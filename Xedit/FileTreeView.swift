@@ -8,7 +8,7 @@
 import SwiftUI
 
 /// A recursive file-tree view that renders a `FileSystemNode` tree using
-/// `DisclosureGroup` for directories and tappable rows for files.
+/// compact custom rows for directories and files.
 ///
 /// Directories expand lazily — children are loaded from disk only on first expand.
 struct FileTreeView: View {
@@ -30,14 +30,18 @@ struct FileTreeView: View {
             )
         }
         .listStyle(.sidebar)
-        .environment(\.defaultMinListRowHeight, 22)
+        .environment(\.defaultMinListRowHeight, 18)
+        .onAppear {
+            root.isExpanded = true
+            root.loadChildren()
+        }
     }
 }
 
 // MARK: - Recursive Row
 
-/// A single row in the file tree. Directories render as expandable
-/// `DisclosureGroup` rows; files render as tappable label rows.
+/// A single row in the file tree. Directories render as expandable rows;
+/// files render as tappable label rows.
 private struct FileNodeRow: View {
     @ObservedObject var node: FileSystemNode
     @Binding var selectedURL: URL?
@@ -46,17 +50,36 @@ private struct FileNodeRow: View {
 
     var body: some View {
         if node.isDirectory {
-            DisclosureGroup(
-                isExpanded: Binding(
-                    get: { node.isExpanded },
-                    set: { newValue in
-                        node.isExpanded = newValue
-                        if newValue {
-                            node.loadChildren()
-                        }
+            VStack(spacing: 0) {
+                Button {
+                    toggleDirectory()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: isVisuallyExpanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 10)
+                            .padding(.leading, CGFloat(level) * 8)
+                        Label(node.name, systemImage: "folder")
+                        Spacer(minLength: 0)
                     }
-                ),
-                content: {
+                    .font(.system(size: 12))
+                    .frame(maxWidth: .infinity, minHeight: 18, maxHeight: 18, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .background(
+                        selectedFolderURL == node.url
+                            ? Color.accentColor.opacity(0.16)
+                            : Color.clear
+                    )
+                }
+                .buttonStyle(.plain)
+                .onAppear {
+                    if isVisuallyExpanded {
+                        node.loadChildren()
+                    }
+                }
+
+                if isVisuallyExpanded {
                     if let children = node.children {
                         ForEach(children) { child in
                             FileNodeRow(
@@ -67,36 +90,20 @@ private struct FileNodeRow: View {
                             )
                         }
                     }
-                },
-                label: {
-                    HStack(spacing: 0) {
-                        Label(node.name, systemImage: "folder")
-                            .padding(.leading, CGFloat(level) * 2)
-                        Spacer(minLength: 0)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .background(
-                        selectedFolderURL == node.url
-                            ? Color.accentColor.opacity(0.16)
-                            : Color.clear
-                    )
-                    .onTapGesture {
-                        selectedFolderURL = node.url
-                    }
                 }
-            )
-            .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 0))
+            }
+            .listRowInsets(EdgeInsets(top: 0, leading: 2, bottom: 0, trailing: 0))
         } else {
             Button {
                 selectedURL = node.url
             } label: {
                 HStack(spacing: 0) {
                     Label(node.name, systemImage: "doc")
-                        .padding(.leading, CGFloat(level) * 2)
+                        .padding(.leading, CGFloat(level) * 8 + 14)
                     Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
+                .font(.system(size: 12))
+                .frame(maxWidth: .infinity, minHeight: 18, maxHeight: 18, alignment: .leading)
                 .contentShape(Rectangle())
                 .background(
                     selectedURL == node.url
@@ -105,7 +112,25 @@ private struct FileNodeRow: View {
                 )
             }
             .buttonStyle(.plain)
-            .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 0))
+            .listRowInsets(EdgeInsets(top: 0, leading: 2, bottom: 0, trailing: 0))
+        }
+    }
+
+    private var isVisuallyExpanded: Bool {
+        level == 0 || node.isExpanded
+    }
+
+    private func toggleDirectory() {
+        selectedFolderURL = node.url
+        if level == 0 {
+            node.isExpanded = true
+            node.loadChildren()
+            return
+        }
+
+        node.isExpanded.toggle()
+        if node.isExpanded {
+            node.loadChildren()
         }
     }
 }

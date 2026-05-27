@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="AppleTitle" content="VeilWriter Help">
+  <meta name="description" content="Learn the core VeilWriter workflows for opening projects, editing files, finding text, previewing Markdown, and tuning the editor.">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VeilWriter Help</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header class="hero">
+      <p class="eyebrow">VeilWriter Help</p>
+      <h1>Write, browse, and edit with less ceremony.</h1>
+      <p class="intro">VeilWriter is a lightweight macOS editor for opening a folder, moving through files quickly, and keeping common text workflows close at hand.</p>
+    </header>
+
+    <nav aria-label="Help topics" class="topics">
+      <a href="#getting-started">Getting started</a>
+      <a href="#editing">Editing</a>
+      <a href="#navigation">Navigation</a>
+      <a href="#search">Find and replace</a>
+      <a href="#markdown">Markdown preview</a>
+      <a href="#cli">Command line</a>
+      <a href="#settings">Settings</a>
+      <a href="#troubleshooting">Troubleshooting</a>
+    </nav>
+
+    <section id="getting-started">
+      <h2>Getting started</h2>
+      <ul>
+        <li>Choose File &gt; Open Folder to browse a project in the sidebar.</li>
+        <li>Choose File &gt; Open File to open one file without selecting a folder.</li>
+        <li>In Finder, choose Open With &gt; VeilWriter for text files, source files, or folders.</li>
+        <li>Use recent files and folders from the empty sidebar to return to previous work.</li>
+        <li>Use File &gt; Open Containing Folder to reveal the active file in Finder.</li>
+      </ul>
+    </section>
+
+    <section id="editing">
+      <h2>Editing</h2>
+      <ul>
+        <li>Press Command-S to save the active file.</li>
+        <li>Press Command-Shift-S to save a copy with Save As.</li>
+        <li>Press Command-D to duplicate the current line.</li>
+        <li>Press Option-Up or Option-Down to move the current line.</li>
+        <li>Use Tab and Shift-Tab to indent or outdent selected lines.</li>
+      </ul>
+    </section>
+
+    <section id="navigation">
+      <h2>Navigation</h2>
+      <ul>
+        <li>Press Command-P to open files quickly inside the selected folder.</li>
+        <li>Press Command-Shift-P to show the command palette, then use Up, Down, and Return to run the selected command.</li>
+        <li>Press Command-L to jump to a line in the active file.</li>
+        <li>Press Command-Shift-O to jump to a symbol in supported files.</li>
+        <li>Use Command-1 through Command-9, Command-Shift-[, and Command-Shift-] to switch tabs.</li>
+        <li>Press Command-Shift-T to reopen the most recently closed tab.</li>
+      </ul>
+    </section>
+
+    <section id="search">
+      <h2>Find and replace</h2>
+      <ul>
+        <li>Press Command-F to search in the active editor.</li>
+        <li>Press Command-G or Command-Shift-G to move between matches.</li>
+        <li>Choose the active tab, all open tabs, or the selected folder as the find and replace scope.</li>
+        <li>Review highlighted matches before replacing text across a broader scope.</li>
+      </ul>
+    </section>
+
+    <section id="markdown">
+      <h2>Markdown preview</h2>
+      <ul>
+        <li>Open a Markdown file, then choose View &gt; Toggle Preview or press Command-Option-R.</li>
+        <li>The preview renders headings, paragraphs, quotes, lists, dividers, and fenced code blocks beside the editor.</li>
+      </ul>
+    </section>
+
+    <section id="cli">
+      <h2>Command line</h2>
+      <ul>
+        <li>Open VeilWriter &gt; Settings, then install the veilwriter command from the Command Line Tool section. The command is installed in ~/.local/bin.</li>
+        <li>Run veilwriter . to open the current folder.</li>
+        <li>Run veilwriter file.md to open a specific file.</li>
+      </ul>
+    </section>
+
+    <section id="settings">
+      <h2>Settings</h2>
+      <ul>
+        <li>Open VeilWriter &gt; Settings to adjust font, font size, line height, color style, line numbers, and current-line highlighting.</li>
+        <li>Enable save cleanup to trim trailing whitespace or ensure a final newline when saving.</li>
+      </ul>
+    </section>
+
+    <section id="troubleshooting">
+      <h2>Troubleshooting</h2>
+      <dl>
+        <dt>A file will not open.</dt>
+        <dd>VeilWriter blocks binary files and asks for confirmation before loading files larger than 1 MB.</dd>
+        <dt>Changes appeared on disk outside the app.</dt>
+        <dd>Use the status bar reload action when VeilWriter reports that the active file changed externally.</dd>
+        <dt>Syntax highlighting looks stale.</dt>
+        <dd>Switch tabs or reopen the file. VeilWriter refreshes highlighting after file loads and tab activation.</dd>
+      </dl>
+    </section>
+  </main>
+</body>
+</html>

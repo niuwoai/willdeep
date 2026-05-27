@@ -180,6 +180,9 @@ private struct WindowRootView: View {
         ContentView()
             .environmentObject(appState)
             .focusedSceneObject(appState)
+            .onOpenURL { url in
+                appState.openExternalURL(url)
+            }
             .onAppear {
                 appState.restoreSessionIfAvailable()
             }

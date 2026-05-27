@@ -26,6 +26,9 @@ struct EditorView: NSViewRepresentable {
     /// across tab activation changes.
     var renderRevision = 0
 
+    /// Explicit highlight token used after file load completes.
+    var highlightRevision = 0
+
     /// A one-shot line navigation request from the inspector/minimap.
     var navigationRequest: EditorNavigationRequest?
 
@@ -89,19 +92,21 @@ struct EditorView: NSViewRepresentable {
         let langChanged = context.coordinator.currentLanguage != language
         let settingsChanged = context.coordinator.currentSettings != settings
         let renderRevisionChanged = context.coordinator.currentRenderRevision != renderRevision
+        let highlightRevisionChanged = context.coordinator.currentHighlightRevision != highlightRevision
         let navigationChanged = context.coordinator.currentNavigationRequest != navigationRequest
         let searchChanged = context.coordinator.currentSearchRanges != searchRanges
             || context.coordinator.currentActiveSearchRange != activeSearchRange
         context.coordinator.currentLanguage = language
         context.coordinator.currentSettings = settings
         context.coordinator.currentRenderRevision = renderRevision
+        context.coordinator.currentHighlightRevision = highlightRevision
         context.coordinator.currentNavigationRequest = navigationRequest
         context.coordinator.currentSearchRanges = searchRanges
         context.coordinator.currentActiveSearchRange = activeSearchRange
         context.coordinator.applyAppearance(to: textView, in: nsView)
 
         // Detect programmatic text changes (file load, not user typing).
-        if textView.string != text || langChanged || settingsChanged || renderRevisionChanged {
+        if textView.string != text || langChanged || settingsChanged || renderRevisionChanged || highlightRevisionChanged {
             context.coordinator.suppressDirtyFlag = true
             context.coordinator.applyText(text, to: textView)
             context.coordinator.suppressDirtyFlag = false
@@ -130,6 +135,7 @@ struct EditorView: NSViewRepresentable {
         var currentSettings: EditorSettings
 
         var currentRenderRevision: Int
+        var currentHighlightRevision: Int
         var currentNavigationRequest: EditorNavigationRequest?
         var currentSearchRanges: [NSRange]
         var currentActiveSearchRange: NSRange?
@@ -143,6 +149,7 @@ struct EditorView: NSViewRepresentable {
             self.currentLanguage = parent.language
             self.currentSettings = parent.settings
             self.currentRenderRevision = parent.renderRevision
+            self.currentHighlightRevision = parent.highlightRevision
             self.currentNavigationRequest = parent.navigationRequest
             self.currentSearchRanges = parent.searchRanges
             self.currentActiveSearchRange = parent.activeSearchRange
@@ -180,6 +187,7 @@ struct EditorView: NSViewRepresentable {
         func applyAppearance(to textView: VeilWriterTextView, in scrollView: NSScrollView) {
             let theme = parent.settings.theme
             let font = parent.settings.editorFont()
+            let paragraphStyle = parent.settings.editorParagraphStyle()
 
             scrollView.drawsBackground = true
             scrollView.backgroundColor = theme.backgroundColor
@@ -190,11 +198,13 @@ struct EditorView: NSViewRepresentable {
             textView.textColor = theme.foregroundColor
             textView.backgroundColor = theme.backgroundColor
             textView.insertionPointColor = theme.insertionPointColor
-        textView.currentLineColor = theme.currentLineBackgroundColor
-        textView.showsCurrentLineHighlight = parent.settings.highlightsCurrentLine
-        textView.typingAttributes = [
+            textView.currentLineColor = theme.currentLineBackgroundColor
+            textView.showsCurrentLineHighlight = parent.settings.highlightsCurrentLine
+            textView.defaultParagraphStyle = paragraphStyle
+            textView.typingAttributes = [
                 .font: font,
                 .foregroundColor: theme.foregroundColor,
+                .paragraphStyle: paragraphStyle,
             ]
 
             if let ruler = scrollView.verticalRulerView as? LineNumberRulerView {
@@ -238,6 +248,7 @@ struct EditorView: NSViewRepresentable {
                     attributes: [
                         .font: parent.settings.editorFont(),
                         .foregroundColor: parent.settings.theme.foregroundColor,
+                        .paragraphStyle: parent.settings.editorParagraphStyle(),
                     ]
                 )
                 replaceTextStorage(in: textView, with: attributed)
@@ -247,6 +258,13 @@ struct EditorView: NSViewRepresentable {
         private func replaceTextStorage(in textView: VeilWriterTextView, with attributed: NSAttributedString) {
             let selected = textView.selectedRanges
             textView.textStorage?.setAttributedString(attributed)
+            if let textStorage = textView.textStorage, textStorage.length > 0 {
+                textStorage.addAttribute(
+                    .paragraphStyle,
+                    value: parent.settings.editorParagraphStyle(),
+                    range: NSRange(location: 0, length: textStorage.length)
+                )
+            }
             applySearchHighlights(to: textView)
             textView.selectedRanges = selected
             refreshEditorChrome(for: textView)

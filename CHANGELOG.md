@@ -1,5 +1,49 @@
 # Changelog
 
+## 1.20.0-rc1 - 2026-05-27
+
+- Disabled App Sandbox for the main VeilWriter app target to allow broader local filesystem access in non-App-Store builds.
+
+## 1.19.0-rc2 - 2026-05-27
+
+- Fixed command line tool installation by writing `veilwriter` to `~/.local/bin` without administrator authorization.
+- Saved security-scoped access for restored project folders so the sidebar tree can reload after launching the app again.
+
+## 1.19.0-rc1 - 2026-05-27
+
+- Registered VeilWriter as an alternate Finder "Open With" app for text documents, source files, and folders.
+
+## 1.18.0-rc1 - 2026-05-27
+
+- Added keyboard selection to the command palette with Up/Down navigation, Return execution, and a highlighted selected row.
+
+## 1.17.0-rc1 - 2026-05-27
+
+- Added a Settings entry to install or update the `veilwriter` command line tool at `/usr/local/bin/veilwriter`.
+- Added external file and folder open handling so the CLI can launch VeilWriter directly into a path.
+
+## 1.16.0-rc5 - 2026-05-27
+
+- Added a bundled macOS Help Book so VeilWriter Help opens from the system Help menu instead of showing the missing-help alert.
+
+## 1.16.0-rc4 - 2026-05-27
+
+- Kept the restored project root visually expanded in the sidebar so its file tree loads immediately on launch.
+
+## 1.16.0-rc3 - 2026-05-27
+
+- Fixed restored project folders not expanding and loading their file tree immediately on app launch.
+
+## 1.16.0-rc2 - 2026-05-27
+
+- Forced a dedicated syntax-highlight refresh after file loads and tab activation so shell and HTML files render highlighted immediately.
+
+## 1.16.0-rc1 - 2026-05-27
+
+- Added an editor line-height preference and applied it to the text view layout.
+- Tightened sidebar file-tree rows for denser project browsing while preserving full-row click targets.
+- Reworked Markdown preview into a richer block renderer for headings, paragraphs, quotes, lists, dividers, and fenced code blocks.
+
 ## 1.15.0-rc1 - 2026-05-27
 
 - Added external file change detection with a status bar reload action.

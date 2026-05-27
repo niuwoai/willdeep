@@ -33,6 +33,7 @@ final class AppState: ObservableObject {
     @Published var tabs: [EditorTab]
     @Published var activeTabID: EditorTab.ID?
     @Published private(set) var editorRenderRevision = 0
+    @Published private(set) var editorHighlightRevision = 0
     @Published private(set) var editorNavigationRequest: EditorNavigationRequest?
     @Published var isFindBarVisible = false
     @Published var findQuery = "" {
@@ -78,6 +79,7 @@ final class AppState: ObservableObject {
     private var isApplyingTabSnapshot = false
     private var closedTabs: [EditorTab] = []
     private var knownModificationDates: [URL: Date] = [:]
+    private var securityScopedAccessURLs: Set<URL> = []
 
     init(
         openedFileURL: URL? = nil,
@@ -101,6 +103,12 @@ final class AppState: ObservableObject {
         self.editorSettings = editorSettings.normalized()
         self.recentFiles = RecentItemsStore.loadFiles()
         self.recentFolders = RecentItemsStore.loadFolders()
+    }
+
+    deinit {
+        for url in securityScopedAccessURLs {
+            url.stopAccessingSecurityScopedResource()
+        }
     }
 
     var activeTab: EditorTab? {
@@ -208,8 +216,28 @@ final class AppState: ObservableObject {
 
     func openRecentFolder(_ url: URL) {
         registerRecentFolder(url)
-        rootDirectory = url
-        selectedFolderURL = url
+        setRootDirectory(url)
+    }
+
+    func openExternalURL(_ url: URL) {
+        let fileURL = url.isFileURL ? url : URL(fileURLWithPath: url.path)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory) else {
+            return
+        }
+
+        if isDirectory.boolValue {
+            registerRecentFolder(fileURL)
+            setRootDirectory(fileURL)
+            persistSession()
+            return
+        }
+
+        registerRecentFile(fileURL)
+        registerRecentFolder(fileURL.deletingLastPathComponent())
+        setRootDirectory(fileURL.deletingLastPathComponent())
+        openedFileURL = fileURL
+        persistSession()
     }
 
     func registerRecentFile(_ url: URL) {
@@ -698,6 +726,7 @@ final class AppState: ObservableObject {
             isEdited = false
             isApplyingTabSnapshot = false
             bumpEditorRenderRevision()
+            bumpEditorHighlightRevision()
             updateWindowTitle(url: nil, isEdited: false)
             persistSession()
             return
@@ -719,12 +748,17 @@ final class AppState: ObservableObject {
         isEdited = tab.isEdited
         isApplyingTabSnapshot = false
         bumpEditorRenderRevision()
+        bumpEditorHighlightRevision()
         updateWindowTitle(url: tab.url, isEdited: tab.isEdited)
         persistSession()
     }
 
     private func bumpEditorRenderRevision() {
         editorRenderRevision += 1
+    }
+
+    private func bumpEditorHighlightRevision() {
+        editorHighlightRevision += 1
     }
 
     private func updateActiveTab(_ mutation: (inout EditorTab) -> Void) {
@@ -769,8 +803,7 @@ final class AppState: ObservableObject {
 
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
-            self?.rootDirectory = url
-            self?.selectedFolderURL = url
+            self?.setRootDirectory(url)
             self?.registerRecentFolder(url)
             self?.persistSession()
         }
@@ -796,7 +829,7 @@ final class AppState: ObservableObject {
             self?.registerRecentFile(url)
             self?.registerRecentFolder(url.deletingLastPathComponent())
             self?.openedFileURL = url
-            self?.rootDirectory = url.deletingLastPathComponent()
+            self?.setRootDirectory(url.deletingLastPathComponent())
             self?.persistSession()
         }
     }
@@ -923,6 +956,7 @@ final class AppState: ObservableObject {
         isEdited = false
         isApplyingTabSnapshot = false
         bumpEditorRenderRevision()
+        bumpEditorHighlightRevision()
         updateWindowTitle(url: url, isEdited: false)
         knownModificationDates[url] = Self.modificationDate(at: url)
         hasExternalFileChanges = false
@@ -962,6 +996,7 @@ final class AppState: ObservableObject {
             isEdited = false
             isApplyingTabSnapshot = false
             bumpEditorRenderRevision()
+            bumpEditorHighlightRevision()
             updateWindowTitle(url: nil, isEdited: false)
             persistSession()
         }
@@ -1095,10 +1130,8 @@ final class AppState: ObservableObject {
             return
         }
 
-        if let rootPath = session.rootDirectoryPath {
-            let rootURL = URL(fileURLWithPath: rootPath)
-            rootDirectory = rootURL
-            selectedFolderURL = rootURL
+        if let rootURL = resolvedRootDirectory(from: session) {
+            setRootDirectory(rootURL)
             registerRecentFolder(rootURL)
         }
 
@@ -1125,10 +1158,59 @@ final class AppState: ObservableObject {
     func persistSession() {
         let session = EditorSessionSnapshot(
             rootDirectoryPath: rootDirectory?.path,
+            rootDirectoryBookmarkData: rootDirectory.flatMap { bookmarkData(for: $0) },
             tabPaths: tabs.map(\.url.path),
             activeTabPath: activeTab?.url.path
         )
         SessionStore.save(session)
+    }
+
+    private func setRootDirectory(_ url: URL) {
+        activateSecurityScope(for: url)
+        rootDirectory = url
+        selectedFolderURL = url
+    }
+
+    @discardableResult
+    private func activateSecurityScope(for url: URL) -> Bool {
+        let standardizedURL = url.standardizedFileURL
+        guard !securityScopedAccessURLs.contains(standardizedURL) else {
+            return true
+        }
+
+        guard standardizedURL.startAccessingSecurityScopedResource() else {
+            return false
+        }
+
+        securityScopedAccessURLs.insert(standardizedURL)
+        return true
+    }
+
+    private func bookmarkData(for url: URL) -> Data? {
+        activateSecurityScope(for: url)
+        return try? url.bookmarkData(
+            options: .withSecurityScope,
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+    }
+
+    private func resolvedRootDirectory(from session: EditorSessionSnapshot) -> URL? {
+        if let bookmarkData = session.rootDirectoryBookmarkData {
+            var isStale = false
+            if let url = try? URL(
+                resolvingBookmarkData: bookmarkData,
+                options: .withSecurityScope,
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            ) {
+                activateSecurityScope(for: url)
+                return url
+            }
+        }
+
+        guard let rootPath = session.rootDirectoryPath else { return nil }
+        return URL(fileURLWithPath: rootPath)
     }
 }
 
@@ -1170,6 +1252,7 @@ private enum RecentItemsStore {
 
 private struct EditorSessionSnapshot: Codable {
     let rootDirectoryPath: String?
+    let rootDirectoryBookmarkData: Data?
     let tabPaths: [String]
     let activeTabPath: String?
 }

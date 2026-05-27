@@ -29,6 +29,7 @@ struct ContentView: View {
                         selectedURL: $appState.openedFileURL,
                         selectedFolderURL: $appState.selectedFolderURL
                     )
+                    .id(root.url.standardizedFileURL)
                 } else {
                     VStack(spacing: 14) {
                         Image(systemName: "folder")
@@ -106,6 +107,7 @@ struct ContentView: View {
                             language: detectedLanguage,
                             settings: appState.editorSettings,
                             renderRevision: appState.editorRenderRevision,
+                            highlightRevision: appState.editorHighlightRevision,
                             navigationRequest: appState.editorNavigationRequest,
                             changedLineNumbers: appState.changedLineNumbers,
                             searchRanges: appState.findMatchRanges,
@@ -346,6 +348,7 @@ private struct RecentItemsView: View {
 private struct CommandPalettePanel: View {
     @EnvironmentObject var appState: AppState
     @FocusState private var queryFocused: Bool
+    @State private var selectedCommandIndex = 0
 
     private var commands: [PaletteCommand] {
         [
@@ -437,6 +440,11 @@ private struct CommandPalettePanel: View {
         }
     }
 
+    private var selectedCommand: PaletteCommand? {
+        guard filteredCommands.indices.contains(selectedCommandIndex) else { return nil }
+        return filteredCommands[selectedCommandIndex]
+    }
+
     var body: some View {
         ZStack {
             Color.black.opacity(0.12)
@@ -452,49 +460,132 @@ private struct CommandPalettePanel: View {
                     .padding(12)
                     .focused($queryFocused)
                     .onSubmit {
-                        run(filteredCommands.first)
+                        run(selectedCommand)
                     }
 
                 Divider()
 
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(filteredCommands) { command in
-                            Button {
-                                run(command)
-                            } label: {
-                                HStack(spacing: 10) {
-                                    Image(systemName: command.icon)
-                                        .foregroundColor(.secondary)
-                                        .frame(width: 18)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(command.title)
-                                            .font(.system(size: 13, weight: .medium))
-                                        Text(command.subtitle)
-                                            .font(.caption2)
-                                            .foregroundColor(.secondary)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(filteredCommands.enumerated()), id: \.element.id) { index, command in
+                                let isSelected = index == selectedCommandIndex
+
+                                Button {
+                                    run(command)
+                                } label: {
+                                    HStack(spacing: 10) {
+                                        Image(systemName: command.icon)
+                                            .foregroundColor(isSelected ? .accentColor : .secondary)
+                                            .frame(width: 18)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(command.title)
+                                                .font(.system(size: 13, weight: .medium))
+                                            Text(command.subtitle)
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        Spacer(minLength: 0)
                                     }
-                                    Spacer(minLength: 0)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background {
+                                        if isSelected {
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .fill(Color.accentColor.opacity(0.16))
+                                        }
+                                    }
+                                    .contentShape(Rectangle())
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .contentShape(Rectangle())
+                                .buttonStyle(.plain)
+                                .disabled(!command.isEnabled)
+                                .opacity(command.isEnabled ? 1 : 0.42)
+                                .padding(.horizontal, 6)
+                                .id(command.id)
+                                .onHover { isHovering in
+                                    if isHovering {
+                                        selectedCommandIndex = index
+                                    }
+                                }
                             }
-                            .buttonStyle(.plain)
-                            .disabled(!command.isEnabled)
-                            .opacity(command.isEnabled ? 1 : 0.42)
                         }
+                        .padding(.vertical, 4)
+                    }
+                    .frame(maxHeight: 300)
+                    .onChange(of: selectedCommandIndex) { _, newValue in
+                        scrollSelectedCommandIntoView(with: proxy, index: newValue)
                     }
                 }
-                .frame(maxHeight: 300)
             }
             .frame(width: 520)
             .background(.regularMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .shadow(radius: 18, y: 10)
         }
+        .background {
+            PaletteKeyboardHandler(
+                onMoveUp: selectPreviousCommand,
+                onMoveDown: selectNextCommand,
+                onSubmit: { run(selectedCommand) },
+                onCancel: { appState.hideCommandPalette() }
+            )
+        }
         .onAppear {
             queryFocused = true
+            resetSelection()
+        }
+        .onChange(of: appState.commandPaletteQuery) { _, _ in
+            resetSelection()
+        }
+        .onChange(of: filteredCommands.count) { _, _ in
+            clampSelection()
+        }
+    }
+
+    private func selectPreviousCommand() {
+        guard !filteredCommands.isEmpty else { return }
+        selectedCommandIndex = selectableIndex(from: selectedCommandIndex, offset: -1)
+    }
+
+    private func selectNextCommand() {
+        guard !filteredCommands.isEmpty else { return }
+        selectedCommandIndex = selectableIndex(from: selectedCommandIndex, offset: 1)
+    }
+
+    private func selectableIndex(from startIndex: Int, offset: Int) -> Int {
+        guard !filteredCommands.isEmpty else { return 0 }
+        var nextIndex = startIndex
+
+        for _ in filteredCommands.indices {
+            nextIndex = (nextIndex + offset + filteredCommands.count) % filteredCommands.count
+            if filteredCommands[nextIndex].isEnabled {
+                return nextIndex
+            }
+        }
+
+        return min(max(nextIndex, 0), filteredCommands.count - 1)
+    }
+
+    private func resetSelection() {
+        selectedCommandIndex = filteredCommands.firstIndex(where: \.isEnabled) ?? 0
+        clampSelection()
+    }
+
+    private func clampSelection() {
+        guard !filteredCommands.isEmpty else {
+            selectedCommandIndex = 0
+            return
+        }
+
+        if !filteredCommands.indices.contains(selectedCommandIndex) {
+            selectedCommandIndex = filteredCommands.firstIndex(where: \.isEnabled) ?? 0
+        }
+    }
+
+    private func scrollSelectedCommandIntoView(with proxy: ScrollViewProxy, index: Int) {
+        guard filteredCommands.indices.contains(index) else { return }
+        withAnimation(.easeOut(duration: 0.12)) {
+            proxy.scrollTo(filteredCommands[index].id, anchor: .center)
         }
     }
 
@@ -504,8 +595,96 @@ private struct CommandPalettePanel: View {
     }
 }
 
+private struct PaletteKeyboardHandler: NSViewRepresentable {
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
+    let onSubmit: () -> Void
+    let onCancel: () -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        context.coordinator.installMonitor()
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.onMoveUp = onMoveUp
+        context.coordinator.onMoveDown = onMoveDown
+        context.coordinator.onSubmit = onSubmit
+        context.coordinator.onCancel = onCancel
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.removeMonitor()
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            onMoveUp: onMoveUp,
+            onMoveDown: onMoveDown,
+            onSubmit: onSubmit,
+            onCancel: onCancel
+        )
+    }
+
+    final class Coordinator {
+        var onMoveUp: () -> Void
+        var onMoveDown: () -> Void
+        var onSubmit: () -> Void
+        var onCancel: () -> Void
+        private var monitor: Any?
+
+        init(
+            onMoveUp: @escaping () -> Void,
+            onMoveDown: @escaping () -> Void,
+            onSubmit: @escaping () -> Void,
+            onCancel: @escaping () -> Void
+        ) {
+            self.onMoveUp = onMoveUp
+            self.onMoveDown = onMoveDown
+            self.onSubmit = onSubmit
+            self.onCancel = onCancel
+        }
+
+        func installMonitor() {
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self else { return event }
+                return self.handle(event)
+            }
+        }
+
+        func removeMonitor() {
+            guard let monitor else { return }
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
+        }
+
+        private func handle(_ event: NSEvent) -> NSEvent? {
+            if event.keyCode == 53 {
+                onCancel()
+                return nil
+            }
+
+            switch event.specialKey {
+            case .upArrow:
+                onMoveUp()
+                return nil
+            case .downArrow:
+                onMoveDown()
+                return nil
+            case .carriageReturn:
+                onSubmit()
+                return nil
+            default:
+                return event
+            }
+        }
+    }
+}
+
 private struct PaletteCommand: Identifiable {
-    let id = UUID()
+    var id: String { title }
     let title: String
     let subtitle: String
     let icon: String
@@ -855,6 +1034,7 @@ private struct SplitEditorPane: View {
                 text: $appState.splitFileContent,
                 language: splitLanguage,
                 settings: appState.editorSettings,
+                highlightRevision: appState.editorHighlightRevision,
                 searchRanges: [],
                 activeSearchRange: nil
             )
@@ -869,8 +1049,8 @@ private struct MarkdownPreviewPane: View {
     let text: String
     let onClose: () -> Void
 
-    private var preview: AttributedString {
-        (try? AttributedString(markdown: text)) ?? AttributedString(text)
+    private var blocks: [MarkdownPreviewBlock] {
+        MarkdownPreviewParser.blocks(from: text)
     }
 
     var body: some View {
@@ -895,16 +1075,204 @@ private struct MarkdownPreviewPane: View {
             Divider()
 
             ScrollView {
-                Text(preview)
-                    .font(.body)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                        MarkdownPreviewBlockView(block: block)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(18)
             }
             .background(Color(nsColor: .textBackgroundColor))
         }
         .overlay(alignment: .leading) {
             Divider()
         }
+    }
+}
+
+struct MarkdownPreviewBlock: Equatable {
+    enum Kind: Equatable {
+        case heading(level: Int)
+        case paragraph
+        case quote
+        case unorderedList
+        case orderedList
+        case code
+        case divider
+    }
+
+    let kind: Kind
+    let text: String
+}
+
+enum MarkdownPreviewParser {
+    static func blocks(from source: String) -> [MarkdownPreviewBlock] {
+        let lines = source.components(separatedBy: .newlines)
+        var blocks: [MarkdownPreviewBlock] = []
+        var paragraph: [String] = []
+        var code: [String] = []
+        var isInCodeBlock = false
+
+        func flushParagraph() {
+            guard !paragraph.isEmpty else { return }
+            blocks.append(MarkdownPreviewBlock(kind: .paragraph, text: paragraph.joined(separator: " ")))
+            paragraph.removeAll()
+        }
+
+        func flushCode() {
+            guard !code.isEmpty else { return }
+            blocks.append(MarkdownPreviewBlock(kind: .code, text: code.joined(separator: "\n")))
+            code.removeAll()
+        }
+
+        for line in lines {
+            if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+                if isInCodeBlock {
+                    flushCode()
+                    isInCodeBlock = false
+                } else {
+                    flushParagraph()
+                    isInCodeBlock = true
+                }
+                continue
+            }
+
+            if isInCodeBlock {
+                code.append(line)
+                continue
+            }
+
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty {
+                flushParagraph()
+                continue
+            }
+
+            if trimmed == "---" || trimmed == "***" || trimmed == "___" {
+                flushParagraph()
+                blocks.append(MarkdownPreviewBlock(kind: .divider, text: ""))
+                continue
+            }
+
+            if let heading = headingBlock(from: trimmed) {
+                flushParagraph()
+                blocks.append(heading)
+                continue
+            }
+
+            if trimmed.hasPrefix(">") {
+                flushParagraph()
+                let quote = trimmed.dropFirst().trimmingCharacters(in: .whitespaces)
+                blocks.append(MarkdownPreviewBlock(kind: .quote, text: quote))
+                continue
+            }
+
+            if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
+                flushParagraph()
+                blocks.append(MarkdownPreviewBlock(kind: .unorderedList, text: String(trimmed.dropFirst(2))))
+                continue
+            }
+
+            if let ordered = orderedListText(from: trimmed) {
+                flushParagraph()
+                blocks.append(MarkdownPreviewBlock(kind: .orderedList, text: ordered))
+                continue
+            }
+
+            paragraph.append(trimmed)
+        }
+
+        if isInCodeBlock {
+            flushCode()
+        }
+        flushParagraph()
+        return blocks
+    }
+
+    private static func headingBlock(from line: String) -> MarkdownPreviewBlock? {
+        let hashes = line.prefix { $0 == "#" }
+        guard !hashes.isEmpty, hashes.count <= 6, line.dropFirst(hashes.count).hasPrefix(" ") else {
+            return nil
+        }
+        let text = line.dropFirst(hashes.count + 1).trimmingCharacters(in: .whitespaces)
+        return MarkdownPreviewBlock(kind: .heading(level: hashes.count), text: text)
+    }
+
+    private static func orderedListText(from line: String) -> String? {
+        guard let dotIndex = line.firstIndex(of: ".") else { return nil }
+        let number = line[..<dotIndex]
+        guard !number.isEmpty, number.allSatisfy(\.isNumber) else { return nil }
+        let afterDot = line[line.index(after: dotIndex)...]
+        guard afterDot.hasPrefix(" ") else { return nil }
+        return String(afterDot.dropFirst())
+    }
+}
+
+private struct MarkdownPreviewBlockView: View {
+    let block: MarkdownPreviewBlock
+
+    var body: some View {
+        switch block.kind {
+        case .heading(let level):
+            Text(inlineText(block.text))
+                .font(.system(size: headingSize(level), weight: .semibold))
+                .foregroundColor(.primary)
+                .padding(.top, level <= 2 ? 8 : 2)
+        case .paragraph:
+            Text(inlineText(block.text))
+                .font(.body)
+                .lineSpacing(3)
+        case .quote:
+            HStack(alignment: .top, spacing: 10) {
+                Rectangle()
+                    .fill(Color.accentColor.opacity(0.45))
+                    .frame(width: 3)
+                Text(inlineText(block.text))
+                    .font(.body)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.vertical, 4)
+        case .unorderedList:
+            HStack(alignment: .top, spacing: 8) {
+                Text("•")
+                Text(inlineText(block.text))
+            }
+            .font(.body)
+        case .orderedList:
+            HStack(alignment: .top, spacing: 8) {
+                Text("1.")
+                    .foregroundColor(.secondary)
+                Text(inlineText(block.text))
+            }
+            .font(.body)
+        case .code:
+            ScrollView(.horizontal, showsIndicators: false) {
+                Text(block.text)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background(Color(nsColor: .controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        case .divider:
+            Divider()
+                .padding(.vertical, 8)
+        }
+    }
+
+    private func headingSize(_ level: Int) -> CGFloat {
+        switch level {
+        case 1: return 26
+        case 2: return 21
+        case 3: return 18
+        default: return 15
+        }
+    }
+
+    private func inlineText(_ text: String) -> AttributedString {
+        (try? AttributedString(markdown: text)) ?? AttributedString(text)
     }
 }
 

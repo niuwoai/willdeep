@@ -11,6 +11,7 @@ import Foundation
 struct EditorSettings: Codable, Equatable {
     var fontID: String
     var fontSize: Double
+    var lineHeightMultiple: Double
     var themeID: String
     var showsLineNumbers: Bool
     var highlightsCurrentLine: Bool
@@ -20,6 +21,7 @@ struct EditorSettings: Codable, Equatable {
     static let `default` = EditorSettings(
         fontID: EditorFontChoice.systemMono.id,
         fontSize: 13,
+        lineHeightMultiple: 1.15,
         themeID: EditorTheme.paper.id,
         showsLineNumbers: true,
         highlightsCurrentLine: true,
@@ -55,6 +57,7 @@ extension EditorSettings {
             result.themeID = EditorSettings.default.themeID
         }
         result.fontSize = min(max(result.fontSize, 10), 28)
+        result.lineHeightMultiple = min(max(result.lineHeightMultiple, 1.0), 1.8)
         return result
     }
 
@@ -68,6 +71,12 @@ extension EditorSettings {
 
     func editorFont() -> NSFont {
         fontChoice.font(size: CGFloat(fontSize))
+    }
+
+    func editorParagraphStyle() -> NSParagraphStyle {
+        let style = NSMutableParagraphStyle()
+        style.lineHeightMultiple = CGFloat(lineHeightMultiple)
+        return style
     }
 }
 

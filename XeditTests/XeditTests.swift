@@ -126,6 +126,7 @@ struct VeilWriterTests {
     @Test("editor settings defaults enable line focus affordances")
     func testEditorSettingsDefaults() {
         let settings = EditorSettings.default
+        #expect(settings.lineHeightMultiple == 1.15)
         #expect(settings.showsLineNumbers == true)
         #expect(settings.highlightsCurrentLine == true)
         #expect(settings.trimsTrailingWhitespaceOnSave == false)
@@ -139,6 +140,7 @@ struct VeilWriterTests {
         let settings = EditorSettings(
             fontID: "missing-font",
             fontSize: 99,
+            lineHeightMultiple: 4.0,
             themeID: "missing-theme",
             showsLineNumbers: false,
             highlightsCurrentLine: false,
@@ -149,10 +151,71 @@ struct VeilWriterTests {
         #expect(settings.fontID == EditorSettings.default.fontID)
         #expect(settings.themeID == EditorSettings.default.themeID)
         #expect(settings.fontSize == 28)
+        #expect(settings.lineHeightMultiple == 1.8)
         #expect(settings.showsLineNumbers == false)
         #expect(settings.highlightsCurrentLine == false)
         #expect(settings.trimsTrailingWhitespaceOnSave == true)
         #expect(settings.ensuresFinalNewlineOnSave == true)
+    }
+
+    @Test("command line installer script forwards paths to VeilWriter")
+    func testCommandLineInstallerScript() {
+        let appURL = URL(fileURLWithPath: "/Applications/VeilWriter.app")
+        let script = CommandLineToolInstaller.scriptContent(appBundleURL: appURL)
+
+        #expect(script.hasPrefix("#!/bin/zsh"))
+        #expect(script.contains("/usr/bin/open -a \"$app_path\" -- \"$@\""))
+        #expect(script.contains("app_path='/Applications/VeilWriter.app'"))
+    }
+
+    @Test("command line installer uses a user-local path")
+    func testCommandLineInstallerUsesUserLocalPath() {
+        let path = CommandLineToolInstaller.installURL.standardizedFileURL.path
+
+        #expect(path.hasSuffix("/.local/bin/veilwriter"))
+    }
+
+    @Test("command line installer shell quoting handles apostrophes")
+    func testCommandLineInstallerShellQuoting() {
+        let quoted = CommandLineToolInstaller.singleQuotedShellString("/tmp/VeilWriter's App.app")
+
+        #expect(quoted.hasPrefix("'"))
+        #expect(quoted.hasSuffix("'"))
+        #expect(quoted.contains("'\\''"))
+    }
+
+    @Test("external folder opens as project root")
+    @MainActor
+    func testExternalFolderOpen() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("veilwriter_external_folder_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let state = AppState()
+        state.openExternalURL(tempDir)
+
+        #expect(state.rootDirectory?.standardizedFileURL.path == tempDir.standardizedFileURL.path)
+        #expect(state.selectedFolderURL?.standardizedFileURL.path == tempDir.standardizedFileURL.path)
+        #expect(state.openedFileURL == nil)
+    }
+
+    @Test("external file opens inside its parent folder")
+    @MainActor
+    func testExternalFileOpen() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("veilwriter_external_file_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let fileURL = tempDir.appendingPathComponent("note.md")
+        try "hello".write(to: fileURL, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let state = AppState()
+        state.openExternalURL(fileURL)
+
+        #expect(state.rootDirectory?.standardizedFileURL.path == tempDir.standardizedFileURL.path)
+        #expect(state.selectedFolderURL?.standardizedFileURL.path == tempDir.standardizedFileURL.path)
+        #expect(state.openedFileURL == fileURL)
     }
 
     @Test("syntax highlighting uses the selected theme and font")
@@ -487,8 +550,8 @@ struct VeilWriterTests {
         #expect(appState.openedFileURL == firstURL)
     }
 
-    @Test("closing active tab refreshes editor rendering")
-    func testCloseTabBumpsEditorRenderRevision() {
+    @Test("closing active tab refreshes editor rendering and highlighting")
+    func testCloseTabBumpsEditorRenderAndHighlightRevision() {
         let tempDir = FileManager.default.temporaryDirectory
         let firstURL = tempDir.appendingPathComponent("veilwriter_render_first_\(UUID().uuidString).swift")
         let secondURL = tempDir.appendingPathComponent("veilwriter_render_second_\(UUID().uuidString).swift")
@@ -500,10 +563,12 @@ struct VeilWriterTests {
         appState.fileContent = "let second = true"
 
         let revisionBeforeClose = appState.editorRenderRevision
+        let highlightRevisionBeforeClose = appState.editorHighlightRevision
         appState.closeActiveTab()
 
         #expect(appState.openedFileURL == firstURL)
         #expect(appState.editorRenderRevision > revisionBeforeClose)
+        #expect(appState.editorHighlightRevision > highlightRevisionBeforeClose)
     }
 
     @Test("closeActiveTab closes the current tab")
@@ -668,6 +733,7 @@ struct VeilWriterTests {
         let settings = EditorSettings(
             fontID: EditorSettings.default.fontID,
             fontSize: EditorSettings.default.fontSize,
+            lineHeightMultiple: EditorSettings.default.lineHeightMultiple,
             themeID: EditorSettings.default.themeID,
             showsLineNumbers: true,
             highlightsCurrentLine: true,
@@ -712,6 +778,33 @@ struct VeilWriterTests {
         #expect(codeState.canShowPreview == false)
         codeState.togglePreview()
         #expect(codeState.isPreviewVisible == false)
+    }
+
+    @Test("markdown preview parser extracts common blocks")
+    func testMarkdownPreviewParserExtractsCommonBlocks() {
+        let source = """
+        # Title
+
+        A paragraph with **bold** text.
+
+        > Quote
+        - Item
+        1. Ordered
+        ---
+        ```swift
+        let value = 1
+        ```
+        """
+
+        let blocks = MarkdownPreviewParser.blocks(from: source)
+
+        #expect(blocks.contains(MarkdownPreviewBlock(kind: .heading(level: 1), text: "Title")))
+        #expect(blocks.contains(MarkdownPreviewBlock(kind: .paragraph, text: "A paragraph with **bold** text.")))
+        #expect(blocks.contains(MarkdownPreviewBlock(kind: .quote, text: "Quote")))
+        #expect(blocks.contains(MarkdownPreviewBlock(kind: .unorderedList, text: "Item")))
+        #expect(blocks.contains(MarkdownPreviewBlock(kind: .orderedList, text: "Ordered")))
+        #expect(blocks.contains(MarkdownPreviewBlock(kind: .divider, text: "")))
+        #expect(blocks.contains(MarkdownPreviewBlock(kind: .code, text: "let value = 1")))
     }
 
     @Test("file modification date detects existing files")

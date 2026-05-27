@@ -9,6 +9,9 @@ import SwiftUI
 
 struct EditorSettingsView: View {
     @EnvironmentObject var appState: AppState
+    @State private var cliInstallState: CommandLineToolInstallState = .notInstalled
+    @State private var cliStatusMessage = ""
+    @State private var isInstallingCLI = false
 
     var body: some View {
         Form {
@@ -24,6 +27,13 @@ struct EditorSettingsView: View {
                     Text("\(Int(appState.editorSettings.fontSize)) pt")
                         .monospacedDigit()
                         .frame(width: 48, alignment: .trailing)
+                }
+
+                HStack {
+                    Slider(value: setting(\.lineHeightMultiple), in: 1.0...1.8, step: 0.05)
+                    Text(String(format: "%.2fx", appState.editorSettings.lineHeightMultiple))
+                        .monospacedDigit()
+                        .frame(width: 56, alignment: .trailing)
                 }
             }
 
@@ -57,10 +67,94 @@ struct EditorSettingsView: View {
                 Toggle("Trim Trailing Whitespace", isOn: setting(\.trimsTrailingWhitespaceOnSave))
                 Toggle("Ensure Final Newline", isOn: setting(\.ensuresFinalNewlineOnSave))
             }
+
+            Section("Command Line Tool") {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("veilwriter")
+                            .font(.headline)
+                        Text(cliStatusText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Button(cliButtonTitle) {
+                        installCLI()
+                    }
+                    .disabled(isInstallingCLI)
+                }
+
+                if !cliStatusMessage.isEmpty {
+                    Text(cliStatusMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .formStyle(.grouped)
         .padding(20)
-        .frame(width: 440)
+        .frame(width: 500)
+        .onAppear {
+            refreshCLIState()
+        }
+    }
+
+    private var cliStatusText: String {
+        switch cliInstallState {
+        case .installed:
+            return "Installed at \(CommandLineToolInstaller.installURL.path)"
+        case .needsUpdate:
+            return "A command exists at \(CommandLineToolInstaller.installURL.path) and can be updated."
+        case .notInstalled:
+            return "Install the veilwriter command for Terminal."
+        }
+    }
+
+    private var cliButtonTitle: String {
+        if isInstallingCLI {
+            return "Installing..."
+        }
+
+        switch cliInstallState {
+        case .installed:
+            return "Reinstall"
+        case .needsUpdate:
+            return "Update"
+        case .notInstalled:
+            return "Install"
+        }
+    }
+
+    private func refreshCLIState() {
+        cliInstallState = CommandLineToolInstaller.installState()
+    }
+
+    private func installCLI() {
+        isInstallingCLI = true
+        cliStatusMessage = "Installing without administrator privileges."
+
+        Task.detached {
+            let result: Result<Void, Error>
+            do {
+                try CommandLineToolInstaller.install()
+                result = .success(())
+            } catch {
+                result = .failure(error)
+            }
+
+            await MainActor.run {
+                isInstallingCLI = false
+                refreshCLIState()
+                switch result {
+                case .success:
+                    cliStatusMessage = "Installed. Try: veilwriter . Add ~/.local/bin to PATH if needed."
+                case .failure(let error):
+                    cliStatusMessage = error.localizedDescription
+                }
+            }
+        }
     }
 
     private func setting<Value>(_ keyPath: WritableKeyPath<EditorSettings, Value>) -> Binding<Value> {
