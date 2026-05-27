@@ -121,6 +121,12 @@ extension Language {
     }
 }
 
+enum SyntaxHighlightingSelection: Equatable {
+    case automatic
+    case plainText
+    case language(Language)
+}
+
 // MARK: - Highlight Rule
 
 /// A single regex-based highlighting rule.

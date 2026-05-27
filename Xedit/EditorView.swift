@@ -18,6 +18,8 @@ struct EditorView: NSViewRepresentable {
 
     /// The language to use for syntax highlighting. `nil` disables highlighting.
     var language: Language?
+    var detectedLanguage: Language?
+    var syntaxHighlightingSelection: SyntaxHighlightingSelection = .automatic
 
     /// User-configurable editor appearance.
     var settings: EditorSettings
@@ -47,6 +49,9 @@ struct EditorView: NSViewRepresentable {
     /// Called when the caret or selection moves so the status bar can stay current.
     var onSelectionChange: ((Int, Int, Int, Int) -> Void)?
 
+    /// Called when the user picks a syntax highlighting mode from the editor menu.
+    var onSyntaxHighlightingChange: ((SyntaxHighlightingSelection) -> Void)?
+
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
@@ -69,6 +74,11 @@ struct EditorView: NSViewRepresentable {
         textView.textContainerInset = NSSize(width: 12, height: 8)
         textView.textContainer?.lineFragmentPadding = 0
         textView.delegate = context.coordinator
+        textView.syntaxHighlightingSelection = syntaxHighlightingSelection
+        textView.detectedLanguage = detectedLanguage
+        textView.onSyntaxHighlightingChange = { [weak coordinator = context.coordinator] selection in
+            coordinator?.parent.onSyntaxHighlightingChange?(selection)
+        }
 
         let ruler = LineNumberRulerView(scrollView: scrollView, textView: textView)
         scrollView.verticalRulerView = ruler
@@ -103,6 +113,11 @@ struct EditorView: NSViewRepresentable {
         context.coordinator.currentNavigationRequest = navigationRequest
         context.coordinator.currentSearchRanges = searchRanges
         context.coordinator.currentActiveSearchRange = activeSearchRange
+        textView.syntaxHighlightingSelection = syntaxHighlightingSelection
+        textView.detectedLanguage = detectedLanguage
+        textView.onSyntaxHighlightingChange = { [weak coordinator = context.coordinator] selection in
+            coordinator?.parent.onSyntaxHighlightingChange?(selection)
+        }
         context.coordinator.applyAppearance(to: textView, in: nsView)
 
         // Detect programmatic text changes (file load, not user typing).
@@ -534,6 +549,74 @@ private struct BracketPair {
 final class VeilWriterTextView: NSTextView {
     var currentLineColor: NSColor = NSColor.selectedTextBackgroundColor.withAlphaComponent(0.16)
     var showsCurrentLineHighlight = true
+    var syntaxHighlightingSelection: SyntaxHighlightingSelection = .automatic
+    var detectedLanguage: Language?
+    var onSyntaxHighlightingChange: ((SyntaxHighlightingSelection) -> Void)?
+
+    private enum SyntaxMenuToken {
+        static let automatic = "__automatic"
+        static let plainText = "__plain_text"
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event) ?? NSMenu()
+        if menu.items.isEmpty == false {
+            menu.addItem(.separator())
+        }
+        menu.addItem(syntaxHighlightingMenuItem())
+        return menu
+    }
+
+    @objc private func chooseSyntaxHighlighting(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+
+        switch value {
+        case SyntaxMenuToken.automatic:
+            onSyntaxHighlightingChange?(.automatic)
+        case SyntaxMenuToken.plainText:
+            onSyntaxHighlightingChange?(.plainText)
+        default:
+            guard let language = Language(rawValue: value) else { return }
+            onSyntaxHighlightingChange?(.language(language))
+        }
+    }
+
+    private func syntaxHighlightingMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Syntax Highlighting", action: nil, keyEquivalent: "")
+        let submenu = NSMenu(title: "Syntax Highlighting")
+
+        let detectedName = detectedLanguage?.displayName ?? "Plain Text"
+        submenu.addItem(syntaxMenuItem(
+            title: "Automatic (\(detectedName))",
+            representedObject: SyntaxMenuToken.automatic,
+            isSelected: syntaxHighlightingSelection == .automatic
+        ))
+        submenu.addItem(syntaxMenuItem(
+            title: "Plain Text",
+            representedObject: SyntaxMenuToken.plainText,
+            isSelected: syntaxHighlightingSelection == .plainText
+        ))
+        submenu.addItem(.separator())
+
+        for language in Language.allCases.sorted(by: { $0.displayName < $1.displayName }) {
+            submenu.addItem(syntaxMenuItem(
+                title: language.displayName,
+                representedObject: language.rawValue,
+                isSelected: syntaxHighlightingSelection == .language(language)
+            ))
+        }
+
+        item.submenu = submenu
+        return item
+    }
+
+    private func syntaxMenuItem(title: String, representedObject: String, isSelected: Bool) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: #selector(chooseSyntaxHighlighting(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = representedObject
+        item.state = isSelected ? .on : .off
+        return item
+    }
 
     override func insertNewline(_ sender: Any?) {
         let indent = Self.leadingWhitespaceBefore(location: selectedRange().location, in: string)

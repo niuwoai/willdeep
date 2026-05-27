@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.26.0-rc1 - 2026-05-28
+
+- Added an editor context menu for choosing automatic, plain text, or explicit syntax highlighting languages per tab.
+
+## 1.25.0-rc2 - 2026-05-28
+
+- Fixed New Window so Command-N prompts for a folder and opens the selected directory in the new window instead of restoring an already-open project.
+
+## 1.25.0-rc1 - 2026-05-28
+
+- Added a File menu New Tab command with Command-T for opening a fresh untitled editor tab.
+
+## 1.24.0-rc4 - 2026-05-27
+
+- Fixed folder opening from the app UI and external folder events so selected directories open in a new editor window instead of replacing the current window.
+
+## 1.24.0-rc3 - 2026-05-27
+
+- Fixed HTML outline extraction so unlabeled ul and ol list containers appear in the shallow structure outline.
+
+## 1.24.0-rc2 - 2026-05-27
+
+- Fixed a crash when HTML outline extraction reads id, class, title, or aria-label attributes with different quote styles.
+
+## 1.24.0-rc1 - 2026-05-27
+
+- Added HTML preview support beside the editor using the existing lightweight preview pane.
+- Reworked HTML outline extraction to use shallow HTML node structure, including title, h1-h5, div, list, and semantic layout nodes.
+
+## 1.23.0-rc6 - 2026-05-27
+
+- Fixed Command-W in editor windows so it closes the active tab before falling back to the system window-close behavior when no tab is open.
+
 ## 1.23.0-rc5 - 2026-05-27
 
 - Fixed Settings window keyboard handling so Option-W and Command-W close the Settings window when it is focused.

@@ -281,6 +281,32 @@ struct VeilWriterTests {
         #expect(!state.recentFolders.contains { $0.standardizedFileURL.path == tempDir.standardizedFileURL.path })
     }
 
+    @Test("folder URL can be delegated to a new window without replacing current root")
+    @MainActor
+    func testFolderURLOpensInNewWindow() throws {
+        let originalDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("veilwriter_original_folder_\(UUID().uuidString)")
+        let nextDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("veilwriter_new_window_folder_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: originalDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: nextDir, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: originalDir)
+            try? FileManager.default.removeItem(at: nextDir)
+        }
+
+        let state = AppState(rootDirectory: originalDir)
+        var delegatedURL: URL?
+        state.openFolderURL(nextDir) { url in
+            delegatedURL = url
+        }
+
+        #expect(delegatedURL?.standardizedFileURL.path == nextDir.standardizedFileURL.path)
+        #expect(state.rootDirectory?.standardizedFileURL.path == originalDir.standardizedFileURL.path)
+        #expect(state.selectedFolderURL == nil)
+        #expect(state.recentFolders.contains { $0.standardizedFileURL.path == nextDir.standardizedFileURL.path })
+    }
+
     @Test("external file opens inside its parent folder")
     @MainActor
     func testExternalFileOpen() throws {
@@ -441,6 +467,63 @@ struct VeilWriterTests {
 
         #expect(items.map(\.title) == ["Product", "Features", "Minimap"])
         #expect(items.map(\.level) == [0, 1, 2])
+    }
+
+    @Test("outline extractor finds shallow HTML nodes")
+    func testOutlineExtractorFindsShallowHTMLNodes() {
+        let source = """
+        <!doctype html>
+        <html>
+          <head>
+            <title>Product Page</title>
+          </head>
+          <body>
+            <main id="app">
+              <h1>Welcome</h1>
+              <div class="hero primary">
+                <ul>
+                  <li>Fast preview</li>
+                </ul>
+              </div>
+              <section>
+                <div>
+                  <div>
+                    <div>
+                      <div id="too-deep"></div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </main>
+          </body>
+        </html>
+        """
+
+        let items = EditorOutlineExtractor.outline(for: source, language: .html)
+
+        #expect(items.map(\.title).contains("Product Page"))
+        #expect(items.map(\.title).contains("main#app"))
+        #expect(items.map(\.title).contains("H1 Welcome"))
+        #expect(items.map(\.title).contains("div.hero.primary"))
+        #expect(items.map(\.title).contains("ul"))
+        #expect(items.map(\.title).contains("li Fast preview"))
+        #expect(items.map(\.title).contains("div#too-deep") == false)
+    }
+
+    @Test("outline extractor handles HTML attribute quote styles")
+    func testOutlineExtractorHandlesHTMLAttributeQuoteStyles() {
+        let source = """
+        <main id=app>
+          <div class='hero primary'></div>
+          <section aria-label="Feature list"></section>
+        </main>
+        """
+
+        let items = EditorOutlineExtractor.outline(for: source, language: .html)
+
+        #expect(items.map(\.title).contains("main#app"))
+        #expect(items.map(\.title).contains("div.hero.primary"))
+        #expect(items.map(\.title).contains("section Feature list"))
     }
 
     @Test("git porcelain status maps common file states")
@@ -687,6 +770,45 @@ struct VeilWriterTests {
         #expect(appState.isEdited == true)
     }
 
+    @Test("createNewTab opens an untitled tab without reusing file tabs")
+    func testCreateNewTabOpensUntitledTab() {
+        let appState = AppState()
+
+        appState.createNewTab()
+        let firstID = appState.activeTabID
+        appState.fileContent = "draft"
+        appState.isEdited = true
+        appState.createNewTab()
+
+        #expect(appState.tabs.count == 2)
+        #expect(appState.activeTabID != firstID)
+        #expect(appState.activeTab?.title == "Untitled")
+        #expect(appState.activeTab?.isUntitled == true)
+        #expect(appState.tabs.first { $0.id == firstID }?.content == "draft")
+        #expect(appState.tabs.first { $0.id == firstID }?.isEdited == true)
+    }
+
+    @Test("syntax highlighting selection overrides detected file language")
+    func testSyntaxHighlightingSelectionOverridesDetectedLanguage() {
+        let fileURL = URL(fileURLWithPath: "/tmp/veilwriter_syntax_override.swift")
+        let appState = AppState(openedFileURL: fileURL, fileContent: "puts 'hi'")
+
+        #expect(appState.detectedLanguage == .swift)
+        #expect(appState.effectiveLanguage == .swift)
+
+        appState.setSyntaxHighlightingSelection(.language(.ruby))
+        if case .language(.ruby) = appState.syntaxHighlightingSelection {} else {
+            Issue.record("Expected Ruby syntax highlighting override")
+        }
+        #expect(appState.effectiveLanguage == .ruby)
+
+        appState.setSyntaxHighlightingSelection(.plainText)
+        #expect(appState.effectiveLanguage == nil)
+
+        appState.setSyntaxHighlightingSelection(.automatic)
+        #expect(appState.effectiveLanguage == .swift)
+    }
+
     @Test("closeTab activates a neighboring tab")
     func testCloseTabActivatesNeighbor() {
         let tempDir = FileManager.default.temporaryDirectory
@@ -927,6 +1049,7 @@ struct VeilWriterTests {
     @Test("preview and focus toggles stay lightweight")
     func testPreviewAndFocusTogglesStayLightweight() {
         let markdownURL = URL(fileURLWithPath: "/tmp/veilwriter_preview.md")
+        let htmlURL = URL(fileURLWithPath: "/tmp/veilwriter_preview.html")
         let swiftURL = URL(fileURLWithPath: "/tmp/veilwriter_preview.swift")
         let appState = AppState(openedFileURL: markdownURL, fileContent: "# Title")
 
@@ -936,6 +1059,11 @@ struct VeilWriterTests {
 
         appState.toggleFocusMode()
         #expect(appState.isFocusModeEnabled == true)
+
+        let htmlState = AppState(openedFileURL: htmlURL, fileContent: "<h1>Title</h1>")
+        #expect(htmlState.canShowPreview == true)
+        htmlState.togglePreview()
+        #expect(htmlState.isPreviewVisible == true)
 
         let codeState = AppState(openedFileURL: swiftURL, fileContent: "let x = 1")
         #expect(codeState.canShowPreview == false)
@@ -966,6 +1094,33 @@ struct VeilWriterTests {
         #expect(blocks.contains(MarkdownPreviewBlock(kind: .quote, text: "Quote")))
         #expect(blocks.contains(MarkdownPreviewBlock(kind: .unorderedList, text: "Item")))
         #expect(blocks.contains(MarkdownPreviewBlock(kind: .orderedList, text: "Ordered")))
+        #expect(blocks.contains(MarkdownPreviewBlock(kind: .divider, text: "")))
+        #expect(blocks.contains(MarkdownPreviewBlock(kind: .code, text: "let value = 1")))
+    }
+
+    @Test("HTML preview parser extracts common blocks")
+    func testHTMLPreviewParserExtractsCommonBlocks() {
+        let source = """
+        <html>
+          <head><title>Preview Title</title></head>
+          <body>
+            <h2>Section</h2>
+            <p>A paragraph with <strong>bold</strong> text.</p>
+            <blockquote>Quote</blockquote>
+            <ul><li>Item</li></ul>
+            <hr>
+            <pre>let value = 1</pre>
+          </body>
+        </html>
+        """
+
+        let blocks = HTMLPreviewParser.blocks(from: source)
+
+        #expect(blocks.contains(MarkdownPreviewBlock(kind: .heading(level: 1), text: "Preview Title")))
+        #expect(blocks.contains(MarkdownPreviewBlock(kind: .heading(level: 2), text: "Section")))
+        #expect(blocks.contains(MarkdownPreviewBlock(kind: .paragraph, text: "A paragraph with bold text.")))
+        #expect(blocks.contains(MarkdownPreviewBlock(kind: .quote, text: "Quote")))
+        #expect(blocks.contains(MarkdownPreviewBlock(kind: .unorderedList, text: "Item")))
         #expect(blocks.contains(MarkdownPreviewBlock(kind: .divider, text: "")))
         #expect(blocks.contains(MarkdownPreviewBlock(kind: .code, text: "let value = 1")))
     }

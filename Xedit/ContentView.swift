@@ -11,6 +11,7 @@ import Combine
 
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.openWindow) private var openWindow
 
     /// Derived from `appState.rootDirectory` — the tree model root node.
     /// Re-created whenever the root directory changes.
@@ -52,7 +53,9 @@ struct ContentView: View {
                             .accessibilityLabel("Open File")
 
                             Button {
-                                appState.openFolder()
+                                appState.openFolder { url in
+                                    openWindow(value: url)
+                                }
                             } label: {
                                 Label("Open Folder", systemImage: "folder")
                             }
@@ -99,17 +102,15 @@ struct ContentView: View {
                     }
 
                     // Detail: editor area with syntax highlighting.
-                    let detectedLanguage: Language? = {
-                        if let url = appState.openedFileURL {
-                            return Language.fromURL(url)
-                        }
-                        return nil
-                    }()
+                    let detectedLanguage = appState.detectedLanguage
+                    let editorLanguage = appState.effectiveLanguage
 
                     HStack(spacing: 0) {
                         EditorView(
                             text: $appState.fileContent,
-                            language: detectedLanguage,
+                            language: editorLanguage,
+                            detectedLanguage: detectedLanguage,
+                            syntaxHighlightingSelection: appState.syntaxHighlightingSelection,
                             settings: appState.editorSettings,
                             renderRevision: appState.editorRenderRevision,
                             highlightRevision: appState.editorHighlightRevision,
@@ -129,6 +130,9 @@ struct ContentView: View {
                                     selectedCharacters: selectedCharacters,
                                     selectedLines: selectedLines
                                 )
+                            },
+                            onSyntaxHighlightingChange: { selection in
+                                appState.setSyntaxHighlightingSelection(selection)
                             }
                         )
                         .frame(minWidth: 400, minHeight: 400)
@@ -139,8 +143,8 @@ struct ContentView: View {
                                 .frame(minWidth: 280, idealWidth: 360)
                         }
 
-                        if appState.isPreviewVisible, detectedLanguage == .markdown {
-                            MarkdownPreviewPane(text: appState.fileContent) {
+                        if appState.isPreviewVisible, PreviewPane.supports(editorLanguage) {
+                            PreviewPane(text: appState.fileContent, language: editorLanguage) {
                                 appState.isPreviewVisible = false
                             }
                             .frame(minWidth: 280, idealWidth: 360)
@@ -149,7 +153,7 @@ struct ContentView: View {
                         if appState.isInspectorVisible && !appState.isFocusModeEnabled {
                             EditorInspectorSidebar(
                                 text: appState.fileContent,
-                                language: detectedLanguage,
+                                language: editorLanguage,
                                 mode: $appState.inspectorMode,
                                 orderedModes: appState.editorSettings.orderedInspectorModes,
                                 onNavigateToLine: { line in
@@ -168,7 +172,7 @@ struct ContentView: View {
                     }
 
                     if !appState.isFocusModeEnabled {
-                        EditorStatusBar(language: detectedLanguage)
+                        EditorStatusBar(language: editorLanguage)
                             .environmentObject(appState)
                     }
                 } else {
@@ -231,6 +235,14 @@ struct ContentView: View {
                 }
             }
         }
+        .background(
+            MainWindowKeyboardShortcutHandler(
+                hasActiveTab: appState.activeTabID != nil,
+                onCloseTab: {
+                    appState.closeActiveTab()
+                }
+            )
+        )
     }
 
     // MARK: - File Selection Handling
@@ -312,12 +324,15 @@ struct ContentView: View {
 
 private struct RecentItemsView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if !appState.recentFolders.isEmpty {
                 recentSection(title: "Recent Folders", urls: appState.recentFolders, icon: "folder") { url in
-                    appState.openRecentFolder(url)
+                    appState.openRecentFolder(url) { folderURL in
+                        openWindow(value: folderURL)
+                    }
                 }
             }
             if !appState.recentFiles.isEmpty {
@@ -359,6 +374,7 @@ private struct RecentItemsView: View {
 
 private struct CommandPalettePanel: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.openWindow) private var openWindow
     @FocusState private var queryFocused: Bool
     @State private var selectedCommandIndex = 0
     @State private var ignoredHoverSelectionUntil = Date.distantPast
@@ -390,7 +406,7 @@ private struct CommandPalettePanel: View {
                 appState.hideCommandPalette()
                 appState.toggleFocusMode()
             },
-            PaletteCommand(title: "Toggle Preview", subtitle: "Show or hide Markdown preview", icon: "doc.richtext", isEnabled: appState.canShowPreview, keywords: ["markdown", "md"]) {
+            PaletteCommand(title: "Toggle Preview", subtitle: "Show or hide Markdown and HTML preview", icon: "doc.richtext", isEnabled: appState.canShowPreview, keywords: ["markdown", "md", "html"]) {
                 appState.hideCommandPalette()
                 appState.togglePreview()
             },
@@ -408,7 +424,9 @@ private struct CommandPalettePanel: View {
             },
             PaletteCommand(title: "Open Folder", subtitle: "Choose a folder for the sidebar", icon: "folder", isEnabled: true, keywords: ["project", "workspace"]) {
                 appState.hideCommandPalette()
-                appState.openFolder()
+                appState.openFolder { url in
+                    openWindow(value: url)
+                }
             },
             PaletteCommand(title: "Open Terminal Here", subtitle: "Open Terminal at the project or active file location", icon: "terminal", isEnabled: appState.rootDirectory != nil || appState.openedFileURL != nil, keywords: ["shell", "cli", "command line"]) {
                 appState.hideCommandPalette()
@@ -654,6 +672,75 @@ private struct CommandPalettePanel: View {
     }
 }
 
+private struct MainWindowKeyboardShortcutHandler: NSViewRepresentable {
+    let hasActiveTab: Bool
+    let onCloseTab: () -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        context.coordinator.view = view
+        context.coordinator.installMonitor()
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.view = nsView
+        context.coordinator.hasActiveTab = hasActiveTab
+        context.coordinator.onCloseTab = onCloseTab
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.removeMonitor()
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(hasActiveTab: hasActiveTab, onCloseTab: onCloseTab)
+    }
+
+    final class Coordinator {
+        weak var view: NSView?
+        var hasActiveTab: Bool
+        var onCloseTab: () -> Void
+        private var monitor: Any?
+
+        init(hasActiveTab: Bool, onCloseTab: @escaping () -> Void) {
+            self.hasActiveTab = hasActiveTab
+            self.onCloseTab = onCloseTab
+        }
+
+        func installMonitor() {
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                self?.handle(event) ?? event
+            }
+        }
+
+        func removeMonitor() {
+            guard let monitor else { return }
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
+        }
+
+        private func handle(_ event: NSEvent) -> NSEvent? {
+            guard let window = view?.window,
+                  event.window === window,
+                  hasActiveTab,
+                  event.charactersIgnoringModifiers?.lowercased() == "w" else {
+                return event
+            }
+
+            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            let relevantModifiers = modifiers.intersection([.command, .option, .control, .shift])
+            guard relevantModifiers == .command else {
+                return event
+            }
+
+            onCloseTab()
+            return nil
+        }
+    }
+}
+
 private struct PaletteKeyboardHandler: NSViewRepresentable {
     let onMoveUp: () -> Void
     let onMoveDown: () -> Void
@@ -802,7 +889,7 @@ private struct SymbolJumpPanel: View {
 
     private var symbols: [EditorOutlineItem] {
         guard let url = appState.openedFileURL else { return [] }
-        let language = Language.fromURL(url)
+        let language = appState.effectiveLanguage ?? Language.fromURL(url)
         let all = EditorOutlineExtractor.outline(for: appState.fileContent, language: language)
         let query = appState.symbolJumpQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return all }
@@ -1227,12 +1314,22 @@ private struct SplitEditorPane: View {
     }
 }
 
-private struct MarkdownPreviewPane: View {
+private struct PreviewPane: View {
     let text: String
+    let language: Language?
     let onClose: () -> Void
 
     private var blocks: [MarkdownPreviewBlock] {
-        MarkdownPreviewParser.blocks(from: text)
+        switch language {
+        case .html:
+            return HTMLPreviewParser.blocks(from: text)
+        default:
+            return MarkdownPreviewParser.blocks(from: text)
+        }
+    }
+
+    static func supports(_ language: Language?) -> Bool {
+        language == .markdown || language == .html
     }
 
     var body: some View {
@@ -1388,6 +1485,97 @@ enum MarkdownPreviewParser {
         let afterDot = line[line.index(after: dotIndex)...]
         guard afterDot.hasPrefix(" ") else { return nil }
         return String(afterDot.dropFirst())
+    }
+}
+
+enum HTMLPreviewParser {
+    static func blocks(from source: String) -> [MarkdownPreviewBlock] {
+        let nsSource = source as NSString
+        let range = NSRange(location: 0, length: nsSource.length)
+        let pattern = #"<\s*(title|h[1-5]|p|li|blockquote|pre|code|hr|div)\b([^>]*)>"#
+        guard let tagRegex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+            return []
+        }
+
+        var blocks: [MarkdownPreviewBlock] = []
+        let matches = tagRegex.matches(in: source, range: range)
+
+        for match in matches {
+            guard match.numberOfRanges >= 2 else { continue }
+            let tagName = nsSource.substring(with: match.range(at: 1)).lowercased()
+
+            if tagName == "hr" {
+                blocks.append(MarkdownPreviewBlock(kind: .divider, text: ""))
+                continue
+            }
+
+            guard let text = innerText(tagName: tagName, source: nsSource, after: match.range.upperBound) else {
+                continue
+            }
+
+            switch tagName {
+            case "title":
+                blocks.append(MarkdownPreviewBlock(kind: .heading(level: 1), text: text))
+            case "h1", "h2", "h3", "h4", "h5":
+                let level = tagName.last?.wholeNumberValue ?? 1
+                blocks.append(MarkdownPreviewBlock(kind: .heading(level: level), text: text))
+            case "li":
+                blocks.append(MarkdownPreviewBlock(kind: .unorderedList, text: text))
+            case "blockquote":
+                blocks.append(MarkdownPreviewBlock(kind: .quote, text: text))
+            case "pre", "code":
+                blocks.append(MarkdownPreviewBlock(kind: .code, text: text))
+            default:
+                blocks.append(MarkdownPreviewBlock(kind: .paragraph, text: text))
+            }
+
+            if blocks.count >= 200 {
+                return blocks
+            }
+        }
+
+        return blocks
+    }
+
+    private static func innerText(tagName: String, source: NSString, after start: Int) -> String? {
+        let remainingLength = source.length - start
+        guard remainingLength > 0 else { return nil }
+
+        let closingPattern = "</\\s*\(NSRegularExpression.escapedPattern(for: tagName))\\s*>"
+        guard let closingRegex = try? NSRegularExpression(pattern: closingPattern, options: [.caseInsensitive]) else {
+            return nil
+        }
+
+        let searchRange = NSRange(location: start, length: min(remainingLength, 8_000))
+        guard let closing = closingRegex.firstMatch(in: source as String, range: searchRange) else {
+            return nil
+        }
+
+        let textRange = NSRange(location: start, length: closing.range.location - start)
+        guard textRange.length > 0 else { return nil }
+
+        let raw = source.substring(with: textRange)
+        let withoutHiddenContent = raw
+            .replacingOccurrences(of: "<script[\\s\\S]*?</script>", with: " ", options: [.regularExpression, .caseInsensitive])
+            .replacingOccurrences(of: "<style[\\s\\S]*?</style>", with: " ", options: [.regularExpression, .caseInsensitive])
+        let stripped = withoutHiddenContent.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+        return normalizedText(stripped)
+    }
+
+    private static func normalizedText(_ text: String) -> String? {
+        let decoded = text
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+        let collapsed = decoded
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        guard !collapsed.isEmpty else { return nil }
+        return collapsed
     }
 }
 

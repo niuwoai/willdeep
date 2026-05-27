@@ -13,16 +13,20 @@ struct EditorTab: Identifiable, Equatable {
     var content: String
     var savedContent: String
     var isEdited: Bool
+    var isUntitled: Bool
+    var syntaxHighlightingSelection: SyntaxHighlightingSelection
 
-    init(id: UUID = UUID(), url: URL, content: String = "", savedContent: String? = nil, isEdited: Bool = false) {
+    init(id: UUID = UUID(), url: URL, content: String = "", savedContent: String? = nil, isEdited: Bool = false, isUntitled: Bool = false, syntaxHighlightingSelection: SyntaxHighlightingSelection = .automatic) {
         self.id = id
         self.url = url
         self.content = content
         self.savedContent = savedContent ?? content
         self.isEdited = isEdited
+        self.isUntitled = isUntitled
+        self.syntaxHighlightingSelection = syntaxHighlightingSelection
     }
 
     var title: String {
-        url.lastPathComponent
+        isUntitled ? "Untitled" : url.lastPathComponent
     }
 }

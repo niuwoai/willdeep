@@ -153,8 +153,27 @@ final class AppState: ObservableObject {
     }
 
     var canShowPreview: Bool {
-        guard let openedFileURL else { return false }
-        return Language.fromURL(openedFileURL) == .markdown
+        let language = effectiveLanguage
+        return language == .markdown || language == .html
+    }
+
+    var detectedLanguage: Language? {
+        openedFileURL.map(Language.fromURL) ?? nil
+    }
+
+    var syntaxHighlightingSelection: SyntaxHighlightingSelection {
+        activeTab?.syntaxHighlightingSelection ?? .automatic
+    }
+
+    var effectiveLanguage: Language? {
+        switch syntaxHighlightingSelection {
+        case .automatic:
+            return detectedLanguage
+        case .plainText:
+            return nil
+        case .language(let language):
+            return language
+        }
     }
 
     func showFindBar() {
@@ -235,10 +254,8 @@ final class AppState: ObservableObject {
         openedFileURL = url
     }
 
-    func openRecentFolder(_ url: URL) {
-        registerRecentFolder(url)
-        setRootDirectory(url)
-        refreshGitStatus()
+    func openRecentFolder(_ url: URL, openInNewWindow: ((URL) -> Void)? = nil) {
+        openFolderURL(url, openInNewWindow: openInNewWindow)
     }
 
     func openExternalURL(_ url: URL) {
@@ -262,6 +279,25 @@ final class AppState: ObservableObject {
         openedFileURL = fileURL
         refreshGitStatus()
         persistSession()
+    }
+
+    func openFolderURL(_ url: URL, openInNewWindow: ((URL) -> Void)? = nil) {
+        registerRecentFolder(url)
+
+        if let openInNewWindow {
+            openInNewWindow(url)
+            return
+        }
+
+        setRootDirectory(url)
+        refreshGitStatus()
+        persistSession()
+    }
+
+    nonisolated static func isExistingDirectory(_ url: URL) -> Bool {
+        let fileURL = url.isFileURL ? url : URL(fileURLWithPath: url.path)
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory) && isDirectory.boolValue
     }
 
     func registerRecentFile(_ url: URL) {
@@ -402,6 +438,23 @@ final class AppState: ObservableObject {
     func activateTab(atDisplayIndex displayIndex: Int) {
         guard displayIndex > 0, displayIndex <= tabs.count else { return }
         activateTab(id: tabs[displayIndex - 1].id)
+    }
+
+    func createNewTab() {
+        let tab = EditorTab(url: Self.untitledTabURL(), isUntitled: true)
+        tabs.append(tab)
+        activeTabID = tab.id
+        imagePreviewURL = nil
+        selectedSidebarFileURL = nil
+        applySnapshot(from: tab, suppressURLChange: true)
+    }
+
+    func setSyntaxHighlightingSelection(_ selection: SyntaxHighlightingSelection) {
+        updateActiveTab { tab in
+            tab.syntaxHighlightingSelection = selection
+        }
+        bumpEditorHighlightRevision()
+        persistSession()
     }
 
     func reopenClosedTab() {
@@ -837,17 +890,7 @@ final class AppState: ObservableObject {
 
             switch alert.runModal() {
             case .alertFirstButtonReturn:
-                do {
-                    try tab.content.write(to: tab.url, atomically: true, encoding: .utf8)
-                    tabs[index].savedContent = tab.content
-                    tabs[index].isEdited = false
-                } catch {
-                    let saveAlert = NSAlert()
-                    saveAlert.messageText = "Save Failed"
-                    saveAlert.informativeText = "Could not save \"\(tab.title)\": \(error.localizedDescription)"
-                    saveAlert.alertStyle = .critical
-                    saveAlert.addButton(withTitle: "OK")
-                    saveAlert.runModal()
+                guard saveTabBeforeClosing(at: index) else {
                     return
                 }
             case .alertThirdButtonReturn:
@@ -929,11 +972,49 @@ final class AppState: ObservableObject {
         tabs[index].content = fileContent
         tabs[index].savedContent = fileContent
         tabs[index].isEdited = isEdited
+        tabs[index].isUntitled = false
+    }
+
+    private func saveTabBeforeClosing(at index: Int) -> Bool {
+        guard tabs.indices.contains(index) else { return false }
+        let tab = tabs[index]
+
+        if tab.isUntitled {
+            let previousActiveTabID = activeTabID
+            activeTabID = tab.id
+            applySnapshot(from: tab, suppressURLChange: true)
+            let saved = saveCurrentFileAs()
+            if !saved, let previousActiveTabID {
+                activateTab(id: previousActiveTabID)
+            }
+            return saved
+        }
+
+        do {
+            try tab.content.write(to: tab.url, atomically: true, encoding: .utf8)
+            tabs[index].savedContent = tab.content
+            tabs[index].isEdited = false
+            return true
+        } catch {
+            let saveAlert = NSAlert()
+            saveAlert.messageText = "Save Failed"
+            saveAlert.informativeText = "Could not save \"\(tab.title)\": \(error.localizedDescription)"
+            saveAlert.alertStyle = .critical
+            saveAlert.addButton(withTitle: "OK")
+            saveAlert.runModal()
+            return false
+        }
+    }
+
+    private static func untitledTabURL() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("veilwriter-untitled-\(UUID().uuidString)")
+            .appendingPathExtension("txt")
     }
 
     private func updateWindowTitle(url: URL?, isEdited: Bool) {
         guard let window = NSApplication.shared.keyWindow else { return }
-        window.title = url?.lastPathComponent ?? ""
+        window.title = activeTab?.title ?? url?.lastPathComponent ?? ""
         window.isDocumentEdited = isEdited
     }
 
@@ -941,7 +1022,16 @@ final class AppState: ObservableObject {
 
     /// Presents an `NSOpenPanel` configured for directory selection and assigns
     /// the chosen URL to `rootDirectory`.
-    func openFolder() {
+    func openFolder(openInNewWindow: ((URL) -> Void)? = nil) {
+        let panel = Self.folderOpenPanel()
+
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.openFolderURL(url, openInNewWindow: openInNewWindow)
+        }
+    }
+
+    static func folderOpenPanel() -> NSOpenPanel {
         let panel = NSOpenPanel()
         panel.title = "Choose a Folder"
         panel.message = "Select a directory to browse in the sidebar."
@@ -950,14 +1040,7 @@ final class AppState: ObservableObject {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = false
-
-        panel.begin { [weak self] response in
-            guard response == .OK, let url = panel.url else { return }
-            self?.setRootDirectory(url)
-            self?.registerRecentFolder(url)
-            self?.refreshGitStatus()
-            self?.persistSession()
-        }
+        return panel
     }
 
     // MARK: - File Opening
@@ -1220,6 +1303,10 @@ final class AppState: ObservableObject {
     /// On failure optionally presents an alert describing the error and returns `false`.
     @discardableResult
     func saveCurrentFile() -> Bool {
+        if activeTab?.isUntitled == true {
+            return saveCurrentFileAs()
+        }
+
         guard let url = openedFileURL else {
             return saveCurrentFileAs()
         }
@@ -1235,7 +1322,7 @@ final class AppState: ObservableObject {
         panel.message = "Choose where to save this file."
         panel.prompt = "Save"
         panel.canCreateDirectories = true
-        panel.nameFieldStringValue = openedFileURL?.lastPathComponent ?? "Untitled.txt"
+        panel.nameFieldStringValue = activeTab?.isUntitled == true ? "Untitled.txt" : (openedFileURL?.lastPathComponent ?? "Untitled.txt")
 
         guard panel.runModal() == .OK, let url = panel.url else {
             return false
@@ -1318,11 +1405,12 @@ final class AppState: ObservableObject {
     }
 
     func persistSession() {
+        let restorableTabs = tabs.filter { !$0.isUntitled }
         let session = EditorSessionSnapshot(
             rootDirectoryPath: rootDirectory?.path,
             rootDirectoryBookmarkData: rootDirectory.flatMap { bookmarkData(for: $0) },
-            tabPaths: tabs.map(\.url.path),
-            activeTabPath: activeTab?.url.path
+            tabPaths: restorableTabs.map(\.url.path),
+            activeTabPath: activeTab?.isUntitled == true ? nil : activeTab?.url.path
         )
         SessionStore.save(session)
     }

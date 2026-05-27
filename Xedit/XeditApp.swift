@@ -11,20 +11,36 @@ import AppKit
 @main
 struct VeilWriterApp: App {
     @FocusedObject private var appState: AppState?
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
         WindowGroup {
             WindowRootView()
         }
+        WindowGroup(for: URL.self) { $url in
+            WindowRootView(initialExternalURL: url)
+        }
         .commands {
-            CommandGroup(after: .newItem) {
+            CommandGroup(replacing: .newItem) {
+                Button("New Window…") {
+                    chooseFolderForNewWindow()
+                }
+                .keyboardShortcut("n", modifiers: .command)
+
+                Button("New Tab") {
+                    appState?.createNewTab()
+                }
+                .keyboardShortcut("t", modifiers: .command)
+
                 Button("Open File…") {
                     appState?.openFile()
                 }
                 .keyboardShortcut("O", modifiers: .command)
 
                 Button("Open Folder…") {
-                    appState?.openFolder()
+                    appState?.openFolder { url in
+                        openWindow(value: url)
+                    }
                 }
                 .keyboardShortcut("O", modifiers: [.command, .shift])
             }
@@ -161,7 +177,7 @@ struct VeilWriterApp: App {
                 Button("Close Tab") {
                     appState?.closeActiveTab()
                 }
-                .keyboardShortcut(.tab, modifiers: .option)
+                .keyboardShortcut("w", modifiers: .command)
                 .disabled(appState?.activeTabID == nil)
             }
         }
@@ -171,19 +187,45 @@ struct VeilWriterApp: App {
                 .environmentObject(AppState())
         }
     }
+
+    private func chooseFolderForNewWindow() {
+        let panel = AppState.folderOpenPanel()
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            appState?.registerRecentFolder(url)
+            openWindow(value: url)
+        }
+    }
 }
 
 private struct WindowRootView: View {
+    @Environment(\.openWindow) private var openWindow
     @StateObject private var appState = AppState()
+    let initialExternalURL: URL?
+    @State private var didHandleInitialExternalURL = false
+
+    init(initialExternalURL: URL? = nil) {
+        self.initialExternalURL = initialExternalURL
+    }
 
     var body: some View {
         ContentView()
             .environmentObject(appState)
             .focusedSceneObject(appState)
             .onOpenURL { url in
+                if AppState.isExistingDirectory(url) {
+                    appState.registerRecentFolder(url)
+                    openWindow(value: url)
+                    return
+                }
                 appState.openExternalURL(url)
             }
             .onAppear {
+                if !didHandleInitialExternalURL, let initialExternalURL {
+                    didHandleInitialExternalURL = true
+                    appState.openExternalURL(initialExternalURL)
+                    return
+                }
                 appState.restoreSessionIfAvailable()
             }
     }
