@@ -128,6 +128,8 @@ struct VeilWriterTests {
         let settings = EditorSettings.default
         #expect(settings.showsLineNumbers == true)
         #expect(settings.highlightsCurrentLine == true)
+        #expect(settings.trimsTrailingWhitespaceOnSave == false)
+        #expect(settings.ensuresFinalNewlineOnSave == false)
         #expect(EditorTheme.byID(settings.themeID) != nil)
         #expect(EditorFontChoice.byID(settings.fontID) != nil)
     }
@@ -139,7 +141,9 @@ struct VeilWriterTests {
             fontSize: 99,
             themeID: "missing-theme",
             showsLineNumbers: false,
-            highlightsCurrentLine: false
+            highlightsCurrentLine: false,
+            trimsTrailingWhitespaceOnSave: true,
+            ensuresFinalNewlineOnSave: true
         ).normalized()
 
         #expect(settings.fontID == EditorSettings.default.fontID)
@@ -147,6 +151,8 @@ struct VeilWriterTests {
         #expect(settings.fontSize == 28)
         #expect(settings.showsLineNumbers == false)
         #expect(settings.highlightsCurrentLine == false)
+        #expect(settings.trimsTrailingWhitespaceOnSave == true)
+        #expect(settings.ensuresFinalNewlineOnSave == true)
     }
 
     @Test("syntax highlighting uses the selected theme and font")
@@ -518,6 +524,49 @@ struct VeilWriterTests {
         #expect(appState.openedFileURL == firstURL)
     }
 
+    @Test("tab navigation activates previous next and indexed tabs")
+    func testTabNavigationActivatesPreviousNextAndIndexedTabs() {
+        let tempDir = FileManager.default.temporaryDirectory
+        let firstURL = tempDir.appendingPathComponent("veilwriter_nav_first_\(UUID().uuidString).txt")
+        let secondURL = tempDir.appendingPathComponent("veilwriter_nav_second_\(UUID().uuidString).txt")
+        let thirdURL = tempDir.appendingPathComponent("veilwriter_nav_third_\(UUID().uuidString).txt")
+
+        let appState = AppState()
+        appState.beginOpeningTab(for: firstURL)
+        let firstID = appState.activeTabID
+        appState.beginOpeningTab(for: secondURL)
+        let secondID = appState.activeTabID
+        appState.beginOpeningTab(for: thirdURL)
+        let thirdID = appState.activeTabID
+
+        appState.activatePreviousTab()
+        #expect(appState.activeTabID == secondID)
+
+        appState.activateNextTab()
+        #expect(appState.activeTabID == thirdID)
+
+        appState.activateTab(atDisplayIndex: 1)
+        #expect(appState.activeTabID == firstID)
+    }
+
+    @Test("reopenClosedTab restores most recently closed tab")
+    func testReopenClosedTabRestoresMostRecentlyClosedTab() {
+        let tempDir = FileManager.default.temporaryDirectory
+        let firstURL = tempDir.appendingPathComponent("veilwriter_reopen_first_\(UUID().uuidString).txt")
+        let secondURL = tempDir.appendingPathComponent("veilwriter_reopen_second_\(UUID().uuidString).txt")
+
+        let appState = AppState()
+        appState.beginOpeningTab(for: firstURL)
+        appState.beginOpeningTab(for: secondURL)
+
+        appState.closeActiveTab()
+        #expect(appState.tabs.map(\.url) == [firstURL])
+
+        appState.reopenClosedTab()
+        #expect(appState.tabs.map(\.url).contains(secondURL))
+        #expect(appState.openedFileURL == secondURL)
+    }
+
     @Test("editor navigation request targets requested line")
     func testEditorNavigationRequestTargetsLine() {
         let appState = AppState()
@@ -556,6 +605,15 @@ struct VeilWriterTests {
         #expect(second.column == 2)
         #expect(end.line == 3)
         #expect(end.column == 6)
+    }
+
+    @Test("editor selected line count maps ranges")
+    func testEditorSelectedLineCountMapsRanges() {
+        let text = "alpha\nbeta\ngamma"
+
+        #expect(EditorView.Coordinator.selectedLineCount(for: NSRange(location: 0, length: 0), in: text) == 0)
+        #expect(EditorView.Coordinator.selectedLineCount(for: NSRange(location: 1, length: 3), in: text) == 1)
+        #expect(EditorView.Coordinator.selectedLineCount(for: NSRange(location: 1, length: 8), in: text) == 2)
     }
 
     @Test("quick open file URLs are sorted and limited")
@@ -603,6 +661,67 @@ struct VeilWriterTests {
         #expect(VeilWriterTextView.leadingWhitespaceBefore(location: 17, in: source) == "    ")
         #expect(VeilWriterTextView.indentingLines("one\ntwo\n") == "    one\n    two\n")
         #expect(VeilWriterTextView.outdentingLines("    one\n\ttwo\n  three") == "one\ntwo\nthree")
+    }
+
+    @Test("save cleanup trims whitespace and ensures final newline")
+    func testSaveCleanupTrimsWhitespaceAndEnsuresFinalNewline() {
+        let settings = EditorSettings(
+            fontID: EditorSettings.default.fontID,
+            fontSize: EditorSettings.default.fontSize,
+            themeID: EditorSettings.default.themeID,
+            showsLineNumbers: true,
+            highlightsCurrentLine: true,
+            trimsTrailingWhitespaceOnSave: true,
+            ensuresFinalNewlineOnSave: true
+        )
+
+        let cleaned = AppState.contentForSave("let a = 1   \nlet b = 2\t", settings: settings)
+
+        #expect(cleaned == "let a = 1\nlet b = 2\n")
+    }
+
+    @Test("line editing helpers duplicate and move current line")
+    func testLineEditingHelpersDuplicateAndMoveCurrentLine() {
+        let source = "one\ntwo\nthree"
+
+        #expect(AppState.duplicateLine(at: 2, in: source) == "one\ntwo\ntwo\nthree")
+
+        let movedUp = AppState.moveLine(at: 2, direction: -1, in: source)
+        #expect(movedUp.text == "two\none\nthree")
+        #expect(movedUp.line == 1)
+
+        let movedDown = AppState.moveLine(at: 2, direction: 1, in: source)
+        #expect(movedDown.text == "one\nthree\ntwo")
+        #expect(movedDown.line == 3)
+    }
+
+    @Test("preview and focus toggles stay lightweight")
+    func testPreviewAndFocusTogglesStayLightweight() {
+        let markdownURL = URL(fileURLWithPath: "/tmp/veilwriter_preview.md")
+        let swiftURL = URL(fileURLWithPath: "/tmp/veilwriter_preview.swift")
+        let appState = AppState(openedFileURL: markdownURL, fileContent: "# Title")
+
+        #expect(appState.canShowPreview == true)
+        appState.togglePreview()
+        #expect(appState.isPreviewVisible == true)
+
+        appState.toggleFocusMode()
+        #expect(appState.isFocusModeEnabled == true)
+
+        let codeState = AppState(openedFileURL: swiftURL, fileContent: "let x = 1")
+        #expect(codeState.canShowPreview == false)
+        codeState.togglePreview()
+        #expect(codeState.isPreviewVisible == false)
+    }
+
+    @Test("file modification date detects existing files")
+    func testFileModificationDateDetectsExistingFiles() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let fileURL = tempDir.appendingPathComponent("veilwriter_mod_date_\(UUID().uuidString).txt")
+        try "first".write(to: fileURL, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        #expect(AppState.modificationDate(at: fileURL) != nil)
     }
 
     @Test("matching bracket ranges find nested pairs around cursor")

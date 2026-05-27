@@ -14,13 +14,17 @@ struct EditorSettings: Codable, Equatable {
     var themeID: String
     var showsLineNumbers: Bool
     var highlightsCurrentLine: Bool
+    var trimsTrailingWhitespaceOnSave: Bool
+    var ensuresFinalNewlineOnSave: Bool
 
     static let `default` = EditorSettings(
         fontID: EditorFontChoice.systemMono.id,
         fontSize: 13,
         themeID: EditorTheme.paper.id,
         showsLineNumbers: true,
-        highlightsCurrentLine: true
+        highlightsCurrentLine: true,
+        trimsTrailingWhitespaceOnSave: false,
+        ensuresFinalNewlineOnSave: false
     )
 }
 

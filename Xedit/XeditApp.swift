@@ -59,6 +59,12 @@ struct VeilWriterApp: App {
                 .keyboardShortcut("l", modifiers: .command)
                 .disabled(appState?.activeTabID == nil)
 
+                Button("Go to Symbol") {
+                    appState?.showSymbolJump()
+                }
+                .keyboardShortcut("o", modifiers: [.command, .shift])
+                .disabled(appState?.activeTabID == nil)
+
                 Button("Find") {
                     appState?.showFindBar()
                 }
@@ -76,9 +82,49 @@ struct VeilWriterApp: App {
                 }
                 .keyboardShortcut("g", modifiers: [.command, .shift])
                 .disabled(appState?.findMatchRanges.isEmpty ?? true)
+
+                Button("Duplicate Line") {
+                    appState?.duplicateCurrentLine()
+                }
+                .keyboardShortcut("d", modifiers: .command)
+                .disabled(appState?.activeTabID == nil)
+
+                Button("Move Line Up") {
+                    appState?.moveCurrentLineUp()
+                }
+                .keyboardShortcut(.upArrow, modifiers: .option)
+                .disabled(appState?.activeTabID == nil)
+
+                Button("Move Line Down") {
+                    appState?.moveCurrentLineDown()
+                }
+                .keyboardShortcut(.downArrow, modifiers: .option)
+                .disabled(appState?.activeTabID == nil)
             }
 
             CommandGroup(after: .toolbar) {
+                Button("Toggle Focus Mode") {
+                    appState?.toggleFocusMode()
+                }
+                .keyboardShortcut("z", modifiers: [.command, .shift])
+                .disabled(appState?.activeTabID == nil)
+
+                Button("Toggle Preview") {
+                    appState?.togglePreview()
+                }
+                .keyboardShortcut("r", modifiers: [.command, .option])
+                .disabled(appState?.canShowPreview != true)
+
+                Button("Open Split File…") {
+                    appState?.openSplitFile()
+                }
+                .keyboardShortcut("\\", modifiers: [.command, .option])
+
+                Button("Open Containing Folder") {
+                    appState?.openContainingFolder()
+                }
+                .disabled(appState?.openedFileURL == nil)
+
                 Button("Toggle Inspector") {
                     appState?.isInspectorVisible.toggle()
                 }
@@ -87,6 +133,31 @@ struct VeilWriterApp: App {
             }
 
             CommandGroup(before: .windowArrangement) {
+                Button("Previous Tab") {
+                    appState?.activatePreviousTab()
+                }
+                .keyboardShortcut("[", modifiers: [.command, .shift])
+                .disabled((appState?.tabs.count ?? 0) < 2)
+
+                Button("Next Tab") {
+                    appState?.activateNextTab()
+                }
+                .keyboardShortcut("]", modifiers: [.command, .shift])
+                .disabled((appState?.tabs.count ?? 0) < 2)
+
+                ForEach(1...9, id: \.self) { index in
+                    Button("Select Tab \(index)") {
+                        appState?.activateTab(atDisplayIndex: index)
+                    }
+                    .keyboardShortcut(KeyEquivalent(Character("\(index)")), modifiers: .command)
+                    .disabled((appState?.tabs.count ?? 0) < index)
+                }
+
+                Button("Reopen Closed Tab") {
+                    appState?.reopenClosedTab()
+                }
+                .keyboardShortcut("t", modifiers: [.command, .shift])
+
                 Button("Close Tab") {
                     appState?.closeActiveTab()
                 }

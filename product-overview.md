@@ -10,23 +10,34 @@ VeilWriter is a lightweight macOS editor focused on quick project browsing, fast
 - Select files from compact full-width sidebar rows for easier clicking.
 - Open files and folders from either the menu commands or the empty sidebar state.
 - Open individual files from the File menu.
+- Reveal the current file in Finder with Open Containing Folder.
 - Reopen recent files and folders from the empty sidebar state.
 - Restore the last folder, open tabs, and active tab on launch.
 - Run common actions from the Command-Shift-P command palette.
 - Search and open project files quickly with Command-P.
 - Keep multiple files open in tabs, each with its own unsaved state.
+- Switch tabs with previous/next commands or Command-1 through Command-9.
+- Reopen the most recently closed tab with Command-Shift-T.
 - Open multiple windows, each with its own independent tab set and editor state.
 - Close the active tab from the File menu or with Option-Tab.
 - Jump to a specific line with Command-L.
+- Jump to symbols in the active file with Command-Shift-O.
 - Find and replace text in the active editor, all open tabs, or the selected folder with highlighted matches and next/previous navigation.
 - Use the right inspector for a lightweight minimap and document/code structure view, with click-to-jump navigation into the current tab.
+- Use Focus Mode to hide editor chrome when reading or writing.
+- Open a lightweight split editor pane to view another text file beside the active editor.
+- Preview Markdown beside the editor.
 - Read current file state from a compact status bar with cursor position, language, file size, and version.
+- Reload when the active file has changed on disk outside VeilWriter.
+- Read selected character and line counts from the status bar when text is selected.
 - See lightweight dirty gutter marks for lines changed since the last saved content.
 - Highlight matching bracket pairs around the cursor for common code delimiters.
 - Open text files in a native macOS editing surface.
 - Highlight Swift, Ruby, PHP, Java, JSON, JavaScript, TypeScript, Go, HTML, CSS, Markdown, Python, shell/bash, YAML, TOML, XML, SQL, Dockerfile, Makefile, INI, env, Rust, C, C++, and C# files.
 - Customize editor font, font size, color style, line numbers, and current-line focus highlighting from Settings.
+- Optionally trim trailing whitespace and ensure a final newline on save.
 - Keep indentation flowing with newline auto-indent plus Tab and Shift-Tab line indentation.
+- Duplicate the current line with Command-D and move it with Option-Up/Option-Down.
 - Decode UTF-8 first, then fall back through NSString encoding detection and ISO Latin 1.
 - Detect binary files before opening.
 - Track dirty state, save with Cmd+S, and save copies with Save As.

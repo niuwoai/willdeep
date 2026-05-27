@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.15.0-rc1 - 2026-05-27
+
+- Added external file change detection with a status bar reload action.
+- Added Focus Mode to hide editor chrome for a cleaner writing and reading surface.
+- Added lightweight split editor support for viewing another text file beside the active editor.
+- Added Markdown preview and an Open Containing Folder command.
+
+## 1.14.0-rc1 - 2026-05-27
+
+- Added optional save cleanup settings for trimming trailing whitespace and ensuring a final newline.
+- Added status bar selection info for selected character and line counts.
+- Added Duplicate Line, Move Line Up, and Move Line Down commands with keyboard shortcuts and command palette entries.
+
+## 1.13.0-rc1 - 2026-05-27
+
+- Added Command-Shift-O symbol jump for searching and navigating the active file outline.
+- Added previous/next tab commands and Command-1 through Command-9 indexed tab activation.
+- Added Command-Shift-T to reopen the most recently closed tab.
+
 ## 1.12.0-rc1 - 2026-05-27
 
 - Added a Command-Shift-P command palette for fast editor actions.

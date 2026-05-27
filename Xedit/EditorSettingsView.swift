@@ -52,6 +52,11 @@ struct EditorSettingsView: View {
                 Toggle("Show Line Numbers", isOn: setting(\.showsLineNumbers))
                 Toggle("Highlight Current Line", isOn: setting(\.highlightsCurrentLine))
             }
+
+            Section("Save") {
+                Toggle("Trim Trailing Whitespace", isOn: setting(\.trimsTrailingWhitespaceOnSave))
+                Toggle("Ensure Final Newline", isOn: setting(\.ensuresFinalNewlineOnSave))
+            }
         }
         .formStyle(.grouped)
         .padding(20)

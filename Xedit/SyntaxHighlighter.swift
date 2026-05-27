@@ -41,7 +41,7 @@ enum Language: String, CaseIterable {
 
     /// Maps a file extension (including the dot) to a language.
     /// Returns `nil` if the extension is not recognized.
-    static func fromExtension(_ ext: String) -> Language? {
+    nonisolated static func fromExtension(_ ext: String) -> Language? {
         let lower = ext.lowercased()
         switch lower {
         case ".swift":  return .swift
@@ -72,7 +72,7 @@ enum Language: String, CaseIterable {
     }
 
     /// Convenience: detect language from a file URL.
-    static func fromURL(_ url: URL) -> Language? {
+    nonisolated static func fromURL(_ url: URL) -> Language? {
         let filename = url.lastPathComponent.lowercased()
         switch filename {
         case "dockerfile", "containerfile":

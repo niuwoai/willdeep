@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AppKit
+import Combine
 
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
@@ -19,7 +20,10 @@ struct ContentView: View {
         NavigationSplitView {
             // Sidebar: directory tree
             Group {
-                if let root = rootNode {
+                if appState.isFocusModeEnabled {
+                    Color.clear
+                        .frame(width: 0)
+                } else if let root = rootNode {
                     FileTreeView(
                         root: root,
                         selectedURL: $appState.openedFileURL,
@@ -65,19 +69,25 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .frame(minWidth: 180)
-            .navigationSplitViewColumnWidth(min: 160, ideal: 220, max: 400)
+            .frame(minWidth: appState.isFocusModeEnabled ? 0 : 180)
+            .navigationSplitViewColumnWidth(
+                min: appState.isFocusModeEnabled ? 0 : 160,
+                ideal: appState.isFocusModeEnabled ? 0 : 220,
+                max: appState.isFocusModeEnabled ? 0 : 400
+            )
         } detail: {
             VStack(spacing: 0) {
                 if appState.activeTab != nil {
-                    EditorTabBar(
-                        tabs: appState.tabs,
-                        activeTabID: appState.activeTabID,
-                        onSelect: { appState.activateTab(id: $0) },
-                        onClose: { appState.closeTab(id: $0) }
-                    )
+                    if !appState.isFocusModeEnabled {
+                        EditorTabBar(
+                            tabs: appState.tabs,
+                            activeTabID: appState.activeTabID,
+                            onSelect: { appState.activateTab(id: $0) },
+                            onClose: { appState.closeTab(id: $0) }
+                        )
+                    }
 
-                    if appState.isFindBarVisible {
+                    if appState.isFindBarVisible && !appState.isFocusModeEnabled {
                         FindReplaceBar()
                             .environmentObject(appState)
                     }
@@ -105,13 +115,31 @@ struct ContentView: View {
                                 appState.isEdited = true
                                 NSApplication.shared.keyWindow?.isDocumentEdited = true
                             },
-                            onCursorChange: { line, column in
-                                appState.updateCursorPosition(line: line, column: column)
+                            onSelectionChange: { line, column, selectedCharacters, selectedLines in
+                                appState.updateSelectionInfo(
+                                    line: line,
+                                    column: column,
+                                    selectedCharacters: selectedCharacters,
+                                    selectedLines: selectedLines
+                                )
                             }
                         )
                         .frame(minWidth: 400, minHeight: 400)
 
-                        if appState.isInspectorVisible {
+                        if appState.isSplitEditorVisible {
+                            SplitEditorPane()
+                                .environmentObject(appState)
+                                .frame(minWidth: 280, idealWidth: 360)
+                        }
+
+                        if appState.isPreviewVisible, detectedLanguage == .markdown {
+                            MarkdownPreviewPane(text: appState.fileContent) {
+                                appState.isPreviewVisible = false
+                            }
+                            .frame(minWidth: 280, idealWidth: 360)
+                        }
+
+                        if appState.isInspectorVisible && !appState.isFocusModeEnabled {
                             EditorInspectorSidebar(
                                 text: appState.fileContent,
                                 language: detectedLanguage,
@@ -124,15 +152,17 @@ struct ContentView: View {
                                 }
                             )
                             .frame(width: 220)
-                        } else {
+                        } else if !appState.isFocusModeEnabled {
                             InspectorCollapsedRail {
                                 appState.isInspectorVisible = true
                             }
                         }
                     }
 
-                    EditorStatusBar(language: detectedLanguage)
-                        .environmentObject(appState)
+                    if !appState.isFocusModeEnabled {
+                        EditorStatusBar(language: detectedLanguage)
+                            .environmentObject(appState)
+                    }
                 } else {
                     Color(nsColor: .textBackgroundColor)
                         .frame(minWidth: 400, minHeight: 400)
@@ -149,6 +179,10 @@ struct ContentView: View {
                 }
                 if appState.isCommandPaletteVisible {
                     CommandPalettePanel()
+                        .environmentObject(appState)
+                }
+                if appState.isSymbolJumpVisible {
+                    SymbolJumpPanel()
                         .environmentObject(appState)
                 }
             }
@@ -169,6 +203,12 @@ struct ContentView: View {
         }
         .onChange(of: appState.openedFileURL) { oldValue, newValue in
             handleFileSelectionChange(oldValue: oldValue, newValue: newValue)
+        }
+        .onChange(of: appState.fileContent) { _, _ in
+            appState.refreshExternalFileStatus()
+        }
+        .onReceive(Timer.publish(every: 3, on: .main, in: .common).autoconnect()) { _ in
+            appState.refreshExternalFileStatus()
         }
         .onAppear {
             // If rootDirectory was set before the view appeared, create the node.
@@ -317,6 +357,10 @@ private struct CommandPalettePanel: View {
                 appState.hideCommandPalette()
                 appState.showGoToLine()
             },
+            PaletteCommand(title: "Go to Symbol", subtitle: "Search symbols in the active tab", icon: "list.bullet.indent", isEnabled: appState.activeTabID != nil) {
+                appState.hideCommandPalette()
+                appState.showSymbolJump()
+            },
             PaletteCommand(title: "Find", subtitle: "Show find and replace", icon: "magnifyingglass", isEnabled: appState.activeTabID != nil) {
                 appState.hideCommandPalette()
                 appState.showFindBar()
@@ -324,6 +368,22 @@ private struct CommandPalettePanel: View {
             PaletteCommand(title: "Toggle Inspector", subtitle: "Show or hide minimap and structure", icon: "sidebar.right", isEnabled: appState.activeTabID != nil) {
                 appState.hideCommandPalette()
                 appState.isInspectorVisible.toggle()
+            },
+            PaletteCommand(title: "Toggle Focus Mode", subtitle: "Hide chrome and keep only the editor", icon: "viewfinder", isEnabled: appState.activeTabID != nil) {
+                appState.hideCommandPalette()
+                appState.toggleFocusMode()
+            },
+            PaletteCommand(title: "Toggle Preview", subtitle: "Show or hide Markdown preview", icon: "doc.richtext", isEnabled: appState.canShowPreview) {
+                appState.hideCommandPalette()
+                appState.togglePreview()
+            },
+            PaletteCommand(title: "Open Split File", subtitle: "Show another text file beside the editor", icon: "rectangle.split.2x1", isEnabled: true) {
+                appState.hideCommandPalette()
+                appState.openSplitFile()
+            },
+            PaletteCommand(title: "Open Containing Folder", subtitle: "Reveal the active file in Finder", icon: "folder.badge.gearshape", isEnabled: appState.openedFileURL != nil) {
+                appState.hideCommandPalette()
+                appState.openContainingFolder()
             },
             PaletteCommand(title: "Open File", subtitle: "Choose a file from disk", icon: "doc", isEnabled: true) {
                 appState.hideCommandPalette()
@@ -336,6 +396,30 @@ private struct CommandPalettePanel: View {
             PaletteCommand(title: "Save", subtitle: "Write the active file", icon: "square.and.arrow.down", isEnabled: appState.activeTabID != nil) {
                 appState.hideCommandPalette()
                 appState.saveCurrentFile()
+            },
+            PaletteCommand(title: "Next Tab", subtitle: "Activate the tab to the right", icon: "chevron.right", isEnabled: appState.tabs.count > 1) {
+                appState.hideCommandPalette()
+                appState.activateNextTab()
+            },
+            PaletteCommand(title: "Previous Tab", subtitle: "Activate the tab to the left", icon: "chevron.left", isEnabled: appState.tabs.count > 1) {
+                appState.hideCommandPalette()
+                appState.activatePreviousTab()
+            },
+            PaletteCommand(title: "Reopen Closed Tab", subtitle: "Restore the most recently closed tab", icon: "arrow.uturn.backward", isEnabled: true) {
+                appState.hideCommandPalette()
+                appState.reopenClosedTab()
+            },
+            PaletteCommand(title: "Duplicate Line", subtitle: "Copy the current line below", icon: "plus.square.on.square", isEnabled: appState.activeTabID != nil) {
+                appState.hideCommandPalette()
+                appState.duplicateCurrentLine()
+            },
+            PaletteCommand(title: "Move Line Up", subtitle: "Move the current line upward", icon: "arrow.up", isEnabled: appState.activeTabID != nil) {
+                appState.hideCommandPalette()
+                appState.moveCurrentLineUp()
+            },
+            PaletteCommand(title: "Move Line Down", subtitle: "Move the current line downward", icon: "arrow.down", isEnabled: appState.activeTabID != nil) {
+                appState.hideCommandPalette()
+                appState.moveCurrentLineDown()
             },
             PaletteCommand(title: "Close Tab", subtitle: "Close the active tab", icon: "xmark", isEnabled: appState.activeTabID != nil) {
                 appState.hideCommandPalette()
@@ -427,6 +511,117 @@ private struct PaletteCommand: Identifiable {
     let icon: String
     let isEnabled: Bool
     let action: () -> Void
+}
+
+private struct SymbolJumpPanel: View {
+    @EnvironmentObject var appState: AppState
+    @FocusState private var queryFocused: Bool
+
+    private var symbols: [EditorOutlineItem] {
+        guard let url = appState.openedFileURL else { return [] }
+        let language = Language.fromURL(url)
+        let all = EditorOutlineExtractor.outline(for: appState.fileContent, language: language)
+        let query = appState.symbolJumpQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return all }
+        return all.filter { item in
+            item.title.localizedCaseInsensitiveContains(query)
+                || item.kind.rawValue.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.12)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    appState.hideSymbolJump()
+                }
+
+            VStack(spacing: 0) {
+                TextField("Go to Symbol", text: $appState.symbolJumpQuery)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 16))
+                    .padding(12)
+                    .focused($queryFocused)
+                    .onSubmit {
+                        jump(symbols.first)
+                    }
+
+                Divider()
+
+                if symbols.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "list.bullet.indent")
+                            .font(.system(size: 22))
+                        Text("No Symbols")
+                            .font(.caption)
+                    }
+                    .foregroundColor(.secondary)
+                    .frame(height: 160)
+                    .frame(maxWidth: .infinity)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(symbols) { item in
+                                Button {
+                                    jump(item)
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: symbolIcon(for: item.kind))
+                                            .foregroundColor(.secondary)
+                                            .frame(width: 18)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(item.title)
+                                                .font(.system(size: 13, weight: .medium))
+                                                .lineLimit(1)
+                                                .truncationMode(.middle)
+                                            Text("\(item.kind.rawValue) · line \(item.line)")
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        Spacer(minLength: 0)
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 320)
+                }
+            }
+            .frame(width: 520)
+            .background(.regularMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .shadow(radius: 18, y: 10)
+        }
+        .onAppear {
+            queryFocused = true
+        }
+    }
+
+    private func jump(_ item: EditorOutlineItem?) {
+        guard let item else { return }
+        appState.navigateEditor(toLine: item.line)
+        appState.hideSymbolJump()
+    }
+
+    private func symbolIcon(for kind: EditorOutlineItem.Kind) -> String {
+        switch kind {
+        case .type:
+            return "cube"
+        case .function:
+            return "function"
+        case .property:
+            return "number"
+        case .section:
+            return "text.alignleft"
+        case .key:
+            return "key"
+        }
+    }
 }
 
 private struct QuickOpenPanel: View {
@@ -599,9 +794,20 @@ private struct EditorStatusBar: View {
 
     var body: some View {
         HStack(spacing: 14) {
+            if appState.hasExternalFileChanges {
+                Text("External changes")
+                    .foregroundColor(.orange)
+                Button("Reload") {
+                    appState.reloadCurrentFileFromDisk()
+                }
+                .buttonStyle(.borderless)
+            }
             Text(appState.isEdited ? "Modified" : "Saved")
                 .foregroundColor(appState.isEdited ? .orange : .secondary)
             Text("Ln \(appState.cursorLine), Col \(appState.cursorColumn)")
+            if appState.selectedCharacterCount > 0 {
+                Text("\(appState.selectedCharacterCount) chars, \(appState.selectedLineCount) lines selected")
+            }
             Spacer(minLength: 0)
             Text(language?.displayName ?? "Plain Text")
             Text(fileSizeText)
@@ -613,6 +819,90 @@ private struct EditorStatusBar: View {
         .frame(height: 24)
         .background(Color(nsColor: .windowBackgroundColor))
         .overlay(alignment: .top) {
+            Divider()
+        }
+    }
+}
+
+private struct SplitEditorPane: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        let splitLanguage = appState.splitFileURL.map(Language.fromURL) ?? nil
+
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "rectangle.split.2x1")
+                    .foregroundColor(.secondary)
+                Text(appState.splitFileURL?.lastPathComponent ?? "Split")
+                    .font(.caption)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Button {
+                    appState.closeSplitEditor()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 28)
+            .background(Color(nsColor: .windowBackgroundColor))
+
+            Divider()
+
+            EditorView(
+                text: $appState.splitFileContent,
+                language: splitLanguage,
+                settings: appState.editorSettings,
+                searchRanges: [],
+                activeSearchRange: nil
+            )
+        }
+        .overlay(alignment: .leading) {
+            Divider()
+        }
+    }
+}
+
+private struct MarkdownPreviewPane: View {
+    let text: String
+    let onClose: () -> Void
+
+    private var preview: AttributedString {
+        (try? AttributedString(markdown: text)) ?? AttributedString(text)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "doc.richtext")
+                    .foregroundColor(.secondary)
+                Text("Preview")
+                    .font(.caption)
+                Spacer(minLength: 0)
+                Button {
+                    onClose()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 28)
+            .background(Color(nsColor: .windowBackgroundColor))
+
+            Divider()
+
+            ScrollView {
+                Text(preview)
+                    .font(.body)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+            }
+            .background(Color(nsColor: .textBackgroundColor))
+        }
+        .overlay(alignment: .leading) {
             Divider()
         }
     }

@@ -42,7 +42,7 @@ struct EditorView: NSViewRepresentable {
     var onEdit: (() -> Void)?
 
     /// Called when the caret or selection moves so the status bar can stay current.
-    var onCursorChange: ((Int, Int) -> Void)?
+    var onSelectionChange: ((Int, Int, Int, Int) -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -326,8 +326,10 @@ struct EditorView: NSViewRepresentable {
         }
 
         private func publishCursorPosition(for textView: VeilWriterTextView) {
-            let position = Self.lineAndColumn(for: textView.selectedRange().location, in: textView.string)
-            parent.onCursorChange?(position.line, position.column)
+            let selectedRange = textView.selectedRange()
+            let position = Self.lineAndColumn(for: selectedRange.location, in: textView.string)
+            let selectedLines = Self.selectedLineCount(for: selectedRange, in: textView.string)
+            parent.onSelectionChange?(position.line, position.column, selectedRange.length, selectedLines)
         }
 
         private func applyBracketHighlight(to textView: VeilWriterTextView) {
@@ -427,6 +429,15 @@ struct EditorView: NSViewRepresentable {
             let prefix = nsText.substring(with: NSRange(location: 0, length: lineStart))
             let line = prefix.components(separatedBy: .newlines).count
             return (line, boundedLocation - lineStart + 1)
+        }
+
+        static func selectedLineCount(for range: NSRange, in text: String) -> Int {
+            guard range.length > 0 else { return 0 }
+            let nsText = text as NSString
+            let boundedLocation = min(max(0, range.location), nsText.length)
+            let boundedEnd = min(max(boundedLocation, NSMaxRange(range)), nsText.length)
+            let selected = nsText.substring(with: NSRange(location: boundedLocation, length: boundedEnd - boundedLocation))
+            return selected.components(separatedBy: .newlines).count
         }
 
         // MARK: - Debounced Highlighting

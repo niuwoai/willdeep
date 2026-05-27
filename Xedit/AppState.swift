@@ -46,16 +46,26 @@ final class AppState: ObservableObject {
     @Published var selectedFolderURL: URL?
     @Published var isInspectorVisible = true
     @Published var inspectorMode: EditorInspectorMode = .minimap
+    @Published var isFocusModeEnabled = false
+    @Published var isPreviewVisible = false
+    @Published var isSplitEditorVisible = false
+    @Published var splitFileURL: URL?
+    @Published var splitFileContent = ""
     @Published var isQuickOpenVisible = false
     @Published var quickOpenQuery = ""
     @Published var isGoToLineVisible = false
     @Published var goToLineText = ""
     @Published var isCommandPaletteVisible = false
     @Published var commandPaletteQuery = ""
+    @Published var isSymbolJumpVisible = false
+    @Published var symbolJumpQuery = ""
     @Published private(set) var recentFiles: [URL] = []
     @Published private(set) var recentFolders: [URL] = []
     @Published private(set) var cursorLine = 1
     @Published private(set) var cursorColumn = 1
+    @Published private(set) var selectedCharacterCount = 0
+    @Published private(set) var selectedLineCount = 0
+    @Published private(set) var hasExternalFileChanges = false
     @Published var editorSettings: EditorSettings {
         didSet {
             EditorSettingsStore.save(editorSettings)
@@ -66,6 +76,8 @@ final class AppState: ObservableObject {
     /// change is a programmatic revert (e.g. binary file rejected, user cancelled).
     var suppressURLChangeProcessing = false
     private var isApplyingTabSnapshot = false
+    private var closedTabs: [EditorTab] = []
+    private var knownModificationDates: [URL: Date] = [:]
 
     init(
         openedFileURL: URL? = nil,
@@ -111,6 +123,11 @@ final class AppState: ObservableObject {
         return Self.changedLineNumbers(current: activeTab.content, saved: activeTab.savedContent)
     }
 
+    var canShowPreview: Bool {
+        guard let openedFileURL else { return false }
+        return Language.fromURL(openedFileURL) == .markdown
+    }
+
     func showFindBar() {
         isFindBarVisible = true
     }
@@ -151,9 +168,31 @@ final class AppState: ObservableObject {
         commandPaletteQuery = ""
     }
 
-    func updateCursorPosition(line: Int, column: Int) {
+    func showSymbolJump() {
+        guard activeTabID != nil else { return }
+        symbolJumpQuery = ""
+        isSymbolJumpVisible = true
+    }
+
+    func hideSymbolJump() {
+        isSymbolJumpVisible = false
+        symbolJumpQuery = ""
+    }
+
+    func toggleFocusMode() {
+        isFocusModeEnabled.toggle()
+    }
+
+    func togglePreview() {
+        guard canShowPreview else { return }
+        isPreviewVisible.toggle()
+    }
+
+    func updateSelectionInfo(line: Int, column: Int, selectedCharacters: Int, selectedLines: Int) {
         cursorLine = max(1, line)
         cursorColumn = max(1, column)
+        selectedCharacterCount = max(0, selectedCharacters)
+        selectedLineCount = max(0, selectedLines)
     }
 
     func navigateEditor(toLine line: Int) {
@@ -181,6 +220,106 @@ final class AppState: ObservableObject {
     func registerRecentFolder(_ url: URL) {
         recentFolders = RecentItemsStore.add(url, to: recentFolders)
         RecentItemsStore.saveFolders(recentFolders)
+    }
+
+    func activateNextTab() {
+        guard tabs.count > 1,
+              let activeTabID,
+              let index = tabs.firstIndex(where: { $0.id == activeTabID }) else {
+            return
+        }
+        let nextIndex = (index + 1) % tabs.count
+        activateTab(id: tabs[nextIndex].id)
+    }
+
+    func activatePreviousTab() {
+        guard tabs.count > 1,
+              let activeTabID,
+              let index = tabs.firstIndex(where: { $0.id == activeTabID }) else {
+            return
+        }
+        let previousIndex = (index - 1 + tabs.count) % tabs.count
+        activateTab(id: tabs[previousIndex].id)
+    }
+
+    func activateTab(atDisplayIndex displayIndex: Int) {
+        guard displayIndex > 0, displayIndex <= tabs.count else { return }
+        activateTab(id: tabs[displayIndex - 1].id)
+    }
+
+    func reopenClosedTab() {
+        guard let tab = closedTabs.popLast() else { return }
+        if activateTab(for: tab.url) {
+            return
+        }
+        tabs.append(tab)
+        activeTabID = tab.id
+        applySnapshot(from: tab, suppressURLChange: true)
+    }
+
+    func duplicateCurrentLine() {
+        fileContent = Self.duplicateLine(at: cursorLine, in: fileContent)
+        isEdited = true
+        navigateEditor(toLine: cursorLine + 1)
+    }
+
+    func moveCurrentLineUp() {
+        let result = Self.moveLine(at: cursorLine, direction: -1, in: fileContent)
+        guard result.text != fileContent else { return }
+        fileContent = result.text
+        isEdited = true
+        navigateEditor(toLine: result.line)
+    }
+
+    func moveCurrentLineDown() {
+        let result = Self.moveLine(at: cursorLine, direction: 1, in: fileContent)
+        guard result.text != fileContent else { return }
+        fileContent = result.text
+        isEdited = true
+        navigateEditor(toLine: result.line)
+    }
+
+    func openContainingFolder() {
+        guard let openedFileURL else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([openedFileURL])
+    }
+
+    func openSplitFile() {
+        let panel = NSOpenPanel()
+        panel.title = "Open Split File"
+        panel.message = "Select a text file to show beside the current editor."
+        panel.prompt = "Open"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = false
+
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.loadSplitFile(from: url)
+        }
+    }
+
+    func closeSplitEditor() {
+        isSplitEditorVisible = false
+        splitFileURL = nil
+        splitFileContent = ""
+    }
+
+    func reloadCurrentFileFromDisk() {
+        guard let openedFileURL else { return }
+        loadFile(from: openedFileURL, fallbackURL: openedFileURL, allowLargeFile: true)
+        hasExternalFileChanges = false
+    }
+
+    func refreshExternalFileStatus() {
+        guard let openedFileURL,
+              let knownDate = knownModificationDates[openedFileURL],
+              let currentDate = Self.modificationDate(at: openedFileURL) else {
+            hasExternalFileChanges = false
+            return
+        }
+        hasExternalFileChanges = currentDate > knownDate
     }
 
     func findNext() {
@@ -368,6 +507,54 @@ final class AppState: ObservableObject {
         return changed
     }
 
+    nonisolated static func contentForSave(_ content: String, settings: EditorSettings) -> String {
+        var result = content
+        if settings.trimsTrailingWhitespaceOnSave {
+            result = trimTrailingWhitespace(in: result)
+        }
+        if settings.ensuresFinalNewlineOnSave, !result.isEmpty, !result.hasSuffix("\n") {
+            result += "\n"
+        }
+        return result
+    }
+
+    nonisolated static func trimTrailingWhitespace(in content: String) -> String {
+        let endsWithNewline = content.hasSuffix("\n")
+        var lines = content.components(separatedBy: "\n")
+        if endsWithNewline {
+            lines.removeLast()
+        }
+
+        let trimmed = lines
+            .map { line in
+                String(line.reversed().drop { $0 == " " || $0 == "\t" }.reversed())
+            }
+            .joined(separator: "\n")
+        return endsWithNewline ? "\(trimmed)\n" : trimmed
+    }
+
+    nonisolated static func duplicateLine(at line: Int, in content: String) -> String {
+        var lines = content.components(separatedBy: "\n")
+        guard !lines.isEmpty else { return content }
+        let index = min(max(0, line - 1), lines.count - 1)
+        lines.insert(lines[index], at: index + 1)
+        return lines.joined(separator: "\n")
+    }
+
+    nonisolated static func moveLine(at line: Int, direction: Int, in content: String) -> (text: String, line: Int) {
+        var lines = content.components(separatedBy: "\n")
+        guard lines.count > 1 else { return (content, line) }
+
+        let index = min(max(0, line - 1), lines.count - 1)
+        let target = index + direction
+        guard target >= 0, target < lines.count else {
+            return (content, line)
+        }
+
+        lines.swapAt(index, target)
+        return (lines.joined(separator: "\n"), target + 1)
+    }
+
     nonisolated static func textFileURLs(in folder: URL) -> [URL] {
         guard let enumerator = FileManager.default.enumerator(
             at: folder,
@@ -493,7 +680,9 @@ final class AppState: ObservableObject {
         }
 
         let wasActive = tabs[index].id == activeTabID
-        tabs.remove(at: index)
+        let closedTab = tabs.remove(at: index)
+        closedTabs.append(closedTab)
+        closedTabs = Array(closedTabs.suffix(10))
 
         guard wasActive else {
             persistSession()
@@ -633,6 +822,14 @@ final class AppState: ObservableObject {
         return size
     }
 
+    nonisolated static func modificationDate(at url: URL) -> Date? {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let date = attrs[.modificationDate] as? Date else {
+            return nil
+        }
+        return date
+    }
+
     nonisolated static func shouldRequireLargeFileConfirmation(at url: URL) -> Bool {
         guard let size = fileSize(at: url) else { return false }
         return size > Int64(maxFileSize)
@@ -727,9 +924,23 @@ final class AppState: ObservableObject {
         isApplyingTabSnapshot = false
         bumpEditorRenderRevision()
         updateWindowTitle(url: url, isEdited: false)
+        knownModificationDates[url] = Self.modificationDate(at: url)
+        hasExternalFileChanges = false
         registerRecentFile(url)
         registerRecentFolder(url.deletingLastPathComponent())
         persistSession()
+    }
+
+    private func loadSplitFile(from url: URL) {
+        guard !Self.isBinaryFile(at: url),
+              let data = try? Self.readFileData(from: url),
+              let content = String(data: data, encoding: .utf8) ?? Optional(Self.decodeText(from: data)) else {
+            return
+        }
+        splitFileURL = url
+        splitFileContent = content
+        isSplitEditorVisible = true
+        registerRecentFile(url)
     }
 
     private func revertFailedLoad(for url: URL, fallbackURL: URL?) {
@@ -840,7 +1051,11 @@ final class AppState: ObservableObject {
     @discardableResult
     func writeCurrentFile(to url: URL, updateOpenedURL: Bool, showsAlert: Bool = true) -> Bool {
         do {
-            try fileContent.write(to: url, atomically: true, encoding: .utf8)
+            let contentToWrite = Self.contentForSave(fileContent, settings: editorSettings)
+            if contentToWrite != fileContent {
+                fileContent = contentToWrite
+            }
+            try contentToWrite.write(to: url, atomically: true, encoding: .utf8)
             if updateOpenedURL {
                 suppressURLChangeProcessing = true
                 openedFileURL = url
@@ -848,10 +1063,12 @@ final class AppState: ObservableObject {
                 updateActiveTabAfterURLChange(to: url)
             }
             updateActiveTab { tab in
-                tab.savedContent = fileContent
+                tab.savedContent = contentToWrite
             }
             isEdited = false
             updateWindowTitle(url: url, isEdited: false)
+            knownModificationDates[url] = Self.modificationDate(at: url)
+            hasExternalFileChanges = false
             registerRecentFile(url)
             registerRecentFolder(url.deletingLastPathComponent())
             persistSession()
