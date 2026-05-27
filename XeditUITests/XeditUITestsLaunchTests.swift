@@ -1,13 +1,13 @@
 //
 //  XeditUITestsLaunchTests.swift
-//  XeditUITests
+//  VeilWriterUITests
 //
 //  Created by rocky on 2026/5/27.
 //
 
 import XCTest
 
-final class XeditUITestsLaunchTests: XCTestCase {
+final class VeilWriterUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true

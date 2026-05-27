@@ -1,43 +1,51 @@
 //
 //  XeditApp.swift
-//  Xedit
+//  VeilWriter
 //
 //  Created by rocky on 2026/5/27.
 //
 
 import SwiftUI
-import SwiftData
-import UniformTypeIdentifiers
+import AppKit
 
 @main
-struct XeditApp: App {
+struct VeilWriterApp: App {
+    @StateObject private var appState = AppState()
+
     var body: some Scene {
-        DocumentGroup(editing: .itemDocument, migrationPlan: XeditMigrationPlan.self) {
+        WindowGroup {
             ContentView()
+                .environmentObject(appState)
+        }
+        .commands {
+            CommandGroup(after: .newItem) {
+                Button("Open File…") {
+                    appState.openFile()
+                }
+                .keyboardShortcut("O", modifiers: .command)
+
+                Button("Open Folder…") {
+                    appState.openFolder()
+                }
+                .keyboardShortcut("O", modifiers: [.command, .shift])
+            }
+
+            CommandGroup(replacing: .saveItem) {
+                Button("Save") {
+                    appState.saveCurrentFile()
+                }
+                .keyboardShortcut("S", modifiers: .command)
+
+                Button("Save As…") {
+                    appState.saveCurrentFileAs()
+                }
+                .keyboardShortcut("S", modifiers: [.command, .shift])
+            }
+        }
+
+        Settings {
+            EditorSettingsView()
+                .environmentObject(appState)
         }
     }
-}
-
-extension UTType {
-    static var itemDocument: UTType {
-        UTType(importedAs: "com.example.item-document")
-    }
-}
-
-struct XeditMigrationPlan: SchemaMigrationPlan {
-    static var schemas: [VersionedSchema.Type] = [
-        XeditVersionedSchema.self,
-    ]
-
-    static var stages: [MigrationStage] = [
-        // Stages of migration between VersionedSchema, if required.
-    ]
-}
-
-struct XeditVersionedSchema: VersionedSchema {
-    static var versionIdentifier = Schema.Version(1, 0, 0)
-
-    static var models: [any PersistentModel.Type] = [
-        Item.self,
-    ]
 }
