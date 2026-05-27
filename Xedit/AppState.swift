@@ -67,6 +67,7 @@ final class AppState: ObservableObject {
     @Published private(set) var selectedCharacterCount = 0
     @Published private(set) var selectedLineCount = 0
     @Published private(set) var hasExternalFileChanges = false
+    @Published private(set) var gitStatus = GitRepositoryStatus()
     @Published var editorSettings: EditorSettings {
         didSet {
             EditorSettingsStore.save(editorSettings)
@@ -82,6 +83,7 @@ final class AppState: ObservableObject {
     private var closedTabs: [EditorTab] = []
     private var knownModificationDates: [URL: Date] = [:]
     private var securityScopedAccessURLs: Set<URL> = []
+    private var gitStatusRefreshTask: Task<Void, Never>?
 
     init(
         openedFileURL: URL? = nil,
@@ -108,6 +110,7 @@ final class AppState: ObservableObject {
     }
 
     deinit {
+        gitStatusRefreshTask?.cancel()
         for url in securityScopedAccessURLs {
             url.stopAccessingSecurityScopedResource()
         }
@@ -219,6 +222,7 @@ final class AppState: ObservableObject {
     func openRecentFolder(_ url: URL) {
         registerRecentFolder(url)
         setRootDirectory(url)
+        refreshGitStatus()
     }
 
     func openExternalURL(_ url: URL) {
@@ -231,6 +235,7 @@ final class AppState: ObservableObject {
         if isDirectory.boolValue {
             registerRecentFolder(fileURL)
             setRootDirectory(fileURL)
+            refreshGitStatus()
             persistSession()
             return
         }
@@ -239,6 +244,7 @@ final class AppState: ObservableObject {
         registerRecentFolder(fileURL.deletingLastPathComponent())
         setRootDirectory(fileURL.deletingLastPathComponent())
         openedFileURL = fileURL
+        refreshGitStatus()
         persistSession()
     }
 
@@ -250,6 +256,111 @@ final class AppState: ObservableObject {
     func registerRecentFolder(_ url: URL) {
         recentFolders = RecentItemsStore.add(url, to: recentFolders)
         RecentItemsStore.saveFolders(recentFolders)
+    }
+
+    func gitStatusKind(for url: URL) -> GitFileStatusKind? {
+        gitStatus.kind(for: url)
+    }
+
+    func refreshGitStatus() {
+        gitStatusRefreshTask?.cancel()
+
+        guard let rootDirectory else {
+            let emptyStatus = GitRepositoryStatus()
+            DispatchQueue.main.async { [weak self] in
+                self?.gitStatus = emptyStatus
+            }
+            return
+        }
+
+        let targetDirectory = rootDirectory.standardizedFileURL
+        gitStatusRefreshTask = Task { [weak self] in
+            let status = await Task.detached(priority: .utility) {
+                Self.loadGitStatus(for: targetDirectory)
+            }.value
+
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self,
+                      self.rootDirectory?.standardizedFileURL.path == targetDirectory.path else {
+                    return
+                }
+                self.gitStatus = status
+            }
+        }
+    }
+
+    func openTerminalHere(_ url: URL? = nil) {
+        let targetURL = terminalTargetURL(for: url)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = ["-a", "Terminal", targetURL.path]
+        try? process.run()
+    }
+
+    func copyPath(_ url: URL) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.path, forType: .string)
+    }
+
+    func copyRelativePath(_ url: URL) {
+        let path = relativePath(for: url)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(path, forType: .string)
+    }
+
+    func revealInFinder(_ url: URL) {
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    func createNewFile(in directoryURL: URL, completion: (() -> Void)? = nil) {
+        promptForName(
+            title: "New File",
+            message: "Create a file in \(directoryURL.lastPathComponent).",
+            placeholder: "Untitled.txt"
+        ) { [weak self] name in
+            guard let self else { return }
+            let fileURL = directoryURL.appendingPathComponent(name)
+            guard !FileManager.default.fileExists(atPath: fileURL.path) else {
+                self.showFileOperationError("A file or folder named \"\(name)\" already exists.")
+                return
+            }
+
+            do {
+                try Data().write(to: fileURL)
+                registerRecentFile(fileURL)
+                openedFileURL = fileURL
+                refreshGitStatus()
+                completion?()
+            } catch {
+                showFileOperationError(error.localizedDescription)
+            }
+        }
+    }
+
+    func createNewFolder(in directoryURL: URL, completion: (() -> Void)? = nil) {
+        promptForName(
+            title: "New Folder",
+            message: "Create a folder in \(directoryURL.lastPathComponent).",
+            placeholder: "Untitled Folder"
+        ) { [weak self] name in
+            guard let self else { return }
+            let folderURL = directoryURL.appendingPathComponent(name, isDirectory: true)
+            guard !FileManager.default.fileExists(atPath: folderURL.path) else {
+                self.showFileOperationError("A file or folder named \"\(name)\" already exists.")
+                return
+            }
+
+            do {
+                try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: false)
+                registerRecentFolder(folderURL)
+                selectedFolderURL = folderURL
+                refreshGitStatus()
+                completion?()
+            } catch {
+                showFileOperationError(error.localizedDescription)
+            }
+        }
     }
 
     func activateNextTab() {
@@ -807,6 +918,7 @@ final class AppState: ObservableObject {
             guard response == .OK, let url = panel.url else { return }
             self?.setRootDirectory(url)
             self?.registerRecentFolder(url)
+            self?.refreshGitStatus()
             self?.persistSession()
         }
     }
@@ -832,6 +944,7 @@ final class AppState: ObservableObject {
             self?.registerRecentFolder(url.deletingLastPathComponent())
             self?.openedFileURL = url
             self?.setRootDirectory(url.deletingLastPathComponent())
+            self?.refreshGitStatus()
             self?.persistSession()
         }
     }
@@ -1108,6 +1221,7 @@ final class AppState: ObservableObject {
             hasExternalFileChanges = false
             registerRecentFile(url)
             registerRecentFolder(url.deletingLastPathComponent())
+            refreshGitStatus()
             persistSession()
             return true
         } catch {
@@ -1213,6 +1327,195 @@ final class AppState: ObservableObject {
 
         guard let rootPath = session.rootDirectoryPath else { return nil }
         return URL(fileURLWithPath: rootPath)
+    }
+
+    private func terminalTargetURL(for url: URL?) -> URL {
+        let candidate = url ?? selectedFolderURL ?? openedFileURL ?? rootDirectory
+        guard let candidate else {
+            return FileManager.default.homeDirectoryForCurrentUser
+        }
+
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDirectory),
+           isDirectory.boolValue {
+            return candidate
+        }
+
+        return candidate.deletingLastPathComponent()
+    }
+
+    private func relativePath(for url: URL) -> String {
+        guard let rootDirectory else { return url.path }
+        let rootPath = rootDirectory.standardizedFileURL.path
+        let path = url.standardizedFileURL.path
+        guard path == rootPath || path.hasPrefix(rootPath + "/") else {
+            return path
+        }
+        return String(path.dropFirst(rootPath.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
+    private func promptForName(
+        title: String,
+        message: String,
+        placeholder: String,
+        onConfirm: @escaping (String) -> Void
+    ) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "Create")
+        alert.addButton(withTitle: "Cancel")
+
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        textField.stringValue = placeholder
+        alert.accessoryView = textField
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let name = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, !name.contains("/") else {
+            showFileOperationError("Enter a valid name.")
+            return
+        }
+
+        onConfirm(name)
+    }
+
+    private func showFileOperationError(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = "File Operation Failed"
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
+    nonisolated static func loadGitStatus(for directoryURL: URL) -> GitRepositoryStatus {
+        guard let repositoryRoot = findGitRepositoryRoot(startingAt: directoryURL) else {
+            return GitRepositoryStatus()
+        }
+
+        let branch = runGit(arguments: ["branch", "--show-current"], in: repositoryRoot)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let statusOutput = runGit(arguments: ["status", "--porcelain"], in: repositoryRoot)
+        let entries = parseGitStatusPorcelain(statusOutput)
+
+        return GitRepositoryStatus(
+            repositoryRoot: repositoryRoot,
+            branchName: branch.isEmpty ? "detached" : branch,
+            entries: entries
+        )
+    }
+
+    nonisolated static func parseGitStatusPorcelain(_ output: String) -> [String: GitFileStatusKind] {
+        var result: [String: GitFileStatusKind] = [:]
+
+        for line in output.split(separator: "\n", omittingEmptySubsequences: true) {
+            guard line.count >= 4 else { continue }
+            let x = line[line.startIndex]
+            let y = line[line.index(after: line.startIndex)]
+            let pathStart = line.index(line.startIndex, offsetBy: 3)
+            var path = String(line[pathStart...])
+            if let renameRange = path.range(of: " -> ") {
+                path = String(path[renameRange.upperBound...])
+            }
+
+            result[path] = GitFileStatusKind(indexStatus: x, workTreeStatus: y)
+        }
+
+        return result
+    }
+
+    nonisolated private static func findGitRepositoryRoot(startingAt directoryURL: URL) -> URL? {
+        var currentURL = directoryURL.standardizedFileURL
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: currentURL.path, isDirectory: &isDirectory),
+           !isDirectory.boolValue {
+            currentURL.deleteLastPathComponent()
+        }
+
+        while true {
+            if FileManager.default.fileExists(atPath: currentURL.appendingPathComponent(".git").path) {
+                return currentURL
+            }
+
+            let parentURL = currentURL.deletingLastPathComponent()
+            guard parentURL.path != currentURL.path else { return nil }
+            currentURL = parentURL
+        }
+    }
+
+    nonisolated private static func runGit(arguments: [String], in repositoryRoot: URL) -> String {
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = arguments
+        process.currentDirectoryURL = repositoryRoot
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+        } catch {
+            return ""
+        }
+
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return "" }
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+}
+
+enum GitFileStatusKind: String, Equatable {
+    case modified = "M"
+    case added = "A"
+    case deleted = "D"
+    case renamed = "R"
+    case untracked = "?"
+
+    nonisolated init(indexStatus: Character, workTreeStatus: Character) {
+        if indexStatus == "?" || workTreeStatus == "?" {
+            self = .untracked
+        } else if indexStatus == "A" || workTreeStatus == "A" {
+            self = .added
+        } else if indexStatus == "D" || workTreeStatus == "D" {
+            self = .deleted
+        } else if indexStatus == "R" || workTreeStatus == "R" {
+            self = .renamed
+        } else {
+            self = .modified
+        }
+    }
+}
+
+struct GitRepositoryStatus: Equatable {
+    var repositoryRoot: URL?
+    var branchName: String?
+    var entries: [String: GitFileStatusKind]
+
+    nonisolated init(repositoryRoot: URL? = nil, branchName: String? = nil, entries: [String: GitFileStatusKind] = [:]) {
+        self.repositoryRoot = repositoryRoot
+        self.branchName = branchName
+        self.entries = entries
+    }
+
+    nonisolated var isRepository: Bool {
+        repositoryRoot != nil
+    }
+
+    nonisolated func kind(for url: URL) -> GitFileStatusKind? {
+        guard let repositoryRoot else { return nil }
+        let rootPath = repositoryRoot.standardizedFileURL.path
+        let path = url.standardizedFileURL.path
+        guard path == rootPath || path.hasPrefix(rootPath + "/") else { return nil }
+        let relativePath = String(path.dropFirst(rootPath.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        if let kind = entries[relativePath] {
+            return kind
+        }
+
+        let prefix = relativePath.isEmpty ? "" : relativePath + "/"
+        return entries.first { $0.key.hasPrefix(prefix) }?.value
     }
 }
 

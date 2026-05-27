@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.21.0-rc2 - 2026-05-27
+
+- Fixed Git status refresh running synchronously on the main thread and publishing changes during SwiftUI view updates.
+
+## 1.21.0-rc1 - 2026-05-27
+
+- Added lightweight Git integration with current branch display and sidebar file status markers.
+- Added sidebar context actions for new files, new folders, Finder reveal, Terminal launch, and path copying.
+- Added command palette fuzzy matching, keyword lookup, shortcut hints, and Terminal/path/Git refresh actions.
+
 ## 1.20.0-rc4 - 2026-05-27
 
 - Added left and right breathing room around Recent Files and Recent Folders in the empty sidebar state.

@@ -383,6 +383,54 @@ struct VeilWriterTests {
         #expect(items.map(\.level) == [0, 1, 2])
     }
 
+    @Test("git porcelain status maps common file states")
+    func testGitPorcelainStatusMapping() {
+        let entries = AppState.parseGitStatusPorcelain(
+            """
+             M Sources/App.swift
+            ?? Notes/todo.md
+            A  Sources/NewFile.swift
+             D Sources/Removed.swift
+            R  Old.swift -> Sources/Renamed.swift
+            """
+        )
+
+        #expect(entries["Sources/App.swift"] == .modified)
+        #expect(entries["Notes/todo.md"] == .untracked)
+        #expect(entries["Sources/NewFile.swift"] == .added)
+        #expect(entries["Sources/Removed.swift"] == .deleted)
+        #expect(entries["Sources/Renamed.swift"] == .renamed)
+    }
+
+    @Test("git repository status returns folder marker when child changed")
+    func testGitRepositoryStatusFolderMarker() {
+        let root = URL(fileURLWithPath: "/tmp/veilwriter-git-root")
+        let status = GitRepositoryStatus(
+            repositoryRoot: root,
+            branchName: "main",
+            entries: ["Sources/App.swift": .modified]
+        )
+
+        #expect(status.kind(for: root.appendingPathComponent("Sources")) == .modified)
+        #expect(status.kind(for: root.appendingPathComponent("Sources/App.swift")) == .modified)
+        #expect(status.kind(for: root.appendingPathComponent("README.md")) == nil)
+    }
+
+    @Test("command palette matcher supports fuzzy and keyword lookup")
+    func testCommandPaletteMatcher() {
+        let command = PaletteCommand(
+            title: "Open Terminal Here",
+            subtitle: "Open Terminal at the project location",
+            icon: "terminal",
+            isEnabled: true,
+            keywords: ["shell", "cli"]
+        ) {}
+
+        #expect(PaletteCommandMatcher.matches("oth", command: command) == true)
+        #expect(PaletteCommandMatcher.matches("cli", command: command) == true)
+        #expect(PaletteCommandMatcher.matches("preview", command: command) == false)
+    }
+
     // MARK: - File Loading Timing (c1)
 
     @Test("loadFile completes within 500ms for a file under 1MB")

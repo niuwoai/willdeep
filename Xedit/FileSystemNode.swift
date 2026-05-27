@@ -98,6 +98,11 @@ final class FileSystemNode: ObservableObject, Identifiable, Hashable {
             self?.children = nodes
         }
     }
+
+    func reloadChildren() {
+        children = nil
+        loadChildren()
+    }
 }
 
 // MARK: - URL Helpers

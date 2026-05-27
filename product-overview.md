@@ -10,6 +10,9 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 
 - Browse a selected folder through a native sidebar file tree.
 - Select files from compact full-width sidebar rows for easier clicking.
+- See lightweight Git file markers in the sidebar and the current branch in the status bar.
+- Create files and folders from the sidebar context menu.
+- Reveal sidebar items in Finder, open Terminal at their folder, and copy absolute or relative paths.
 - Open files and folders from either the menu commands or the empty sidebar state.
 - Open text files, source files, and folders from Finder's Open With menu.
 - Open individual files from the File menu.
@@ -19,7 +22,8 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Reopen recent files and folders from the empty sidebar state with readable sidebar spacing.
 - Keep temporary test and scratch paths out of recent files and folders.
 - Restore the last folder, open tabs, active tab, and a pinned-expanded root file tree on launch with security-scoped folder access.
-- Run common actions from the Command-Shift-P command palette with keyboard selection and highlighted rows.
+- Run common actions from the Command-Shift-P command palette with keyboard selection, highlighted rows, fuzzy matching, keyword lookup, and shortcut hints.
+- Open Terminal, copy active-file paths, and refresh Git status from the command palette.
 - Search and open project files quickly with Command-P.
 - Keep multiple files open in tabs, each with its own unsaved state.
 - Switch tabs with previous/next commands or Command-1 through Command-9.

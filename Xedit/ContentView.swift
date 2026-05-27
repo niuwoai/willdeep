@@ -211,6 +211,7 @@ struct ContentView: View {
         }
         .onReceive(Timer.publish(every: 3, on: .main, in: .common).autoconnect()) { _ in
             appState.refreshExternalFileStatus()
+            appState.refreshGitStatus()
         }
         .onAppear {
             // If rootDirectory was set before the view appeared, create the node.
@@ -353,79 +354,99 @@ private struct CommandPalettePanel: View {
 
     private var commands: [PaletteCommand] {
         [
-            PaletteCommand(title: "Quick Open", subtitle: "Search files in the current folder", icon: "doc.text.magnifyingglass", isEnabled: appState.rootDirectory != nil) {
+            PaletteCommand(title: "Quick Open", subtitle: "Search files in the current folder", icon: "doc.text.magnifyingglass", isEnabled: appState.rootDirectory != nil, keywords: ["file", "folder", "project"], shortcut: "⌘P") {
                 appState.hideCommandPalette()
                 appState.showQuickOpen()
             },
-            PaletteCommand(title: "Go to Line", subtitle: "Jump to a line in the active tab", icon: "arrow.down.to.line", isEnabled: appState.activeTabID != nil) {
+            PaletteCommand(title: "Go to Line", subtitle: "Jump to a line in the active tab", icon: "arrow.down.to.line", isEnabled: appState.activeTabID != nil, keywords: ["line", "jump"], shortcut: "⌘L") {
                 appState.hideCommandPalette()
                 appState.showGoToLine()
             },
-            PaletteCommand(title: "Go to Symbol", subtitle: "Search symbols in the active tab", icon: "list.bullet.indent", isEnabled: appState.activeTabID != nil) {
+            PaletteCommand(title: "Go to Symbol", subtitle: "Search symbols in the active tab", icon: "list.bullet.indent", isEnabled: appState.activeTabID != nil, keywords: ["outline", "method", "function"]) {
                 appState.hideCommandPalette()
                 appState.showSymbolJump()
             },
-            PaletteCommand(title: "Find", subtitle: "Show find and replace", icon: "magnifyingglass", isEnabled: appState.activeTabID != nil) {
+            PaletteCommand(title: "Find", subtitle: "Show find and replace", icon: "magnifyingglass", isEnabled: appState.activeTabID != nil, keywords: ["replace", "search"], shortcut: "⌘F") {
                 appState.hideCommandPalette()
                 appState.showFindBar()
             },
-            PaletteCommand(title: "Toggle Inspector", subtitle: "Show or hide minimap and structure", icon: "sidebar.right", isEnabled: appState.activeTabID != nil) {
+            PaletteCommand(title: "Toggle Inspector", subtitle: "Show or hide minimap and structure", icon: "sidebar.right", isEnabled: appState.activeTabID != nil, keywords: ["minimap", "outline"]) {
                 appState.hideCommandPalette()
                 appState.isInspectorVisible.toggle()
             },
-            PaletteCommand(title: "Toggle Focus Mode", subtitle: "Hide chrome and keep only the editor", icon: "viewfinder", isEnabled: appState.activeTabID != nil) {
+            PaletteCommand(title: "Toggle Focus Mode", subtitle: "Hide chrome and keep only the editor", icon: "viewfinder", isEnabled: appState.activeTabID != nil, keywords: ["zen", "clean"]) {
                 appState.hideCommandPalette()
                 appState.toggleFocusMode()
             },
-            PaletteCommand(title: "Toggle Preview", subtitle: "Show or hide Markdown preview", icon: "doc.richtext", isEnabled: appState.canShowPreview) {
+            PaletteCommand(title: "Toggle Preview", subtitle: "Show or hide Markdown preview", icon: "doc.richtext", isEnabled: appState.canShowPreview, keywords: ["markdown", "md"]) {
                 appState.hideCommandPalette()
                 appState.togglePreview()
             },
-            PaletteCommand(title: "Open Split File", subtitle: "Show another text file beside the editor", icon: "rectangle.split.2x1", isEnabled: true) {
+            PaletteCommand(title: "Open Split File", subtitle: "Show another text file beside the editor", icon: "rectangle.split.2x1", isEnabled: true, keywords: ["side", "compare"]) {
                 appState.hideCommandPalette()
                 appState.openSplitFile()
             },
-            PaletteCommand(title: "Open Containing Folder", subtitle: "Reveal the active file in Finder", icon: "folder.badge.gearshape", isEnabled: appState.openedFileURL != nil) {
+            PaletteCommand(title: "Open Containing Folder", subtitle: "Reveal the active file in Finder", icon: "folder.badge.gearshape", isEnabled: appState.openedFileURL != nil, keywords: ["finder", "reveal"]) {
                 appState.hideCommandPalette()
                 appState.openContainingFolder()
             },
-            PaletteCommand(title: "Open File", subtitle: "Choose a file from disk", icon: "doc", isEnabled: true) {
+            PaletteCommand(title: "Open File", subtitle: "Choose a file from disk", icon: "doc", isEnabled: true, keywords: ["document"], shortcut: "⌘O") {
                 appState.hideCommandPalette()
                 appState.openFile()
             },
-            PaletteCommand(title: "Open Folder", subtitle: "Choose a folder for the sidebar", icon: "folder", isEnabled: true) {
+            PaletteCommand(title: "Open Folder", subtitle: "Choose a folder for the sidebar", icon: "folder", isEnabled: true, keywords: ["project", "workspace"]) {
                 appState.hideCommandPalette()
                 appState.openFolder()
             },
-            PaletteCommand(title: "Save", subtitle: "Write the active file", icon: "square.and.arrow.down", isEnabled: appState.activeTabID != nil) {
+            PaletteCommand(title: "Open Terminal Here", subtitle: "Open Terminal at the project or active file location", icon: "terminal", isEnabled: appState.rootDirectory != nil || appState.openedFileURL != nil, keywords: ["shell", "cli", "command line"]) {
+                appState.hideCommandPalette()
+                appState.openTerminalHere(appState.openedFileURL ?? appState.rootDirectory)
+            },
+            PaletteCommand(title: "Copy File Path", subtitle: "Copy the active file path", icon: "doc.on.doc", isEnabled: appState.openedFileURL != nil, keywords: ["absolute", "clipboard"]) {
+                appState.hideCommandPalette()
+                if let url = appState.openedFileURL {
+                    appState.copyPath(url)
+                }
+            },
+            PaletteCommand(title: "Copy Relative File Path", subtitle: "Copy the active file path relative to the current folder", icon: "rectangle.on.rectangle", isEnabled: appState.openedFileURL != nil, keywords: ["relative", "clipboard"]) {
+                appState.hideCommandPalette()
+                if let url = appState.openedFileURL {
+                    appState.copyRelativePath(url)
+                }
+            },
+            PaletteCommand(title: "Refresh Git Status", subtitle: "Refresh branch and file status markers", icon: "arrow.clockwise", isEnabled: appState.rootDirectory != nil, keywords: ["source control", "branch", "changes"]) {
+                appState.hideCommandPalette()
+                appState.refreshGitStatus()
+            },
+            PaletteCommand(title: "Save", subtitle: "Write the active file", icon: "square.and.arrow.down", isEnabled: appState.activeTabID != nil, keywords: ["write"], shortcut: "⌘S") {
                 appState.hideCommandPalette()
                 appState.saveCurrentFile()
             },
-            PaletteCommand(title: "Next Tab", subtitle: "Activate the tab to the right", icon: "chevron.right", isEnabled: appState.tabs.count > 1) {
+            PaletteCommand(title: "Next Tab", subtitle: "Activate the tab to the right", icon: "chevron.right", isEnabled: appState.tabs.count > 1, keywords: ["tab"], shortcut: "⌘}") {
                 appState.hideCommandPalette()
                 appState.activateNextTab()
             },
-            PaletteCommand(title: "Previous Tab", subtitle: "Activate the tab to the left", icon: "chevron.left", isEnabled: appState.tabs.count > 1) {
+            PaletteCommand(title: "Previous Tab", subtitle: "Activate the tab to the left", icon: "chevron.left", isEnabled: appState.tabs.count > 1, keywords: ["tab"], shortcut: "⌘{") {
                 appState.hideCommandPalette()
                 appState.activatePreviousTab()
             },
-            PaletteCommand(title: "Reopen Closed Tab", subtitle: "Restore the most recently closed tab", icon: "arrow.uturn.backward", isEnabled: true) {
+            PaletteCommand(title: "Reopen Closed Tab", subtitle: "Restore the most recently closed tab", icon: "arrow.uturn.backward", isEnabled: true, keywords: ["undo", "tab"]) {
                 appState.hideCommandPalette()
                 appState.reopenClosedTab()
             },
-            PaletteCommand(title: "Duplicate Line", subtitle: "Copy the current line below", icon: "plus.square.on.square", isEnabled: appState.activeTabID != nil) {
+            PaletteCommand(title: "Duplicate Line", subtitle: "Copy the current line below", icon: "plus.square.on.square", isEnabled: appState.activeTabID != nil, keywords: ["copy", "editor"]) {
                 appState.hideCommandPalette()
                 appState.duplicateCurrentLine()
             },
-            PaletteCommand(title: "Move Line Up", subtitle: "Move the current line upward", icon: "arrow.up", isEnabled: appState.activeTabID != nil) {
+            PaletteCommand(title: "Move Line Up", subtitle: "Move the current line upward", icon: "arrow.up", isEnabled: appState.activeTabID != nil, keywords: ["editor", "line"]) {
                 appState.hideCommandPalette()
                 appState.moveCurrentLineUp()
             },
-            PaletteCommand(title: "Move Line Down", subtitle: "Move the current line downward", icon: "arrow.down", isEnabled: appState.activeTabID != nil) {
+            PaletteCommand(title: "Move Line Down", subtitle: "Move the current line downward", icon: "arrow.down", isEnabled: appState.activeTabID != nil, keywords: ["editor", "line"]) {
                 appState.hideCommandPalette()
                 appState.moveCurrentLineDown()
             },
-            PaletteCommand(title: "Close Tab", subtitle: "Close the active tab", icon: "xmark", isEnabled: appState.activeTabID != nil) {
+            PaletteCommand(title: "Close Tab", subtitle: "Close the active tab", icon: "xmark", isEnabled: appState.activeTabID != nil, keywords: ["tab"], shortcut: "⌘W") {
                 appState.hideCommandPalette()
                 appState.closeActiveTab()
             },
@@ -436,8 +457,7 @@ private struct CommandPalettePanel: View {
         let query = appState.commandPaletteQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return commands }
         return commands.filter {
-            $0.title.localizedCaseInsensitiveContains(query)
-                || $0.subtitle.localizedCaseInsensitiveContains(query)
+            PaletteCommandMatcher.matches(query, command: $0)
         }
     }
 
@@ -487,6 +507,11 @@ private struct CommandPalettePanel: View {
                                                 .foregroundColor(.secondary)
                                         }
                                         Spacer(minLength: 0)
+                                        if let shortcut = command.shortcut {
+                                            Text(shortcut)
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                        }
                                     }
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 8)
@@ -684,13 +709,58 @@ private struct PaletteKeyboardHandler: NSViewRepresentable {
     }
 }
 
-private struct PaletteCommand: Identifiable {
+struct PaletteCommand: Identifiable {
     var id: String { title }
     let title: String
     let subtitle: String
     let icon: String
     let isEnabled: Bool
+    let keywords: [String]
+    let shortcut: String?
     let action: () -> Void
+
+    init(
+        title: String,
+        subtitle: String,
+        icon: String,
+        isEnabled: Bool,
+        keywords: [String] = [],
+        shortcut: String? = nil,
+        action: @escaping () -> Void
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.icon = icon
+        self.isEnabled = isEnabled
+        self.keywords = keywords
+        self.shortcut = shortcut
+        self.action = action
+    }
+}
+
+struct PaletteCommandMatcher {
+    static func matches(_ query: String, command: PaletteCommand) -> Bool {
+        let haystacks = [command.title, command.subtitle] + command.keywords
+        return haystacks.contains { fuzzyMatches(query, in: $0) }
+    }
+
+    static func fuzzyMatches(_ query: String, in candidate: String) -> Bool {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedCandidate = candidate.lowercased()
+        guard !normalizedQuery.isEmpty else { return true }
+        if normalizedCandidate.contains(normalizedQuery) {
+            return true
+        }
+
+        var searchIndex = normalizedCandidate.startIndex
+        for character in normalizedQuery {
+            guard let foundIndex = normalizedCandidate[searchIndex...].firstIndex(of: character) else {
+                return false
+            }
+            searchIndex = normalizedCandidate.index(after: foundIndex)
+        }
+        return true
+    }
 }
 
 private struct SymbolJumpPanel: View {
@@ -989,6 +1059,9 @@ private struct EditorStatusBar: View {
                 Text("\(appState.selectedCharacterCount) chars, \(appState.selectedLineCount) lines selected")
             }
             Spacer(minLength: 0)
+            if let branchName = appState.gitStatus.branchName {
+                Text("Git \(branchName)")
+            }
             Text(language?.displayName ?? "Plain Text")
             Text(fileSizeText)
             Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")")
