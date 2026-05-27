@@ -76,6 +76,7 @@ struct EditorView: NSViewRepresentable {
         textView.delegate = context.coordinator
         textView.syntaxHighlightingSelection = syntaxHighlightingSelection
         textView.detectedLanguage = detectedLanguage
+        textView.scopeGuideLanguage = language
         textView.onSyntaxHighlightingChange = { [weak coordinator = context.coordinator] selection in
             coordinator?.parent.onSyntaxHighlightingChange?(selection)
         }
@@ -115,6 +116,7 @@ struct EditorView: NSViewRepresentable {
         context.coordinator.currentActiveSearchRange = activeSearchRange
         textView.syntaxHighlightingSelection = syntaxHighlightingSelection
         textView.detectedLanguage = detectedLanguage
+        textView.scopeGuideLanguage = language
         textView.onSyntaxHighlightingChange = { [weak coordinator = context.coordinator] selection in
             coordinator?.parent.onSyntaxHighlightingChange?(selection)
         }
@@ -213,6 +215,8 @@ struct EditorView: NSViewRepresentable {
             textView.backgroundColor = theme.backgroundColor
             textView.insertionPointColor = theme.insertionPointColor
             textView.currentLineColor = theme.currentLineBackgroundColor
+            textView.scopeGuideColor = theme.gutterTextColor
+            textView.activeScopeGuideColor = theme.keywordColor
             textView.showsCurrentLineHighlight = parent.settings.highlightsCurrentLine
             textView.defaultParagraphStyle = paragraphStyle
             textView.typingAttributes = [
@@ -548,7 +552,10 @@ private struct BracketPair {
 
 final class VeilWriterTextView: NSTextView {
     var currentLineColor: NSColor = NSColor.selectedTextBackgroundColor.withAlphaComponent(0.16)
+    var scopeGuideColor: NSColor = NSColor.secondaryLabelColor
+    var activeScopeGuideColor: NSColor = NSColor.controlAccentColor
     var showsCurrentLineHighlight = true
+    var scopeGuideLanguage: Language?
     var syntaxHighlightingSelection: SyntaxHighlightingSelection = .automatic
     var detectedLanguage: Language?
     var onSyntaxHighlightingChange: ((SyntaxHighlightingSelection) -> Void)?
@@ -639,34 +646,131 @@ final class VeilWriterTextView: NSTextView {
     override func drawBackground(in rect: NSRect) {
         super.drawBackground(in: rect)
 
-        guard showsCurrentLineHighlight else { return }
+        if showsCurrentLineHighlight {
+            currentLineColor.setFill()
 
-        currentLineColor.setFill()
+            if string.isEmpty {
+                let lineHeight = font?.boundingRectForFont.height ?? 16
+                NSRect(
+                    x: 0,
+                    y: textContainerInset.height,
+                    width: bounds.width,
+                    height: lineHeight + 2
+                ).fill()
+                return
+            }
 
-        if string.isEmpty {
-            let lineHeight = font?.boundingRectForFont.height ?? 16
-            NSRect(
-                x: 0,
-                y: textContainerInset.height,
-                width: bounds.width,
-                height: lineHeight + 2
-            ).fill()
+            guard let layoutManager = layoutManager else { return }
+
+            let selectedLocation = min(selectedRange().location, max(0, string.utf16.count - 1))
+            let glyphIndex = layoutManager.glyphIndexForCharacter(at: selectedLocation)
+            var lineGlyphRange = NSRange(location: 0, length: 0)
+            let lineRect = layoutManager.lineFragmentRect(
+                forGlyphAt: glyphIndex,
+                effectiveRange: &lineGlyphRange,
+                withoutAdditionalLayout: true
+            )
+
+            let y = lineRect.minY + textContainerOrigin.y
+            NSRect(x: 0, y: y, width: bounds.width, height: lineRect.height).fill()
+        }
+
+        drawScopeGuides(in: rect)
+    }
+
+    private func drawScopeGuides(in rect: NSRect) {
+        guard let layoutManager,
+              let textContainer,
+              let font,
+              let language = scopeGuideLanguage,
+              string.isEmpty == false else {
             return
         }
 
-        guard let layoutManager = layoutManager else { return }
+        let guides = ScopeGuideCalculator.guides(in: string, language: language)
+        guard guides.isEmpty == false else { return }
 
-        let selectedLocation = min(selectedRange().location, max(0, string.utf16.count - 1))
-        let glyphIndex = layoutManager.glyphIndexForCharacter(at: selectedLocation)
-        var lineGlyphRange = NSRange(location: 0, length: 0)
-        let lineRect = layoutManager.lineFragmentRect(
+        let selectedLine = Self.lineNumber(at: selectedRange().location, in: string)
+        let activeGuide = ScopeGuideCalculator.guideContaining(line: selectedLine, in: guides)
+        let columnWidth = max(1, font.advancement(forGlyph: font.glyph(withName: "space")).width)
+
+        NSGraphicsContext.saveGraphicsState()
+        for guide in guides {
+            guard guide.endLine >= guide.startLine,
+                  let startRect = lineFragmentRect(forLine: guide.startLine, layoutManager: layoutManager, textContainer: textContainer),
+                  let endRect = lineFragmentRect(forLine: guide.endLine, layoutManager: layoutManager, textContainer: textContainer) else {
+                continue
+            }
+
+            let x = textContainerOrigin.x + CGFloat(guide.column) * columnWidth - columnWidth * 0.45
+            let startY = textContainerOrigin.y + startRect.maxY
+            let endY = textContainerOrigin.y + endRect.midY
+            let guideRect = NSRect(x: x, y: startY, width: 1, height: endY - startY)
+            guard endY > startY, NSIntersectsRect(rect.insetBy(dx: -4, dy: -24), guideRect) else {
+                continue
+            }
+
+            let isActive = activeGuide == guide
+            let color = isActive ? activeScopeGuideColor.withAlphaComponent(0.48) : scopeGuideColor.withAlphaComponent(0.26)
+            color.setStroke()
+
+            let path = NSBezierPath()
+            path.lineWidth = isActive ? 1.25 : 1
+            path.setLineDash([3, 4], count: 2, phase: 0)
+            path.move(to: NSPoint(x: x, y: startY))
+            path.line(to: NSPoint(x: x, y: endY))
+            path.stroke()
+        }
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private func lineFragmentRect(
+        forLine line: Int,
+        layoutManager: NSLayoutManager,
+        textContainer: NSTextContainer
+    ) -> NSRect? {
+        let nsText = string as NSString
+        guard nsText.length > 0 else { return nil }
+
+        let characterIndex = Self.characterIndex(forLine: line, in: nsText)
+        guard characterIndex < nsText.length else { return nil }
+
+        let glyphIndex = layoutManager.glyphIndexForCharacter(at: characterIndex)
+        var effectiveRange = NSRange(location: 0, length: 0)
+        return layoutManager.lineFragmentRect(
             forGlyphAt: glyphIndex,
-            effectiveRange: &lineGlyphRange,
+            effectiveRange: &effectiveRange,
             withoutAdditionalLayout: true
         )
+    }
 
-        let y = lineRect.minY + textContainerOrigin.y
-        NSRect(x: 0, y: y, width: bounds.width, height: lineRect.height).fill()
+    private static func characterIndex(forLine targetLine: Int, in text: NSString) -> Int {
+        guard targetLine > 1 else { return 0 }
+        var line = 1
+        var index = 0
+        while index < text.length {
+            if line == targetLine {
+                return index
+            }
+            if text.character(at: index) == 10 {
+                line += 1
+                if line == targetLine {
+                    return min(index + 1, text.length - 1)
+                }
+            }
+            index += 1
+        }
+        return max(0, text.length - 1)
+    }
+
+    private static func lineNumber(at location: Int, in text: String) -> Int {
+        let nsText = text as NSString
+        let boundedLocation = min(max(0, location), nsText.length)
+        var line = 1
+        for index in 0..<boundedLocation where nsText.character(at: index) == 10 {
+            line += 1
+        }
+        return line
     }
 
     private func replaceSelectedLines(using transform: (String) -> String) {

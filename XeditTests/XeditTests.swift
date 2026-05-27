@@ -440,6 +440,71 @@ struct VeilWriterTests {
         }
     }
 
+    @Test("scope guides match Ruby class and method blocks")
+    func testScopeGuidesMatchRubyBlocks() {
+        let source = """
+        class Hello
+          def gds
+            puts "ok"
+          end
+        end
+        """
+
+        let guides = ScopeGuideCalculator.guides(in: source, language: .ruby)
+
+        #expect(guides.contains(ScopeGuide(startLine: 1, endLine: 5, column: 0, depth: 0)))
+        #expect(guides.contains(ScopeGuide(startLine: 2, endLine: 4, column: 2, depth: 1)))
+        #expect(ScopeGuideCalculator.guideContaining(line: 3, in: guides) == ScopeGuide(startLine: 2, endLine: 4, column: 2, depth: 1))
+    }
+
+    @Test("scope guides match Python indentation blocks")
+    func testScopeGuidesMatchPythonBlocks() {
+        let source = """
+        class Hello:
+            def gds(self):
+                print("ok")
+            def other(self):
+                pass
+        """
+
+        let guides = ScopeGuideCalculator.guides(in: source, language: .python)
+
+        #expect(guides.contains(ScopeGuide(startLine: 1, endLine: 5, column: 0, depth: 0)))
+        #expect(guides.contains(ScopeGuide(startLine: 2, endLine: 3, column: 4, depth: 1)))
+        #expect(guides.contains(ScopeGuide(startLine: 4, endLine: 5, column: 4, depth: 1)))
+    }
+
+    @Test("scope guides match brace based Java blocks")
+    func testScopeGuidesMatchJavaBlocks() {
+        let source = """
+        public class Hello {
+          void gds() {
+            System.out.println("ok");
+          }
+        }
+        """
+
+        let guides = ScopeGuideCalculator.guides(in: source, language: .java)
+
+        #expect(guides.contains(ScopeGuide(startLine: 1, endLine: 5, column: 19, depth: 0)))
+        #expect(guides.contains(ScopeGuide(startLine: 2, endLine: 4, column: 13, depth: 1)))
+    }
+
+    @Test("scope guide calculator handles every highlighted language")
+    func testScopeGuideCalculatorHandlesEveryHighlightedLanguage() {
+        let source = """
+        class Hello {
+          def gds
+            puts "ok"
+          end
+        }
+        """
+
+        for language in Language.allCases {
+            _ = ScopeGuideCalculator.guides(in: source, language: language)
+        }
+    }
+
     @Test("outline extractor finds Swift structure")
     func testOutlineExtractorFindsSwiftStructure() {
         let source = """

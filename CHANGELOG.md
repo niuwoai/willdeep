@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.27.0-rc1 - 2026-05-28
+
+- Added lightweight scope guide rendering for supported syntax-highlighted languages, including Ruby, Python, Java, brace-based languages, markup, and section-style formats.
+
 ## 1.26.0-rc1 - 2026-05-28
 
 - Added an editor context menu for choosing automatic, plain text, or explicit syntax highlighting languages per tab.

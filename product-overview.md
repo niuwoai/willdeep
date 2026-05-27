@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-05-28 | Current version: v1.26.0-rc1
+> Last updated: 2026-05-28 | Current version: v1.27.0-rc1
 
 ## Positioning
 
@@ -49,6 +49,7 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Read selected character and line counts from the status bar when text is selected.
 - See lightweight dirty gutter marks for lines changed since the last saved content.
 - Highlight matching bracket pairs around the cursor for common code delimiters.
+- See lightweight scope guide lines connecting matching code blocks across supported syntax-highlighted languages.
 - Open text files in a native macOS editing surface.
 - Highlight Swift, Ruby, PHP, Java, JSON, JavaScript, TypeScript, Go, HTML, CSS, Markdown, Python, shell/bash, YAML, TOML, XML, SQL, Dockerfile, Makefile, INI, env, Rust, C, C++, and C# files.
 - Override syntax highlighting per editor tab from the editor context menu.
