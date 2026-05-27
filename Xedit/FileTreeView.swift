@@ -18,12 +18,19 @@ struct FileTreeView: View {
 
     /// A binding to the currently selected file URL (writes into AppState).
     @Binding var selectedURL: URL?
+    @Binding var selectedFolderURL: URL?
 
     var body: some View {
         List {
-            FileNodeRow(node: root, selectedURL: $selectedURL, level: 0)
+            FileNodeRow(
+                node: root,
+                selectedURL: $selectedURL,
+                selectedFolderURL: $selectedFolderURL,
+                level: 0
+            )
         }
         .listStyle(.sidebar)
+        .environment(\.defaultMinListRowHeight, 22)
     }
 }
 
@@ -34,6 +41,7 @@ struct FileTreeView: View {
 private struct FileNodeRow: View {
     @ObservedObject var node: FileSystemNode
     @Binding var selectedURL: URL?
+    @Binding var selectedFolderURL: URL?
     let level: Int
 
     var body: some View {
@@ -51,32 +59,53 @@ private struct FileNodeRow: View {
                 content: {
                     if let children = node.children {
                         ForEach(children) { child in
-                            FileNodeRow(node: child, selectedURL: $selectedURL, level: level + 1)
+                            FileNodeRow(
+                                node: child,
+                                selectedURL: $selectedURL,
+                                selectedFolderURL: $selectedFolderURL,
+                                level: level + 1
+                            )
                         }
                     }
                 },
                 label: {
-                    Label(node.name, systemImage: "folder")
-                        .padding(.leading, CGFloat(level) * 2)
+                    HStack(spacing: 0) {
+                        Label(node.name, systemImage: "folder")
+                            .padding(.leading, CGFloat(level) * 2)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .background(
+                        selectedFolderURL == node.url
+                            ? Color.accentColor.opacity(0.16)
+                            : Color.clear
+                    )
+                    .onTapGesture {
+                        selectedFolderURL = node.url
+                    }
                 }
             )
+            .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 0))
         } else {
-            HStack(spacing: 0) {
-                Label(node.name, systemImage: "doc")
-                    .padding(.leading, CGFloat(level) * 2)
-                Spacer(minLength: 0)
-            }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 1)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    selectedURL = node.url
+            Button {
+                selectedURL = node.url
+            } label: {
+                HStack(spacing: 0) {
+                    Label(node.name, systemImage: "doc")
+                        .padding(.leading, CGFloat(level) * 2)
+                    Spacer(minLength: 0)
                 }
+                .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
+                .contentShape(Rectangle())
                 .background(
                     selectedURL == node.url
                         ? Color.accentColor.opacity(0.3)
                         : Color.clear
                 )
+            }
+            .buttonStyle(.plain)
+            .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 0))
         }
     }
 }

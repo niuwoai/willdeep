@@ -22,6 +22,12 @@ struct EditorView: NSViewRepresentable {
     /// User-configurable editor appearance.
     var settings: EditorSettings
 
+    /// Ranges matching the current find query.
+    var searchRanges: [NSRange] = []
+
+    /// The active find match, shown more prominently than the rest.
+    var activeSearchRange: NSRange?
+
     /// Called whenever the user makes a text change (not during programmatic updates).
     var onEdit: (() -> Void)?
 
@@ -69,8 +75,12 @@ struct EditorView: NSViewRepresentable {
 
         let langChanged = context.coordinator.currentLanguage != language
         let settingsChanged = context.coordinator.currentSettings != settings
+        let searchChanged = context.coordinator.currentSearchRanges != searchRanges
+            || context.coordinator.currentActiveSearchRange != activeSearchRange
         context.coordinator.currentLanguage = language
         context.coordinator.currentSettings = settings
+        context.coordinator.currentSearchRanges = searchRanges
+        context.coordinator.currentActiveSearchRange = activeSearchRange
         context.coordinator.applyAppearance(to: textView, in: nsView)
 
         // Detect programmatic text changes (file load, not user typing).
@@ -78,6 +88,8 @@ struct EditorView: NSViewRepresentable {
             context.coordinator.suppressDirtyFlag = true
             context.coordinator.applyText(text, to: textView)
             context.coordinator.suppressDirtyFlag = false
+        } else if searchChanged {
+            context.coordinator.applySearchHighlights(to: textView)
         }
     }
 
@@ -96,13 +108,19 @@ struct EditorView: NSViewRepresentable {
         /// Tracks the current settings so we can refresh text attributes.
         var currentSettings: EditorSettings
 
+        var currentSearchRanges: [NSRange]
+        var currentActiveSearchRange: NSRange?
+
         /// Debounced highlight work item.
         private var highlightWorkItem: DispatchWorkItem?
+        private var highlightGeneration = 0
 
         init(_ parent: EditorView) {
             self.parent = parent
             self.currentLanguage = parent.language
             self.currentSettings = parent.settings
+            self.currentSearchRanges = parent.searchRanges
+            self.currentActiveSearchRange = parent.activeSearchRange
         }
 
         func textDidChange(_ notification: Notification) {
@@ -162,6 +180,9 @@ struct EditorView: NSViewRepresentable {
         }
 
         func applyText(_ newText: String, to textView: VeilWriterTextView) {
+            highlightGeneration += 1
+            let generation = highlightGeneration
+
             if let lang = currentLanguage, !newText.isEmpty {
                 let settings = parent.settings
                 SyntaxHighlighter.highlight(
@@ -171,6 +192,7 @@ struct EditorView: NSViewRepresentable {
                     font: settings.editorFont()
                 ) { [weak self, weak textView] highlighted in
                     guard let self = self, let textView = textView else { return }
+                    guard self.highlightGeneration == generation else { return }
                     self.replaceTextStorage(in: textView, with: highlighted)
                 }
             } else {
@@ -188,7 +210,36 @@ struct EditorView: NSViewRepresentable {
         private func replaceTextStorage(in textView: VeilWriterTextView, with attributed: NSAttributedString) {
             let selected = textView.selectedRanges
             textView.textStorage?.setAttributedString(attributed)
+            applySearchHighlights(to: textView)
             textView.selectedRanges = selected
+            refreshEditorChrome(for: textView)
+        }
+
+        func applySearchHighlights(to textView: VeilWriterTextView) {
+            guard let textStorage = textView.textStorage else { return }
+
+            let fullRange = NSRange(location: 0, length: textStorage.length)
+            textStorage.removeAttribute(.backgroundColor, range: fullRange)
+            textStorage.removeAttribute(.underlineStyle, range: fullRange)
+
+            let passiveColor = NSColor.systemYellow.withAlphaComponent(0.28)
+            let activeColor = NSColor.systemYellow.withAlphaComponent(0.58)
+            for range in currentSearchRanges where NSMaxRange(range) <= textStorage.length {
+                textStorage.addAttribute(.backgroundColor, value: passiveColor, range: range)
+            }
+
+            if let activeRange = currentActiveSearchRange,
+               NSMaxRange(activeRange) <= textStorage.length {
+                textStorage.addAttributes(
+                    [
+                        .backgroundColor: activeColor,
+                        .underlineStyle: NSUnderlineStyle.single.rawValue,
+                    ],
+                    range: activeRange
+                )
+                textView.scrollRangeToVisible(activeRange)
+            }
+
             refreshEditorChrome(for: textView)
         }
 
@@ -206,6 +257,8 @@ struct EditorView: NSViewRepresentable {
             guard let lang = currentLanguage else { return }
 
             highlightWorkItem?.cancel()
+            highlightGeneration += 1
+            let generation = highlightGeneration
 
             let settings = parent.settings
             let workItem = DispatchWorkItem { [weak self, weak textView] in
@@ -221,6 +274,7 @@ struct EditorView: NSViewRepresentable {
                     font: settings.editorFont()
                 ) { [weak self, weak textView] highlighted in
                     guard let self = self, let textView = textView else { return }
+                    guard self.highlightGeneration == generation else { return }
                     self.replaceTextStorage(in: textView, with: highlighted)
                 }
             }

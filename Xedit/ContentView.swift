@@ -20,7 +20,11 @@ struct ContentView: View {
             // Sidebar: directory tree
             Group {
                 if let root = rootNode {
-                    FileTreeView(root: root, selectedURL: $appState.openedFileURL)
+                    FileTreeView(
+                        root: root,
+                        selectedURL: $appState.openedFileURL,
+                        selectedFolderURL: $appState.selectedFolderURL
+                    )
                 } else {
                     VStack(spacing: 14) {
                         Image(systemName: "folder")
@@ -37,15 +41,22 @@ struct ContentView: View {
                             } label: {
                                 Label("Open File", systemImage: "doc")
                             }
+                            .buttonStyle(EmptyStateIconButtonStyle())
+                            .focusable(false)
+                            .help("Open File")
+                            .accessibilityLabel("Open File")
 
                             Button {
                                 appState.openFolder()
                             } label: {
                                 Label("Open Folder", systemImage: "folder")
                             }
+                            .buttonStyle(EmptyStateIconButtonStyle())
+                            .focusable(false)
+                            .help("Open Folder")
+                            .accessibilityLabel("Open Folder")
                         }
                         .labelStyle(.iconOnly)
-                        .help("Open a file or folder")
                     }
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -63,6 +74,11 @@ struct ContentView: View {
                         onClose: { appState.closeTab(id: $0) }
                     )
 
+                    if appState.isFindBarVisible {
+                        FindReplaceBar()
+                            .environmentObject(appState)
+                    }
+
                     // Detail: editor area with syntax highlighting.
                     let detectedLanguage: Language? = {
                         if let url = appState.openedFileURL {
@@ -71,17 +87,33 @@ struct ContentView: View {
                         return nil
                     }()
 
-                    EditorView(
-                        text: $appState.fileContent,
-                        language: detectedLanguage,
-                        settings: appState.editorSettings,
-                        onEdit: {
-                            // Mark dirty when the user types.
-                            appState.isEdited = true
-                            NSApplication.shared.keyWindow?.isDocumentEdited = true
+                    HStack(spacing: 0) {
+                        EditorView(
+                            text: $appState.fileContent,
+                            language: detectedLanguage,
+                            settings: appState.editorSettings,
+                            searchRanges: appState.findMatchRanges,
+                            activeSearchRange: appState.activeFindRange,
+                            onEdit: {
+                                // Mark dirty when the user types.
+                                appState.isEdited = true
+                                NSApplication.shared.keyWindow?.isDocumentEdited = true
+                            }
+                        )
+                        .frame(minWidth: 400, minHeight: 400)
+
+                        if appState.isInspectorVisible {
+                            EditorInspectorSidebar(
+                                text: appState.fileContent,
+                                language: detectedLanguage,
+                                mode: $appState.inspectorMode,
+                                onClose: {
+                                    appState.isInspectorVisible = false
+                                }
+                            )
+                            .frame(width: 220)
                         }
-                    )
-                    .frame(minWidth: 400, minHeight: 400)
+                    }
                 } else {
                     Color(nsColor: .textBackgroundColor)
                         .frame(minWidth: 400, minHeight: 400)
@@ -94,8 +126,12 @@ struct ContentView: View {
                 node.loadChildren()
                 node.isExpanded = true
                 rootNode = node
+                if appState.selectedFolderURL == nil {
+                    appState.selectedFolderURL = dir
+                }
             } else {
                 rootNode = nil
+                appState.selectedFolderURL = nil
             }
         }
         .onChange(of: appState.openedFileURL) { oldValue, newValue in
@@ -108,6 +144,9 @@ struct ContentView: View {
                 node.loadChildren()
                 node.isExpanded = true
                 rootNode = node
+                if appState.selectedFolderURL == nil {
+                    appState.selectedFolderURL = dir
+                }
             }
         }
     }
@@ -180,6 +219,236 @@ struct ContentView: View {
         // --- Load the file (c1, c2) ---
         appState.beginOpeningTab(for: newURL)
         appState.loadFile(from: newURL, fallbackURL: oldValue, allowLargeFile: allowLargeFile)
+    }
+}
+
+private struct EditorInspectorSidebar: View {
+    let text: String
+    let language: Language?
+    @Binding var mode: EditorInspectorMode
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Picker("Inspector", selection: $mode) {
+                    ForEach(EditorInspectorMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+
+                Button {
+                    onClose()
+                } label: {
+                    Image(systemName: "sidebar.right")
+                }
+                .buttonStyle(.borderless)
+                .help("Hide Inspector")
+            }
+            .padding(8)
+
+            Divider()
+
+            switch mode {
+            case .minimap:
+                EditorMinimapView(text: text)
+            case .structure:
+                EditorStructureView(items: EditorOutlineExtractor.outline(for: text, language: language))
+            }
+        }
+        .background(Color(nsColor: .controlBackgroundColor))
+        .overlay(alignment: .leading) {
+            Divider()
+        }
+    }
+}
+
+private struct EditorMinimapView: View {
+    let text: String
+
+    private var lines: [String] {
+        Array(text.components(separatedBy: .newlines).prefix(600))
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(line.trimmingCharacters(in: .whitespaces).isEmpty
+                              ? Color(nsColor: .separatorColor).opacity(0.28)
+                              : Color(nsColor: .secondaryLabelColor).opacity(0.38))
+                        .frame(width: minimapWidth(for: line), height: 2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+        }
+    }
+
+    private func minimapWidth(for line: String) -> CGFloat {
+        let count = line.trimmingCharacters(in: .whitespaces).count
+        return min(180, max(12, CGFloat(count) * 1.8))
+    }
+}
+
+private struct EditorStructureView: View {
+    let items: [EditorOutlineItem]
+
+    var body: some View {
+        if items.isEmpty {
+            VStack(spacing: 8) {
+                Image(systemName: "list.bullet.indent")
+                    .font(.system(size: 22))
+                Text("No Structure")
+                    .font(.caption)
+            }
+            .foregroundColor(.secondary)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            List(items) { item in
+                HStack(spacing: 6) {
+                    Image(systemName: iconName(for: item.kind))
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    Text(item.title)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 4)
+                    Text("\(item.line)")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.leading, CGFloat(item.level) * 10)
+                .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
+            }
+            .listStyle(.plain)
+            .environment(\.defaultMinListRowHeight, 22)
+        }
+    }
+
+    private func iconName(for kind: EditorOutlineItem.Kind) -> String {
+        switch kind {
+        case .type:
+            return "cube"
+        case .function:
+            return "function"
+        case .property:
+            return "number"
+        case .section:
+            return "text.alignleft"
+        case .key:
+            return "key"
+        }
+    }
+}
+
+private struct FindReplaceBar: View {
+    @EnvironmentObject var appState: AppState
+    @FocusState private var findFieldFocused: Bool
+
+    private var matchText: String {
+        let matches = appState.findMatchRanges
+        guard !appState.findQuery.isEmpty else { return "" }
+        guard !matches.isEmpty else { return "No matches" }
+        return "\(min(appState.activeFindIndex + 1, matches.count)) of \(matches.count)"
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            TextField("Find", text: $appState.findQuery)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 180)
+                .focused($findFieldFocused)
+
+            Button {
+                appState.findPrevious()
+            } label: {
+                Image(systemName: "chevron.up")
+            }
+            .buttonStyle(.borderless)
+            .disabled(appState.findMatchRanges.isEmpty)
+            .help("Previous Match")
+
+            Button {
+                appState.findNext()
+            } label: {
+                Image(systemName: "chevron.down")
+            }
+            .buttonStyle(.borderless)
+            .disabled(appState.findMatchRanges.isEmpty)
+            .help("Next Match")
+
+            Text(matchText)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .frame(width: 82, alignment: .leading)
+
+            Divider()
+                .frame(height: 18)
+
+            TextField("Replace", text: $appState.replaceText)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 180)
+
+            Picker("Scope", selection: $appState.findReplaceScope) {
+                ForEach(FindReplaceScope.allCases) { scope in
+                    Text(scope.displayName).tag(scope)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 140)
+            .disabled(appState.findReplaceScope == .selectedFolder && appState.selectedFolderURL == nil)
+
+            Button("Replace") {
+                appState.replaceCurrentFindMatch()
+            }
+            .disabled(appState.findMatchRanges.isEmpty)
+
+            Button("All") {
+                appState.replaceAllFindMatches()
+            }
+            .disabled(appState.findMatchRanges.isEmpty)
+
+            Spacer(minLength: 0)
+
+            Button {
+                appState.hideFindBar()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.borderless)
+            .help("Close Find")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+        .onAppear {
+            findFieldFocused = true
+        }
+    }
+}
+
+private struct EmptyStateIconButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 15, weight: .medium))
+            .foregroundColor(Color(nsColor: .secondaryLabelColor))
+            .frame(width: 40, height: 26)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(
+                        configuration.isPressed
+                            ? Color(nsColor: .quaternaryLabelColor).opacity(0.35)
+                            : Color(nsColor: .quaternaryLabelColor).opacity(0.16)
+                    )
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 6))
     }
 }
 

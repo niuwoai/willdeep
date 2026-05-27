@@ -10,42 +10,87 @@ import AppKit
 
 @main
 struct VeilWriterApp: App {
-    @StateObject private var appState = AppState()
+    @FocusedObject private var appState: AppState?
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environmentObject(appState)
+            WindowRootView()
         }
         .commands {
             CommandGroup(after: .newItem) {
                 Button("Open File…") {
-                    appState.openFile()
+                    appState?.openFile()
                 }
                 .keyboardShortcut("O", modifiers: .command)
 
                 Button("Open Folder…") {
-                    appState.openFolder()
+                    appState?.openFolder()
                 }
                 .keyboardShortcut("O", modifiers: [.command, .shift])
             }
 
             CommandGroup(replacing: .saveItem) {
                 Button("Save") {
-                    appState.saveCurrentFile()
+                    appState?.saveCurrentFile()
                 }
                 .keyboardShortcut("S", modifiers: .command)
 
                 Button("Save As…") {
-                    appState.saveCurrentFileAs()
+                    appState?.saveCurrentFileAs()
                 }
                 .keyboardShortcut("S", modifiers: [.command, .shift])
+            }
+
+            CommandGroup(after: .textEditing) {
+                Button("Find") {
+                    appState?.showFindBar()
+                }
+                .keyboardShortcut("f", modifiers: .command)
+                .disabled(appState?.activeTabID == nil)
+
+                Button("Find Next") {
+                    appState?.findNext()
+                }
+                .keyboardShortcut("g", modifiers: .command)
+                .disabled(appState?.findMatchRanges.isEmpty ?? true)
+
+                Button("Find Previous") {
+                    appState?.findPrevious()
+                }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
+                .disabled(appState?.findMatchRanges.isEmpty ?? true)
+            }
+
+            CommandGroup(after: .toolbar) {
+                Button("Toggle Inspector") {
+                    appState?.isInspectorVisible.toggle()
+                }
+                .keyboardShortcut("i", modifiers: [.command, .option])
+                .disabled(appState?.activeTabID == nil)
+            }
+
+            CommandGroup(before: .windowArrangement) {
+                Button("Close Tab") {
+                    appState?.closeActiveTab()
+                }
+                .keyboardShortcut("w", modifiers: .option)
+                .disabled(appState?.activeTabID == nil)
             }
         }
 
         Settings {
             EditorSettingsView()
-                .environmentObject(appState)
+                .environmentObject(AppState())
         }
+    }
+}
+
+private struct WindowRootView: View {
+    @StateObject private var appState = AppState()
+
+    var body: some View {
+        ContentView()
+            .environmentObject(appState)
+            .focusedSceneObject(appState)
     }
 }

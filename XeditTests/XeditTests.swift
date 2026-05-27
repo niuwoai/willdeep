@@ -222,6 +222,35 @@ struct VeilWriterTests {
         }
     }
 
+    @Test("outline extractor finds Swift structure")
+    func testOutlineExtractorFindsSwiftStructure() {
+        let source = """
+        struct Writer {
+            let title: String
+            func save() {}
+        }
+        """
+
+        let items = EditorOutlineExtractor.outline(for: source, language: .swift)
+
+        #expect(items.map(\.title) == ["Writer", "title", "save"])
+        #expect(items.map(\.kind) == [.type, .property, .function])
+    }
+
+    @Test("outline extractor finds Markdown headings")
+    func testOutlineExtractorFindsMarkdownHeadings() {
+        let source = """
+        # Product
+        ## Features
+        ### Minimap
+        """
+
+        let items = EditorOutlineExtractor.outline(for: source, language: .markdown)
+
+        #expect(items.map(\.title) == ["Product", "Features", "Minimap"])
+        #expect(items.map(\.level) == [0, 1, 2])
+    }
+
     // MARK: - File Loading Timing (c1)
 
     @Test("loadFile completes within 500ms for a file under 1MB")
@@ -421,6 +450,126 @@ struct VeilWriterTests {
         #expect(appState.tabs.count == 1)
         #expect(appState.activeTabID == firstID)
         #expect(appState.openedFileURL == firstURL)
+    }
+
+    @Test("closeActiveTab closes the current tab")
+    func testCloseActiveTabClosesCurrentTab() {
+        let tempDir = FileManager.default.temporaryDirectory
+        let firstURL = tempDir.appendingPathComponent("veilwriter_active_close_first_\(UUID().uuidString).txt")
+        let secondURL = tempDir.appendingPathComponent("veilwriter_active_close_second_\(UUID().uuidString).txt")
+
+        let appState = AppState()
+        appState.beginOpeningTab(for: firstURL)
+        let firstID = appState.activeTabID
+        appState.beginOpeningTab(for: secondURL)
+
+        appState.closeActiveTab()
+
+        #expect(appState.tabs.count == 1)
+        #expect(appState.activeTabID == firstID)
+        #expect(appState.openedFileURL == firstURL)
+    }
+
+    // MARK: - Find and Replace
+
+    @Test("findRanges returns case-insensitive matches")
+    func testFindRangesReturnsCaseInsensitiveMatches() {
+        let ranges = AppState.findRanges(in: "Find find FIND", query: "find")
+
+        #expect(ranges.count == 3)
+        #expect(ranges.map(\.location) == [0, 5, 10])
+    }
+
+    @Test("find navigation wraps across matches")
+    func testFindNavigationWrapsAcrossMatches() {
+        let appState = AppState()
+        appState.fileContent = "alpha beta alpha"
+        appState.findQuery = "alpha"
+
+        #expect(appState.activeFindIndex == 0)
+        appState.findNext()
+        #expect(appState.activeFindIndex == 1)
+        appState.findNext()
+        #expect(appState.activeFindIndex == 0)
+        appState.findPrevious()
+        #expect(appState.activeFindIndex == 1)
+    }
+
+    @Test("replaceCurrentFindMatch replaces only active match")
+    func testReplaceCurrentFindMatch() {
+        let appState = AppState()
+        appState.fileContent = "red blue red"
+        appState.findQuery = "red"
+        appState.replaceText = "green"
+        appState.findNext()
+
+        let didReplace = appState.replaceCurrentFindMatch()
+
+        #expect(didReplace == true)
+        #expect(appState.fileContent == "red blue green")
+        #expect(appState.isEdited == true)
+    }
+
+    @Test("replaceAllFindMatches replaces every match")
+    func testReplaceAllFindMatches() {
+        let appState = AppState()
+        appState.fileContent = "one two ONE"
+        appState.findQuery = "one"
+        appState.replaceText = "1"
+
+        let count = appState.replaceAllFindMatches()
+
+        #expect(count == 2)
+        #expect(appState.fileContent == "1 two 1")
+        #expect(appState.isEdited == true)
+    }
+
+    @Test("replaceAllFindMatches can target all open tabs")
+    func testReplaceAllFindMatchesAcrossOpenTabs() {
+        let tempDir = FileManager.default.temporaryDirectory
+        let firstURL = tempDir.appendingPathComponent("veilwriter_replace_tabs_first_\(UUID().uuidString).txt")
+        let secondURL = tempDir.appendingPathComponent("veilwriter_replace_tabs_second_\(UUID().uuidString).txt")
+
+        let appState = AppState()
+        appState.beginOpeningTab(for: firstURL)
+        appState.fileContent = "token first token"
+        appState.beginOpeningTab(for: secondURL)
+        appState.fileContent = "second token"
+        appState.findQuery = "token"
+        appState.replaceText = "value"
+        appState.findReplaceScope = .openTabs
+
+        let count = appState.replaceAllFindMatches()
+
+        #expect(count == 3)
+        #expect(appState.tabs.first { $0.url == firstURL }?.content == "value first value")
+        #expect(appState.tabs.first { $0.url == secondURL }?.content == "second value")
+        #expect(appState.tabs.allSatisfy(\.isEdited) == true)
+    }
+
+    @Test("replaceAllFindMatches can target selected folder files")
+    func testReplaceAllFindMatchesInSelectedFolder() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("veilwriter_replace_folder_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let firstURL = tempDir.appendingPathComponent("first.txt")
+        let secondURL = tempDir.appendingPathComponent("second.txt")
+        try "apple pear apple".write(to: firstURL, atomically: true, encoding: .utf8)
+        try "pear apple".write(to: secondURL, atomically: true, encoding: .utf8)
+
+        let appState = AppState(rootDirectory: tempDir)
+        appState.selectedFolderURL = tempDir
+        appState.findQuery = "apple"
+        appState.replaceText = "orange"
+        appState.findReplaceScope = .selectedFolder
+
+        let count = appState.replaceAllFindMatches()
+
+        #expect(count == 3)
+        #expect(try String(contentsOf: firstURL, encoding: .utf8) == "orange pear orange")
+        #expect(try String(contentsOf: secondURL, encoding: .utf8) == "pear orange")
     }
 
     // MARK: - Dirty State Tracking (c3)

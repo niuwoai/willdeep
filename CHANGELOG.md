@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.8.0-rc1 - 2026-05-27
+
+- Added a right-side editor inspector with Minimap and Structure views.
+- Added lightweight structure extraction for supported source and document languages.
+- Added an Option-Command-I shortcut to show or hide the inspector.
+
+## 1.7.0-rc1 - 2026-05-27
+
+- Added find/replace scope selection for the current tab, all open tabs, or the selected folder.
+- Added selected-folder tracking in the file tree for folder-scoped replace-all operations.
+- Added independent per-window editor state so each window can own its own tab set.
+
+## 1.6.0-rc1 - 2026-05-27
+
+- Added an in-editor find and replace bar with match highlighting, next/previous navigation, replace current, and replace all.
+- Added Command-F, Command-G, and Shift-Command-G commands for find workflows.
+- Made editor theme/font changes discard stale highlight results so the visible editor re-renders with the latest settings.
+
+## 1.5.0-rc1 - 2026-05-27
+
+- Added an Option-W shortcut and File menu command for closing the current editor tab.
+
+## 1.4.0-rc5 - 2026-05-27
+
+- Tightened sidebar file-tree row height and made each file row a full-width button target.
+
+## 1.4.0-rc4 - 2026-05-27
+
+- Replaced the empty-sidebar icon buttons with a quieter custom style that avoids the default focus ring.
+
 ## 1.4.0-rc3 - 2026-05-27
 
 - Fixed file-tree rows so the full row width responds to clicks, not just the filename text.

@@ -32,6 +32,18 @@ final class AppState: ObservableObject {
     @Published var rootDirectory: URL?
     @Published var tabs: [EditorTab]
     @Published var activeTabID: EditorTab.ID?
+    @Published var isFindBarVisible = false
+    @Published var findQuery = "" {
+        didSet {
+            activeFindIndex = 0
+        }
+    }
+    @Published var replaceText = ""
+    @Published var activeFindIndex = 0
+    @Published var findReplaceScope: FindReplaceScope = .currentTab
+    @Published var selectedFolderURL: URL?
+    @Published var isInspectorVisible = true
+    @Published var inspectorMode: EditorInspectorMode = .minimap
     @Published var editorSettings: EditorSettings {
         didSet {
             EditorSettingsStore.save(editorSettings)
@@ -70,6 +82,215 @@ final class AppState: ObservableObject {
         return tabs.first { $0.id == activeTabID }
     }
 
+    var findMatchRanges: [NSRange] {
+        Self.findRanges(in: fileContent, query: findQuery)
+    }
+
+    var activeFindRange: NSRange? {
+        let ranges = findMatchRanges
+        guard !ranges.isEmpty else { return nil }
+        return ranges[min(activeFindIndex, ranges.count - 1)]
+    }
+
+    func showFindBar() {
+        isFindBarVisible = true
+    }
+
+    func hideFindBar() {
+        isFindBarVisible = false
+    }
+
+    func findNext() {
+        let ranges = findMatchRanges
+        guard !ranges.isEmpty else { return }
+        activeFindIndex = (activeFindIndex + 1) % ranges.count
+    }
+
+    func findPrevious() {
+        let ranges = findMatchRanges
+        guard !ranges.isEmpty else { return }
+        activeFindIndex = (activeFindIndex - 1 + ranges.count) % ranges.count
+    }
+
+    @discardableResult
+    func replaceCurrentFindMatch() -> Bool {
+        let ranges = findMatchRanges
+        guard !ranges.isEmpty else { return false }
+
+        let index = min(activeFindIndex, ranges.count - 1)
+        let range = ranges[index]
+        let mutable = NSMutableString(string: fileContent)
+        mutable.replaceCharacters(in: range, with: replaceText)
+        fileContent = mutable as String
+        isEdited = true
+
+        let nextRanges = findMatchRanges
+        activeFindIndex = nextRanges.isEmpty ? 0 : min(index, nextRanges.count - 1)
+        return true
+    }
+
+    @discardableResult
+    func replaceAllFindMatches() -> Int {
+        switch findReplaceScope {
+        case .currentTab:
+            return replaceAllInCurrentTab()
+        case .openTabs:
+            return replaceAllInOpenTabs()
+        case .selectedFolder:
+            return replaceAllInSelectedFolder()
+        }
+    }
+
+    @discardableResult
+    private func replaceAllInCurrentTab() -> Int {
+        let ranges = findMatchRanges
+        guard !ranges.isEmpty else { return 0 }
+
+        let mutable = NSMutableString(string: fileContent)
+        for range in ranges.reversed() {
+            mutable.replaceCharacters(in: range, with: replaceText)
+        }
+        fileContent = mutable as String
+        isEdited = true
+        activeFindIndex = 0
+        return ranges.count
+    }
+
+    @discardableResult
+    private func replaceAllInOpenTabs() -> Int {
+        guard !findQuery.isEmpty else { return 0 }
+
+        var replacementCount = 0
+        for index in tabs.indices {
+            let ranges = Self.findRanges(in: tabs[index].content, query: findQuery)
+            guard !ranges.isEmpty else { continue }
+
+            tabs[index].content = Self.replacingRanges(ranges, in: tabs[index].content, with: replaceText)
+            tabs[index].isEdited = true
+            replacementCount += ranges.count
+        }
+
+        if let activeTabID, let activeIndex = tabs.firstIndex(where: { $0.id == activeTabID }) {
+            isApplyingTabSnapshot = true
+            fileContent = tabs[activeIndex].content
+            isEdited = tabs[activeIndex].isEdited
+            isApplyingTabSnapshot = false
+        }
+
+        activeFindIndex = 0
+        return replacementCount
+    }
+
+    @discardableResult
+    private func replaceAllInSelectedFolder() -> Int {
+        guard !findQuery.isEmpty, let folder = selectedFolderURL ?? rootDirectory else {
+            return 0
+        }
+
+        var replacementCount = 0
+        let fileURLs = Self.textFileURLs(in: folder)
+
+        for url in fileURLs {
+            if let tabIndex = tabs.firstIndex(where: { $0.url == url }) {
+                let ranges = Self.findRanges(in: tabs[tabIndex].content, query: findQuery)
+                guard !ranges.isEmpty else { continue }
+
+                let replaced = Self.replacingRanges(ranges, in: tabs[tabIndex].content, with: replaceText)
+                do {
+                    try replaced.write(to: url, atomically: true, encoding: .utf8)
+                    tabs[tabIndex].content = replaced
+                    tabs[tabIndex].isEdited = false
+                    replacementCount += ranges.count
+                } catch {
+                    continue
+                }
+                continue
+            }
+
+            guard let data = try? Self.readFileData(from: url),
+                  let content = String(data: data, encoding: .utf8) ?? Optional(Self.decodeText(from: data)) else {
+                continue
+            }
+
+            let ranges = Self.findRanges(in: content, query: findQuery)
+            guard !ranges.isEmpty else { continue }
+
+            let replaced = Self.replacingRanges(ranges, in: content, with: replaceText)
+            do {
+                try replaced.write(to: url, atomically: true, encoding: .utf8)
+                replacementCount += ranges.count
+            } catch {
+                continue
+            }
+        }
+
+        if let activeTabID, let activeIndex = tabs.firstIndex(where: { $0.id == activeTabID }) {
+            isApplyingTabSnapshot = true
+            fileContent = tabs[activeIndex].content
+            isEdited = tabs[activeIndex].isEdited
+            isApplyingTabSnapshot = false
+        }
+
+        activeFindIndex = 0
+        return replacementCount
+    }
+
+    nonisolated static func findRanges(in text: String, query: String) -> [NSRange] {
+        guard !query.isEmpty, !text.isEmpty else { return [] }
+
+        let nsText = text as NSString
+        var ranges: [NSRange] = []
+        var searchRange = NSRange(location: 0, length: nsText.length)
+
+        while searchRange.length > 0 {
+            let found = nsText.range(
+                of: query,
+                options: [.caseInsensitive],
+                range: searchRange
+            )
+            guard found.location != NSNotFound, found.length > 0 else {
+                break
+            }
+
+            ranges.append(found)
+            let nextLocation = found.location + found.length
+            searchRange = NSRange(location: nextLocation, length: nsText.length - nextLocation)
+        }
+
+        return ranges
+    }
+
+    nonisolated static func replacingRanges(_ ranges: [NSRange], in text: String, with replacement: String) -> String {
+        let mutable = NSMutableString(string: text)
+        for range in ranges.reversed() {
+            mutable.replaceCharacters(in: range, with: replacement)
+        }
+        return mutable as String
+    }
+
+    nonisolated static func textFileURLs(in folder: URL) -> [URL] {
+        guard let enumerator = FileManager.default.enumerator(
+            at: folder,
+            includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else {
+            return []
+        }
+
+        var urls: [URL] = []
+        for case let url as URL in enumerator {
+            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey]),
+                  values.isRegularFile == true else {
+                continue
+            }
+            if shouldRequireLargeFileConfirmation(at: url) || isBinaryFile(at: url) {
+                continue
+            }
+            urls.append(url)
+        }
+        return urls
+    }
+
     func beginOpeningTab(for url: URL) {
         if activateTab(for: url) {
             return
@@ -98,6 +319,13 @@ final class AppState: ObservableObject {
             return false
         }
         return activateTab(id: tab.id)
+    }
+
+    func closeActiveTab() {
+        guard let activeTabID else {
+            return
+        }
+        closeTab(id: activeTabID)
     }
 
     func closeTab(id: EditorTab.ID) {
@@ -213,6 +441,7 @@ final class AppState: ObservableObject {
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             self?.rootDirectory = url
+            self?.selectedFolderURL = url
         }
     }
 
