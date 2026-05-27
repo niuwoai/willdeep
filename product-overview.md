@@ -16,7 +16,8 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Reveal the current file in Finder with Open Containing Folder.
 - Open bundled macOS Help from the system Help menu for core workflows and troubleshooting.
 - Install the `veilwriter` command line tool from Settings into `~/.local/bin` and open files or folders from Terminal.
-- Reopen recent files and folders from the empty sidebar state.
+- Reopen recent files and folders from the empty sidebar state with readable sidebar spacing.
+- Keep temporary test and scratch paths out of recent files and folders.
 - Restore the last folder, open tabs, active tab, and a pinned-expanded root file tree on launch with security-scoped folder access.
 - Run common actions from the Command-Shift-P command palette with keyboard selection and highlighted rows.
 - Search and open project files quickly with Command-P.
@@ -39,7 +40,7 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Highlight matching bracket pairs around the cursor for common code delimiters.
 - Open text files in a native macOS editing surface.
 - Highlight Swift, Ruby, PHP, Java, JSON, JavaScript, TypeScript, Go, HTML, CSS, Markdown, Python, shell/bash, YAML, TOML, XML, SQL, Dockerfile, Makefile, INI, env, Rust, C, C++, and C# files.
-- Customize editor font, font size, line height, color style, line numbers, and current-line focus highlighting from Settings.
+- Customize editor font, font size, line height, color style, line numbers, and current-line focus highlighting from Settings with immediate editor refresh.
 - Optionally trim trailing whitespace and ensure a final newline on save.
 - Keep indentation flowing with newline auto-indent plus Tab and Shift-Tab line indentation.
 - Duplicate the current line with Command-D and move it with Option-Up/Option-Down.

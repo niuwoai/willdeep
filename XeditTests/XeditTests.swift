@@ -158,6 +158,26 @@ struct VeilWriterTests {
         #expect(settings.ensuresFinalNewlineOnSave == true)
     }
 
+    @Test("changing editor settings refreshes the active editor")
+    @MainActor
+    func testEditorSettingsChangeBumpsRenderAndHighlightRevisions() {
+        let appState = AppState()
+        let renderRevision = appState.editorRenderRevision
+        let highlightRevision = appState.editorHighlightRevision
+        var settings = appState.editorSettings
+        settings.fontID = EditorFontChoice.menlo.id
+        settings.fontSize = 18
+        settings.lineHeightMultiple = 1.4
+        settings.themeID = EditorTheme.graphite.id
+        settings.showsLineNumbers = false
+        settings.highlightsCurrentLine = false
+
+        appState.editorSettings = settings
+
+        #expect(appState.editorRenderRevision > renderRevision)
+        #expect(appState.editorHighlightRevision > highlightRevision)
+    }
+
     @Test("command line installer script forwards paths to VeilWriter")
     func testCommandLineInstallerScript() {
         let appURL = URL(fileURLWithPath: "/Applications/VeilWriter.app")
@@ -198,6 +218,7 @@ struct VeilWriterTests {
         #expect(state.rootDirectory?.standardizedFileURL.path == tempDir.standardizedFileURL.path)
         #expect(state.selectedFolderURL?.standardizedFileURL.path == tempDir.standardizedFileURL.path)
         #expect(state.openedFileURL == nil)
+        #expect(!state.recentFolders.contains { $0.standardizedFileURL.path == tempDir.standardizedFileURL.path })
     }
 
     @Test("external file opens inside its parent folder")
@@ -216,6 +237,19 @@ struct VeilWriterTests {
         #expect(state.rootDirectory?.standardizedFileURL.path == tempDir.standardizedFileURL.path)
         #expect(state.selectedFolderURL?.standardizedFileURL.path == tempDir.standardizedFileURL.path)
         #expect(state.openedFileURL == fileURL)
+        #expect(!state.recentFiles.contains { $0.standardizedFileURL.path == fileURL.standardizedFileURL.path })
+        #expect(!state.recentFolders.contains { $0.standardizedFileURL.path == tempDir.standardizedFileURL.path })
+    }
+
+    @Test("temporary paths are excluded from recent items")
+    func testTemporaryPathsAreExcludedFromRecentItems() {
+        let tempFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("xedit_test_recent_\(UUID().uuidString).txt")
+        let homeFile = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Documents/note.md")
+
+        #expect(AppState.isRecentItemEligibleForTesting(tempFile) == false)
+        #expect(AppState.isRecentItemEligibleForTesting(homeFile) == true)
     }
 
     @Test("syntax highlighting uses the selected theme and font")

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.20.0-rc4 - 2026-05-27
+
+- Added left and right breathing room around Recent Files and Recent Folders in the empty sidebar state.
+
+## 1.20.0-rc3 - 2026-05-27
+
+- Fixed editor theme and appearance changes from Settings not immediately refreshing the active editor.
+
+## 1.20.0-rc2 - 2026-05-27
+
+- Filtered temporary files and folders out of Recent Files and Recent Folders, including cleanup of previously saved temporary paths.
+
 ## 1.20.0-rc1 - 2026-05-27
 
 - Disabled App Sandbox for the main VeilWriter app target to allow broader local filesystem access in non-App-Store builds.

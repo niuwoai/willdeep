@@ -315,7 +315,8 @@ private struct RecentItemsView: View {
                 }
             }
         }
-        .frame(maxWidth: 220)
+        .frame(maxWidth: 220, alignment: .leading)
+        .padding(.horizontal, 12)
         .padding(.top, 4)
     }
 
