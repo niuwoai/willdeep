@@ -74,6 +74,7 @@ struct EditorView: NSViewRepresentable {
         textView.textContainerInset = NSSize(width: 12, height: 8)
         textView.textContainer?.lineFragmentPadding = 0
         textView.delegate = context.coordinator
+        textView.layoutManager?.delegate = context.coordinator
         textView.syntaxHighlightingSelection = syntaxHighlightingSelection
         textView.detectedLanguage = detectedLanguage
         textView.scopeGuideLanguage = language
@@ -114,6 +115,7 @@ struct EditorView: NSViewRepresentable {
         context.coordinator.currentNavigationRequest = navigationRequest
         context.coordinator.currentSearchRanges = searchRanges
         context.coordinator.currentActiveSearchRange = activeSearchRange
+        textView.layoutManager?.delegate = context.coordinator
         textView.syntaxHighlightingSelection = syntaxHighlightingSelection
         textView.detectedLanguage = detectedLanguage
         textView.scopeGuideLanguage = language
@@ -124,6 +126,7 @@ struct EditorView: NSViewRepresentable {
 
         // Detect programmatic text changes (file load, not user typing).
         if textView.string != text || langChanged || settingsChanged || renderRevisionChanged || highlightRevisionChanged {
+            textView.clearFoldedScopes()
             context.coordinator.suppressDirtyFlag = true
             context.coordinator.applyText(text, to: textView)
             context.coordinator.suppressDirtyFlag = false
@@ -138,7 +141,7 @@ struct EditorView: NSViewRepresentable {
 
     // MARK: - Coordinator
 
-    final class Coordinator: NSObject, NSTextViewDelegate {
+    final class Coordinator: NSObject, NSLayoutManagerDelegate, NSTextViewDelegate {
         var parent: EditorView
 
         /// When `true`, `textDidChange` will skip calling `onEdit` —
@@ -174,6 +177,7 @@ struct EditorView: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? VeilWriterTextView else { return }
+            textView.clearFoldedScopes()
             parent.text = textView.string
 
             if !suppressDirtyFlag {
@@ -201,6 +205,26 @@ struct EditorView: NSViewRepresentable {
             refreshEditorChrome(for: textView)
         }
 
+        func layoutManager(
+            _ layoutManager: NSLayoutManager,
+            shouldSetLineFragmentRect lineFragmentRect: UnsafeMutablePointer<NSRect>,
+            lineFragmentUsedRect: UnsafeMutablePointer<NSRect>,
+            baselineOffset: UnsafeMutablePointer<CGFloat>,
+            in textContainer: NSTextContainer,
+            forGlyphRange glyphRange: NSRange
+        ) -> Bool {
+            guard let textView = textContainer.textView as? VeilWriterTextView,
+                  textView.isFoldedGlyphRange(glyphRange, layoutManager: layoutManager) else {
+                return true
+            }
+
+            lineFragmentRect.pointee.size.height = 0
+            lineFragmentUsedRect.pointee.size.height = 0
+            lineFragmentUsedRect.pointee.size.width = 0
+            baselineOffset.pointee = 0
+            return true
+        }
+
         func applyAppearance(to textView: VeilWriterTextView, in scrollView: NSScrollView) {
             let theme = parent.settings.theme
             let font = parent.settings.editorFont()
@@ -215,8 +239,8 @@ struct EditorView: NSViewRepresentable {
             textView.backgroundColor = theme.backgroundColor
             textView.insertionPointColor = theme.insertionPointColor
             textView.currentLineColor = theme.currentLineBackgroundColor
-            textView.scopeGuideColor = theme.gutterTextColor
-            textView.activeScopeGuideColor = theme.keywordColor
+            textView.foldedPlaceholderColor = theme.gutterTextColor
+            textView.foldedPlaceholderBackgroundColor = theme.gutterTextColor.withAlphaComponent(0.12)
             textView.showsCurrentLineHighlight = parent.settings.highlightsCurrentLine
             textView.defaultParagraphStyle = paragraphStyle
             textView.typingAttributes = [
@@ -317,6 +341,7 @@ struct EditorView: NSViewRepresentable {
         }
 
         private func refreshEditorChrome(for textView: VeilWriterTextView) {
+            textView.applyFoldedScopes()
             textView.needsDisplay = true
             (textView.enclosingScrollView?.verticalRulerView as? LineNumberRulerView)?.needsDisplay = true
         }
@@ -552,13 +577,14 @@ private struct BracketPair {
 
 final class VeilWriterTextView: NSTextView {
     var currentLineColor: NSColor = NSColor.selectedTextBackgroundColor.withAlphaComponent(0.16)
-    var scopeGuideColor: NSColor = NSColor.secondaryLabelColor
-    var activeScopeGuideColor: NSColor = NSColor.controlAccentColor
+    var foldedPlaceholderColor: NSColor = NSColor.secondaryLabelColor
+    var foldedPlaceholderBackgroundColor: NSColor = NSColor.secondaryLabelColor.withAlphaComponent(0.12)
     var showsCurrentLineHighlight = true
     var scopeGuideLanguage: Language?
     var syntaxHighlightingSelection: SyntaxHighlightingSelection = .automatic
     var detectedLanguage: Language?
     var onSyntaxHighlightingChange: ((SyntaxHighlightingSelection) -> Void)?
+    private var foldedGuides: Set<ScopeGuide> = []
 
     private enum SyntaxMenuToken {
         static let automatic = "__automatic"
@@ -675,53 +701,102 @@ final class VeilWriterTextView: NSTextView {
             NSRect(x: 0, y: y, width: bounds.width, height: lineRect.height).fill()
         }
 
-        drawScopeGuides(in: rect)
+        drawFoldedPlaceholders(in: rect)
     }
 
-    private func drawScopeGuides(in rect: NSRect) {
+    func toggleFold(at line: Int) {
+        guard let guide = foldableGuides().first(where: { $0.startLine == line }) else { return }
+        if foldedGuides.contains(guide) {
+            foldedGuides.remove(guide)
+        } else {
+            foldedGuides.insert(guide)
+        }
+        applyFoldedScopes()
+        needsDisplay = true
+        enclosingScrollView?.verticalRulerView?.needsDisplay = true
+    }
+
+    func clearFoldedScopes() {
+        guard foldedGuides.isEmpty == false else { return }
+        foldedGuides.removeAll()
+        applyFoldedScopes()
+        enclosingScrollView?.verticalRulerView?.needsDisplay = true
+    }
+
+    func isFolded(_ guide: ScopeGuide) -> Bool {
+        foldedGuides.contains(guide)
+    }
+
+    func foldableGuides() -> [ScopeGuide] {
+        ScopeGuideCalculator.guides(in: string, language: scopeGuideLanguage)
+            .filter { $0.endLine - $0.startLine >= 2 }
+    }
+
+    func applyFoldedScopes() {
+        guard let layoutManager, let textStorage else { return }
+        let fullRange = NSRange(location: 0, length: textStorage.length)
+        layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: fullRange)
+
+        guard foldedGuides.isEmpty == false else {
+            layoutManager.invalidateGlyphs(forCharacterRange: fullRange, changeInLength: 0, actualCharacterRange: nil)
+            layoutManager.invalidateLayout(forCharacterRange: fullRange, actualCharacterRange: nil)
+            return
+        }
+
+        for guide in foldedGuides {
+            guard let hiddenRange = foldedCharacterRange(for: guide), hiddenRange.length > 0 else {
+                continue
+            }
+            layoutManager.addTemporaryAttributes(
+                [.foregroundColor: NSColor.clear],
+                forCharacterRange: hiddenRange
+            )
+        }
+        layoutManager.invalidateGlyphs(forCharacterRange: fullRange, changeInLength: 0, actualCharacterRange: nil)
+        layoutManager.invalidateLayout(forCharacterRange: fullRange, actualCharacterRange: nil)
+        needsDisplay = true
+    }
+
+    func isFoldedGlyphRange(_ glyphRange: NSRange, layoutManager: NSLayoutManager) -> Bool {
+        guard foldedGuides.isEmpty == false else { return false }
+        let characterRange = layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
+        return foldedCharacterRanges().contains { NSIntersectionRange($0, characterRange).length > 0 }
+    }
+
+    private func foldedCharacterRanges() -> [NSRange] {
+        foldedGuides.compactMap { foldedCharacterRange(for: $0) }
+    }
+
+    private func drawFoldedPlaceholders(in rect: NSRect) {
         guard let layoutManager,
               let textContainer,
               let font,
-              let language = scopeGuideLanguage,
+              foldedGuides.isEmpty == false,
               string.isEmpty == false else {
             return
         }
 
-        let guides = ScopeGuideCalculator.guides(in: string, language: language)
-        guard guides.isEmpty == false else { return }
-
-        let selectedLine = Self.lineNumber(at: selectedRange().location, in: string)
-        let activeGuide = ScopeGuideCalculator.guideContaining(line: selectedLine, in: guides)
         let columnWidth = max(1, font.advancement(forGlyph: font.glyph(withName: "space")).width)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedSystemFont(ofSize: max(10, font.pointSize - 2), weight: .medium),
+            .foregroundColor: foldedPlaceholderColor,
+        ]
 
-        NSGraphicsContext.saveGraphicsState()
-        for guide in guides {
-            guard guide.endLine >= guide.startLine,
-                  let startRect = lineFragmentRect(forLine: guide.startLine, layoutManager: layoutManager, textContainer: textContainer),
-                  let endRect = lineFragmentRect(forLine: guide.endLine, layoutManager: layoutManager, textContainer: textContainer) else {
-                continue
-            }
+        for guide in foldedGuides {
+            guard let lineRect = lineFragmentRect(forLine: guide.startLine, layoutManager: layoutManager, textContainer: textContainer) else { continue }
+            let y = textContainerOrigin.y + lineRect.minY + max(0, (lineRect.height - font.boundingRectForFont.height) / 2)
+            guard rect.maxY >= y, rect.minY <= y + lineRect.height else { continue }
 
-            let x = textContainerOrigin.x + CGFloat(guide.column) * columnWidth - columnWidth * 0.45
-            let startY = textContainerOrigin.y + startRect.maxY
-            let endY = textContainerOrigin.y + endRect.midY
-            let guideRect = NSRect(x: x, y: startY, width: 1, height: endY - startY)
-            guard endY > startY, NSIntersectsRect(rect.insetBy(dx: -4, dy: -24), guideRect) else {
-                continue
-            }
-
-            let isActive = activeGuide == guide
-            let color = isActive ? activeScopeGuideColor.withAlphaComponent(0.48) : scopeGuideColor.withAlphaComponent(0.26)
-            color.setStroke()
-
-            let path = NSBezierPath()
-            path.lineWidth = isActive ? 1.25 : 1
-            path.setLineDash([3, 4], count: 2, phase: 0)
-            path.move(to: NSPoint(x: x, y: startY))
-            path.line(to: NSPoint(x: x, y: endY))
-            path.stroke()
+            let visibleText = Self.lineText(forLine: guide.startLine, in: string)
+            let x = textContainerOrigin.x + CGFloat(visibleText.count + 2) * columnWidth
+            let foldedLineCount = max(1, guide.endLine - guide.startLine)
+            let placeholder = "... \(foldedLineCount) lines folded" as NSString
+            let size = placeholder.size(withAttributes: attributes)
+            let backgroundRect = NSRect(x: x - 4, y: y + 1, width: size.width + 8, height: size.height + 2)
+            foldedPlaceholderBackgroundColor.setFill()
+            backgroundRect.fill()
+            placeholder.draw(at: NSPoint(x: x, y: y + 2), withAttributes: attributes)
         }
-        NSGraphicsContext.restoreGraphicsState()
     }
 
     private func lineFragmentRect(
@@ -771,6 +846,27 @@ final class VeilWriterTextView: NSTextView {
             line += 1
         }
         return line
+    }
+
+    private func foldedCharacterRange(for guide: ScopeGuide) -> NSRange? {
+        let nsText = string as NSString
+        guard nsText.length > 0, guide.endLine > guide.startLine else { return nil }
+
+        let start = Self.characterIndex(forLine: guide.startLine + 1, in: nsText)
+        let endLineStart = Self.characterIndex(forLine: guide.endLine, in: nsText)
+        let endLineRange = nsText.lineRange(for: NSRange(location: endLineStart, length: 0))
+        let end = min(NSMaxRange(endLineRange), nsText.length)
+        guard start < end else { return nil }
+        return NSRange(location: start, length: end - start)
+    }
+
+    private static func lineText(forLine targetLine: Int, in text: String) -> String {
+        let nsText = text as NSString
+        guard nsText.length > 0 else { return "" }
+        let location = characterIndex(forLine: targetLine, in: nsText)
+        let range = nsText.lineRange(for: NSRange(location: location, length: 0))
+        return nsText.substring(with: range)
+            .trimmingCharacters(in: .newlines)
     }
 
     private func replaceSelectedLines(using transform: (String) -> String) {
@@ -851,7 +947,7 @@ final class LineNumberRulerView: NSRulerView {
     override var requiredThickness: CGFloat {
         let digits = max(2, String(max(1, lineCount())).count)
         let digitWidth = max(7, font.advancement(forGlyph: font.glyph(withName: "zero")).width)
-        return CGFloat(digits) * digitWidth + 18
+        return CGFloat(digits) * digitWidth + 34
     }
 
     func invalidateRuleThickness() {
@@ -895,6 +991,7 @@ final class LineNumberRulerView: NSRulerView {
         }
 
         let selectedLine = lineNumber(at: textView.selectedRange().location)
+        let foldableGuides = (textView as? VeilWriterTextView)?.foldableGuides() ?? []
         let glyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: textContainer)
         var glyphIndex = glyphRange.location
 
@@ -908,6 +1005,7 @@ final class LineNumberRulerView: NSRulerView {
             let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
             let lineNumber = lineNumber(at: characterIndex)
             let y = relativePoint.y + textView.textContainerOrigin.y + lineRect.minY
+            let foldGuide = foldableGuides.first(where: { $0.startLine == lineNumber })
 
             drawLineNumber(
                 lineNumber,
@@ -915,7 +1013,9 @@ final class LineNumberRulerView: NSRulerView {
                 lineHeight: lineRect.height,
                 attributes: attributes,
                 isCurrentLine: settings.highlightsCurrentLine && lineNumber == selectedLine,
-                isChanged: changedLineNumbers.contains(lineNumber)
+                isChanged: changedLineNumbers.contains(lineNumber),
+                foldGuide: foldGuide,
+                isFolded: foldGuide.map { (textView as? VeilWriterTextView)?.isFolded($0) ?? false } ?? false
             )
 
             let nextGlyphIndex = NSMaxRange(lineGlyphRange)
@@ -924,13 +1024,28 @@ final class LineNumberRulerView: NSRulerView {
         }
     }
 
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard point.x <= 18,
+              let textView = textView as? VeilWriterTextView,
+              let line = lineNumber(atRulerY: point.y),
+              textView.foldableGuides().contains(where: { $0.startLine == line }) else {
+            super.mouseDown(with: event)
+            return
+        }
+
+        textView.toggleFold(at: line)
+    }
+
     private func drawLineNumber(
         _ lineNumber: Int,
         y: CGFloat,
         lineHeight: CGFloat,
         attributes: [NSAttributedString.Key: Any],
         isCurrentLine: Bool,
-        isChanged: Bool = false
+        isChanged: Bool = false,
+        foldGuide: ScopeGuide? = nil,
+        isFolded: Bool = false
     ) {
         if isCurrentLine {
             theme.currentLineBackgroundColor.setFill()
@@ -942,14 +1057,37 @@ final class LineNumberRulerView: NSRulerView {
             NSRect(x: 2, y: y + 3, width: 3, height: max(4, lineHeight - 6)).fill()
         }
 
+        if foldGuide != nil {
+            drawFoldToggle(y: y, lineHeight: lineHeight, isFolded: isFolded)
+        }
+
         let text = "\(lineNumber)" as NSString
         let drawRect = NSRect(
-            x: 0,
+            x: 18,
             y: y + max(0, (lineHeight - (attributes[.font] as? NSFont ?? font).boundingRectForFont.height) / 2),
-            width: bounds.width - 8,
+            width: bounds.width - 26,
             height: lineHeight
         )
         text.draw(in: drawRect, withAttributes: attributes)
+    }
+
+    private func drawFoldToggle(y: CGFloat, lineHeight: CGFloat, isFolded: Bool) {
+        let center = NSPoint(x: 10, y: y + lineHeight / 2)
+        let path = NSBezierPath()
+
+        if isFolded {
+            path.move(to: NSPoint(x: center.x - 2, y: center.y - 4))
+            path.line(to: NSPoint(x: center.x - 2, y: center.y + 4))
+            path.line(to: NSPoint(x: center.x + 4, y: center.y))
+        } else {
+            path.move(to: NSPoint(x: center.x - 4, y: center.y + 2))
+            path.line(to: NSPoint(x: center.x + 4, y: center.y + 2))
+            path.line(to: NSPoint(x: center.x, y: center.y - 4))
+        }
+
+        path.close()
+        theme.gutterTextColor.withAlphaComponent(0.82).setFill()
+        path.fill()
     }
 
     private func lineCount() -> Int {
@@ -971,5 +1109,22 @@ final class LineNumberRulerView: NSRulerView {
             line += 1
         }
         return line
+    }
+
+    private func lineNumber(atRulerY y: CGFloat) -> Int? {
+        guard let textView = textView,
+              let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer else {
+            return nil
+        }
+
+        let relativePoint = convert(NSPoint.zero, from: textView)
+        let textPoint = NSPoint(
+            x: textView.textContainerOrigin.x,
+            y: y - relativePoint.y - textView.textContainerOrigin.y
+        )
+        let glyphIndex = layoutManager.glyphIndex(for: textPoint, in: textContainer)
+        let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+        return lineNumber(at: characterIndex)
     }
 }

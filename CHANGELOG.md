@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.28.0-rc2 - 2026-05-28
+
+- Fixed folded editor ranges leaking across tab switches by clearing visual folds before programmatic tab text refreshes.
+
+## 1.28.0-rc1 - 2026-05-28
+
+- Added gutter folding controls for collapsible code scopes while disabling visible scope guide line rendering.
+
 ## 1.27.0-rc1 - 2026-05-28
 
 - Added lightweight scope guide rendering for supported syntax-highlighted languages, including Ruby, Python, Java, brace-based languages, markup, and section-style formats.

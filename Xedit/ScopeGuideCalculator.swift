@@ -2,12 +2,12 @@
 //  ScopeGuideCalculator.swift
 //  VeilWriter
 //
-//  Lightweight block and scope guide extraction for editor background guides.
+//  Lightweight block extraction for editor folding.
 //
 
 import Foundation
 
-struct ScopeGuide: Equatable, Sendable {
+struct ScopeGuide: Equatable, Hashable, Sendable {
     let startLine: Int
     let endLine: Int
     let column: Int
