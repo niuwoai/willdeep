@@ -45,6 +45,8 @@ final class AppState: ObservableObject {
     @Published var activeFindIndex = 0
     @Published var findReplaceScope: FindReplaceScope = .currentTab
     @Published var selectedFolderURL: URL?
+    @Published var selectedSidebarFileURL: URL?
+    @Published var imagePreviewURL: URL?
     @Published var isInspectorVisible = true
     @Published var inspectorMode: EditorInspectorMode = .minimap
     @Published var isFocusModeEnabled = false
@@ -70,6 +72,9 @@ final class AppState: ObservableObject {
     @Published private(set) var gitStatus = GitRepositoryStatus()
     @Published var editorSettings: EditorSettings {
         didSet {
+            if editorSettings.preferredInspectorMode != oldValue.preferredInspectorMode {
+                inspectorMode = editorSettings.preferredInspectorMode
+            }
             EditorSettingsStore.save(editorSettings)
             bumpEditorRenderRevision()
             bumpEditorHighlightRevision()
@@ -84,6 +89,7 @@ final class AppState: ObservableObject {
     private var knownModificationDates: [URL: Date] = [:]
     private var securityScopedAccessURLs: Set<URL> = []
     private var gitStatusRefreshTask: Task<Void, Never>?
+    private var editorSettingsObserver: AnyCancellable?
 
     init(
         openedFileURL: URL? = nil,
@@ -105,8 +111,18 @@ final class AppState: ObservableObject {
             self.activeTabID = nil
         }
         self.editorSettings = editorSettings.normalized()
+        self.inspectorMode = self.editorSettings.preferredInspectorMode
         self.recentFiles = RecentItemsStore.loadFiles()
         self.recentFolders = RecentItemsStore.loadFolders()
+        self.editorSettingsObserver = NotificationCenter.default
+            .publisher(for: EditorSettingsStore.didChangeNotification)
+            .compactMap { $0.object as? EditorSettings }
+            .sink { [weak self] settings in
+                guard let self else { return }
+                let normalizedSettings = settings.normalized()
+                guard self.editorSettings != normalizedSettings else { return }
+                self.editorSettings = normalizedSettings
+            }
     }
 
     deinit {
@@ -763,9 +779,30 @@ final class AppState: ObservableObject {
             return false
         }
 
+        imagePreviewURL = nil
+        selectedSidebarFileURL = tab.url
         activeTabID = id
         applySnapshot(from: tab, suppressURLChange: true)
         return true
+    }
+
+    func openImagePreview(_ url: URL) {
+        selectedSidebarFileURL = url
+        imagePreviewURL = url
+        registerRecentFile(url)
+        registerRecentFolder(url.deletingLastPathComponent())
+        updateWindowTitle(url: url, isEdited: false)
+        persistSession()
+    }
+
+    func closeImagePreview() {
+        imagePreviewURL = nil
+        selectedSidebarFileURL = openedFileURL
+        if let activeTab {
+            updateWindowTitle(url: activeTab.url, isEdited: activeTab.isEdited)
+        } else {
+            updateWindowTitle(url: nil, isEdited: false)
+        }
     }
 
     @discardableResult
@@ -996,6 +1033,15 @@ final class AppState: ObservableObject {
         defer { try? handle.close() }
         let chunk = handle.readData(ofLength: 8192)
         return chunk.contains(0)
+    }
+
+    nonisolated static func isImageFile(at url: URL) -> Bool {
+        switch url.pathExtension.lowercased() {
+        case "png", "jpg", "jpeg", "gif", "heic", "heif", "webp", "tiff", "tif", "bmp", "ico", "icns":
+            return true
+        default:
+            return false
+        }
     }
 
     // MARK: - File Loading
@@ -1396,7 +1442,7 @@ final class AppState: ObservableObject {
 
         let branch = runGit(arguments: ["branch", "--show-current"], in: repositoryRoot)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let statusOutput = runGit(arguments: ["status", "--porcelain"], in: repositoryRoot)
+        let statusOutput = runGit(arguments: ["status", "--porcelain=v1", "-uall"], in: repositoryRoot)
         let entries = parseGitStatusPorcelain(statusOutput)
 
         return GitRepositoryStatus(
@@ -1419,7 +1465,7 @@ final class AppState: ObservableObject {
                 path = String(path[renameRange.upperBound...])
             }
 
-            result[path] = GitFileStatusKind(indexStatus: x, workTreeStatus: y)
+            result[path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))] = GitFileStatusKind(indexStatus: x, workTreeStatus: y)
         }
 
         return result
@@ -1487,6 +1533,25 @@ enum GitFileStatusKind: String, Equatable {
             self = .modified
         }
     }
+
+    nonisolated static func aggregate(_ kinds: [GitFileStatusKind]) -> GitFileStatusKind? {
+        kinds.max { $0.folderPriority < $1.folderPriority }
+    }
+
+    private nonisolated var folderPriority: Int {
+        switch self {
+        case .deleted:
+            return 50
+        case .renamed:
+            return 40
+        case .modified:
+            return 30
+        case .added:
+            return 20
+        case .untracked:
+            return 10
+        }
+    }
 }
 
 struct GitRepositoryStatus: Equatable {
@@ -1515,7 +1580,10 @@ struct GitRepositoryStatus: Equatable {
         }
 
         let prefix = relativePath.isEmpty ? "" : relativePath + "/"
-        return entries.first { $0.key.hasPrefix(prefix) }?.value
+        let childKinds = entries.compactMap { path, kind in
+            path.hasPrefix(prefix) ? kind : nil
+        }
+        return GitFileStatusKind.aggregate(childKinds)
     }
 }
 

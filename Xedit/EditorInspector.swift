@@ -12,7 +12,7 @@ struct EditorNavigationRequest: Equatable {
     let revision: Int
 }
 
-enum EditorInspectorMode: String, CaseIterable, Identifiable {
+enum EditorInspectorMode: String, CaseIterable, Codable, Identifiable {
     case minimap
     case structure
 
@@ -24,6 +24,31 @@ enum EditorInspectorMode: String, CaseIterable, Identifiable {
             return "Minimap"
         case .structure:
             return "Structure"
+        }
+    }
+}
+
+enum EditorInspectorPanelOrder: String, CaseIterable, Codable, Identifiable {
+    case minimapFirst
+    case structureFirst
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .minimapFirst:
+            return "Minimap First"
+        case .structureFirst:
+            return "Structure First"
+        }
+    }
+
+    var modes: [EditorInspectorMode] {
+        switch self {
+        case .minimapFirst:
+            return [.minimap, .structure]
+        case .structureFirst:
+            return [.structure, .minimap]
         }
     }
 }

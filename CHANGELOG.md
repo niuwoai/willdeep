@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.23.0-rc5 - 2026-05-27
+
+- Fixed Settings window keyboard handling so Option-W and Command-W close the Settings window when it is focused.
+
+## 1.23.0-rc4 - 2026-05-27
+
+- Added a sidebar image preview flow so double-clicking common raster image files shows them in the editor detail area instead of treating them as text.
+
+## 1.23.0-rc3 - 2026-05-27
+
+- Fixed sidebar folder Git markers flickering between untracked and deleted states by expanding untracked directories and aggregating child statuses deterministically.
+
+## 1.23.0-rc2 - 2026-05-27
+
+- Fixed command palette keyboard navigation flickering and snapping back to hovered bottom rows while scrolling the selected command into view.
+
+## 1.23.0-rc1 - 2026-05-27
+
+- Added SF Symbols-based file type icons with subtle colors for common source, web, config, media, archive, database, build, and project files in the sidebar tree.
+
+## 1.22.0-rc2 - 2026-05-27
+
+- Fixed editor appearance refreshes overwriting existing rich-text syntax highlight colors during SwiftUI updates.
+
+## 1.22.0-rc1 - 2026-05-27
+
+- Added Settings controls for sidebar file-tree text size, the default Inspector view, and Minimap/Structure ordering.
+- Applied sidebar text-size changes immediately to file-tree rows.
+- Preserved older saved editor settings while filling in new sidebar and inspector preference defaults.
+
 ## 1.21.0-rc2 - 2026-05-27
 
 - Fixed Git status refresh running synchronously on the main thread and publishing changes during SwiftUI view updates.

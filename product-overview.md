@@ -1,5 +1,7 @@
 # VeilWriter Product Overview
 
+> Last updated: 2026-05-27 | Current version: v1.23.0-rc5
+
 ## Positioning
 
 VeilWriter is a lightweight macOS editor focused on quick project browsing, fast text loading, simple saving, and syntax-highlighted editing without the weight of a full IDE.
@@ -9,6 +11,8 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 ## Current Capabilities
 
 - Browse a selected folder through a native sidebar file tree.
+- Recognize common file types in the sidebar through colored SF Symbols-based icons.
+- Preview common raster image files from the sidebar by double-clicking them.
 - Select files from compact full-width sidebar rows for easier clicking.
 - See lightweight Git file markers in the sidebar and the current branch in the status bar.
 - Create files and folders from the sidebar context menu.
@@ -34,6 +38,7 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Jump to symbols in the active file with Command-Shift-O.
 - Find and replace text in the active editor, all open tabs, or the selected folder with highlighted matches and next/previous navigation.
 - Use the right inspector for a lightweight minimap and document/code structure view, with click-to-jump navigation into the current tab.
+- Choose the default right inspector view and whether Minimap or Structure appears first in the Inspector control.
 - Use Focus Mode to hide editor chrome when reading or writing.
 - Open a lightweight split editor pane to view another text file beside the active editor.
 - Preview Markdown beside the editor with richer block rendering for headings, lists, quotes, dividers, and fenced code.
@@ -44,7 +49,7 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Highlight matching bracket pairs around the cursor for common code delimiters.
 - Open text files in a native macOS editing surface.
 - Highlight Swift, Ruby, PHP, Java, JSON, JavaScript, TypeScript, Go, HTML, CSS, Markdown, Python, shell/bash, YAML, TOML, XML, SQL, Dockerfile, Makefile, INI, env, Rust, C, C++, and C# files.
-- Customize editor font, font size, line height, color style, line numbers, and current-line focus highlighting from Settings with immediate editor refresh.
+- Customize editor font, font size, line height, sidebar file-tree text size, color style, line numbers, current-line focus highlighting, and inspector preferences from Settings with immediate refresh.
 - Optionally trim trailing whitespace and ensure a final newline on save.
 - Keep indentation flowing with newline auto-indent plus Tab and Shift-Tab line indentation.
 - Duplicate the current line with Command-D and move it with Option-Up/Option-Down.

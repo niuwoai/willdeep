@@ -78,7 +78,12 @@ struct ContentView: View {
             )
         } detail: {
             VStack(spacing: 0) {
-                if appState.activeTab != nil {
+                if let imageURL = appState.imagePreviewURL {
+                    ImagePreviewPane(url: imageURL) {
+                        appState.closeImagePreview()
+                    }
+                    .frame(minWidth: 400, minHeight: 400)
+                } else if appState.activeTab != nil {
                     if !appState.isFocusModeEnabled {
                         EditorTabBar(
                             tabs: appState.tabs,
@@ -146,6 +151,7 @@ struct ContentView: View {
                                 text: appState.fileContent,
                                 language: detectedLanguage,
                                 mode: $appState.inspectorMode,
+                                orderedModes: appState.editorSettings.orderedInspectorModes,
                                 onNavigateToLine: { line in
                                     appState.navigateEditor(toLine: line)
                                 },
@@ -242,6 +248,7 @@ struct ContentView: View {
 
         guard let newURL = newValue else {
             // openedFileURL was set to nil — clear the editor and window state.
+            appState.imagePreviewURL = nil
             appState.fileContent = ""
             appState.isEdited = false
             if let window = NSApplication.shared.keyWindow {
@@ -253,6 +260,9 @@ struct ContentView: View {
 
         // Skip if the URL didn't actually change (e.g. click same file twice).
         if newURL == oldValue { return }
+
+        appState.imagePreviewURL = nil
+        appState.selectedSidebarFileURL = newURL
 
         if appState.activateTab(for: newURL) {
             return
@@ -351,6 +361,8 @@ private struct CommandPalettePanel: View {
     @EnvironmentObject var appState: AppState
     @FocusState private var queryFocused: Bool
     @State private var selectedCommandIndex = 0
+    @State private var ignoredHoverSelectionUntil = Date.distantPast
+    @State private var lastHoverMouseLocation: CGPoint?
 
     private var commands: [PaletteCommand] {
         [
@@ -530,7 +542,7 @@ private struct CommandPalettePanel: View {
                                 .id(command.id)
                                 .onHover { isHovering in
                                     if isHovering {
-                                        selectedCommandIndex = index
+                                        selectCommandFromHover(at: index)
                                     }
                                 }
                             }
@@ -570,12 +582,33 @@ private struct CommandPalettePanel: View {
 
     private func selectPreviousCommand() {
         guard !filteredCommands.isEmpty else { return }
+        ignoreHoverSelectionDuringKeyboardMove()
         selectedCommandIndex = selectableIndex(from: selectedCommandIndex, offset: -1)
     }
 
     private func selectNextCommand() {
         guard !filteredCommands.isEmpty else { return }
+        ignoreHoverSelectionDuringKeyboardMove()
         selectedCommandIndex = selectableIndex(from: selectedCommandIndex, offset: 1)
+    }
+
+    private func ignoreHoverSelectionDuringKeyboardMove() {
+        ignoredHoverSelectionUntil = Date().addingTimeInterval(0.35)
+        lastHoverMouseLocation = NSEvent.mouseLocation
+    }
+
+    private func selectCommandFromHover(at index: Int) {
+        guard filteredCommands.indices.contains(index), filteredCommands[index].isEnabled else { return }
+
+        let mouseLocation = NSEvent.mouseLocation
+        guard Date() >= ignoredHoverSelectionUntil else {
+            lastHoverMouseLocation = mouseLocation
+            return
+        }
+
+        guard lastHoverMouseLocation != mouseLocation else { return }
+        lastHoverMouseLocation = mouseLocation
+        selectedCommandIndex = index
     }
 
     private func selectableIndex(from startIndex: Int, offset: Int) -> Int {
@@ -870,6 +903,81 @@ private struct SymbolJumpPanel: View {
             return "text.alignleft"
         case .key:
             return "key"
+        }
+    }
+}
+
+private struct ImagePreviewPane: View {
+    let url: URL
+    let onClose: () -> Void
+
+    private var image: NSImage? {
+        NSImage(contentsOf: url)
+    }
+
+    private var imageSizeText: String? {
+        guard let image else { return nil }
+        let width = Int(image.size.width.rounded())
+        let height = Int(image.size.height.rounded())
+        return "\(width) × \(height)"
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "photo")
+                    .foregroundStyle(.secondary)
+                Text(url.lastPathComponent)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if let imageSizeText {
+                    Text(imageSizeText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Close Preview")
+                .accessibilityLabel("Close Preview")
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color(nsColor: .windowBackgroundColor))
+            .overlay(alignment: .bottom) {
+                Divider()
+            }
+
+            if let image {
+                ScrollView([.horizontal, .vertical]) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .padding(24)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .background(Color(nsColor: .textBackgroundColor))
+            } else {
+                VStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 28))
+                    Text("Cannot Preview Image")
+                        .font(.headline)
+                    Text(url.path)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(nsColor: .textBackgroundColor))
+                .foregroundStyle(.secondary)
+            }
         }
     }
 }
@@ -1380,6 +1488,7 @@ private struct EditorInspectorSidebar: View {
     let text: String
     let language: Language?
     @Binding var mode: EditorInspectorMode
+    let orderedModes: [EditorInspectorMode]
     let onNavigateToLine: (Int) -> Void
     let onClose: () -> Void
 
@@ -1387,7 +1496,7 @@ private struct EditorInspectorSidebar: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Picker("Inspector", selection: $mode) {
-                    ForEach(EditorInspectorMode.allCases) { mode in
+                    ForEach(orderedModes) { mode in
                         Text(mode.displayName).tag(mode)
                     }
                 }

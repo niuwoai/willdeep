@@ -195,7 +195,6 @@ struct EditorView: NSViewRepresentable {
             scrollView.hasVerticalRuler = parent.settings.showsLineNumbers
 
             textView.font = font
-            textView.textColor = theme.foregroundColor
             textView.backgroundColor = theme.backgroundColor
             textView.insertionPointColor = theme.insertionPointColor
             textView.currentLineColor = theme.currentLineBackgroundColor

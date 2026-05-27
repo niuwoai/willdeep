@@ -12,9 +12,12 @@ struct EditorSettings: Codable, Equatable {
     var fontID: String
     var fontSize: Double
     var lineHeightMultiple: Double
+    var fileTreeFontSize: Double
     var themeID: String
     var showsLineNumbers: Bool
     var highlightsCurrentLine: Bool
+    var preferredInspectorMode: EditorInspectorMode
+    var inspectorPanelOrder: EditorInspectorPanelOrder
     var trimsTrailingWhitespaceOnSave: Bool
     var ensuresFinalNewlineOnSave: Bool
 
@@ -22,16 +25,63 @@ struct EditorSettings: Codable, Equatable {
         fontID: EditorFontChoice.systemMono.id,
         fontSize: 13,
         lineHeightMultiple: 1.15,
+        fileTreeFontSize: 12,
         themeID: EditorTheme.paper.id,
         showsLineNumbers: true,
         highlightsCurrentLine: true,
+        preferredInspectorMode: .minimap,
+        inspectorPanelOrder: .minimapFirst,
         trimsTrailingWhitespaceOnSave: false,
         ensuresFinalNewlineOnSave: false
     )
+
+    init(
+        fontID: String,
+        fontSize: Double,
+        lineHeightMultiple: Double,
+        fileTreeFontSize: Double,
+        themeID: String,
+        showsLineNumbers: Bool,
+        highlightsCurrentLine: Bool,
+        preferredInspectorMode: EditorInspectorMode,
+        inspectorPanelOrder: EditorInspectorPanelOrder,
+        trimsTrailingWhitespaceOnSave: Bool,
+        ensuresFinalNewlineOnSave: Bool
+    ) {
+        self.fontID = fontID
+        self.fontSize = fontSize
+        self.lineHeightMultiple = lineHeightMultiple
+        self.fileTreeFontSize = fileTreeFontSize
+        self.themeID = themeID
+        self.showsLineNumbers = showsLineNumbers
+        self.highlightsCurrentLine = highlightsCurrentLine
+        self.preferredInspectorMode = preferredInspectorMode
+        self.inspectorPanelOrder = inspectorPanelOrder
+        self.trimsTrailingWhitespaceOnSave = trimsTrailingWhitespaceOnSave
+        self.ensuresFinalNewlineOnSave = ensuresFinalNewlineOnSave
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = EditorSettings.default
+
+        fontID = try container.decodeIfPresent(String.self, forKey: .fontID) ?? fallback.fontID
+        fontSize = try container.decodeIfPresent(Double.self, forKey: .fontSize) ?? fallback.fontSize
+        lineHeightMultiple = try container.decodeIfPresent(Double.self, forKey: .lineHeightMultiple) ?? fallback.lineHeightMultiple
+        fileTreeFontSize = try container.decodeIfPresent(Double.self, forKey: .fileTreeFontSize) ?? fallback.fileTreeFontSize
+        themeID = try container.decodeIfPresent(String.self, forKey: .themeID) ?? fallback.themeID
+        showsLineNumbers = try container.decodeIfPresent(Bool.self, forKey: .showsLineNumbers) ?? fallback.showsLineNumbers
+        highlightsCurrentLine = try container.decodeIfPresent(Bool.self, forKey: .highlightsCurrentLine) ?? fallback.highlightsCurrentLine
+        preferredInspectorMode = try container.decodeIfPresent(EditorInspectorMode.self, forKey: .preferredInspectorMode) ?? fallback.preferredInspectorMode
+        inspectorPanelOrder = try container.decodeIfPresent(EditorInspectorPanelOrder.self, forKey: .inspectorPanelOrder) ?? fallback.inspectorPanelOrder
+        trimsTrailingWhitespaceOnSave = try container.decodeIfPresent(Bool.self, forKey: .trimsTrailingWhitespaceOnSave) ?? fallback.trimsTrailingWhitespaceOnSave
+        ensuresFinalNewlineOnSave = try container.decodeIfPresent(Bool.self, forKey: .ensuresFinalNewlineOnSave) ?? fallback.ensuresFinalNewlineOnSave
+    }
 }
 
 enum EditorSettingsStore {
     private static let key = "im.some.veilwriter.editorSettings.v1"
+    static let didChangeNotification = Notification.Name("im.some.veilwriter.editorSettingsDidChange")
 
     static func load() -> EditorSettings {
         guard let data = UserDefaults.standard.data(forKey: key),
@@ -42,8 +92,10 @@ enum EditorSettingsStore {
     }
 
     static func save(_ settings: EditorSettings) {
-        guard let data = try? JSONEncoder().encode(settings.normalized()) else { return }
+        let normalizedSettings = settings.normalized()
+        guard let data = try? JSONEncoder().encode(normalizedSettings) else { return }
         UserDefaults.standard.set(data, forKey: key)
+        NotificationCenter.default.post(name: didChangeNotification, object: normalizedSettings)
     }
 }
 
@@ -58,6 +110,7 @@ extension EditorSettings {
         }
         result.fontSize = min(max(result.fontSize, 10), 28)
         result.lineHeightMultiple = min(max(result.lineHeightMultiple, 1.0), 1.8)
+        result.fileTreeFontSize = min(max(result.fileTreeFontSize, 10), 16)
         return result
     }
 
@@ -77,6 +130,10 @@ extension EditorSettings {
         let style = NSMutableParagraphStyle()
         style.lineHeightMultiple = CGFloat(lineHeightMultiple)
         return style
+    }
+
+    var orderedInspectorModes: [EditorInspectorMode] {
+        inspectorPanelOrder.modes
     }
 }
 

@@ -75,6 +75,14 @@ struct VeilWriterTests {
         #expect(AppState.isBinaryFile(at: nonexistent) == false)
     }
 
+    @Test("isImageFile recognizes previewable image extensions")
+    func testImageFileDetection() {
+        #expect(AppState.isImageFile(at: URL(fileURLWithPath: "/tmp/photo.png")) == true)
+        #expect(AppState.isImageFile(at: URL(fileURLWithPath: "/tmp/photo.JPG")) == true)
+        #expect(AppState.isImageFile(at: URL(fileURLWithPath: "/tmp/icon.icns")) == true)
+        #expect(AppState.isImageFile(at: URL(fileURLWithPath: "/tmp/readme.md")) == false)
+    }
+
     // MARK: - Encoding Detection (c2)
 
     @Test("decodeText correctly decodes UTF-8 with multi-byte characters")
@@ -127,8 +135,12 @@ struct VeilWriterTests {
     func testEditorSettingsDefaults() {
         let settings = EditorSettings.default
         #expect(settings.lineHeightMultiple == 1.15)
+        #expect(settings.fileTreeFontSize == 12)
         #expect(settings.showsLineNumbers == true)
         #expect(settings.highlightsCurrentLine == true)
+        #expect(settings.preferredInspectorMode == .minimap)
+        #expect(settings.inspectorPanelOrder == .minimapFirst)
+        #expect(settings.orderedInspectorModes == [.minimap, .structure])
         #expect(settings.trimsTrailingWhitespaceOnSave == false)
         #expect(settings.ensuresFinalNewlineOnSave == false)
         #expect(EditorTheme.byID(settings.themeID) != nil)
@@ -141,9 +153,12 @@ struct VeilWriterTests {
             fontID: "missing-font",
             fontSize: 99,
             lineHeightMultiple: 4.0,
+            fileTreeFontSize: 99,
             themeID: "missing-theme",
             showsLineNumbers: false,
             highlightsCurrentLine: false,
+            preferredInspectorMode: .structure,
+            inspectorPanelOrder: .structureFirst,
             trimsTrailingWhitespaceOnSave: true,
             ensuresFinalNewlineOnSave: true
         ).normalized()
@@ -152,10 +167,38 @@ struct VeilWriterTests {
         #expect(settings.themeID == EditorSettings.default.themeID)
         #expect(settings.fontSize == 28)
         #expect(settings.lineHeightMultiple == 1.8)
+        #expect(settings.fileTreeFontSize == 16)
         #expect(settings.showsLineNumbers == false)
         #expect(settings.highlightsCurrentLine == false)
+        #expect(settings.preferredInspectorMode == .structure)
+        #expect(settings.inspectorPanelOrder == .structureFirst)
+        #expect(settings.orderedInspectorModes == [.structure, .minimap])
         #expect(settings.trimsTrailingWhitespaceOnSave == true)
         #expect(settings.ensuresFinalNewlineOnSave == true)
+    }
+
+    @Test("editor settings decode older persisted settings with new preference defaults")
+    @MainActor
+    func testEditorSettingsDecodesOlderPersistedSettings() throws {
+        let json = """
+        {
+          "fontID": "menlo",
+          "fontSize": 14,
+          "lineHeightMultiple": 1.25,
+          "themeID": "graphite",
+          "showsLineNumbers": false,
+          "highlightsCurrentLine": true,
+          "trimsTrailingWhitespaceOnSave": true,
+          "ensuresFinalNewlineOnSave": false
+        }
+        """
+
+        let settings = try JSONDecoder().decode(EditorSettings.self, from: Data(json.utf8)).normalized()
+
+        #expect(settings.fontID == "menlo")
+        #expect(settings.fileTreeFontSize == EditorSettings.default.fileTreeFontSize)
+        #expect(settings.preferredInspectorMode == EditorSettings.default.preferredInspectorMode)
+        #expect(settings.inspectorPanelOrder == EditorSettings.default.inspectorPanelOrder)
     }
 
     @Test("changing editor settings refreshes the active editor")
@@ -168,14 +211,31 @@ struct VeilWriterTests {
         settings.fontID = EditorFontChoice.menlo.id
         settings.fontSize = 18
         settings.lineHeightMultiple = 1.4
+        settings.fileTreeFontSize = 14
         settings.themeID = EditorTheme.graphite.id
         settings.showsLineNumbers = false
         settings.highlightsCurrentLine = false
+        settings.preferredInspectorMode = .structure
+        settings.inspectorPanelOrder = .structureFirst
 
         appState.editorSettings = settings
 
         #expect(appState.editorRenderRevision > renderRevision)
         #expect(appState.editorHighlightRevision > highlightRevision)
+        #expect(appState.inspectorMode == .structure)
+    }
+
+    @Test("file tree icons map common file types to distinct symbols")
+    @MainActor
+    func testFileTreeIconsForCommonFileTypes() {
+        #expect(FileTreeIconDescriptor.file(for: URL(fileURLWithPath: "/tmp/App.swift")).symbolName == "swift")
+        #expect(FileTreeIconDescriptor.file(for: URL(fileURLWithPath: "/tmp/package.json")).symbolName == "slider.horizontal.3")
+        #expect(FileTreeIconDescriptor.file(for: URL(fileURLWithPath: "/tmp/index.html")).symbolName == "globe")
+        #expect(FileTreeIconDescriptor.file(for: URL(fileURLWithPath: "/tmp/styles.css")).symbolName == "paintpalette.fill")
+        #expect(FileTreeIconDescriptor.file(for: URL(fileURLWithPath: "/tmp/script.sh")).symbolName == "terminal.fill")
+        #expect(FileTreeIconDescriptor.file(for: URL(fileURLWithPath: "/tmp/photo.png")).symbolName == "photo.fill")
+        #expect(FileTreeIconDescriptor.file(for: URL(fileURLWithPath: "/tmp/Dockerfile")).symbolName == "shippingbox.circle.fill")
+        #expect(FileTreeIconDescriptor.file(for: URL(fileURLWithPath: "/tmp/unknown.blob")).symbolName == "doc.fill")
     }
 
     @Test("command line installer script forwards paths to VeilWriter")
@@ -392,6 +452,7 @@ struct VeilWriterTests {
             A  Sources/NewFile.swift
              D Sources/Removed.swift
             R  Old.swift -> Sources/Renamed.swift
+            ?? Assets/
             """
         )
 
@@ -400,6 +461,7 @@ struct VeilWriterTests {
         #expect(entries["Sources/NewFile.swift"] == .added)
         #expect(entries["Sources/Removed.swift"] == .deleted)
         #expect(entries["Sources/Renamed.swift"] == .renamed)
+        #expect(entries["Assets"] == .untracked)
     }
 
     @Test("git repository status returns folder marker when child changed")
@@ -414,6 +476,22 @@ struct VeilWriterTests {
         #expect(status.kind(for: root.appendingPathComponent("Sources")) == .modified)
         #expect(status.kind(for: root.appendingPathComponent("Sources/App.swift")) == .modified)
         #expect(status.kind(for: root.appendingPathComponent("README.md")) == nil)
+    }
+
+    @Test("git repository status aggregates folder markers deterministically")
+    func testGitRepositoryStatusFolderMarkerPriority() {
+        let root = URL(fileURLWithPath: "/tmp/veilwriter-git-root")
+        let status = GitRepositoryStatus(
+            repositoryRoot: root,
+            branchName: "main",
+            entries: [
+                "icons/new.svg": .untracked,
+                "icons/removed.svg": .deleted,
+                "icons/changed.svg": .modified,
+            ]
+        )
+
+        #expect(status.kind(for: root.appendingPathComponent("icons")) == .deleted)
     }
 
     @Test("command palette matcher supports fuzzy and keyword lookup")
@@ -816,9 +894,12 @@ struct VeilWriterTests {
             fontID: EditorSettings.default.fontID,
             fontSize: EditorSettings.default.fontSize,
             lineHeightMultiple: EditorSettings.default.lineHeightMultiple,
+            fileTreeFontSize: EditorSettings.default.fileTreeFontSize,
             themeID: EditorSettings.default.themeID,
             showsLineNumbers: true,
             highlightsCurrentLine: true,
+            preferredInspectorMode: EditorSettings.default.preferredInspectorMode,
+            inspectorPanelOrder: EditorSettings.default.inspectorPanelOrder,
             trimsTrailingWhitespaceOnSave: true,
             ensuresFinalNewlineOnSave: true
         )

@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 struct EditorSettingsView: View {
     @EnvironmentObject var appState: AppState
@@ -63,6 +64,29 @@ struct EditorSettingsView: View {
                 Toggle("Highlight Current Line", isOn: setting(\.highlightsCurrentLine))
             }
 
+            Section("Sidebar") {
+                HStack {
+                    Slider(value: setting(\.fileTreeFontSize), in: 10...16, step: 1)
+                    Text("\(Int(appState.editorSettings.fileTreeFontSize)) pt")
+                        .monospacedDigit()
+                        .frame(width: 48, alignment: .trailing)
+                }
+            }
+
+            Section("Inspector") {
+                Picker("Default View", selection: setting(\.preferredInspectorMode)) {
+                    ForEach(EditorInspectorMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+
+                Picker("View Order", selection: setting(\.inspectorPanelOrder)) {
+                    ForEach(EditorInspectorPanelOrder.allCases) { order in
+                        Text(order.displayName).tag(order)
+                    }
+                }
+            }
+
             Section("Save") {
                 Toggle("Trim Trailing Whitespace", isOn: setting(\.trimsTrailingWhitespaceOnSave))
                 Toggle("Ensure Final Newline", isOn: setting(\.ensuresFinalNewlineOnSave))
@@ -96,6 +120,7 @@ struct EditorSettingsView: View {
         .formStyle(.grouped)
         .padding(20)
         .frame(width: 500)
+        .background(SettingsKeyboardShortcutHandler())
         .onAppear {
             refreshCLIState()
         }
@@ -169,6 +194,61 @@ struct EditorSettingsView: View {
         var settings = appState.editorSettings
         settings[keyPath: keyPath] = value
         appState.editorSettings = settings.normalized()
+    }
+}
+
+private struct SettingsKeyboardShortcutHandler: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        context.coordinator.attach(to: view)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.view = nsView
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.removeMonitor()
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    final class Coordinator {
+        weak var view: NSView?
+        private var monitor: Any?
+
+        func attach(to view: NSView) {
+            self.view = view
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                self?.handle(event) ?? event
+            }
+        }
+
+        func removeMonitor() {
+            guard let monitor else { return }
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
+        }
+
+        private func handle(_ event: NSEvent) -> NSEvent? {
+            guard let window = view?.window,
+                  event.window === window,
+                  event.charactersIgnoringModifiers?.lowercased() == "w" else {
+                return event
+            }
+
+            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            guard modifiers.contains(.option) || modifiers.contains(.command) else {
+                return event
+            }
+
+            window.performClose(nil)
+            return nil
+        }
     }
 }
 
