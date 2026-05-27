@@ -10,6 +10,9 @@ VeilWriter is a lightweight macOS editor focused on quick project browsing, fast
 - Select files from compact full-width sidebar rows for easier clicking.
 - Open files and folders from either the menu commands or the empty sidebar state.
 - Open individual files from the File menu.
+- Reopen recent files and folders from the empty sidebar state.
+- Restore the last folder, open tabs, and active tab on launch.
+- Run common actions from the Command-Shift-P command palette.
 - Search and open project files quickly with Command-P.
 - Keep multiple files open in tabs, each with its own unsaved state.
 - Open multiple windows, each with its own independent tab set and editor state.
@@ -18,6 +21,8 @@ VeilWriter is a lightweight macOS editor focused on quick project browsing, fast
 - Find and replace text in the active editor, all open tabs, or the selected folder with highlighted matches and next/previous navigation.
 - Use the right inspector for a lightweight minimap and document/code structure view, with click-to-jump navigation into the current tab.
 - Read current file state from a compact status bar with cursor position, language, file size, and version.
+- See lightweight dirty gutter marks for lines changed since the last saved content.
+- Highlight matching bracket pairs around the cursor for common code delimiters.
 - Open text files in a native macOS editing surface.
 - Highlight Swift, Ruby, PHP, Java, JSON, JavaScript, TypeScript, Go, HTML, CSS, Markdown, Python, shell/bash, YAML, TOML, XML, SQL, Dockerfile, Makefile, INI, env, Rust, C, C++, and C# files.
 - Customize editor font, font size, color style, line numbers, and current-line focus highlighting from Settings.

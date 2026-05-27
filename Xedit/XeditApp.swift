@@ -42,6 +42,11 @@ struct VeilWriterApp: App {
             }
 
             CommandGroup(after: .textEditing) {
+                Button("Command Palette") {
+                    appState?.showCommandPalette()
+                }
+                .keyboardShortcut("p", modifiers: [.command, .shift])
+
                 Button("Quick Open") {
                     appState?.showQuickOpen()
                 }
@@ -104,5 +109,8 @@ private struct WindowRootView: View {
         ContentView()
             .environmentObject(appState)
             .focusedSceneObject(appState)
+            .onAppear {
+                appState.restoreSessionIfAvailable()
+            }
     }
 }

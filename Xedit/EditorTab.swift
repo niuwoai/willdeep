@@ -11,12 +11,14 @@ struct EditorTab: Identifiable, Equatable {
     let id: UUID
     var url: URL
     var content: String
+    var savedContent: String
     var isEdited: Bool
 
-    init(id: UUID = UUID(), url: URL, content: String = "", isEdited: Bool = false) {
+    init(id: UUID = UUID(), url: URL, content: String = "", savedContent: String? = nil, isEdited: Bool = false) {
         self.id = id
         self.url = url
         self.content = content
+        self.savedContent = savedContent ?? content
         self.isEdited = isEdited
     }
 

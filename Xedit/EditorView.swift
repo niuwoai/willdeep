@@ -29,6 +29,9 @@ struct EditorView: NSViewRepresentable {
     /// A one-shot line navigation request from the inspector/minimap.
     var navigationRequest: EditorNavigationRequest?
 
+    /// Lines whose current content differs from the last saved content.
+    var changedLineNumbers: Set<Int> = []
+
     /// Ranges matching the current find query.
     var searchRanges: [NSRange] = []
 
@@ -161,6 +164,7 @@ struct EditorView: NSViewRepresentable {
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView = notification.object as? VeilWriterTextView else { return }
             publishCursorPosition(for: textView)
+            applyBracketHighlight(to: textView)
             refreshEditorChrome(for: textView)
         }
 
@@ -186,9 +190,9 @@ struct EditorView: NSViewRepresentable {
             textView.textColor = theme.foregroundColor
             textView.backgroundColor = theme.backgroundColor
             textView.insertionPointColor = theme.insertionPointColor
-            textView.currentLineColor = theme.currentLineBackgroundColor
-            textView.showsCurrentLineHighlight = parent.settings.highlightsCurrentLine
-            textView.typingAttributes = [
+        textView.currentLineColor = theme.currentLineBackgroundColor
+        textView.showsCurrentLineHighlight = parent.settings.highlightsCurrentLine
+        textView.typingAttributes = [
                 .font: font,
                 .foregroundColor: theme.foregroundColor,
             ]
@@ -197,6 +201,7 @@ struct EditorView: NSViewRepresentable {
                 ruler.settings = parent.settings
                 ruler.theme = theme
                 ruler.font = font
+                ruler.changedLineNumbers = parent.changedLineNumbers
                 ruler.needsDisplay = true
                 ruler.invalidateRuleThickness()
             }
@@ -286,6 +291,7 @@ struct EditorView: NSViewRepresentable {
             textView.setSelectedRange(NSRange(location: range.location, length: 0))
             textView.scrollRangeToVisible(range)
             publishCursorPosition(for: textView)
+            applyBracketHighlight(to: textView)
             refreshEditorChrome(for: textView)
         }
 
@@ -322,6 +328,85 @@ struct EditorView: NSViewRepresentable {
         private func publishCursorPosition(for textView: VeilWriterTextView) {
             let position = Self.lineAndColumn(for: textView.selectedRange().location, in: textView.string)
             parent.onCursorChange?(position.line, position.column)
+        }
+
+        private func applyBracketHighlight(to textView: VeilWriterTextView) {
+            guard let layoutManager = textView.layoutManager else { return }
+            let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
+            layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: fullRange)
+
+            guard let match = Self.matchingBracketRanges(
+                around: textView.selectedRange().location,
+                in: textView.string
+            ) else {
+                return
+            }
+
+            let color = NSColor.selectedTextBackgroundColor.withAlphaComponent(0.55)
+            layoutManager.addTemporaryAttribute(.backgroundColor, value: color, forCharacterRange: match.opening)
+            layoutManager.addTemporaryAttribute(.backgroundColor, value: color, forCharacterRange: match.closing)
+        }
+
+        static func matchingBracketRanges(around location: Int, in text: String) -> (opening: NSRange, closing: NSRange)? {
+            let nsText = text as NSString
+            guard nsText.length > 1 else { return nil }
+
+            let candidates = [
+                min(max(0, location - 1), nsText.length - 1),
+                min(max(0, location), nsText.length - 1),
+            ]
+
+            for index in candidates {
+                guard let bracket = BracketPair(character: nsText.character(at: index)) else {
+                    continue
+                }
+
+                if bracket.isOpening,
+                   let match = findClosingBracket(from: index, pair: bracket, in: nsText) {
+                    return (NSRange(location: index, length: 1), NSRange(location: match, length: 1))
+                }
+
+                if !bracket.isOpening,
+                   let match = findOpeningBracket(from: index, pair: bracket, in: nsText) {
+                    return (NSRange(location: match, length: 1), NSRange(location: index, length: 1))
+                }
+            }
+
+            return nil
+        }
+
+        private static func findClosingBracket(from index: Int, pair: BracketPair, in text: NSString) -> Int? {
+            var depth = 0
+            guard index + 1 < text.length else { return nil }
+            for cursor in index..<text.length {
+                let character = text.character(at: cursor)
+                if character == pair.opening {
+                    depth += 1
+                } else if character == pair.closing {
+                    depth -= 1
+                    if depth == 0 {
+                        return cursor
+                    }
+                }
+            }
+            return nil
+        }
+
+        private static func findOpeningBracket(from index: Int, pair: BracketPair, in text: NSString) -> Int? {
+            var depth = 0
+            guard index > 0 else { return nil }
+            for cursor in stride(from: index, through: 0, by: -1) {
+                let character = text.character(at: cursor)
+                if character == pair.closing {
+                    depth += 1
+                } else if character == pair.opening {
+                    depth -= 1
+                    if depth == 0 {
+                        return cursor
+                    }
+                }
+            }
+            return nil
         }
 
         static func lineAndColumn(for location: Int, in text: String) -> (line: Int, column: Int) {
@@ -377,6 +462,43 @@ struct EditorView: NSViewRepresentable {
 
             highlightWorkItem = workItem
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
+        }
+    }
+}
+
+private struct BracketPair {
+    let opening: unichar
+    let closing: unichar
+    let isOpening: Bool
+
+    init?(character: unichar) {
+        switch character {
+        case 40:
+            self.opening = 40
+            self.closing = 41
+            self.isOpening = true
+        case 41:
+            self.opening = 40
+            self.closing = 41
+            self.isOpening = false
+        case 91:
+            self.opening = 91
+            self.closing = 93
+            self.isOpening = true
+        case 93:
+            self.opening = 91
+            self.closing = 93
+            self.isOpening = false
+        case 123:
+            self.opening = 123
+            self.closing = 125
+            self.isOpening = true
+        case 125:
+            self.opening = 123
+            self.closing = 125
+            self.isOpening = false
+        default:
+            return nil
         }
     }
 }
@@ -499,6 +621,7 @@ final class LineNumberRulerView: NSRulerView {
     var settings: EditorSettings = .default
     var theme: EditorTheme = .paper
     var font: NSFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+    var changedLineNumbers: Set<Int> = []
 
     init(scrollView: NSScrollView, textView: NSTextView) {
         self.textView = textView
@@ -576,7 +699,8 @@ final class LineNumberRulerView: NSRulerView {
                 y: y,
                 lineHeight: lineRect.height,
                 attributes: attributes,
-                isCurrentLine: settings.highlightsCurrentLine && lineNumber == selectedLine
+                isCurrentLine: settings.highlightsCurrentLine && lineNumber == selectedLine,
+                isChanged: changedLineNumbers.contains(lineNumber)
             )
 
             let nextGlyphIndex = NSMaxRange(lineGlyphRange)
@@ -590,11 +714,17 @@ final class LineNumberRulerView: NSRulerView {
         y: CGFloat,
         lineHeight: CGFloat,
         attributes: [NSAttributedString.Key: Any],
-        isCurrentLine: Bool
+        isCurrentLine: Bool,
+        isChanged: Bool = false
     ) {
         if isCurrentLine {
             theme.currentLineBackgroundColor.setFill()
             NSRect(x: 0, y: y, width: bounds.width, height: lineHeight).fill()
+        }
+
+        if isChanged {
+            NSColor.systemBlue.withAlphaComponent(0.82).setFill()
+            NSRect(x: 2, y: y + 3, width: 3, height: max(4, lineHeight - 6)).fill()
         }
 
         let text = "\(lineNumber)" as NSString

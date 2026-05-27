@@ -57,6 +57,9 @@ struct ContentView: View {
                             .accessibilityLabel("Open Folder")
                         }
                         .labelStyle(.iconOnly)
+
+                        RecentItemsView()
+                            .environmentObject(appState)
                     }
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -94,6 +97,7 @@ struct ContentView: View {
                             settings: appState.editorSettings,
                             renderRevision: appState.editorRenderRevision,
                             navigationRequest: appState.editorNavigationRequest,
+                            changedLineNumbers: appState.changedLineNumbers,
                             searchRanges: appState.findMatchRanges,
                             activeSearchRange: appState.activeFindRange,
                             onEdit: {
@@ -141,6 +145,10 @@ struct ContentView: View {
                 }
                 if appState.isGoToLineVisible {
                     GoToLinePanel()
+                        .environmentObject(appState)
+                }
+                if appState.isCommandPaletteVisible {
+                    CommandPalettePanel()
                         .environmentObject(appState)
                 }
             }
@@ -242,9 +250,183 @@ struct ContentView: View {
         }
 
         // --- Load the file (c1, c2) ---
+        appState.registerRecentFile(newURL)
+        appState.registerRecentFolder(newURL.deletingLastPathComponent())
         appState.beginOpeningTab(for: newURL)
         appState.loadFile(from: newURL, fallbackURL: oldValue, allowLargeFile: allowLargeFile)
     }
+}
+
+private struct RecentItemsView: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !appState.recentFolders.isEmpty {
+                recentSection(title: "Recent Folders", urls: appState.recentFolders, icon: "folder") { url in
+                    appState.openRecentFolder(url)
+                }
+            }
+            if !appState.recentFiles.isEmpty {
+                recentSection(title: "Recent Files", urls: appState.recentFiles, icon: "doc") { url in
+                    appState.openRecentFile(url)
+                }
+            }
+        }
+        .frame(maxWidth: 220)
+        .padding(.top, 4)
+    }
+
+    private func recentSection(
+        title: String,
+        urls: [URL],
+        icon: String,
+        action: @escaping (URL) -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+            ForEach(urls.prefix(4), id: \.self) { url in
+                Button {
+                    action(url)
+                } label: {
+                    Label(url.lastPathComponent, systemImage: icon)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .font(.caption)
+            }
+        }
+    }
+}
+
+private struct CommandPalettePanel: View {
+    @EnvironmentObject var appState: AppState
+    @FocusState private var queryFocused: Bool
+
+    private var commands: [PaletteCommand] {
+        [
+            PaletteCommand(title: "Quick Open", subtitle: "Search files in the current folder", icon: "doc.text.magnifyingglass", isEnabled: appState.rootDirectory != nil) {
+                appState.hideCommandPalette()
+                appState.showQuickOpen()
+            },
+            PaletteCommand(title: "Go to Line", subtitle: "Jump to a line in the active tab", icon: "arrow.down.to.line", isEnabled: appState.activeTabID != nil) {
+                appState.hideCommandPalette()
+                appState.showGoToLine()
+            },
+            PaletteCommand(title: "Find", subtitle: "Show find and replace", icon: "magnifyingglass", isEnabled: appState.activeTabID != nil) {
+                appState.hideCommandPalette()
+                appState.showFindBar()
+            },
+            PaletteCommand(title: "Toggle Inspector", subtitle: "Show or hide minimap and structure", icon: "sidebar.right", isEnabled: appState.activeTabID != nil) {
+                appState.hideCommandPalette()
+                appState.isInspectorVisible.toggle()
+            },
+            PaletteCommand(title: "Open File", subtitle: "Choose a file from disk", icon: "doc", isEnabled: true) {
+                appState.hideCommandPalette()
+                appState.openFile()
+            },
+            PaletteCommand(title: "Open Folder", subtitle: "Choose a folder for the sidebar", icon: "folder", isEnabled: true) {
+                appState.hideCommandPalette()
+                appState.openFolder()
+            },
+            PaletteCommand(title: "Save", subtitle: "Write the active file", icon: "square.and.arrow.down", isEnabled: appState.activeTabID != nil) {
+                appState.hideCommandPalette()
+                appState.saveCurrentFile()
+            },
+            PaletteCommand(title: "Close Tab", subtitle: "Close the active tab", icon: "xmark", isEnabled: appState.activeTabID != nil) {
+                appState.hideCommandPalette()
+                appState.closeActiveTab()
+            },
+        ]
+    }
+
+    private var filteredCommands: [PaletteCommand] {
+        let query = appState.commandPaletteQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return commands }
+        return commands.filter {
+            $0.title.localizedCaseInsensitiveContains(query)
+                || $0.subtitle.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.12)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    appState.hideCommandPalette()
+                }
+
+            VStack(spacing: 0) {
+                TextField("Command Palette", text: $appState.commandPaletteQuery)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 16))
+                    .padding(12)
+                    .focused($queryFocused)
+                    .onSubmit {
+                        run(filteredCommands.first)
+                    }
+
+                Divider()
+
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(filteredCommands) { command in
+                            Button {
+                                run(command)
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: command.icon)
+                                        .foregroundColor(.secondary)
+                                        .frame(width: 18)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(command.title)
+                                            .font(.system(size: 13, weight: .medium))
+                                        Text(command.subtitle)
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(!command.isEnabled)
+                            .opacity(command.isEnabled ? 1 : 0.42)
+                        }
+                    }
+                }
+                .frame(maxHeight: 300)
+            }
+            .frame(width: 520)
+            .background(.regularMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .shadow(radius: 18, y: 10)
+        }
+        .onAppear {
+            queryFocused = true
+        }
+    }
+
+    private func run(_ command: PaletteCommand?) {
+        guard let command, command.isEnabled else { return }
+        command.action()
+    }
+}
+
+private struct PaletteCommand: Identifiable {
+    let id = UUID()
+    let title: String
+    let subtitle: String
+    let icon: String
+    let isEnabled: Bool
+    let action: () -> Void
 }
 
 private struct QuickOpenPanel: View {

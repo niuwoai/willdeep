@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.12.0-rc1 - 2026-05-27
+
+- Added a Command-Shift-P command palette for fast editor actions.
+- Added recent files and recent folders with quick access from the empty sidebar state.
+- Added session restore for the last folder, open tabs, and active tab.
+- Added a lightweight dirty gutter indicator for lines that differ from the saved file content.
+- Added bracket pair highlighting around the cursor for parentheses, square brackets, and braces.
+
 ## 1.11.0-rc1 - 2026-05-27
 
 - Added Quick Open with Command-P for fast file lookup inside the selected folder.

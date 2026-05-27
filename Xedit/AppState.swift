@@ -50,6 +50,10 @@ final class AppState: ObservableObject {
     @Published var quickOpenQuery = ""
     @Published var isGoToLineVisible = false
     @Published var goToLineText = ""
+    @Published var isCommandPaletteVisible = false
+    @Published var commandPaletteQuery = ""
+    @Published private(set) var recentFiles: [URL] = []
+    @Published private(set) var recentFolders: [URL] = []
     @Published private(set) var cursorLine = 1
     @Published private(set) var cursorColumn = 1
     @Published var editorSettings: EditorSettings {
@@ -83,6 +87,8 @@ final class AppState: ObservableObject {
             self.activeTabID = nil
         }
         self.editorSettings = editorSettings.normalized()
+        self.recentFiles = RecentItemsStore.loadFiles()
+        self.recentFolders = RecentItemsStore.loadFolders()
     }
 
     var activeTab: EditorTab? {
@@ -98,6 +104,11 @@ final class AppState: ObservableObject {
         let ranges = findMatchRanges
         guard !ranges.isEmpty else { return nil }
         return ranges[min(activeFindIndex, ranges.count - 1)]
+    }
+
+    var changedLineNumbers: Set<Int> {
+        guard let activeTab else { return [] }
+        return Self.changedLineNumbers(current: activeTab.content, saved: activeTab.savedContent)
     }
 
     func showFindBar() {
@@ -130,6 +141,16 @@ final class AppState: ObservableObject {
         goToLineText = ""
     }
 
+    func showCommandPalette() {
+        commandPaletteQuery = ""
+        isCommandPaletteVisible = true
+    }
+
+    func hideCommandPalette() {
+        isCommandPaletteVisible = false
+        commandPaletteQuery = ""
+    }
+
     func updateCursorPosition(line: Int, column: Int) {
         cursorLine = max(1, line)
         cursorColumn = max(1, column)
@@ -139,6 +160,27 @@ final class AppState: ObservableObject {
         guard line > 0 else { return }
         let nextRevision = (editorNavigationRequest?.revision ?? 0) + 1
         editorNavigationRequest = EditorNavigationRequest(line: line, revision: nextRevision)
+    }
+
+    func openRecentFile(_ url: URL) {
+        registerRecentFile(url)
+        openedFileURL = url
+    }
+
+    func openRecentFolder(_ url: URL) {
+        registerRecentFolder(url)
+        rootDirectory = url
+        selectedFolderURL = url
+    }
+
+    func registerRecentFile(_ url: URL) {
+        recentFiles = RecentItemsStore.add(url, to: recentFiles)
+        RecentItemsStore.saveFiles(recentFiles)
+    }
+
+    func registerRecentFolder(_ url: URL) {
+        recentFolders = RecentItemsStore.add(url, to: recentFolders)
+        RecentItemsStore.saveFolders(recentFolders)
     }
 
     func findNext() {
@@ -309,6 +351,23 @@ final class AppState: ObservableObject {
         return mutable as String
     }
 
+    nonisolated static func changedLineNumbers(current: String, saved: String) -> Set<Int> {
+        let currentLines = current.components(separatedBy: .newlines)
+        let savedLines = saved.components(separatedBy: .newlines)
+        let maxCount = max(currentLines.count, savedLines.count)
+        guard maxCount > 0 else { return [] }
+
+        var changed: Set<Int> = []
+        for index in 0..<maxCount {
+            let currentLine = index < currentLines.count ? currentLines[index] : ""
+            let savedLine = index < savedLines.count ? savedLines[index] : ""
+            if currentLine != savedLine {
+                changed.insert(index + 1)
+            }
+        }
+        return changed
+    }
+
     nonisolated static func textFileURLs(in folder: URL) -> [URL] {
         guard let enumerator = FileManager.default.enumerator(
             at: folder,
@@ -415,6 +474,7 @@ final class AppState: ObservableObject {
             case .alertFirstButtonReturn:
                 do {
                     try tab.content.write(to: tab.url, atomically: true, encoding: .utf8)
+                    tabs[index].savedContent = tab.content
                     tabs[index].isEdited = false
                 } catch {
                     let saveAlert = NSAlert()
@@ -435,7 +495,10 @@ final class AppState: ObservableObject {
         let wasActive = tabs[index].id == activeTabID
         tabs.remove(at: index)
 
-        guard wasActive else { return }
+        guard wasActive else {
+            persistSession()
+            return
+        }
 
         if tabs.isEmpty {
             activeTabID = nil
@@ -447,6 +510,7 @@ final class AppState: ObservableObject {
             isApplyingTabSnapshot = false
             bumpEditorRenderRevision()
             updateWindowTitle(url: nil, isEdited: false)
+            persistSession()
             return
         }
 
@@ -467,6 +531,7 @@ final class AppState: ObservableObject {
         isApplyingTabSnapshot = false
         bumpEditorRenderRevision()
         updateWindowTitle(url: tab.url, isEdited: tab.isEdited)
+        persistSession()
     }
 
     private func bumpEditorRenderRevision() {
@@ -489,6 +554,7 @@ final class AppState: ObservableObject {
         }
         tabs[index].url = url
         tabs[index].content = fileContent
+        tabs[index].savedContent = fileContent
         tabs[index].isEdited = isEdited
     }
 
@@ -516,6 +582,8 @@ final class AppState: ObservableObject {
             guard response == .OK, let url = panel.url else { return }
             self?.rootDirectory = url
             self?.selectedFolderURL = url
+            self?.registerRecentFolder(url)
+            self?.persistSession()
         }
     }
 
@@ -536,8 +604,11 @@ final class AppState: ObservableObject {
 
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
+            self?.registerRecentFile(url)
+            self?.registerRecentFolder(url.deletingLastPathComponent())
             self?.openedFileURL = url
             self?.rootDirectory = url.deletingLastPathComponent()
+            self?.persistSession()
         }
     }
 
@@ -642,6 +713,7 @@ final class AppState: ObservableObject {
     private func applyLoadedContent(_ content: String, for url: URL) {
         if let index = tabs.firstIndex(where: { $0.url == url }) {
             tabs[index].content = content
+            tabs[index].savedContent = content
             tabs[index].isEdited = false
         }
 
@@ -655,6 +727,9 @@ final class AppState: ObservableObject {
         isApplyingTabSnapshot = false
         bumpEditorRenderRevision()
         updateWindowTitle(url: url, isEdited: false)
+        registerRecentFile(url)
+        registerRecentFolder(url.deletingLastPathComponent())
+        persistSession()
     }
 
     private func revertFailedLoad(for url: URL, fallbackURL: URL?) {
@@ -677,6 +752,7 @@ final class AppState: ObservableObject {
             isApplyingTabSnapshot = false
             bumpEditorRenderRevision()
             updateWindowTitle(url: nil, isEdited: false)
+            persistSession()
         }
     }
 
@@ -771,8 +847,14 @@ final class AppState: ObservableObject {
                 rootDirectory = url.deletingLastPathComponent()
                 updateActiveTabAfterURLChange(to: url)
             }
+            updateActiveTab { tab in
+                tab.savedContent = fileContent
+            }
             isEdited = false
             updateWindowTitle(url: url, isEdited: false)
+            registerRecentFile(url)
+            registerRecentFolder(url.deletingLastPathComponent())
+            persistSession()
             return true
         } catch {
             guard showsAlert else {
@@ -787,5 +869,104 @@ final class AppState: ObservableObject {
             alert.runModal()
             return false
         }
+    }
+
+    // MARK: - Session Restore
+
+    func restoreSessionIfAvailable() {
+        guard tabs.isEmpty, openedFileURL == nil, let session = SessionStore.load() else {
+            return
+        }
+
+        if let rootPath = session.rootDirectoryPath {
+            let rootURL = URL(fileURLWithPath: rootPath)
+            rootDirectory = rootURL
+            selectedFolderURL = rootURL
+            registerRecentFolder(rootURL)
+        }
+
+        var restoredTabs: [EditorTab] = []
+        for path in session.tabPaths {
+            let url = URL(fileURLWithPath: path)
+            guard !Self.isBinaryFile(at: url),
+                  let data = try? Self.readFileData(from: url),
+                  let content = String(data: data, encoding: .utf8) ?? Optional(Self.decodeText(from: data)) else {
+                continue
+            }
+            restoredTabs.append(EditorTab(url: url, content: content, savedContent: content, isEdited: false))
+        }
+
+        guard !restoredTabs.isEmpty else { return }
+
+        tabs = restoredTabs
+        let activeURL = session.activeTabPath.map { URL(fileURLWithPath: $0) }
+        let activeTab = activeURL.flatMap { url in restoredTabs.first { $0.url == url } } ?? restoredTabs[0]
+        activeTabID = activeTab.id
+        applySnapshot(from: activeTab, suppressURLChange: true)
+    }
+
+    func persistSession() {
+        let session = EditorSessionSnapshot(
+            rootDirectoryPath: rootDirectory?.path,
+            tabPaths: tabs.map(\.url.path),
+            activeTabPath: activeTab?.url.path
+        )
+        SessionStore.save(session)
+    }
+}
+
+private enum RecentItemsStore {
+    private static let filesKey = "im.some.veilwriter.recentFiles.v1"
+    private static let foldersKey = "im.some.veilwriter.recentFolders.v1"
+    private static let limit = 8
+
+    static func loadFiles() -> [URL] {
+        load(key: filesKey)
+    }
+
+    static func loadFolders() -> [URL] {
+        load(key: foldersKey)
+    }
+
+    static func saveFiles(_ urls: [URL]) {
+        save(urls, key: filesKey)
+    }
+
+    static func saveFolders(_ urls: [URL]) {
+        save(urls, key: foldersKey)
+    }
+
+    static func add(_ url: URL, to urls: [URL]) -> [URL] {
+        let standardized = url.standardizedFileURL
+        let unique = urls.filter { $0.standardizedFileURL != standardized }
+        return Array(([standardized] + unique).prefix(limit))
+    }
+
+    private static func load(key: String) -> [URL] {
+        (UserDefaults.standard.stringArray(forKey: key) ?? []).map { URL(fileURLWithPath: $0) }
+    }
+
+    private static func save(_ urls: [URL], key: String) {
+        UserDefaults.standard.set(urls.map(\.path), forKey: key)
+    }
+}
+
+private struct EditorSessionSnapshot: Codable {
+    let rootDirectoryPath: String?
+    let tabPaths: [String]
+    let activeTabPath: String?
+}
+
+private enum SessionStore {
+    private static let key = "im.some.veilwriter.session.v1"
+
+    static func load() -> EditorSessionSnapshot? {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(EditorSessionSnapshot.self, from: data)
+    }
+
+    static func save(_ snapshot: EditorSessionSnapshot) {
+        guard let data = try? JSONEncoder().encode(snapshot) else { return }
+        UserDefaults.standard.set(data, forKey: key)
     }
 }

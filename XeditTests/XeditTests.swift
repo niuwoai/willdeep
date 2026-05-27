@@ -575,6 +575,27 @@ struct VeilWriterTests {
         #expect(urls.map(\.lastPathComponent) == ["alpha.swift"])
     }
 
+    @Test("changed line numbers compare current and saved content")
+    func testChangedLineNumbersCompareCurrentAndSavedContent() {
+        let changed = AppState.changedLineNumbers(
+            current: "one\ntwo changed\nthree\nfour",
+            saved: "one\ntwo\nthree"
+        )
+
+        #expect(changed == Set([2, 4]))
+    }
+
+    @Test("active tab exposes dirty gutter line numbers")
+    func testActiveTabExposesDirtyGutterLineNumbers() {
+        let tempDir = FileManager.default.temporaryDirectory
+        let fileURL = tempDir.appendingPathComponent("veilwriter_dirty_gutter_\(UUID().uuidString).swift")
+        let appState = AppState(openedFileURL: fileURL, fileContent: "let a = 1\nlet b = 2")
+
+        appState.fileContent = "let a = 1\nlet b = 3"
+
+        #expect(appState.changedLineNumbers == Set([2]))
+    }
+
     @Test("editor indentation helpers preserve lightweight editing flow")
     func testEditorIndentationHelpers() {
         let source = "func run() {\n    print(\"ok\")\n}"
@@ -582,6 +603,22 @@ struct VeilWriterTests {
         #expect(VeilWriterTextView.leadingWhitespaceBefore(location: 17, in: source) == "    ")
         #expect(VeilWriterTextView.indentingLines("one\ntwo\n") == "    one\n    two\n")
         #expect(VeilWriterTextView.outdentingLines("    one\n\ttwo\n  three") == "one\ntwo\nthree")
+    }
+
+    @Test("matching bracket ranges find nested pairs around cursor")
+    func testMatchingBracketRangesFindNestedPairs() {
+        let text = "call(a[0], { value })"
+
+        let square = EditorView.Coordinator.matchingBracketRanges(around: 7, in: text)
+        let curly = EditorView.Coordinator.matchingBracketRanges(around: 12, in: text)
+        let paren = EditorView.Coordinator.matchingBracketRanges(around: 5, in: text)
+
+        #expect(square?.opening == NSRange(location: 6, length: 1))
+        #expect(square?.closing == NSRange(location: 8, length: 1))
+        #expect(curly?.opening == NSRange(location: 11, length: 1))
+        #expect(curly?.closing == NSRange(location: 19, length: 1))
+        #expect(paren?.opening == NSRange(location: 4, length: 1))
+        #expect(paren?.closing == NSRange(location: 20, length: 1))
     }
 
     // MARK: - Find and Replace
