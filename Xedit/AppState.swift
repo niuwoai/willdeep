@@ -32,6 +32,8 @@ final class AppState: ObservableObject {
     @Published var rootDirectory: URL?
     @Published var tabs: [EditorTab]
     @Published var activeTabID: EditorTab.ID?
+    @Published private(set) var editorRenderRevision = 0
+    @Published private(set) var editorNavigationRequest: EditorNavigationRequest?
     @Published var isFindBarVisible = false
     @Published var findQuery = "" {
         didSet {
@@ -44,6 +46,12 @@ final class AppState: ObservableObject {
     @Published var selectedFolderURL: URL?
     @Published var isInspectorVisible = true
     @Published var inspectorMode: EditorInspectorMode = .minimap
+    @Published var isQuickOpenVisible = false
+    @Published var quickOpenQuery = ""
+    @Published var isGoToLineVisible = false
+    @Published var goToLineText = ""
+    @Published private(set) var cursorLine = 1
+    @Published private(set) var cursorColumn = 1
     @Published var editorSettings: EditorSettings {
         didSet {
             EditorSettingsStore.save(editorSettings)
@@ -98,6 +106,39 @@ final class AppState: ObservableObject {
 
     func hideFindBar() {
         isFindBarVisible = false
+    }
+
+    func showQuickOpen() {
+        guard rootDirectory != nil else { return }
+        quickOpenQuery = ""
+        isQuickOpenVisible = true
+    }
+
+    func hideQuickOpen() {
+        isQuickOpenVisible = false
+        quickOpenQuery = ""
+    }
+
+    func showGoToLine() {
+        guard activeTabID != nil else { return }
+        goToLineText = ""
+        isGoToLineVisible = true
+    }
+
+    func hideGoToLine() {
+        isGoToLineVisible = false
+        goToLineText = ""
+    }
+
+    func updateCursorPosition(line: Int, column: Int) {
+        cursorLine = max(1, line)
+        cursorColumn = max(1, column)
+    }
+
+    func navigateEditor(toLine line: Int) {
+        guard line > 0 else { return }
+        let nextRevision = (editorNavigationRequest?.revision ?? 0) + 1
+        editorNavigationRequest = EditorNavigationRequest(line: line, revision: nextRevision)
     }
 
     func findNext() {
@@ -291,6 +332,33 @@ final class AppState: ObservableObject {
         return urls
     }
 
+    nonisolated static func quickOpenFileURLs(in folder: URL, limit: Int = 1_500) -> [URL] {
+        guard let enumerator = FileManager.default.enumerator(
+            at: folder,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else {
+            return []
+        }
+
+        var urls: [URL] = []
+        for case let url as URL in enumerator {
+            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey]),
+                  values.isRegularFile == true else {
+                continue
+            }
+
+            urls.append(url)
+        }
+
+        return urls
+            .sorted { lhs, rhs in
+                lhs.lastPathComponent.localizedStandardCompare(rhs.lastPathComponent) == .orderedAscending
+            }
+            .prefix(limit)
+            .map { $0 }
+    }
+
     func beginOpeningTab(for url: URL) {
         if activateTab(for: url) {
             return
@@ -377,6 +445,7 @@ final class AppState: ObservableObject {
             fileContent = ""
             isEdited = false
             isApplyingTabSnapshot = false
+            bumpEditorRenderRevision()
             updateWindowTitle(url: nil, isEdited: false)
             return
         }
@@ -396,7 +465,12 @@ final class AppState: ObservableObject {
         fileContent = tab.content
         isEdited = tab.isEdited
         isApplyingTabSnapshot = false
+        bumpEditorRenderRevision()
         updateWindowTitle(url: tab.url, isEdited: tab.isEdited)
+    }
+
+    private func bumpEditorRenderRevision() {
+        editorRenderRevision += 1
     }
 
     private func updateActiveTab(_ mutation: (inout EditorTab) -> Void) {
@@ -579,6 +653,7 @@ final class AppState: ObservableObject {
         fileContent = content
         isEdited = false
         isApplyingTabSnapshot = false
+        bumpEditorRenderRevision()
         updateWindowTitle(url: url, isEdited: false)
     }
 
@@ -600,6 +675,7 @@ final class AppState: ObservableObject {
             fileContent = ""
             isEdited = false
             isApplyingTabSnapshot = false
+            bumpEditorRenderRevision()
             updateWindowTitle(url: nil, isEdited: false)
         }
     }

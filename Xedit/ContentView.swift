@@ -92,12 +92,17 @@ struct ContentView: View {
                             text: $appState.fileContent,
                             language: detectedLanguage,
                             settings: appState.editorSettings,
+                            renderRevision: appState.editorRenderRevision,
+                            navigationRequest: appState.editorNavigationRequest,
                             searchRanges: appState.findMatchRanges,
                             activeSearchRange: appState.activeFindRange,
                             onEdit: {
                                 // Mark dirty when the user types.
                                 appState.isEdited = true
                                 NSApplication.shared.keyWindow?.isDocumentEdited = true
+                            },
+                            onCursorChange: { line, column in
+                                appState.updateCursorPosition(line: line, column: column)
                             }
                         )
                         .frame(minWidth: 400, minHeight: 400)
@@ -107,16 +112,36 @@ struct ContentView: View {
                                 text: appState.fileContent,
                                 language: detectedLanguage,
                                 mode: $appState.inspectorMode,
+                                onNavigateToLine: { line in
+                                    appState.navigateEditor(toLine: line)
+                                },
                                 onClose: {
                                     appState.isInspectorVisible = false
                                 }
                             )
                             .frame(width: 220)
+                        } else {
+                            InspectorCollapsedRail {
+                                appState.isInspectorVisible = true
+                            }
                         }
                     }
+
+                    EditorStatusBar(language: detectedLanguage)
+                        .environmentObject(appState)
                 } else {
                     Color(nsColor: .textBackgroundColor)
                         .frame(minWidth: 400, minHeight: 400)
+                }
+            }
+            .overlay {
+                if appState.isQuickOpenVisible {
+                    QuickOpenPanel()
+                        .environmentObject(appState)
+                }
+                if appState.isGoToLineVisible {
+                    GoToLinePanel()
+                        .environmentObject(appState)
                 }
             }
         }
@@ -222,10 +247,226 @@ struct ContentView: View {
     }
 }
 
+private struct QuickOpenPanel: View {
+    @EnvironmentObject var appState: AppState
+    @FocusState private var queryFocused: Bool
+
+    private var candidates: [URL] {
+        guard let root = appState.rootDirectory else { return [] }
+        let all = AppState.quickOpenFileURLs(in: root)
+        let query = appState.quickOpenQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return Array(all.prefix(80)) }
+
+        return all
+            .filter { url in
+                relativePath(for: url).localizedCaseInsensitiveContains(query)
+                    || url.lastPathComponent.localizedCaseInsensitiveContains(query)
+            }
+            .prefix(80)
+            .map { $0 }
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.12)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    appState.hideQuickOpen()
+                }
+
+            VStack(spacing: 0) {
+                TextField("Quick Open", text: $appState.quickOpenQuery)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 16))
+                    .padding(12)
+                    .focused($queryFocused)
+                    .onSubmit {
+                        open(candidates.first)
+                    }
+
+                Divider()
+
+                if candidates.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .font(.system(size: 22))
+                        Text("No Files")
+                            .font(.caption)
+                    }
+                    .foregroundColor(.secondary)
+                    .frame(height: 160)
+                    .frame(maxWidth: .infinity)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(candidates, id: \.self) { url in
+                                Button {
+                                    open(url)
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "doc")
+                                            .foregroundColor(.secondary)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(url.lastPathComponent)
+                                                .font(.system(size: 13, weight: .medium))
+                                                .lineLimit(1)
+                                            Text(relativePath(for: url))
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                                .lineLimit(1)
+                                                .truncationMode(.middle)
+                                        }
+                                        Spacer(minLength: 0)
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 7)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 320)
+                }
+            }
+            .frame(width: 520)
+            .background(.regularMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .shadow(radius: 18, y: 10)
+        }
+        .onAppear {
+            queryFocused = true
+        }
+    }
+
+    private func open(_ url: URL?) {
+        guard let url else { return }
+        appState.hideQuickOpen()
+        appState.openedFileURL = url
+    }
+
+    private func relativePath(for url: URL) -> String {
+        guard let root = appState.rootDirectory else { return url.path }
+        let rootPath = root.standardizedFileURL.path
+        let filePath = url.standardizedFileURL.path
+        guard filePath.hasPrefix(rootPath) else { return filePath }
+        return String(filePath.dropFirst(rootPath.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+}
+
+private struct GoToLinePanel: View {
+    @EnvironmentObject var appState: AppState
+    @FocusState private var lineFieldFocused: Bool
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.10)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    appState.hideGoToLine()
+                }
+
+            HStack(spacing: 10) {
+                Image(systemName: "arrow.down.to.line")
+                    .foregroundColor(.secondary)
+
+                TextField("Go to Line", text: $appState.goToLineText)
+                    .textFieldStyle(.plain)
+                    .focused($lineFieldFocused)
+                    .onSubmit {
+                        submit()
+                    }
+
+                Button {
+                    submit()
+                } label: {
+                    Image(systemName: "return")
+                }
+                .buttonStyle(.borderless)
+                .disabled(Int(appState.goToLineText) == nil)
+            }
+            .padding(12)
+            .frame(width: 260)
+            .background(.regularMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .shadow(radius: 16, y: 8)
+        }
+        .onAppear {
+            lineFieldFocused = true
+        }
+    }
+
+    private func submit() {
+        guard let line = Int(appState.goToLineText), line > 0 else { return }
+        appState.navigateEditor(toLine: line)
+        appState.hideGoToLine()
+    }
+}
+
+private struct EditorStatusBar: View {
+    @EnvironmentObject var appState: AppState
+    let language: Language?
+
+    private var fileSizeText: String {
+        guard let url = appState.openedFileURL,
+              let size = AppState.fileSize(at: url) else {
+            return "--"
+        }
+        return ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Text(appState.isEdited ? "Modified" : "Saved")
+                .foregroundColor(appState.isEdited ? .orange : .secondary)
+            Text("Ln \(appState.cursorLine), Col \(appState.cursorColumn)")
+            Spacer(minLength: 0)
+            Text(language?.displayName ?? "Plain Text")
+            Text(fileSizeText)
+            Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")")
+        }
+        .font(.caption2)
+        .foregroundColor(.secondary)
+        .padding(.horizontal, 10)
+        .frame(height: 24)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .overlay(alignment: .top) {
+            Divider()
+        }
+    }
+}
+
+private struct InspectorCollapsedRail: View {
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button {
+            onOpen()
+        } label: {
+            VStack {
+                Image(systemName: "sidebar.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .rotationEffect(.degrees(90))
+            }
+            .frame(width: 14)
+            .frame(maxHeight: .infinity)
+            .foregroundColor(Color(nsColor: .secondaryLabelColor))
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.72))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Show Inspector")
+        .overlay(alignment: .leading) {
+            Divider()
+        }
+    }
+}
+
 private struct EditorInspectorSidebar: View {
     let text: String
     let language: Language?
     @Binding var mode: EditorInspectorMode
+    let onNavigateToLine: (Int) -> Void
     let onClose: () -> Void
 
     var body: some View {
@@ -253,9 +494,12 @@ private struct EditorInspectorSidebar: View {
 
             switch mode {
             case .minimap:
-                EditorMinimapView(text: text)
+                EditorMinimapView(text: text, onNavigateToLine: onNavigateToLine)
             case .structure:
-                EditorStructureView(items: EditorOutlineExtractor.outline(for: text, language: language))
+                EditorStructureView(
+                    items: EditorOutlineExtractor.outline(for: text, language: language),
+                    onNavigateToLine: onNavigateToLine
+                )
             }
         }
         .background(Color(nsColor: .controlBackgroundColor))
@@ -267,6 +511,7 @@ private struct EditorInspectorSidebar: View {
 
 private struct EditorMinimapView: View {
     let text: String
+    let onNavigateToLine: (Int) -> Void
 
     private var lines: [String] {
         Array(text.components(separatedBy: .newlines).prefix(600))
@@ -275,12 +520,19 @@ private struct EditorMinimapView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 2) {
-                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                    RoundedRectangle(cornerRadius: 1)
-                        .fill(line.trimmingCharacters(in: .whitespaces).isEmpty
-                              ? Color(nsColor: .separatorColor).opacity(0.28)
-                              : Color(nsColor: .secondaryLabelColor).opacity(0.38))
-                        .frame(width: minimapWidth(for: line), height: 2)
+                ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
+                    Button {
+                        onNavigateToLine(index + 1)
+                    } label: {
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(line.trimmingCharacters(in: .whitespaces).isEmpty
+                                  ? Color(nsColor: .separatorColor).opacity(0.28)
+                                  : Color(nsColor: .secondaryLabelColor).opacity(0.38))
+                            .frame(width: minimapWidth(for: line), height: 2)
+                            .frame(maxWidth: .infinity, minHeight: 6, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -296,6 +548,7 @@ private struct EditorMinimapView: View {
 
 private struct EditorStructureView: View {
     let items: [EditorOutlineItem]
+    let onNavigateToLine: (Int) -> Void
 
     var body: some View {
         if items.isEmpty {
@@ -309,20 +562,26 @@ private struct EditorStructureView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             List(items) { item in
-                HStack(spacing: 6) {
-                    Image(systemName: iconName(for: item.kind))
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                    Text(item.title)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer(minLength: 4)
-                    Text("\(item.line)")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                Button {
+                    onNavigateToLine(item.line)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: iconName(for: item.kind))
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                        Text(item.title)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 4)
+                        Text("\(item.line)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.leading, CGFloat(item.level) * 10)
+                    .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
-                .padding(.leading, CGFloat(item.level) * 10)
-                .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
+                .buttonStyle(.plain)
             }
             .listStyle(.plain)
             .environment(\.defaultMinListRowHeight, 22)

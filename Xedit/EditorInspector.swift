@@ -7,6 +7,11 @@
 
 import Foundation
 
+struct EditorNavigationRequest: Equatable {
+    let line: Int
+    let revision: Int
+}
+
 enum EditorInspectorMode: String, CaseIterable, Identifiable {
     case minimap
     case structure
@@ -103,6 +108,41 @@ enum EditorOutlineExtractor {
         case .shell:
             return regexOutline(source, specs: [
                 OutlineSpec(pattern: "^\\s*(?:function\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*\\(\\)\\s*\\{", kind: .function),
+            ])
+        case .rust:
+            return regexOutline(source, specs: [
+                OutlineSpec(pattern: "^\\s*(?:pub\\s+)?(?:struct|enum|trait|impl)\\s+([A-Za-z_][A-Za-z0-9_]*)", kind: .type),
+                OutlineSpec(pattern: "^\\s*(?:pub\\s+)?(?:async\\s+)?fn\\s+([A-Za-z_][A-Za-z0-9_]*)", kind: .function),
+            ])
+        case .c, .cpp, .csharp:
+            return regexOutline(source, specs: [
+                OutlineSpec(pattern: "^\\s*(?:public\\s+|private\\s+|protected\\s+)?(?:class|struct|enum|interface)\\s+([A-Za-z_][A-Za-z0-9_]*)", kind: .type),
+                OutlineSpec(pattern: "^\\s*(?:public\\s+|private\\s+|protected\\s+|static\\s+|virtual\\s+|override\\s+)*[A-Za-z_][A-Za-z0-9_<>,:*&?\\[\\] ]+\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(", kind: .function),
+            ])
+        case .yaml:
+            return regexOutline(source, specs: [
+                OutlineSpec(pattern: "^\\s*([A-Za-z0-9_.-]+)\\s*:", kind: .key),
+            ])
+        case .toml, .ini, .env:
+            return regexOutline(source, specs: [
+                OutlineSpec(pattern: "^\\s*\\[([^\\]]+)\\]", kind: .section),
+                OutlineSpec(pattern: "^\\s*([A-Za-z_][A-Za-z0-9_.-]*)(?=\\s*[=:])", kind: .key),
+            ])
+        case .xml:
+            return regexOutline(source, specs: [
+                OutlineSpec(pattern: "<([A-Za-z_][A-Za-z0-9_.:-]*)\\b", kind: .section),
+            ])
+        case .sql:
+            return regexOutline(source, specs: [
+                OutlineSpec(pattern: "^\\s*(?:create\\s+(?:table|view|index)|alter\\s+table|drop\\s+table)\\s+([A-Za-z_][A-Za-z0-9_.]*)", kind: .section),
+            ])
+        case .dockerfile:
+            return regexOutline(source, specs: [
+                OutlineSpec(pattern: "^\\s*(FROM|RUN|CMD|ENTRYPOINT|COPY|ADD|ENV|ARG|WORKDIR|EXPOSE)\\b", kind: .section),
+            ])
+        case .makefile:
+            return regexOutline(source, specs: [
+                OutlineSpec(pattern: "^\\s*([A-Za-z0-9_./%-]+)\\s*:(?!=)", kind: .section),
             ])
         case .none:
             return []

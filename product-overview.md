@@ -10,14 +10,18 @@ VeilWriter is a lightweight macOS editor focused on quick project browsing, fast
 - Select files from compact full-width sidebar rows for easier clicking.
 - Open files and folders from either the menu commands or the empty sidebar state.
 - Open individual files from the File menu.
+- Search and open project files quickly with Command-P.
 - Keep multiple files open in tabs, each with its own unsaved state.
 - Open multiple windows, each with its own independent tab set and editor state.
-- Close the active tab from the File menu or with Option-W.
+- Close the active tab from the File menu or with Option-Tab.
+- Jump to a specific line with Command-L.
 - Find and replace text in the active editor, all open tabs, or the selected folder with highlighted matches and next/previous navigation.
-- Use the right inspector for a lightweight minimap and document/code structure view.
+- Use the right inspector for a lightweight minimap and document/code structure view, with click-to-jump navigation into the current tab.
+- Read current file state from a compact status bar with cursor position, language, file size, and version.
 - Open text files in a native macOS editing surface.
-- Highlight Swift, Ruby, PHP, Java, JSON, JavaScript, TypeScript, Go, HTML, CSS, Markdown, Python, and shell files.
+- Highlight Swift, Ruby, PHP, Java, JSON, JavaScript, TypeScript, Go, HTML, CSS, Markdown, Python, shell/bash, YAML, TOML, XML, SQL, Dockerfile, Makefile, INI, env, Rust, C, C++, and C# files.
 - Customize editor font, font size, color style, line numbers, and current-line focus highlighting from Settings.
+- Keep indentation flowing with newline auto-indent plus Tab and Shift-Tab line indentation.
 - Decode UTF-8 first, then fall back through NSString encoding detection and ISO Latin 1.
 - Detect binary files before opening.
 - Track dirty state, save with Cmd+S, and save copies with Save As.
@@ -27,6 +31,7 @@ VeilWriter is a lightweight macOS editor focused on quick project browsing, fast
 
 - Keep file IO off the main thread.
 - Apply completed file loads back on the main thread and target the tab that requested the load.
+- Force the editor view to re-render after tab activation or closure so syntax highlighting remains visible.
 - Keep the default editing path optimized for files under 1 MB.
 - Require explicit confirmation before loading larger files, with a core loader guard as a backstop.
 

@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.11.0-rc1 - 2026-05-27
+
+- Added Quick Open with Command-P for fast file lookup inside the selected folder.
+- Added Go to Line with Command-L, reusing editor line navigation.
+- Added a compact status bar with modified state, cursor line/column, language, file size, and app version.
+- Added lightweight indentation helpers for newline indentation, Tab indent, and Shift-Tab outdent.
+
+## 1.10.0-rc1 - 2026-05-27
+
+- Made the right inspector navigable: minimap rows and structure items now jump the current editor tab to the selected line.
+
+## 1.9.0-rc5 - 2026-05-27
+
+- Forced editor re-rendering after tab activation and closure so the remaining tab keeps syntax highlighting.
+
+## 1.9.0-rc4 - 2026-05-27
+
+- Changed the close-current-tab shortcut from Option-W to Option-Tab.
+
+## 1.9.0-rc3 - 2026-05-27
+
+- Added a narrow collapsed inspector rail so the right sidebar can be reopened after hiding it.
+
+## 1.9.0-rc2 - 2026-05-27
+
+- Fixed newly opened files briefly appearing unhighlighted by applying an immediate synchronous highlight before the background refresh.
+
+## 1.9.0-rc1 - 2026-05-27
+
+- Expanded bash/shell syntax highlighting for shebangs, variables, assignments, flags, command substitutions, functions, and common builtins.
+- Added syntax highlighting and extension detection for YAML, TOML, XML, SQL, Dockerfile, Makefile, INI, env, Rust, C, C++, and C#.
+- Added filename detection for common shell/config files such as `.bashrc`, `.zshrc`, `.env`, `Dockerfile`, and `Makefile`.
+
 ## 1.8.0-rc1 - 2026-05-27
 
 - Added a right-side editor inspector with Minimap and Structure views.

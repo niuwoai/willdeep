@@ -183,11 +183,27 @@ struct VeilWriterTests {
             (".html", .html),
             (".css", .css),
             (".swift", .swift),
+            (".bash", .shell),
+            (".yaml", .yaml),
+            (".toml", .toml),
+            (".xml", .xml),
+            (".sql", .sql),
+            (".ini", .ini),
+            (".rs", .rust),
+            (".c", .c),
+            (".cpp", .cpp),
+            (".cs", .csharp),
         ]
 
         for (ext, language) in expected {
             #expect(Language.fromExtension(ext) == language)
         }
+
+        let tempDir = URL(fileURLWithPath: "/tmp")
+        #expect(Language.fromURL(tempDir.appendingPathComponent("Dockerfile")) == .dockerfile)
+        #expect(Language.fromURL(tempDir.appendingPathComponent("Makefile")) == .makefile)
+        #expect(Language.fromURL(tempDir.appendingPathComponent(".bashrc")) == .shell)
+        #expect(Language.fromURL(tempDir.appendingPathComponent(".env")) == .env)
     }
 
     @Test("syntax highlighting covers requested languages")
@@ -206,6 +222,19 @@ struct VeilWriterTests {
             (.html, "<section class=\"hero\"></section>\n", "section"),
             (.css, ".hero { color: #fff; }\n", "color"),
             (.swift, "struct Greeter { let value = true }\n", "struct"),
+            (.shell, "#!/usr/bin/env bash\nif [[ -f \"$HOME/.zshrc\" ]]; then echo ok; fi\n", "if"),
+            (.yaml, "service:\n  enabled: true\n", "service"),
+            (.toml, "[server]\nport = 8080\n", "port"),
+            (.xml, "<plist><dict><key>Name</key></dict></plist>\n", "plist"),
+            (.sql, "select name from users where active = true;\n", "select"),
+            (.dockerfile, "FROM swift:latest\nRUN echo ok\n", "FROM"),
+            (.makefile, "include config.mk\nbuild:\n\tswift build\n", "include"),
+            (.ini, "[server]\nport=8080\n", "port"),
+            (.env, "API_HOST=\"localhost\"\n", "API_HOST"),
+            (.rust, "pub struct Writer { fn save() {} }\n", "pub"),
+            (.c, "struct Writer { int value; };\n", "struct"),
+            (.cpp, "class Writer { public: void save(); };\n", "class"),
+            (.csharp, "public class Writer { string Name; }\n", "public"),
         ]
 
         for (language, source, token) in samples {
@@ -452,6 +481,25 @@ struct VeilWriterTests {
         #expect(appState.openedFileURL == firstURL)
     }
 
+    @Test("closing active tab refreshes editor rendering")
+    func testCloseTabBumpsEditorRenderRevision() {
+        let tempDir = FileManager.default.temporaryDirectory
+        let firstURL = tempDir.appendingPathComponent("veilwriter_render_first_\(UUID().uuidString).swift")
+        let secondURL = tempDir.appendingPathComponent("veilwriter_render_second_\(UUID().uuidString).swift")
+
+        let appState = AppState()
+        appState.beginOpeningTab(for: firstURL)
+        appState.fileContent = "let first = true"
+        appState.beginOpeningTab(for: secondURL)
+        appState.fileContent = "let second = true"
+
+        let revisionBeforeClose = appState.editorRenderRevision
+        appState.closeActiveTab()
+
+        #expect(appState.openedFileURL == firstURL)
+        #expect(appState.editorRenderRevision > revisionBeforeClose)
+    }
+
     @Test("closeActiveTab closes the current tab")
     func testCloseActiveTabClosesCurrentTab() {
         let tempDir = FileManager.default.temporaryDirectory
@@ -468,6 +516,72 @@ struct VeilWriterTests {
         #expect(appState.tabs.count == 1)
         #expect(appState.activeTabID == firstID)
         #expect(appState.openedFileURL == firstURL)
+    }
+
+    @Test("editor navigation request targets requested line")
+    func testEditorNavigationRequestTargetsLine() {
+        let appState = AppState()
+
+        appState.navigateEditor(toLine: 4)
+        let firstRequest = appState.editorNavigationRequest
+
+        appState.navigateEditor(toLine: 2)
+
+        #expect(firstRequest?.line == 4)
+        #expect(appState.editorNavigationRequest?.line == 2)
+        #expect((appState.editorNavigationRequest?.revision ?? 0) > (firstRequest?.revision ?? 0))
+    }
+
+    @Test("editor line navigation maps lines to text ranges")
+    func testEditorLineNavigationMapsLinesToRanges() {
+        let text = "alpha\nbeta\ngamma"
+
+        #expect(EditorView.Coordinator.rangeForLine(1, in: text) == NSRange(location: 0, length: 0))
+        #expect(EditorView.Coordinator.rangeForLine(2, in: text) == NSRange(location: 6, length: 4))
+        #expect(EditorView.Coordinator.rangeForLine(3, in: text) == NSRange(location: 11, length: 5))
+        #expect(EditorView.Coordinator.rangeForLine(99, in: text) == NSRange(location: 16, length: 0))
+    }
+
+    @Test("editor cursor position maps location to line and column")
+    func testEditorCursorPositionMapsLocationToLineAndColumn() {
+        let text = "alpha\nbeta\ngamma"
+
+        let first = EditorView.Coordinator.lineAndColumn(for: 0, in: text)
+        let second = EditorView.Coordinator.lineAndColumn(for: 7, in: text)
+        let end = EditorView.Coordinator.lineAndColumn(for: 99, in: text)
+
+        #expect(first.line == 1)
+        #expect(first.column == 1)
+        #expect(second.line == 2)
+        #expect(second.column == 2)
+        #expect(end.line == 3)
+        #expect(end.column == 6)
+    }
+
+    @Test("quick open file URLs are sorted and limited")
+    func testQuickOpenFileURLsAreSortedAndLimited() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("veilwriter_quick_open_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let beta = tempDir.appendingPathComponent("beta.swift")
+        let alpha = tempDir.appendingPathComponent("alpha.swift")
+        try "beta".write(to: beta, atomically: true, encoding: .utf8)
+        try "alpha".write(to: alpha, atomically: true, encoding: .utf8)
+
+        let urls = AppState.quickOpenFileURLs(in: tempDir, limit: 1)
+
+        #expect(urls.map(\.lastPathComponent) == ["alpha.swift"])
+    }
+
+    @Test("editor indentation helpers preserve lightweight editing flow")
+    func testEditorIndentationHelpers() {
+        let source = "func run() {\n    print(\"ok\")\n}"
+
+        #expect(VeilWriterTextView.leadingWhitespaceBefore(location: 17, in: source) == "    ")
+        #expect(VeilWriterTextView.indentingLines("one\ntwo\n") == "    one\n    two\n")
+        #expect(VeilWriterTextView.outdentingLines("    one\n\ttwo\n  three") == "one\ntwo\nthree")
     }
 
     // MARK: - Find and Replace

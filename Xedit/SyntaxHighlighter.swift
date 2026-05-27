@@ -26,6 +26,18 @@ enum Language: String, CaseIterable {
     case json
     case markdown
     case shell
+    case yaml
+    case toml
+    case xml
+    case sql
+    case dockerfile
+    case makefile
+    case ini
+    case env
+    case rust
+    case c
+    case cpp
+    case csharp
 
     /// Maps a file extension (including the dot) to a language.
     /// Returns `nil` if the extension is not recognized.
@@ -44,14 +56,68 @@ enum Language: String, CaseIterable {
         case ".css", ".scss", ".sass", ".less": return .css
         case ".json", ".jsonc", ".jsonl": return .json
         case ".md", ".markdown": return .markdown
-        case ".sh", ".bash", ".zsh": return .shell
+        case ".sh", ".bash", ".zsh", ".ksh": return .shell
+        case ".yml", ".yaml": return .yaml
+        case ".toml": return .toml
+        case ".xml", ".plist", ".svg", ".xib", ".storyboard": return .xml
+        case ".sql": return .sql
+        case ".ini", ".cfg", ".conf", ".editorconfig": return .ini
+        case ".env": return .env
+        case ".rs": return .rust
+        case ".c", ".h": return .c
+        case ".cc", ".cpp", ".cxx", ".hpp", ".hh", ".hxx": return .cpp
+        case ".cs": return .csharp
         default:        return nil
         }
     }
 
     /// Convenience: detect language from a file URL.
     static func fromURL(_ url: URL) -> Language? {
-        fromExtension(url.pathExtension.isEmpty ? "" : ".\(url.pathExtension)")
+        let filename = url.lastPathComponent.lowercased()
+        switch filename {
+        case "dockerfile", "containerfile":
+            return .dockerfile
+        case "makefile", "gnumakefile":
+            return .makefile
+        case ".bashrc", ".bash_profile", ".bash_aliases", ".zshrc", ".profile":
+            return .shell
+        case ".env":
+            return .env
+        default:
+            return fromExtension(url.pathExtension.isEmpty ? "" : ".\(url.pathExtension)")
+        }
+    }
+}
+
+extension Language {
+    var displayName: String {
+        switch self {
+        case .swift: return "Swift"
+        case .python: return "Python"
+        case .ruby: return "Ruby"
+        case .php: return "PHP"
+        case .java: return "Java"
+        case .javascript: return "JavaScript"
+        case .typescript: return "TypeScript"
+        case .go: return "Go"
+        case .html: return "HTML"
+        case .css: return "CSS"
+        case .json: return "JSON"
+        case .markdown: return "Markdown"
+        case .shell: return "Shell"
+        case .yaml: return "YAML"
+        case .toml: return "TOML"
+        case .xml: return "XML"
+        case .sql: return "SQL"
+        case .dockerfile: return "Dockerfile"
+        case .makefile: return "Makefile"
+        case .ini: return "INI"
+        case .env: return "env"
+        case .rust: return "Rust"
+        case .c: return "C"
+        case .cpp: return "C++"
+        case .csharp: return "C#"
+        }
     }
 }
 
@@ -94,6 +160,18 @@ enum SyntaxHighlighter {
         case .json:        return jsonRules(theme: theme)
         case .markdown:    return markdownRules(theme: theme, font: font)
         case .shell:       return shellRules(theme: theme)
+        case .yaml:        return yamlRules(theme: theme)
+        case .toml:        return tomlRules(theme: theme)
+        case .xml:         return xmlRules(theme: theme)
+        case .sql:         return sqlRules(theme: theme)
+        case .dockerfile:  return dockerfileRules(theme: theme)
+        case .makefile:    return makefileRules(theme: theme)
+        case .ini:         return iniRules(theme: theme)
+        case .env:         return envRules(theme: theme)
+        case .rust:        return rustRules(theme: theme)
+        case .c:           return cRules(theme: theme)
+        case .cpp:         return cppRules(theme: theme)
+        case .csharp:      return csharpRules(theme: theme)
         }
     }
 
@@ -213,7 +291,7 @@ enum SyntaxHighlighter {
             HighlightRule(pattern: "'(?:\\\\.|[^'\\\\])*'", attributes: [.foregroundColor: theme.stringColor]),
             HighlightRule(pattern: "\\$[a-zA-Z_][a-zA-Z0-9_]*", attributes: [.foregroundColor: theme.numberColor]),
             HighlightRule(pattern: "\\b-?(?:0b[01_]+|0o[0-7_]+|0x[0-9a-fA-F_]+|(?:\\d[\\d_]*\\.?[\\d_]*|\\.\\d[\\d_]*)(?:[eE][+-]?\\d+)?)\\b", attributes: [.foregroundColor: theme.numberColor]),
-            HighlightRule(pattern: keywordPattern(for: keywords), attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "(?i)" + keywordPattern(for: keywords), attributes: [.foregroundColor: theme.keywordColor]),
             HighlightRule(pattern: "\\b[A-Z][a-zA-Z0-9_]*\\b", attributes: [.foregroundColor: theme.typeNameColor]),
         ]
     }
@@ -400,29 +478,236 @@ enum SyntaxHighlighter {
             "if", "then", "else", "elif", "fi",
             "for", "while", "until", "do", "done",
             "case", "esac", "in",
-            "function",
-            "return", "exit",
-            "export", "local", "readonly",
-            "source", "alias", "unalias",
-            "break", "continue",
-            "echo", "printf", "shift", "test"
+            "select", "function", "time",
+            "return", "exit", "exec",
+            "export", "local", "readonly", "declare", "typeset",
+            "source", "alias", "unalias", "trap", "set", "unset",
+            "break", "continue", "eval",
+            "echo", "printf", "shift", "test", "read", "cd", "pwd",
+            "pushd", "popd", "dirs", "getopts", "jobs", "fg", "bg",
+            "wait", "kill", "true", "false"
         ]
-        let keywordPattern = "\\b(?:" + keywords.sorted(by: { $0.count > $1.count }).map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|") + ")\\b"
+        let keywordPattern = keywordPattern(for: keywords)
 
         return [
+            // Shebang
+            HighlightRule(pattern: "^#!.*", attributes: [.foregroundColor: theme.commentColor]),
             // Line comments
             HighlightRule(pattern: "#.*", attributes: [.foregroundColor: theme.commentColor]),
+            // Here-doc operators
+            HighlightRule(pattern: "<<-?\\s*['\"]?[A-Za-z_][A-Za-z0-9_]*['\"]?", attributes: [.foregroundColor: theme.stringColor]),
             // Double-quoted strings
             HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
             // Single-quoted strings
             HighlightRule(pattern: "'[^']*'", attributes: [.foregroundColor: theme.stringColor]),
             // Variable expansions ${VAR} or $VAR
+            HighlightRule(pattern: "\\$\\([^)]*\\)", attributes: [.foregroundColor: theme.typeNameColor]),
+            HighlightRule(pattern: "`[^`]*`", attributes: [.foregroundColor: theme.typeNameColor]),
             HighlightRule(pattern: "\\$\\{[^}]+\\}", attributes: [.foregroundColor: theme.numberColor]),
-            HighlightRule(pattern: "\\$[a-zA-Z_][a-zA-Z0-9_]*", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\$(?:[a-zA-Z_][a-zA-Z0-9_]*|[0-9#?*!@$-])", attributes: [.foregroundColor: theme.numberColor]),
+            // Assignments and flags
+            HighlightRule(pattern: "\\b[A-Za-z_][A-Za-z0-9_]*(?=\\=)", attributes: [.foregroundColor: theme.typeNameColor]),
+            HighlightRule(pattern: "(?<=\\s)-{1,2}[A-Za-z0-9][A-Za-z0-9_-]*(?:=[^\\s]+)?", attributes: [.foregroundColor: theme.typeNameColor]),
             // Numbers
             HighlightRule(pattern: "\\b-?(?:0|[1-9]\\d*)(?:\\.\\d+)?\\b", attributes: [.foregroundColor: theme.numberColor]),
             // Keywords
             HighlightRule(pattern: keywordPattern, attributes: [.foregroundColor: theme.keywordColor]),
+            // Function definitions and common command position.
+            HighlightRule(pattern: "^\\s*(?:function\\s+)?[A-Za-z_][A-Za-z0-9_-]*(?=\\s*\\(\\)|\\s*\\{)", attributes: [.foregroundColor: theme.headerColor]),
+            HighlightRule(pattern: "(?m)^\\s*[A-Za-z_][A-Za-z0-9_.-]*(?=\\s|$)", attributes: [.foregroundColor: theme.headerColor]),
+        ]
+    }
+
+    // MARK: - Data and Config Rules
+
+    private static func yamlRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "#.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "'[^']*'", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "(?m)^\\s*-", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "(?m)^\\s*[A-Za-z0-9_.-]+(?=\\s*:)", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "\\b(?:true|false|null|yes|no|on|off)\\b", attributes: [.foregroundColor: theme.typeNameColor]),
+            HighlightRule(pattern: "\\b-?(?:0|[1-9]\\d*)(?:\\.\\d+)?\\b", attributes: [.foregroundColor: theme.numberColor]),
+        ]
+    }
+
+    private static func tomlRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "#.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "(?m)^\\s*\\[\\[?[^\\]]+\\]\\]?", attributes: [.foregroundColor: theme.headerColor]),
+            HighlightRule(pattern: "\"\"\"[\\s\\S]*?\"\"\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "'''[\\s\\S]*?'''", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "'[^']*'", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "(?m)^\\s*[A-Za-z0-9_.-]+(?=\\s*=)", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "\\b(?:true|false)\\b", attributes: [.foregroundColor: theme.typeNameColor]),
+            HighlightRule(pattern: "\\b\\d{4}-\\d{2}-\\d{2}(?:[Tt ]\\d{2}:\\d{2}:\\d{2}(?:Z|[+-]\\d{2}:\\d{2})?)?\\b", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\b-?(?:0|[1-9]\\d*)(?:\\.\\d+)?\\b", attributes: [.foregroundColor: theme.numberColor]),
+        ]
+    }
+
+    private static func xmlRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "<!--[\\s\\S]*?-->", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "<\\?[^>]+\\?>", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "</?[A-Za-z_][A-Za-z0-9_.:-]*", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "\\b[A-Za-z_:][A-Za-z0-9_.:-]*(?=\\s*=)", attributes: [.foregroundColor: theme.typeNameColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "'(?:\\\\.|[^'\\\\])*'", attributes: [.foregroundColor: theme.stringColor]),
+        ]
+    }
+
+    private static func iniRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "[#;].*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "(?m)^\\s*\\[[^\\]]+\\]", attributes: [.foregroundColor: theme.headerColor]),
+            HighlightRule(pattern: "(?m)^\\s*[A-Za-z0-9_.-]+(?=\\s*[=:])", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "'[^']*'", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\b(?:true|false|yes|no|on|off)\\b", attributes: [.foregroundColor: theme.typeNameColor]),
+            HighlightRule(pattern: "\\b-?(?:0|[1-9]\\d*)(?:\\.\\d+)?\\b", attributes: [.foregroundColor: theme.numberColor]),
+        ]
+    }
+
+    private static func envRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "#.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "(?m)^\\s*(?:export\\s+)?[A-Za-z_][A-Za-z0-9_]*(?=\\=)", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "'[^']*'", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\$\\{[^}]+\\}", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\$[A-Za-z_][A-Za-z0-9_]*", attributes: [.foregroundColor: theme.numberColor]),
+        ]
+    }
+
+    // MARK: - Systems and Database Rules
+
+    private static func sqlRules(theme: EditorTheme) -> [HighlightRule] {
+        let keywords = [
+            "select", "from", "where", "join", "inner", "left", "right",
+            "full", "outer", "on", "as", "and", "or", "not", "null",
+            "insert", "into", "values", "update", "set", "delete",
+            "create", "alter", "drop", "table", "view", "index",
+            "primary", "key", "foreign", "references", "constraint",
+            "group", "by", "having", "order", "limit", "offset",
+            "union", "all", "distinct", "case", "when", "then", "else", "end",
+            "true", "false", "like", "in", "exists", "between"
+        ]
+
+        return [
+            HighlightRule(pattern: "--.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "/\\*[\\s\\S]*?\\*/", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "'(?:''|[^'])*'", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\b-?(?:0|[1-9]\\d*)(?:\\.\\d+)?\\b", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: keywordPattern(for: keywords), attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "\\b[A-Z_][A-Z0-9_]*\\b", attributes: [.foregroundColor: theme.typeNameColor]),
+        ]
+    }
+
+    private static func dockerfileRules(theme: EditorTheme) -> [HighlightRule] {
+        let keywords = [
+            "FROM", "RUN", "CMD", "LABEL", "MAINTAINER", "EXPOSE",
+            "ENV", "ADD", "COPY", "ENTRYPOINT", "VOLUME", "USER",
+            "WORKDIR", "ARG", "ONBUILD", "STOPSIGNAL", "HEALTHCHECK", "SHELL"
+        ]
+
+        return [
+            HighlightRule(pattern: "#.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "'[^']*'", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\$\\{[^}]+\\}", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\$[A-Za-z_][A-Za-z0-9_]*", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "(?m)^\\s*(?:" + keywords.joined(separator: "|") + ")\\b", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "--[A-Za-z0-9_-]+(?:=[^\\s]+)?", attributes: [.foregroundColor: theme.typeNameColor]),
+        ]
+    }
+
+    private static func makefileRules(theme: EditorTheme) -> [HighlightRule] {
+        let keywords = [
+            "include", "-include", "define", "endef", "ifeq", "ifneq",
+            "ifdef", "ifndef", "else", "endif", "export", "unexport", "override"
+        ]
+
+        return [
+            HighlightRule(pattern: "#.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "(?m)^\\s*[A-Za-z0-9_./%-]+\\s*:(?!=)", attributes: [.foregroundColor: theme.headerColor]),
+            HighlightRule(pattern: "(?m)^\\s*[A-Za-z_][A-Za-z0-9_]*(?=\\s*[:+?]?=)", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "\\$\\([^)]*\\)", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\$\\{[^}]*\\}", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "'[^']*'", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: keywordPattern(for: keywords), attributes: [.foregroundColor: theme.keywordColor]),
+        ]
+    }
+
+    // MARK: - Additional Code Rules
+
+    private static func rustRules(theme: EditorTheme) -> [HighlightRule] {
+        let keywords = [
+            "as", "async", "await", "break", "const", "continue", "crate",
+            "dyn", "else", "enum", "extern", "false", "fn", "for", "if",
+            "impl", "in", "let", "loop", "match", "mod", "move", "mut",
+            "pub", "ref", "return", "self", "Self", "static", "struct",
+            "super", "trait", "true", "type", "unsafe", "use", "where", "while"
+        ]
+        return cFamilyRules(theme: theme, keywords: keywords)
+    }
+
+    private static func cRules(theme: EditorTheme) -> [HighlightRule] {
+        let keywords = [
+            "auto", "break", "case", "char", "const", "continue", "default",
+            "do", "double", "else", "enum", "extern", "float", "for",
+            "goto", "if", "inline", "int", "long", "register", "restrict",
+            "return", "short", "signed", "sizeof", "static", "struct",
+            "switch", "typedef", "union", "unsigned", "void", "volatile", "while"
+        ]
+        return cFamilyRules(theme: theme, keywords: keywords)
+    }
+
+    private static func cppRules(theme: EditorTheme) -> [HighlightRule] {
+        let keywords = [
+            "alignas", "alignof", "auto", "bool", "break", "case", "catch",
+            "class", "const", "constexpr", "continue", "decltype", "default",
+            "delete", "do", "double", "else", "enum", "explicit", "export",
+            "extern", "false", "final", "float", "for", "friend", "if",
+            "inline", "int", "long", "mutable", "namespace", "new", "noexcept",
+            "nullptr", "operator", "override", "private", "protected", "public",
+            "return", "short", "signed", "sizeof", "static", "struct",
+            "switch", "template", "this", "throw", "true", "try", "typedef",
+            "typename", "union", "unsigned", "using", "virtual", "void",
+            "volatile", "while"
+        ]
+        return cFamilyRules(theme: theme, keywords: keywords)
+    }
+
+    private static func csharpRules(theme: EditorTheme) -> [HighlightRule] {
+        let keywords = [
+            "abstract", "as", "async", "await", "base", "bool", "break",
+            "case", "catch", "class", "const", "continue", "default",
+            "delegate", "do", "double", "else", "enum", "event", "false",
+            "finally", "fixed", "float", "for", "foreach", "if", "implicit",
+            "in", "int", "interface", "internal", "is", "lock", "namespace",
+            "new", "null", "object", "operator", "out", "override", "params",
+            "private", "protected", "public", "readonly", "record", "ref",
+            "return", "sealed", "static", "string", "struct", "switch",
+            "this", "throw", "true", "try", "typeof", "using", "var",
+            "virtual", "void", "while", "yield"
+        ]
+        return cFamilyRules(theme: theme, keywords: keywords)
+    }
+
+    private static func cFamilyRules(theme: EditorTheme, keywords: [String]) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "//.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "/\\*[\\s\\S]*?\\*/", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "#\\s*[A-Za-z_][A-Za-z0-9_]*.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "'(?:\\\\.|[^'\\\\])+'", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\b-?(?:0b[01_]+|0x[0-9a-fA-F_]+|(?:\\d[\\d_]*\\.?[\\d_]*|\\.\\d[\\d_]*)(?:[eE][+-]?\\d+)?)[uUlLfFdDmM]*\\b", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: keywordPattern(for: keywords), attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "\\b[A-Z][A-Za-z0-9_]*\\b", attributes: [.foregroundColor: theme.typeNameColor]),
         ]
     }
 

@@ -42,6 +42,18 @@ struct VeilWriterApp: App {
             }
 
             CommandGroup(after: .textEditing) {
+                Button("Quick Open") {
+                    appState?.showQuickOpen()
+                }
+                .keyboardShortcut("p", modifiers: .command)
+                .disabled(appState?.rootDirectory == nil)
+
+                Button("Go to Line") {
+                    appState?.showGoToLine()
+                }
+                .keyboardShortcut("l", modifiers: .command)
+                .disabled(appState?.activeTabID == nil)
+
                 Button("Find") {
                     appState?.showFindBar()
                 }
@@ -73,7 +85,7 @@ struct VeilWriterApp: App {
                 Button("Close Tab") {
                     appState?.closeActiveTab()
                 }
-                .keyboardShortcut("w", modifiers: .option)
+                .keyboardShortcut(.tab, modifiers: .option)
                 .disabled(appState?.activeTabID == nil)
             }
         }

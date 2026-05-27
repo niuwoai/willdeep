@@ -22,6 +22,13 @@ struct EditorView: NSViewRepresentable {
     /// User-configurable editor appearance.
     var settings: EditorSettings
 
+    /// Explicit render token used when SwiftUI keeps the same NSTextView alive
+    /// across tab activation changes.
+    var renderRevision = 0
+
+    /// A one-shot line navigation request from the inspector/minimap.
+    var navigationRequest: EditorNavigationRequest?
+
     /// Ranges matching the current find query.
     var searchRanges: [NSRange] = []
 
@@ -30,6 +37,9 @@ struct EditorView: NSViewRepresentable {
 
     /// Called whenever the user makes a text change (not during programmatic updates).
     var onEdit: (() -> Void)?
+
+    /// Called when the caret or selection moves so the status bar can stay current.
+    var onCursorChange: ((Int, Int) -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -75,21 +85,29 @@ struct EditorView: NSViewRepresentable {
 
         let langChanged = context.coordinator.currentLanguage != language
         let settingsChanged = context.coordinator.currentSettings != settings
+        let renderRevisionChanged = context.coordinator.currentRenderRevision != renderRevision
+        let navigationChanged = context.coordinator.currentNavigationRequest != navigationRequest
         let searchChanged = context.coordinator.currentSearchRanges != searchRanges
             || context.coordinator.currentActiveSearchRange != activeSearchRange
         context.coordinator.currentLanguage = language
         context.coordinator.currentSettings = settings
+        context.coordinator.currentRenderRevision = renderRevision
+        context.coordinator.currentNavigationRequest = navigationRequest
         context.coordinator.currentSearchRanges = searchRanges
         context.coordinator.currentActiveSearchRange = activeSearchRange
         context.coordinator.applyAppearance(to: textView, in: nsView)
 
         // Detect programmatic text changes (file load, not user typing).
-        if textView.string != text || langChanged || settingsChanged {
+        if textView.string != text || langChanged || settingsChanged || renderRevisionChanged {
             context.coordinator.suppressDirtyFlag = true
             context.coordinator.applyText(text, to: textView)
             context.coordinator.suppressDirtyFlag = false
         } else if searchChanged {
             context.coordinator.applySearchHighlights(to: textView)
+        }
+
+        if navigationChanged, let navigationRequest {
+            context.coordinator.navigate(toLine: navigationRequest.line, in: textView)
         }
     }
 
@@ -108,6 +126,8 @@ struct EditorView: NSViewRepresentable {
         /// Tracks the current settings so we can refresh text attributes.
         var currentSettings: EditorSettings
 
+        var currentRenderRevision: Int
+        var currentNavigationRequest: EditorNavigationRequest?
         var currentSearchRanges: [NSRange]
         var currentActiveSearchRange: NSRange?
 
@@ -119,6 +139,8 @@ struct EditorView: NSViewRepresentable {
             self.parent = parent
             self.currentLanguage = parent.language
             self.currentSettings = parent.settings
+            self.currentRenderRevision = parent.renderRevision
+            self.currentNavigationRequest = parent.navigationRequest
             self.currentSearchRanges = parent.searchRanges
             self.currentActiveSearchRange = parent.activeSearchRange
         }
@@ -132,11 +154,13 @@ struct EditorView: NSViewRepresentable {
             }
 
             scheduleHighlight(textView: textView)
+            publishCursorPosition(for: textView)
             refreshEditorChrome(for: textView)
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView = notification.object as? VeilWriterTextView else { return }
+            publishCursorPosition(for: textView)
             refreshEditorChrome(for: textView)
         }
 
@@ -185,6 +209,14 @@ struct EditorView: NSViewRepresentable {
 
             if let lang = currentLanguage, !newText.isEmpty {
                 let settings = parent.settings
+                let immediate = SyntaxHighlighter.highlightSync(
+                    newText,
+                    language: lang,
+                    theme: settings.theme,
+                    font: settings.editorFont()
+                )
+                replaceTextStorage(in: textView, with: immediate)
+
                 SyntaxHighlighter.highlight(
                     newText,
                     language: lang,
@@ -248,6 +280,70 @@ struct EditorView: NSViewRepresentable {
             (textView.enclosingScrollView?.verticalRulerView as? LineNumberRulerView)?.needsDisplay = true
         }
 
+        func navigate(toLine line: Int, in textView: VeilWriterTextView) {
+            let range = Self.rangeForLine(line, in: textView.string)
+            textView.window?.makeFirstResponder(textView)
+            textView.setSelectedRange(NSRange(location: range.location, length: 0))
+            textView.scrollRangeToVisible(range)
+            publishCursorPosition(for: textView)
+            refreshEditorChrome(for: textView)
+        }
+
+        static func rangeForLine(_ line: Int, in text: String) -> NSRange {
+            guard line > 1, !text.isEmpty else {
+                return NSRange(location: 0, length: 0)
+            }
+
+            let nsText = text as NSString
+            var lineStart = 0
+            var lineEnd = 0
+            var contentsEnd = 0
+            var currentLine = 1
+
+            while lineStart < nsText.length {
+                nsText.getLineStart(
+                    &lineStart,
+                    end: &lineEnd,
+                    contentsEnd: &contentsEnd,
+                    for: NSRange(location: lineStart, length: 0)
+                )
+
+                if currentLine == line {
+                    return NSRange(location: lineStart, length: max(0, contentsEnd - lineStart))
+                }
+
+                currentLine += 1
+                lineStart = lineEnd
+            }
+
+            return NSRange(location: nsText.length, length: 0)
+        }
+
+        private func publishCursorPosition(for textView: VeilWriterTextView) {
+            let position = Self.lineAndColumn(for: textView.selectedRange().location, in: textView.string)
+            parent.onCursorChange?(position.line, position.column)
+        }
+
+        static func lineAndColumn(for location: Int, in text: String) -> (line: Int, column: Int) {
+            guard !text.isEmpty else { return (1, 1) }
+
+            let nsText = text as NSString
+            let boundedLocation = min(max(0, location), nsText.length)
+            var lineStart = 0
+            var lineEnd = 0
+            var contentsEnd = 0
+            nsText.getLineStart(
+                &lineStart,
+                end: &lineEnd,
+                contentsEnd: &contentsEnd,
+                for: NSRange(location: boundedLocation, length: 0)
+            )
+
+            let prefix = nsText.substring(with: NSRange(location: 0, length: lineStart))
+            let line = prefix.components(separatedBy: .newlines).count
+            return (line, boundedLocation - lineStart + 1)
+        }
+
         // MARK: - Debounced Highlighting
 
         /// Schedules a debounced re-highlight of the current document content.
@@ -289,6 +385,24 @@ final class VeilWriterTextView: NSTextView {
     var currentLineColor: NSColor = NSColor.selectedTextBackgroundColor.withAlphaComponent(0.16)
     var showsCurrentLineHighlight = true
 
+    override func insertNewline(_ sender: Any?) {
+        let indent = Self.leadingWhitespaceBefore(location: selectedRange().location, in: string)
+        insertText("\n\(indent)", replacementRange: selectedRange())
+    }
+
+    override func insertTab(_ sender: Any?) {
+        let selected = selectedRange()
+        guard selected.length > 0 else {
+            insertText("    ", replacementRange: selected)
+            return
+        }
+        replaceSelectedLines(using: Self.indentingLines(_:))
+    }
+
+    override func insertBacktab(_ sender: Any?) {
+        replaceSelectedLines(using: Self.outdentingLines(_:))
+    }
+
     override func drawBackground(in rect: NSRect) {
         super.drawBackground(in: rect)
 
@@ -320,6 +434,63 @@ final class VeilWriterTextView: NSTextView {
 
         let y = lineRect.minY + textContainerOrigin.y
         NSRect(x: 0, y: y, width: bounds.width, height: lineRect.height).fill()
+    }
+
+    private func replaceSelectedLines(using transform: (String) -> String) {
+        let nsText = string as NSString
+        let lineRange = nsText.lineRange(for: selectedRange())
+        let original = nsText.substring(with: lineRange)
+        let replacement = transform(original)
+
+        guard replacement != original else { return }
+        shouldChangeText(in: lineRange, replacementString: replacement)
+        textStorage?.replaceCharacters(in: lineRange, with: replacement)
+        didChangeText()
+        setSelectedRange(NSRange(location: lineRange.location, length: (replacement as NSString).length))
+    }
+
+    nonisolated static func leadingWhitespaceBefore(location: Int, in text: String) -> String {
+        guard !text.isEmpty else { return "" }
+
+        let nsText = text as NSString
+        let boundedLocation = min(max(0, location), nsText.length)
+        var lineStart = 0
+        var lineEnd = 0
+        var contentsEnd = 0
+        nsText.getLineStart(
+            &lineStart,
+            end: &lineEnd,
+            contentsEnd: &contentsEnd,
+            for: NSRange(location: boundedLocation, length: 0)
+        )
+
+        let linePrefix = nsText.substring(with: NSRange(location: lineStart, length: boundedLocation - lineStart))
+        return String(linePrefix.prefix { $0 == " " || $0 == "\t" })
+    }
+
+    nonisolated static func indentingLines(_ text: String) -> String {
+        transformLines(text) { "    \($0)" }
+    }
+
+    nonisolated static func outdentingLines(_ text: String) -> String {
+        transformLines(text) { line in
+            if line.hasPrefix("\t") {
+                return String(line.dropFirst())
+            }
+            let removableSpaces = min(line.prefix { $0 == " " }.count, 4)
+            return String(line.dropFirst(removableSpaces))
+        }
+    }
+
+    private nonisolated static func transformLines(_ text: String, transform: (String) -> String) -> String {
+        let endsWithNewline = text.hasSuffix("\n")
+        var lines = text.components(separatedBy: "\n")
+        if endsWithNewline {
+            lines.removeLast()
+        }
+
+        let transformed = lines.map(transform).joined(separator: "\n")
+        return endsWithNewline ? "\(transformed)\n" : transformed
     }
 }
 
