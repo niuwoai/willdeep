@@ -164,6 +164,31 @@ struct EditorView: NSViewRepresentable {
         private var highlightWorkItem: DispatchWorkItem?
         private var highlightGeneration = 0
 
+        // MARK: Viewport highlighting (large files)
+
+        /// Files at or above this UTF-16 length highlight only the visible range
+        /// (plus a margin) instead of the whole document, so opening and scrolling
+        /// huge files stays responsive. Smaller files keep the simple full-file
+        /// async path.
+        private static let viewportHighlightThreshold = 100_000
+
+        /// Characters of overscan added on each side of the visible range before
+        /// highlighting, snapped to line boundaries. A generous margin lets most
+        /// multi-line tokens (block comments, multi-line strings) resolve and
+        /// pre-warms scrolling so highlight rarely "pops" in.
+        private static let viewportHighlightMargin = 8_000
+
+        /// Debounced viewport re-highlight on scroll.
+        private var viewportHighlightWorkItem: DispatchWorkItem?
+
+        /// Character ranges already highlighted for the current document, so a
+        /// scroll only highlights newly-revealed regions. Reset when the document
+        /// or language changes.
+        private var highlightedRanges = IndexSet()
+
+        /// `true` while the current document uses viewport highlighting.
+        private var usesViewportHighlighting = false
+
         init(_ parent: EditorView) {
             self.parent = parent
             self.currentLanguage = parent.language
@@ -204,6 +229,18 @@ struct EditorView: NSViewRepresentable {
                 return
             }
             refreshEditorChrome(for: textView)
+
+            // Extend viewport highlighting into newly-revealed regions of a large
+            // file (debounced so a fling-scroll doesn't queue many passes).
+            guard usesViewportHighlighting, let lang = currentLanguage else { return }
+            viewportHighlightWorkItem?.cancel()
+            let settings = parent.settings
+            let workItem = DispatchWorkItem { [weak self, weak textView] in
+                guard let self = self, let textView = textView else { return }
+                self.highlightVisibleRange(in: textView, language: lang, settings: settings)
+            }
+            viewportHighlightWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: workItem)
         }
 
         func layoutManager(
@@ -265,13 +302,12 @@ struct EditorView: NSViewRepresentable {
             highlightGeneration += 1
             let generation = highlightGeneration
             textView.invalidateFoldableGuidesCache()
+            highlightedRanges.removeAll()
+            viewportHighlightWorkItem?.cancel()
 
             // Show plain text immediately so the file appears the instant it
             // loads — never block the main thread on a full-file regex pass.
-            // Syntax highlighting is applied asynchronously and swapped in once
-            // ready. Previously this ran `highlightSync` over the whole file on
-            // the main thread *before* showing anything (then highlighted again
-            // async), which froze the UI for seconds on large files.
+            // Syntax highlighting is applied asynchronously afterwards.
             let plain = NSAttributedString(
                 string: newText,
                 attributes: [
@@ -282,9 +318,22 @@ struct EditorView: NSViewRepresentable {
             )
             replaceTextStorage(in: textView, with: plain)
 
-            guard let lang = currentLanguage, !newText.isEmpty else { return }
+            guard let lang = currentLanguage, !newText.isEmpty else {
+                usesViewportHighlighting = false
+                return
+            }
 
             let settings = parent.settings
+
+            // Large files highlight only the visible range (plus a margin) and
+            // extend on scroll; small files highlight the whole document once.
+            if (newText as NSString).length >= Self.viewportHighlightThreshold {
+                usesViewportHighlighting = true
+                highlightVisibleRange(in: textView, language: lang, settings: settings)
+                return
+            }
+
+            usesViewportHighlighting = false
             SyntaxHighlighter.highlight(
                 newText,
                 language: lang,
@@ -295,6 +344,71 @@ struct EditorView: NSViewRepresentable {
                 guard self.highlightGeneration == generation else { return }
                 self.replaceTextStorage(in: textView, with: highlighted)
             }
+        }
+
+        /// Highlight the currently-visible character range (expanded to line
+        /// boundaries with an overscan margin) for a large document, applying the
+        /// result in place so layout and scroll position are preserved. Skips
+        /// regions already highlighted.
+        private func highlightVisibleRange(
+            in textView: VeilWriterTextView,
+            language: Language,
+            settings: EditorSettings
+        ) {
+            guard let target = visibleHighlightRange(in: textView) else { return }
+
+            // Only the not-yet-highlighted portion needs work; bail if covered.
+            var pending = IndexSet(integersIn: target.location..<(target.location + target.length))
+            pending.subtract(highlightedRanges)
+            guard !pending.isEmpty else { return }
+
+            let source = textView.string
+            let theme = settings.theme
+            let font = settings.editorFont()
+            highlightGeneration += 1
+            let generation = highlightGeneration
+
+            DispatchQueue.global(qos: .userInitiated).async { [weak self, weak textView] in
+                let spans = SyntaxHighlighter.computeSpans(
+                    in: source,
+                    range: target,
+                    language: language,
+                    theme: theme,
+                    font: font
+                )
+                DispatchQueue.main.async {
+                    guard let self = self, let textView = textView else { return }
+                    guard self.highlightGeneration == generation,
+                          let textStorage = textView.textStorage,
+                          textView.string == source else { return }
+                    SyntaxHighlighter.applySpans(spans, to: textStorage, clearing: target, theme: theme)
+                    self.highlightedRanges.insert(integersIn: target.location..<(target.location + target.length))
+                }
+            }
+        }
+
+        /// The visible character range expanded to line boundaries plus an
+        /// overscan margin, clamped to the document. `nil` if nothing is laid out.
+        private func visibleHighlightRange(in textView: VeilWriterTextView) -> NSRange? {
+            guard let layoutManager = textView.layoutManager,
+                  let container = textView.textContainer else { return nil }
+
+            let visibleRect = textView.visibleRect
+            let glyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: container)
+            let charRange = layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
+
+            let nsString = textView.string as NSString
+            let length = nsString.length
+            guard length > 0 else { return nil }
+
+            let lower = max(0, charRange.location - Self.viewportHighlightMargin)
+            let upper = min(length, charRange.location + charRange.length + Self.viewportHighlightMargin)
+            // Snap to line boundaries so multi-line tokens aren't clipped mid-line.
+            let lineStart = nsString.lineRange(for: NSRange(location: lower, length: 0)).location
+            let lineEndRange = nsString.lineRange(for: NSRange(location: min(upper, length - 1), length: 0))
+            let lineEnd = min(length, lineEndRange.location + lineEndRange.length)
+            guard lineEnd > lineStart else { return nil }
+            return NSRange(location: lineStart, length: lineEnd - lineStart)
         }
 
         private func replaceTextStorage(in textView: VeilWriterTextView, with attributed: NSAttributedString) {
@@ -453,6 +567,12 @@ struct EditorView: NSViewRepresentable {
             publishCursorPosition(for: textView)
             applyBracketHighlight(to: textView)
             refreshEditorChrome(for: textView)
+
+            // Ensure the jumped-to region is highlighted in a large file even if
+            // the scroll didn't cross a bounds-change threshold.
+            if usesViewportHighlighting, let lang = currentLanguage {
+                highlightVisibleRange(in: textView, language: lang, settings: parent.settings)
+            }
         }
 
         static func rangeForLine(_ line: Int, in text: String) -> NSRange {
@@ -623,6 +743,22 @@ struct EditorView: NSViewRepresentable {
             let generation = highlightGeneration
 
             let settings = parent.settings
+
+            // Large files: after an edit, character offsets shifted, so drop the
+            // highlighted-range bookkeeping and re-highlight just the visible
+            // range (debounced). Avoids re-running the full-file regex per
+            // keystroke on a huge document.
+            if usesViewportHighlighting {
+                let workItem = DispatchWorkItem { [weak self, weak textView] in
+                    guard let self = self, let textView = textView else { return }
+                    self.highlightedRanges.removeAll()
+                    self.highlightVisibleRange(in: textView, language: lang, settings: settings)
+                }
+                highlightWorkItem = workItem
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
+                return
+            }
+
             let workItem = DispatchWorkItem { [weak self, weak textView] in
                 guard let self = self, let textView = textView, self.currentLanguage != nil else { return }
 

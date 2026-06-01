@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-01 | Current version: v1.30.0-rc2
+> Last updated: 2026-06-01 | Current version: v1.31.0-rc1
 
 ## Positioning
 
@@ -71,6 +71,7 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Expand and load the restored project root as soon as the sidebar tree appears.
 - Keep the default editing path optimized for files under 1 MB.
 - Show a file's plain text immediately on open; never block the main thread on a full-file syntax-highlight pass. Highlighting runs off the main thread and is swapped in when ready.
+- For large files (>= ~100 KB), highlight only the visible range plus an overscan margin and extend on scroll, applying attributes in place so scroll/layout are preserved. Smaller files highlight the whole document once.
 - Require explicit confirmation before loading larger files, with a core loader guard as a backstop.
 - Cache the Go to Symbol outline when the panel opens (recompute only when file content or language changes) so arrow-key navigation and query typing don't re-run the regex extraction on every body pass.
 - Cache the Quick Open file list cross-session on disk (in `~/Library/Caches`, outside the project directory) keyed by a SHA-256 of the project root path. Serve it instantly on project open, verify it with a background scan, and invalidate per-entry by modification time + size (no content hashing). Cap the cache at the 50 most-recently-used projects.

@@ -780,6 +780,82 @@ enum SyntaxHighlighter {
 
         return base
     }
+
+    // MARK: - Viewport (range-limited) highlighting
+
+    /// One computed highlight span: an attribute set over a character range,
+    /// expressed in offsets relative to the *whole* document. Computed on a
+    /// background queue, then applied to the live text storage on the main queue.
+    struct HighlightSpan {
+        let range: NSRange
+        let attributes: [NSAttributedString.Key: Any]
+    }
+
+    /// Compute highlight spans for a sub-range of `source`.
+    ///
+    /// Safe to call on a background queue. The regex pass runs over the given
+    /// `range` only — for very large files this is what keeps highlighting cheap
+    /// (we highlight the viewport plus a margin instead of the whole file). The
+    /// caller is responsible for expanding `range` to line boundaries and adding
+    /// an overscan margin so multi-line tokens within the window resolve
+    /// correctly; tokens that span far beyond the window may be approximate.
+    static func computeSpans(
+        in source: String,
+        range: NSRange,
+        language: Language,
+        theme: EditorTheme,
+        font: NSFont
+    ) -> [HighlightSpan] {
+        let nsSource = source as NSString
+        let safeRange = NSIntersectionRange(range, NSRange(location: 0, length: nsSource.length))
+        guard safeRange.length > 0 else { return [] }
+
+        let allRules = rules(for: language, theme: theme, font: font)
+        var claimed = IndexSet()
+        var spans: [HighlightSpan] = []
+
+        for rule in allRules {
+            guard let regex = try? NSRegularExpression(pattern: rule.pattern, options: []) else { continue }
+            let matches = regex.matches(in: source, options: [], range: safeRange)
+
+            for match in matches {
+                let matchRange = match.range.location..<(match.range.location + match.range.length)
+                let matchIdxSet = IndexSet(integersIn: matchRange)
+                if match.range.length > 0 && !claimed.intersection(matchIdxSet).isEmpty {
+                    continue
+                }
+                spans.append(HighlightSpan(range: match.range, attributes: rule.attributes))
+                claimed.insert(integersIn: matchRange)
+            }
+        }
+
+        return spans
+    }
+
+    /// Apply computed spans to a live text storage, resetting the range to the
+    /// default foreground color first so stale highlighting is cleared. Must run
+    /// on the main queue. Uses in-place `addAttributes` (no full-storage swap) so
+    /// layout and scroll position are preserved.
+    @MainActor
+    static func applySpans(
+        _ spans: [HighlightSpan],
+        to textStorage: NSTextStorage,
+        clearing range: NSRange,
+        theme: EditorTheme
+    ) {
+        let safeRange = NSIntersectionRange(range, NSRange(location: 0, length: textStorage.length))
+        guard safeRange.length > 0 else { return }
+
+        textStorage.beginEditing()
+        textStorage.addAttribute(.foregroundColor, value: theme.foregroundColor, range: safeRange)
+        for span in spans {
+            let r = NSIntersectionRange(span.range, NSRange(location: 0, length: textStorage.length))
+            if r.length > 0 {
+                textStorage.addAttributes(span.attributes, range: r)
+            }
+        }
+        textStorage.endEditing()
+    }
 }
 
 // MARK: - NSFont Italic Helper
