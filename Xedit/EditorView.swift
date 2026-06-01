@@ -920,6 +920,12 @@ final class VeilWriterTextView: NSTextView {
     /// full-document glyph/layout invalidation entirely.
     private var foldLayoutIsClean = true
 
+    /// Earliest character offset invalidated by the last fold update. When the
+    /// fold set changes we re-invalidate from min(this, new earliest fold) so
+    /// content that reappears after an unfold gets re-laid-out, while content
+    /// above the fold is never touched.
+    private var lastFoldInvalidationStart = 0
+
     /// Cached result of `foldableGuides()`. Computing it re-parses the entire
     /// document via `ScopeGuideCalculator`, and the line-number ruler asks for it
     /// on every redraw (i.e. every scroll/edit), so we memoize until the text or
@@ -1101,12 +1107,17 @@ final class VeilWriterTextView: NSTextView {
         layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: fullRange)
 
         guard foldedGuides.isEmpty == false else {
-            layoutManager.invalidateGlyphs(forCharacterRange: fullRange, changeInLength: 0, actualCharacterRange: nil)
-            layoutManager.invalidateLayout(forCharacterRange: fullRange, actualCharacterRange: nil)
+            // Nothing folded: invalidate from the previously-folded region down.
+            // Content above never changed, so re-laying it out is wasted work —
+            // the dominant cost behind the ~1 s fold/unfold stall on large files
+            // once non-contiguous layout was enabled.
+            invalidateFoldLayout(from: lastFoldInvalidationStart, in: layoutManager, fullRange: fullRange)
+            lastFoldInvalidationStart = 0
             foldLayoutIsClean = true
             return
         }
 
+        var earliestHiddenStart = textStorage.length
         for guide in foldedGuides {
             guard let hiddenRange = foldedCharacterRange(for: guide), hiddenRange.length > 0 else {
                 continue
@@ -1115,11 +1126,26 @@ final class VeilWriterTextView: NSTextView {
                 [.foregroundColor: NSColor.clear],
                 forCharacterRange: hiddenRange
             )
+            earliestHiddenStart = min(earliestHiddenStart, hiddenRange.location)
         }
-        layoutManager.invalidateGlyphs(forCharacterRange: fullRange, changeInLength: 0, actualCharacterRange: nil)
-        layoutManager.invalidateLayout(forCharacterRange: fullRange, actualCharacterRange: nil)
+
+        // Only invalidate from the earliest fold downward. Lines above the first
+        // folded scope keep their layout, so on a large file we re-lay-out only
+        // the tail (and with non-contiguous layout, only its visible part).
+        let invalidateStart = min(earliestHiddenStart, lastFoldInvalidationStart)
+        invalidateFoldLayout(from: invalidateStart, in: layoutManager, fullRange: fullRange)
+        lastFoldInvalidationStart = earliestHiddenStart
         foldLayoutIsClean = true
         needsDisplay = true
+    }
+
+    /// Invalidate glyphs/layout from `start` to the end of the document.
+    private func invalidateFoldLayout(from start: Int, in layoutManager: NSLayoutManager, fullRange: NSRange) {
+        let clampedStart = max(0, min(start, fullRange.length))
+        let range = NSRange(location: clampedStart, length: fullRange.length - clampedStart)
+        guard range.length >= 0 else { return }
+        layoutManager.invalidateGlyphs(forCharacterRange: range, changeInLength: 0, actualCharacterRange: nil)
+        layoutManager.invalidateLayout(forCharacterRange: range, actualCharacterRange: nil)
     }
 
     func isFoldedGlyphRange(_ glyphRange: NSRange, layoutManager: NSLayoutManager) -> Bool {
