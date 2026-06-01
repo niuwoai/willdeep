@@ -415,11 +415,17 @@ private struct AgentChatPane: View {
         panel.allowsMultipleSelection = true
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
-        guard panel.runModal() == .OK else { return }
-        for url in panel.urls {
-            guard let data = try? Data(contentsOf: url),
-                  let mime = AgentImagePasteboardHelper.mimeType(forPath: url.path) else { continue }
-            ingest(data: data, mimeType: mime)
+        // `runModal()` blocks the main run loop and, when invoked from a
+        // SwiftUI Button action under `default-isolation=MainActor`, was
+        // freezing the whole app. Use the async `begin` form instead so
+        // the panel runs on its own session.
+        panel.begin { response in
+            guard response == .OK else { return }
+            for url in panel.urls {
+                guard let data = try? Data(contentsOf: url),
+                      let mime = AgentImagePasteboardHelper.mimeType(forPath: url.path) else { continue }
+                ingest(data: data, mimeType: mime)
+            }
         }
     }
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.39.0-rc2 - 2026-06-02
+
+- Fixed the "Attach Image" button freezing the whole app in Agent mode. `NSOpenPanel.runModal()` from a SwiftUI Button action was blocking the main run loop under the new MainActor-default isolation; switched to the async `panel.begin { ... }` form.
+
 ## 1.39.0-rc1 - 2026-06-02
 
 - Added a dedicated Agent mode (View > Switch to Agent Mode, Cmd+Shift+A) with a project-grouped chat sidebar on the left and a wide chat pane on the right. The editor is hidden in this mode.
