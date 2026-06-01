@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.32.0-rc18 - 2026-06-01
+
+- Added left padding to the custom file tree content so root and child rows no longer sit flush against the rounded window edge.
+
 ## 1.32.0-rc17 - 2026-06-01
 
 - Removed the vertical line tied to the line-number gutter. `LineNumberRulerView` now overrides `draw(_:)` so AppKit's default `NSRulerView` border/edge drawing is bypassed, and the gutter fills with the editor background color instead of a separate gutter color. Line numbers and fold controls remain visible without a distinct vertical gutter edge.

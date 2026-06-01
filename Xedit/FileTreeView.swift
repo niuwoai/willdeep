@@ -22,6 +22,8 @@ struct FileTreeView: View {
     @Binding var selectedURL: URL?
     @Binding var selectedFolderURL: URL?
 
+    private let treeContentLeadingPadding: CGFloat = 10
+
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
@@ -32,6 +34,7 @@ struct FileTreeView: View {
                     level: 0
                 )
             }
+            .padding(.leading, treeContentLeadingPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Color(nsColor: .windowBackgroundColor))
