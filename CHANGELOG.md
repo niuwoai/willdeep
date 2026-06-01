@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.29.0-rc1 - 2026-06-01
+
+- Added arrow-key navigation to the Go to Symbol panel (Command+Shift+O), matching the Command Palette: Up/Down move the selection, Return jumps to the highlighted symbol, the selected row is highlighted and scrolled into view, and hover selection is suppressed briefly after a keyboard move.
+
 ## 1.28.0-rc4 - 2026-06-01
 
 - Fixed the editor viewport jumping after an edit (scrolling to the top, or drifting a few lines up) by anchoring on the character at the top of the viewport and re-pinning it after layout settles, instead of restoring a raw pixel scroll offset that gets clamped against the transiently-collapsed document height during a re-highlight.

@@ -945,6 +945,9 @@ struct PaletteCommandMatcher {
 private struct SymbolJumpPanel: View {
     @EnvironmentObject var appState: AppState
     @FocusState private var queryFocused: Bool
+    @State private var selectedIndex = 0
+    @State private var ignoredHoverSelectionUntil = Date.distantPast
+    @State private var lastHoverMouseLocation = NSEvent.mouseLocation
 
     private var symbols: [EditorOutlineItem] {
         guard let url = appState.openedFileURL else { return [] }
@@ -956,6 +959,11 @@ private struct SymbolJumpPanel: View {
             item.title.localizedCaseInsensitiveContains(query)
                 || item.kind.rawValue.localizedCaseInsensitiveContains(query)
         }
+    }
+
+    private var selectedSymbol: EditorOutlineItem? {
+        guard symbols.indices.contains(selectedIndex) else { return nil }
+        return symbols[selectedIndex]
     }
 
     var body: some View {
@@ -973,7 +981,7 @@ private struct SymbolJumpPanel: View {
                     .padding(12)
                     .focused($queryFocused)
                     .onSubmit {
-                        jump(symbols.first)
+                        jump(selectedSymbol)
                     }
 
                 Divider()
@@ -989,36 +997,57 @@ private struct SymbolJumpPanel: View {
                     .frame(height: 160)
                     .frame(maxWidth: .infinity)
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(symbols) { item in
-                                Button {
-                                    jump(item)
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: symbolIcon(for: item.kind))
-                                            .foregroundColor(.secondary)
-                                            .frame(width: 18)
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(item.title)
-                                                .font(.system(size: 13, weight: .medium))
-                                                .lineLimit(1)
-                                                .truncationMode(.middle)
-                                            Text("\(item.kind.rawValue) · line \(item.line)")
-                                                .font(.caption2)
-                                                .foregroundColor(.secondary)
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(spacing: 0) {
+                                ForEach(Array(symbols.enumerated()), id: \.element.id) { index, item in
+                                    let isSelected = index == selectedIndex
+
+                                    Button {
+                                        jump(item)
+                                    } label: {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: symbolIcon(for: item.kind))
+                                                .foregroundColor(isSelected ? .accentColor : .secondary)
+                                                .frame(width: 18)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(item.title)
+                                                    .font(.system(size: 13, weight: .medium))
+                                                    .lineLimit(1)
+                                                    .truncationMode(.middle)
+                                                Text("\(item.kind.rawValue) · line \(item.line)")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                            Spacer(minLength: 0)
                                         }
-                                        Spacer(minLength: 0)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background {
+                                            if isSelected {
+                                                RoundedRectangle(cornerRadius: 6)
+                                                    .fill(Color.accentColor.opacity(0.16))
+                                            }
+                                        }
+                                        .contentShape(Rectangle())
                                     }
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .contentShape(Rectangle())
+                                    .buttonStyle(.plain)
+                                    .padding(.horizontal, 6)
+                                    .id(item.id)
+                                    .onHover { isHovering in
+                                        if isHovering {
+                                            selectFromHover(at: index)
+                                        }
+                                    }
                                 }
-                                .buttonStyle(.plain)
                             }
+                            .padding(.vertical, 4)
+                        }
+                        .frame(maxHeight: 320)
+                        .onChange(of: selectedIndex) { _, newValue in
+                            scrollSelectionIntoView(with: proxy, index: newValue)
                         }
                     }
-                    .frame(maxHeight: 320)
                 }
             }
             .frame(width: 520)
@@ -1026,13 +1055,76 @@ private struct SymbolJumpPanel: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .shadow(radius: 18, y: 10)
         }
+        .background {
+            PaletteKeyboardHandler(
+                onMoveUp: selectPrevious,
+                onMoveDown: selectNext,
+                onSubmit: { jump(selectedSymbol) },
+                onCancel: { appState.hideSymbolJump() }
+            )
+        }
         .onAppear {
             queryFocused = true
+            resetSelection()
         }
-        .background {
-            FloatingPanelEscapeKeyHandler {
-                appState.hideSymbolJump()
-            }
+        .onChange(of: appState.symbolJumpQuery) { _, _ in
+            resetSelection()
+        }
+        .onChange(of: symbols.count) { _, _ in
+            clampSelection()
+        }
+    }
+
+    private func selectPrevious() {
+        guard !symbols.isEmpty else { return }
+        ignoreHoverSelectionDuringKeyboardMove()
+        selectedIndex = (selectedIndex - 1 + symbols.count) % symbols.count
+    }
+
+    private func selectNext() {
+        guard !symbols.isEmpty else { return }
+        ignoreHoverSelectionDuringKeyboardMove()
+        selectedIndex = (selectedIndex + 1) % symbols.count
+    }
+
+    private func ignoreHoverSelectionDuringKeyboardMove() {
+        ignoredHoverSelectionUntil = Date().addingTimeInterval(0.35)
+        lastHoverMouseLocation = NSEvent.mouseLocation
+    }
+
+    private func selectFromHover(at index: Int) {
+        guard symbols.indices.contains(index) else { return }
+
+        let mouseLocation = NSEvent.mouseLocation
+        guard Date() >= ignoredHoverSelectionUntil else {
+            lastHoverMouseLocation = mouseLocation
+            return
+        }
+
+        guard lastHoverMouseLocation != mouseLocation else { return }
+        lastHoverMouseLocation = mouseLocation
+        selectedIndex = index
+    }
+
+    private func resetSelection() {
+        selectedIndex = 0
+        clampSelection()
+    }
+
+    private func clampSelection() {
+        guard !symbols.isEmpty else {
+            selectedIndex = 0
+            return
+        }
+        if !symbols.indices.contains(selectedIndex) {
+            selectedIndex = 0
+        }
+    }
+
+    private func scrollSelectionIntoView(with proxy: ScrollViewProxy, index: Int) {
+        guard symbols.indices.contains(index) else { return }
+        withAnimation(.easeOut(duration: 0.12)) {
+            proxy.scrollTo(symbols[index].id, anchor: .center)
         }
     }
 
