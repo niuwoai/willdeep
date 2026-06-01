@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 /// A recursive file-tree view that renders a `FileSystemNode` tree using
 /// compact custom rows for directories and files.
@@ -22,15 +23,18 @@ struct FileTreeView: View {
     @Binding var selectedFolderURL: URL?
 
     var body: some View {
-        List {
-            FileNodeRow(
-                node: root,
-                selectedURL: $selectedURL,
-                selectedFolderURL: $selectedFolderURL,
-                level: 0
-            )
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                FileNodeRow(
+                    node: root,
+                    selectedURL: $selectedURL,
+                    selectedFolderURL: $selectedFolderURL,
+                    level: 0
+                )
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .listStyle(.sidebar)
+        .background(Color(nsColor: .windowBackgroundColor))
         .environment(\.defaultMinListRowHeight, CGFloat(max(18, appState.editorSettings.fileTreeFontSize + 6)))
         .onAppear {
             root.isExpanded = true
