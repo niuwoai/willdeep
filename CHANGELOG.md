@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.32.0-rc15 - 2026-06-01
+
+- Replaced the main `NavigationSplitView` shell with a custom two-column `HStack` so SwiftUI no longer generates titlebar/sidebar tracking separator chrome. The right editor/detail column now ignores the top safe-area inset, letting the tab bar sit flush at the top of the window, while the left sidebar keeps its own named top padding for the traffic-light controls.
+
+## 1.32.0-rc14 - 2026-06-01
+
+- Fixed a crash introduced in rc13 by no longer removing `NSTrackingSeparatorToolbarItem` from the toolbar. AppKit owns KVO wiring for that private tracking separator item, and removing it can trigger an `NSInternalInconsistencyException`. The window toolbar is now hidden via SwiftUI's `.toolbar(.hidden, for: .windowToolbar)` so the sidebar toggle/tracking separator chrome is suppressed without mutating AppKit's private toolbar item list.
+
+## 1.32.0-rc13 - 2026-06-01
+
+- Tried to remove the remaining title-bar vertical separator by targeting SwiftUI/AppKit's sidebar tracking separator in the window toolbar/titlebar chrome. This approach was superseded in rc14 because directly removing `NSTrackingSeparatorToolbarItem` is unsafe.
+
+## 1.32.0-rc12 - 2026-06-01
+
+- Actually collapsed the title-bar row this time. rc11's AppKit-only approach (`titleVisibility = .hidden` + `.fullSizeContentView` poked onto the window) was being reset by SwiftUI's `WindowGroup`, so the "VeilWriter" strip stayed. Switched to the native SwiftUI modifier `.windowStyle(.hiddenTitleBar)` on both window groups, which SwiftUI honors and doesn't override.
+
+## 1.32.0-rc11 - 2026-06-01
+
+- Collapsed the empty title-bar row entirely (not just its text). `.fullSizeContentView` is now added to the window style mask so the content area — and the tab bar — extends up through the former title-bar height, sitting flush at the top of the window.
+- Removed the vertical hairline NavigationSplitView draws between the sidebar and the editor. The underlying `NSSplitView` is reclassed to a `ClearDividerSplitView` whose `dividerColor` is `.clear`.
+
+## 1.32.0-rc10 - 2026-06-01
+
+- Removed the stray hairline that sat directly above line "1" across the gutter ruler. It was the default `NSScrollView` `.bezelBorder` peeking out along the editor's top edge; the scroll view's `borderType` is now set to `.noBorder`, so the gutter joins the tab bar above it cleanly.
+
+## 1.32.0-rc9 - 2026-06-01
+
+- Removed the standalone window title strip that showed the current file name (e.g. "AppState.swift") on its own row directly above the tab bar — it duplicated the active tab's label and wasted vertical space. The system title bar is now hidden (`titleVisibility = .hidden`) and made transparent (`titlebarAppearsTransparent = true`) via a `WindowChromeConfigurator`, so the tab bar tucks up under the traffic-light buttons.
+- Removed the horizontal divider line under the tab bar (the `Divider()` overlay at the bottom of `EditorTabBar`), leaving the tab row visually cleaner and eliminating the stray separator that appeared to bleed upward.
+
 ## 1.32.0-rc8 - 2026-06-01
 
 - Fixed line numbers from the gutter ruler bleeding into the tab bar above the editor (e.g. line "12" appearing inside the tab bar row, alongside the gutter's dark strip extending upward through the tab area). NSRulerView's drawing isn't automatically clipped to its bounds, so line-number labels whose Y position falls just above the ruler's top — which happens for the first visible row at certain scroll positions — leaked into the tab-bar area above. The ruler now explicitly clips drawing to its own bounds via `NSGraphicsContext.saveGraphicsState()` + `NSBezierPath(rect: bounds).addClip()`. Probed via on-screen geometry logs: ruler in window y=24..476, window content height=515, tab bar 39px — fix verified by side-by-side before/after screenshot.

@@ -17,9 +17,11 @@ struct VeilWriterApp: App {
         WindowGroup {
             WindowRootView()
         }
+        .windowStyle(.hiddenTitleBar)
         WindowGroup(for: URL.self) { $url in
             WindowRootView(initialExternalURL: url)
         }
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Window…") {

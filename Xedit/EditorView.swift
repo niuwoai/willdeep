@@ -67,6 +67,10 @@ struct EditorView: NSViewRepresentable {
 
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
+        // Default NSScrollView border is `.bezelBorder`, which draws a hairline
+        // along the top edge — it peeked out above the gutter ruler as a stray
+        // line sitting just over line "1". Drop it.
+        scrollView.borderType = .noBorder
         scrollView.documentView = textView
         scrollView.autoresizingMask = [.width, .height]
         scrollView.contentView.postsBoundsChangedNotifications = true

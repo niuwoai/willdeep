@@ -17,70 +17,128 @@ struct ContentView: View {
     /// Re-created whenever the root directory changes.
     @State private var rootNode: FileSystemNode?
 
+    private let sidebarWidth: CGFloat = 220
+    private let sidebarTopPadding: CGFloat = 48
+
     var body: some View {
-        NavigationSplitView {
-            // Sidebar: directory tree
-            Group {
-                if appState.isFocusModeEnabled {
-                    Color.clear
-                        .frame(width: 0)
-                } else if let root = rootNode {
-                    FileTreeView(
-                        root: root,
-                        selectedURL: $appState.openedFileURL,
-                        selectedFolderURL: $appState.selectedFolderURL
-                    )
-                    .id(root.url.standardizedFileURL)
-                } else {
-                    VStack(spacing: 14) {
-                        Image(systemName: "folder")
-                            .font(.system(size: 32))
-                        Text("No Folder Open")
-                            .font(.headline)
-                        Text("Choose a file or folder to start editing.")
-                            .font(.caption)
-                            .multilineTextAlignment(.center)
+        HStack(spacing: 0) {
+            sidebar
 
-                        HStack(spacing: 8) {
-                            Button {
-                                appState.openFile()
-                            } label: {
-                                Label("Open File", systemImage: "doc")
-                            }
-                            .buttonStyle(EmptyStateIconButtonStyle())
-                            .focusable(false)
-                            .help("Open File")
-                            .accessibilityLabel("Open File")
-
-                            Button {
-                                appState.openFolder { url in
-                                    openWindow(value: url)
-                                }
-                            } label: {
-                                Label("Open Folder", systemImage: "folder")
-                            }
-                            .buttonStyle(EmptyStateIconButtonStyle())
-                            .focusable(false)
-                            .help("Open Folder")
-                            .accessibilityLabel("Open Folder")
-                        }
-                        .labelStyle(.iconOnly)
-
-                        RecentItemsView()
-                            .environmentObject(appState)
-                    }
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .ignoresSafeArea(.container, edges: .top)
+        .onChange(of: appState.rootDirectory) { _, newDirectory in
+            if let dir = newDirectory {
+                let node = FileSystemNode(url: dir)
+                node.loadChildren()
+                node.isExpanded = true
+                rootNode = node
+                if appState.selectedFolderURL == nil {
+                    appState.selectedFolderURL = dir
+                }
+            } else {
+                rootNode = nil
+                appState.selectedFolderURL = nil
+            }
+        }
+        .onChange(of: appState.openedFileURL) { oldValue, newValue in
+            handleFileSelectionChange(oldValue: oldValue, newValue: newValue)
+        }
+        .onChange(of: appState.fileContent) { _, _ in
+            appState.refreshExternalFileStatus()
+        }
+        .onReceive(Timer.publish(every: 3, on: .main, in: .common).autoconnect()) { _ in
+            appState.refreshExternalFileStatus()
+            appState.refreshGitStatus()
+        }
+        .onAppear {
+            // If rootDirectory was set before the view appeared, create the node.
+            if let dir = appState.rootDirectory {
+                let node = FileSystemNode(url: dir)
+                node.loadChildren()
+                node.isExpanded = true
+                rootNode = node
+                if appState.selectedFolderURL == nil {
+                    appState.selectedFolderURL = dir
                 }
             }
-            .frame(minWidth: appState.isFocusModeEnabled ? 0 : 180)
-            .navigationSplitViewColumnWidth(
-                min: appState.isFocusModeEnabled ? 0 : 160,
-                ideal: appState.isFocusModeEnabled ? 0 : 220,
-                max: appState.isFocusModeEnabled ? 0 : 400
+        }
+        .background(
+            MainWindowKeyboardShortcutHandler(
+                hasActiveTab: appState.activeTabID != nil,
+                onCloseTab: {
+                    appState.closeActiveTab()
+                }
             )
-        } detail: {
-            VStack(spacing: 0) {
+        )
+        .background(WindowChromeConfigurator())
+        .toolbar(.hidden, for: .windowToolbar)
+    }
+
+    private var sidebar: some View {
+        Group {
+            if appState.isFocusModeEnabled {
+                Color.clear
+                    .frame(width: 0)
+            } else if let root = rootNode {
+                FileTreeView(
+                    root: root,
+                    selectedURL: $appState.openedFileURL,
+                    selectedFolderURL: $appState.selectedFolderURL
+                )
+                .id(root.url.standardizedFileURL)
+            } else {
+                VStack(spacing: 14) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 32))
+                    Text("No Folder Open")
+                        .font(.headline)
+                    Text("Choose a file or folder to start editing.")
+                        .font(.caption)
+                        .multilineTextAlignment(.center)
+
+                    HStack(spacing: 8) {
+                        Button {
+                            appState.openFile()
+                        } label: {
+                            Label("Open File", systemImage: "doc")
+                        }
+                        .buttonStyle(EmptyStateIconButtonStyle())
+                        .focusable(false)
+                        .help("Open File")
+                        .accessibilityLabel("Open File")
+
+                        Button {
+                            appState.openFolder { url in
+                                openWindow(value: url)
+                            }
+                        } label: {
+                            Label("Open Folder", systemImage: "folder")
+                        }
+                        .buttonStyle(EmptyStateIconButtonStyle())
+                        .focusable(false)
+                        .help("Open Folder")
+                        .accessibilityLabel("Open Folder")
+                    }
+                    .labelStyle(.iconOnly)
+
+                    RecentItemsView()
+                        .environmentObject(appState)
+                }
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .padding(.top, appState.isFocusModeEnabled ? 0 : sidebarTopPadding)
+        .frame(width: appState.isFocusModeEnabled ? 0 : sidebarWidth)
+        .frame(maxHeight: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .clipped()
+    }
+
+    private var detail: some View {
+        VStack(spacing: 0) {
                 if let imageURL = appState.imagePreviewURL {
                     ImagePreviewPane(url: imageURL) {
                         appState.closeImagePreview()
@@ -199,51 +257,6 @@ struct ContentView: View {
                         .environmentObject(appState)
                 }
             }
-        }
-        .onChange(of: appState.rootDirectory) { _, newDirectory in
-            if let dir = newDirectory {
-                let node = FileSystemNode(url: dir)
-                node.loadChildren()
-                node.isExpanded = true
-                rootNode = node
-                if appState.selectedFolderURL == nil {
-                    appState.selectedFolderURL = dir
-                }
-            } else {
-                rootNode = nil
-                appState.selectedFolderURL = nil
-            }
-        }
-        .onChange(of: appState.openedFileURL) { oldValue, newValue in
-            handleFileSelectionChange(oldValue: oldValue, newValue: newValue)
-        }
-        .onChange(of: appState.fileContent) { _, _ in
-            appState.refreshExternalFileStatus()
-        }
-        .onReceive(Timer.publish(every: 3, on: .main, in: .common).autoconnect()) { _ in
-            appState.refreshExternalFileStatus()
-            appState.refreshGitStatus()
-        }
-        .onAppear {
-            // If rootDirectory was set before the view appeared, create the node.
-            if let dir = appState.rootDirectory {
-                let node = FileSystemNode(url: dir)
-                node.loadChildren()
-                node.isExpanded = true
-                rootNode = node
-                if appState.selectedFolderURL == nil {
-                    appState.selectedFolderURL = dir
-                }
-            }
-        }
-        .background(
-            MainWindowKeyboardShortcutHandler(
-                hasActiveTab: appState.activeTabID != nil,
-                onCloseTab: {
-                    appState.closeActiveTab()
-                }
-            )
-        )
     }
 
     // MARK: - File Selection Handling
@@ -738,6 +751,105 @@ private struct MainWindowKeyboardShortcutHandler: NSViewRepresentable {
 
             onCloseTab()
             return nil
+        }
+    }
+}
+
+/// Collapses the system title-bar row so the tab bar sits at the very top of the
+/// window instead of below a dead file-name strip. We hide the title text, make
+/// the title bar transparent, and — crucially — turn on `.fullSizeContentView`
+/// so the content area extends up through the title-bar height (otherwise that
+/// ~28pt row keeps occupying space even with no title drawn). The traffic-light
+/// buttons stay on top of the content because they live in their own layer.
+private struct WindowChromeConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        context.coordinator.attach(to: view)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.attach(to: nsView)
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator {
+        private weak var view: NSView?
+        private var retriesLeft = 30
+
+        func attach(to view: NSView) {
+            self.view = view
+            retriesLeft = 30
+            poll()
+        }
+
+        /// `view.window` is often still nil on the first runloop turn after the
+        /// representable is created (the helper NSView hasn't been inserted into
+        /// the window yet), and SwiftUI re-applies its own title-bar chrome a few
+        /// turns later. Poll until we get a window, then keep configuring for a
+        /// short while so our settings win over SwiftUI's late reset.
+        private func poll() {
+            guard retriesLeft > 0 else { return }
+            retriesLeft -= 1
+            if let window = view?.window {
+                WindowChromeConfigurator.configure(window)
+            }
+            DispatchQueue.main.async { [weak self] in self?.poll() }
+        }
+    }
+
+    private static func configure(_ window: NSWindow) {
+        if window.titleVisibility != .hidden { window.titleVisibility = .hidden }
+        if !window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = true }
+        if !window.styleMask.contains(.fullSizeContentView) {
+            window.styleMask.insert(.fullSizeContentView)
+        }
+        window.titlebarSeparatorStyle = .none
+        window.contentView?.superview?.hideTitlebarSeparatorViews()
+
+        // Hide the 1px divider NavigationSplitView's underlying NSSplitView draws
+        // between the sidebar and the editor. There is no SwiftUI API for it, so
+        // we find that NSSplitView and reclass it to a subclass whose
+        // `dividerColor` is clear.
+        if let contentView = window.contentView {
+            for split in contentView.descendantSplitViews()
+            where !(split is ClearDividerSplitView) {
+                object_setClass(split, ClearDividerSplitView.self)
+                split.needsDisplay = true
+            }
+            contentView.hideTitlebarSeparatorViews()
+        }
+    }
+}
+
+/// NSSplitView subclass that paints no visible divider line. Used to suppress the
+/// hairline NavigationSplitView draws between the sidebar and the editor.
+private final class ClearDividerSplitView: NSSplitView {
+    override var dividerColor: NSColor { .clear }
+}
+
+private extension NSView {
+    /// All `NSSplitView`s anywhere beneath this view (depth-first).
+    func descendantSplitViews() -> [NSSplitView] {
+        var result: [NSSplitView] = []
+        if let split = self as? NSSplitView {
+            result.append(split)
+        }
+        for subview in subviews {
+            result.append(contentsOf: subview.descendantSplitViews())
+        }
+        return result
+    }
+
+    func hideTitlebarSeparatorViews() {
+        let className = NSStringFromClass(type(of: self))
+        if className.contains("Separator") || className.contains("TrackingSeparator") {
+            isHidden = true
+            alphaValue = 0
+        }
+        for subview in subviews {
+            subview.hideTitlebarSeparatorViews()
         }
     }
 }
@@ -2198,8 +2310,5 @@ private struct EditorTabBar: View {
             .padding(.vertical, 6)
         }
         .background(Color(nsColor: .windowBackgroundColor))
-        .overlay(alignment: .bottom) {
-            Divider()
-        }
     }
 }
