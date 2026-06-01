@@ -77,12 +77,7 @@ final class AppState: ObservableObject {
     @Published private(set) var quickOpenFiles: [URL] = []
     @Published var editorSettings: EditorSettings {
         didSet {
-            if editorSettings.preferredInspectorMode != oldValue.preferredInspectorMode {
-                inspectorMode = editorSettings.preferredInspectorMode
-            }
-            EditorSettingsStore.save(editorSettings)
-            bumpEditorRenderRevision()
-            bumpEditorHighlightRevision()
+            scheduleEditorSettingsSideEffects()
         }
     }
 
@@ -95,6 +90,7 @@ final class AppState: ObservableObject {
     private var securityScopedAccessURLs: Set<URL> = []
     private var gitStatusRefreshTask: Task<Void, Never>?
     private var quickOpenRefreshTask: Task<Void, Never>?
+    private var editorSettingsSideEffectsWorkItem: DispatchWorkItem?
     private var editorSettingsObserver: AnyCancellable?
 
     init(
@@ -1011,6 +1007,24 @@ final class AppState: ObservableObject {
 
     private func bumpEditorHighlightRevision() {
         editorHighlightRevision += 1
+    }
+
+    private func scheduleEditorSettingsSideEffects() {
+        editorSettingsSideEffectsWorkItem?.cancel()
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            let normalizedSettings = self.editorSettings.normalized()
+            if self.inspectorMode != normalizedSettings.preferredInspectorMode {
+                self.inspectorMode = normalizedSettings.preferredInspectorMode
+            }
+            EditorSettingsStore.save(normalizedSettings)
+            self.bumpEditorRenderRevision()
+            self.bumpEditorHighlightRevision()
+        }
+
+        editorSettingsSideEffectsWorkItem = workItem
+        DispatchQueue.main.async(execute: workItem)
     }
 
     private func updateActiveTab(_ mutation: (inout EditorTab) -> Void) {

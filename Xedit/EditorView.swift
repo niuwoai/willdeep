@@ -314,14 +314,17 @@ struct EditorView: NSViewRepresentable {
             let theme = parent.settings.theme
             let font = parent.settings.editorFont()
             let paragraphStyle = parent.settings.editorParagraphStyle()
+            let surfaceOpacity = parent.settings.editorGlassEnabled ? CGFloat(parent.settings.editorSurfaceOpacity) : 1
+            let editorBackgroundColor = theme.backgroundColor.withAlphaComponent(surfaceOpacity)
 
-            scrollView.drawsBackground = true
-            scrollView.backgroundColor = theme.backgroundColor
+            scrollView.drawsBackground = !parent.settings.editorGlassEnabled
+            scrollView.backgroundColor = editorBackgroundColor
             scrollView.rulersVisible = parent.settings.showsLineNumbers
             scrollView.hasVerticalRuler = parent.settings.showsLineNumbers
 
             textView.font = font
-            textView.backgroundColor = theme.backgroundColor
+            textView.drawsBackground = true
+            textView.backgroundColor = editorBackgroundColor
             textView.insertionPointColor = theme.insertionPointColor
             textView.currentLineColor = theme.currentLineBackgroundColor
             textView.foldedPlaceholderColor = theme.gutterTextColor
@@ -1443,7 +1446,8 @@ final class LineNumberRulerView: NSRulerView {
         defer { NSGraphicsContext.restoreGraphicsState() }
         NSBezierPath(rect: bounds).addClip()
 
-        theme.backgroundColor.setFill()
+        let backgroundOpacity = settings.editorGlassEnabled ? CGFloat(settings.editorSurfaceOpacity) : 1
+        theme.backgroundColor.withAlphaComponent(backgroundOpacity).setFill()
         bounds.fill()
 
         guard let textView = textView,

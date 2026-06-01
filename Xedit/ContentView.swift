@@ -27,12 +27,17 @@ struct ContentView: View {
     private let sidebarTopPadding: CGFloat = 48
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
-            sidebarControl
+        ZStack {
+            WorkspaceWindowBackground()
 
-            detail
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            HStack(spacing: 0) {
+                sidebar
+                sidebarControl
+
+                detail
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
         }
         .ignoresSafeArea(.container, edges: .top)
         .onChange(of: appState.rootDirectory) { _, newDirectory in
@@ -113,27 +118,22 @@ struct ContentView: View {
             && !isEditorMaximized
     }
 
+    private var tabBarLeadingReserve: CGFloat {
+        shouldShowSidebar ? 0 : 72
+    }
+
     private var shouldShowSidebarControl: Bool {
         !appState.isFocusModeEnabled && rootNode != nil && !isEditorMaximized
     }
 
     @ViewBuilder
     private var sidebarControl: some View {
-        if shouldShowSidebarControl {
-            if shouldShowSidebar {
-                SidebarResizeHandle(
-                    width: $sidebarWidth,
-                    minWidth: minSidebarWidth,
-                    maxWidth: maxSidebarWidth,
-                    onCollapse: {
-                        isFileTreeCollapsed = true
-                    }
-                )
-            } else {
-                CollapsedFileTreeRail {
-                    isFileTreeCollapsed = false
-                }
-            }
+        if shouldShowSidebarControl && shouldShowSidebar {
+            SidebarResizeHandle(
+                width: $sidebarWidth,
+                minWidth: minSidebarWidth,
+                maxWidth: maxSidebarWidth
+            )
         }
     }
 
@@ -149,6 +149,7 @@ struct ContentView: View {
                         EditorTabBar(
                             tabs: appState.tabs,
                             activeTabID: appState.activeTabID,
+                            leadingReserve: tabBarLeadingReserve,
                             onSelect: { appState.activateTab(id: $0) },
                             onClose: { appState.closeTab(id: $0) },
                             onDoubleClick: { id in
@@ -198,6 +199,7 @@ struct ContentView: View {
                                 appState.setSyntaxHighlightingSelection(selection)
                             }
                         )
+                        .editorGlassBackground(settings: appState.editorSettings)
                         .frame(minWidth: 400, minHeight: 400)
 
                         if appState.isSplitEditorVisible {
@@ -259,6 +261,7 @@ struct ContentView: View {
                     }
                 }
             }
+            .background(EditorAreaBackground(settings: appState.editorSettings))
             .overlay {
                 if appState.isQuickOpenVisible {
                     QuickOpenPanel()
@@ -374,11 +377,118 @@ struct ContentView: View {
     }
 }
 
+private struct WorkspaceWindowBackground: View {
+    var body: some View {
+        Color(nsColor: .windowBackgroundColor)
+            .ignoresSafeArea()
+    }
+}
+
+private struct EditorAreaBackground: View {
+    let settings: EditorSettings
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Color(nsColor: .windowBackgroundColor)
+
+                if let image = backgroundImage {
+                    imageView(image, in: proxy.size)
+                        .opacity(settings.windowBackgroundImageOpacity)
+                }
+            }
+        }
+        .clipped()
+    }
+
+    private var backgroundImage: NSImage? {
+        guard let path = settings.windowBackgroundImagePath else { return nil }
+        return NSImage(contentsOfFile: path)
+    }
+
+    @ViewBuilder
+    private func imageView(_ image: NSImage, in size: CGSize) -> some View {
+        switch settings.windowBackgroundImageMode {
+        case .fill:
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: size.width, height: size.height)
+                .scaleEffect(settings.windowBackgroundImageScale)
+                .clipped()
+        case .fit:
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: size.width, height: size.height)
+                .scaleEffect(settings.windowBackgroundImageScale)
+                .clipped()
+        case .stretch:
+            Image(nsImage: image)
+                .resizable()
+                .frame(
+                    width: max(1, size.width * settings.windowBackgroundImageScale),
+                    height: max(1, size.height * settings.windowBackgroundImageScale)
+                )
+                .frame(width: size.width, height: size.height)
+                .clipped()
+        case .center:
+            Image(nsImage: image)
+                .resizable()
+                .frame(
+                    width: max(1, image.size.width * settings.windowBackgroundImageScale),
+                    height: max(1, image.size.height * settings.windowBackgroundImageScale)
+                )
+                .frame(width: size.width, height: size.height)
+                .clipped()
+        }
+    }
+}
+
+private struct EditorGlassBackgroundModifier: ViewModifier {
+    let settings: EditorSettings
+
+    func body(content: Content) -> some View {
+        if settings.editorGlassEnabled {
+            ZStack {
+                VisualEffectView(material: settings.editorGlassMaterial.material)
+                    .opacity(settings.editorGlassOpacity)
+                content
+            }
+        } else {
+            content
+        }
+    }
+}
+
+private extension View {
+    func editorGlassBackground(settings: EditorSettings) -> some View {
+        modifier(EditorGlassBackgroundModifier(settings: settings))
+    }
+}
+
+private struct VisualEffectView: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.blendingMode = .behindWindow
+        view.state = .active
+        view.material = material
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
+        nsView.blendingMode = .behindWindow
+        nsView.state = .active
+    }
+}
+
 private struct SidebarResizeHandle: View {
     @Binding var width: CGFloat
     let minWidth: CGFloat
     let maxWidth: CGFloat
-    let onCollapse: () -> Void
 
     @State private var dragStartWidth: CGFloat?
 
@@ -387,22 +497,6 @@ private struct SidebarResizeHandle: View {
             Rectangle()
                 .fill(Color(nsColor: .separatorColor).opacity(0.22))
                 .frame(width: 1)
-
-            VStack(spacing: 8) {
-                Button {
-                    onCollapse()
-                } label: {
-                    Image(systemName: "sidebar.left")
-                        .font(.system(size: 12, weight: .medium))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .frame(width: 18, height: 22)
-                .help("Collapse File Tree")
-
-                Spacer(minLength: 0)
-            }
-            .padding(.top, 54)
         }
         .frame(width: 10)
         .contentShape(Rectangle())
@@ -418,38 +512,6 @@ private struct SidebarResizeHandle: View {
                     dragStartWidth = nil
                 }
         )
-        .onTapGesture(count: 2) {
-            onCollapse()
-        }
-    }
-}
-
-private struct CollapsedFileTreeRail: View {
-    let onExpand: () -> Void
-
-    var body: some View {
-        VStack {
-            Button {
-                onExpand()
-            } label: {
-                Image(systemName: "sidebar.left")
-                    .font(.system(size: 12, weight: .medium))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .frame(width: 24, height: 26)
-            .help("Expand File Tree")
-            .padding(.top, 54)
-
-            Spacer(minLength: 0)
-        }
-        .frame(width: 26)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .overlay(alignment: .trailing) {
-            Rectangle()
-                .fill(Color(nsColor: .separatorColor).opacity(0.18))
-                .frame(width: 1)
-        }
     }
 }
 
@@ -2608,6 +2670,7 @@ private struct FindReplaceBar: View {
 private struct EditorTabBar: View {
     let tabs: [EditorTab]
     let activeTabID: EditorTab.ID?
+    let leadingReserve: CGFloat
     let onSelect: (EditorTab.ID) -> Void
     let onClose: (EditorTab.ID) -> Void
     let onDoubleClick: (EditorTab.ID) -> Void
@@ -2647,7 +2710,8 @@ private struct EditorTabBar: View {
                     .help(tab.url.path)
                 }
             }
-            .padding(.horizontal, 8)
+            .padding(.leading, 8 + leadingReserve)
+            .padding(.trailing, 8)
             .padding(.vertical, 6)
         }
         .background(Color(nsColor: .windowBackgroundColor))

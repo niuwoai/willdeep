@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.33.0-rc13 - 2026-06-01
+
+- Removed the manual file-tree collapse and restore icons, leaving the divider as a resize-only control.
+
+## 1.33.0-rc12 - 2026-06-01
+
+- Removed the collapsed file-tree rail from the main layout and replaced it with a compact floating restore button at the left edge of the editor.
+
+## 1.33.0-rc11 - 2026-06-01
+
+- Deferred editor settings persistence and editor refresh side effects to the next main-loop turn to avoid SwiftUI publishing changes during view updates.
+
+## 1.33.0-rc10 - 2026-06-01
+
+- Added editor background image fit controls for fill-and-crop, fit, stretch, center, and image size scaling.
+- Limited custom background images to the editor/detail area so the file tree and collapsed file-tree rail stay on the native window background.
+
+## 1.33.0-rc9 - 2026-06-01
+
+- Added a leading tab-bar reserve when the editor reaches the window edge so the first tab title no longer overlaps the macOS window controls.
+
+## 1.33.0-rc8 - 2026-06-01
+
+- Added Settings controls for a custom window background image and image opacity.
+- Added an optional glass editor background with material, glass strength, and editor surface opacity controls.
+
 ## 1.33.0-rc7 - 2026-06-01
 
 - Added a draggable file-tree divider with collapse and expand controls.

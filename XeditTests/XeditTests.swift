@@ -136,6 +136,7 @@ struct VeilWriterTests {
         let settings = EditorSettings.default
         #expect(settings.lineHeightMultiple == 1.15)
         #expect(settings.fileTreeFontSize == 12)
+        #expect(settings.fileTreeLineHeightMultiple == 1.25)
         #expect(settings.showsLineNumbers == true)
         #expect(settings.highlightsCurrentLine == true)
         #expect(settings.preferredInspectorMode == .minimap)
@@ -154,6 +155,7 @@ struct VeilWriterTests {
             fontSize: 99,
             lineHeightMultiple: 4.0,
             fileTreeFontSize: 99,
+            fileTreeLineHeightMultiple: 99,
             themeID: "missing-theme",
             showsLineNumbers: false,
             highlightsCurrentLine: false,
@@ -168,6 +170,7 @@ struct VeilWriterTests {
         #expect(settings.fontSize == 28)
         #expect(settings.lineHeightMultiple == 1.8)
         #expect(settings.fileTreeFontSize == 16)
+        #expect(settings.fileTreeLineHeightMultiple == 2.0)
         #expect(settings.showsLineNumbers == false)
         #expect(settings.highlightsCurrentLine == false)
         #expect(settings.preferredInspectorMode == .structure)
@@ -197,6 +200,7 @@ struct VeilWriterTests {
 
         #expect(settings.fontID == "menlo")
         #expect(settings.fileTreeFontSize == EditorSettings.default.fileTreeFontSize)
+        #expect(settings.fileTreeLineHeightMultiple == EditorSettings.default.fileTreeLineHeightMultiple)
         #expect(settings.preferredInspectorMode == EditorSettings.default.preferredInspectorMode)
         #expect(settings.inspectorPanelOrder == EditorSettings.default.inspectorPanelOrder)
     }
@@ -212,6 +216,7 @@ struct VeilWriterTests {
         settings.fontSize = 18
         settings.lineHeightMultiple = 1.4
         settings.fileTreeFontSize = 14
+        settings.fileTreeLineHeightMultiple = 1.5
         settings.themeID = EditorTheme.graphite.id
         settings.showsLineNumbers = false
         settings.highlightsCurrentLine = false
@@ -1082,6 +1087,7 @@ struct VeilWriterTests {
             fontSize: EditorSettings.default.fontSize,
             lineHeightMultiple: EditorSettings.default.lineHeightMultiple,
             fileTreeFontSize: EditorSettings.default.fileTreeFontSize,
+            fileTreeLineHeightMultiple: EditorSettings.default.fileTreeLineHeightMultiple,
             themeID: EditorSettings.default.themeID,
             showsLineNumbers: true,
             highlightsCurrentLine: true,

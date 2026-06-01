@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 struct EditorSettingsView: View {
     @EnvironmentObject var appState: AppState
@@ -59,17 +60,101 @@ struct EditorSettingsView: View {
                 .padding(.vertical, 4)
             }
 
+            Section("Editor Background") {
+                LabeledContent("Image") {
+                    HStack {
+                        Text(backgroundImageLabel)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .foregroundStyle(appState.editorSettings.windowBackgroundImagePath == nil ? .secondary : .primary)
+                        Spacer(minLength: 8)
+                        Button("Choose...") {
+                            chooseBackgroundImage()
+                        }
+                        Button("Clear") {
+                            update(\.windowBackgroundImagePath, nil)
+                        }
+                        .disabled(appState.editorSettings.windowBackgroundImagePath == nil)
+                    }
+                }
+
+                Picker("Image Mode", selection: setting(\.windowBackgroundImageMode)) {
+                    ForEach(EditorBackgroundImageMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .disabled(appState.editorSettings.windowBackgroundImagePath == nil)
+
+                LabeledContent("Image Size") {
+                    HStack {
+                        Slider(value: setting(\.windowBackgroundImageScale), in: 0.25...3, step: 0.05)
+                        Text("\(Int(appState.editorSettings.windowBackgroundImageScale * 100))%")
+                            .monospacedDigit()
+                            .frame(width: 48, alignment: .trailing)
+                    }
+                }
+                .disabled(appState.editorSettings.windowBackgroundImagePath == nil)
+
+                LabeledContent("Image Opacity") {
+                    HStack {
+                        Slider(value: setting(\.windowBackgroundImageOpacity), in: 0...1, step: 0.05)
+                        Text("\(Int(appState.editorSettings.windowBackgroundImageOpacity * 100))%")
+                            .monospacedDigit()
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                }
+            }
+
             Section("Editor") {
                 Toggle("Show Line Numbers", isOn: setting(\.showsLineNumbers))
                 Toggle("Highlight Current Line", isOn: setting(\.highlightsCurrentLine))
+                Toggle("Glass Editor Background", isOn: setting(\.editorGlassEnabled))
+
+                Picker("Glass Material", selection: setting(\.editorGlassMaterial)) {
+                    ForEach(EditorGlassMaterial.allCases) { material in
+                        Text(material.displayName).tag(material)
+                    }
+                }
+                .disabled(!appState.editorSettings.editorGlassEnabled)
+
+                LabeledContent("Glass Strength") {
+                    HStack {
+                        Slider(value: setting(\.editorGlassOpacity), in: 0...1, step: 0.05)
+                        Text("\(Int(appState.editorSettings.editorGlassOpacity * 100))%")
+                            .monospacedDigit()
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                }
+                .disabled(!appState.editorSettings.editorGlassEnabled)
+
+                LabeledContent("Editor Surface") {
+                    HStack {
+                        Slider(value: setting(\.editorSurfaceOpacity), in: 0.25...1, step: 0.05)
+                        Text("\(Int(appState.editorSettings.editorSurfaceOpacity * 100))%")
+                            .monospacedDigit()
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                }
+                .disabled(!appState.editorSettings.editorGlassEnabled)
             }
 
             Section("Sidebar") {
-                HStack {
-                    Slider(value: setting(\.fileTreeFontSize), in: 10...16, step: 1)
-                    Text("\(Int(appState.editorSettings.fileTreeFontSize)) pt")
-                        .monospacedDigit()
-                        .frame(width: 48, alignment: .trailing)
+                LabeledContent("Text Size") {
+                    HStack {
+                        Slider(value: setting(\.fileTreeFontSize), in: 10...16, step: 1)
+                        Text("\(Int(appState.editorSettings.fileTreeFontSize)) pt")
+                            .monospacedDigit()
+                            .frame(width: 48, alignment: .trailing)
+                    }
+                }
+
+                LabeledContent("Line Height") {
+                    HStack {
+                        Slider(value: setting(\.fileTreeLineHeightMultiple), in: 1.0...2.0, step: 0.05)
+                        Text(String(format: "%.2fx", appState.editorSettings.fileTreeLineHeightMultiple))
+                            .monospacedDigit()
+                            .frame(width: 56, alignment: .trailing)
+                    }
                 }
             }
 
@@ -126,6 +211,13 @@ struct EditorSettingsView: View {
         }
     }
 
+    private var backgroundImageLabel: String {
+        guard let path = appState.editorSettings.windowBackgroundImagePath else {
+            return "No image selected"
+        }
+        return URL(fileURLWithPath: path).lastPathComponent
+    }
+
     private var cliStatusText: String {
         switch cliInstallState {
         case .installed:
@@ -179,6 +271,19 @@ struct EditorSettingsView: View {
                     cliStatusMessage = error.localizedDescription
                 }
             }
+        }
+    }
+
+    private func chooseBackgroundImage() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Editor Background Image"
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+
+        if panel.runModal() == .OK, let url = panel.url {
+            update(\.windowBackgroundImagePath, url.path)
         }
     }
 

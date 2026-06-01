@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-01 | Current version: v1.33.0-rc7
+> Last updated: 2026-06-01 | Current version: v1.33.0-rc13
 
 ## Positioning
 
@@ -11,7 +11,7 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 ## Current Capabilities
 
 - Browse a selected folder through a native sidebar file tree.
-- Resize the file tree by dragging its divider, collapse or expand it from the divider rail, and double-click an editor tab title to maximize or restore the editor area.
+- Resize the file tree by dragging its divider, and double-click an editor tab title to maximize or restore the editor area.
 - Recognize common file types in the sidebar through colored SF Symbols-based icons.
 - Preview common raster image files from the sidebar by double-clicking them.
 - Select files from compact full-width sidebar rows for easier clicking.
@@ -34,6 +34,7 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Open Terminal, copy active-file paths, and refresh Git status from the command palette.
 - Search and open project files quickly with Command-P.
 - Keep multiple files open in tabs, each with its own unsaved state.
+- Keep the first editor tab clear of macOS window controls when the file tree is collapsed or the editor is maximized.
 - Switch tabs with previous/next commands or Command-1 through Command-9.
 - Reopen the most recently closed tab with Command-Shift-T.
 - Open multiple windows, each with its own independent tab set and editor state.
@@ -57,6 +58,8 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Override syntax highlighting per editor tab from the editor context menu.
 - Extract language-aware document structure, including shallow HTML node outlines for title, h1-h5, div, list, and semantic layout elements.
 - Customize editor font, font size, line height, sidebar file-tree text size and line height, color style, line numbers, current-line focus highlighting, and inspector preferences from Settings with immediate refresh.
+- Choose a custom editor background image with opacity, fit mode, and size controls, while keeping sidebar chrome on the native window background.
+- Apply editor setting changes after the current SwiftUI update pass so preference changes avoid publishing-during-view-update warnings.
 - Optionally trim trailing whitespace and ensure a final newline on save.
 - Keep indentation flowing with newline auto-indent plus Tab and Shift-Tab line indentation.
 - Duplicate the current line with Command-D and move it with Option-Up/Option-Down.

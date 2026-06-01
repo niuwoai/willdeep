@@ -38,7 +38,6 @@ struct FileTreeView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Color(nsColor: .windowBackgroundColor))
-        .environment(\.defaultMinListRowHeight, CGFloat(max(18, appState.editorSettings.fileTreeFontSize + 6)))
         .onAppear {
             root.isExpanded = true
             root.loadChildren()
@@ -153,7 +152,11 @@ private struct FileNodeRow: View {
     }
 
     private var rowHeight: CGFloat {
-        CGFloat(max(18, appState.editorSettings.fileTreeFontSize + 6))
+        let fontSize = appState.editorSettings.fileTreeFontSize
+        let font = NSFont.systemFont(ofSize: CGFloat(fontSize))
+        let naturalLineHeight = Double(font.ascender - font.descender + font.leading)
+        let configuredHeight = naturalLineHeight * appState.editorSettings.fileTreeLineHeightMultiple
+        return CGFloat(ceil(max(configuredHeight, naturalLineHeight)))
     }
 
     private func toggleDirectory() {
