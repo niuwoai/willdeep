@@ -1000,7 +1000,7 @@ private struct SymbolJumpPanel: View {
                     ScrollViewReader { proxy in
                         ScrollView {
                             LazyVStack(spacing: 0) {
-                                ForEach(Array(symbols.enumerated()), id: \.element.id) { index, item in
+                                ForEach(Array(symbols.enumerated()), id: \.offset) { index, item in
                                     let isSelected = index == selectedIndex
 
                                     Button {
@@ -1033,7 +1033,7 @@ private struct SymbolJumpPanel: View {
                                     }
                                     .buttonStyle(.plain)
                                     .padding(.horizontal, 6)
-                                    .id(item.id)
+                                    .id(index)
                                     .onHover { isHovering in
                                         if isHovering {
                                             selectFromHover(at: index)
@@ -1123,8 +1123,12 @@ private struct SymbolJumpPanel: View {
 
     private func scrollSelectionIntoView(with proxy: ScrollViewProxy, index: Int) {
         guard symbols.indices.contains(index) else { return }
+        // Scroll by row index rather than by item id: `symbols` is recomputed on
+        // every body evaluation and each `EditorOutlineItem` gets a fresh UUID, so
+        // an id captured here would never match the id rendered in the list and
+        // the scroll would silently no-op.
         withAnimation(.easeOut(duration: 0.12)) {
-            proxy.scrollTo(symbols[index].id, anchor: .center)
+            proxy.scrollTo(index, anchor: .center)
         }
     }
 
