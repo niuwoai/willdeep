@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-01 | Current version: v1.32.0-rc18
+> Last updated: 2026-06-01 | Current version: v1.33.0-rc7
 
 ## Positioning
 
@@ -11,6 +11,7 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 ## Current Capabilities
 
 - Browse a selected folder through a native sidebar file tree.
+- Resize the file tree by dragging its divider, collapse or expand it from the divider rail, and double-click an editor tab title to maximize or restore the editor area.
 - Recognize common file types in the sidebar through colored SF Symbols-based icons.
 - Preview common raster image files from the sidebar by double-clicking them.
 - Select files from compact full-width sidebar rows for easier clicking.
@@ -25,9 +26,10 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Reveal the current file in Finder with Open Containing Folder.
 - Open bundled macOS Help from the system Help menu for core workflows and troubleshooting.
 - Install the `veilwriter` command line tool from Settings into `~/.local/bin` and open files or folders from Terminal.
-- Reopen recent files and folders from the empty sidebar state with readable sidebar spacing.
+- Start from a centered empty workspace view with open-file, open-folder, recent files, and recent folders grouped in the main editor area when no folder is open.
+- Show a focused no-file prompt without recent items when a folder tree is open but no editor tab is selected.
 - Keep temporary test and scratch paths out of recent files and folders.
-- Restore the last folder, open tabs, active tab, and a pinned-expanded root file tree on launch with security-scoped folder access.
+- Keep recent folders and files available as explicit launch choices instead of automatically restoring the previous workspace on startup.
 - Run common actions from the Command-Shift-P command palette with keyboard selection, highlighted rows, fuzzy matching, keyword lookup, and shortcut hints.
 - Open Terminal, copy active-file paths, and refresh Git status from the command palette.
 - Search and open project files quickly with Command-P.
@@ -54,7 +56,7 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Highlight Swift, Ruby, PHP, Java, JSON, JavaScript, TypeScript, Go, HTML, CSS, Markdown, Python, shell/bash, YAML, TOML, XML, SQL, Dockerfile, Makefile, INI, env, Rust, C, C++, and C# files.
 - Override syntax highlighting per editor tab from the editor context menu.
 - Extract language-aware document structure, including shallow HTML node outlines for title, h1-h5, div, list, and semantic layout elements.
-- Customize editor font, font size, line height, sidebar file-tree text size, color style, line numbers, current-line focus highlighting, and inspector preferences from Settings with immediate refresh.
+- Customize editor font, font size, line height, sidebar file-tree text size and line height, color style, line numbers, current-line focus highlighting, and inspector preferences from Settings with immediate refresh.
 - Optionally trim trailing whitespace and ensure a final newline on save.
 - Keep indentation flowing with newline auto-indent plus Tab and Shift-Tab line indentation.
 - Duplicate the current line with Command-D and move it with Option-Up/Option-Down.

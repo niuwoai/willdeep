@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.33.0-rc7 - 2026-06-01
+
+- Added a draggable file-tree divider with collapse and expand controls.
+- Added tab-title double-click editor maximization, hiding the file tree and inspector/minimap until the tab title is double-clicked again.
+
+## 1.33.0-rc6 - 2026-06-01
+
+- Removed the tinted icon tile from the no-folder empty workspace header so the folder icon no longer appears focused or selected.
+
+## 1.33.0-rc5 - 2026-06-01
+
+- Hid the full recent-files workspace when a folder tree is already open, replacing it with a focused no-file editor prompt.
+- Stopped automatically restoring the previous folder and open tabs on window launch; recent files and folders remain available as explicit choices.
+
+## 1.33.0-rc4 - 2026-06-01
+
+- Moved recent files and folders into the centered empty workspace view and collapsed the sidebar when no folder is open.
+
+## 1.33.0-rc3 - 2026-06-01
+
+- Moved the no-folder empty state into the main editor area with a larger centered welcome layout and primary open actions, leaving the sidebar for recent files and folders only.
+
+## 1.33.0-rc2 - 2026-06-01
+
+- Restored the standard macOS close, minimize, and zoom window buttons while keeping the hidden-titlebar editor layout.
+
+## 1.33.0-rc1 - 2026-06-01
+
+- Added a File Tree line-height setting in Settings > Sidebar. The file tree now uses the configured row-height multiple directly, with a default of 1.25x.
+
 ## 1.32.0-rc18 - 2026-06-01
 
 - Added left padding to the custom file tree content so root and child rows no longer sit flush against the rounded window edge.

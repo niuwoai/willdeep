@@ -226,9 +226,7 @@ private struct WindowRootView: View {
                 if !didHandleInitialExternalURL, let initialExternalURL {
                     didHandleInitialExternalURL = true
                     appState.openExternalURL(initialExternalURL)
-                    return
                 }
-                appState.restoreSessionIfAvailable()
             }
     }
 }
