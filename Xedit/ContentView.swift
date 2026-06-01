@@ -30,12 +30,16 @@ struct ContentView: View {
         ZStack {
             WorkspaceWindowBackground()
 
-            HStack(spacing: 0) {
-                sidebar
-                sidebarControl
+            if appState.appMode == .agent {
+                AgentModeView()
+            } else {
+                HStack(spacing: 0) {
+                    sidebar
+                    sidebarControl
 
-                detail
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    detail
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
 
         }

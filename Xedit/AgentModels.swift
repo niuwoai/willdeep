@@ -7,11 +7,35 @@
 
 import Foundation
 
+enum AppMode: String, Codable {
+    case editor
+    case agent
+}
+
 enum AgentRole: String, Codable {
     case system
     case user
     case assistant
     case tool
+}
+
+/// A user-attached image, encoded inline so it round-trips through session
+/// JSON without a separate blob store. `dataBase64` is the raw image bytes
+/// base64-encoded (no `data:` prefix); `mimeType` is e.g. `image/png`.
+struct AgentImageAttachment: Codable, Equatable, Identifiable {
+    let id: UUID
+    let mimeType: String
+    let dataBase64: String
+
+    init(id: UUID = UUID(), mimeType: String, dataBase64: String) {
+        self.id = id
+        self.mimeType = mimeType
+        self.dataBase64 = dataBase64
+    }
+
+    var dataURL: String {
+        "data:\(mimeType);base64,\(dataBase64)"
+    }
 }
 
 /// Tool call emitted by the assistant in an OpenAI function-calling response.
@@ -27,6 +51,8 @@ struct AgentMessage: Identifiable, Codable, Equatable {
     let id: UUID
     let role: AgentRole
     var content: String
+    /// User-attached images, only meaningful for `role == .user`.
+    var images: [AgentImageAttachment]
     var toolCalls: [AgentMessageToolCall]
     /// When `role == .tool`, the external id of the assistant tool_call this
     /// message answers.
@@ -37,6 +63,7 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         id: UUID = UUID(),
         role: AgentRole,
         content: String,
+        images: [AgentImageAttachment] = [],
         toolCalls: [AgentMessageToolCall] = [],
         toolCallID: String? = nil,
         createdAt: Date = Date()
@@ -44,9 +71,74 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         self.id = id
         self.role = role
         self.content = content
+        self.images = images
         self.toolCalls = toolCalls
         self.toolCallID = toolCallID
         self.createdAt = createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        role = try container.decode(AgentRole.self, forKey: .role)
+        content = try container.decode(String.self, forKey: .content)
+        images = try container.decodeIfPresent([AgentImageAttachment].self, forKey: .images) ?? []
+        toolCalls = try container.decodeIfPresent([AgentMessageToolCall].self, forKey: .toolCalls) ?? []
+        toolCallID = try container.decodeIfPresent(String.self, forKey: .toolCallID)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+    }
+}
+
+/// A message the user queued while the agent was busy. Consumed FIFO
+/// once the current response completes (or is stopped).
+struct AgentQueuedMessage: Identifiable, Equatable {
+    let id: UUID
+    var text: String
+    var images: [AgentImageAttachment]
+
+    init(id: UUID = UUID(), text: String, images: [AgentImageAttachment] = []) {
+        self.id = id
+        self.text = text
+        self.images = images
+    }
+}
+
+/// A persisted Agent conversation. Lives as one JSON file under the app's
+/// Application Support directory. `workspaceRootPath` is used to group
+/// sessions by project in the Agent-mode sidebar.
+struct AgentSession: Identifiable, Codable, Equatable {
+    let id: UUID
+    var title: String
+    /// Optional — sessions started before a folder was picked have no root.
+    var workspaceRootPath: String?
+    /// Model id captured at the time the session was last sent (so changing
+    /// the global model later doesn't silently switch what an old chat used).
+    var modelID: String?
+    let createdAt: Date
+    var updatedAt: Date
+    var messages: [AgentMessage]
+
+    init(
+        id: UUID = UUID(),
+        title: String = "New Chat",
+        workspaceRootPath: String? = nil,
+        modelID: String? = nil,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date(),
+        messages: [AgentMessage] = []
+    ) {
+        self.id = id
+        self.title = title
+        self.workspaceRootPath = workspaceRootPath
+        self.modelID = modelID
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.messages = messages
+    }
+
+    var workspaceName: String {
+        guard let path = workspaceRootPath, !path.isEmpty else { return "No workspace" }
+        return URL(fileURLWithPath: path).lastPathComponent
     }
 }
 

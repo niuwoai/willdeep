@@ -176,7 +176,7 @@ struct AgentPanelView: View {
     }
 }
 
-private struct AgentToolCallCard: View {
+struct AgentToolCallCard: View {
     @EnvironmentObject var appState: AppState
     let call: AgentToolCall
     @State private var isExpanded = false
@@ -364,7 +364,7 @@ private struct AgentToolCallCard: View {
     }
 }
 
-private struct AgentPatchProposalCard: View {
+struct AgentPatchProposalCard: View {
     @EnvironmentObject var appState: AppState
     let proposal: AgentPatchProposal
     @State private var isExpanded = false
@@ -478,7 +478,7 @@ private struct AgentEmptyState: View {
     }
 }
 
-private struct AgentMessageBubble: View {
+struct AgentMessageBubble: View {
     let message: AgentMessage
 
     var body: some View {
@@ -490,6 +490,15 @@ private struct AgentMessageBubble: View {
                 .font(.system(size: 13))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            if !message.images.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(message.images) { image in
+                            AgentImageThumbnail(image: image, size: 96, allowsRemoval: false, onRemove: nil)
+                        }
+                    }
+                }
+            }
         }
         .padding(9)
         .background(backgroundColor)
@@ -500,6 +509,9 @@ private struct AgentMessageBubble: View {
         if message.content.isEmpty {
             if !message.toolCalls.isEmpty {
                 return "Using tools…"
+            }
+            if !message.images.isEmpty {
+                return ""
             }
             return "…"
         }

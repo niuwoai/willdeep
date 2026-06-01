@@ -153,6 +153,11 @@ struct VeilWriterApp: App {
                     appState?.toggleAgentPanel()
                 }
                 .keyboardShortcut("a", modifiers: [.command, .option])
+
+                Button(appState?.appMode == .agent ? "Switch to Editor Mode" : "Switch to Agent Mode") {
+                    appState?.toggleAppMode()
+                }
+                .keyboardShortcut("a", modifiers: [.command, .shift])
             }
 
             CommandGroup(before: .windowArrangement) {

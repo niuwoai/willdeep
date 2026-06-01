@@ -10,8 +10,21 @@ import Security
 
 enum AgentSettingsStore {
     private static let defaultsKey = "im.some.veilwriter.agentSettings.v1"
+    private static let knownModelsKey = "im.some.veilwriter.agentSettings.knownModels.v1"
     private static let keychainService = "im.some.veilwriter.agent"
     private static let keychainAccount = "openai-compatible-api-key"
+
+    /// Recently-fetched model IDs from any provider's `/models` endpoint.
+    /// Surfaced in the Agent-mode model picker as a quick switcher.
+    static func loadKnownModelIDs() -> [String] {
+        (UserDefaults.standard.stringArray(forKey: knownModelsKey) ?? [])
+            .filter { !$0.isEmpty }
+    }
+
+    static func saveKnownModelIDs(_ ids: [String]) {
+        let cleaned = Array(Set(ids.filter { !$0.isEmpty })).sorted()
+        UserDefaults.standard.set(cleaned, forKey: knownModelsKey)
+    }
 
     private struct StoredSettings: Codable {
         var providerID: String?

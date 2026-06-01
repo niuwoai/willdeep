@@ -186,11 +186,26 @@ struct AgentClient {
 
     private static func encodeMessage(_ message: AgentMessage) -> [String: Any] {
         var dict: [String: Any] = ["role": message.role.rawValue]
-        if !message.content.isEmpty {
+
+        if message.role == .user, !message.images.isEmpty {
+            // OpenAI multimodal: content is an array of typed parts.
+            var parts: [[String: Any]] = []
+            if !message.content.isEmpty {
+                parts.append(["type": "text", "text": message.content])
+            }
+            for image in message.images {
+                parts.append([
+                    "type": "image_url",
+                    "image_url": ["url": image.dataURL]
+                ])
+            }
+            dict["content"] = parts
+        } else if !message.content.isEmpty {
             dict["content"] = message.content
         } else if message.role != .assistant {
             dict["content"] = ""
         }
+
         if message.role == .tool, let id = message.toolCallID {
             dict["tool_call_id"] = id
         }

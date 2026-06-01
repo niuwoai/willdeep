@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-02 | Current version: v1.38.0-rc1
+> Last updated: 2026-06-02 | Current version: v1.39.0-rc1
 
 ## Positioning
 
@@ -51,6 +51,10 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Fetch Agent model IDs from provider `/models` endpoints and choose a returned model directly in Settings. API keys remain stored in Keychain.
 - Review Agent-generated unified diff proposals in the Agent panel, then apply or reject them explicitly. Accepted patches are limited to existing files inside the current workspace and update open tabs plus Git status.
 - Let the Agent call built-in workspace tools (`search_files`, `grep_files`, `read_file`, `list_directory`, `git_status`, `run_command`) via OpenAI function-calling. `search_files` does literal text matching while `grep_files` supports full regular expressions plus an optional filename `include` glob (e.g. `*.swift`). Read-only tools run automatically; `run_command` requires per-call Allow/Deny approval; destructive commands additionally require typing `confirm` before running.
+- Switch the window into a dedicated Agent mode (Cmd+Shift+A) with a project-grouped session sidebar on the left and a wide chat pane on the right. Sessions persist as JSON under `~/Library/Application Support/VeilWriter/agent-sessions/` and are grouped by workspace.
+- Paste, drag-drop, or attach images directly in the Agent composer; staged images appear as removable thumbnails and are sent inline as base64 `image_url` content parts in the multimodal request body.
+- Queue follow-up messages while the agent is responding — additional sends become "Queued" bubbles that auto-fire when the current turn ends. Stop the current response without dropping the queue; Clear Queue removes them explicitly.
+- See the estimated context-window utilization in the chat header (≈ remaining tokens / model window) using a chars/4 token heuristic plus per-image budget. Switch the model for the active session from a picker fed by previously fetched model IDs.
 - Preview Markdown and HTML beside the editor with richer lightweight block rendering for headings, lists, quotes, dividers, code, and common HTML content nodes.
 - Read current file state from a compact status bar with cursor position, language, file size, and version.
 - Reload when the active file has changed on disk outside VeilWriter.

@@ -83,6 +83,25 @@ final class AppState: ObservableObject {
     @Published var agentInput = ""
     @Published var isAgentResponding = false
     @Published var agentErrorMessage: String?
+    /// Images staged in the composer for the next user message.
+    @Published var agentPendingImages: [AgentImageAttachment] = []
+    /// Messages the user queued while the agent was busy. Each entry is a
+    /// snapshot of text + images, consumed FIFO once the current turn ends.
+    @Published var agentQueuedMessages: [AgentQueuedMessage] = []
+    /// Per-session model override. If non-nil, takes precedence over
+    /// `agentConfiguration.model` for the active Agent-mode session.
+    @Published var agentSessionModelOverride: String?
+    /// Model IDs the user has previously fetched in Settings — surfaced in
+    /// the Agent-mode model picker as a quick switcher.
+    @Published var agentKnownModelIDs: [String] = []
+    /// Persisted Agent-mode chat sessions, newest-updated first.
+    @Published private(set) var agentSessions: [AgentSession] = []
+    /// Active Agent-mode session id. nil means "scratch" — Editor-mode
+    /// chat keeps working without forcing a session to exist.
+    @Published var activeAgentSessionID: AgentSession.ID?
+    /// Top-level UI mode. Editor is the classic file editor; agent hides
+    /// the editor and shows the conversation-first layout.
+    @Published var appMode: AppMode = .editor
     /// Continuation resumed when the user resolves (approve/deny/confirm) the
     /// currently-blocked tool call. Internal to the agent loop.
     private var agentToolDecisionWaiter: CheckedContinuation<AgentToolDecision, Never>?
@@ -143,6 +162,8 @@ final class AppState: ObservableObject {
                 guard self.editorSettings != normalizedSettings else { return }
                 self.editorSettings = normalizedSettings
             }
+        self.agentSessions = AgentSessionStore.loadAll()
+        self.agentKnownModelIDs = AgentSettingsStore.loadKnownModelIDs()
     }
 
     deinit {
@@ -270,16 +291,54 @@ final class AppState: ObservableObject {
         self.selectedText = selectedText
     }
 
+    /// Submit the composer (text + staged images). If the agent is already
+    /// responding, the message is queued and consumed when the current turn
+    /// finishes. Editor-mode and Agent-mode share this entry point.
     func sendAgentMessage() {
         let prompt = agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !prompt.isEmpty, !isAgentResponding else { return }
+        let images = agentPendingImages
+        guard !prompt.isEmpty || !images.isEmpty else { return }
 
-        agentErrorMessage = nil
         agentInput = ""
+        agentPendingImages = []
+
+        if isAgentResponding {
+            agentQueuedMessages.append(AgentQueuedMessage(text: prompt, images: images))
+            return
+        }
+
+        dispatchAgentMessage(text: prompt, images: images)
+    }
+
+    /// Cancel the in-flight response (if any). Queued messages are kept and
+    /// the next one is dispatched automatically. Use `clearAgentQueue` to
+    /// drop them explicitly.
+    func stopAgentResponse() {
+        guard isAgentResponding else { return }
+        agentRequestTask?.cancel()
+        // The loop's defer clears `isAgentResponding` and triggers
+        // `consumeNextQueuedMessageIfNeeded()`.
+    }
+
+    func clearAgentQueue() {
+        agentQueuedMessages.removeAll()
+    }
+
+    func addAgentImage(data: Data, mimeType: String) {
+        let attachment = AgentImageAttachment(mimeType: mimeType, dataBase64: data.base64EncodedString())
+        agentPendingImages.append(attachment)
+    }
+
+    func removeAgentImage(id: AgentImageAttachment.ID) {
+        agentPendingImages.removeAll { $0.id == id }
+    }
+
+    private func dispatchAgentMessage(text: String, images: [AgentImageAttachment]) {
+        agentErrorMessage = nil
         isAgentResponding = true
 
-        agentMessages.append(AgentMessage(role: .user, content: prompt))
-        let configuration = agentConfiguration
+        agentMessages.append(AgentMessage(role: .user, content: text, images: images))
+        let configuration = configurationForCurrentTurn()
 
         agentRequestTask?.cancel()
         agentRequestTask = Task { [weak self] in
@@ -287,15 +346,201 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Resolve the configuration to use for this turn. Honours the per-
+    /// session `agentSessionModelOverride` if one is set; falls back to the
+    /// global Settings model.
+    private func configurationForCurrentTurn() -> AgentConfiguration {
+        var configuration = agentConfiguration
+        if let override = agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !override.isEmpty {
+            configuration.model = override
+        }
+        return configuration.normalized
+    }
+
+    private func consumeNextQueuedMessageIfNeeded() {
+        guard !isAgentResponding, let next = agentQueuedMessages.first else { return }
+        agentQueuedMessages.removeFirst()
+        dispatchAgentMessage(text: next.text, images: next.images)
+    }
+
     func clearAgentConversation() {
         agentRequestTask?.cancel()
         agentMessages.removeAll()
         agentPatchProposals.removeAll()
         agentToolCalls.removeAll()
+        agentQueuedMessages.removeAll()
+        agentPendingImages.removeAll()
         agentErrorMessage = nil
         agentToolDecisionWaiter?.resume(returning: .denied(reason: "Conversation cleared"))
         agentToolDecisionWaiter = nil
         isAgentResponding = false
+        persistActiveAgentSession()
+    }
+
+    // MARK: - Agent mode + sessions
+
+    func setAppMode(_ mode: AppMode) {
+        guard appMode != mode else { return }
+        appMode = mode
+        if mode == .agent, activeAgentSessionID == nil {
+            // Drop any stale Editor-mode chat state when first entering
+            // Agent mode so the user lands on an empty New Chat.
+            agentRequestTask?.cancel()
+            agentMessages = []
+            agentPatchProposals = []
+            agentToolCalls = []
+            agentQueuedMessages = []
+            agentPendingImages = []
+            agentErrorMessage = nil
+            isAgentResponding = false
+            startNewAgentSession()
+        }
+    }
+
+    func toggleAppMode() {
+        setAppMode(appMode == .agent ? .editor : .agent)
+    }
+
+    @discardableResult
+    func startNewAgentSession() -> AgentSession {
+        agentRequestTask?.cancel()
+        agentMessages = []
+        agentPatchProposals = []
+        agentToolCalls = []
+        agentQueuedMessages = []
+        agentPendingImages = []
+        agentErrorMessage = nil
+        agentToolDecisionWaiter?.resume(returning: .denied(reason: "Session switched"))
+        agentToolDecisionWaiter = nil
+        isAgentResponding = false
+        agentSessionModelOverride = nil
+
+        let session = AgentSession(
+            workspaceRootPath: rootDirectory?.standardizedFileURL.path,
+            modelID: agentConfiguration.model
+        )
+        agentSessions.insert(session, at: 0)
+        activeAgentSessionID = session.id
+        AgentSessionStore.save(session)
+        return session
+    }
+
+    func selectAgentSession(id: AgentSession.ID) {
+        guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
+        // Save the outgoing session first.
+        persistActiveAgentSession()
+
+        agentRequestTask?.cancel()
+        agentToolDecisionWaiter?.resume(returning: .denied(reason: "Session switched"))
+        agentToolDecisionWaiter = nil
+        isAgentResponding = false
+
+        let session = agentSessions[index]
+        activeAgentSessionID = session.id
+        agentMessages = session.messages
+        agentSessionModelOverride = session.modelID == agentConfiguration.model ? nil : session.modelID
+        agentPatchProposals = []
+        agentToolCalls = []
+        agentQueuedMessages = []
+        agentPendingImages = []
+        agentErrorMessage = nil
+    }
+
+    func deleteAgentSession(id: AgentSession.ID) {
+        AgentSessionStore.delete(id: id)
+        agentSessions.removeAll { $0.id == id }
+        if activeAgentSessionID == id {
+            activeAgentSessionID = nil
+            agentMessages = []
+            agentPatchProposals = []
+            agentToolCalls = []
+            agentQueuedMessages = []
+            agentPendingImages = []
+            agentErrorMessage = nil
+        }
+    }
+
+    /// Write the active session back to disk. No-op if no session is
+    /// active (Editor-mode chats aren't persisted).
+    func persistActiveAgentSession() {
+        guard let id = activeAgentSessionID,
+              let index = agentSessions.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        var session = agentSessions[index]
+        session.messages = agentMessages
+        session.updatedAt = Date()
+        session.title = AgentSessionStore.deriveTitle(from: agentMessages)
+        if let override = agentSessionModelOverride, !override.isEmpty {
+            session.modelID = override
+        } else {
+            session.modelID = agentConfiguration.model
+        }
+        agentSessions[index] = session
+        // Bubble most-recently-updated to the top.
+        agentSessions.sort { $0.updatedAt > $1.updatedAt }
+        AgentSessionStore.save(session)
+    }
+
+    func recordFetchedAgentModels(_ ids: [String]) {
+        let merged = Array(Set(agentKnownModelIDs + ids))
+            .filter { !$0.isEmpty }
+            .sorted()
+        agentKnownModelIDs = merged
+        AgentSettingsStore.saveKnownModelIDs(merged)
+    }
+
+    func setAgentSessionModel(_ model: String?) {
+        let trimmed = model?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmed, !trimmed.isEmpty {
+            agentSessionModelOverride = trimmed
+            recordFetchedAgentModels([trimmed])
+        } else {
+            agentSessionModelOverride = nil
+        }
+        persistActiveAgentSession()
+    }
+
+    /// Best-effort token count for the messages currently in the
+    /// conversation. Uses a chars/4 rule of thumb plus a flat per-image
+    /// budget — accurate enough to drive the "context remaining" UI.
+    var estimatedAgentTokens: Int {
+        var total = 0
+        for message in agentMessages {
+            total += max(1, message.content.count / 4)
+            // Each image roughly equates to a 256x256 tile budget in the
+            // OpenAI and Claude vision pricing models — call it 600 tokens.
+            total += message.images.count * 600
+            for call in message.toolCalls {
+                total += call.argumentsJSON.count / 4
+            }
+        }
+        // System prompt is a small constant; pad 500 tokens.
+        total += 500
+        return total
+    }
+
+    /// Heuristic context-window budget for the active model. Falls back to
+    /// 8k for unknown models so the indicator stays informative without
+    /// over-promising.
+    var agentContextWindow: Int {
+        let model = (agentSessionModelOverride ?? agentConfiguration.model).lowercased()
+        // Substring match — vendors include variants like `-32k`, `-128k` in the id.
+        if model.contains("1m") || model.contains("-1m") { return 1_000_000 }
+        if model.contains("200k") { return 200_000 }
+        if model.contains("128k") || model.contains("-128k") { return 128_000 }
+        if model.contains("64k") { return 64_000 }
+        if model.contains("32k") { return 32_000 }
+        if model.contains("16k") { return 16_000 }
+        // Known family defaults.
+        if model.contains("gpt-4.1") || model.contains("gpt-4o") || model.contains("o1") || model.contains("o3") { return 128_000 }
+        if model.contains("claude") { return 200_000 }
+        if model.contains("deepseek") { return 64_000 }
+        if model.contains("qwen") || model.contains("dashscope") { return 32_000 }
+        if model.contains("kimi") || model.contains("moonshot") { return 128_000 }
+        if model.contains("gpt-3.5") { return 16_000 }
+        return 8_000
     }
 
     func approveAgentToolCall(id: AgentToolCall.ID) {
@@ -334,6 +579,8 @@ final class AppState: ObservableObject {
         defer {
             self.isAgentResponding = false
             self.agentRequestTask = nil
+            self.persistActiveAgentSession()
+            self.consumeNextQueuedMessageIfNeeded()
         }
 
         let maxTurns = 6

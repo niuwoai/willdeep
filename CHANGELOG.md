@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.39.0-rc1 - 2026-06-02
+
+- Added a dedicated Agent mode (View > Switch to Agent Mode, Cmd+Shift+A) with a project-grouped chat sidebar on the left and a wide chat pane on the right. The editor is hidden in this mode.
+- Added persistent Agent chat sessions: each conversation lives as a JSON file under `~/Library/Application Support/VeilWriter/agent-sessions/`. Sessions are grouped by workspace folder in the sidebar with collapsible sections and right-click "Delete Chat".
+- Added image attachments to the Agent composer: paste from clipboard, drag-and-drop, or pick via "Attach Image". Multiple images can be staged with removable thumbnails and are sent inline as OpenAI multimodal `image_url` parts.
+- Added a per-session model picker (fed from previously fetched model IDs in Settings) so individual chats can use a different model than the global default.
+- Added an estimated context-window indicator in the chat header (`≈ N left / window`) using a chars/4 token heuristic plus a flat per-image budget, with a model-aware fallback table covering OpenAI, Claude, DeepSeek, Qwen, and Kimi/Moonshot families.
+- Added a message queue: sending while the agent is responding queues the new message as a dim "Queued" bubble that fires automatically when the current turn ends. Stop cancels just the current turn; Clear Queue drops pending messages.
+- Added a Stop button that cancels the in-flight response and tool execution loop without dropping queued messages; the next queued message dispatches automatically.
+
 ## 1.38.0-rc1 - 2026-06-02
 
 - Added a sixth Agent tool, `grep_files`, that searches the workspace using ICU/NSRegularExpression patterns and supports an optional `include` filename glob (`*.swift`, `*.{ts,tsx}`, etc.) and a `case_sensitive` flag. `search_files` keeps doing literal text matching for cases where regex is overkill.
