@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.40.0-rc3 - 2026-06-02
+
+- Fixed the Agent Settings API Key (and Base URL / Model) field clearing while typing. The fields now use local `@State` buffers and only commit to `agentConfiguration` when the new Save button is pressed (⌘↩). Provider preset switches refresh the buffers automatically; external writes (like Fetch Models picking a default) only overwrite the buffer when it currently matches what was last saved, so in-flight typing is never clobbered.
+- Extended the `ask_user` tool with optional `options: string[]` and `multi_select: boolean` parameters. When `options` is provided the card shows clickable choice buttons (single-select) or checkboxes + Confirm (multi-select); the free-form text input stays available as an escape hatch. Returned answer is the chosen option, comma-separated list (for multi-select), or the typed text if non-empty.
+- Added `boolValue()` and `stringArrayValue()` helpers on `AgentJSONValue`, and a new `stringArray` JSON-schema parameter type that emits `{"type": "array", "items": {"type": "string"}}` to the provider.
+- Fetched models from Settings now also flow into `agentKnownModelIDs`, so the Agent-mode model picker pill sees them immediately.
+- Fixed a potential Agent `run_command` deadlock by draining stdout and stderr while the subprocess is still running, then enforcing timeout termination with a short SIGKILL fallback.
+- Skipped common generated dependency/build directories during Agent file search and Quick Open scans so large projects do not spend time walking `node_modules`, `.git`, `DerivedData`, `dist`, and similar trees.
+- Capped Quick Open cache candidate collection before sorting, preventing very large workspaces from monopolizing a background worker.
+- Added regression tests for large command output draining, Quick Open dependency-directory skipping, and `ask_user` option metadata.
+
 ## 1.40.0-rc2 - 2026-06-02
 
 - Made context compression automatic. `runAgentLoop`'s defer now calls a new `maybeAutoCompressContext()` that fires `compressAgentContext()` whenever the estimated context usage crosses 75% (and the conversation has more than 6 messages, and nothing else is in flight). The status bar continues to show only a `Compressing…` spinner — no popups, no extra prompt for the user.

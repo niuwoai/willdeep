@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-02 | Current version: v1.40.0-rc2
+> Last updated: 2026-06-02 | Current version: v1.40.0-rc3
 
 ## Positioning
 
@@ -50,7 +50,7 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Configure Agent providers from a tabbed Settings window, with built-in OpenAI-compatible presets for OpenAI, DashScope, DeepSeek, Kimi, Moonshot, Claude, and custom endpoints.
 - Fetch Agent model IDs from provider `/models` endpoints and choose a returned model directly in Settings. API keys remain stored in Keychain.
 - Review Agent-generated unified diff proposals in the Agent panel, then apply or reject them explicitly. Accepted patches are limited to existing files inside the current workspace and update open tabs plus Git status.
-- Let the Agent call built-in workspace tools (`search_files`, `grep_files`, `read_file`, `list_directory`, `git_status`, `run_command`, `ask_user`) via OpenAI function-calling. `search_files` does literal text matching while `grep_files` supports full regular expressions plus an optional filename `include` glob (e.g. `*.swift`). Read-only tools run automatically; `run_command` requires per-call Allow/Deny approval; destructive commands additionally require typing `confirm` before running. `ask_user` lets the agent pause mid-turn and ask the user a clarifying question, then continue with their typed answer.
+- Let the Agent call built-in workspace tools (`search_files`, `grep_files`, `read_file`, `list_directory`, `git_status`, `run_command`, `ask_user`) via OpenAI function-calling. `search_files` does literal text matching while `grep_files` supports full regular expressions plus an optional filename `include` glob (e.g. `*.swift`). Read-only tools run automatically; `run_command` requires per-call Allow/Deny approval; destructive commands additionally require typing `confirm` before running. `ask_user` lets the agent pause mid-turn and ask the user a clarifying question; when the answer is one of a small known set the model can pass `options` so the card renders clickable choice buttons (or checkboxes for `multi_select`), with a free-form text input still available as an escape hatch.
 - Switch the window into a dedicated Agent mode (Cmd+Shift+A) with a project-grouped session sidebar on the left and a wide chat pane on the right. Sessions persist as JSON under `~/Library/Application Support/VeilWriter/agent-sessions/` and are grouped by workspace.
 - Paste, drag-drop, or attach images directly in the Agent composer; staged images appear as removable thumbnails and are sent inline as base64 `image_url` content parts in the multimodal request body.
 - Queue follow-up messages while the agent is responding — additional sends become "Queued" bubbles that auto-fire when the current turn ends. Stop the current response without dropping the queue; Clear Queue removes them explicitly.
@@ -81,6 +81,7 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 ## Performance Direction
 
 - Keep file IO off the main thread.
+- Skip generated dependency/build directories during project-wide scans, and cap Quick Open candidate collection so huge workspaces remain responsive.
 - Apply completed file loads back on the main thread and target the tab that requested the load.
 - Force the editor view to re-render after tab activation or closure so syntax highlighting remains visible.
 - Expand and load the restored project root as soon as the sidebar tree appears.

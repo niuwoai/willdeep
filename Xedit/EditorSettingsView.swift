@@ -18,6 +18,18 @@ struct EditorSettingsView: View {
     @State private var isFetchingAgentModels = false
     @State private var agentModelFetchMessage = ""
 
+    // Local buffers for the Agent settings text fields. The previous
+    // implementation bound directly to `appState.agentConfiguration`,
+    // which sent every keystroke through the @Published didSet →
+    // Keychain → normalize round-trip. Under macOS 26 SwiftUI that loop
+    // sometimes clears the SecureField mid-type. Keeping the in-flight
+    // text local means typing is purely a @State mutation; an explicit
+    // Save button is the only commit point.
+    @State private var agentBaseURLBuffer: String = ""
+    @State private var agentModelBuffer: String = ""
+    @State private var agentAPIKeyBuffer: String = ""
+    @State private var agentSaveStatus: String = ""
+
     var body: some View {
         TabView {
             typographySettings
@@ -238,16 +250,16 @@ struct EditorSettingsView: View {
                     }
                 }
 
-                TextField("Base URL", text: agentBaseURLBinding)
+                TextField("Base URL", text: $agentBaseURLBuffer)
                     .textFieldStyle(.roundedBorder)
 
                 LabeledContent("Model") {
                     HStack {
-                        TextField("Model", text: agentSetting(\.model))
+                        TextField("Model", text: $agentModelBuffer)
                             .textFieldStyle(.roundedBorder)
 
                         if !fetchedAgentModels.isEmpty {
-                            Picker("Fetched Models", selection: agentSetting(\.model)) {
+                            Picker("Fetched Models", selection: $agentModelBuffer) {
                                 ForEach(fetchedAgentModels, id: \.self) { model in
                                     Text(model).tag(model)
                                 }
@@ -258,16 +270,33 @@ struct EditorSettingsView: View {
                     }
                 }
 
-                SecureField("API Key", text: agentSetting(\.apiKey))
+                SecureField("API Key", text: $agentAPIKeyBuffer)
                     .textFieldStyle(.roundedBorder)
 
                 HStack {
+                    Button("Save") {
+                        commitAgentBuffers()
+                    }
+                    .disabled(!agentBuffersDiffer)
+                    .keyboardShortcut(.return, modifiers: [.command])
+
+                    Button("Revert") {
+                        loadAgentBuffersFromAppState()
+                        agentSaveStatus = ""
+                    }
+                    .disabled(!agentBuffersDiffer)
+
                     Button(isFetchingAgentModels ? "Fetching..." : "Fetch Models") {
                         fetchAgentModels()
                     }
                     .disabled(isFetchingAgentModels)
 
-                    if !agentModelFetchMessage.isEmpty {
+                    if !agentSaveStatus.isEmpty {
+                        Text(agentSaveStatus)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    } else if !agentModelFetchMessage.isEmpty {
                         Text(agentModelFetchMessage)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -275,12 +304,55 @@ struct EditorSettingsView: View {
                     }
                 }
 
-                Text("Uses OpenAI-compatible chat completions and models APIs where providers support them. The API key is stored in Keychain.")
+                Text("Keystrokes stay local until you press Save (⌘↩). The API key is stored in Keychain.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+        .onAppear {
+            loadAgentBuffersFromAppState()
+        }
+        .onChange(of: appState.agentConfiguration) { _, _ in
+            // External writes (e.g. fetchModels picking a default) should
+            // refresh the buffers — but only when they currently match
+            // what we last saved, so the user's in-flight typing isn't
+            // clobbered.
+            if !agentBuffersDiffer {
+                loadAgentBuffersFromAppState()
+            }
+        }
+    }
+
+    private var agentBuffersDiffer: Bool {
+        let configuration = appState.agentConfiguration
+        return agentBaseURLBuffer != configuration.baseURL
+            || agentModelBuffer != configuration.model
+            || agentAPIKeyBuffer != configuration.apiKey
+    }
+
+    private func loadAgentBuffersFromAppState() {
+        let configuration = appState.agentConfiguration
+        agentBaseURLBuffer = configuration.baseURL
+        agentModelBuffer = configuration.model
+        agentAPIKeyBuffer = configuration.apiKey
+    }
+
+    private func commitAgentBuffers() {
+        var configuration = appState.agentConfiguration
+        configuration.baseURL = agentBaseURLBuffer
+        configuration.model = agentModelBuffer
+        configuration.apiKey = agentAPIKeyBuffer
+        appState.agentConfiguration = configuration.normalized
+        // Reflect any normalization (trim, fallback baseURL) back into
+        // the buffer so the user sees what was actually saved.
+        loadAgentBuffersFromAppState()
+        agentSaveStatus = "Saved."
+        // Clear the status after a beat so it doesn't linger forever.
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            if agentSaveStatus == "Saved." { agentSaveStatus = "" }
+        }
     }
 
     private var toolsSettings: some View {
@@ -408,15 +480,14 @@ struct EditorSettingsView: View {
                 switch result {
                 case .success(let models):
                     fetchedAgentModels = models
+                    appState.recordFetchedAgentModels(models)
                     if models.isEmpty {
                         agentModelFetchMessage = "No models returned."
                     } else {
                         agentModelFetchMessage = "Fetched \(models.count) models."
-                        if appState.agentConfiguration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                        if agentModelBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                            let firstModel = models.first {
-                            var next = appState.agentConfiguration
-                            next.model = firstModel
-                            appState.agentConfiguration = next.normalized
+                            agentModelBuffer = firstModel
                         }
                     }
                 case .failure(let error):
@@ -451,6 +522,11 @@ struct EditorSettingsView: View {
                preset.id != AgentProviderPreset.customID {
                 configuration.baseURL = preset.baseURL
                 configuration.model = preset.defaultModel
+                // Reflect the preset in the live buffers so the user
+                // doesn't have to click Save just to make the picker
+                // visibly take effect.
+                agentBaseURLBuffer = preset.baseURL
+                agentModelBuffer = preset.defaultModel
             }
             fetchedAgentModels = []
             agentModelFetchMessage = ""
@@ -458,28 +534,6 @@ struct EditorSettingsView: View {
         }
     }
 
-    private var agentBaseURLBinding: Binding<String> {
-        Binding {
-            appState.agentConfiguration.baseURL
-        } set: { baseURL in
-            var configuration = appState.agentConfiguration
-            configuration.baseURL = baseURL
-            configuration.providerID = AgentProviderPreset.matchingBaseURL(baseURL)?.id ?? AgentProviderPreset.customID
-            fetchedAgentModels = []
-            agentModelFetchMessage = ""
-            appState.agentConfiguration = configuration.normalized
-        }
-    }
-
-    private func agentSetting<Value>(_ keyPath: WritableKeyPath<AgentConfiguration, Value>) -> Binding<Value> {
-        Binding {
-            appState.agentConfiguration[keyPath: keyPath]
-        } set: { newValue in
-            var configuration = appState.agentConfiguration
-            configuration[keyPath: keyPath] = newValue
-            appState.agentConfiguration = configuration.normalized
-        }
-    }
 }
 
 private struct SettingsKeyboardShortcutHandler: NSViewRepresentable {

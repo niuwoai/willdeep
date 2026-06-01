@@ -35,7 +35,7 @@ enum AgentContextBuilder {
             Tools:
             - You can call tools to look around the workspace before answering: search_files, grep_files, read_file, list_directory, git_status, run_command.
             - Prefer the read-only tools first. They run automatically. run_command requires the user to approve each call; destructive commands additionally need typed confirmation.
-            - When something a user asked for is ambiguous or you're missing a required piece of information, call ask_user with a single concrete question instead of guessing. Do NOT call ask_user for things you can determine by reading files yourself.
+            - When something a user asked for is ambiguous or you're missing a required piece of information, call ask_user with a single concrete question instead of guessing. Do NOT call ask_user for things you can determine by reading files yourself. If the answer is one of a small known set, pass `options` so the user can click; set `multi_select` to true only when more than one option can legitimately apply at once.
             - Use workspace-relative paths in tool arguments.
             - After gathering enough context, stop calling tools and answer the user. For edits, still emit a ```diff block.
             """)

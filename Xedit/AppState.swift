@@ -1674,25 +1674,33 @@ final class AppState: ObservableObject {
         return urls
     }
 
-    static let quickOpenFileLimit = 1_500
+    nonisolated static let quickOpenFileLimit = 1_500
 
     nonisolated static func quickOpenFileURLs(in folder: URL, limit: Int = quickOpenFileLimit) -> [URL] {
         guard let enumerator = FileManager.default.enumerator(
             at: folder,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         ) else {
             return []
         }
 
         var urls: [URL] = []
+        let candidateLimit = max(limit * 4, limit)
         for case let url as URL in enumerator {
-            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey]),
-                  values.isRegularFile == true else {
+            guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey]) else {
                 continue
             }
+            if values.isDirectory == true {
+                if ProjectDirectoryExclusions.shouldSkip(url) {
+                    enumerator.skipDescendants()
+                }
+                continue
+            }
+            guard values.isRegularFile == true else { continue }
 
             urls.append(url)
+            if urls.count >= candidateLimit { break }
         }
 
         return urls

@@ -1491,6 +1491,46 @@ struct VeilWriterTests {
         #expect(forcePushRisk == .danger)
     }
 
+    @Test("run_command drains large output without hanging")
+    func testRunCommandDrainsLargeOutput() async throws {
+        let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("veilwriter_test_run_command_output_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let context = AgentToolContext(rootDirectory: workspace)
+        let result = try await AgentToolRunner.run(
+            name: "run_command",
+            arguments: [
+                "command": .string("/usr/bin/ruby -e 'STDOUT.write(\"x\" * 200000)'"),
+                "timeout_seconds": .number(5)
+            ],
+            context: context
+        )
+
+        #expect(result.summary.hasPrefix("exit 0"))
+        #expect(result.payload.contains("[truncated]"))
+    }
+
+    @Test("quick open skips dependency directories")
+    func testQuickOpenSkipsDependencyDirectories() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("veilwriter_quick_open_skip_\(UUID().uuidString)", isDirectory: true)
+        let nodeModules = tempDir.appendingPathComponent("node_modules", isDirectory: true)
+        try FileManager.default.createDirectory(at: nodeModules, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let source = tempDir.appendingPathComponent("App.swift")
+        let dependency = nodeModules.appendingPathComponent("dep.swift")
+        try "source".write(to: source, atomically: true, encoding: .utf8)
+        try "dependency".write(to: dependency, atomically: true, encoding: .utf8)
+
+        let urls = AppState.quickOpenFileURLs(in: tempDir)
+
+        #expect(urls.map(\.lastPathComponent).contains("App.swift"))
+        #expect(!urls.map(\.lastPathComponent).contains("dep.swift"))
+    }
+
     @Test("shouldAutoCompressNow flips true once estimated context usage crosses 75%")
     @MainActor
     func testShouldAutoCompressTriggersAt75Percent() {
@@ -1544,6 +1584,34 @@ struct VeilWriterTests {
             arguments: ["question": .string("What port should the server bind to?")]
         )
         #expect(risk == .userInput)
+    }
+
+    @Test("ask_user exposes optional options and multi_select parameters")
+    func testAskUserExposesChoiceParameters() {
+        let descriptor = AgentToolRegistry.descriptor(for: "ask_user")
+        let options = descriptor?.parameters.first { $0.name == "options" }
+        let multi = descriptor?.parameters.first { $0.name == "multi_select" }
+
+        #expect(options?.type == .stringArray)
+        #expect(options?.required == false)
+        #expect(multi?.type == .boolean)
+        #expect(multi?.required == false)
+    }
+
+    @Test("AgentJSONValue stringArrayValue and boolValue work")
+    func testAgentJSONValueHelpers() {
+        let validArray: AgentJSONValue = .array([.string("a"), .string("b"), .string("c")])
+        #expect(validArray.stringArrayValue() == ["a", "b", "c"])
+
+        // Mixed types must NOT silently coerce.
+        let mixedArray: AgentJSONValue = .array([.string("a"), .number(2)])
+        #expect(mixedArray.stringArrayValue() == nil)
+
+        #expect(AgentJSONValue.bool(true).boolValue() == true)
+        #expect(AgentJSONValue.string("yes").boolValue() == true)
+        #expect(AgentJSONValue.string("no").boolValue() == false)
+        #expect(AgentJSONValue.number(0).boolValue() == false)
+        #expect(AgentJSONValue.string("maybe").boolValue() == nil)
     }
 
     @Test("collapseOldToolResults keeps the most recent tool messages and replaces older ones with a placeholder")

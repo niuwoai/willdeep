@@ -228,10 +228,7 @@ struct AgentClient {
         var properties: [String: Any] = [:]
         var required: [String] = []
         for parameter in descriptor.parameters {
-            properties[parameter.name] = [
-                "type": parameter.type.rawValue,
-                "description": parameter.description
-            ]
+            properties[parameter.name] = schemaProperty(for: parameter)
             if parameter.required { required.append(parameter.name) }
         }
 
@@ -251,6 +248,22 @@ struct AgentClient {
                 "parameters": parameterSchema
             ]
         ]
+    }
+
+    private static func schemaProperty(for parameter: AgentToolParameter) -> [String: Any] {
+        switch parameter.type {
+        case .string, .integer, .boolean:
+            return [
+                "type": parameter.type.rawValue,
+                "description": parameter.description
+            ]
+        case .stringArray:
+            return [
+                "type": "array",
+                "items": ["type": "string"],
+                "description": parameter.description
+            ]
+        }
     }
 
     // MARK: - Pending tool call helpers

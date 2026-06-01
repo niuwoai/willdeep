@@ -182,6 +182,7 @@ struct AgentToolCallCard: View {
     @State private var isExpanded = false
     @State private var confirmInput = ""
     @State private var answerInput = ""
+    @State private var selectedOptions: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -261,31 +262,7 @@ struct AgentToolCallCard: View {
                     .font(.caption)
                 }
             } else if call.status == .awaitingUserAnswer {
-                VStack(alignment: .leading, spacing: 6) {
-                    if let question = call.arguments["question"]?.stringValue(), !question.isEmpty {
-                        Text(question)
-                            .font(.system(size: 13))
-                            .foregroundStyle(.primary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    TextField("Your answer", text: $answerInput, axis: .vertical)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 12))
-                        .lineLimit(1...4)
-                    HStack(spacing: 6) {
-                        Button("Send") {
-                            appState.answerAgentToolCall(id: call.id, answer: answerInput)
-                            answerInput = ""
-                        }
-                        .disabled(answerInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        Button("Skip") {
-                            appState.denyAgentToolCall(id: call.id)
-                            answerInput = ""
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .font(.caption)
-                }
+                askUserBody
             }
         }
         .padding(9)
@@ -295,6 +272,130 @@ struct AgentToolCallCard: View {
             RoundedRectangle(cornerRadius: 7)
                 .stroke(borderColor, lineWidth: 1)
         )
+    }
+
+    @ViewBuilder
+    private var askUserBody: some View {
+        let question = call.arguments["question"]?.stringValue() ?? ""
+        let options = call.arguments["options"]?.stringArrayValue() ?? []
+        let isMultiSelect = call.arguments["multi_select"]?.boolValue() ?? false
+
+        VStack(alignment: .leading, spacing: 8) {
+            if !question.isEmpty {
+                Text(question)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !options.isEmpty {
+                if isMultiSelect {
+                    multiSelectChoices(options)
+                } else {
+                    singleSelectChoices(options)
+                }
+            }
+
+            // Free-form text input is always available — even with preset
+            // options, the user may want to write "none of these".
+            TextField(options.isEmpty ? "Your answer" : "Other answer (optional)",
+                      text: $answerInput,
+                      axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12))
+                .lineLimit(1...4)
+
+            HStack(spacing: 6) {
+                Button("Send") {
+                    submitAnswer(options: options, isMultiSelect: isMultiSelect)
+                }
+                .disabled(!canSubmitAskUser(isMultiSelect: isMultiSelect))
+                Button("Skip") {
+                    appState.denyAgentToolCall(id: call.id)
+                    resetAskUserInputs()
+                }
+                Spacer(minLength: 0)
+            }
+            .font(.caption)
+        }
+    }
+
+    private func singleSelectChoices(_ options: [String]) -> some View {
+        // An adaptive grid gives us wrapping like a flow layout without
+        // dragging in a third-party Layout implementation. Min item
+        // width is generous so short options sit two-per-row at typical
+        // panel widths.
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 6)], alignment: .leading, spacing: 6) {
+            ForEach(options, id: \.self) { option in
+                Button {
+                    appState.answerAgentToolCall(id: call.id, answer: option)
+                    resetAskUserInputs()
+                } label: {
+                    Text(option)
+                        .font(.system(size: 12))
+                        .lineLimit(2)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.purple.opacity(0.12))
+                        .foregroundStyle(.primary)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.purple.opacity(0.35), lineWidth: 1)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func multiSelectChoices(_ options: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(options, id: \.self) { option in
+                Toggle(isOn: Binding(
+                    get: { selectedOptions.contains(option) },
+                    set: { isOn in
+                        if isOn { selectedOptions.insert(option) }
+                        else { selectedOptions.remove(option) }
+                    }
+                )) {
+                    Text(option).font(.system(size: 12))
+                }
+                .toggleStyle(.checkbox)
+            }
+        }
+    }
+
+    private func canSubmitAskUser(isMultiSelect: Bool) -> Bool {
+        if !answerInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return true
+        }
+        if isMultiSelect { return !selectedOptions.isEmpty }
+        return false
+    }
+
+    private func submitAnswer(options: [String], isMultiSelect: Bool) {
+        // Free-form text wins if the user typed anything — gives them an
+        // escape hatch from the preset options.
+        let typed = answerInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let answer: String
+        if !typed.isEmpty {
+            answer = typed
+        } else if isMultiSelect {
+            // Preserve the order the model offered them so the
+            // assistant can correlate.
+            answer = options.filter { selectedOptions.contains($0) }.joined(separator: ", ")
+        } else {
+            return
+        }
+        appState.answerAgentToolCall(id: call.id, answer: answer)
+        resetAskUserInputs()
+    }
+
+    private func resetAskUserInputs() {
+        answerInput = ""
+        selectedOptions = []
     }
 
     private func expandableBlock(title: String, text: String) -> some View {

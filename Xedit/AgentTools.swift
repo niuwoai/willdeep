@@ -9,6 +9,7 @@
 //
 
 import Foundation
+import Darwin
 
 // MARK: - Risk model
 
@@ -40,6 +41,7 @@ struct AgentToolParameter: Codable, Equatable {
         case string
         case integer
         case boolean
+        case stringArray
     }
 
     let name: String
@@ -253,6 +255,29 @@ enum AgentJSONValue: Equatable {
         default: return nil
         }
     }
+
+    func boolValue() -> Bool? {
+        switch self {
+        case .bool(let value): return value
+        case .number(let value): return value != 0
+        case .string(let value):
+            switch value.lowercased() {
+            case "true", "1", "yes": return true
+            case "false", "0", "no": return false
+            default: return nil
+            }
+        default: return nil
+        }
+    }
+
+    func stringArrayValue() -> [String]? {
+        guard case .array(let values) = self else { return nil }
+        let strings = values.compactMap { $0.stringValue() }
+        // Only treat the array as "string array" when every element was
+        // a string — partial matches are ambiguous enough to skip.
+        guard strings.count == values.count else { return nil }
+        return strings
+    }
 }
 
 // MARK: - Tool registry
@@ -314,10 +339,12 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "ask_user",
-            description: "Ask the user a clarifying question and wait for their answer before continuing. Use this whenever a required piece of information is missing or ambiguous; do not guess. Returns the user's typed answer as the tool result.",
+            description: "Ask the user a clarifying question and wait for their answer before continuing. Use this whenever a required piece of information is missing or ambiguous; do not guess. Returns the user's answer as the tool result. When the question has a small, well-defined set of valid answers, pass them as `options` so the user can click instead of type.",
             risk: .userInput,
             parameters: [
-                AgentToolParameter(name: "question", type: .string, description: "The clarifying question to show the user.", required: true)
+                AgentToolParameter(name: "question", type: .string, description: "The clarifying question to show the user.", required: true),
+                AgentToolParameter(name: "options", type: .stringArray, description: "Optional list of preset answers. When provided, the UI renders them as buttons (single-choice) or checkboxes (multi-choice). The user can still type a free-form answer.", required: false),
+                AgentToolParameter(name: "multi_select", type: .boolean, description: "When true, the user can pick multiple options; the tool result is a comma-separated list. Defaults to false (single choice).", required: false)
             ]
         )
     ]
@@ -402,7 +429,7 @@ enum AgentToolRunner {
 
         guard let enumerator = FileManager.default.enumerator(
             at: root,
-            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         ) else {
             throw AgentToolError.notFound(rootPath)
@@ -412,12 +439,18 @@ enum AgentToolRunner {
         var scanned = 0
 
         for case let url as URL in enumerator {
-            scanned += 1
-            if scanned > maxScannedFiles { break }
-            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
-                  values.isRegularFile == true else {
+            guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey]) else {
                 continue
             }
+            if values.isDirectory == true {
+                if ProjectDirectoryExclusions.shouldSkip(url) {
+                    enumerator.skipDescendants()
+                }
+                continue
+            }
+            guard values.isRegularFile == true else { continue }
+            scanned += 1
+            if scanned > maxScannedFiles { break }
             if let size = values.fileSize, size > maxFileSizeForSearch { continue }
             if AppState.isBinaryFile(at: url) { continue }
 
@@ -492,7 +525,7 @@ enum AgentToolRunner {
 
         guard let enumerator = FileManager.default.enumerator(
             at: searchRoot,
-            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         ) else {
             throw AgentToolError.notFound(searchRoot.path)
@@ -502,12 +535,18 @@ enum AgentToolRunner {
         var scanned = 0
 
         for case let url as URL in enumerator {
-            scanned += 1
-            if scanned > maxScannedFiles { break }
-            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
-                  values.isRegularFile == true else {
+            guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey]) else {
                 continue
             }
+            if values.isDirectory == true {
+                if ProjectDirectoryExclusions.shouldSkip(url) {
+                    enumerator.skipDescendants()
+                }
+                continue
+            }
+            guard values.isRegularFile == true else { continue }
+            scanned += 1
+            if scanned > maxScannedFiles { break }
             if let size = values.fileSize, size > maxFileSizeForSearch { continue }
             if let includeGlob, !globMatches(includeGlob, name: url.lastPathComponent) { continue }
             if AppState.isBinaryFile(at: url) { continue }
@@ -758,9 +797,9 @@ enum AgentToolRunner {
 
     // MARK: run_command
 
-    private static let defaultCommandTimeout: TimeInterval = 20
-    private static let maxCommandTimeout: TimeInterval = 120
-    private static let maxCommandOutput = 32 * 1024
+    nonisolated private static let defaultCommandTimeout: TimeInterval = 20
+    nonisolated private static let maxCommandTimeout: TimeInterval = 120
+    nonisolated private static let maxCommandOutput = 32 * 1024
 
     private static func runCommand(
         arguments: [String: AgentJSONValue],
@@ -784,32 +823,53 @@ enum AgentToolRunner {
             let stderrPipe = Pipe()
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
+            let outputLimit = maxCommandOutput
+            let stdoutCollector = CommandOutputCollector(limit: outputLimit)
+            let stderrCollector = CommandOutputCollector(limit: outputLimit)
+            let runState = CommandRunState()
 
+            stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                if !data.isEmpty { stdoutCollector.append(data) }
+            }
+            stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                if !data.isEmpty { stderrCollector.append(data) }
+            }
             do {
                 try process.run()
             } catch {
+                stdoutPipe.fileHandleForReading.readabilityHandler = nil
+                stderrPipe.fileHandleForReading.readabilityHandler = nil
                 return CommandOutcome(exitStatus: -1, stdout: "", stderr: error.localizedDescription, timedOut: false, launchFailed: true)
             }
 
             let timeoutWorkItem = DispatchWorkItem {
-                if process.isRunning { process.terminate() }
+                runState.markTimedOut()
+                if process.isRunning {
+                    process.terminate()
+                }
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
+                    if process.isRunning {
+                        kill(process.processIdentifier, SIGKILL)
+                    }
+                }
             }
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: timeoutWorkItem)
 
             process.waitUntilExit()
-            let didTimeout = timeoutWorkItem.isCancelled == false && process.terminationReason == .uncaughtSignal
             timeoutWorkItem.cancel()
 
-            let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-            let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-            let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
-            let stderr = String(data: stderrData, encoding: .utf8) ?? ""
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            stdoutCollector.append(stdoutPipe.fileHandleForReading.availableData)
+            stderrCollector.append(stderrPipe.fileHandleForReading.availableData)
 
             return CommandOutcome(
                 exitStatus: process.terminationStatus,
-                stdout: stdout,
-                stderr: stderr,
-                timedOut: didTimeout,
+                stdout: stdoutCollector.stringValue,
+                stderr: stderrCollector.stringValue,
+                timedOut: runState.didTimeout,
                 launchFailed: false
             )
         }.value
@@ -850,6 +910,62 @@ enum AgentToolRunner {
         let stderr: String
         let timedOut: Bool
         let launchFailed: Bool
+    }
+
+    private nonisolated final class CommandOutputCollector: @unchecked Sendable {
+        private let limit: Int
+        private var data = Data()
+        private var truncated = false
+        private let lock = NSLock()
+
+        init(limit: Int) {
+            self.limit = limit
+        }
+
+        func append(_ chunk: Data) {
+            guard !chunk.isEmpty else { return }
+            lock.lock()
+            defer { lock.unlock() }
+
+            let remaining = max(0, limit - data.count)
+            if remaining > 0 {
+                data.append(chunk.prefix(remaining))
+            }
+            if chunk.count > remaining {
+                truncated = true
+            }
+        }
+
+        var stringValue: String {
+            lock.lock()
+            let snapshot = data
+            let didTruncate = truncated
+            lock.unlock()
+
+            var text = String(data: snapshot, encoding: .utf8) ?? AppState.decodeText(from: snapshot)
+            if didTruncate {
+                text += "\n...[truncated]"
+            }
+            return text
+        }
+    }
+
+    private nonisolated final class CommandRunState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var timedOut = false
+
+        func markTimedOut() {
+            lock.lock()
+            timedOut = true
+            lock.unlock()
+        }
+
+        var didTimeout: Bool {
+            lock.lock()
+            let value = timedOut
+            lock.unlock()
+            return value
+        }
     }
 
     private static func resolveWorkspaceURL(_ path: String, root: URL) throws -> URL {
