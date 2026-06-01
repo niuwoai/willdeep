@@ -829,6 +829,65 @@ private struct PaletteKeyboardHandler: NSViewRepresentable {
     }
 }
 
+private struct FloatingPanelEscapeKeyHandler: NSViewRepresentable {
+    let onCancel: () -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        context.coordinator.view = view
+        context.coordinator.installMonitor()
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.view = nsView
+        context.coordinator.onCancel = onCancel
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.removeMonitor()
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onCancel: onCancel)
+    }
+
+    final class Coordinator {
+        weak var view: NSView?
+        var onCancel: () -> Void
+        private var monitor: Any?
+
+        init(onCancel: @escaping () -> Void) {
+            self.onCancel = onCancel
+        }
+
+        func installMonitor() {
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                self?.handle(event) ?? event
+            }
+        }
+
+        func removeMonitor() {
+            guard let monitor else { return }
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
+        }
+
+        private func handle(_ event: NSEvent) -> NSEvent? {
+            guard event.keyCode == 53 else { return event }
+            if let window = view?.window,
+               let eventWindow = event.window,
+               eventWindow !== window {
+                return event
+            }
+
+            onCancel()
+            return nil
+        }
+    }
+}
+
 struct PaletteCommand: Identifiable {
     var id: String { title }
     let title: String
@@ -969,6 +1028,11 @@ private struct SymbolJumpPanel: View {
         }
         .onAppear {
             queryFocused = true
+        }
+        .background {
+            FloatingPanelEscapeKeyHandler {
+                appState.hideSymbolJump()
+            }
         }
     }
 
@@ -1159,6 +1223,11 @@ private struct QuickOpenPanel: View {
         .onAppear {
             queryFocused = true
         }
+        .background {
+            FloatingPanelEscapeKeyHandler {
+                appState.hideQuickOpen()
+            }
+        }
     }
 
     private func open(_ url: URL?) {
@@ -1215,6 +1284,11 @@ private struct GoToLinePanel: View {
         }
         .onAppear {
             lineFieldFocused = true
+        }
+        .background {
+            FloatingPanelEscapeKeyHandler {
+                appState.hideGoToLine()
+            }
         }
     }
 

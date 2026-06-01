@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.28.0-rc4 - 2026-06-01
+
+- Fixed the editor viewport jumping after an edit (scrolling to the top, or drifting a few lines up) by anchoring on the character at the top of the viewport and re-pinning it after layout settles, instead of restoring a raw pixel scroll offset that gets clamped against the transiently-collapsed document height during a re-highlight.
+- Fixed severe arrow-key cursor-movement lag by skipping the full-document glyph/layout invalidation on every caret move and clearing only the previously highlighted bracket ranges instead of sweeping the entire document's temporary attributes.
+- Fixed scroll/edit sluggishness on large files by memoizing the fold-guide scope analysis (previously the line-number gutter re-parsed the whole document on every redraw) and computing visible line numbers incrementally instead of rescanning from the file start for each gutter row.
+
+## 1.28.0-rc3 - 2026-05-31
+
+- Fixed Escape closing behavior for Quick Open, Go to Line, and Go to Symbol floating panels so shortcut-opened navigation windows dismiss consistently.
+
 ## 1.28.0-rc2 - 2026-05-28
 
 - Fixed folded editor ranges leaking across tab switches by clearing visual folds before programmatic tab text refreshes.

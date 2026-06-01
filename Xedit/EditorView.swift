@@ -177,6 +177,7 @@ struct EditorView: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? VeilWriterTextView else { return }
+            textView.invalidateFoldableGuidesCache()
             textView.clearFoldedScopes()
             parent.text = textView.string
 
@@ -263,6 +264,7 @@ struct EditorView: NSViewRepresentable {
         func applyText(_ newText: String, to textView: VeilWriterTextView) {
             highlightGeneration += 1
             let generation = highlightGeneration
+            textView.invalidateFoldableGuidesCache()
 
             if let lang = currentLanguage, !newText.isEmpty {
                 let settings = parent.settings
@@ -299,6 +301,21 @@ struct EditorView: NSViewRepresentable {
 
         private func replaceTextStorage(in textView: VeilWriterTextView, with attributed: NSAttributedString) {
             let selected = textView.selectedRanges
+            // Replacing the entire text storage resets layout and makes the scroll
+            // view snap to the origin. Capture the scroll position up front and
+            // restore it afterwards so a re-highlight never yanks the viewport to
+            // the top of the document.
+            //
+            // We anchor on the character at the top of the viewport rather than a
+            // raw pixel origin: replacing the storage transiently collapses the
+            // document height, so restoring a saved pixel origin gets clamped to
+            // the not-yet-recomputed (smaller) height and lands a few lines too
+            // high. We also record how far that line's top sits above the viewport
+            // top, so partially-scrolled lines are restored sub-pixel-exactly
+            // instead of snapping to a whole-line boundary (which drifted by ~one
+            // line).
+            let topAnchor = topVisibleAnchor(in: textView)
+
             textView.textStorage?.setAttributedString(attributed)
             if let textStorage = textView.textStorage, textStorage.length > 0 {
                 textStorage.addAttribute(
@@ -307,12 +324,91 @@ struct EditorView: NSViewRepresentable {
                     range: NSRange(location: 0, length: textStorage.length)
                 )
             }
-            applySearchHighlights(to: textView)
+            applySearchHighlights(to: textView, scrollToActiveMatch: false)
             textView.selectedRanges = selected
+
+            restoreTopVisibleAnchor(topAnchor, in: textView)
             refreshEditorChrome(for: textView)
         }
 
-        func applySearchHighlights(to textView: VeilWriterTextView) {
+        /// A scroll anchor: the character at the top of the viewport plus the
+        /// distance its line's top sits above the viewport top. Restoring both
+        /// reproduces a partially-scrolled top line exactly.
+        private struct ScrollAnchor {
+            let characterIndex: Int
+            /// `viewportTopY - lineTopY` in text-view coordinates (>= 0 when the
+            /// line's top has scrolled above the viewport edge).
+            let offsetWithinLine: CGFloat
+        }
+
+        private func topVisibleAnchor(in textView: VeilWriterTextView) -> ScrollAnchor? {
+            guard let layoutManager = textView.layoutManager,
+                  let textContainer = textView.textContainer,
+                  textView.enclosingScrollView != nil else {
+                return nil
+            }
+            let visibleRect = textView.visibleRect
+            guard visibleRect.height > 0 else { return nil }
+
+            // Probe a point just inside the top of the viewport, in text-container
+            // coordinates.
+            let probeY = visibleRect.minY - textView.textContainerOrigin.y + 1
+            let probe = NSPoint(x: textView.textContainerOrigin.x, y: probeY)
+            let glyphIndex = layoutManager.glyphIndex(for: probe, in: textContainer)
+            let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+
+            var lineGlyphRange = NSRange(location: 0, length: 0)
+            let lineRect = layoutManager.lineFragmentRect(
+                forGlyphAt: glyphIndex,
+                effectiveRange: &lineGlyphRange,
+                withoutAdditionalLayout: true
+            )
+            let lineTopY = lineRect.minY + textView.textContainerOrigin.y
+            return ScrollAnchor(
+                characterIndex: characterIndex,
+                offsetWithinLine: visibleRect.minY - lineTopY
+            )
+        }
+
+        /// Scrolls so the anchored line is restored to the same sub-pixel position
+        /// it held before the text storage was replaced, after forcing layout so
+        /// the document height is correct.
+        private func restoreTopVisibleAnchor(_ anchor: ScrollAnchor?, in textView: VeilWriterTextView) {
+            guard let anchor,
+                  let layoutManager = textView.layoutManager,
+                  let textContainer = textView.textContainer,
+                  let clipView = textView.enclosingScrollView?.contentView else {
+                return
+            }
+
+            let length = (textView.string as NSString).length
+            let safeAnchor = min(max(0, anchor.characterIndex), max(0, length))
+
+            // Force full glyph layout so both the anchor's line rect and the
+            // document height are valid; otherwise the clamp below uses a stale
+            // (collapsed) height and lands the viewport too high.
+            layoutManager.ensureLayout(for: textContainer)
+
+            let glyphIndex = layoutManager.glyphIndexForCharacter(at: safeAnchor)
+            var lineGlyphRange = NSRange(location: 0, length: 0)
+            let lineRect = layoutManager.lineFragmentRect(
+                forGlyphAt: glyphIndex,
+                effectiveRange: &lineGlyphRange
+            )
+
+            let documentHeight = layoutManager.usedRect(for: textContainer).height
+                + textView.textContainerInset.height * 2
+            let lineTopY = lineRect.minY + textView.textContainerOrigin.y
+            // Re-apply the original within-line offset so a top line that was only
+            // half-visible stays half-visible instead of snapping flush to the top.
+            let targetY = lineTopY + anchor.offsetWithinLine
+            let maxY = max(0, documentHeight - clipView.bounds.height)
+            let clampedY = min(max(0, targetY), maxY)
+            clipView.setBoundsOrigin(NSPoint(x: clipView.bounds.origin.x, y: clampedY))
+            textView.enclosingScrollView?.reflectScrolledClipView(clipView)
+        }
+
+        func applySearchHighlights(to textView: VeilWriterTextView, scrollToActiveMatch: Bool = true) {
             guard let textStorage = textView.textStorage else { return }
 
             let fullRange = NSRange(location: 0, length: textStorage.length)
@@ -334,14 +430,19 @@ struct EditorView: NSViewRepresentable {
                     ],
                     range: activeRange
                 )
-                textView.scrollRangeToVisible(activeRange)
+                if scrollToActiveMatch {
+                    textView.scrollRangeToVisible(activeRange)
+                }
             }
 
             refreshEditorChrome(for: textView)
         }
 
         private func refreshEditorChrome(for textView: VeilWriterTextView) {
-            textView.applyFoldedScopes()
+            // Only re-apply folding when scopes are actually folded. Applying it
+            // unconditionally forced a full-document glyph/layout invalidation on
+            // every caret move, which produced severe arrow-key lag.
+            textView.refreshFoldedScopesIfNeeded()
             textView.needsDisplay = true
             (textView.enclosingScrollView?.verticalRulerView as? LineNumberRulerView)?.needsDisplay = true
         }
@@ -393,10 +494,19 @@ struct EditorView: NSViewRepresentable {
             parent.onSelectionChange?(position.line, position.column, selectedRange.length, selectedLines)
         }
 
+        /// The two single-character ranges currently carrying the bracket-match
+        /// highlight, so we can clear exactly those instead of sweeping the whole
+        /// document's temporary attributes on every caret move.
+        private var highlightedBracketRanges: [NSRange] = []
+
         private func applyBracketHighlight(to textView: VeilWriterTextView) {
             guard let layoutManager = textView.layoutManager else { return }
-            let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
-            layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: fullRange)
+            let length = (textView.string as NSString).length
+
+            for range in highlightedBracketRanges where NSMaxRange(range) <= length {
+                layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: range)
+            }
+            highlightedBracketRanges = []
 
             guard let match = Self.matchingBracketRanges(
                 around: textView.selectedRange().location,
@@ -408,6 +518,7 @@ struct EditorView: NSViewRepresentable {
             let color = NSColor.selectedTextBackgroundColor.withAlphaComponent(0.55)
             layoutManager.addTemporaryAttribute(.backgroundColor, value: color, forCharacterRange: match.opening)
             layoutManager.addTemporaryAttribute(.backgroundColor, value: color, forCharacterRange: match.closing)
+            highlightedBracketRanges = [match.opening, match.closing]
         }
 
         static func matchingBracketRanges(around location: Int, in text: String) -> (opening: NSRange, closing: NSRange)? {
@@ -586,6 +697,18 @@ final class VeilWriterTextView: NSTextView {
     var onSyntaxHighlightingChange: ((SyntaxHighlightingSelection) -> Void)?
     private var foldedGuides: Set<ScopeGuide> = []
 
+    /// Tracks whether the layout currently reflects `foldedGuides`. While this is
+    /// `true`, caret moves and chrome refreshes can skip the expensive
+    /// full-document glyph/layout invalidation entirely.
+    private var foldLayoutIsClean = true
+
+    /// Cached result of `foldableGuides()`. Computing it re-parses the entire
+    /// document via `ScopeGuideCalculator`, and the line-number ruler asks for it
+    /// on every redraw (i.e. every scroll/edit), so we memoize until the text or
+    /// language changes.
+    private var cachedFoldableGuides: [ScopeGuide]?
+    private var cachedFoldableGuidesLanguage: Language?
+
     private enum SyntaxMenuToken {
         static let automatic = "__automatic"
         static let plainText = "__plain_text"
@@ -711,6 +834,7 @@ final class VeilWriterTextView: NSTextView {
         } else {
             foldedGuides.insert(guide)
         }
+        foldLayoutIsClean = false
         applyFoldedScopes()
         needsDisplay = true
         enclosingScrollView?.verticalRulerView?.needsDisplay = true
@@ -719,8 +843,17 @@ final class VeilWriterTextView: NSTextView {
     func clearFoldedScopes() {
         guard foldedGuides.isEmpty == false else { return }
         foldedGuides.removeAll()
+        foldLayoutIsClean = false
         applyFoldedScopes()
         enclosingScrollView?.verticalRulerView?.needsDisplay = true
+    }
+
+    /// Re-applies folding layout only when it is stale. Caret moves call this on
+    /// every selection change, so the common (no-op) path must avoid touching the
+    /// layout manager.
+    func refreshFoldedScopesIfNeeded() {
+        guard foldLayoutIsClean == false else { return }
+        applyFoldedScopes()
     }
 
     func isFolded(_ guide: ScopeGuide) -> Bool {
@@ -728,8 +861,20 @@ final class VeilWriterTextView: NSTextView {
     }
 
     func foldableGuides() -> [ScopeGuide] {
-        ScopeGuideCalculator.guides(in: string, language: scopeGuideLanguage)
+        if let cachedFoldableGuides, cachedFoldableGuidesLanguage == scopeGuideLanguage {
+            return cachedFoldableGuides
+        }
+        let guides = ScopeGuideCalculator.guides(in: string, language: scopeGuideLanguage)
             .filter { $0.endLine - $0.startLine >= 2 }
+        cachedFoldableGuides = guides
+        cachedFoldableGuidesLanguage = scopeGuideLanguage
+        return guides
+    }
+
+    /// Drops the memoized fold guides so the next request re-parses the document.
+    /// Called whenever the text content changes.
+    func invalidateFoldableGuidesCache() {
+        cachedFoldableGuides = nil
     }
 
     func applyFoldedScopes() {
@@ -740,6 +885,7 @@ final class VeilWriterTextView: NSTextView {
         guard foldedGuides.isEmpty == false else {
             layoutManager.invalidateGlyphs(forCharacterRange: fullRange, changeInLength: 0, actualCharacterRange: nil)
             layoutManager.invalidateLayout(forCharacterRange: fullRange, actualCharacterRange: nil)
+            foldLayoutIsClean = true
             return
         }
 
@@ -754,6 +900,7 @@ final class VeilWriterTextView: NSTextView {
         }
         layoutManager.invalidateGlyphs(forCharacterRange: fullRange, changeInLength: 0, actualCharacterRange: nil)
         layoutManager.invalidateLayout(forCharacterRange: fullRange, actualCharacterRange: nil)
+        foldLayoutIsClean = true
         needsDisplay = true
     }
 
@@ -995,6 +1142,15 @@ final class LineNumberRulerView: NSRulerView {
         let glyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: textContainer)
         var glyphIndex = glyphRange.location
 
+        // The line number for the first visible character is computed once via a
+        // full scan; every line after that is derived incrementally by counting
+        // only the newlines in the gap from the previous line. This keeps the
+        // ruler redraw at O(visible characters) instead of O(lines × file length),
+        // which is what made scrolling large files sluggish.
+        let nsString = textView.string as NSString
+        var previousCharacterIndex: Int? = nil
+        var lineNumber = 1
+
         while glyphIndex < NSMaxRange(glyphRange) {
             var lineGlyphRange = NSRange(location: 0, length: 0)
             let lineRect = layoutManager.lineFragmentRect(
@@ -1003,7 +1159,12 @@ final class LineNumberRulerView: NSRulerView {
                 withoutAdditionalLayout: true
             )
             let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
-            let lineNumber = lineNumber(at: characterIndex)
+            if let previousCharacterIndex {
+                lineNumber += Self.newlineCount(in: nsString, from: previousCharacterIndex, to: characterIndex)
+            } else {
+                lineNumber = self.lineNumber(at: characterIndex)
+            }
+            previousCharacterIndex = characterIndex
             let y = relativePoint.y + textView.textContainerOrigin.y + lineRect.minY
             let foldGuide = foldableGuides.first(where: { $0.startLine == lineNumber })
 
@@ -1109,6 +1270,20 @@ final class LineNumberRulerView: NSRulerView {
             line += 1
         }
         return line
+    }
+
+    /// Counts newlines in the half-open character range `[from, to)`. Used to
+    /// advance the visible line number incrementally instead of rescanning the
+    /// document from the start for every gutter row.
+    private static func newlineCount(in text: NSString, from: Int, to: Int) -> Int {
+        let lower = min(max(0, from), text.length)
+        let upper = min(max(lower, to), text.length)
+        guard lower < upper else { return 0 }
+        var count = 0
+        for index in lower..<upper where text.character(at: index) == 10 {
+            count += 1
+        }
+        return count
     }
 
     private func lineNumber(atRulerY y: CGFloat) -> Int? {
