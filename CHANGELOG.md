@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.40.0-rc4 - 2026-06-02
+
+- Fixed the Agent-mode composer "+" (Attach Image) button freezing the app again. `NSOpenPanel.begin { }` without a parent window has been racing the SwiftUI main run loop under macOS 26 + default-isolation=MainActor. Now the panel attaches as a sheet on the key window (`beginSheetModal(for:completionHandler:)`), with the bare `begin` form kept only as a fallback when no key window exists.
+- Softened the Agent-mode visual hierarchy. The sidebar and status bar no longer paint a heavy `underPageBackgroundColor` grey band — both now sit on `windowBackgroundColor` and the sidebar gets a very light 2.5% label-color tint instead. Regions read as a single calm canvas separated by thin dividers, not three competing grey blocks.
+
 ## 1.40.0-rc3 - 2026-06-02
 
 - Fixed the Agent Settings API Key (and Base URL / Model) field clearing while typing. The fields now use local `@State` buffers and only commit to `agentConfiguration` when the new Save button is pressed (⌘↩). Provider preset switches refresh the buffers automatically; external writes (like Fetch Models picking a default) only overwrite the buffer when it currently matches what was last saved, so in-flight typing is never clobbered.

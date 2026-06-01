@@ -19,7 +19,10 @@ struct AgentModeView: View {
         HStack(spacing: 0) {
             AgentSessionsSidebar()
                 .frame(width: sidebarWidth)
-                .background(AgentDesign.sidebarBackground)
+                .background(
+                    AgentDesign.sidebarBackground
+                        .overlay(AgentDesign.sidebarTint)
+                )
 
             Divider()
 
@@ -44,11 +47,20 @@ struct AgentModeView: View {
 // appearance (light / dark) automatically.
 
 enum AgentDesign {
-    // Backgrounds — semantic so light/dark adapt for free.
+    // Backgrounds — semantic so light/dark adapt for free. Earlier
+    // revisions used `underPageBackgroundColor` for the sidebar and the
+    // status bar; on light appearance that paints a fairly dark grey
+    // band that fights with the white chat area. Now everything sits on
+    // a single `windowBackgroundColor` plane, separated by dividers and
+    // very light overlays so the eye reads it as one calm canvas.
     static let chatBackground = Color(nsColor: .windowBackgroundColor)
-    static let sidebarBackground = Color(nsColor: .underPageBackgroundColor)
+    static let sidebarBackground = Color(nsColor: .windowBackgroundColor)
+    static let statusBarBackground = Color(nsColor: .windowBackgroundColor)
     static let cardBackground = Color(nsColor: .controlBackgroundColor)
     static let subtleBackground = Color(nsColor: .quaternaryLabelColor).opacity(0.18)
+    /// Very faint tint to set the sidebar apart from the chat without
+    /// the heavy grey of `underPageBackgroundColor`.
+    static let sidebarTint = Color(nsColor: .labelColor).opacity(0.025)
 
     // Corner radii.
     static let cardCornerRadius: CGFloat = 8
@@ -625,15 +637,25 @@ private struct ComposerCard: View {
         panel.allowsMultipleSelection = true
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
-        // `panel.begin` is critical — `runModal` blocks the main run loop
-        // under default-isolation=MainActor and freezes the app.
-        panel.begin { response in
+
+        let completion: (NSApplication.ModalResponse) -> Void = { response in
             guard response == .OK else { return }
             for url in panel.urls {
                 guard let data = try? Data(contentsOf: url),
                       let mime = AgentImagePasteboardHelper.mimeType(forPath: url.path) else { continue }
                 ingest(data: data, mimeType: mime)
             }
+        }
+
+        // Prefer attaching the panel as a sheet on the current key
+        // window. `panel.begin { }` without a parent has been observed
+        // to freeze the app on macOS 26 + SwiftUI MainActor isolation
+        // (it interacts badly with the run loop). The sheet form is
+        // explicitly modeless on the rest of the app.
+        if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+            panel.beginSheetModal(for: window, completionHandler: completion)
+        } else {
+            panel.begin(completionHandler: completion)
         }
     }
 
@@ -819,7 +841,7 @@ private struct AgentChatStatusBar: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, 18)
         .frame(height: AgentDesign.statusBarHeight)
-        .background(AgentDesign.sidebarBackground)
+        .background(AgentDesign.statusBarBackground)
         .overlay(Divider(), alignment: .top)
     }
 }
