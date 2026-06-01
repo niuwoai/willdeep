@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.40.0-rc2 - 2026-06-02
+
+- Made context compression automatic. `runAgentLoop`'s defer now calls a new `maybeAutoCompressContext()` that fires `compressAgentContext()` whenever the estimated context usage crosses 75% (and the conversation has more than 6 messages, and nothing else is in flight). The status bar continues to show only a `Compressing…` spinner — no popups, no extra prompt for the user.
+- Made the queued-message pump wait for compression to finish. `consumeNextQueuedMessageIfNeeded` now also gates on `!isCompressingAgentContext`, and `runContextCompression`'s defer kicks the queue once compression resolves. This prevents a queued user message from racing an auto-compression that the same defer block just started.
+- Added unit test `testShouldAutoCompressTriggersAt75Percent` covering the empty-conversation, low-usage, high-usage, in-flight-compression, and in-flight-turn branches of the new `shouldAutoCompressNow` predicate.
+
 ## 1.40.0-rc1 - 2026-06-02
 
 - Added the `ask_user` tool so the Agent can pause mid-turn and ask the user a clarifying question instead of guessing. Surfaces a purple tool-call card with a question, an inline answer field, and Send / Skip buttons; the typed answer is fed back as the tool result and the turn resumes. Tracked through a new `.userInput` risk level and `.awaitingUserAnswer` status.

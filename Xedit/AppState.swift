@@ -359,7 +359,11 @@ final class AppState: ObservableObject {
     }
 
     private func consumeNextQueuedMessageIfNeeded() {
-        guard !isAgentResponding, let next = agentQueuedMessages.first else { return }
+        // Wait for any in-flight compression to finish — otherwise the
+        // user's queued message would race a compression that just got
+        // kicked off in the same defer block.
+        guard !isAgentResponding, !isCompressingAgentContext else { return }
+        guard let next = agentQueuedMessages.first else { return }
         agentQueuedMessages.removeFirst()
         dispatchAgentMessage(text: next.text, images: next.images)
     }
@@ -588,6 +592,7 @@ final class AppState: ObservableObject {
             self.isAgentResponding = false
             self.agentRequestTask = nil
             self.persistActiveAgentSession()
+            self.maybeAutoCompressContext()
             self.consumeNextQueuedMessageIfNeeded()
         }
 
@@ -843,6 +848,25 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Pure predicate: true if `maybeAutoCompressContext` would launch a
+    /// compression right now. Exposed mainly for tests; the production
+    /// caller is `maybeAutoCompressContext` itself.
+    var shouldAutoCompressNow: Bool {
+        guard !isCompressingAgentContext, !isAgentResponding else { return false }
+        guard agentMessages.count > 6 else { return false }
+        let window = max(1, agentContextWindow)
+        let usedFraction = Double(estimatedAgentTokens) / Double(window)
+        return usedFraction > 0.75
+    }
+
+    /// Auto-compress when token usage crosses 75% and nothing else is in
+    /// flight. Invoked from `runAgentLoop`'s defer so it runs between
+    /// turns and never interrupts a streaming response.
+    func maybeAutoCompressContext() {
+        guard shouldAutoCompressNow else { return }
+        compressAgentContext()
+    }
+
     @MainActor
     private func runContextCompression(
         head: [AgentMessage],
@@ -852,6 +876,10 @@ final class AppState: ObservableObject {
         defer {
             self.isCompressingAgentContext = false
             self.persistActiveAgentSession()
+            // Auto-compression can be racing with a queued message —
+            // resume the queue once compression resolves so the user
+            // doesn't see "queued" forever.
+            self.consumeNextQueuedMessageIfNeeded()
         }
 
         let transcript = head

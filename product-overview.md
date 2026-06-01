@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-02 | Current version: v1.40.0-rc1
+> Last updated: 2026-06-02 | Current version: v1.40.0-rc2
 
 ## Positioning
 
@@ -55,7 +55,7 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Paste, drag-drop, or attach images directly in the Agent composer; staged images appear as removable thumbnails and are sent inline as base64 `image_url` content parts in the multimodal request body.
 - Queue follow-up messages while the agent is responding — additional sends become "Queued" bubbles that auto-fire when the current turn ends. Stop the current response without dropping the queue; Clear Queue removes them explicitly.
 - See the estimated context-window utilization in the chat header (≈ remaining tokens / model window) using a chars/4 token heuristic plus per-image budget. Switch the model for the active session from a picker fed by previously fetched model IDs.
-- Reclaim context budget without losing state: a Compress button in the status bar (surfaces once usage crosses 50%) summarizes the older transcript into a single assistant message via the current model. The last few messages stay verbatim. Older `tool` results auto-collapse to a small placeholder in the request payload so long sessions don't blow up the prompt.
+- Reclaim context budget without losing state: a Compress button in the status bar (surfaces once usage crosses 50%) summarizes the older transcript into a single assistant message via the current model. The last few messages stay verbatim. Older `tool` results auto-collapse to a small placeholder in the request payload so long sessions don't blow up the prompt. Once usage crosses 75% the compression also runs automatically between turns — the status bar shows a `Compressing…` spinner and any queued message waits for compression to finish before dispatching.
 - Preview Markdown and HTML beside the editor with richer lightweight block rendering for headings, lists, quotes, dividers, code, and common HTML content nodes.
 - Read current file state from a compact status bar with cursor position, language, file size, and version.
 - Reload when the active file has changed on disk outside VeilWriter.

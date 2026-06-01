@@ -1491,6 +1491,47 @@ struct VeilWriterTests {
         #expect(forcePushRisk == .danger)
     }
 
+    @Test("shouldAutoCompressNow flips true once estimated context usage crosses 75%")
+    @MainActor
+    func testShouldAutoCompressTriggersAt75Percent() {
+        let appState = AppState()
+        // Force a known small context window so the test doesn't depend
+        // on the model fallback table.
+        var config = appState.agentConfiguration
+        config.model = "gpt-3.5-16k"
+        appState.agentConfiguration = config
+
+        // Empty conversation must not trigger.
+        #expect(appState.shouldAutoCompressNow == false)
+
+        // Add 7 messages so the > 6 guard passes, but with tiny content
+        // so estimated tokens stay low.
+        for _ in 0..<7 {
+            appState.agentMessages.append(AgentMessage(role: .user, content: "hi"))
+        }
+        #expect(appState.shouldAutoCompressNow == false)
+
+        // Replace with messages that push estimated tokens past 75%.
+        appState.agentMessages.removeAll()
+        // 16_000-token window × 0.8 = 12_800 tokens. chars/4 heuristic →
+        // ~51_200 chars total. Spread across 8 user messages.
+        let bigChunk = String(repeating: "a", count: 7_000)
+        for _ in 0..<8 {
+            appState.agentMessages.append(AgentMessage(role: .user, content: bigChunk))
+        }
+        #expect(appState.shouldAutoCompressNow == true)
+
+        // A compression already in flight must suppress the trigger.
+        appState.isCompressingAgentContext = true
+        #expect(appState.shouldAutoCompressNow == false)
+        appState.isCompressingAgentContext = false
+
+        // Likewise, while the agent is still streaming a turn.
+        appState.isAgentResponding = true
+        #expect(appState.shouldAutoCompressNow == false)
+        appState.isAgentResponding = false
+    }
+
     @Test("ask_user tool is registered with userInput risk and a question parameter")
     func testAskUserToolRegistration() {
         let descriptor = AgentToolRegistry.descriptor(for: "ask_user")
