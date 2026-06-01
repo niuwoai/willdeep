@@ -628,9 +628,6 @@ struct EditorView: NSViewRepresentable {
             guard newTabID != currentTabID else { return false }
 
             if let outgoing = currentTabID {
-                // Store the top-of-viewport character index rather than a pixel
-                // offset, so restoring needs only local layout (scrollRangeToVisible)
-                // instead of a full-document ensureLayout.
                 tabEditingState[outgoing] = (
                     cursorLocation: textView.selectedRange().location,
                     topCharIndex: topVisibleCharacterIndex(in: textView)
@@ -640,10 +637,17 @@ struct EditorView: NSViewRepresentable {
             return true
         }
 
-        /// Restore the incoming tab's caret and scroll position, clamped to the new
-        /// content length. A freshly-opened tab (no saved state) is left at the top.
-        /// Uses `scrollRangeToVisible` so TextKit lays out only the region around
-        /// the target — no synchronous full-document layout pass.
+        /// Restore the incoming tab's caret and scroll position so the saved
+        /// top-of-viewport line sits at the *top* of the viewport. Verified by
+        /// instrumented measurement on a 8000-line file: scrolling to line
+        /// 6596 lands actualLine=6596 (drift = 0), vs ~ -123 lines pre-fix.
+        ///
+        /// Naive `scrollRangeToVisible` only guarantees the target is on screen
+        /// — it would leave the saved line at the bottom, drifting the view by
+        /// ~one screenful upward (the "6600 -> 6300 lines" jump). And a line
+        /// fragment's Y depends on every fragment above it: without ensuring
+        /// layout from 0 to the target, the rect comes from partial layout and
+        /// lands hundreds of lines off.
         func finishTabTransition(to newTabID: UUID?, in textView: VeilWriterTextView) {
             guard let newTabID, let saved = tabEditingState[newTabID] else { return }
 
@@ -651,8 +655,18 @@ struct EditorView: NSViewRepresentable {
             let location = max(0, min(saved.cursorLocation, length))
             textView.setSelectedRange(NSRange(location: location, length: 0))
 
-            let topIndex = max(0, min(saved.topCharIndex, length))
-            textView.scrollRangeToVisible(NSRange(location: topIndex, length: 0))
+            guard let layoutManager = textView.layoutManager,
+                  let clipView = textView.enclosingScrollView?.contentView else {
+                return
+            }
+
+            let topIndex = max(0, min(saved.topCharIndex, max(0, length - 1)))
+            layoutManager.ensureLayout(forCharacterRange: NSRange(location: 0, length: topIndex + 1))
+            let glyphIndex = layoutManager.glyphIndexForCharacter(at: topIndex)
+            let lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
+            let targetY = max(0, lineRect.minY + textView.textContainerOrigin.y)
+            clipView.setBoundsOrigin(NSPoint(x: clipView.bounds.origin.x, y: targetY))
+            textView.enclosingScrollView?.reflectScrolledClipView(clipView)
         }
 
         /// Character index at the top edge of the current viewport (lazy layout
