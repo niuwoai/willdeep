@@ -2,10 +2,9 @@
 //  AgentModeView.swift
 //  VeilWriter
 //
-//  Top-level Agent mode: a project-grouped session sidebar on the left
-//  and a chat pane on the right. The chat pane reuses the message bubble,
-//  tool-call card, and patch proposal card from AgentPanelView so the
-//  panel form and the mode form stay visually consistent.
+//  Top-level Agent mode. Layout inspired by Cursor: a project-grouped
+//  session sidebar on the left, a chat pane on the right, and a thin
+//  status bar at the bottom of the chat pane.
 //
 
 import SwiftUI
@@ -14,98 +13,176 @@ import UniformTypeIdentifiers
 
 struct AgentModeView: View {
     @EnvironmentObject var appState: AppState
-    @State private var sidebarWidth: CGFloat = 240
-
-    private let minSidebarWidth: CGFloat = 200
-    private let maxSidebarWidth: CGFloat = 380
+    @State private var sidebarWidth: CGFloat = 230
 
     var body: some View {
         HStack(spacing: 0) {
             AgentSessionsSidebar()
                 .frame(width: sidebarWidth)
-                .background(Color(nsColor: .windowBackgroundColor))
+                .background(AgentDesign.sidebarBackground)
+
             Divider()
-            AgentChatPane()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            VStack(spacing: 0) {
+                AgentChatHeader()
+                Divider().opacity(0.5)
+                AgentChatTranscript()
+                AgentChatComposer()
+                AgentChatStatusBar()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(AgentDesign.chatBackground)
         }
-        .background(Color(nsColor: .underPageBackgroundColor))
+        .background(AgentDesign.chatBackground)
     }
+}
+
+// MARK: - Design tokens
+//
+// Centralized so the next time we want to tweak spacing/colors, it's all
+// in one place. Uses macOS semantic colors so the look follows system
+// appearance (light / dark) automatically.
+
+enum AgentDesign {
+    // Backgrounds — semantic so light/dark adapt for free.
+    static let chatBackground = Color(nsColor: .windowBackgroundColor)
+    static let sidebarBackground = Color(nsColor: .underPageBackgroundColor)
+    static let cardBackground = Color(nsColor: .controlBackgroundColor)
+    static let subtleBackground = Color(nsColor: .quaternaryLabelColor).opacity(0.18)
+
+    // Corner radii.
+    static let cardCornerRadius: CGFloat = 8
+    static let pillCornerRadius: CGFloat = 6
+    static let inputCornerRadius: CGFloat = 10
+
+    // Paddings & sizes.
+    static let chatMaxContentWidth: CGFloat = 720
+    static let messageVerticalSpacing: CGFloat = 18
+    static let composerHeight: CGFloat = 124
+    static let headerHeight: CGFloat = 42
+    static let statusBarHeight: CGFloat = 26
+    static let sidebarRowHeight: CGFloat = 26
+
+    // Typography.
+    static let titleFont = Font.system(size: 13, weight: .semibold)
+    static let bodyFont = Font.system(size: 13)
+    static let secondaryFont = Font.system(size: 11)
+    static let captionFont = Font.system(size: 10)
+    static let sidebarSectionFont = Font.system(size: 11, weight: .semibold)
+    static let sidebarRowFont = Font.system(size: 12)
 }
 
 // MARK: - Sessions sidebar
 
 private struct AgentSessionsSidebar: View {
     @EnvironmentObject var appState: AppState
-    @State private var collapsedWorkspaces: Set<String> = []
+    @State private var expandedWorkspaces: Set<String> = []
+
+    private let initialRowCount = 5
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Divider()
+            sidebarHeader
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(groupedSessions, id: \.0) { workspace, sessions in
-                        sectionHeader(for: workspace, count: sessions.count)
-                        if !collapsedWorkspaces.contains(workspace) {
-                            ForEach(sessions) { session in
-                                sessionRow(session)
-                            }
-                        }
-                    }
+                    primaryActions
+                    Spacer().frame(height: 18)
+                    workspacesSection
                     if appState.agentSessions.isEmpty {
-                        Text("No chats yet. Start one with New Chat.")
-                            .font(.caption)
+                        Text("Sessions you start will appear here.")
+                            .font(AgentDesign.secondaryFont)
                             .foregroundStyle(.secondary)
-                            .padding(12)
+                            .padding(.horizontal, 14)
+                            .padding(.top, 16)
                     }
                 }
+                .padding(.vertical, 8)
             }
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 6) {
+    private var sidebarHeader: some View {
+        HStack {
             Text("Chats")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
             Spacer(minLength: 0)
-            Button {
-                appState.startNewAgentSession()
-            } label: {
-                Image(systemName: "square.and.pencil")
-            }
-            .buttonStyle(.borderless)
-            .help("New Chat")
         }
-        .padding(.horizontal, 12)
-        .frame(height: 38)
+        .padding(.horizontal, 14)
+        .frame(height: 36)
     }
 
-    private func sectionHeader(for workspace: String, count: Int) -> some View {
-        Button {
-            if collapsedWorkspaces.contains(workspace) {
-                collapsedWorkspaces.remove(workspace)
-            } else {
-                collapsedWorkspaces.insert(workspace)
+    private var primaryActions: some View {
+        VStack(spacing: 0) {
+            SidebarActionRow(icon: "square.and.pencil", title: "New Chat", shortcut: "⌘N") {
+                appState.startNewAgentSession()
             }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: collapsedWorkspaces.contains(workspace) ? "chevron.right" : "chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
-                Text(workspaceDisplayName(workspace))
-                    .font(.system(size: 11, weight: .semibold))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text("\(count)")
-                    .font(.caption2)
+            SidebarActionRow(icon: "arrow.triangle.2.circlepath", title: "Automations", shortcut: nil, isDimmed: true) { }
+            SidebarActionRow(icon: "slider.horizontal.3", title: "Customize", shortcut: nil, isDimmed: true) { }
+        }
+    }
+
+    private var workspacesSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Workspaces")
+                    .font(AgentDesign.sidebarSectionFont)
                     .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .contentShape(Rectangle())
+            .padding(.horizontal, 14)
+            .padding(.bottom, 6)
+
+            ForEach(groupedSessions, id: \.0) { workspace, sessions in
+                workspaceGroup(workspace: workspace, sessions: sessions)
+            }
         }
-        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func workspaceGroup(workspace: String, sessions: [AgentSession]) -> some View {
+        let isExpanded = expandedWorkspaces.contains(workspace)
+        let visible = isExpanded ? sessions : Array(sessions.prefix(initialRowCount))
+
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "folder")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Text(workspaceDisplayName(workspace))
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 4)
+
+            ForEach(visible) { session in
+                sessionRow(session)
+            }
+
+            if sessions.count > initialRowCount {
+                Button {
+                    if isExpanded {
+                        expandedWorkspaces.remove(workspace)
+                    } else {
+                        expandedWorkspaces.insert(workspace)
+                    }
+                } label: {
+                    Text(isExpanded ? "Show less" : "See more")
+                        .font(AgentDesign.secondaryFont)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 34)
+                        .padding(.vertical, 3)
+                }
+                .buttonStyle(.plain)
+            }
+
+            Spacer().frame(height: 10)
+        }
     }
 
     private func sessionRow(_ session: AgentSession) -> some View {
@@ -113,20 +190,21 @@ private struct AgentSessionsSidebar: View {
         return Button {
             appState.selectAgentSession(id: session.id)
         } label: {
-            VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(isActive ? Color.accentColor : Color.secondary.opacity(0.4))
+                    .frame(width: 5, height: 5)
                 Text(session.title)
-                    .font(.system(size: 12, weight: isActive ? .semibold : .regular))
+                    .font(AgentDesign.sidebarRowFont)
+                    .foregroundStyle(isActive ? .primary : .secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                Text(relativeTime(session.updatedAt))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isActive ? Color.accentColor.opacity(0.18) : Color.clear)
+            .padding(.horizontal, 28)
+            .frame(height: AgentDesign.sidebarRowHeight)
             .contentShape(Rectangle())
+            .background(isActive ? Color.accentColor.opacity(0.12) : Color.clear)
         }
         .buttonStyle(.plain)
         .contextMenu {
@@ -143,9 +221,9 @@ private struct AgentSessionsSidebar: View {
         return groups
             .map { ($0.key, $0.value.sorted { $0.updatedAt > $1.updatedAt }) }
             .sorted { lhs, rhs in
-                let lhsMostRecent = lhs.1.first?.updatedAt ?? .distantPast
-                let rhsMostRecent = rhs.1.first?.updatedAt ?? .distantPast
-                return lhsMostRecent > rhsMostRecent
+                let l = lhs.1.first?.updatedAt ?? .distantPast
+                let r = rhs.1.first?.updatedAt ?? .distantPast
+                return l > r
             }
     }
 
@@ -153,97 +231,159 @@ private struct AgentSessionsSidebar: View {
         if key == "_no_workspace_" { return "No workspace" }
         return URL(fileURLWithPath: key).lastPathComponent
     }
+}
 
-    private func relativeTime(_ date: Date) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        return formatter.localizedString(for: date, relativeTo: Date())
+private struct SidebarActionRow: View {
+    let icon: String
+    let title: String
+    let shortcut: String?
+    var isDimmed: Bool = false
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: icon)
+                    .font(.system(size: 12))
+                    .frame(width: 14)
+                    .foregroundStyle(isDimmed ? .tertiary : .secondary)
+                Text(title)
+                    .font(AgentDesign.sidebarRowFont)
+                    .foregroundStyle(isDimmed ? .secondary : .primary)
+                Spacer(minLength: 0)
+                if let shortcut {
+                    Text(shortcut)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 28)
+            .contentShape(Rectangle())
+            .background(isHovered ? AgentDesign.subtleBackground : Color.clear)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .disabled(isDimmed)
     }
 }
 
-// MARK: - Chat pane
+// MARK: - Header
 
-private struct AgentChatPane: View {
+private struct AgentChatHeader: View {
     @EnvironmentObject var appState: AppState
-    @FocusState private var inputFocused: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            transcript
-            Divider()
-            composer
-        }
-        .background(Color(nsColor: .windowBackgroundColor))
-    }
+        HStack(spacing: 8) {
+            Text(title)
+                .font(AgentDesign.titleFont)
+                .lineLimit(1)
+                .truncationMode(.middle)
 
-    private var header: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(currentSessionTitle)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-                Text(workspaceLabel)
-                    .font(.caption2)
+            Button {
+                copyTitle()
+            } label: {
+                Image(systemName: "square.on.square")
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
+            .buttonStyle(.plain)
+            .help("Copy title")
 
             Spacer(minLength: 8)
 
-            ModelPicker()
-                .frame(minWidth: 200, maxWidth: 280)
+            HStack(spacing: 12) {
+                Button {
+                    appState.startNewAgentSession()
+                } label: {
+                    Image(systemName: "plus.bubble")
+                }
+                .buttonStyle(.plain)
+                .help("New Chat")
 
-            ContextProgress()
-                .frame(width: 130)
+                Button {
+                    appState.setAppMode(.editor)
+                } label: {
+                    Image(systemName: "rectangle.split.2x1")
+                }
+                .buttonStyle(.plain)
+                .help("Switch to Editor Mode")
+            }
+            .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 14)
-        .frame(height: 50)
+        .padding(.horizontal, 18)
+        .frame(height: AgentDesign.headerHeight)
     }
 
-    private var transcript: some View {
+    private var title: String {
+        guard let id = appState.activeAgentSessionID,
+              let session = appState.agentSessions.first(where: { $0.id == id }) else {
+            return "New Chat"
+        }
+        return session.title
+    }
+
+    private func copyTitle() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(title, forType: .string)
+    }
+}
+
+// MARK: - Transcript
+
+private struct AgentChatTranscript: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
+                LazyVStack(alignment: .leading, spacing: AgentDesign.messageVerticalSpacing) {
                     if appState.agentMessages.isEmpty {
-                        AgentModeEmptyState()
+                        AgentEmptyState()
                             .frame(maxWidth: .infinity)
-                            .padding(.top, 56)
+                            .padding(.top, 80)
                     } else {
                         ForEach(visibleMessages) { message in
-                            AgentMessageBubble(message: message)
+                            AgentModeMessageView(message: message)
                                 .id(message.id)
                             ForEach(toolCalls(for: message.id)) { call in
                                 AgentToolCallCard(call: call)
                                     .id(call.id)
+                                    .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                             }
                         }
                     }
 
                     ForEach(appState.agentQueuedMessages) { queued in
-                        QueuedMessageBubble(message: queued)
+                        QueuedMessageRow(message: queued)
                     }
 
                     if let error = appState.agentErrorMessage {
                         Text(error)
-                            .font(.caption)
+                            .font(AgentDesign.secondaryFont)
                             .foregroundStyle(.red)
-                            .padding(8)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.red.opacity(0.08))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .padding(10)
+                            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+                            .background(Color.red.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius))
                     }
 
                     ForEach(appState.agentPatchProposals) { proposal in
                         AgentPatchProposalCard(proposal: proposal)
+                            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                     }
                 }
-                .padding(14)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 20)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .onChange(of: appState.agentMessages) { _, messages in
                 if let last = messages.last {
-                    proxy.scrollTo(last.id, anchor: .bottom)
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        proxy.scrollTo(last.id, anchor: .bottom)
+                    }
                 }
             }
             .onChange(of: appState.agentToolCalls.count) { _, _ in
@@ -254,130 +394,206 @@ private struct AgentChatPane: View {
         }
     }
 
-    private var composer: some View {
-        VStack(spacing: 8) {
+    private var visibleMessages: [AgentMessage] {
+        appState.agentMessages.filter { $0.role != .tool }
+    }
+
+    private func toolCalls(for messageID: AgentMessage.ID) -> [AgentToolCall] {
+        appState.agentToolCalls.filter { $0.messageID == messageID }
+    }
+}
+
+// MARK: - Message bubbles for Agent mode
+
+private struct AgentModeMessageView: View {
+    let message: AgentMessage
+
+    var body: some View {
+        switch message.role {
+        case .user: userBubble
+        case .assistant: assistantContent
+        case .system: assistantContent
+        case .tool: EmptyView()
+        }
+    }
+
+    private var userBubble: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !message.content.isEmpty {
+                Text(message.content)
+                    .font(AgentDesign.bodyFont)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !message.images.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(message.images) { image in
+                            AgentImageThumbnail(image: image, size: 96, allowsRemoval: false, onRemove: nil)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+        .background(AgentDesign.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius))
+    }
+
+    private var assistantContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if message.content.isEmpty, !message.toolCalls.isEmpty {
+                Text("Using tools…")
+                    .font(AgentDesign.secondaryFont)
+                    .foregroundStyle(.secondary)
+            } else if !message.content.isEmpty {
+                Text(message.content)
+                    .font(AgentDesign.bodyFont)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+    }
+}
+
+// MARK: - Queued message
+
+private struct QueuedMessageRow: View {
+    let message: AgentQueuedMessage
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "hourglass")
+                .font(.system(size: 11))
+                .foregroundStyle(.orange)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Queued")
+                    .font(AgentDesign.captionFont)
+                    .foregroundStyle(.orange)
+                    .textCase(.uppercase)
+                if !message.text.isEmpty {
+                    Text(message.text)
+                        .font(AgentDesign.bodyFont)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+                if !message.images.isEmpty {
+                    Text("\(message.images.count) image\(message.images.count == 1 ? "" : "s")")
+                        .font(AgentDesign.captionFont)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+        .background(Color.orange.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius)
+                .stroke(Color.orange.opacity(0.25), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Empty state
+
+private struct AgentEmptyState: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 28, weight: .light))
+                .foregroundStyle(.tertiary)
+            Text("How can I help today?")
+                .font(.system(size: 16, weight: .medium))
+            Text(subtitle)
+                .font(AgentDesign.secondaryFont)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 360)
+        }
+        .foregroundStyle(.secondary)
+    }
+
+    private var subtitle: String {
+        if appState.rootDirectory == nil {
+            return "Open a folder from the menu to chat about a project."
+        }
+        return "Chatting about \(appState.rootDirectory?.lastPathComponent ?? ""). Paste images, switch models, queue follow-ups."
+    }
+}
+
+// MARK: - Composer
+
+private struct AgentChatComposer: View {
+    @EnvironmentObject var appState: AppState
+    @FocusState private var inputFocused: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                ComposerCard()
+                    .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 14)
+        }
+    }
+}
+
+private struct ComposerCard: View {
+    @EnvironmentObject var appState: AppState
+    @FocusState private var inputFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
             if !appState.agentPendingImages.isEmpty {
                 AgentComposerImageStrip(images: appState.agentPendingImages) { id in
                     appState.removeAgentImage(id: id)
                 }
             }
 
-            HStack(alignment: .top, spacing: 8) {
-                ComposerTextEditor(
-                    text: $appState.agentInput,
-                    onSubmit: { appState.sendAgentMessage() },
-                    onPasteImage: handlePastedImage
-                )
-                .focused($inputFocused)
-                .frame(minHeight: 70, maxHeight: 140)
-                .padding(6)
-                .background(Color(nsColor: .textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .onDrop(of: [.image, .fileURL], isTargeted: nil) { providers in
-                    handleDroppedProviders(providers)
-                    return true
-                }
-
-                VStack(spacing: 6) {
-                    Button {
-                        attachImageFromPanel()
-                    } label: {
-                        Image(systemName: "photo.badge.plus")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Attach Image")
-
-                    if appState.isAgentResponding {
-                        Button {
-                            appState.stopAgentResponse()
-                        } label: {
-                            Image(systemName: "stop.circle.fill")
-                                .foregroundStyle(.red)
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Stop")
-                    } else {
-                        Button {
-                            appState.sendAgentMessage()
-                        } label: {
-                            Image(systemName: "paperplane.fill")
-                        }
-                        .buttonStyle(.borderless)
-                        .disabled(!hasSomethingToSend)
-                        .help("Send")
-                    }
-                }
+            ComposerTextEditor(
+                text: $appState.agentInput,
+                onSubmit: { appState.sendAgentMessage() },
+                onPasteImage: handlePastedImage
+            )
+            .focused($inputFocused)
+            .frame(minHeight: 40, maxHeight: 130)
+            .onDrop(of: [.image, .fileURL], isTargeted: nil) { providers in
+                handleDroppedProviders(providers)
+                return true
             }
 
             HStack(spacing: 6) {
-                if appState.agentQueuedMessages.isEmpty {
-                    Text(composerHint)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("\(appState.agentQueuedMessages.count) queued")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                    Button("Clear Queue") {
-                        appState.clearAgentQueue()
-                    }
-                    .buttonStyle(.borderless)
-                    .font(.caption2)
-                }
+                AttachButton(action: attachImageFromPanel)
+                ModelPickerPill()
                 Spacer(minLength: 0)
-                if appState.isAgentResponding {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Sending…")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                if !appState.agentQueuedMessages.isEmpty {
+                    QueueBadge()
                 }
+                SendStopButton()
             }
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(AgentDesign.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AgentDesign.inputCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: AgentDesign.inputCornerRadius)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+        )
         .onAppear { inputFocused = true }
     }
 
-    private var hasSomethingToSend: Bool {
-        !appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || !appState.agentPendingImages.isEmpty
-    }
-
-    private var composerHint: String {
-        if appState.rootDirectory == nil {
-            return "Open a folder from the menu to enable workspace tools."
-        }
-        return "Cmd+Return to send · Paste or drop to attach images"
-    }
-
-    private var visibleMessages: [AgentMessage] {
-        appState.agentMessages.filter { $0.role != .tool }
-    }
-
-    private var currentSessionTitle: String {
-        guard let id = appState.activeAgentSessionID,
-              let session = appState.agentSessions.first(where: { $0.id == id }) else {
-            return "New Chat"
-        }
-        return session.title
-    }
-
-    private var workspaceLabel: String {
-        if let root = appState.rootDirectory {
-            return root.lastPathComponent
-        }
-        return "No workspace"
-    }
-
-    private func toolCalls(for messageID: AgentMessage.ID) -> [AgentToolCall] {
-        appState.agentToolCalls.filter { $0.messageID == messageID }
-    }
-
-    // MARK: image intake
-
     private func handlePastedImage() {
-        let images = AgentImagePasteboardHelper.readImages(from: NSPasteboard.general)
-        for (data, mime) in images {
+        for (data, mime) in AgentImagePasteboardHelper.readImages(from: NSPasteboard.general) {
             ingest(data: data, mimeType: mime)
         }
     }
@@ -388,21 +604,15 @@ private struct AgentChatPane: View {
                 _ = provider.loadObject(ofClass: NSImage.self) { object, _ in
                     guard let image = object as? NSImage,
                           let png = Self.pngData(for: image) else { return }
-                    DispatchQueue.main.async {
-                        ingest(data: png, mimeType: "image/png")
-                    }
+                    DispatchQueue.main.async { ingest(data: png, mimeType: "image/png") }
                 }
             } else if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
                 provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
                     guard let data = item as? Data,
                           let url = URL(dataRepresentation: data, relativeTo: nil),
                           let raw = try? Data(contentsOf: url),
-                          let mime = AgentImagePasteboardHelper.mimeType(forPath: url.path) else {
-                        return
-                    }
-                    DispatchQueue.main.async {
-                        ingest(data: raw, mimeType: mime)
-                    }
+                          let mime = AgentImagePasteboardHelper.mimeType(forPath: url.path) else { return }
+                    DispatchQueue.main.async { ingest(data: raw, mimeType: mime) }
                 }
             }
         }
@@ -415,10 +625,8 @@ private struct AgentChatPane: View {
         panel.allowsMultipleSelection = true
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
-        // `runModal()` blocks the main run loop and, when invoked from a
-        // SwiftUI Button action under `default-isolation=MainActor`, was
-        // freezing the whole app. Use the async `begin` form instead so
-        // the panel runs on its own session.
+        // `panel.begin` is critical — `runModal` blocks the main run loop
+        // under default-isolation=MainActor and freezes the app.
         panel.begin { response in
             guard response == .OK else { return }
             for url in panel.urls {
@@ -430,11 +638,7 @@ private struct AgentChatPane: View {
     }
 
     private func ingest(data: Data, mimeType: String) {
-        if data.count > 8 * 1024 * 1024 {
-            // Skip absurdly large attachments. A warning toast would be
-            // nicer, but for now we just drop them.
-            return
-        }
+        guard data.count <= 8 * 1024 * 1024 else { return }
         appState.addAgentImage(data: data, mimeType: mimeType)
     }
 
@@ -445,9 +649,81 @@ private struct AgentChatPane: View {
     }
 }
 
-// MARK: - Model picker
+private struct AttachButton: View {
+    let action: () -> Void
 
-private struct ModelPicker: View {
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "plus.circle")
+                .font(.system(size: 16))
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .help("Attach image")
+    }
+}
+
+private struct SendStopButton: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        Button {
+            if appState.isAgentResponding {
+                appState.stopAgentResponse()
+            } else {
+                appState.sendAgentMessage()
+            }
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(appState.isAgentResponding ? Color.red : (canSend ? Color.accentColor : Color.secondary.opacity(0.3)))
+                    .frame(width: 26, height: 26)
+                Image(systemName: appState.isAgentResponding ? "stop.fill" : "arrow.up")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!appState.isAgentResponding && !canSend)
+        .help(appState.isAgentResponding ? "Stop" : "Send (⌘↩)")
+    }
+
+    private var canSend: Bool {
+        !appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !appState.agentPendingImages.isEmpty
+    }
+}
+
+private struct QueueBadge: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        Menu {
+            Button("Clear Queue", role: .destructive) {
+                appState.clearAgentQueue()
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "hourglass")
+                    .font(.system(size: 9))
+                Text("\(appState.agentQueuedMessages.count) queued")
+                    .font(AgentDesign.captionFont)
+            }
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Color.orange.opacity(0.12))
+            .clipShape(Capsule())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
+}
+
+// MARK: - Model picker pill
+
+private struct ModelPickerPill: View {
     @EnvironmentObject var appState: AppState
 
     var body: some View {
@@ -464,10 +740,8 @@ private struct ModelPicker: View {
                         }
                     }
                 }
-                Text("Default (from Settings)")
                 Divider()
             }
-
             ForEach(appState.agentKnownModelIDs, id: \.self) { model in
                 Button {
                     appState.setAgentSessionModel(model)
@@ -481,26 +755,26 @@ private struct ModelPicker: View {
                 }
             }
             if appState.agentKnownModelIDs.isEmpty {
-                Text("No fetched models. Use Settings > Agent.")
+                Text("Fetch models in Settings > Agent")
             }
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "cube")
-                    .font(.system(size: 11))
+            HStack(spacing: 3) {
                 Text(currentModel.isEmpty ? "Select model" : currentModel)
+                    .font(AgentDesign.secondaryFont)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .font(.system(size: 11))
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 9))
+                    .font(.system(size: 8, weight: .semibold))
             }
+            .foregroundStyle(.secondary)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(Capsule())
+            .background(AgentDesign.subtleBackground)
+            .clipShape(RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius))
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
+        .fixedSize()
     }
 
     private var currentModel: String {
@@ -508,45 +782,73 @@ private struct ModelPicker: View {
     }
 }
 
-// MARK: - Context progress
+// MARK: - Status bar
 
-private struct ContextProgress: View {
+private struct AgentChatStatusBar: View {
     @EnvironmentObject var appState: AppState
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 2) {
-            HStack(spacing: 4) {
-                Text(remainingLabel)
-                    .font(.caption2)
-                    .foregroundStyle(remainingColor)
-                Text("/ \(formatTokens(window))")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.secondary.opacity(0.2))
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(barColor)
-                        .frame(width: proxy.size.width * CGFloat(usedFraction))
+        HStack(spacing: 14) {
+            if let branch = appState.gitStatus.branchName {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: 9))
+                    Text(branch)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
             }
-            .frame(height: 4)
+            if let root = appState.rootDirectory {
+                HStack(spacing: 4) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 9))
+                    Text(root.lastPathComponent)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            } else {
+                Text("No workspace")
+            }
+
+            Spacer(minLength: 0)
+
+            ContextRingIndicator()
         }
+        .font(AgentDesign.captionFont)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 18)
+        .frame(height: AgentDesign.statusBarHeight)
+        .background(AgentDesign.sidebarBackground)
+        .overlay(Divider(), alignment: .top)
+    }
+}
+
+private struct ContextRingIndicator: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ZStack {
+                Circle()
+                    .stroke(Color.secondary.opacity(0.25), lineWidth: 2)
+                    .frame(width: 12, height: 12)
+                Circle()
+                    .trim(from: 0, to: usedFraction)
+                    .stroke(barColor, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: 12, height: 12)
+            }
+            Text("\(percent)%")
+                .monospacedDigit()
+        }
+        .help("Context: ~\(formatTokens(used)) / \(formatTokens(window)). \(formatTokens(remaining)) remaining (estimate).")
     }
 
     private var window: Int { max(1, appState.agentContextWindow) }
     private var used: Int { appState.estimatedAgentTokens }
-    private var usedFraction: Double { min(1.0, Double(used) / Double(window)) }
+    private var usedFraction: CGFloat { min(1, max(0, CGFloat(used) / CGFloat(window))) }
     private var remaining: Int { max(0, window - used) }
-    private var remainingLabel: String { "≈ \(formatTokens(remaining)) left" }
-
-    private var remainingColor: Color {
-        if usedFraction > 0.9 { return .red }
-        if usedFraction > 0.75 { return .orange }
-        return .secondary
-    }
+    private var percent: Int { Int(usedFraction * 100) }
 
     private var barColor: Color {
         if usedFraction > 0.9 { return .red }
@@ -561,68 +863,7 @@ private struct ContextProgress: View {
     }
 }
 
-// MARK: - Queued bubble + empty state
-
-private struct QueuedMessageBubble: View {
-    let message: AgentQueuedMessage
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Image(systemName: "hourglass")
-                    .font(.caption2)
-                    .foregroundStyle(.orange)
-                Text("Queued")
-                    .font(.caption2)
-                    .foregroundStyle(.orange)
-            }
-            if !message.text.isEmpty {
-                Text(message.text)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            if !message.images.isEmpty {
-                HStack(spacing: 4) {
-                    Image(systemName: "photo")
-                    Text("\(message.images.count) image\(message.images.count == 1 ? "" : "s")")
-                }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            }
-        }
-        .padding(9)
-        .background(Color.orange.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 7))
-        .overlay(
-            RoundedRectangle(cornerRadius: 7)
-                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
-        )
-    }
-}
-
-private struct AgentModeEmptyState: View {
-    @EnvironmentObject var appState: AppState
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "sparkles.rectangle.stack")
-                .font(.system(size: 36, weight: .light))
-                .foregroundStyle(.secondary)
-            Text("Start a new chat")
-                .font(.system(size: 16, weight: .semibold))
-            Text(appState.rootDirectory == nil
-                ? "Open a folder from the menu to chat about a project, or just ask anything."
-                : "Chatting about \(appState.rootDirectory?.lastPathComponent ?? "this project"). Paste images, switch models, queue follow-ups.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 360)
-        }
-    }
-}
-
-// MARK: - NSTextView-backed composer that hooks Cmd+V for images
+// MARK: - NSTextView-backed composer (Cmd+V image intercept, Cmd+Return submit)
 
 private struct ComposerTextEditor: NSViewRepresentable {
     @Binding var text: String
@@ -642,13 +883,13 @@ private struct ComposerTextEditor: NSViewRepresentable {
         let textView = ComposerNSTextView(frame: .zero)
         textView.delegate = context.coordinator
         textView.coordinator = context.coordinator
-        textView.font = .systemFont(ofSize: 13)
+        textView.font = NSFont.systemFont(ofSize: 13)
         textView.isRichText = false
         textView.allowsUndo = true
         textView.isEditable = true
         textView.isSelectable = true
         textView.autoresizingMask = [.width]
-        textView.textContainerInset = NSSize(width: 4, height: 4)
+        textView.textContainerInset = NSSize(width: 0, height: 2)
         textView.string = text
         textView.drawsBackground = false
         textView.minSize = NSSize(width: 0, height: 0)
@@ -685,7 +926,6 @@ private struct ComposerTextEditor: NSViewRepresentable {
         }
 
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-            // Cmd+Return submits; plain Return inserts newline.
             if commandSelector == #selector(NSResponder.insertNewline(_:)) {
                 let modifiers = NSEvent.modifierFlags
                 if modifiers.contains(.command) {
@@ -697,13 +937,9 @@ private struct ComposerTextEditor: NSViewRepresentable {
         }
     }
 
-    static func dismantleNSView(_ nsView: NSScrollView, coordinator: Coordinator) {
-        // No teardown needed.
-    }
+    static func dismantleNSView(_ nsView: NSScrollView, coordinator: Coordinator) {}
 }
 
-/// Custom NSTextView that intercepts Cmd+V to ingest image data from the
-/// pasteboard before falling back to the default paste behavior.
 fileprivate final class ComposerNSTextView: NSTextView {
     fileprivate weak var coordinator: ComposerTextEditor.Coordinator?
 
@@ -715,8 +951,6 @@ fileprivate final class ComposerNSTextView: NSTextView {
         }
         if hasImage {
             coordinator?.onPasteImage()
-            // Also let the default paste run for any string content alongside
-            // the image, but only if there's a text representation.
             if pasteboard.string(forType: .string) != nil {
                 super.paste(sender)
             }

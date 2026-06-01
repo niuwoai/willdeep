@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.39.0-rc3 - 2026-06-02
+
+- Reworked the Agent mode visual language to track Cursor's layout: lighter window background using `windowBackgroundColor` / `underPageBackgroundColor` so it follows system appearance, narrower header that just shows the chat title and a copy/new-chat affordance, assistant messages rendered flush against the background (no bubble), user messages as compact left-aligned cards with capped width, and a refreshed composer card with attach icon + model picker pill on the lower-left and a circular send/stop button on the lower-right.
+- Replaced the in-header context progress bar with a small bottom status bar showing git branch, workspace folder, and a circular context-usage ring with percentage and an estimate tooltip.
+- Reworked the sessions sidebar with grouped workspaces, bold folder rows, and per-project "See more" expansion (5 rows by default). Active session is marked with a tinted row and accent dot; right-click still deletes.
+- Added a queue badge in the composer that opens a Clear Queue action; queued messages render as a compact bordered orange row instead of a colored bubble.
+- Centralized all Agent-mode spacing, font sizes, and colors in an `AgentDesign` enum to keep future visual passes one-file changes.
+
 ## 1.39.0-rc2 - 2026-06-02
 
 - Fixed the "Attach Image" button freezing the whole app in Agent mode. `NSOpenPanel.runModal()` from a SwiftUI Button action was blocking the main run loop under the new MainActor-default isolation; switched to the async `panel.begin { ... }` form.
