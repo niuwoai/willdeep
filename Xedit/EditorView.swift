@@ -1427,6 +1427,14 @@ final class LineNumberRulerView: NSRulerView {
     }
 
     override func drawHashMarksAndLabels(in rect: NSRect) {
+        // Clip drawing to our own bounds. NSRulerView's drawing isn't clipped
+        // automatically — line-number labels whose Y falls just above the
+        // ruler's top end up rendering into the tab bar above (the "line 12
+        // appearing in the tab bar row" glitch).
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        NSBezierPath(rect: bounds).addClip()
+
         theme.gutterBackgroundColor.setFill()
         bounds.fill()
 
