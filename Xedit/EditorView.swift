@@ -1430,6 +1430,10 @@ final class LineNumberRulerView: NSRulerView {
         return digits != lastThicknessDigits
     }
 
+    override func draw(_ dirtyRect: NSRect) {
+        drawHashMarksAndLabels(in: dirtyRect)
+    }
+
     override func drawHashMarksAndLabels(in rect: NSRect) {
         // Clip drawing to our own bounds. NSRulerView's drawing isn't clipped
         // automatically — line-number labels whose Y falls just above the
@@ -1439,7 +1443,7 @@ final class LineNumberRulerView: NSRulerView {
         defer { NSGraphicsContext.restoreGraphicsState() }
         NSBezierPath(rect: bounds).addClip()
 
-        theme.gutterBackgroundColor.setFill()
+        theme.backgroundColor.setFill()
         bounds.fill()
 
         guard let textView = textView,

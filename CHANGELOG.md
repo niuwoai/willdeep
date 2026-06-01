@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.32.0-rc17 - 2026-06-01
+
+- Removed the vertical line tied to the line-number gutter. `LineNumberRulerView` now overrides `draw(_:)` so AppKit's default `NSRulerView` border/edge drawing is bypassed, and the gutter fills with the editor background color instead of a separate gutter color. Line numbers and fold controls remain visible without a distinct vertical gutter edge.
+
 ## 1.32.0-rc16 - 2026-06-01
 
 - Removed the remaining sidebar edge hairline by replacing the file tree's system `.sidebar` `List` with a plain `ScrollView`/`LazyVStack`. The line was coming from the AppKit-backed sidebar list itself, not from the outer split view or titlebar chrome.
