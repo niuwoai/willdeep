@@ -132,7 +132,20 @@ struct EditorView: NSViewRepresentable {
         textView.onSyntaxHighlightingChange = { [weak coordinator = context.coordinator] selection in
             coordinator?.parent.onSyntaxHighlightingChange?(selection)
         }
-        context.coordinator.applyAppearance(to: textView, in: nsView)
+        // `applyAppearance` sets a dozen NSTextView properties (font, theme,
+        // typingAttributes, paragraph style) and re-tiles the line-number ruler
+        // — non-trivial on large files. SwiftUI re-fires `updateNSView` on every
+        // window re-activation; running it then when nothing has actually
+        // changed was a big slice of the reactivation lag. Skip the heavy parts
+        // when settings/language/render haven't changed, but always push the
+        // cheap, edit-driven changedLineNumbers update to the ruler.
+        if settingsChanged || langChanged || renderRevisionChanged {
+            context.coordinator.applyAppearance(to: textView, in: nsView)
+        } else if let ruler = nsView.verticalRulerView as? LineNumberRulerView,
+                  ruler.changedLineNumbers != changedLineNumbers {
+            ruler.changedLineNumbers = changedLineNumbers
+            ruler.needsDisplay = true
+        }
 
         // A tab switch arrives as a changed activeTabID plus new content. Save the
         // outgoing tab's cursor/scroll before the content is replaced.
@@ -320,10 +333,18 @@ struct EditorView: NSViewRepresentable {
             if let ruler = scrollView.verticalRulerView as? LineNumberRulerView {
                 ruler.settings = parent.settings
                 ruler.theme = theme
+                let fontChanged = ruler.font != font
                 ruler.font = font
                 ruler.changedLineNumbers = parent.changedLineNumbers
                 ruler.needsDisplay = true
-                ruler.invalidateRuleThickness()
+                // `requiredThickness` scans the document to count lines, and
+                // `tile()` re-lays out the scroll view — both costly on large
+                // files. Only recompute when something that can actually change
+                // the thickness changed (font size or the line count itself).
+                // `lineCount()` is now cached by length so this stays cheap.
+                if fontChanged || ruler.thicknessNeedsRefresh() {
+                    ruler.invalidateRuleThickness()
+                }
             }
             textView.needsDisplay = true
         }
@@ -1365,7 +1386,19 @@ final class LineNumberRulerView: NSRulerView {
 
     func invalidateRuleThickness() {
         ruleThickness = requiredThickness
+        lastThicknessDigits = String(max(1, lineCount())).count
         scrollView?.tile()
+    }
+
+    private var lastThicknessDigits: Int = 0
+
+    /// `true` when the gutter's digit width has actually changed since the last
+    /// `invalidateRuleThickness()` (i.e. the file crossed a power-of-10 boundary
+    /// in line count). Lets callers skip the expensive `tile()` re-layout when
+    /// the rendered gutter wouldn't change.
+    func thicknessNeedsRefresh() -> Bool {
+        let digits = max(2, String(max(1, lineCount())).count)
+        return digits != lastThicknessDigits
     }
 
     override func drawHashMarksAndLabels(in rect: NSRect) {
@@ -1517,17 +1550,27 @@ final class LineNumberRulerView: NSRulerView {
         path.fill()
     }
 
+    private var cachedLineCount: Int = 1
+    private var cachedLineCountForLength: Int = -1
+
     private func lineCount() -> Int {
         guard let string = textView?.string, !string.isEmpty else { return 1 }
-        // Count newlines over the UTF-8 bytes instead of per-character NSString
-        // bridging (`character(at:)` per index was O(file) with heavy per-call
-        // overhead — a measurable slice of the tab-switch render cost on large
-        // files). The gutter only needs the digit count, so an exact byte count
-        // of "\n" is sufficient and much faster.
+        // Cache the result keyed by string length. `lineCount()` is read on
+        // every `requiredThickness` getter call and that getter ran twice per
+        // EditorView.updateNSView (re-fired on every window re-activation),
+        // contributing ~80/350 main-thread samples in profiling on a 348 KB
+        // file. Length is a cheap O(1) proxy that changes on any edit, so the
+        // cache stays correct without needing a separate invalidation token.
+        let length = (string as NSString).length
+        if length == cachedLineCountForLength {
+            return cachedLineCount
+        }
         var count = 1
         for byte in string.utf8 where byte == 0x0A {
             count += 1
         }
+        cachedLineCount = count
+        cachedLineCountForLength = length
         return count
     }
 

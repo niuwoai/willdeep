@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.32.0-rc5 - 2026-06-01
+
+- Cut window re-activation lag on large files by ~66%, measured on a 348 KB file with structure inspector open: ~265 ms -> ~90 ms per re-activation. Found via main-thread sampling that two costs ran on every SwiftUI `updateNSView` (which re-fires on every window become-active):
+  - `LineNumberRulerView.lineCount()` scanned the entire string to count newlines each call, and was invoked twice per update via `requiredThickness`. Now cached by string length, with an O(1) check that only recomputes when length changes.
+  - The whole `applyAppearance` pass (font, theme, paragraph style, ruler retile) ran unconditionally, even when nothing changed. Now gated on `settingsChanged || langChanged || renderRevisionChanged`; the cheap `changedLineNumbers` update to the ruler still runs every time. The ruler also only calls `invalidateRuleThickness()` when the gutter's digit count would actually differ.
+
 ## 1.32.0-rc4 - 2026-06-01
 
 - Fixed two regressions from the non-contiguous layout introduced in 1.32.0-rc2:
