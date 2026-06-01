@@ -181,6 +181,7 @@ struct AgentToolCallCard: View {
     let call: AgentToolCall
     @State private var isExpanded = false
     @State private var confirmInput = ""
+    @State private var answerInput = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -259,6 +260,32 @@ struct AgentToolCallCard: View {
                     }
                     .font(.caption)
                 }
+            } else if call.status == .awaitingUserAnswer {
+                VStack(alignment: .leading, spacing: 6) {
+                    if let question = call.arguments["question"]?.stringValue(), !question.isEmpty {
+                        Text(question)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    TextField("Your answer", text: $answerInput, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 12))
+                        .lineLimit(1...4)
+                    HStack(spacing: 6) {
+                        Button("Send") {
+                            appState.answerAgentToolCall(id: call.id, answer: answerInput)
+                            answerInput = ""
+                        }
+                        .disabled(answerInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        Button("Skip") {
+                            appState.denyAgentToolCall(id: call.id)
+                            answerInput = ""
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .font(.caption)
+                }
             }
         }
         .padding(9)
@@ -306,6 +333,7 @@ struct AgentToolCallCard: View {
     private var iconName: String {
         switch call.status {
         case .pendingApproval, .awaitingConfirm: return "questionmark.circle"
+        case .awaitingUserAnswer: return "bubble.left.and.text.bubble.right"
         case .running: return "hourglass"
         case .succeeded: return "checkmark.circle.fill"
         case .failed: return "exclamationmark.triangle.fill"
@@ -316,6 +344,7 @@ struct AgentToolCallCard: View {
     private var iconColor: Color {
         switch call.status {
         case .pendingApproval, .awaitingConfirm: return .blue
+        case .awaitingUserAnswer: return .purple
         case .running: return .secondary
         case .succeeded: return .green
         case .failed: return .orange
@@ -327,6 +356,7 @@ struct AgentToolCallCard: View {
         switch call.status {
         case .pendingApproval: return "Awaiting approval"
         case .awaitingConfirm: return "Confirm required"
+        case .awaitingUserAnswer: return "Asking you"
         case .running: return "Running…"
         case .succeeded:
             if let summary = call.result?.summary, !summary.isEmpty {
@@ -343,6 +373,7 @@ struct AgentToolCallCard: View {
         case .read: return "READ"
         case .write: return "WRITE"
         case .danger: return "DANGER"
+        case .userInput: return "ASK"
         }
     }
 
@@ -351,12 +382,14 @@ struct AgentToolCallCard: View {
         case .read: return .secondary
         case .write: return .blue
         case .danger: return .orange
+        case .userInput: return .purple
         }
     }
 
     private var borderColor: Color {
         switch call.status {
         case .pendingApproval, .awaitingConfirm: return Color.blue.opacity(0.4)
+        case .awaitingUserAnswer: return Color.purple.opacity(0.4)
         case .failed: return Color.orange.opacity(0.4)
         case .denied: return Color.secondary.opacity(0.3)
         default: return Color.clear

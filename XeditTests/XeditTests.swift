@@ -1491,6 +1491,47 @@ struct VeilWriterTests {
         #expect(forcePushRisk == .danger)
     }
 
+    @Test("ask_user tool is registered with userInput risk and a question parameter")
+    func testAskUserToolRegistration() {
+        let descriptor = AgentToolRegistry.descriptor(for: "ask_user")
+        #expect(descriptor != nil)
+        #expect(descriptor?.risk == .userInput)
+        #expect(descriptor?.parameters.contains(where: { $0.name == "question" && $0.required }) == true)
+
+        let risk = AgentToolRegistry.risk(
+            for: "ask_user",
+            arguments: ["question": .string("What port should the server bind to?")]
+        )
+        #expect(risk == .userInput)
+    }
+
+    @Test("collapseOldToolResults keeps the most recent tool messages and replaces older ones with a placeholder")
+    func testCollapseOldToolResults() {
+        var messages: [AgentMessage] = []
+        messages.append(AgentMessage(role: .user, content: "Find foo"))
+        for index in 0..<6 {
+            messages.append(AgentMessage(role: .assistant, content: "step \(index)"))
+            messages.append(AgentMessage(
+                role: .tool,
+                content: String(repeating: "x", count: 500),
+                toolCallID: "call_\(index)"
+            ))
+        }
+
+        let collapsed = AppState.collapseOldToolResults(in: messages, keepRecentToolMessages: 2)
+        let toolMessages = collapsed.filter { $0.role == .tool }
+        #expect(toolMessages.count == 6)
+
+        let placeholderCount = toolMessages.filter { $0.content.hasPrefix("[tool result hidden") }.count
+        #expect(placeholderCount == 4)
+
+        // Final two tool messages should remain at full length.
+        let untouched = toolMessages.suffix(2)
+        for message in untouched {
+            #expect(message.content.count == 500)
+        }
+    }
+
     @Test("agent tool runner refuses paths outside the workspace")
     func testReadFileRefusesEscapedPath() async throws {
         let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!

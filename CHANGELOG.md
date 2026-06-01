@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.40.0-rc1 - 2026-06-02
+
+- Added the `ask_user` tool so the Agent can pause mid-turn and ask the user a clarifying question instead of guessing. Surfaces a purple tool-call card with a question, an inline answer field, and Send / Skip buttons; the typed answer is fed back as the tool result and the turn resumes. Tracked through a new `.userInput` risk level and `.awaitingUserAnswer` status.
+- Added context compression: a Compress button appears in the status bar once estimated usage crosses 50% (and the conversation has more than 6 messages). Clicking it streams a tight summary of the older transcript from the current model and replaces them with a single `[Earlier conversation summary]` assistant message; the most recent 4 messages stay verbatim. Tool calls whose owner message vanished are dropped from the rendered list.
+- Auto-collapse old tool results: when the request payload is being built, every `tool` role message beyond the most recent 4 is replaced with a small `[tool result hidden — earlier turn, was N bytes; ask the user or re-run the tool if you need it again]` placeholder. The UI still shows the original content in the tool-call card.
+- Updated the agent system prompt to instruct the model: when something is ambiguous or a required piece of information is missing, call `ask_user` with a single concrete question instead of guessing.
+- Added unit tests for ask_user registration and old-tool-result collapsing.
+
 ## 1.39.0-rc3 - 2026-06-02
 
 - Reworked the Agent mode visual language to track Cursor's layout: lighter window background using `windowBackgroundColor` / `underPageBackgroundColor` so it follows system appearance, narrower header that just shows the chat title and a copy/new-chat affordance, assistant messages rendered flush against the background (no bubble), user messages as compact left-aligned cards with capped width, and a refreshed composer card with attach icon + model picker pill on the lower-left and a circular send/stop button on the lower-right.

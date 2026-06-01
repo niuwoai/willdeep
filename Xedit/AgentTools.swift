@@ -19,11 +19,16 @@ enum AgentToolRisk: String, Codable {
     case write
     /// Destructive or escapes the workspace; needs typed "confirm".
     case danger
+    /// Asks the user a question. Doesn't execute anything — the AppState
+    /// loop intercepts it, surfaces an input card, and feeds the typed
+    /// answer back as the tool result.
+    case userInput
 }
 
 enum AgentToolCallStatus: String, Codable {
     case pendingApproval
     case awaitingConfirm
+    case awaitingUserAnswer
     case running
     case succeeded
     case failed
@@ -113,6 +118,7 @@ enum AgentToolError: LocalizedError {
 enum AgentToolDecision {
     case approved
     case denied(reason: String)
+    case answered(String)
 }
 
 // MARK: - Tool call record (UI state)
@@ -304,6 +310,14 @@ enum AgentToolRegistry {
             parameters: [
                 AgentToolParameter(name: "command", type: .string, description: "Shell command line. Runs through /bin/sh -c.", required: true),
                 AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Hard timeout in seconds. Defaults to 20, max 120.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "ask_user",
+            description: "Ask the user a clarifying question and wait for their answer before continuing. Use this whenever a required piece of information is missing or ambiguous; do not guess. Returns the user's typed answer as the tool result.",
+            risk: .userInput,
+            parameters: [
+                AgentToolParameter(name: "question", type: .string, description: "The clarifying question to show the user.", required: true)
             ]
         )
     ]

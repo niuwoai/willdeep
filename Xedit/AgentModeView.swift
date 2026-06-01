@@ -812,6 +812,7 @@ private struct AgentChatStatusBar: View {
 
             Spacer(minLength: 0)
 
+            CompressButton()
             ContextRingIndicator()
         }
         .font(AgentDesign.captionFont)
@@ -820,6 +821,57 @@ private struct AgentChatStatusBar: View {
         .frame(height: AgentDesign.statusBarHeight)
         .background(AgentDesign.sidebarBackground)
         .overlay(Divider(), alignment: .top)
+    }
+}
+
+/// Button to manually compress the conversation. Surfaces only when the
+/// estimated context usage crosses 50% so light conversations don't see
+/// it. Replaced with a spinner while a compression is in flight.
+private struct CompressButton: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        Group {
+            if appState.isCompressingAgentContext {
+                HStack(spacing: 4) {
+                    ProgressView().controlSize(.mini)
+                    Text("Compressing…")
+                }
+            } else if shouldOffer {
+                Button {
+                    appState.compressAgentContext()
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "rectangle.compress.vertical")
+                            .font(.system(size: 9))
+                        Text("Compress")
+                    }
+                    .foregroundStyle(tint)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(tint.opacity(0.12))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .help("Summarize older messages to free context budget")
+                .disabled(appState.isAgentResponding)
+            }
+        }
+    }
+
+    private var usedFraction: Double {
+        let window = max(1, appState.agentContextWindow)
+        return min(1.0, Double(appState.estimatedAgentTokens) / Double(window))
+    }
+
+    private var shouldOffer: Bool {
+        usedFraction > 0.5 && appState.agentMessages.count > 6
+    }
+
+    private var tint: Color {
+        if usedFraction > 0.9 { return .red }
+        if usedFraction > 0.75 { return .orange }
+        return .accentColor
     }
 }
 

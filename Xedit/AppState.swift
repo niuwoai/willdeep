@@ -560,10 +560,18 @@ final class AppState: ObservableObject {
         return true
     }
 
+    /// Resolve an `ask_user` call with the user's typed answer. Empty
+    /// strings still resume the loop (so the model can react to "no answer
+    /// provided"); use `denyAgentToolCall` to skip outright.
+    func answerAgentToolCall(id: AgentToolCall.ID, answer: String) {
+        resolveAgentToolCallDecision(id: id, decision: .answered(answer))
+    }
+
     private func resolveAgentToolCallDecision(id: AgentToolCall.ID, decision: AgentToolDecision) {
         guard let index = agentToolCalls.firstIndex(where: { $0.id == id }) else { return }
         guard agentToolCalls[index].status == .pendingApproval
-            || agentToolCalls[index].status == .awaitingConfirm else {
+            || agentToolCalls[index].status == .awaitingConfirm
+            || agentToolCalls[index].status == .awaitingUserAnswer else {
             return
         }
         if case .denied(let reason) = decision {
@@ -600,7 +608,8 @@ final class AppState: ObservableObject {
                 toolsEnabled: rootDirectory != nil
             )
             let history = agentMessages.filter { $0.id != assistantID }
-            let requestMessages = [AgentMessage(role: .system, content: systemPrompt)] + history
+            let collapsedHistory = Self.collapseOldToolResults(in: history)
+            let requestMessages = [AgentMessage(role: .system, content: systemPrompt)] + collapsedHistory
 
             var finishReason: String?
             var latestToolCalls: [AgentMessageToolCall] = []
@@ -677,6 +686,7 @@ final class AppState: ObservableObject {
                 case .read: initialStatus = .running
                 case .write: initialStatus = .pendingApproval
                 case .danger: initialStatus = .awaitingConfirm
+                case .userInput: initialStatus = .awaitingUserAnswer
                 }
 
                 let record = AgentToolCall(
@@ -689,6 +699,41 @@ final class AppState: ObservableObject {
                 )
                 agentToolCalls.append(record)
                 let recordID = record.id
+
+                // ask_user short-circuits the runner: surface the question,
+                // wait for the user's typed answer, feed it back as the
+                // tool result.
+                if risk == .userInput {
+                    let decision = await awaitToolDecision(forCallID: recordID)
+                    let answer: String
+                    switch decision {
+                    case .answered(let typed):
+                        answer = typed
+                    case .denied(let reason):
+                        anyDenied = true
+                        if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
+                            agentToolCalls[index].status = .denied
+                            agentToolCalls[index].errorMessage = reason
+                        }
+                        appendToolMessage(
+                            toolCallID: call.externalID,
+                            payload: "User skipped the question."
+                        )
+                        continue
+                    case .approved:
+                        // No explicit answer recorded — treat as empty.
+                        answer = ""
+                    }
+                    if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
+                        agentToolCalls[index].status = .succeeded
+                        agentToolCalls[index].result = AgentToolResult(
+                            summary: answer.isEmpty ? "(no answer)" : "answered",
+                            payload: answer
+                        )
+                    }
+                    appendToolMessage(toolCallID: call.externalID, payload: answer)
+                    continue
+                }
 
                 if risk != .read {
                     let decision = await awaitToolDecision(forCallID: recordID)
@@ -748,7 +793,8 @@ final class AppState: ObservableObject {
             // Already resolved before we got to register (e.g. user clicked
             // Deny while the previous tool was still running) — resume now.
             if let call = agentToolCalls.first(where: { $0.id == id }),
-               call.status != .pendingApproval, call.status != .awaitingConfirm {
+               call.status != .pendingApproval, call.status != .awaitingConfirm,
+               call.status != .awaitingUserAnswer {
                 if call.status == .denied {
                     continuation.resume(returning: .denied(reason: call.errorMessage ?? "User denied"))
                 } else {
@@ -771,6 +817,133 @@ final class AppState: ObservableObject {
         agentMessages.append(
             AgentMessage(role: .tool, content: limited, toolCallID: toolCallID)
         )
+    }
+
+    @Published var isCompressingAgentContext = false
+
+    /// Summarize older conversation history into a single assistant
+    /// message to reclaim context budget. Keeps the most recent
+    /// `keepRecent` messages verbatim. Runs concurrently with whatever
+    /// the user is doing (Send still works once compression resolves).
+    func compressAgentContext(keepRecent: Int = 4) {
+        guard !isCompressingAgentContext, !isAgentResponding else { return }
+        guard agentMessages.count > keepRecent else { return }
+
+        isCompressingAgentContext = true
+        let configuration = configurationForCurrentTurn()
+        let head = Array(agentMessages.prefix(agentMessages.count - keepRecent))
+        let tail = Array(agentMessages.suffix(keepRecent))
+
+        Task { [weak self] in
+            await self?.runContextCompression(
+                head: head,
+                tail: tail,
+                configuration: configuration
+            )
+        }
+    }
+
+    @MainActor
+    private func runContextCompression(
+        head: [AgentMessage],
+        tail: [AgentMessage],
+        configuration: AgentConfiguration
+    ) async {
+        defer {
+            self.isCompressingAgentContext = false
+            self.persistActiveAgentSession()
+        }
+
+        let transcript = head
+            .filter { $0.role != .system }
+            .map { message -> String in
+                let label: String
+                switch message.role {
+                case .user: label = "USER"
+                case .assistant: label = "ASSISTANT"
+                case .tool: label = "TOOL(\(message.toolCallID ?? "?"))"
+                case .system: label = "SYSTEM"
+                }
+                return "\(label):\n\(message.content)"
+            }
+            .joined(separator: "\n\n---\n\n")
+
+        let system = AgentMessage(
+            role: .system,
+            content: """
+            You compress a coding-agent conversation transcript into a tight summary.
+            Goal: preserve enough state that the agent can continue without re-reading the old turns.
+            Cover, in this order: the user's goal, key decisions, file paths examined or modified, important findings, and any open questions. Skip pleasantries and verbatim quotes. Keep under 300 words. Output plain text, no preamble like "Here's the summary".
+            """
+        )
+        let payload = AgentMessage(
+            role: .user,
+            content: "Transcript to compress:\n\n\(transcript)"
+        )
+
+        let client = AgentClient(configuration: configuration)
+        let collector = CompressionSummaryCollector()
+        do {
+            try await client.streamChat(messages: [system, payload]) { event in
+                if case .textDelta(let delta) = event {
+                    await collector.append(delta)
+                }
+            }
+        } catch {
+            agentErrorMessage = "Context compression failed: \(error.localizedDescription)"
+            return
+        }
+
+        let trimmed = await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            agentErrorMessage = "Context compression returned an empty summary; nothing changed."
+            return
+        }
+
+        let summaryMessage = AgentMessage(
+            role: .assistant,
+            content: "[Earlier conversation summary]\n\n\(trimmed)"
+        )
+        agentMessages = [summaryMessage] + tail
+        // Tool calls referencing pre-compression assistant messages no
+        // longer have a valid messageID; drop them so they stop rendering.
+        let liveMessageIDs = Set(agentMessages.map(\.id))
+        agentToolCalls.removeAll { !liveMessageIDs.contains($0.messageID) }
+    }
+
+    /// Replace the body of older `tool` role messages with a tiny
+    /// placeholder so they stop dominating the request payload. The most
+    /// recent `keepRecentToolMessages` tool messages are left untouched so
+    /// the model can still reason about what it just did.
+    nonisolated static func collapseOldToolResults(
+        in messages: [AgentMessage],
+        keepRecentToolMessages: Int = 4
+    ) -> [AgentMessage] {
+        // Find tool message indices.
+        let toolIndices = messages.enumerated().compactMap { offset, message in
+            message.role == .tool ? offset : nil
+        }
+        guard toolIndices.count > keepRecentToolMessages else { return messages }
+        let collapseUpTo = toolIndices[toolIndices.count - keepRecentToolMessages - 1]
+
+        var copy = messages
+        for index in 0...collapseUpTo where copy[index].role == .tool {
+            let original = copy[index]
+            // Already collapsed.
+            if original.content.hasPrefix("[tool result hidden") { continue }
+            let bytes = original.content.utf8.count
+            let placeholder = "[tool result hidden — earlier turn, was \(bytes) bytes; ask the user or re-run the tool if you need it again]"
+            copy[index] = AgentMessage(
+                id: original.id,
+                role: .tool,
+                content: placeholder,
+                images: original.images,
+                toolCalls: original.toolCalls,
+                toolCallID: original.toolCallID,
+                createdAt: original.createdAt
+            )
+        }
+        return copy
     }
 
     func rejectAgentPatchProposal(id: AgentPatchProposal.ID) {
@@ -2460,6 +2633,15 @@ private struct EditorSessionSnapshot: Codable {
     let rootDirectoryBookmarkData: Data?
     let tabPaths: [String]
     let activeTabPath: String?
+}
+
+/// Tiny actor used to thread-safely accumulate a streamed summary
+/// without leaking `@MainActor` isolation into the streaming callback.
+private actor CompressionSummaryCollector {
+    private(set) var value: String = ""
+    func append(_ chunk: String) {
+        value += chunk
+    }
 }
 
 private enum SessionStore {
