@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-01 | Current version: v1.29.0-rc2
+> Last updated: 2026-06-01 | Current version: v1.30.0-rc2
 
 ## Positioning
 
@@ -70,9 +70,15 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Force the editor view to re-render after tab activation or closure so syntax highlighting remains visible.
 - Expand and load the restored project root as soon as the sidebar tree appears.
 - Keep the default editing path optimized for files under 1 MB.
+- Show a file's plain text immediately on open; never block the main thread on a full-file syntax-highlight pass. Highlighting runs off the main thread and is swapped in when ready.
 - Require explicit confirmation before loading larger files, with a core loader guard as a backstop.
+- Cache the Go to Symbol outline when the panel opens (recompute only when file content or language changes) so arrow-key navigation and query typing don't re-run the regex extraction on every body pass.
+- Cache the Quick Open file list cross-session on disk (in `~/Library/Caches`, outside the project directory) keyed by a SHA-256 of the project root path. Serve it instantly on project open, verify it with a background scan, and invalidate per-entry by modification time + size (no content hashing). Cap the cache at the 50 most-recently-used projects.
 
 ## Open Questions
+
+- Decide whether the Quick Open / file-list cache should honor `.gitignore` (currently it mirrors the raw enumerator walk).
+- Extend the cross-session disk cache to the Go to Symbol outline (currently cached only in-memory per panel session).
 
 - Add line-number and search workflows without making the editor feel heavy.
 - Refine keyboard-first tab workflows around unsaved-change prompts and bulk closing.

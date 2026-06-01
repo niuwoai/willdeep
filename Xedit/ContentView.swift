@@ -948,14 +948,22 @@ private struct SymbolJumpPanel: View {
     @State private var selectedIndex = 0
     @State private var ignoredHoverSelectionUntil = Date.distantPast
     @State private var lastHoverMouseLocation = NSEvent.mouseLocation
+    // Cache the extracted outline so the regex-heavy `EditorOutlineExtractor.outline`
+    // pass runs only when the panel opens (and when file content/language actually
+    // change), not on every body evaluation triggered by arrow-key navigation or
+    // typing in the query field.
+    @State private var allSymbols: [EditorOutlineItem] = []
 
-    private var symbols: [EditorOutlineItem] {
+    private func extractOutline() -> [EditorOutlineItem] {
         guard let url = appState.openedFileURL else { return [] }
         let language = appState.effectiveLanguage ?? Language.fromURL(url)
-        let all = EditorOutlineExtractor.outline(for: appState.fileContent, language: language)
+        return EditorOutlineExtractor.outline(for: appState.fileContent, language: language)
+    }
+
+    private var symbols: [EditorOutlineItem] {
         let query = appState.symbolJumpQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return all }
-        return all.filter { item in
+        guard !query.isEmpty else { return allSymbols }
+        return allSymbols.filter { item in
             item.title.localizedCaseInsensitiveContains(query)
                 || item.kind.rawValue.localizedCaseInsensitiveContains(query)
         }
@@ -1065,7 +1073,16 @@ private struct SymbolJumpPanel: View {
         }
         .onAppear {
             queryFocused = true
+            allSymbols = extractOutline()
             resetSelection()
+        }
+        .onChange(of: appState.fileContent) { _, _ in
+            allSymbols = extractOutline()
+            clampSelection()
+        }
+        .onChange(of: appState.effectiveLanguage) { _, _ in
+            allSymbols = extractOutline()
+            clampSelection()
         }
         .onChange(of: appState.symbolJumpQuery) { _, _ in
             resetSelection()
@@ -1234,8 +1251,10 @@ private struct QuickOpenPanel: View {
     @FocusState private var queryFocused: Bool
 
     private var candidates: [URL] {
-        guard let root = appState.rootDirectory else { return [] }
-        let all = AppState.quickOpenFileURLs(in: root)
+        // Reads the cache-backed, in-memory list maintained by AppState instead
+        // of re-walking the project tree on every keystroke. Filtering stays in
+        // the view because it's cheap (in-memory string match over <=1500 paths).
+        let all = appState.quickOpenFiles
         let query = appState.quickOpenQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return Array(all.prefix(80)) }
 
@@ -1318,6 +1337,12 @@ private struct QuickOpenPanel: View {
         }
         .onAppear {
             queryFocused = true
+            // Safety net: backfill if the list is empty (e.g. project was opened
+            // before this list existed, or a prior refresh was cancelled). A
+            // refresh already in flight is a cheap no-op via task cancellation.
+            if appState.quickOpenFiles.isEmpty {
+                appState.refreshProjectFileList()
+            }
         }
         .background {
             FloatingPanelEscapeKeyHandler {

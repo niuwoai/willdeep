@@ -266,36 +266,34 @@ struct EditorView: NSViewRepresentable {
             let generation = highlightGeneration
             textView.invalidateFoldableGuidesCache()
 
-            if let lang = currentLanguage, !newText.isEmpty {
-                let settings = parent.settings
-                let immediate = SyntaxHighlighter.highlightSync(
-                    newText,
-                    language: lang,
-                    theme: settings.theme,
-                    font: settings.editorFont()
-                )
-                replaceTextStorage(in: textView, with: immediate)
+            // Show plain text immediately so the file appears the instant it
+            // loads — never block the main thread on a full-file regex pass.
+            // Syntax highlighting is applied asynchronously and swapped in once
+            // ready. Previously this ran `highlightSync` over the whole file on
+            // the main thread *before* showing anything (then highlighted again
+            // async), which froze the UI for seconds on large files.
+            let plain = NSAttributedString(
+                string: newText,
+                attributes: [
+                    .font: parent.settings.editorFont(),
+                    .foregroundColor: parent.settings.theme.foregroundColor,
+                    .paragraphStyle: parent.settings.editorParagraphStyle(),
+                ]
+            )
+            replaceTextStorage(in: textView, with: plain)
 
-                SyntaxHighlighter.highlight(
-                    newText,
-                    language: lang,
-                    theme: settings.theme,
-                    font: settings.editorFont()
-                ) { [weak self, weak textView] highlighted in
-                    guard let self = self, let textView = textView else { return }
-                    guard self.highlightGeneration == generation else { return }
-                    self.replaceTextStorage(in: textView, with: highlighted)
-                }
-            } else {
-                let attributed = NSAttributedString(
-                    string: newText,
-                    attributes: [
-                        .font: parent.settings.editorFont(),
-                        .foregroundColor: parent.settings.theme.foregroundColor,
-                        .paragraphStyle: parent.settings.editorParagraphStyle(),
-                    ]
-                )
-                replaceTextStorage(in: textView, with: attributed)
+            guard let lang = currentLanguage, !newText.isEmpty else { return }
+
+            let settings = parent.settings
+            SyntaxHighlighter.highlight(
+                newText,
+                language: lang,
+                theme: settings.theme,
+                font: settings.editorFont()
+            ) { [weak self, weak textView] highlighted in
+                guard let self = self, let textView = textView else { return }
+                guard self.highlightGeneration == generation else { return }
+                self.replaceTextStorage(in: textView, with: highlighted)
             }
         }
 

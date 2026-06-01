@@ -70,6 +70,11 @@ final class AppState: ObservableObject {
     @Published private(set) var selectedLineCount = 0
     @Published private(set) var hasExternalFileChanges = false
     @Published private(set) var gitStatus = GitRepositoryStatus()
+    /// Display-ready Quick Open file list, backed by `ProjectFileListCache`.
+    /// Populated instantly from disk cache on project open, then verified and
+    /// backfilled by a background scan. `QuickOpenPanel` filters this in-memory
+    /// array per keystroke instead of re-walking the project tree.
+    @Published private(set) var quickOpenFiles: [URL] = []
     @Published var editorSettings: EditorSettings {
         didSet {
             if editorSettings.preferredInspectorMode != oldValue.preferredInspectorMode {
@@ -89,6 +94,7 @@ final class AppState: ObservableObject {
     private var knownModificationDates: [URL: Date] = [:]
     private var securityScopedAccessURLs: Set<URL> = []
     private var gitStatusRefreshTask: Task<Void, Never>?
+    private var quickOpenRefreshTask: Task<Void, Never>?
     private var editorSettingsObserver: AnyCancellable?
 
     init(
@@ -127,6 +133,7 @@ final class AppState: ObservableObject {
 
     deinit {
         gitStatusRefreshTask?.cancel()
+        quickOpenRefreshTask?.cancel()
         for url in securityScopedAccessURLs {
             url.stopAccessingSecurityScopedResource()
         }
@@ -340,6 +347,57 @@ final class AppState: ObservableObject {
                 self.gitStatus = status
             }
         }
+    }
+
+    /// Refresh the Quick Open file list: serve the disk cache immediately (if
+    /// present), then verify it against a fresh background scan and backfill any
+    /// differences. All file IO runs off the main thread; only the two
+    /// `@Published` assignments hop back to the main actor.
+    func refreshProjectFileList() {
+        quickOpenRefreshTask?.cancel()
+
+        guard let rootDirectory else {
+            quickOpenFiles = []
+            return
+        }
+
+        let targetRoot = rootDirectory.standardizedFileURL
+        let rootPath = targetRoot.path
+        let limit = Self.quickOpenFileLimit
+
+        quickOpenRefreshTask = Task { [weak self] in
+            // 1. Serve cache instantly (if any).
+            let cached = await Task.detached(priority: .userInitiated) {
+                ProjectFileListCache.load(forRootPath: rootPath)
+            }.value
+
+            if let cached, !Task.isCancelled {
+                let urls = ProjectFileListCache.fileURLs(from: cached, root: targetRoot)
+                await self?.applyQuickOpenFiles(urls, ifRootMatches: rootPath)
+            }
+
+            guard !Task.isCancelled else { return }
+
+            // 2. Verify with a full scan and backfill if it differs.
+            let scanned = await Task.detached(priority: .utility) {
+                ProjectFileListCache.scan(root: targetRoot, limit: limit)
+            }.value
+
+            guard !Task.isCancelled else { return }
+
+            if cached == nil || ProjectFileListCache.differs(cached!.entries, scanned.entries) {
+                ProjectFileListCache.save(scanned)
+                let urls = ProjectFileListCache.fileURLs(from: scanned, root: targetRoot)
+                await self?.applyQuickOpenFiles(urls, ifRootMatches: rootPath)
+            }
+        }
+    }
+
+    @MainActor
+    private func applyQuickOpenFiles(_ urls: [URL], ifRootMatches rootPath: String) {
+        // Guard against a fast project switch clobbering the new project's list.
+        guard rootDirectory?.standardizedFileURL.path == rootPath else { return }
+        quickOpenFiles = urls
     }
 
     func openTerminalHere(_ url: URL? = nil) {
@@ -788,7 +846,9 @@ final class AppState: ObservableObject {
         return urls
     }
 
-    nonisolated static func quickOpenFileURLs(in folder: URL, limit: Int = 1_500) -> [URL] {
+    static let quickOpenFileLimit = 1_500
+
+    nonisolated static func quickOpenFileURLs(in folder: URL, limit: Int = quickOpenFileLimit) -> [URL] {
         guard let enumerator = FileManager.default.enumerator(
             at: folder,
             includingPropertiesForKeys: [.isRegularFileKey],
@@ -1419,6 +1479,9 @@ final class AppState: ObservableObject {
         activateSecurityScope(for: url)
         rootDirectory = url
         selectedFolderURL = url
+        // Security scope is active above, so the background verify scan can read
+        // the project; the cache itself lives in Caches (outside the scope).
+        refreshProjectFileList()
     }
 
     @discardableResult

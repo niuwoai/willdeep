@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.30.0-rc2 - 2026-06-01
+
+- Fixed files taking many seconds to appear when opened (a large file could freeze the window for 10+ seconds). The editor ran a full-file syntax-highlight regex pass synchronously on the main thread *before* displaying any content — and then highlighted the same text again asynchronously, doing the heavy work twice. Now the file's plain text is shown instantly the moment it loads, and syntax highlighting is computed off the main thread and swapped in when ready. Opening a file is responsive immediately; the color pass arrives a beat later. Minimap, inspector outline, and scope-guide computations were already lazy/cached and are unaffected.
+
+## 1.30.0-rc1 - 2026-06-01
+
+- Added a cross-session disk cache for the Quick Open file list (Command+P). Previously the panel re-walked the entire project tree (FileManager enumerator, capped at 1500 files) synchronously on every keystroke, stalling on large projects. The file list is now scanned once into a cache under `~/Library/Caches/<bundle-id>/projects/<sha256-of-root-path>/filelist.json`, served instantly from cache when a project re-opens, and verified by a background scan that backfills any differences. Invalidation is layered and cheap (modification time + size per entry; no content hashing). The cache lives outside the project directory so it never pollutes the user's git tree, and keeps at most the 50 most-recently-used project caches. Quick Open keystrokes now filter an in-memory array instead of touching disk.
+
+## 1.29.0-rc3 - 2026-06-01
+
+- Improved Go to Symbol (Command+Shift+O) responsiveness on large files: the outline extraction (regex passes over the whole file) is now computed once when the panel opens and recomputed only when the file content or language actually changes, instead of on every body evaluation. Arrow-key navigation and typing in the query field no longer re-parse the entire file each interaction. Query filtering still happens live against the cached outline.
+
 ## 1.29.0-rc2 - 2026-06-01
 
 - Fixed the Go to Symbol panel not scrolling the highlighted row into view when arrowing past the visible window: the list now anchors scrolling on the stable row index instead of the per-item UUID, which was regenerated on every body evaluation and never matched the rendered ids (so the scroll silently no-opped).
