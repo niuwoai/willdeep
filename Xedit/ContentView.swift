@@ -112,6 +112,7 @@ struct ContentView: View {
                             detectedLanguage: detectedLanguage,
                             syntaxHighlightingSelection: appState.syntaxHighlightingSelection,
                             settings: appState.editorSettings,
+                            activeTabID: appState.activeTabID,
                             renderRevision: appState.editorRenderRevision,
                             highlightRevision: appState.editorHighlightRevision,
                             navigationRequest: appState.editorNavigationRequest,
@@ -1875,6 +1876,13 @@ private struct EditorInspectorSidebar: View {
     let onNavigateToLine: (Int) -> Void
     let onClose: () -> Void
 
+    // Memoize the regex-heavy outline extraction so it runs only when the file
+    // content or language actually changes — not on every body evaluation.
+    // Computing it inline made switching tabs re-parse the whole file each time
+    // (the same cost that made Go to Symbol sluggish), stalling the switch for
+    // seconds on large files.
+    @State private var outline: [EditorOutlineItem] = []
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
@@ -1903,7 +1911,7 @@ private struct EditorInspectorSidebar: View {
                 EditorMinimapView(text: text, onNavigateToLine: onNavigateToLine)
             case .structure:
                 EditorStructureView(
-                    items: EditorOutlineExtractor.outline(for: text, language: language),
+                    items: outline,
                     onNavigateToLine: onNavigateToLine
                 )
             }
@@ -1912,16 +1920,39 @@ private struct EditorInspectorSidebar: View {
         .overlay(alignment: .leading) {
             Divider()
         }
+        // Extract the outline off the main thread, and only when the structure
+        // view is actually showing. `.task(id:)` cancels and restarts whenever
+        // the text, language, or mode changes, so switching tabs never blocks on
+        // a full-file regex pass during the SwiftUI body evaluation.
+        .task(id: TextLanguageKey(text: text, language: language, mode: mode)) {
+            guard mode == .structure else { return }
+            let source = text
+            let lang = language
+            let extracted = await Task.detached(priority: .userInitiated) {
+                EditorOutlineExtractor.outline(for: source, language: lang)
+            }.value
+            guard !Task.isCancelled else { return }
+            outline = extracted
+        }
     }
+}
+
+/// Identity for `.task(id:)` so the outline recomputes when the text, language,
+/// or inspector mode changes.
+private struct TextLanguageKey: Equatable {
+    let text: String
+    let language: Language?
+    let mode: EditorInspectorMode
 }
 
 private struct EditorMinimapView: View {
     let text: String
     let onNavigateToLine: (Int) -> Void
 
-    private var lines: [String] {
-        Array(text.components(separatedBy: .newlines).prefix(600))
-    }
+    // Memoize the (capped) line split so switching tabs doesn't re-split the
+    // whole file on every body evaluation. Splitting a multi-MB string just to
+    // take the first 600 lines was part of the tab-switch stall.
+    @State private var lines: [String] = []
 
     var body: some View {
         ScrollView {
@@ -1943,6 +1974,14 @@ private struct EditorMinimapView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(10)
+        }
+        .task(id: text) {
+            let source = text
+            let computed = await Task.detached(priority: .userInitiated) {
+                Array(source.components(separatedBy: .newlines).prefix(600))
+            }.value
+            guard !Task.isCancelled else { return }
+            lines = computed
         }
     }
 

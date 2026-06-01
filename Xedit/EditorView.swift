@@ -24,6 +24,11 @@ struct EditorView: NSViewRepresentable {
     /// User-configurable editor appearance.
     var settings: EditorSettings
 
+    /// Identity of the active tab. The single shared NSTextView is reused across
+    /// tabs; this lets the coordinator save the outgoing tab's cursor/scroll and
+    /// restore the incoming tab's, so switching tabs returns to where you were.
+    var activeTabID: UUID?
+
     /// Explicit render token used when SwiftUI keeps the same NSTextView alive
     /// across tab activation changes.
     var renderRevision = 0
@@ -75,6 +80,10 @@ struct EditorView: NSViewRepresentable {
         textView.textContainer?.lineFragmentPadding = 0
         textView.delegate = context.coordinator
         textView.layoutManager?.delegate = context.coordinator
+        // Lay out only the glyphs needed for the visible region instead of the
+        // whole document. On large files this is the difference between a
+        // multi-hundred-ms layout pass on every tab switch and an instant one.
+        textView.layoutManager?.allowsNonContiguousLayout = true
         textView.syntaxHighlightingSelection = syntaxHighlightingSelection
         textView.detectedLanguage = detectedLanguage
         textView.scopeGuideLanguage = language
@@ -124,6 +133,10 @@ struct EditorView: NSViewRepresentable {
         }
         context.coordinator.applyAppearance(to: textView, in: nsView)
 
+        // A tab switch arrives as a changed activeTabID plus new content. Save the
+        // outgoing tab's cursor/scroll before the content is replaced.
+        let tabSwitched = context.coordinator.beginTabTransitionIfNeeded(to: activeTabID, in: textView)
+
         // Detect programmatic text changes (file load, not user typing).
         if textView.string != text || langChanged || settingsChanged || renderRevisionChanged || highlightRevisionChanged {
             textView.clearFoldedScopes()
@@ -132,6 +145,11 @@ struct EditorView: NSViewRepresentable {
             context.coordinator.suppressDirtyFlag = false
         } else if searchChanged {
             context.coordinator.applySearchHighlights(to: textView)
+        }
+
+        // Restore the incoming tab's cursor/scroll after its content is in place.
+        if tabSwitched {
+            context.coordinator.finishTabTransition(to: activeTabID, in: textView)
         }
 
         if navigationChanged, let navigationRequest {
@@ -188,6 +206,17 @@ struct EditorView: NSViewRepresentable {
 
         /// `true` while the current document uses viewport highlighting.
         private var usesViewportHighlighting = false
+
+        // MARK: Per-tab cursor/scroll restoration
+
+        /// Saved caret location and top-of-viewport character index per tab, so
+        /// switching tabs returns to where the user left off instead of jumping to
+        /// the top. Storing a character index (not a pixel offset) lets us restore
+        /// with local layout only.
+        private var tabEditingState: [UUID: (cursorLocation: Int, topCharIndex: Int)] = [:]
+
+        /// The tab whose content is currently shown, to detect switches.
+        private var currentTabID: UUID?
 
         init(_ parent: EditorView) {
             self.parent = parent
@@ -316,7 +345,10 @@ struct EditorView: NSViewRepresentable {
                     .paragraphStyle: parent.settings.editorParagraphStyle(),
                 ]
             )
-            replaceTextStorage(in: textView, with: plain)
+            // Fresh content: don't preserve/restore a viewport (no full-document
+            // layout). Scroll is restored separately on tab switch; a freshly
+            // opened file starts at the top.
+            replaceTextStorage(in: textView, with: plain, preserveViewport: false)
 
             guard let lang = currentLanguage, !newText.isEmpty else {
                 usesViewportHighlighting = false
@@ -411,22 +443,24 @@ struct EditorView: NSViewRepresentable {
             return NSRange(location: lineStart, length: lineEnd - lineStart)
         }
 
-        private func replaceTextStorage(in textView: VeilWriterTextView, with attributed: NSAttributedString) {
-            let selected = textView.selectedRanges
-            // Replacing the entire text storage resets layout and makes the scroll
-            // view snap to the origin. Capture the scroll position up front and
-            // restore it afterwards so a re-highlight never yanks the viewport to
-            // the top of the document.
-            //
-            // We anchor on the character at the top of the viewport rather than a
-            // raw pixel origin: replacing the storage transiently collapses the
-            // document height, so restoring a saved pixel origin gets clamped to
-            // the not-yet-recomputed (smaller) height and lands a few lines too
-            // high. We also record how far that line's top sits above the viewport
-            // top, so partially-scrolled lines are restored sub-pixel-exactly
-            // instead of snapping to a whole-line boundary (which drifted by ~one
-            // line).
-            let topAnchor = topVisibleAnchor(in: textView)
+        /// Replace the whole text storage.
+        ///
+        /// - Parameter preserveViewport: when `true` (a re-highlight of the
+        ///   *same* document), the current top-of-viewport line is captured and
+        ///   restored so the highlight swap doesn't yank the scroll position —
+        ///   which requires forcing full-document glyph layout. When `false` (a
+        ///   fresh load / tab switch, where the content is entirely new and the
+        ///   caller restores scroll separately), that anchor work is skipped, so
+        ///   the editor shows the new text without a synchronous full-document
+        ///   layout pass — the difference between an instant switch and a 1-2s
+        ///   stall on a large file.
+        private func replaceTextStorage(
+            in textView: VeilWriterTextView,
+            with attributed: NSAttributedString,
+            preserveViewport: Bool = true
+        ) {
+            let selected = preserveViewport ? textView.selectedRanges : nil
+            let topAnchor = preserveViewport ? topVisibleAnchor(in: textView) : nil
 
             textView.textStorage?.setAttributedString(attributed)
             if let textStorage = textView.textStorage, textStorage.length > 0 {
@@ -437,9 +471,13 @@ struct EditorView: NSViewRepresentable {
                 )
             }
             applySearchHighlights(to: textView, scrollToActiveMatch: false)
-            textView.selectedRanges = selected
+            if let selected {
+                textView.selectedRanges = selected
+            }
 
-            restoreTopVisibleAnchor(topAnchor, in: textView)
+            if preserveViewport {
+                restoreTopVisibleAnchor(topAnchor, in: textView)
+            }
             refreshEditorChrome(for: textView)
         }
 
@@ -557,6 +595,52 @@ struct EditorView: NSViewRepresentable {
             textView.refreshFoldedScopesIfNeeded()
             textView.needsDisplay = true
             (textView.enclosingScrollView?.verticalRulerView as? LineNumberRulerView)?.needsDisplay = true
+        }
+
+        /// Detect a tab switch. If the active tab changed, save the outgoing tab's
+        /// caret and scroll offset (read live from the text view) and return
+        /// `true` so the caller restores the incoming tab afterwards. Returns
+        /// `false` when this is the same tab (an edit/setting change, not a
+        /// switch), where state must be left untouched.
+        func beginTabTransitionIfNeeded(to newTabID: UUID?, in textView: VeilWriterTextView) -> Bool {
+            guard newTabID != currentTabID else { return false }
+
+            if let outgoing = currentTabID {
+                // Store the top-of-viewport character index rather than a pixel
+                // offset, so restoring needs only local layout (scrollRangeToVisible)
+                // instead of a full-document ensureLayout.
+                tabEditingState[outgoing] = (
+                    cursorLocation: textView.selectedRange().location,
+                    topCharIndex: topVisibleCharacterIndex(in: textView)
+                )
+            }
+            currentTabID = newTabID
+            return true
+        }
+
+        /// Restore the incoming tab's caret and scroll position, clamped to the new
+        /// content length. A freshly-opened tab (no saved state) is left at the top.
+        /// Uses `scrollRangeToVisible` so TextKit lays out only the region around
+        /// the target — no synchronous full-document layout pass.
+        func finishTabTransition(to newTabID: UUID?, in textView: VeilWriterTextView) {
+            guard let newTabID, let saved = tabEditingState[newTabID] else { return }
+
+            let length = (textView.string as NSString).length
+            let location = max(0, min(saved.cursorLocation, length))
+            textView.setSelectedRange(NSRange(location: location, length: 0))
+
+            let topIndex = max(0, min(saved.topCharIndex, length))
+            textView.scrollRangeToVisible(NSRange(location: topIndex, length: 0))
+        }
+
+        /// Character index at the top edge of the current viewport (lazy layout
+        /// safe — only queries the visible rect).
+        private func topVisibleCharacterIndex(in textView: VeilWriterTextView) -> Int {
+            guard let layoutManager = textView.layoutManager,
+                  let container = textView.textContainer else { return 0 }
+            let visibleRect = textView.visibleRect
+            let glyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: container)
+            return layoutManager.characterIndexForGlyph(at: glyphRange.location)
         }
 
         func navigate(toLine line: Int, in textView: VeilWriterTextView) {
@@ -1387,9 +1471,13 @@ final class LineNumberRulerView: NSRulerView {
 
     private func lineCount() -> Int {
         guard let string = textView?.string, !string.isEmpty else { return 1 }
-        let nsString = string as NSString
+        // Count newlines over the UTF-8 bytes instead of per-character NSString
+        // bridging (`character(at:)` per index was O(file) with heavy per-call
+        // overhead — a measurable slice of the tab-switch render cost on large
+        // files). The gutter only needs the digit count, so an exact byte count
+        // of "\n" is sufficient and much faster.
         var count = 1
-        for index in 0..<nsString.length where nsString.character(at: index) == 10 {
+        for byte in string.utf8 where byte == 0x0A {
             count += 1
         }
         return count

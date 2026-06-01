@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.32.0-rc2 - 2026-06-01
+
+- Further reduced tab-switch lag on large files. Instrumented measurement showed the model update was already trivial (2-7 ms) and the plain-text apply was 50-180 ms, but the editor's render commit took 300-1000 ms — dominated by TextKit laying out the whole document. Changes: (1) enabled non-contiguous (lazy) layout so only the visible glyphs are laid out instead of the entire file; (2) on a tab switch / fresh load, skip the viewport-anchor restore that forced a full-document `ensureLayout` (scroll is restored separately); (3) restore the tab's scroll position via `scrollRangeToVisible` on the saved top character (local layout only) instead of an absolute pixel offset that needed full layout; (4) count gutter lines over UTF-8 bytes instead of per-character NSString bridging. The inspector's structure-outline extraction and minimap line-split were also moved off the main thread (computed in a background task, only when shown) so the editor area appears immediately and the minimap/structure fill in just after.
+
+## 1.32.0-rc1 - 2026-06-01
+
+- Made switching between open tabs lighter: each tab now remembers its caret position and scroll offset, and switching back restores them instead of jumping to the top of the file. The position is captured live from the editor when switching away and restored after the incoming tab's content is in place (layout is forced first so the scroll offset isn't clamped against a not-yet-grown document height). Combined with the viewport highlighting from 1.31.0, switching to a large-file tab no longer re-highlights the whole document.
+
 ## 1.31.0-rc1 - 2026-06-01
 
 - Added viewport-based syntax highlighting for large files. Files at or above ~100 KB now highlight only the visible range (expanded to line boundaries with an ~8 KB overscan margin) instead of running the regex over the whole document, and extend highlighting as you scroll (debounced). Highlight attributes are applied in place rather than swapping the whole text storage, so scroll position and layout are preserved. Smaller files keep the existing whole-file async highlight. Net effect: very large files open and scroll smoothly; the color pass for an off-screen region arrives a beat after it scrolls into view. Edits and Go to Symbol jumps re-highlight the visible range.

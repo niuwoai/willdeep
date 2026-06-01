@@ -891,7 +891,6 @@ final class AppState: ObservableObject {
         guard let tab = tabs.first(where: { $0.id == id }) else {
             return false
         }
-
         imagePreviewURL = nil
         selectedSidebarFileURL = tab.url
         activeTabID = id
