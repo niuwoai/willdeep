@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-01 | Current version: v1.33.0-rc13
+> Last updated: 2026-06-02 | Current version: v1.38.0-rc1
 
 ## Positioning
 
@@ -46,6 +46,11 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Choose the default right inspector view and whether Minimap or Structure appears first in the Inspector control.
 - Use Focus Mode to hide editor chrome when reading or writing.
 - Open a lightweight split editor pane to view another text file beside the active editor.
+- Use a first-phase project Agent panel backed by an OpenAI-compatible streaming chat API, with current folder, active file, and selected text included as compact context.
+- Configure Agent providers from a tabbed Settings window, with built-in OpenAI-compatible presets for OpenAI, DashScope, DeepSeek, Kimi, Moonshot, Claude, and custom endpoints.
+- Fetch Agent model IDs from provider `/models` endpoints and choose a returned model directly in Settings. API keys remain stored in Keychain.
+- Review Agent-generated unified diff proposals in the Agent panel, then apply or reject them explicitly. Accepted patches are limited to existing files inside the current workspace and update open tabs plus Git status.
+- Let the Agent call built-in workspace tools (`search_files`, `grep_files`, `read_file`, `list_directory`, `git_status`, `run_command`) via OpenAI function-calling. `search_files` does literal text matching while `grep_files` supports full regular expressions plus an optional filename `include` glob (e.g. `*.swift`). Read-only tools run automatically; `run_command` requires per-call Allow/Deny approval; destructive commands additionally require typing `confirm` before running.
 - Preview Markdown and HTML beside the editor with richer lightweight block rendering for headings, lists, quotes, dividers, code, and common HTML content nodes.
 - Read current file state from a compact status bar with cursor position, language, file size, and version.
 - Reload when the active file has changed on disk outside VeilWriter.
@@ -57,7 +62,7 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Highlight Swift, Ruby, PHP, Java, JSON, JavaScript, TypeScript, Go, HTML, CSS, Markdown, Python, shell/bash, YAML, TOML, XML, SQL, Dockerfile, Makefile, INI, env, Rust, C, C++, and C# files.
 - Override syntax highlighting per editor tab from the editor context menu.
 - Extract language-aware document structure, including shallow HTML node outlines for title, h1-h5, div, list, and semantic layout elements.
-- Customize editor font, font size, line height, sidebar file-tree text size and line height, color style, line numbers, current-line focus highlighting, and inspector preferences from Settings with immediate refresh.
+- Customize editor font, font size, line height, sidebar file-tree text size and line height, color style, line numbers, current-line focus highlighting, inspector preferences, Agent settings, and command-line tooling from tabbed Settings with immediate refresh.
 - Choose a custom editor background image with opacity, fit mode, and size controls, while keeping sidebar chrome on the native window background.
 - Apply editor setting changes after the current SwiftUI update pass so preference changes avoid publishing-during-view-update warnings.
 - Optionally trim trailing whitespace and ensure a final newline on save.
@@ -88,6 +93,9 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 
 - Decide whether the Quick Open / file-list cache should honor `.gitignore` (currently it mirrors the raw enumerator walk).
 - Extend the cross-session disk cache to the Go to Symbol outline (currently cached only in-memory per panel session).
+- Extend Agent edit proposals to support multi-step patch review, new-file creation, and richer before/after diff rendering.
+- Add provider-specific model discovery fallbacks for vendors whose model catalog endpoint is not fully OpenAI-compatible.
+- Add MCP server configuration and tool invocation once the first-phase Agent chat is stable.
 
 - Add line-number and search workflows without making the editor feel heavy.
 - Refine keyboard-first tab workflows around unsaved-change prompts and bulk closing.

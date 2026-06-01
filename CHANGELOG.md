@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.38.0-rc1 - 2026-06-02
+
+- Added a sixth Agent tool, `grep_files`, that searches the workspace using ICU/NSRegularExpression patterns and supports an optional `include` filename glob (`*.swift`, `*.{ts,tsx}`, etc.) and a `case_sensitive` flag. `search_files` keeps doing literal text matching for cases where regex is overkill.
+- Fixed `testEditorSettingsChangeBumpsRenderAndHighlightRevisions` by letting the test drain the main run loop before asserting; AppState defers editor-settings side effects to the next main-loop turn (1.33.0-rc11) so the bumps were never visible in-line.
+- Fixed `testFolderURLOpensInNewWindow` by moving its fixture out of the system temp directory, which `RecentItemsStore` deliberately filters out — the test was asserting that a path the store will never accept ends up in recent folders.
+- Hardened the test suite against shared-state surprises: each test now wipes the AppState-owned `UserDefaults` keys on entry, and the suite is marked `@Suite(.serialized)` so the recent-folders defaults can't be raced by parallel test processes.
+- Added unit tests covering `grep_files` happy path and invalid regex, run_command risk escalation for destructive shells, and workspace-escape rejection in `read_file`.
+
+## 1.37.0-rc1 - 2026-06-02
+
+- Added five built-in Agent tools: `search_files`, `read_file`, `list_directory`, `git_status`, and `run_command`. Filesystem access is sandboxed to the workspace root.
+- Added OpenAI function-calling support to the Agent client: tool definitions are sent with each chat completion request, tool_call deltas are streamed and merged, and tool results are fed back to the model in a multi-turn loop (max 6 rounds).
+- Added a tiered tool-permission model in the Agent panel: read tools auto-allow, `run_command` shows Allow/Deny buttons, and destructive shell commands (`rm -rf`, `git push --force`, `git reset --hard`, etc.) require typing `confirm` before running.
+- Added a per-tool call card in the Agent panel showing the tool name, risk badge, argument summary, live status, and expandable arguments/output/error blocks.
+
+## 1.36.0-rc1 - 2026-06-02
+
+- Added tabbed Settings categories for typography, appearance, workspace, Agent, and tools.
+- Added built-in Agent provider presets for OpenAI, DashScope, DeepSeek, Kimi, Moonshot, Claude, and custom OpenAI-compatible endpoints.
+- Added Agent model discovery from provider `/models` endpoints, with fetched model IDs selectable in Settings.
+
+## 1.35.0-rc1 - 2026-06-02
+
+- Added Agent edit proposals: unified diff blocks in Agent replies are detected and shown as pending patch cards.
+- Added accept/reject controls for Agent patch proposals, with workspace path checks before writing files.
+- Added conservative unified-diff application for existing workspace files, updating open tabs and Git status after accepted patches.
+
+## 1.34.0-rc1 - 2026-06-02
+
+- Added a first-phase project Agent panel with OpenAI-compatible streaming chat, current-workspace context, active-file context, and selected-text context.
+- Added Agent settings for base URL, model, and API key, storing the API key in Keychain.
+- Added menu and command-palette actions for toggling the Agent panel.
+
 ## 1.33.0-rc13 - 2026-06-01
 
 - Removed the manual file-tree collapse and restore icons, leaving the divider as a resize-only control.

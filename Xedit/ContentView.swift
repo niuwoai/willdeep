@@ -187,12 +187,13 @@ struct ContentView: View {
                                 appState.isEdited = true
                                 NSApplication.shared.keyWindow?.isDocumentEdited = true
                             },
-                            onSelectionChange: { line, column, selectedCharacters, selectedLines in
+                            onSelectionChange: { line, column, selectedCharacters, selectedLines, selectedText in
                                 appState.updateSelectionInfo(
                                     line: line,
                                     column: column,
                                     selectedCharacters: selectedCharacters,
-                                    selectedLines: selectedLines
+                                    selectedLines: selectedLines,
+                                    selectedText: selectedText
                                 )
                             },
                             onSyntaxHighlightingChange: { selection in
@@ -233,6 +234,12 @@ struct ContentView: View {
                             InspectorCollapsedRail {
                                 appState.isInspectorVisible = true
                             }
+                        }
+
+                        if appState.isAgentPanelVisible && !appState.isFocusModeEnabled && !isEditorMaximized {
+                            AgentPanelView()
+                                .environmentObject(appState)
+                                .frame(width: 330)
                         }
                     }
 
@@ -820,6 +827,10 @@ private struct CommandPalettePanel: View {
             PaletteCommand(title: "Toggle Inspector", subtitle: "Show or hide minimap and structure", icon: "sidebar.right", isEnabled: appState.activeTabID != nil, keywords: ["minimap", "outline"]) {
                 appState.hideCommandPalette()
                 appState.isInspectorVisible.toggle()
+            },
+            PaletteCommand(title: "Toggle Agent", subtitle: "Show or hide the project agent", icon: "sparkles", isEnabled: true, keywords: ["ai", "chat", "assistant"]) {
+                appState.hideCommandPalette()
+                appState.toggleAgentPanel()
             },
             PaletteCommand(title: "Toggle Focus Mode", subtitle: "Hide chrome and keep only the editor", icon: "viewfinder", isEnabled: appState.activeTabID != nil, keywords: ["zen", "clean"]) {
                 appState.hideCommandPalette()

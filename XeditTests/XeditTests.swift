@@ -10,9 +10,42 @@ import Foundation
 import AppKit
 @testable import VeilWriter
 
+@Suite(.serialized)
 struct VeilWriterTests {
     private enum TestError: Error {
         case loadTimedOut
+    }
+
+    /// Wipes the shared `UserDefaults` keys that AppState persists into so
+    /// each test starts from a clean slate. swift-testing builds a fresh
+    /// instance of this struct per test, so `init()` doubles as the
+    /// per-test `setUp`.
+    init() {
+        let keys = [
+            "im.some.veilwriter.recentFiles.v1",
+            "im.some.veilwriter.recentFolders.v1",
+            "im.some.veilwriter.session.v1"
+        ]
+        for key in keys {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+    }
+
+    /// Drain anything AppState scheduled on the main queue (e.g. the
+    /// deferred editor-settings side effects). Polls until either the
+    /// predicate is satisfied or the deadline passes; spins the main run
+    /// loop and yields to the cooperative scheduler each round.
+    @MainActor
+    private func drainMainQueue(
+        timeout: TimeInterval = 1.0,
+        until predicate: @MainActor () -> Bool = { false }
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if predicate() { return }
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+            await Task.yield()
+        }
     }
 
     // MARK: - File Size Detection
@@ -161,6 +194,14 @@ struct VeilWriterTests {
             highlightsCurrentLine: false,
             preferredInspectorMode: .structure,
             inspectorPanelOrder: .structureFirst,
+            windowBackgroundImagePath: "/tmp/missing.png",
+            windowBackgroundImageOpacity: 9,
+            windowBackgroundImageMode: .center,
+            windowBackgroundImageScale: 9,
+            editorGlassEnabled: true,
+            editorGlassMaterial: .hudWindow,
+            editorGlassOpacity: 9,
+            editorSurfaceOpacity: 9,
             trimsTrailingWhitespaceOnSave: true,
             ensuresFinalNewlineOnSave: true
         ).normalized()
@@ -176,6 +217,14 @@ struct VeilWriterTests {
         #expect(settings.preferredInspectorMode == .structure)
         #expect(settings.inspectorPanelOrder == .structureFirst)
         #expect(settings.orderedInspectorModes == [.structure, .minimap])
+        #expect(settings.windowBackgroundImagePath == "/tmp/missing.png")
+        #expect(settings.windowBackgroundImageOpacity == 1)
+        #expect(settings.windowBackgroundImageMode == .center)
+        #expect(settings.windowBackgroundImageScale == 3)
+        #expect(settings.editorGlassEnabled == true)
+        #expect(settings.editorGlassMaterial == .hudWindow)
+        #expect(settings.editorGlassOpacity == 1)
+        #expect(settings.editorSurfaceOpacity == 1)
         #expect(settings.trimsTrailingWhitespaceOnSave == true)
         #expect(settings.ensuresFinalNewlineOnSave == true)
     }
@@ -207,7 +256,7 @@ struct VeilWriterTests {
 
     @Test("changing editor settings refreshes the active editor")
     @MainActor
-    func testEditorSettingsChangeBumpsRenderAndHighlightRevisions() {
+    func testEditorSettingsChangeBumpsRenderAndHighlightRevisions() async {
         let appState = AppState()
         let renderRevision = appState.editorRenderRevision
         let highlightRevision = appState.editorHighlightRevision
@@ -224,6 +273,15 @@ struct VeilWriterTests {
         settings.inspectorPanelOrder = .structureFirst
 
         appState.editorSettings = settings
+
+        // AppState defers the render/highlight bump to the next main-loop
+        // turn (avoids SwiftUI publishing-during-view-update warnings), so
+        // let the run loop tick before asserting.
+        await drainMainQueue(timeout: 2.0) {
+            appState.editorRenderRevision > renderRevision
+                && appState.editorHighlightRevision > highlightRevision
+                && appState.inspectorMode == .structure
+        }
 
         #expect(appState.editorRenderRevision > renderRevision)
         #expect(appState.editorHighlightRevision > highlightRevision)
@@ -289,10 +347,14 @@ struct VeilWriterTests {
     @Test("folder URL can be delegated to a new window without replacing current root")
     @MainActor
     func testFolderURLOpensInNewWindow() throws {
-        let originalDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("veilwriter_original_folder_\(UUID().uuidString)")
-        let nextDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("veilwriter_new_window_folder_\(UUID().uuidString)")
+        // `RecentItemsStore` deliberately rejects paths under the system
+        // temp directory, so use the user's caches dir for any fixture the
+        // test expects to land in `recentFolders`.
+        let cachesBase = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        let originalDir = cachesBase
+            .appendingPathComponent("veilwriter_test_original_\(UUID().uuidString)")
+        let nextDir = cachesBase
+            .appendingPathComponent("veilwriter_test_new_window_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: originalDir, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: nextDir, withIntermediateDirectories: true)
         defer {
@@ -1093,6 +1155,14 @@ struct VeilWriterTests {
             highlightsCurrentLine: true,
             preferredInspectorMode: EditorSettings.default.preferredInspectorMode,
             inspectorPanelOrder: EditorSettings.default.inspectorPanelOrder,
+            windowBackgroundImagePath: EditorSettings.default.windowBackgroundImagePath,
+            windowBackgroundImageOpacity: EditorSettings.default.windowBackgroundImageOpacity,
+            windowBackgroundImageMode: EditorSettings.default.windowBackgroundImageMode,
+            windowBackgroundImageScale: EditorSettings.default.windowBackgroundImageScale,
+            editorGlassEnabled: EditorSettings.default.editorGlassEnabled,
+            editorGlassMaterial: EditorSettings.default.editorGlassMaterial,
+            editorGlassOpacity: EditorSettings.default.editorGlassOpacity,
+            editorSurfaceOpacity: EditorSettings.default.editorSurfaceOpacity,
             trimsTrailingWhitespaceOnSave: true,
             ensuresFinalNewlineOnSave: true
         )
@@ -1351,5 +1421,90 @@ struct VeilWriterTests {
     func testSuppressFlagDefaultsToFalse() {
         let appState = AppState()
         #expect(appState.suppressURLChangeProcessing == false)
+    }
+
+    // MARK: - Agent tools
+
+    @Test("grep_files matches a regex across workspace files and respects include filter")
+    func testGrepFilesMatchesRegexWithInclude() async throws {
+        let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("veilwriter_test_grep_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        try "func alpha() {}\nlet beta = 1\n".write(
+            to: workspace.appendingPathComponent("Sample.swift"), atomically: true, encoding: .utf8
+        )
+        try "function gamma(){}\nconst delta = 1;\n".write(
+            to: workspace.appendingPathComponent("sample.js"), atomically: true, encoding: .utf8
+        )
+
+        let context = AgentToolContext(rootDirectory: workspace)
+        let result = try await AgentToolRunner.run(
+            name: "grep_files",
+            arguments: [
+                "pattern": .string("^(func|function)\\s+\\w+"),
+                "include": .string("*.swift")
+            ],
+            context: context
+        )
+
+        #expect(result.payload.contains("Sample.swift"))
+        #expect(result.payload.contains("alpha"))
+        #expect(!result.payload.contains("gamma"))
+    }
+
+    @Test("grep_files rejects invalid regex with a descriptive error")
+    func testGrepFilesRejectsInvalidRegex() async throws {
+        let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("veilwriter_test_grep_bad_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let context = AgentToolContext(rootDirectory: workspace)
+        await #expect(throws: AgentToolError.self) {
+            try await AgentToolRunner.run(
+                name: "grep_files",
+                arguments: ["pattern": .string("[unterminated")],
+                context: context
+            )
+        }
+    }
+
+    @Test("agent tool registry escalates dangerous run_command invocations to .danger")
+    func testRunCommandRiskEscalatesForDestructiveShell() {
+        let benignRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("ls -la")]
+        )
+        let dangerousRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("rm -rf build/output")]
+        )
+        let forcePushRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("git push --force origin main")]
+        )
+
+        #expect(benignRisk == .write)
+        #expect(dangerousRisk == .danger)
+        #expect(forcePushRisk == .danger)
+    }
+
+    @Test("agent tool runner refuses paths outside the workspace")
+    func testReadFileRefusesEscapedPath() async throws {
+        let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("veilwriter_test_sandbox_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let context = AgentToolContext(rootDirectory: workspace)
+        await #expect(throws: AgentToolError.self) {
+            try await AgentToolRunner.run(
+                name: "read_file",
+                arguments: ["path": .string("../../../etc/hosts")],
+                context: context
+            )
+        }
     }
 }

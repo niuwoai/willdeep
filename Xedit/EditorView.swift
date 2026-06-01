@@ -52,7 +52,7 @@ struct EditorView: NSViewRepresentable {
     var onEdit: (() -> Void)?
 
     /// Called when the caret or selection moves so the status bar can stay current.
-    var onSelectionChange: ((Int, Int, Int, Int) -> Void)?
+    var onSelectionChange: ((Int, Int, Int, Int, String) -> Void)?
 
     /// Called when the user picks a syntax highlighting mode from the editor menu.
     var onSyntaxHighlightingChange: ((SyntaxHighlightingSelection) -> Void)?
@@ -747,7 +747,8 @@ struct EditorView: NSViewRepresentable {
             let selectedRange = textView.selectedRange()
             let position = Self.lineAndColumn(for: selectedRange.location, in: textView.string)
             let selectedLines = Self.selectedLineCount(for: selectedRange, in: textView.string)
-            parent.onSelectionChange?(position.line, position.column, selectedRange.length, selectedLines)
+            let selectedText = Self.selectedText(for: selectedRange, in: textView.string)
+            parent.onSelectionChange?(position.line, position.column, selectedRange.length, selectedLines, selectedText)
         }
 
         /// The two single-character ranges currently carrying the bracket-match
@@ -866,6 +867,15 @@ struct EditorView: NSViewRepresentable {
             let boundedEnd = min(max(boundedLocation, NSMaxRange(range)), nsText.length)
             let selected = nsText.substring(with: NSRange(location: boundedLocation, length: boundedEnd - boundedLocation))
             return selected.components(separatedBy: .newlines).count
+        }
+
+        static func selectedText(for range: NSRange, in text: String) -> String {
+            guard range.length > 0 else { return "" }
+            let nsText = text as NSString
+            let boundedLocation = min(max(0, range.location), nsText.length)
+            let boundedEnd = min(max(boundedLocation, NSMaxRange(range)), nsText.length)
+            guard boundedEnd > boundedLocation else { return "" }
+            return nsText.substring(with: NSRange(location: boundedLocation, length: boundedEnd - boundedLocation))
         }
 
         // MARK: - Debounced Highlighting

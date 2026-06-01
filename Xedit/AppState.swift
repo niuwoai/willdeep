@@ -68,8 +68,24 @@ final class AppState: ObservableObject {
     @Published private(set) var cursorColumn = 1
     @Published private(set) var selectedCharacterCount = 0
     @Published private(set) var selectedLineCount = 0
+    @Published private(set) var selectedText = ""
     @Published private(set) var hasExternalFileChanges = false
     @Published private(set) var gitStatus = GitRepositoryStatus()
+    @Published var isAgentPanelVisible = false
+    @Published var agentConfiguration: AgentConfiguration {
+        didSet {
+            AgentSettingsStore.save(agentConfiguration)
+        }
+    }
+    @Published var agentMessages: [AgentMessage] = []
+    @Published var agentPatchProposals: [AgentPatchProposal] = []
+    @Published var agentToolCalls: [AgentToolCall] = []
+    @Published var agentInput = ""
+    @Published var isAgentResponding = false
+    @Published var agentErrorMessage: String?
+    /// Continuation resumed when the user resolves (approve/deny/confirm) the
+    /// currently-blocked tool call. Internal to the agent loop.
+    private var agentToolDecisionWaiter: CheckedContinuation<AgentToolDecision, Never>?
     /// Display-ready Quick Open file list, backed by `ProjectFileListCache`.
     /// Populated instantly from disk cache on project open, then verified and
     /// backfilled by a background scan. `QuickOpenPanel` filters this in-memory
@@ -90,6 +106,7 @@ final class AppState: ObservableObject {
     private var securityScopedAccessURLs: Set<URL> = []
     private var gitStatusRefreshTask: Task<Void, Never>?
     private var quickOpenRefreshTask: Task<Void, Never>?
+    private var agentRequestTask: Task<Void, Never>?
     private var editorSettingsSideEffectsWorkItem: DispatchWorkItem?
     private var editorSettingsObserver: AnyCancellable?
 
@@ -113,6 +130,7 @@ final class AppState: ObservableObject {
             self.activeTabID = nil
         }
         self.editorSettings = editorSettings.normalized()
+        self.agentConfiguration = AgentSettingsStore.load()
         self.inspectorMode = self.editorSettings.preferredInspectorMode
         self.recentFiles = RecentItemsStore.loadFiles()
         self.recentFolders = RecentItemsStore.loadFolders()
@@ -130,6 +148,7 @@ final class AppState: ObservableObject {
     deinit {
         gitStatusRefreshTask?.cancel()
         quickOpenRefreshTask?.cancel()
+        agentRequestTask?.cancel()
         for url in securityScopedAccessURLs {
             url.stopAccessingSecurityScopedResource()
         }
@@ -234,16 +253,381 @@ final class AppState: ObservableObject {
         isFocusModeEnabled.toggle()
     }
 
+    func toggleAgentPanel() {
+        isAgentPanelVisible.toggle()
+    }
+
     func togglePreview() {
         guard canShowPreview else { return }
         isPreviewVisible.toggle()
     }
 
-    func updateSelectionInfo(line: Int, column: Int, selectedCharacters: Int, selectedLines: Int) {
+    func updateSelectionInfo(line: Int, column: Int, selectedCharacters: Int, selectedLines: Int, selectedText: String = "") {
         cursorLine = max(1, line)
         cursorColumn = max(1, column)
         selectedCharacterCount = max(0, selectedCharacters)
         selectedLineCount = max(0, selectedLines)
+        self.selectedText = selectedText
+    }
+
+    func sendAgentMessage() {
+        let prompt = agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty, !isAgentResponding else { return }
+
+        agentErrorMessage = nil
+        agentInput = ""
+        isAgentResponding = true
+
+        agentMessages.append(AgentMessage(role: .user, content: prompt))
+        let configuration = agentConfiguration
+
+        agentRequestTask?.cancel()
+        agentRequestTask = Task { [weak self] in
+            await self?.runAgentLoop(configuration: configuration)
+        }
+    }
+
+    func clearAgentConversation() {
+        agentRequestTask?.cancel()
+        agentMessages.removeAll()
+        agentPatchProposals.removeAll()
+        agentToolCalls.removeAll()
+        agentErrorMessage = nil
+        agentToolDecisionWaiter?.resume(returning: .denied(reason: "Conversation cleared"))
+        agentToolDecisionWaiter = nil
+        isAgentResponding = false
+    }
+
+    func approveAgentToolCall(id: AgentToolCall.ID) {
+        resolveAgentToolCallDecision(id: id, decision: .approved)
+    }
+
+    func denyAgentToolCall(id: AgentToolCall.ID) {
+        resolveAgentToolCallDecision(id: id, decision: .denied(reason: "User denied"))
+    }
+
+    func confirmAgentToolCall(id: AgentToolCall.ID, typedConfirmation: String) -> Bool {
+        let expected = "confirm"
+        guard typedConfirmation.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == expected else {
+            return false
+        }
+        resolveAgentToolCallDecision(id: id, decision: .approved)
+        return true
+    }
+
+    private func resolveAgentToolCallDecision(id: AgentToolCall.ID, decision: AgentToolDecision) {
+        guard let index = agentToolCalls.firstIndex(where: { $0.id == id }) else { return }
+        guard agentToolCalls[index].status == .pendingApproval
+            || agentToolCalls[index].status == .awaitingConfirm else {
+            return
+        }
+        if case .denied(let reason) = decision {
+            agentToolCalls[index].status = .denied
+            agentToolCalls[index].errorMessage = reason
+        }
+        agentToolDecisionWaiter?.resume(returning: decision)
+        agentToolDecisionWaiter = nil
+    }
+
+    @MainActor
+    private func runAgentLoop(configuration: AgentConfiguration) async {
+        defer {
+            self.isAgentResponding = false
+            self.agentRequestTask = nil
+        }
+
+        let maxTurns = 6
+        let client = AgentClient(configuration: configuration)
+
+        for _ in 0..<maxTurns {
+            let assistantMessage = AgentMessage(role: .assistant, content: "")
+            agentMessages.append(assistantMessage)
+            let assistantID = assistantMessage.id
+
+            let systemPrompt = AgentContextBuilder.systemPrompt(
+                rootDirectory: rootDirectory,
+                openedFileURL: openedFileURL,
+                fileContent: fileContent,
+                selectedText: selectedText,
+                language: effectiveLanguage,
+                toolsEnabled: rootDirectory != nil
+            )
+            let history = agentMessages.filter { $0.id != assistantID }
+            let requestMessages = [AgentMessage(role: .system, content: systemPrompt)] + history
+
+            var finishReason: String?
+            var latestToolCalls: [AgentMessageToolCall] = []
+
+            do {
+                try await client.streamChat(
+                    messages: requestMessages,
+                    tools: rootDirectory != nil ? AgentToolRegistry.all : []
+                ) { event in
+                    await MainActor.run { [weak self] in
+                        guard let self,
+                              let index = self.agentMessages.firstIndex(where: { $0.id == assistantID }) else {
+                            return
+                        }
+                        switch event {
+                        case .textDelta(let delta):
+                            self.agentMessages[index].content += delta
+                        case .toolCallsUpdated(let calls):
+                            self.agentMessages[index].toolCalls = calls
+                            latestToolCalls = calls
+                        case .finishedTurn(let reason):
+                            finishReason = reason
+                        }
+                    }
+                }
+            } catch is CancellationError {
+                if let index = agentMessages.firstIndex(where: { $0.id == assistantID }),
+                   agentMessages[index].content.isEmpty,
+                   agentMessages[index].toolCalls.isEmpty {
+                    agentMessages.remove(at: index)
+                }
+                return
+            } catch {
+                agentErrorMessage = error.localizedDescription
+                if let index = agentMessages.firstIndex(where: { $0.id == assistantID }),
+                   agentMessages[index].content.isEmpty,
+                   agentMessages[index].toolCalls.isEmpty {
+                    agentMessages.remove(at: index)
+                }
+                return
+            }
+
+            // Snapshot the assistant's final tool_calls list (the .toolCallsUpdated
+            // closure may not have published the very last fragment yet if the
+            // stream ended on the same chunk).
+            if let index = agentMessages.firstIndex(where: { $0.id == assistantID }) {
+                if latestToolCalls.isEmpty {
+                    latestToolCalls = agentMessages[index].toolCalls
+                } else {
+                    agentMessages[index].toolCalls = latestToolCalls
+                }
+            }
+
+            // No tool calls → assistant finished talking. Capture patches and return.
+            guard !latestToolCalls.isEmpty else {
+                captureAgentPatchProposals(fromMessageID: assistantID)
+                return
+            }
+
+            // Execute every tool call, gating on the user when necessary.
+            var anyDenied = false
+            for call in latestToolCalls {
+                let arguments = AgentJSONValue.decode(from: call.argumentsJSON.isEmpty ? "{}" : call.argumentsJSON)
+                let argsDict: [String: AgentJSONValue]
+                if case .object(let dict) = arguments {
+                    argsDict = dict
+                } else {
+                    argsDict = [:]
+                }
+
+                let risk = AgentToolRegistry.risk(for: call.toolName, arguments: argsDict)
+                let initialStatus: AgentToolCallStatus
+                switch risk {
+                case .read: initialStatus = .running
+                case .write: initialStatus = .pendingApproval
+                case .danger: initialStatus = .awaitingConfirm
+                }
+
+                let record = AgentToolCall(
+                    messageID: assistantID,
+                    externalID: call.externalID,
+                    toolName: call.toolName,
+                    arguments: argsDict,
+                    risk: risk,
+                    status: initialStatus
+                )
+                agentToolCalls.append(record)
+                let recordID = record.id
+
+                if risk != .read {
+                    let decision = await awaitToolDecision(forCallID: recordID)
+                    if case .denied(let reason) = decision {
+                        anyDenied = true
+                        if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
+                            agentToolCalls[index].status = .denied
+                            agentToolCalls[index].errorMessage = reason
+                        }
+                        appendToolMessage(
+                            toolCallID: call.externalID,
+                            payload: "Tool call denied by the user."
+                        )
+                        continue
+                    }
+                    if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
+                        agentToolCalls[index].status = .running
+                    }
+                }
+
+                let context = AgentToolContext(rootDirectory: rootDirectory)
+                do {
+                    let result = try await AgentToolRunner.run(
+                        name: call.toolName,
+                        arguments: argsDict,
+                        context: context
+                    )
+                    if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
+                        agentToolCalls[index].status = .succeeded
+                        agentToolCalls[index].result = result
+                    }
+                    appendToolMessage(toolCallID: call.externalID, payload: result.payload)
+                } catch {
+                    if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
+                        agentToolCalls[index].status = .failed
+                        agentToolCalls[index].errorMessage = error.localizedDescription
+                    }
+                    appendToolMessage(
+                        toolCallID: call.externalID,
+                        payload: "Tool error: \(error.localizedDescription)"
+                    )
+                }
+            }
+
+            if anyDenied, finishReason == "stop" {
+                // Model already decided it was done; don't loop further.
+                return
+            }
+            // Otherwise: loop again so the model can react to the tool outputs.
+        }
+
+        agentErrorMessage = "Agent reached the maximum number of tool-call rounds."
+    }
+
+    private func awaitToolDecision(forCallID id: AgentToolCall.ID) async -> AgentToolDecision {
+        await withCheckedContinuation { continuation in
+            // Already resolved before we got to register (e.g. user clicked
+            // Deny while the previous tool was still running) — resume now.
+            if let call = agentToolCalls.first(where: { $0.id == id }),
+               call.status != .pendingApproval, call.status != .awaitingConfirm {
+                if call.status == .denied {
+                    continuation.resume(returning: .denied(reason: call.errorMessage ?? "User denied"))
+                } else {
+                    continuation.resume(returning: .approved)
+                }
+                return
+            }
+            self.agentToolDecisionWaiter = continuation
+        }
+    }
+
+    private func appendToolMessage(toolCallID: String, payload: String) {
+        let limited: String
+        let maxPayload = 24_000
+        if payload.count > maxPayload {
+            limited = String(payload.prefix(maxPayload)) + "\n...[tool output truncated]"
+        } else {
+            limited = payload
+        }
+        agentMessages.append(
+            AgentMessage(role: .tool, content: limited, toolCallID: toolCallID)
+        )
+    }
+
+    func rejectAgentPatchProposal(id: AgentPatchProposal.ID) {
+        guard let index = agentPatchProposals.firstIndex(where: { $0.id == id }) else { return }
+        agentPatchProposals[index].status = .rejected
+        agentPatchProposals[index].statusMessage = "Rejected"
+    }
+
+    func applyAgentPatchProposal(id: AgentPatchProposal.ID) {
+        guard let index = agentPatchProposals.firstIndex(where: { $0.id == id }) else { return }
+
+        do {
+            try applyAgentPatch(agentPatchProposals[index].diff)
+            agentPatchProposals[index].status = .applied
+            agentPatchProposals[index].statusMessage = "Applied"
+        } catch {
+            agentPatchProposals[index].status = .failed
+            agentPatchProposals[index].statusMessage = error.localizedDescription
+        }
+    }
+
+    private func captureAgentPatchProposals(fromMessageID messageID: UUID) {
+        guard let message = agentMessages.first(where: { $0.id == messageID }) else { return }
+        let diffs = AgentPatchApplier.extractDiffBlocks(from: message.content)
+        guard !diffs.isEmpty else { return }
+
+        let existingDiffs = Set(agentPatchProposals.map(\.diff))
+        for (offset, diff) in diffs.enumerated() where !existingDiffs.contains(diff) {
+            let title = diffs.count == 1 ? "Agent Patch" : "Agent Patch \(offset + 1)"
+            agentPatchProposals.append(
+                AgentPatchProposal(messageID: messageID, title: title, diff: diff)
+            )
+        }
+    }
+
+    private func applyAgentPatch(_ diff: String) throws {
+        guard let rootDirectory else {
+            throw AgentPatchError.noWorkspace
+        }
+
+        let changes = try AgentPatchApplier.parse(diff)
+        let root = rootDirectory.standardizedFileURL
+        let rootPath = root.path
+        var pendingWrites: [(url: URL, content: String)] = []
+
+        for change in changes {
+            let url = try resolveAgentPatchURL(change.path, root: root, rootPath: rootPath)
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                throw AgentPatchError.missingFile(change.path)
+            }
+
+            let currentContent = try editableContent(forAgentPatchURL: url)
+            let newContent = try AgentPatchApplier.apply(change, to: currentContent)
+            pendingWrites.append((url, newContent))
+        }
+
+        for pendingWrite in pendingWrites {
+            try pendingWrite.content.write(to: pendingWrite.url, atomically: true, encoding: .utf8)
+            applyAgentPatchedContent(pendingWrite.content, to: pendingWrite.url)
+        }
+
+        refreshGitStatus()
+        persistSession()
+    }
+
+    private func resolveAgentPatchURL(_ path: String, root: URL, rootPath: String) throws -> URL {
+        let url = root.appendingPathComponent(path).standardizedFileURL
+        let filePath = url.path
+        guard filePath == rootPath || filePath.hasPrefix(rootPath + "/") else {
+            throw AgentPatchError.pathOutsideWorkspace(path)
+        }
+        return url
+    }
+
+    private func editableContent(forAgentPatchURL url: URL) throws -> String {
+        if let tab = tabs.first(where: { $0.url.standardizedFileURL.path == url.standardizedFileURL.path }) {
+            return tab.content
+        }
+
+        let data = try Self.readFileData(from: url, allowLargeFile: true)
+        return Self.decodeText(from: data)
+    }
+
+    private func applyAgentPatchedContent(_ content: String, to url: URL) {
+        let standardizedPath = url.standardizedFileURL.path
+
+        for index in tabs.indices where tabs[index].url.standardizedFileURL.path == standardizedPath {
+            tabs[index].content = content
+            tabs[index].savedContent = content
+            tabs[index].isEdited = false
+        }
+
+        if openedFileURL?.standardizedFileURL.path == standardizedPath {
+            isApplyingTabSnapshot = true
+            fileContent = content
+            isEdited = false
+            isApplyingTabSnapshot = false
+            bumpEditorRenderRevision()
+            bumpEditorHighlightRevision()
+            updateWindowTitle(url: url, isEdited: false)
+        }
+
+        knownModificationDates[url] = Self.modificationDate(at: url)
+        hasExternalFileChanges = false
     }
 
     func navigateEditor(toLine line: Int) {

@@ -14,8 +14,47 @@ struct EditorSettingsView: View {
     @State private var cliInstallState: CommandLineToolInstallState = .notInstalled
     @State private var cliStatusMessage = ""
     @State private var isInstallingCLI = false
+    @State private var fetchedAgentModels: [String] = []
+    @State private var isFetchingAgentModels = false
+    @State private var agentModelFetchMessage = ""
 
     var body: some View {
+        TabView {
+            typographySettings
+                .tabItem {
+                    Label("Typography", systemImage: "textformat")
+                }
+
+            appearanceSettings
+                .tabItem {
+                    Label("Appearance", systemImage: "paintpalette")
+                }
+
+            workspaceSettings
+                .tabItem {
+                    Label("Workspace", systemImage: "sidebar.left")
+                }
+
+            agentSettings
+                .tabItem {
+                    Label("Agent", systemImage: "sparkles")
+                }
+
+            toolsSettings
+                .tabItem {
+                    Label("Tools", systemImage: "terminal")
+                }
+        }
+        .padding(20)
+        .frame(width: 560)
+        .frame(minHeight: 460)
+        .background(SettingsKeyboardShortcutHandler())
+        .onAppear {
+            refreshCLIState()
+        }
+    }
+
+    private var typographySettings: some View {
         Form {
             Section("Typography") {
                 Picker("Font", selection: setting(\.fontID)) {
@@ -38,7 +77,12 @@ struct EditorSettingsView: View {
                         .frame(width: 56, alignment: .trailing)
                 }
             }
+        }
+        .formStyle(.grouped)
+    }
 
+    private var appearanceSettings: some View {
+        Form {
             Section("Color Style") {
                 Picker("Theme", selection: setting(\.themeID)) {
                     ForEach(EditorTheme.all) { theme in
@@ -137,7 +181,12 @@ struct EditorSettingsView: View {
                 }
                 .disabled(!appState.editorSettings.editorGlassEnabled)
             }
+        }
+        .formStyle(.grouped)
+    }
 
+    private var workspaceSettings: some View {
+        Form {
             Section("Sidebar") {
                 LabeledContent("Text Size") {
                     HStack {
@@ -176,7 +225,66 @@ struct EditorSettingsView: View {
                 Toggle("Trim Trailing Whitespace", isOn: setting(\.trimsTrailingWhitespaceOnSave))
                 Toggle("Ensure Final Newline", isOn: setting(\.ensuresFinalNewlineOnSave))
             }
+        }
+        .formStyle(.grouped)
+    }
 
+    private var agentSettings: some View {
+        Form {
+            Section("Agent") {
+                Picker("Provider", selection: agentProviderBinding) {
+                    ForEach(AgentProviderPreset.all) { provider in
+                        Text(provider.displayName).tag(provider.id)
+                    }
+                }
+
+                TextField("Base URL", text: agentBaseURLBinding)
+                    .textFieldStyle(.roundedBorder)
+
+                LabeledContent("Model") {
+                    HStack {
+                        TextField("Model", text: agentSetting(\.model))
+                            .textFieldStyle(.roundedBorder)
+
+                        if !fetchedAgentModels.isEmpty {
+                            Picker("Fetched Models", selection: agentSetting(\.model)) {
+                                ForEach(fetchedAgentModels, id: \.self) { model in
+                                    Text(model).tag(model)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 180)
+                        }
+                    }
+                }
+
+                SecureField("API Key", text: agentSetting(\.apiKey))
+                    .textFieldStyle(.roundedBorder)
+
+                HStack {
+                    Button(isFetchingAgentModels ? "Fetching..." : "Fetch Models") {
+                        fetchAgentModels()
+                    }
+                    .disabled(isFetchingAgentModels)
+
+                    if !agentModelFetchMessage.isEmpty {
+                        Text(agentModelFetchMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+
+                Text("Uses OpenAI-compatible chat completions and models APIs where providers support them. The API key is stored in Keychain.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var toolsSettings: some View {
+        Form {
             Section("Command Line Tool") {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -203,12 +311,6 @@ struct EditorSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .padding(20)
-        .frame(width: 500)
-        .background(SettingsKeyboardShortcutHandler())
-        .onAppear {
-            refreshCLIState()
-        }
     }
 
     private var backgroundImageLabel: String {
@@ -287,6 +389,44 @@ struct EditorSettingsView: View {
         }
     }
 
+    private func fetchAgentModels() {
+        isFetchingAgentModels = true
+        agentModelFetchMessage = ""
+        let configuration = appState.agentConfiguration.normalized
+
+        Task {
+            let result: Result<[String], Error>
+            do {
+                let models = try await AgentClient(configuration: configuration).fetchModels()
+                result = .success(models)
+            } catch {
+                result = .failure(error)
+            }
+
+            await MainActor.run {
+                isFetchingAgentModels = false
+                switch result {
+                case .success(let models):
+                    fetchedAgentModels = models
+                    if models.isEmpty {
+                        agentModelFetchMessage = "No models returned."
+                    } else {
+                        agentModelFetchMessage = "Fetched \(models.count) models."
+                        if appState.agentConfiguration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                           let firstModel = models.first {
+                            var next = appState.agentConfiguration
+                            next.model = firstModel
+                            appState.agentConfiguration = next.normalized
+                        }
+                    }
+                case .failure(let error):
+                    fetchedAgentModels = []
+                    agentModelFetchMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
     private func setting<Value>(_ keyPath: WritableKeyPath<EditorSettings, Value>) -> Binding<Value> {
         Binding {
             appState.editorSettings[keyPath: keyPath]
@@ -299,6 +439,46 @@ struct EditorSettingsView: View {
         var settings = appState.editorSettings
         settings[keyPath: keyPath] = value
         appState.editorSettings = settings.normalized()
+    }
+
+    private var agentProviderBinding: Binding<String> {
+        Binding {
+            appState.agentConfiguration.providerID
+        } set: { providerID in
+            var configuration = appState.agentConfiguration
+            configuration.providerID = providerID
+            if let preset = AgentProviderPreset.preset(id: providerID),
+               preset.id != AgentProviderPreset.customID {
+                configuration.baseURL = preset.baseURL
+                configuration.model = preset.defaultModel
+            }
+            fetchedAgentModels = []
+            agentModelFetchMessage = ""
+            appState.agentConfiguration = configuration.normalized
+        }
+    }
+
+    private var agentBaseURLBinding: Binding<String> {
+        Binding {
+            appState.agentConfiguration.baseURL
+        } set: { baseURL in
+            var configuration = appState.agentConfiguration
+            configuration.baseURL = baseURL
+            configuration.providerID = AgentProviderPreset.matchingBaseURL(baseURL)?.id ?? AgentProviderPreset.customID
+            fetchedAgentModels = []
+            agentModelFetchMessage = ""
+            appState.agentConfiguration = configuration.normalized
+        }
+    }
+
+    private func agentSetting<Value>(_ keyPath: WritableKeyPath<AgentConfiguration, Value>) -> Binding<Value> {
+        Binding {
+            appState.agentConfiguration[keyPath: keyPath]
+        } set: { newValue in
+            var configuration = appState.agentConfiguration
+            configuration[keyPath: keyPath] = newValue
+            appState.agentConfiguration = configuration.normalized
+        }
     }
 }
 

@@ -148,6 +148,11 @@ struct VeilWriterApp: App {
                 }
                 .keyboardShortcut("i", modifiers: [.command, .option])
                 .disabled(appState?.activeTabID == nil)
+
+                Button("Toggle Agent") {
+                    appState?.toggleAgentPanel()
+                }
+                .keyboardShortcut("a", modifiers: [.command, .option])
             }
 
             CommandGroup(before: .windowArrangement) {
