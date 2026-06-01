@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.32.0-rc7 - 2026-06-01
+
+- Fixed a residual ~5-line scroll truncation when restoring a tab whose cursor sat near the viewport's bottom edge (e.g. cursor on line 928 with viewport's bottom being line 932 -> after switching away and back, bottom became 927, hiding the cursor). Restore previously laid out only from offset 0 to the saved top character, so AppKit clamped the new scroll origin against a content size that didn't yet include the content below — pulling the viewport up by a few lines. Restore now lays out the entire document before setting the scroll origin, so the document height is fully known and the viewport's bottom matches what was saved.
+
 ## 1.32.0-rc6 - 2026-06-01
 
 - Fixed tab-switch scroll position drifting by ~one screenful upward on long files: scrolling to e.g. line 6600 in a tab, switching away and switching back used to land you on line ~6300. The restore path used `scrollRangeToVisible(saved top character)` which only guarantees the target is on screen — it would land at the bottom of the viewport, not the top. Now the saved top-of-viewport line is positioned at the top via `setBoundsOrigin` on the clip view, with layout ensured from offset 0 to the target character so the line fragment Y is exact (a fragment's Y depends on the heights of every fragment above it). Verified by instrumented measurement on an 8000-line file: scrolling to line 6596, switching tabs and back lands at actualLine=6596 (drift = 0 lines), vs ~-123 lines pre-fix.

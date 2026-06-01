@@ -661,7 +661,18 @@ struct EditorView: NSViewRepresentable {
             }
 
             let topIndex = max(0, min(saved.topCharIndex, max(0, length - 1)))
-            layoutManager.ensureLayout(forCharacterRange: NSRange(location: 0, length: topIndex + 1))
+            // Lay out the entire document. We must lay out from 0 through the
+            // target so the line fragment Y for the saved row is exact (Y
+            // depends on every fragment above it), and we must include the
+            // content *below* the target up to the bottom of the viewport so
+            // AppKit knows the document height — otherwise it clamps the new
+            // scroll origin against a not-yet-extended content size and pulls
+            // the viewport up by a few lines (the "cursor at 928, bottom was
+            // 932 but came back 927" symptom when the cursor sat near the
+            // viewport's bottom edge). Laying out the whole document removes
+            // both failure modes; the cost is a one-time pass per tab switch
+            // and dominated by the fragment-Y requirement anyway.
+            layoutManager.ensureLayout(forCharacterRange: NSRange(location: 0, length: length))
             let glyphIndex = layoutManager.glyphIndexForCharacter(at: topIndex)
             let lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
             let targetY = max(0, lineRect.minY + textView.textContainerOrigin.y)
