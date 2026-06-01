@@ -80,10 +80,11 @@ struct EditorView: NSViewRepresentable {
         textView.textContainer?.lineFragmentPadding = 0
         textView.delegate = context.coordinator
         textView.layoutManager?.delegate = context.coordinator
-        // Lay out only the glyphs needed for the visible region instead of the
-        // whole document. On large files this is the difference between a
-        // multi-hundred-ms layout pass on every tab switch and an instant one.
-        textView.layoutManager?.allowsNonContiguousLayout = true
+        // NOTE: non-contiguous layout was tried here to speed up tab switching,
+        // but it made window re-activation (clicking the Dock icon) janky and
+        // amplified fold invalidation cost. The tab-switch win actually came from
+        // not forcing a full-document ensureLayout on switch (see
+        // `preserveViewport` below), so we keep the default contiguous layout.
         textView.syntaxHighlightingSelection = syntaxHighlightingSelection
         textView.detectedLanguage = detectedLanguage
         textView.scopeGuideLanguage = language
@@ -1059,6 +1060,7 @@ final class VeilWriterTextView: NSTextView {
             foldedGuides.insert(guide)
         }
         foldLayoutIsClean = false
+        invalidateFoldedRangesCache()
         applyFoldedScopes()
         needsDisplay = true
         enclosingScrollView?.verticalRulerView?.needsDisplay = true
@@ -1068,6 +1070,7 @@ final class VeilWriterTextView: NSTextView {
         guard foldedGuides.isEmpty == false else { return }
         foldedGuides.removeAll()
         foldLayoutIsClean = false
+        invalidateFoldedRangesCache()
         applyFoldedScopes()
         enclosingScrollView?.verticalRulerView?.needsDisplay = true
     }
@@ -1099,6 +1102,8 @@ final class VeilWriterTextView: NSTextView {
     /// Called whenever the text content changes.
     func invalidateFoldableGuidesCache() {
         cachedFoldableGuides = nil
+        // Folded ranges are keyed by line offsets, which shift when text changes.
+        invalidateFoldedRangesCache()
     }
 
     func applyFoldedScopes() {
@@ -1154,8 +1159,25 @@ final class VeilWriterTextView: NSTextView {
         return foldedCharacterRanges().contains { NSIntersectionRange($0, characterRange).length > 0 }
     }
 
+    /// Folded character ranges, cached. `isFoldedGlyphRange` is called by the
+    /// layout-manager delegate for *every* line fragment laid out, and each
+    /// `foldedCharacterRange(for:)` does an O(file) line scan — recomputing them
+    /// per fragment was O(folds × file) per layout pass and the real cause of the
+    /// fold stall on larger files. The cache is rebuilt only when the fold set or
+    /// text changes.
+    private var cachedFoldedCharacterRanges: [NSRange]?
+
     private func foldedCharacterRanges() -> [NSRange] {
-        foldedGuides.compactMap { foldedCharacterRange(for: $0) }
+        if let cachedFoldedCharacterRanges {
+            return cachedFoldedCharacterRanges
+        }
+        let ranges = foldedGuides.compactMap { foldedCharacterRange(for: $0) }
+        cachedFoldedCharacterRanges = ranges
+        return ranges
+    }
+
+    private func invalidateFoldedRangesCache() {
+        cachedFoldedCharacterRanges = nil
     }
 
     private func drawFoldedPlaceholders(in rect: NSRect) {

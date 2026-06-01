@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.32.0-rc4 - 2026-06-01
+
+- Fixed two regressions from the non-contiguous layout introduced in 1.32.0-rc2:
+  - Clicking the Dock icon after switching to another app no longer takes several seconds to show the window. Non-contiguous (lazy) layout made AppKit re-layout on window re-activation and was the cause; it has been removed. The tab-switch speedup it was meant to provide actually came from not forcing a full-document layout pass on switch (the `preserveViewport`/`scrollRangeToVisible` changes), which remain in place.
+  - Folding a scope on a file with ~1000+ lines was still slow. The layout-manager delegate calls `isFoldedGlyphRange` for every line fragment it lays out, and that recomputed every folded range from scratch each time (each an O(file) line scan) — O(folds × file) per layout pass. Folded character ranges are now cached and rebuilt only when the fold set or text changes.
+
 ## 1.32.0-rc3 - 2026-06-01
 
 - Fixed the ~1 second delay when clicking a gutter fold control on a large file. Toggling a fold invalidated glyphs and layout for the *entire* document starting at offset 0; once non-contiguous layout was enabled (1.32.0-rc2), that forced TextKit to re-lay-out everything visible from the top. Folding only affects lines from the fold's start downward, so invalidation now begins at the earliest folded scope instead of the document start — content above the fold keeps its layout. Unfolding re-validates from the previously-folded start so reappearing content lays out correctly.
