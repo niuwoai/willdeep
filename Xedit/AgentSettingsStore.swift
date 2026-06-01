@@ -11,6 +11,7 @@ import Security
 enum AgentSettingsStore {
     private static let defaultsKey = "im.some.veilwriter.agentSettings.v1"
     private static let knownModelsKey = "im.some.veilwriter.agentSettings.knownModels.v1"
+    private static let alwaysAllowedCommandsKey = "im.some.veilwriter.agentSettings.alwaysAllowedCommands.v1"
     private static let keychainService = "im.some.veilwriter.agent"
     private static let keychainAccount = "openai-compatible-api-key"
 
@@ -24,6 +25,27 @@ enum AgentSettingsStore {
     static func saveKnownModelIDs(_ ids: [String]) {
         let cleaned = Array(Set(ids.filter { !$0.isEmpty })).sorted()
         UserDefaults.standard.set(cleaned, forKey: knownModelsKey)
+    }
+
+    static func loadAlwaysAllowedCommands() -> [AgentAlwaysAllowedCommand] {
+        guard let data = UserDefaults.standard.data(forKey: alwaysAllowedCommandsKey),
+              let decoded = try? JSONDecoder().decode([AgentAlwaysAllowedCommand].self, from: data) else {
+            return []
+        }
+        return decoded
+            .filter { !$0.commandSignature.isEmpty }
+            .sorted { $0.commandSignature < $1.commandSignature }
+    }
+
+    static func saveAlwaysAllowedCommands(_ commands: [AgentAlwaysAllowedCommand]) {
+        var seen = Set<String>()
+        let cleaned = commands
+            .filter { !$0.commandSignature.isEmpty }
+            .filter { seen.insert($0.commandSignature).inserted }
+            .sorted { $0.commandSignature < $1.commandSignature }
+        if let data = try? JSONEncoder().encode(cleaned) {
+            UserDefaults.standard.set(data, forKey: alwaysAllowedCommandsKey)
+        }
     }
 
     private struct StoredSettings: Codable {

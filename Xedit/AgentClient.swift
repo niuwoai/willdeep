@@ -21,12 +21,23 @@ enum AgentClientEvent {
 }
 
 struct AgentClient {
+    nonisolated private static let requestTimeout: TimeInterval = 45
+    nonisolated private static let resourceTimeout: TimeInterval = 10 * 60
+
     private let configuration: AgentConfiguration
     private let session: URLSession
 
-    init(configuration: AgentConfiguration, session: URLSession = .shared) {
+    init(configuration: AgentConfiguration, session: URLSession? = nil) {
         self.configuration = configuration.normalized
-        self.session = session
+        self.session = session ?? Self.defaultSession()
+    }
+
+    nonisolated private static func defaultSession() -> URLSession {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = requestTimeout
+        configuration.timeoutIntervalForResource = resourceTimeout
+        configuration.waitsForConnectivity = false
+        return URLSession(configuration: configuration)
     }
 
     func streamChat(
@@ -40,6 +51,7 @@ struct AgentClient {
 
         let endpoint = try chatCompletionsEndpoint(from: configuration.baseURL)
         var request = URLRequest(url: endpoint)
+        request.timeoutInterval = Self.requestTimeout
         request.httpMethod = "POST"
         applyAuthenticationHeaders(to: &request)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -110,6 +122,7 @@ struct AgentClient {
 
         let endpoint = try modelsEndpoint(from: configuration.baseURL)
         var request = URLRequest(url: endpoint)
+        request.timeoutInterval = Self.requestTimeout
         request.httpMethod = "GET"
         applyAuthenticationHeaders(to: &request)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -167,7 +180,7 @@ struct AgentClient {
     /// Encodes the chat completion request via `JSONSerialization` because the
     /// `tools` + `tool_calls` payloads are heterogeneous JSON dictionaries that
     /// don't model cleanly as `Encodable` types.
-    static func encodeChatRequest(
+    nonisolated static func encodeChatRequest(
         model: String,
         messages: [AgentMessage],
         tools: [AgentToolDescriptor]
@@ -184,7 +197,7 @@ struct AgentClient {
         return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
     }
 
-    private static func encodeMessage(_ message: AgentMessage) -> [String: Any] {
+    nonisolated private static func encodeMessage(_ message: AgentMessage) -> [String: Any] {
         var dict: [String: Any] = ["role": message.role.rawValue]
 
         if message.role == .user, !message.images.isEmpty {
@@ -224,7 +237,7 @@ struct AgentClient {
         return dict
     }
 
-    private static func encodeTool(_ descriptor: AgentToolDescriptor) -> [String: Any] {
+    nonisolated private static func encodeTool(_ descriptor: AgentToolDescriptor) -> [String: Any] {
         var properties: [String: Any] = [:]
         var required: [String] = []
         for parameter in descriptor.parameters {
@@ -250,7 +263,7 @@ struct AgentClient {
         ]
     }
 
-    private static func schemaProperty(for parameter: AgentToolParameter) -> [String: Any] {
+    nonisolated private static func schemaProperty(for parameter: AgentToolParameter) -> [String: Any] {
         switch parameter.type {
         case .string, .integer, .boolean:
             return [

@@ -185,39 +185,39 @@ struct AgentToolCallCard: View {
     @State private var selectedOptions: Set<String> = []
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: isInteractive ? 6 : 3) {
+            HStack(spacing: 6) {
                 Image(systemName: iconName)
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(iconColor)
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(call.toolName)
-                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        Text(riskBadge)
-                            .font(.system(size: 9, weight: .semibold))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(riskBadgeColor.opacity(0.18))
-                            .foregroundStyle(riskBadgeColor)
-                            .clipShape(Capsule())
-                    }
-                    Text(argumentsSummary)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                Spacer(minLength: 0)
-                Text(statusText)
+                    .frame(width: 14)
+                Text(call.toolName)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .lineLimit(1)
+                Text(argumentsSummary)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                Button {
-                    isExpanded.toggle()
-                } label: {
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(statusText)
+                    .font(.caption2)
+                    .foregroundStyle(statusColor)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                if hasExpandableContent {
+                    Button {
+                        isExpanded.toggle()
+                    } label: {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .buttonStyle(.borderless)
+                    .help(isExpanded ? "Collapse" : "Expand")
                 }
-                .buttonStyle(.borderless)
-                .help(isExpanded ? "Collapse" : "Expand")
             }
+            .frame(minHeight: 20)
+            .help("\(riskBadge): \(argumentsSummary)")
 
             if isExpanded {
                 if !argumentsLines.isEmpty {
@@ -234,6 +234,10 @@ struct AgentToolCallCard: View {
             if call.status == .pendingApproval {
                 HStack {
                     Button("Allow") { appState.approveAgentToolCall(id: call.id) }
+                    if let signature = alwaysAllowSignature {
+                        Button("Always Allow") { appState.alwaysAllowAgentToolCall(id: call.id) }
+                            .help("Always allow future \(signature) commands")
+                    }
                     Button("Deny") { appState.denyAgentToolCall(id: call.id) }
                     Spacer(minLength: 0)
                 }
@@ -265,11 +269,12 @@ struct AgentToolCallCard: View {
                 askUserBody
             }
         }
-        .padding(9)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.75))
-        .clipShape(RoundedRectangle(cornerRadius: 7))
+        .padding(.horizontal, 7)
+        .padding(.vertical, isInteractive ? 7 : 4)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
         .overlay(
-            RoundedRectangle(cornerRadius: 7)
+            RoundedRectangle(cornerRadius: 6)
                 .stroke(borderColor, lineWidth: 1)
         )
     }
@@ -407,10 +412,10 @@ struct AgentToolCallCard: View {
                 Text(text)
                     .font(.system(size: 11, design: .monospaced))
                     .textSelection(.enabled)
-                    .padding(6)
+                    .padding(5)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxHeight: 160)
+            .frame(maxHeight: 96)
             .background(Color(nsColor: .textBackgroundColor))
             .clipShape(RoundedRectangle(cornerRadius: 5))
         }
@@ -429,6 +434,14 @@ struct AgentToolCallCard: View {
             .sorted { $0.key < $1.key }
             .map { "\($0.key): \($0.value.displaySummary)" }
             .joined(separator: "\n")
+    }
+
+    private var alwaysAllowSignature: String? {
+        guard call.toolName == "run_command",
+              let command = call.arguments["command"]?.stringValue() else {
+            return nil
+        }
+        return AgentCommandAuthorization.signature(for: command)
     }
 
     private var iconName: String {
@@ -451,6 +464,38 @@ struct AgentToolCallCard: View {
         case .failed: return .orange
         case .denied: return .secondary
         }
+    }
+
+    private var statusColor: Color {
+        switch call.status {
+        case .pendingApproval, .awaitingConfirm: return .blue
+        case .awaitingUserAnswer: return .purple
+        case .failed: return .orange
+        case .succeeded: return .green
+        case .running, .denied: return .secondary
+        }
+    }
+
+    private var isInteractive: Bool {
+        switch call.status {
+        case .pendingApproval, .awaitingConfirm, .awaitingUserAnswer:
+            return true
+        case .running, .succeeded, .failed, .denied:
+            return isExpanded
+        }
+    }
+
+    private var hasExpandableContent: Bool {
+        !argumentsLines.isEmpty
+        || !(call.result?.payload.isEmpty ?? true)
+        || !(call.errorMessage?.isEmpty ?? true)
+    }
+
+    private var cardBackground: Color {
+        if isInteractive {
+            return Color(nsColor: .controlBackgroundColor).opacity(0.72)
+        }
+        return Color(nsColor: .controlBackgroundColor).opacity(0.38)
     }
 
     private var statusText: String {

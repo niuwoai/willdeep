@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.40.0-rc8 - 2026-06-02
+
+- Compacted Agent tool-call cards so completed and running tools render as a one-line execution row by default, reducing transcript height during multi-step work.
+- Reduced expanded tool output height while keeping arguments, output, and errors available on demand.
+
+## 1.40.0-rc7 - 2026-06-02
+
+- Raised the Agent tool-call round guardrail from 6 to 24 rounds so normal multi-step project work does not stop after only a few tool batches.
+- Reworded the tool-round guardrail message to explain that the Agent paused to avoid accidental loops and can be continued with another message.
+
+## 1.40.0-rc6 - 2026-06-02
+
+- Added an Agent-mode `Always Allow` action for approved `run_command` calls. Matching command families such as `git push` can now run automatically in future turns while dangerous commands still require confirmation.
+- Added Tools settings management for Agent always-allowed command rules, including per-rule removal and clear-all controls.
+
+## 1.40.0-rc5 - 2026-06-02
+
+- Hardened Git status refresh against large repositories by draining `git` stdout while the process is running, capping captured output, disabling optional Git locks, and timing out stuck commands instead of blocking sidebar/status refresh.
+- Added request and resource timeouts to the Agent HTTP client so model discovery and streaming chat fail cleanly when a provider connection stalls.
+
 ## 1.40.0-rc4 - 2026-06-02
 
 - Fixed the Agent-mode composer "+" (Attach Image) button freezing the app again. `NSOpenPanel.begin { }` without a parent window has been racing the SwiftUI main run loop under macOS 26 + default-isolation=MainActor. Now the panel attaches as a sheet on the key window (`beginSheetModal(for:completionHandler:)`), with the bare `begin` form kept only as a fallback when no key window exists.

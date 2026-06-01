@@ -357,6 +357,34 @@ struct EditorSettingsView: View {
 
     private var toolsSettings: some View {
         Form {
+            Section("Agent Always Allow") {
+                if appState.agentAlwaysAllowedCommands.isEmpty {
+                    Text("No commands are always allowed.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(appState.agentAlwaysAllowedCommands) { command in
+                        HStack {
+                            Label(command.commandSignature, systemImage: "checkmark.shield")
+                                .font(.system(size: 12, design: .monospaced))
+                            Spacer()
+                            Button("Remove") {
+                                appState.removeAgentAlwaysAllowedCommand(id: command.id)
+                            }
+                        }
+                    }
+
+                    Button("Clear All") {
+                        appState.clearAgentAlwaysAllowedCommands()
+                    }
+                    .foregroundStyle(.red)
+                }
+
+                Text("Rules apply to command families such as `git push`; dangerous commands still require confirmation.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Command Line Tool") {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {

@@ -14,6 +14,8 @@ import AppKit
 /// Manages the currently opened file URL, its text content, the dirty (edited) flag,
 /// and the root directory for the sidebar file tree.
 final class AppState: ObservableObject {
+    nonisolated private static let maxAgentToolRounds = 24
+
     @Published var openedFileURL: URL?
     @Published var fileContent: String {
         didSet {
@@ -94,6 +96,9 @@ final class AppState: ObservableObject {
     /// Model IDs the user has previously fetched in Settings — surfaced in
     /// the Agent-mode model picker as a quick switcher.
     @Published var agentKnownModelIDs: [String] = []
+    /// Command families the user has explicitly allowed Agent mode to run
+    /// without prompting again, e.g. `git push`.
+    @Published var agentAlwaysAllowedCommands: [AgentAlwaysAllowedCommand] = []
     /// Persisted Agent-mode chat sessions, newest-updated first.
     @Published private(set) var agentSessions: [AgentSession] = []
     /// Active Agent-mode session id. nil means "scratch" — Editor-mode
@@ -164,6 +169,7 @@ final class AppState: ObservableObject {
             }
         self.agentSessions = AgentSessionStore.loadAll()
         self.agentKnownModelIDs = AgentSettingsStore.loadKnownModelIDs()
+        self.agentAlwaysAllowedCommands = AgentSettingsStore.loadAlwaysAllowedCommands()
     }
 
     deinit {
@@ -551,6 +557,14 @@ final class AppState: ObservableObject {
         resolveAgentToolCallDecision(id: id, decision: .approved)
     }
 
+    func alwaysAllowAgentToolCall(id: AgentToolCall.ID) {
+        guard let call = agentToolCalls.first(where: { $0.id == id }) else { return }
+        if let rule = alwaysAllowedCommand(for: call) {
+            addAgentAlwaysAllowedCommand(rule)
+        }
+        resolveAgentToolCallDecision(id: id, decision: .approved)
+    }
+
     func denyAgentToolCall(id: AgentToolCall.ID) {
         resolveAgentToolCallDecision(id: id, decision: .denied(reason: "User denied"))
     }
@@ -569,6 +583,44 @@ final class AppState: ObservableObject {
     /// provided"); use `denyAgentToolCall` to skip outright.
     func answerAgentToolCall(id: AgentToolCall.ID, answer: String) {
         resolveAgentToolCallDecision(id: id, decision: .answered(answer))
+    }
+
+    func removeAgentAlwaysAllowedCommand(id: AgentAlwaysAllowedCommand.ID) {
+        agentAlwaysAllowedCommands.removeAll { $0.id == id }
+        AgentSettingsStore.saveAlwaysAllowedCommands(agentAlwaysAllowedCommands)
+    }
+
+    func clearAgentAlwaysAllowedCommands() {
+        agentAlwaysAllowedCommands = []
+        AgentSettingsStore.saveAlwaysAllowedCommands(agentAlwaysAllowedCommands)
+    }
+
+    private func addAgentAlwaysAllowedCommand(_ command: AgentAlwaysAllowedCommand) {
+        guard !agentAlwaysAllowedCommands.contains(where: { $0.commandSignature == command.commandSignature }) else {
+            return
+        }
+        agentAlwaysAllowedCommands.append(command)
+        agentAlwaysAllowedCommands.sort { $0.commandSignature < $1.commandSignature }
+        AgentSettingsStore.saveAlwaysAllowedCommands(agentAlwaysAllowedCommands)
+    }
+
+    private func alwaysAllowedCommand(for call: AgentToolCall) -> AgentAlwaysAllowedCommand? {
+        guard call.toolName == "run_command",
+              let command = call.arguments["command"]?.stringValue(),
+              let signature = AgentCommandAuthorization.signature(for: command) else {
+            return nil
+        }
+        return AgentAlwaysAllowedCommand(commandSignature: signature)
+    }
+
+    private func isAgentToolCallAlwaysAllowed(toolName: String, arguments: [String: AgentJSONValue], risk: AgentToolRisk) -> Bool {
+        guard risk == .write,
+              toolName == "run_command",
+              let command = arguments["command"]?.stringValue(),
+              let signature = AgentCommandAuthorization.signature(for: command) else {
+            return false
+        }
+        return agentAlwaysAllowedCommands.contains { $0.commandSignature == signature }
     }
 
     private func resolveAgentToolCallDecision(id: AgentToolCall.ID, decision: AgentToolDecision) {
@@ -596,10 +648,9 @@ final class AppState: ObservableObject {
             self.consumeNextQueuedMessageIfNeeded()
         }
 
-        let maxTurns = 6
         let client = AgentClient(configuration: configuration)
 
-        for _ in 0..<maxTurns {
+        for _ in 0..<Self.maxAgentToolRounds {
             let assistantMessage = AgentMessage(role: .assistant, content: "")
             agentMessages.append(assistantMessage)
             let assistantID = assistantMessage.id
@@ -686,12 +737,17 @@ final class AppState: ObservableObject {
                 }
 
                 let risk = AgentToolRegistry.risk(for: call.toolName, arguments: argsDict)
+                let isAlwaysAllowed = isAgentToolCallAlwaysAllowed(toolName: call.toolName, arguments: argsDict, risk: risk)
                 let initialStatus: AgentToolCallStatus
-                switch risk {
-                case .read: initialStatus = .running
-                case .write: initialStatus = .pendingApproval
-                case .danger: initialStatus = .awaitingConfirm
-                case .userInput: initialStatus = .awaitingUserAnswer
+                if isAlwaysAllowed {
+                    initialStatus = .running
+                } else {
+                    switch risk {
+                    case .read: initialStatus = .running
+                    case .write: initialStatus = .pendingApproval
+                    case .danger: initialStatus = .awaitingConfirm
+                    case .userInput: initialStatus = .awaitingUserAnswer
+                    }
                 }
 
                 let record = AgentToolCall(
@@ -740,7 +796,7 @@ final class AppState: ObservableObject {
                     continue
                 }
 
-                if risk != .read {
+                if risk != .read && !isAlwaysAllowed {
                     let decision = await awaitToolDecision(forCallID: recordID)
                     if case .denied(let reason) = decision {
                         anyDenied = true
@@ -790,7 +846,7 @@ final class AppState: ObservableObject {
             // Otherwise: loop again so the model can react to the tool outputs.
         }
 
-        agentErrorMessage = "Agent reached the maximum number of tool-call rounds."
+        agentErrorMessage = "Agent paused after \(Self.maxAgentToolRounds) tool-call rounds to avoid an accidental loop. Send another message to continue."
     }
 
     private func awaitToolDecision(forCallID id: AgentToolCall.ID) async -> AgentToolDecision {
@@ -2494,26 +2550,102 @@ final class AppState: ObservableObject {
         }
     }
 
+    nonisolated private static let maxGitOutputBytes = 512 * 1024
+    nonisolated private static let gitCommandTimeout: TimeInterval = 5
+
     nonisolated private static func runGit(arguments: [String], in repositoryRoot: URL) -> String {
         let process = Process()
-        let pipe = Pipe()
+        let stdoutPipe = Pipe()
+        let collector = ProcessOutputCollector(limit: maxGitOutputBytes)
+        let runState = TimedProcessState()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         process.arguments = arguments
         process.currentDirectoryURL = repositoryRoot
-        process.standardOutput = pipe
+        process.environment = ProcessInfo.processInfo.environment.merging([
+            "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_TERMINAL_PROMPT": "0"
+        ]) { current, _ in current }
+        process.standardOutput = stdoutPipe
         process.standardError = Pipe()
+        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if !data.isEmpty { collector.append(data) }
+        }
 
         do {
             try process.run()
         } catch {
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
             return ""
         }
 
+        let timeoutWorkItem = DispatchWorkItem {
+            runState.markTimedOut()
+            if process.isRunning {
+                process.terminate()
+            }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) {
+                if process.isRunning {
+                    process.interrupt()
+                }
+            }
+        }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + gitCommandTimeout, execute: timeoutWorkItem)
+
         process.waitUntilExit()
+        timeoutWorkItem.cancel()
+        stdoutPipe.fileHandleForReading.readabilityHandler = nil
+        collector.append(stdoutPipe.fileHandleForReading.availableData)
+
+        guard !runState.didTimeout else { return "" }
         guard process.terminationStatus == 0 else { return "" }
 
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        return String(data: data, encoding: .utf8) ?? ""
+        return collector.stringValue
+    }
+}
+
+private nonisolated final class ProcessOutputCollector: @unchecked Sendable {
+    private let limit: Int
+    private var data = Data()
+    private let lock = NSLock()
+
+    init(limit: Int) {
+        self.limit = limit
+    }
+
+    func append(_ chunk: Data) {
+        guard !chunk.isEmpty else { return }
+        lock.lock()
+        defer { lock.unlock() }
+
+        let remaining = max(0, limit - data.count)
+        guard remaining > 0 else { return }
+        data.append(chunk.prefix(remaining))
+    }
+
+    var stringValue: String {
+        lock.lock()
+        let snapshot = data
+        lock.unlock()
+        return String(data: snapshot, encoding: .utf8) ?? AppState.decodeText(from: snapshot)
+    }
+}
+
+private nonisolated final class TimedProcessState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var timedOut = false
+
+    func markTimedOut() {
+        lock.lock()
+        timedOut = true
+        lock.unlock()
+    }
+
+    var didTimeout: Bool {
+        lock.lock()
+        let value = timedOut
+        lock.unlock()
+        return value
     }
 }
 

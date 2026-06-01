@@ -33,7 +33,7 @@ struct AgentImageAttachment: Codable, Equatable, Identifiable {
         self.dataBase64 = dataBase64
     }
 
-    var dataURL: String {
+    nonisolated var dataURL: String {
         "data:\(mimeType);base64,\(dataBase64)"
     }
 }
@@ -59,7 +59,7 @@ struct AgentMessage: Identifiable, Codable, Equatable {
     var toolCallID: String?
     let createdAt: Date
 
-    init(
+    nonisolated init(
         id: UUID = UUID(),
         role: AgentRole,
         content: String,
