@@ -1589,11 +1589,31 @@ final class AppState: ObservableObject {
 
         // 3. LLM judge. Lightweight non-streaming request; defaults to
         //    "no" on network errors so the user still gates anything we
-        //    couldn't certify.
-        let configuration = configurationForCurrentTurn()
+        //    couldn't certify. We deliberately route the classifier
+        //    through the Flash tier (not whatever model the current
+        //    turn happens to be using) — it's a single-word YES/NO,
+        //    cheap & fast on Flash, and we don't want Pro tokens spent
+        //    on every "is `ls` safe?" check.
+        let configuration = configurationForSafetyJudge()
         let client = AgentClient(configuration: configuration)
         let safe = await client.judgeCommandSafety(command: command)
         return safe ? .llmJudge : nil
+    }
+
+    /// Configuration used for the auto-approval safety judge. Always
+    /// resolves to the active library entry's **Flash** model — small,
+    /// cheap, fast — regardless of what tier the current turn is on.
+    /// Falls back to the regular per-turn configuration if Flash isn't
+    /// set (e.g. a custom provider entry only filled in a Pro model),
+    /// because some classification is still better than no
+    /// classification.
+    private func configurationForSafetyJudge() -> AgentConfiguration {
+        var configuration = agentConfiguration.normalized.resolved(for: .interactive)
+        let flash = configuration.flashModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !flash.isEmpty {
+            configuration.model = flash
+        }
+        return configuration.normalized
     }
 
     private func resolveAgentToolCallDecision(id: AgentToolCall.ID, decision: AgentToolDecision) {

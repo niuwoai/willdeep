@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.47.0-rc9 - 2026-06-03
+
+- **Auto-approval safety judge always runs on Flash now.** The LLM judge that classifies "is this `run_command` shell command safe enough to auto-run" used to use the currently-active model — which for users on Pro routing meant every `find -name "*.swift"` decision burned Pro tokens *and* waited Pro latency, often timing out the 12s budget and falling back to the user gate. New `configurationForSafetyJudge()` always resolves to the active library entry's Flash model regardless of the turn's routing (with a graceful fallback to the per-turn config if Flash isn't set). Same YES/NO contract on the wire, an order of magnitude faster and cheaper in practice. Settings → Tool approval text updated to reflect the new behaviour.
+
 ## 1.47.0-rc8 - 2026-06-03
 
 - **Toned down the Stop button.** The streaming-active state was a fully-saturated solid red disc with a white `stop.fill` glyph — a visual alarm bell for what is, in practice, "click to interrupt the model". Now it's a soft red-tinted disc (12% fill) with a thin red stroke (55%) and a red-foreground `square.fill` glyph. Same target size, same affordance, much calmer.
