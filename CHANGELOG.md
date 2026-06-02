@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.41.0-rc3 - 2026-06-02
+
+- Fixed Agent mode sidebar header colliding with the macOS traffic-light buttons. The window keeps `titlebarAppearsTransparent`, which floats close/minimize/zoom over the first ~28pt of sidebar content. The Agent sidebar now reserves that band as empty space and renders the "CHATS" header on the row below it.
+- Removed the Automations and Customize placeholder rows from the Agent mode sidebar. They had no behavior since their introduction in v1.39.0-rc3 — pure visual filler matching the Cursor screenshot they were copied from. They'll come back when there's a real feature behind them.
+
 ## 1.41.0-rc2 - 2026-06-02
 
 - Fixed HTTP 400 `The reasoning_content in the thinking mode must be passed back to the API` from DashScope thinking-mode models (qwen3, qwq, qwen3-coder, etc.). Streaming responses can carry both `delta.content` and `delta.reasoning_content`; the previous implementation discarded the latter, so the next turn's request body was missing it and the provider rejected the whole conversation. `AgentMessage` now carries an optional `reasoningContent`, `streamChat` emits a new `.reasoningDelta` event, `runAgentLoop` accumulates it into the active assistant message, and `encodeMessage` echoes the field back on assistant messages so multi-turn thinking-mode conversations work end to end. The reasoning trace isn't shown in the UI — it exists purely to keep DashScope happy — but it does round-trip through session JSON so reloaded chats can keep replying.

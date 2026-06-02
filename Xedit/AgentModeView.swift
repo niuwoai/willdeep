@@ -92,8 +92,18 @@ private struct AgentSessionsSidebar: View {
 
     private let initialRowCount = 5
 
+    /// Vertical room left at the top of the sidebar for the macOS
+    /// traffic-light buttons. The window uses `titlebarAppearsTransparent`,
+    /// so close/minimize/zoom float over the first ~28pt of sidebar
+    /// content — anything we draw inside this band gets hidden behind
+    /// the buttons.
+    private let trafficLightReserve: CGFloat = 30
+
     var body: some View {
         VStack(spacing: 0) {
+            // Spacer reserves space for the traffic lights; the "CHATS"
+            // header drops to the row below them so it stays visible.
+            Color.clear.frame(height: trafficLightReserve)
             sidebarHeader
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
@@ -122,16 +132,18 @@ private struct AgentSessionsSidebar: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
-        .frame(height: 36)
+        .frame(height: 28)
     }
 
     private var primaryActions: some View {
+        // Automations / Customize used to live here as dimmed
+        // placeholders — they had no behavior and just took up real
+        // estate, so they've been removed. Add them back when there's
+        // a real feature to attach.
         VStack(spacing: 0) {
             SidebarActionRow(icon: "square.and.pencil", title: "New Chat", shortcut: "⌘N") {
                 appState.startNewAgentSession()
             }
-            SidebarActionRow(icon: "arrow.triangle.2.circlepath", title: "Automations", shortcut: nil, isDimmed: true) { }
-            SidebarActionRow(icon: "slider.horizontal.3", title: "Customize", shortcut: nil, isDimmed: true) { }
         }
     }
 
