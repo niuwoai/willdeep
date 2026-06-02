@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.46.0-rc6 - 2026-06-02
+
+- Markdown renderer now handles GFM-style pipe tables in Agent assistant messages. Previously a model reply containing `| Path | Note | / |---|---| / | x | y |` got flattened into one long paragraph because the parser had no table support. `MarkdownPreviewBlock.Kind` gains `.table` (with `tableHeaders` + `tableRows`); the parser commits to table parsing only when a pipe row is immediately followed by an alignment row like `|---|---|` (so a stray `|` in prose can't hijack the parser), accepts colon alignment markers (`:---`, `:---:`, `---:`), tolerates the loose form without outer pipes, and closes the table cleanly at EOF.
+- New `MarkdownTableBlockView` renders the parsed table — bold tinted header row, alternating-zebra body rows, inline-Markdown-rendered cells via `AttributedString(markdown:)`, the whole thing wrapped in a horizontal scroll view so wide tables don't push the chat column. 5 parser tests cover plain GFM, alignment colons, EOF-trailing tables, pipe prose left as paragraph, and the loose-form variant.
+
+## 1.46.0-rc5 - 2026-06-02
+
+- Fixed `cd /path && git status | grep ... | head ...` (and similar read-only chains starting with `cd`) prompting for Allow/Deny instead of running silently. `cd`, `pushd`, and `popd` are now in `SafeCommand.alwaysSafeFirstTokens` — they change shell state only, no FS writes. Command-substitution forms like `cd $(...)` continue to be blocked upstream by the `$(` needle gate, so the loosening only affects the literal-arg case. Added `testSafeCommandCdAllowed` covering the typical agent emission, plus the substitution-still-dangerous regression.
+
 ## 1.46.0-rc4 - 2026-06-02
 
 - **Chat-mode model picker rewritten as a two-level Provider → Model menu** (Phase D, completes the multi-provider effort). Top of the menu still offers "Use route default" to drop any session override. Below it, every library entry collapses into a submenu whose children are its Flash primary + Flash alternates, then Pro primary + Pro alternates (separated by a divider). Picking any leaf flips the active library entry to that provider (rebuilds the live configuration via `selectAgentEntryAndModel`) and sets the session override in one click — no need to first activate the entry in Settings.

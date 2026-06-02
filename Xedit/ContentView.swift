@@ -2147,6 +2147,7 @@ struct MarkdownPreviewBlock: Equatable {
         case orderedList
         case code
         case divider
+        case table
     }
 
     let kind: Kind
@@ -2155,6 +2156,12 @@ struct MarkdownPreviewBlock: Equatable {
     /// to carry the language hint after the opening ``` (e.g. "tsx",
     /// "swift", "bash"). Nil for every other block kind.
     var info: String? = nil
+    /// Header cells for `.table` blocks. Nil for every other kind.
+    var tableHeaders: [String]? = nil
+    /// Body rows for `.table` blocks. Each row is a flat array of cell
+    /// strings, already trimmed and inline-Markdown-ready. Nil for
+    /// every other kind.
+    var tableRows: [[String]]? = nil
 }
 
 enum MarkdownPreviewParser {
@@ -2192,7 +2199,9 @@ enum MarkdownPreviewParser {
             codeLanguage = nil
         }
 
-        for line in lines {
+        var i = 0
+        while i < lines.count {
+            let line = lines[i]
             let trimmedLine = line.trimmingCharacters(in: .whitespaces)
             if trimmedLine.hasPrefix("```") {
                 if isInCodeBlock {
@@ -2206,51 +2215,81 @@ enum MarkdownPreviewParser {
                     let hint = String(trimmedLine.dropFirst(3)).trimmingCharacters(in: .whitespaces)
                     codeLanguage = hint.isEmpty ? nil : hint
                 }
-                continue
+                i += 1; continue
             }
 
             if isInCodeBlock {
                 code.append(line)
-                continue
+                i += 1; continue
             }
 
             if trimmedLine.isEmpty {
                 flushParagraph()
-                continue
+                i += 1; continue
             }
 
             if trimmedLine == "---" || trimmedLine == "***" || trimmedLine == "___" {
                 flushParagraph()
                 blocks.append(MarkdownPreviewBlock(kind: .divider, text: ""))
-                continue
+                i += 1; continue
             }
 
             if let heading = headingBlock(from: trimmedLine) {
                 flushParagraph()
                 blocks.append(heading)
-                continue
+                i += 1; continue
             }
 
             if trimmedLine.hasPrefix(">") {
                 flushParagraph()
                 let quote = trimmedLine.dropFirst().trimmingCharacters(in: .whitespaces)
                 blocks.append(MarkdownPreviewBlock(kind: .quote, text: quote))
+                i += 1; continue
+            }
+
+            // GFM table — header row + alignment row + zero or more
+            // body rows. Header has to be a pipe-delimited line; the
+            // immediately following line must match the alignment row
+            // pattern (cells of `:?---+:?`). Without the alignment row
+            // we treat the pipe-delimited line as paragraph text so
+            // accidental single `|`-laden prose doesn't get hijacked.
+            if isPipeRow(trimmedLine),
+               i + 1 < lines.count,
+               isAlignmentRow(lines[i + 1].trimmingCharacters(in: .whitespaces)) {
+                flushParagraph()
+                let headers = parseRow(trimmedLine)
+                var rows: [[String]] = []
+                var j = i + 2
+                while j < lines.count {
+                    let nextTrim = lines[j].trimmingCharacters(in: .whitespaces)
+                    guard isPipeRow(nextTrim) else { break }
+                    rows.append(parseRow(nextTrim))
+                    j += 1
+                }
+                blocks.append(MarkdownPreviewBlock(
+                    kind: .table,
+                    text: "",
+                    tableHeaders: headers,
+                    tableRows: rows
+                ))
+                i = j
                 continue
             }
 
             if trimmedLine.hasPrefix("- ") || trimmedLine.hasPrefix("* ") {
                 flushParagraph()
                 blocks.append(MarkdownPreviewBlock(kind: .unorderedList, text: String(trimmedLine.dropFirst(2))))
-                continue
+                i += 1; continue
             }
 
             if let ordered = orderedListText(from: trimmedLine) {
                 flushParagraph()
                 blocks.append(MarkdownPreviewBlock(kind: .orderedList, text: ordered))
-                continue
+                i += 1; continue
             }
 
             paragraph.append(trimmedLine)
+            i += 1
         }
 
         if isInCodeBlock {
@@ -2258,6 +2297,49 @@ enum MarkdownPreviewParser {
         }
         flushParagraph()
         return blocks
+    }
+
+    /// A pipe-delimited row: starts with `|`, ends with `|`, and has at
+    /// least two cells. Models often forget the leading `|` — allow
+    /// "cell | cell | cell" as long as there's at least one internal
+    /// `|` and the line doesn't look like a list item.
+    private static func isPipeRow(_ line: String) -> Bool {
+        guard line.contains("|") else { return false }
+        // Avoid eating list items like "- some | thing".
+        if line.hasPrefix("- ") || line.hasPrefix("* ") { return false }
+        // Strict form: leading and trailing pipe.
+        if line.hasPrefix("|") && line.hasSuffix("|") && line.count >= 3 {
+            return true
+        }
+        // Looser form: at least one internal `|` (so there are at least
+        // two cells). Conservative — we still require the alignment
+        // row immediately after to actually commit to table parsing,
+        // so an offhand pipe in prose won't hijack the parser.
+        return line.components(separatedBy: "|").count >= 2
+    }
+
+    /// Alignment row: cells of optional `:`, `---+`, optional `:`,
+    /// separated by `|`. e.g. `|---|:---:|---:|`. Lenient about extra
+    /// outer pipes / whitespace.
+    private static func isAlignmentRow(_ line: String) -> Bool {
+        guard line.contains("|"), line.contains("-") else { return false }
+        let trimmed = line.trimmingCharacters(in: CharacterSet(charactersIn: "|"))
+        let cells = trimmed.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard !cells.isEmpty else { return false }
+        return cells.allSatisfy { cell in
+            guard !cell.isEmpty else { return false }
+            var c = cell
+            if c.hasPrefix(":") { c = String(c.dropFirst()) }
+            if c.hasSuffix(":") { c = String(c.dropLast()) }
+            return !c.isEmpty && c.allSatisfy { $0 == "-" }
+        }
+    }
+
+    /// Split a pipe-delimited row into trimmed cell strings, dropping
+    /// the leading/trailing empty cells caused by `|` at either end.
+    private static func parseRow(_ line: String) -> [String] {
+        let trimmed = line.trimmingCharacters(in: CharacterSet(charactersIn: "|"))
+        return trimmed.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
     }
 
     private static func headingBlock(from line: String) -> MarkdownPreviewBlock? {
@@ -2412,6 +2494,11 @@ struct MarkdownPreviewBlockView: View {
         case .divider:
             Divider()
                 .padding(.vertical, 8)
+        case .table:
+            MarkdownTableBlockView(
+                headers: block.tableHeaders ?? [],
+                rows: block.tableRows ?? []
+            )
         }
     }
 
@@ -2426,6 +2513,84 @@ struct MarkdownPreviewBlockView: View {
 
     private func inlineText(_ text: String) -> AttributedString {
         (try? AttributedString(markdown: text)) ?? AttributedString(text)
+    }
+}
+
+// MARK: - Table block view
+
+/// Renders a GFM-style pipe table. Header row bold + lightly tinted;
+/// body rows alternating background for legibility. The whole table sits
+/// in a horizontal ScrollView so wide tables don't squeeze the chat
+/// column. Inline Markdown (e.g. `code`, **bold**) inside cells is
+/// rendered via `AttributedString(markdown:)` just like paragraph text.
+struct MarkdownTableBlockView: View {
+    let headers: [String]
+    let rows: [[String]]
+
+    private var columnCount: Int {
+        max(headers.count, rows.map(\.count).max() ?? 0)
+    }
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                if !headers.isEmpty {
+                    headerRow
+                    Divider()
+                }
+                ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                    bodyRow(row, isOdd: index % 2 == 1)
+                    if index < rows.count - 1 {
+                        Divider().opacity(0.4)
+                    }
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.45))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(Color.primary.opacity(0.10), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+    }
+
+    @ViewBuilder
+    private var headerRow: some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(0..<columnCount, id: \.self) { col in
+                cell(text: col < headers.count ? headers[col] : "", isHeader: true)
+            }
+        }
+        .background(Color.primary.opacity(0.05))
+    }
+
+    @ViewBuilder
+    private func bodyRow(_ row: [String], isOdd: Bool) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(0..<columnCount, id: \.self) { col in
+                cell(text: col < row.count ? row[col] : "", isHeader: false)
+            }
+        }
+        .background(isOdd ? Color.primary.opacity(0.025) : Color.clear)
+    }
+
+    @ViewBuilder
+    private func cell(text: String, isHeader: Bool) -> some View {
+        Text((try? AttributedString(markdown: text)) ?? AttributedString(text))
+            .font(.system(size: 12, weight: isHeader ? .semibold : .regular))
+            .foregroundStyle(isHeader ? .primary : .primary)
+            .textSelection(.enabled)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(minWidth: 80, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .overlay(alignment: .trailing) {
+                Divider()
+                    .opacity(0.25)
+            }
     }
 }
 

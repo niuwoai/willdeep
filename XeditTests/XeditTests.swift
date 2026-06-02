@@ -1666,6 +1666,18 @@ struct VeilWriterTests {
         #expect(SafeCommand.classify(command: "find . -name '*.log' -exec rm {} ;") == .alwaysDangerous)
     }
 
+    @Test("SafeCommand treats cd/pushd/popd as alwaysSafe")
+    func testSafeCommandCdAllowed() {
+        // The common "navigate then read" chain the agent emits.
+        #expect(SafeCommand.classify(command: "cd /tmp/proj && git status") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "cd /tmp/proj && git status --short | grep '^\\(M\\|A\\|D\\|R\\|C\\)' | head -20") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "cd ~") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "pushd /tmp && ls && popd") == .alwaysSafe)
+        // Command substitution must still kill the whole line — that
+        // gate sits above the per-token check.
+        #expect(SafeCommand.classify(command: "cd $(rm -rf /)") == .alwaysDangerous)
+    }
+
     // MARK: - Tool call grouping
 
     private func makeCall(_ name: String, status: AgentToolCallStatus = .succeeded) -> AgentToolCall {
