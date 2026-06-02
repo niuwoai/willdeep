@@ -1325,6 +1325,8 @@ private struct ModelPickerPill: View {
 
     var body: some View {
         Menu {
+            // First entry: keep the "use the route's natural pick"
+            // shortcut so the user can drop a session override.
             let configured = appState.agentConfiguration.normalized.model(for: .interactive)
             if !configured.isEmpty {
                 Button {
@@ -1339,24 +1341,44 @@ private struct ModelPickerPill: View {
                 }
                 Divider()
             }
-            ForEach(appState.agentKnownModelIDs, id: \.self) { model in
-                Button {
-                    appState.setAgentSessionModel(model)
-                } label: {
-                    HStack {
-                        Text(model)
-                        if appState.agentSessionModelOverride == model {
-                            Image(systemName: "checkmark")
+
+            // Two-level Provider → Model menu, driven by the library.
+            // Each entry collapses into a Menu whose children are its
+            // Flash + Pro primaries (and any user-defined alternates).
+            ForEach(appState.agentProviderLibrary.entries) { entry in
+                providerSubmenu(entry: entry)
+            }
+
+            if appState.agentProviderLibrary.entries.isEmpty {
+                Text("No providers configured. Open Settings → Agent.")
+            }
+
+            // Tail: previously fetched ad-hoc models that don't belong
+            // to any library entry's primary/alternates list. Keeps the
+            // old "fetch + pick" workflow working when the user grabs a
+            // brand-new model id mid-conversation.
+            let libraryModels = libraryModelSet
+            let extras = appState.agentKnownModelIDs.filter { !libraryModels.contains($0) && !$0.isEmpty }
+            if !extras.isEmpty {
+                Divider()
+                Menu("Recently fetched") {
+                    ForEach(extras, id: \.self) { model in
+                        Button {
+                            appState.setAgentSessionModel(model)
+                        } label: {
+                            HStack {
+                                Text(model)
+                                if appState.agentSessionModelOverride == model {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
                         }
                     }
                 }
             }
-            if appState.agentKnownModelIDs.isEmpty {
-                Text("Fetch models in Settings > Agent")
-            }
         } label: {
             HStack(spacing: 3) {
-                Text(currentModel.isEmpty ? "Select model" : currentModel)
+                Text(currentModelLabel.isEmpty ? "Select model" : currentModelLabel)
                     .font(AgentDesign.secondaryFont)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -1372,11 +1394,109 @@ private struct ModelPickerPill: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
+        .help("Pick provider + model for this chat. The active provider also drives Auto/Flash/Pro routing.")
     }
 
-    private var currentModel: String {
-        appState.agentModelStatusText
+    /// One Menu per library entry — its children are Flash + Pro
+    /// primaries plus user-defined alternates. Checks live on the
+    /// currently-effective (entry+model) pair so the user can tell at
+    /// a glance which row is in play right now.
+    @ViewBuilder
+    private func providerSubmenu(entry: AgentProviderEntry) -> some View {
+        let isActive = appState.agentProviderLibrary.activeID == entry.id
+        let override = appState.agentSessionModelOverride
+        Menu {
+            // Flash tier (primary first, then alternates).
+            if !entry.flashPrimary.isEmpty {
+                Button { pick(entry: entry, model: entry.flashPrimary) } label: {
+                    modelRow(label: "Flash · \(entry.flashPrimary)",
+                             checked: isCurrent(entry: entry, model: entry.flashPrimary, override: override, isActive: isActive))
+                }
+            }
+            ForEach(entry.flashAlternates, id: \.self) { m in
+                Button { pick(entry: entry, model: m) } label: {
+                    modelRow(label: "Flash · \(m)",
+                             checked: isCurrent(entry: entry, model: m, override: override, isActive: isActive))
+                }
+            }
+            if !entry.proPrimary.isEmpty || !entry.proAlternates.isEmpty {
+                Divider()
+            }
+            if !entry.proPrimary.isEmpty {
+                Button { pick(entry: entry, model: entry.proPrimary) } label: {
+                    modelRow(label: "Pro · \(entry.proPrimary)",
+                             checked: isCurrent(entry: entry, model: entry.proPrimary, override: override, isActive: isActive))
+                }
+            }
+            ForEach(entry.proAlternates, id: \.self) { m in
+                Button { pick(entry: entry, model: m) } label: {
+                    modelRow(label: "Pro · \(m)",
+                             checked: isCurrent(entry: entry, model: m, override: override, isActive: isActive))
+                }
+            }
+        } label: {
+            HStack {
+                Image(systemName: isActive ? "star.fill" : "star")
+                    .foregroundStyle(isActive ? Color.yellow : Color.secondary)
+                Text(entry.displayName)
+            }
+        }
     }
+
+    @ViewBuilder
+    private func modelRow(label: String, checked: Bool) -> some View {
+        HStack {
+            Text(label)
+            if checked { Image(systemName: "checkmark") }
+        }
+    }
+
+    /// Effective (entry, model) for the current chat is:
+    ///   - the active library entry, AND
+    ///   - the session override if set, otherwise the route's natural pick.
+    private func isCurrent(entry: AgentProviderEntry, model: String, override: String?, isActive: Bool) -> Bool {
+        guard isActive else { return false }
+        if let override, !override.isEmpty {
+            return override == model
+        }
+        // No override → matches whichever primary the route would pick.
+        let routed = appState.agentConfiguration.normalized.model(for: .interactive)
+        return model == routed
+    }
+
+    private func pick(entry: AgentProviderEntry, model: String) {
+        appState.selectAgentEntryAndModel(entryID: entry.id, model: model)
+    }
+
+    /// Set of every model id that lives somewhere in the library —
+    /// used to filter "Recently fetched" so we don't repeat them.
+    private var libraryModelSet: Set<String> {
+        var s = Set<String>()
+        for e in appState.agentProviderLibrary.entries {
+            s.formUnion(e.allFlashModels)
+            s.formUnion(e.allProModels)
+        }
+        return s
+    }
+
+    /// Pill label — prefer the explicit session override, else fall
+    /// back to the route's natural pick (prefixed with provider name
+    /// when there's more than one library entry, so the user always
+    /// knows which provider this chat is talking to).
+    private var currentModelLabel: String {
+        let routed = appState.agentConfiguration.normalized.model(for: .interactive)
+        let model = appState.agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty ?? routed
+        guard appState.agentProviderLibrary.entries.count > 1,
+              let active = appState.agentProviderLibrary.active else {
+            return model
+        }
+        return "\(active.displayName) · \(model)"
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
 // MARK: - Status bar

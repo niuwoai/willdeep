@@ -1293,6 +1293,34 @@ final class AppState: ObservableObject {
         persistActiveAgentSession()
     }
 
+    /// Chat-mode picker entry point — pick a (library entry, model)
+    /// pair in one shot. When `entryID` differs from the current
+    /// active, activates that entry first (rebuilds configuration),
+    /// then sets the session override to `model`. Picking a model
+    /// that already matches the route default clears the override so
+    /// the chip falls back to displaying the routed name.
+    func selectAgentEntryAndModel(entryID: UUID, model: String) {
+        // Activate the target library entry — this rebuilds
+        // agentConfiguration's provider / base URL / key / primaries.
+        if agentProviderLibrary.activeID != entryID {
+            setActiveProviderLibraryEntry(id: entryID)
+        }
+        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            setAgentSessionModel(nil)
+            return
+        }
+        // If the chosen model is already what the route would pick by
+        // default, clear the override so the picker shows the natural
+        // "Use route default" state instead of a redundant lock.
+        let routed = agentConfiguration.normalized.model(for: .interactive)
+        if trimmed == routed {
+            setAgentSessionModel(nil)
+        } else {
+            setAgentSessionModel(trimmed)
+        }
+    }
+
     /// Best-effort token count for the next provider request. This mirrors
     /// the actual Agent request shape instead of only counting visible chat
     /// bubbles, so system context, tool schemas, collapsed tool history, and

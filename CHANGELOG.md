@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.46.0-rc4 - 2026-06-02
+
+- **Chat-mode model picker rewritten as a two-level Provider → Model menu** (Phase D, completes the multi-provider effort). Top of the menu still offers "Use route default" to drop any session override. Below it, every library entry collapses into a submenu whose children are its Flash primary + Flash alternates, then Pro primary + Pro alternates (separated by a divider). Picking any leaf flips the active library entry to that provider (rebuilds the live configuration via `selectAgentEntryAndModel`) and sets the session override in one click — no need to first activate the entry in Settings.
+- The active entry shows a yellow ★ in its submenu label; checked rows mark whichever model is *effectively* in play right now (override → that model; no override → the route's natural Flash/Pro pick).
+- When more than one library entry exists, the pill label prefixes the provider's display name (`OpenAI · gpt-4.1-mini`) so the user always sees which provider this chat is talking to.
+- Previously-fetched ad-hoc model IDs that don't appear in any library entry now collect under a "Recently fetched" submenu instead of getting mixed into the main list — keeps the picker scannable when the catalog is large.
+- New `AppState.selectAgentEntryAndModel(entryID:model:)` collapses "switch active entry" + "set session override" into a single transactional call so the menu can't end up in a half-switched state.
+
 ## 1.46.0-rc3 - 2026-06-02
 
 - **Settings → Agent rewritten as a multi-provider library** (Phase C). The old single-form layout is replaced by a left-pane provider list (with active star, add `+` / remove `−` controls) and a right-pane editor for the selected entry. The editor lets you set display name / preset / base URL / API key, plus separate primary + alternate model lists for Flash and Pro tiers (one model id per line). Edits commit immediately to `agentProviderLibrary` — no Save button needed for per-provider fields; the existing Save button still covers Image Understanding + routing mode.
