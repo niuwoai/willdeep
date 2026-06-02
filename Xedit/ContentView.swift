@@ -2162,6 +2162,10 @@ struct MarkdownPreviewBlock: Equatable {
     /// strings, already trimmed and inline-Markdown-ready. Nil for
     /// every other kind.
     var tableRows: [[String]]? = nil
+    /// Indentation level for list blocks (0 = top-level). 2-space and
+    /// 4-space leading indentation both count as one level. Always 0
+    /// for non-list blocks.
+    var indent: Int = 0
 }
 
 enum MarkdownPreviewParser {
@@ -2276,15 +2280,15 @@ enum MarkdownPreviewParser {
                 continue
             }
 
-            if trimmedLine.hasPrefix("- ") || trimmedLine.hasPrefix("* ") {
+            if let (indent, body) = listItem(from: line, unordered: true) {
                 flushParagraph()
-                blocks.append(MarkdownPreviewBlock(kind: .unorderedList, text: String(trimmedLine.dropFirst(2))))
+                blocks.append(MarkdownPreviewBlock(kind: .unorderedList, text: body, indent: indent))
                 i += 1; continue
             }
 
-            if let ordered = orderedListText(from: trimmedLine) {
+            if let (indent, body) = listItem(from: line, unordered: false) {
                 flushParagraph()
-                blocks.append(MarkdownPreviewBlock(kind: .orderedList, text: ordered))
+                blocks.append(MarkdownPreviewBlock(kind: .orderedList, text: body, indent: indent))
                 i += 1; continue
             }
 
@@ -2358,6 +2362,43 @@ enum MarkdownPreviewParser {
         let afterDot = line[line.index(after: dotIndex)...]
         guard afterDot.hasPrefix(" ") else { return nil }
         return String(afterDot.dropFirst())
+    }
+
+    /// Detect a list item line. Reads the raw (un-trimmed) line so we
+    /// can count leading spaces / tabs as indentation. Returns
+    /// `(indent, body)` on match; `indent` is the nesting level
+    /// (`leadingSpaces / 2`, tabs count as 4 spaces). `unordered`
+    /// selects bullet (`- ` / `* `) vs ordered (`N. `).
+    private static func listItem(from rawLine: String, unordered: Bool) -> (Int, String)? {
+        var spaces = 0
+        var i = rawLine.startIndex
+        while i < rawLine.endIndex {
+            let ch = rawLine[i]
+            if ch == " " { spaces += 1 }
+            else if ch == "\t" { spaces += 4 }
+            else { break }
+            i = rawLine.index(after: i)
+        }
+        guard i < rawLine.endIndex else { return nil }
+        let rest = rawLine[i...]
+        if unordered {
+            if rest.hasPrefix("- ") || rest.hasPrefix("* ") {
+                let body = String(rest.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+                return (spaces / 2, body)
+            }
+        } else {
+            if let dotIndex = rest.firstIndex(of: ".") {
+                let number = rest[..<dotIndex]
+                if !number.isEmpty, number.allSatisfy(\.isNumber) {
+                    let afterDot = rest[rest.index(after: dotIndex)...]
+                    if afterDot.hasPrefix(" ") {
+                        let body = String(afterDot.dropFirst()).trimmingCharacters(in: .whitespaces)
+                        return (spaces / 2, body)
+                    }
+                }
+            }
+        }
+        return nil
     }
 }
 
@@ -2478,10 +2519,12 @@ struct MarkdownPreviewBlockView: View {
             .padding(.vertical, 4)
         case .unorderedList:
             HStack(alignment: .top, spacing: 8) {
-                Text("•")
+                Text(bulletGlyph(for: block.indent))
+                    .foregroundColor(.secondary)
                 Text(inlineText(block.text))
             }
             .font(.body)
+            .padding(.leading, listIndentPadding(block.indent))
         case .orderedList:
             HStack(alignment: .top, spacing: 8) {
                 Text("1.")
@@ -2489,6 +2532,7 @@ struct MarkdownPreviewBlockView: View {
                 Text(inlineText(block.text))
             }
             .font(.body)
+            .padding(.leading, listIndentPadding(block.indent))
         case .code:
             MarkdownCodeBlockView(text: block.text, languageHint: block.info)
         case .divider:
@@ -2512,7 +2556,49 @@ struct MarkdownPreviewBlockView: View {
     }
 
     private func inlineText(_ text: String) -> AttributedString {
-        (try? AttributedString(markdown: text)) ?? AttributedString(text)
+        MarkdownInline.attributedString(from: text)
+    }
+
+    /// Bullet glyph cycles by nesting level so the eye can pick out
+    /// sub-lists at a glance. Caps at level 2 (▪).
+    private func bulletGlyph(for indent: Int) -> String {
+        switch indent {
+        case 0: return "•"
+        case 1: return "◦"
+        default: return "▪"
+        }
+    }
+
+    /// 18pt of left padding per nesting level — enough to read as
+    /// "child of the previous item" without pushing the text off the
+    /// chat column.
+    private func listIndentPadding(_ indent: Int) -> CGFloat {
+        CGFloat(min(indent, 4)) * 18
+    }
+}
+
+/// Inline-Markdown helper used by every block renderer. Wraps
+/// `AttributedString(markdown:)` and then walks the runs to give
+/// `inlineCode` spans the monospace-with-tinted-background treatment
+/// that Apple's built-in renderer skips. Centralised here so headings,
+/// paragraphs, quotes, list items, and table cells stay visually
+/// consistent.
+enum MarkdownInline {
+    static func attributedString(from raw: String) -> AttributedString {
+        guard var attributed = try? AttributedString(markdown: raw) else {
+            return AttributedString(raw)
+        }
+        // SwiftUI's parsed AttributedString tags inline code runs with
+        // .code; we re-style those runs to look like a real code chip:
+        // monospaced font + light grey pill background.
+        for run in attributed.runs {
+            guard let intent = run.inlinePresentationIntent,
+                  intent.contains(.code) else { continue }
+            attributed[run.range].font = .system(.body, design: .monospaced)
+            attributed[run.range].backgroundColor = Color.primary.opacity(0.08)
+            attributed[run.range].foregroundColor = Color(nsColor: .labelColor)
+        }
+        return attributed
     }
 }
 
@@ -2579,7 +2665,7 @@ struct MarkdownTableBlockView: View {
 
     @ViewBuilder
     private func cell(text: String, isHeader: Bool) -> some View {
-        Text((try? AttributedString(markdown: text)) ?? AttributedString(text))
+        Text(MarkdownInline.attributedString(from: text))
             .font(.system(size: 12, weight: isHeader ? .semibold : .regular))
             .foregroundStyle(isHeader ? .primary : .primary)
             .textSelection(.enabled)

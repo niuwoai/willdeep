@@ -262,24 +262,6 @@ struct EditorSettingsView: View {
                         fetchAgentModels(forEntry: entry)
                     }
                 )
-                Picker("Routing", selection: $agentRoutingModeBuffer) {
-                    ForEach(AgentModelRoutingMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: agentRoutingModeBuffer) { _, mode in
-                    // Routing mode lives on the single live configuration
-                    // (not per library entry) — push it through as soon
-                    // as the user flips the segment.
-                    var cfg = appState.agentConfiguration
-                    cfg.routingMode = mode
-                    appState.agentConfiguration = cfg.normalized
-                }
-
-                Text(agentRoutingModeBuffer.description)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             Section("Image Understanding") {
@@ -999,6 +981,7 @@ private struct AgentProviderEntryEditor: View {
     @State private var flashAlternatesText: String = ""
     @State private var proPrimary: String = ""
     @State private var proAlternatesText: String = ""
+    @State private var routingMode: AgentModelRoutingMode = .auto
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1062,6 +1045,27 @@ private struct AgentProviderEntryEditor: View {
                 alternatesBinding: $proAlternatesText,
                 placeholder: "e.g. gpt-4.1\nclaude-opus-4-7"
             )
+
+            // Per-entry routing default. Each entry can prefer Auto /
+            // Flash / Pro independently — useful when one provider's
+            // Pro tier is too pricey to be the default but another's
+            // is a no-brainer.
+            HStack {
+                Text("Routing")
+                    .frame(width: 100, alignment: .leading)
+                Picker("", selection: $routingMode) {
+                    ForEach(AgentModelRoutingMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .onChange(of: routingMode) { _, _ in commit() }
+            }
+            Text(routingMode.description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.leading, 100)
 
             HStack {
                 Button(isFetchingAgentModels ? "Fetching…" : "Fetch Models") {
@@ -1139,6 +1143,7 @@ private struct AgentProviderEntryEditor: View {
         flashAlternatesText = entry.flashAlternates.joined(separator: "\n")
         proPrimary = entry.proPrimary
         proAlternatesText = entry.proAlternates.joined(separator: "\n")
+        routingMode = entry.routingMode
     }
 
     private func commit() {
@@ -1151,7 +1156,8 @@ private struct AgentProviderEntryEditor: View {
             flashPrimary: flashPrimary,
             flashAlternates: splitLines(flashAlternatesText),
             proPrimary: proPrimary,
-            proAlternates: splitLines(proAlternatesText)
+            proAlternates: splitLines(proAlternatesText),
+            routingMode: routingMode
         )
         onChange(updated)
     }

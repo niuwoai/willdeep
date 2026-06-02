@@ -105,6 +105,7 @@ private struct AgentSessionsSidebar: View {
             // header drops to the row below them so it stays visible.
             Color.clear.frame(height: trafficLightReserve)
             sidebarHeader
+            providerStatusBar
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     primaryActions
@@ -133,6 +134,56 @@ private struct AgentSessionsSidebar: View {
         }
         .padding(.horizontal, 14)
         .frame(height: 28)
+    }
+
+    /// One-line status pill showing which library entry is currently
+    /// active, with a click-to-switch menu. Hidden when only one entry
+    /// exists — no point in a picker that has nothing to pick.
+    @ViewBuilder
+    private var providerStatusBar: some View {
+        if appState.agentProviderLibrary.entries.count > 1 {
+            Menu {
+                ForEach(appState.agentProviderLibrary.entries) { entry in
+                    Button {
+                        appState.setActiveProviderLibraryEntry(id: entry.id)
+                    } label: {
+                        HStack {
+                            Text(entry.displayName)
+                            if appState.agentProviderLibrary.activeID == entry.id {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "sparkle")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.accentColor)
+                    Text(activeProviderLabel)
+                        .font(.system(size: 11, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(AgentDesign.subtleBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 6)
+            .help("Active provider — driving the next chat turn. Click to switch.")
+        }
+    }
+
+    private var activeProviderLabel: String {
+        appState.agentProviderLibrary.active?.displayName ?? "No provider"
     }
 
     private var primaryActions: some View {

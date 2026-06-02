@@ -592,6 +592,10 @@ final class AppState: ObservableObject {
         cfg.apiKey = entry.apiKey
         cfg.flashModel = entry.flashPrimary
         cfg.proModel = entry.proPrimary
+        // The active entry's routing mode wins — that's the whole
+        // point of having a per-entry override. The user can still
+        // pick a session-only override via the chat-mode picker.
+        cfg.routingMode = entry.routingMode
         if cfg.model.isEmpty { cfg.model = entry.flashPrimary }
         agentConfiguration = cfg.normalized
     }
@@ -659,6 +663,10 @@ final class AppState: ObservableObject {
         }
         if active.proPrimary != agentConfiguration.proModel {
             active.proPrimary = agentConfiguration.proModel
+            changed = true
+        }
+        if active.routingMode != agentConfiguration.routingMode {
+            active.routingMode = agentConfiguration.routingMode
             changed = true
         }
         guard changed else { return }

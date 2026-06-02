@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.47.0-rc1 - 2026-06-02
+
+Four quality/polish phases shipped together — Markdown polish, per-entry routing, sidebar provider status, and parity tests for the chat picker primitive.
+
+- **Markdown polish.** Inline `` `code` `` spans now render as monospace-with-light-tinted-pill via a new centralised `MarkdownInline.attributedString(from:)` helper (used by every block kind + table cells, so headings / paragraphs / quotes / list items all stay consistent). Nested lists are now actually nested: parser counts leading whitespace (2 spaces or a tab = 1 level), `MarkdownPreviewBlock` carries a new `indent: Int`, renderer pads 18pt per level (capped at 4) and cycles bullet glyphs by level (• → ◦ → ▪). Added `MarkdownListNestingTests` (5 cases).
+- **Per-entry routing mode.** Routing (Auto / Flash / Pro) used to be a single global Settings control. Now lives on each `AgentProviderEntry` — Settings → Agent → provider editor has its own segmented picker, and activating an entry adopts that entry's routing mode automatically. So you can keep OpenAI on Auto, force DeepSeek to Pro, and Claude to Flash without flipping a global control every time you switch providers. Older library JSON (pre-this field) decodes to `.auto` via `decodeIfPresent`. `makeConfiguration(routingMode:)` now accepts an optional override; nil means "use the entry's own mode" — compression still overrides to Flash explicitly.
+- **Sidebar provider status bar.** Agent-mode sidebar now shows a one-line pill right under the "CHATS" header listing the active library entry name. Click → menu lists every library entry, click any to set active. Hidden when only one entry exists (no point picking from one).
+- **`selectAgentEntryAndModel` regression tests.** New `AgentEntryModelSelectionTests` (4 cases) covering: switching to a different entry flips both `activeID` and the live `agentConfiguration`; picking a model that matches the route default clears the session override; empty model string clears the override; the entry's own routing mode propagates to the live configuration on activate.
+
+## 1.46.0-rc7 - 2026-06-02
+
+- Markdown renderer enhancements (Phase 1 of the post-multi-provider cleanup):
+  - **Inline code chips.** Spans Apple's parser tags as `.code` now render with a monospaced font + light grey pill background instead of the plain monospace they were getting from `AttributedString(markdown:)`. Centralised in a new `MarkdownInline.attributedString(from:)` helper so headings, paragraphs, quotes, list items, and table cells stay visually consistent.
+  - **Nested lists.** Parser counts leading whitespace (2 spaces or tabs = 4 spaces, normalised to one indent level) and stamps a new `indent: Int` on each `.unorderedList` / `.orderedList` block. Renderer pads 18pt per level (capped at 4) and cycles the bullet glyph by level (• → ◦ → ▪) so nested children read as nested at a glance. Top-level lists look identical to before.
+  - Added `MarkdownListNestingTests` (5 cases) covering top-level, 2-space, 4-space, tab-indented, and ordered-list nesting. All pass.
+
 ## 1.46.0-rc6 - 2026-06-02
 
 - Markdown renderer now handles GFM-style pipe tables in Agent assistant messages. Previously a model reply containing `| Path | Note | / |---|---| / | x | y |` got flattened into one long paragraph because the parser had no table support. `MarkdownPreviewBlock.Kind` gains `.table` (with `tableHeaders` + `tableRows`); the parser commits to table parsing only when a pipe row is immediately followed by an alignment row like `|---|---|` (so a stray `|` in prose can't hijack the parser), accepts colon alignment markers (`:---`, `:---:`, `---:`), tolerates the loose form without outer pipes, and closes the table cleanly at EOF.

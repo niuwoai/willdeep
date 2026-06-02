@@ -888,6 +888,11 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
     var proPrimary: String
     /// Alternate pro models surfaced in the chat picker.
     var proAlternates: [String]
+    /// Per-entry routing mode override. When the user switches active
+    /// to this entry the live configuration adopts this. Defaults to
+    /// `.auto` for new entries; existing entries that pre-date this
+    /// field decode to `.auto` via decodeIfPresent below.
+    var routingMode: AgentModelRoutingMode
 
     init(
         id: UUID = UUID(),
@@ -898,7 +903,8 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
         flashPrimary: String,
         flashAlternates: [String] = [],
         proPrimary: String,
-        proAlternates: [String] = []
+        proAlternates: [String] = [],
+        routingMode: AgentModelRoutingMode = .auto
     ) {
         self.id = id
         self.providerID = providerID
@@ -911,6 +917,29 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
         self.flashAlternates = AgentProviderEntry.cleanList(flashAlternates, excluding: flashPrimary)
         self.proPrimary = proPrimary
         self.proAlternates = AgentProviderEntry.cleanList(proAlternates, excluding: proPrimary)
+        self.routingMode = routingMode
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, providerID, displayName, baseURL, apiKey
+        case flashPrimary, flashAlternates, proPrimary, proAlternates
+        case routingMode
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(UUID.self, forKey: .id)
+        self.providerID = try c.decode(String.self, forKey: .providerID)
+        self.displayName = try c.decode(String.self, forKey: .displayName)
+        self.baseURL = try c.decode(String.self, forKey: .baseURL)
+        self.apiKey = try c.decodeIfPresent(String.self, forKey: .apiKey) ?? ""
+        self.flashPrimary = try c.decode(String.self, forKey: .flashPrimary)
+        self.flashAlternates = try c.decodeIfPresent([String].self, forKey: .flashAlternates) ?? []
+        self.proPrimary = try c.decode(String.self, forKey: .proPrimary)
+        self.proAlternates = try c.decodeIfPresent([String].self, forKey: .proAlternates) ?? []
+        // New field — older library JSON has no routingMode, default to
+        // .auto so existing entries keep their previous behaviour.
+        self.routingMode = try c.decodeIfPresent(AgentModelRoutingMode.self, forKey: .routingMode) ?? .auto
     }
 
     /// All flash candidates with the primary first — convenient for
@@ -933,18 +962,22 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
     func makeConfiguration(
         flashOverride: String? = nil,
         proOverride: String? = nil,
-        routingMode: AgentModelRoutingMode = .auto,
+        routingMode routingModeOverride: AgentModelRoutingMode? = nil,
         imageDescription: AgentImageDescriptionConfiguration = .default
     ) -> AgentConfiguration {
         let flash = flashOverride.nonEmpty ?? flashPrimary
         let pro = proOverride.nonEmpty ?? proPrimary
+        // Use the entry's own routing mode by default — only callers
+        // that need to force a specific mode (e.g. compression always
+        // wants flash) pass an override.
+        let mode = routingModeOverride ?? routingMode
         return AgentConfiguration(
             providerID: providerID,
             baseURL: baseURL,
-            model: routingMode == .pro ? pro : flash,
+            model: mode == .pro ? pro : flash,
             flashModel: flash,
             proModel: pro,
-            routingMode: routingMode,
+            routingMode: mode,
             imageDescription: imageDescription,
             apiKey: apiKey
         )
