@@ -478,6 +478,7 @@ private struct AgentChatTranscript: View {
 // MARK: - Message bubbles for Agent mode
 
 private struct AgentModeMessageView: View {
+    @EnvironmentObject var appState: AppState
     let message: AgentMessage
 
     var body: some View {
@@ -524,26 +525,89 @@ private struct AgentModeMessageView: View {
         .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .trailing)
     }
 
-    // Assistant messages: left-aligned, no bubble fill, but anchored by a
-    // thin accent strip + small sparkles glyph so the role is obvious even
-    // when prose runs long.
+    // Assistant messages: left-aligned, wrapped in a soft card so the
+    // boundary of one model turn is obvious. Body renders through the
+    // existing MarkdownPreview pipeline (also used by the editor's
+    // Markdown side preview) — headings, lists, quotes, dividers, inline
+    // formatting, and fenced code blocks all render. The parser flushes
+    // an unterminated ``` block at EOF, so streaming code blocks show up
+    // correctly while still being typed.
     private var assistantContent: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "sparkles")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 16, height: 18, alignment: .center)
-                .padding(.top, 1)
-            VStack(alignment: .leading, spacing: 6) {
-                if !message.content.isEmpty {
-                    Text(message.content)
-                        .font(AgentDesign.bodyFont)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                .padding(.top, 10)
+            if !message.content.isEmpty {
+                AgentAssistantMarkdownBody(content: message.content, isStreaming: isStreamingThisMessage)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
+                            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.55))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
+                            .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                    )
             }
         }
         .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+    }
+
+    private var isStreamingThisMessage: Bool {
+        guard appState.isAgentResponding, message.role == .assistant else { return false }
+        return appState.agentMessages.last(where: { $0.role == .assistant })?.id == message.id
+    }
+}
+
+// MARK: - Assistant Markdown body
+
+/// Renders an assistant message's Markdown content as a vertical stack of
+/// parsed blocks. Reuses `MarkdownPreviewParser` + `MarkdownPreviewBlockView`
+/// from the editor's Markdown side preview so we don't carry two parsers,
+/// and so a partially-streamed ```code``` block still renders (the parser
+/// flushes any open code buffer at EOF).
+private struct AgentAssistantMarkdownBody: View {
+    let content: String
+    /// When true, appends a small blinking cursor at the end of the
+    /// rendered body to signal that more tokens are still arriving.
+    let isStreaming: Bool
+
+    private var blocks: [MarkdownPreviewBlock] {
+        MarkdownPreviewParser.blocks(from: content)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                MarkdownPreviewBlockView(block: block)
+            }
+            if isStreaming {
+                AgentStreamingCursor()
+            }
+        }
+        .textSelection(.enabled)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// A 2x14 blinking bar that follows the assistant's last token. Pure
+/// decoration — disappears the moment `isAgentResponding` goes false.
+private struct AgentStreamingCursor: View {
+    @State private var visible = true
+
+    var body: some View {
+        Rectangle()
+            .fill(Color.accentColor.opacity(visible ? 0.85 : 0.15))
+            .frame(width: 7, height: 14)
+            .clipShape(RoundedRectangle(cornerRadius: 1))
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
+                    visible.toggle()
+                }
+            }
     }
 }
 
