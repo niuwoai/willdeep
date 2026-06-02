@@ -82,18 +82,24 @@ struct AgentPanelView: View {
                         }
                     }
 
+                    if appState.shouldShowAgentThinkingIndicator {
+                        AgentThinkingDivider()
+                    }
+
+                    if appState.isCompressingAgentContext {
+                        AgentContextCompressionDivider()
+                    }
+
                     if let error = appState.agentErrorMessage {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .padding(8)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.red.opacity(0.08))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        AgentErrorCard(message: error, details: appState.agentErrorDetails)
                     }
 
                     ForEach(appState.agentPatchProposals) { proposal in
                         AgentPatchProposalCard(proposal: proposal)
+                    }
+
+                    if !appState.agentWorktreeChanges.isEmpty {
+                        AgentWorktreeChangeCard()
                     }
                 }
                 .padding(10)
@@ -110,11 +116,17 @@ struct AgentPanelView: View {
     }
 
     private var visibleMessages: [AgentMessage] {
-        appState.agentMessages.filter { $0.role != .tool }
+        appState.agentMessages.filter { message in
+            message.role != .tool && !isEmptyThinkingPlaceholder(message)
+        }
     }
 
     private func toolCalls(for messageID: AgentMessage.ID) -> [AgentToolCall] {
         appState.agentToolCalls.filter { $0.messageID == messageID }
+    }
+
+    private func isEmptyThinkingPlaceholder(_ message: AgentMessage) -> Bool {
+        message.role == .assistant && message.content.isEmpty && message.toolCalls.isEmpty
     }
 
     private var composer: some View {
@@ -176,6 +188,155 @@ struct AgentPanelView: View {
     }
 }
 
+struct AgentContextCompressionDivider: View {
+    var body: some View {
+        AgentInlineStatusDivider(text: "正在自动压缩上下文")
+    }
+}
+
+struct AgentThinkingDivider: View {
+    var body: some View {
+        AgentInlineStatusDivider(text: "正在思考")
+    }
+}
+
+private struct AgentInlineStatusDivider: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Rectangle()
+                .fill(Color.secondary.opacity(0.22))
+                .frame(height: 1)
+            HStack(spacing: 5) {
+                ProgressView()
+                    .controlSize(.mini)
+                    .scaleEffect(0.62)
+                    .frame(width: 10, height: 10)
+                Text(text)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .fixedSize()
+            Rectangle()
+                .fill(Color.secondary.opacity(0.22))
+                .frame(height: 1)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 6)
+        .accessibilityLabel(text)
+    }
+}
+
+struct AgentWorktreeChangeCard: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let change = appState.primaryAgentChangedFile {
+                HStack(spacing: 7) {
+                    Image(systemName: "pencil.line")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Text("正在编辑")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    changedFileButton(change)
+                    AgentLineStatsView(change: change)
+                    Spacer(minLength: 0)
+                }
+            }
+
+            HStack(spacing: 8) {
+                AgentWorktreeSummaryPill()
+                Spacer(minLength: 0)
+                Button {
+                    appState.reviewAgentWorktreeChanges()
+                } label: {
+                    Text("审查")
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.primary)
+                .help("让 Agent 审查当前未提交改动")
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 8)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.45))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    private func changedFileButton(_ change: AgentFileChangeSummary) -> some View {
+        Button {
+            appState.openAgentChangedFile(change.path)
+        } label: {
+            Text(change.fileName)
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.accentColor)
+        .help(change.path)
+    }
+}
+
+struct AgentWorktreeSummaryPill: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        Button {
+            appState.reviewAgentWorktreeChanges()
+        } label: {
+            HStack(spacing: 6) {
+                Text("\(appState.agentWorktreeChanges.fileCount) 个文件已更改")
+                    .foregroundStyle(.secondary)
+                Text("+\(appState.agentWorktreeChanges.totalAddedLines)")
+                    .foregroundStyle(.green)
+                Text("-\(appState.agentWorktreeChanges.totalDeletedLines)")
+                    .foregroundStyle(.red)
+            }
+            .font(.caption)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(Color(nsColor: .textBackgroundColor))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .help("点击让 Agent 审查当前未提交改动")
+    }
+}
+
+struct AgentLineStatsView: View {
+    let change: AgentFileChangeSummary
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if change.hasKnownLineStats {
+                Text("+\(change.addedLines)")
+                    .foregroundStyle(.green)
+                Text("-\(change.deletedLines)")
+                    .foregroundStyle(.red)
+            } else {
+                Text(change.kind.rawValue)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.system(size: 12, weight: .medium, design: .monospaced))
+        .monospacedDigit()
+    }
+}
+
 struct AgentToolCallCard: View {
     @EnvironmentObject var appState: AppState
     let call: AgentToolCall
@@ -232,18 +393,22 @@ struct AgentToolCallCard: View {
             }
 
             if call.status == .pendingApproval {
-                HStack {
-                    Button("Allow") { appState.approveAgentToolCall(id: call.id) }
-                    if let signature = alwaysAllowSignature {
-                        Button("Always Allow") { appState.alwaysAllowAgentToolCall(id: call.id) }
-                            .help("Always allow future \(signature) commands")
+                VStack(alignment: .leading, spacing: 6) {
+                    approvalCommandBlock
+                    HStack {
+                        Button("Allow") { appState.approveAgentToolCall(id: call.id) }
+                        if let signature = alwaysAllowSignature {
+                            Button("Always Allow") { appState.alwaysAllowAgentToolCall(id: call.id) }
+                                .help("Always allow future \(signature) commands")
+                        }
+                        Button("Deny") { appState.denyAgentToolCall(id: call.id) }
+                        Spacer(minLength: 0)
                     }
-                    Button("Deny") { appState.denyAgentToolCall(id: call.id) }
-                    Spacer(minLength: 0)
+                    .font(.caption)
                 }
-                .font(.caption)
             } else if call.status == .awaitingConfirm {
                 VStack(alignment: .leading, spacing: 4) {
+                    approvalCommandBlock
                     Text("This is a destructive command. Type \"confirm\" to allow.")
                         .font(.caption2)
                         .foregroundStyle(.orange)
@@ -277,6 +442,28 @@ struct AgentToolCallCard: View {
             RoundedRectangle(cornerRadius: 6)
                 .stroke(borderColor, lineWidth: 1)
         )
+    }
+
+    @ViewBuilder
+    private var approvalCommandBlock: some View {
+        if let command = fullCommand {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Command")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                ScrollView([.horizontal, .vertical]) {
+                    Text(command)
+                        .font(.system(size: 12, design: .monospaced))
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(7)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 120)
+                .background(Color(nsColor: .textBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 5))
+            }
+        }
     }
 
     @ViewBuilder
@@ -436,6 +623,15 @@ struct AgentToolCallCard: View {
             .joined(separator: "\n")
     }
 
+    private var fullCommand: String? {
+        guard call.toolName == "run_command",
+              let command = call.arguments["command"]?.stringValue(),
+              !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return command
+    }
+
     private var alwaysAllowSignature: String? {
         guard call.toolName == "run_command",
               let command = call.arguments["command"]?.stringValue() else {
@@ -540,6 +736,69 @@ struct AgentToolCallCard: View {
         case .denied: return Color.secondary.opacity(0.3)
         default: return Color.clear
         }
+    }
+}
+
+struct AgentErrorCard: View {
+    let message: String
+    let details: AgentErrorDetails?
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .top, spacing: 7) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.red)
+                    .padding(.top, 1)
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                if details != nil {
+                    Button {
+                        isExpanded.toggle()
+                    } label: {
+                        Label(isExpanded ? "Hide Details" : "Details",
+                              systemImage: isExpanded ? "chevron.up" : "chevron.down")
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .help(isExpanded ? "Hide provider error details" : "Show provider error details")
+                }
+            }
+
+            if isExpanded, let details {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(details.sections) { section in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(section.title)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            ScrollView([.horizontal, .vertical]) {
+                                Text(section.text)
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .padding(7)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: section.title == "Request Body" ? 180 : 120)
+                            .background(Color(nsColor: .textBackgroundColor))
+                            .clipShape(RoundedRectangle(cornerRadius: 5))
+                        }
+                    }
+                }
+            }
+        }
+        .padding(9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.red.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color.red.opacity(0.18), lineWidth: 1)
+        )
     }
 }
 

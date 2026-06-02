@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-02 | Current version: v1.40.0-rc8
+> Last updated: 2026-06-02 | Current version: v1.40.0-rc18
 
 ## Positioning
 
@@ -51,12 +51,22 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Fetch Agent model IDs from provider `/models` endpoints and choose a returned model directly in Settings. API keys remain stored in Keychain.
 - Review Agent-generated unified diff proposals in the Agent panel, then apply or reject them explicitly. Accepted patches are limited to existing files inside the current workspace and update open tabs plus Git status.
 - Let the Agent call built-in workspace tools (`search_files`, `grep_files`, `read_file`, `list_directory`, `git_status`, `run_command`, `ask_user`) via OpenAI function-calling. `search_files` does literal text matching while `grep_files` supports full regular expressions plus an optional filename `include` glob (e.g. `*.swift`). Read-only tools run automatically; `run_command` requires per-call Allow/Deny approval, or an explicit Always Allow rule for matching command families such as `git push`; destructive commands additionally require typing `confirm` before running. `ask_user` lets the agent pause mid-turn and ask the user a clarifying question; when the answer is one of a small known set the model can pass `options` so the card renders clickable choice buttons (or checkboxes for `multi_select`), with a free-form text input still available as an escape hatch.
+- Let the Agent discover installed Codex skills with `list_skills` and load a selected `SKILL.md` with `read_skill`, so specialized workflows can be pulled into context only when needed.
+- Let the Agent inspect configured MCP servers with `list_mcp_servers`, list one server's MCP tools with `list_mcp_tools`, and call a selected MCP tool with `call_mcp_tool`; sensitive environment values are redacted and MCP tool calls require approval.
+- Automatically run conservatively parsed read-only `run_command` chains, such as workspace-relative or workspace-absolute `cd` prefixes followed by `git diff`, `ls`, `cat`, `rg`, or `grep`, plus workspace-safe `git -C ... diff`; commands that write, redirect, pipe, substitute, or move outside the workspace still require approval or confirmation.
+- Show the full `run_command` command text on approval and destructive-confirmation cards so the exact command is visible before the user allows it.
 - Keep Agent tool-call rows compact by default so long multi-step runs remain scannable, with arguments, output, and errors available from an explicit expand control.
 - Switch the window into a dedicated Agent mode (Cmd+Shift+A) with a project-grouped session sidebar on the left and a wide chat pane on the right. Sessions persist as JSON under `~/Library/Application Support/VeilWriter/agent-sessions/` and are grouped by workspace.
 - Paste, drag-drop, or attach images directly in the Agent composer; staged images appear as removable thumbnails and are sent inline as base64 `image_url` content parts in the multimodal request body.
+- Send Agent-mode messages with Return, while Shift-Return, Option-Return, and Control-Return remain available for multiline composition.
 - Queue follow-up messages while the agent is responding — additional sends become "Queued" bubbles that auto-fire when the current turn ends. Stop the current response without dropping the queue; Clear Queue removes them explicitly.
-- See the estimated context-window utilization in the chat header (≈ remaining tokens / model window) using a chars/4 token heuristic plus per-image budget. Switch the model for the active session from a picker fed by previously fetched model IDs.
+- Show an inline "正在思考" activity divider while the Agent is waiting for the model to start responding or to continue after tool output.
+- See the estimated context-window utilization in the chat header (≈ remaining tokens / model window) based on the actual next provider request shape, including system context, normalized history, collapsed tool results, images, and tool schemas. Switch the model for the active session from a picker fed by previously fetched model IDs.
 - Reclaim context budget without losing state: a Compress button in the status bar (surfaces once usage crosses 50%) summarizes the older transcript into a single assistant message via the current model. The last few messages stay verbatim. Older `tool` results auto-collapse to a small placeholder in the request payload so long sessions don't blow up the prompt. Once usage crosses 75% the compression also runs automatically between turns — the status bar shows a `Compressing…` spinner and any queued message waits for compression to finish before dispatching.
+- Show an inline transcript divider while context compression is running so the chat view explains the temporary pause instead of looking idle.
+- Expand Agent provider errors to inspect the method, URL, provider, model, input message summary, redacted request body, HTTP status, and response body for debugging failed requests.
+- Normalize Agent tool-call history before provider requests so stale or incomplete tool messages from older sessions do not cause OpenAI-compatible request errors.
+- See current Agent worktree changes with clickable filenames, per-file added/deleted line counts, total changed files, total line deltas, and a one-click review action for the Agent to inspect uncommitted changes.
 - Preview Markdown and HTML beside the editor with richer lightweight block rendering for headings, lists, quotes, dividers, code, and common HTML content nodes.
 - Read current file state from a compact status bar with cursor position, language, file size, and version.
 - Reload when the active file has changed on disk outside VeilWriter.

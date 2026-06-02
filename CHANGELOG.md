@@ -1,5 +1,55 @@
 # Changelog
 
+## 1.40.0-rc18 - 2026-06-02
+
+- Let Agent `run_command` risk checks resolve workspace-aware paths, so pure read-only chains such as `cd /path/to/workspace && git diff` and `git -C /path/to/workspace diff` run without approval.
+- Kept read-only auto-allow conservative by rejecting `cd`, `git -C`, and file arguments that resolve outside the current workspace.
+
+## 1.40.0-rc17 - 2026-06-02
+
+- Reworked Agent context estimation to mirror the next provider request, including the system prompt, normalized message history, collapsed tool results, attached images, and tool schemas.
+- Expanded model context-window detection for modern large-context model IDs such as `gpt-5.5` and `gpt-4.1`, with a safer 128k fallback for unknown OpenAI-compatible models.
+- Added Codex skill tools (`list_skills`, `read_skill`) so Agent mode can discover installed skills and load a matching `SKILL.md` on demand.
+- Added MCP tools (`list_mcp_servers`, `list_mcp_tools`, `call_mcp_tool`) backed by Codex MCP config, with sensitive environment values redacted and MCP tool calls kept behind approval.
+
+## 1.40.0-rc16 - 2026-06-02
+
+- Normalized Agent provider request history so orphan `tool` messages and incomplete assistant tool-call exchanges are dropped before sending, preventing OpenAI-compatible HTTP 400 errors.
+- Added regression coverage for provider-ready Agent tool-call message ordering and incomplete tool exchanges.
+
+## 1.40.0-rc15 - 2026-06-02
+
+- Added an inline "正在思考" Agent transcript divider while the model request is waiting for the first assistant content or post-tool response.
+- Hid empty assistant placeholder bubbles so thinking state appears as an intentional activity row instead of a blank message.
+
+## 1.40.0-rc14 - 2026-06-02
+
+- Added an inline Agent transcript divider while context compression is running, matching the centered status-line style used by coding agents.
+
+## 1.40.0-rc13 - 2026-06-02
+
+- Added an Agent worktree change summary that shows the currently changed file with added/deleted line counts and a clickable filename.
+- Added a review action from the Agent change summary so users can ask the Agent to inspect current uncommitted changes directly.
+
+## 1.40.0-rc12 - 2026-06-02
+
+- Added expandable Agent provider error details showing the request method, URL, provider, model, input message summary, redacted request body, HTTP status, and response body.
+- Redacted inline image data from debug request bodies so provider errors remain useful without dumping large base64 payloads.
+
+## 1.40.0-rc11 - 2026-06-02
+
+- Classified conservatively parsed read-only `run_command` chains as read risk, including safe `cd` prefixes followed by commands such as `git diff`, `ls`, `cat`, `rg`, or `grep`, so they can run without approval.
+- Kept write-like, unsafe-directory, redirection, pipeline, command-substitution, and destructive shell commands behind approval or typed confirmation.
+
+## 1.40.0-rc10 - 2026-06-02
+
+- Show the full `run_command` text prominently on Agent approval and destructive-confirmation cards so users can review the exact command before allowing it.
+
+## 1.40.0-rc9 - 2026-06-02
+
+- Made Return submit the Agent-mode composer by default, matching chat-style input behavior.
+- Kept multiline composition available with Shift-Return, Option-Return, or Control-Return, while Command-Return continues to submit.
+
 ## 1.40.0-rc8 - 2026-06-02
 
 - Compacted Agent tool-call cards so completed and running tools render as a one-line execution row by default, reducing transcript height during multi-step work.

@@ -368,22 +368,32 @@ private struct AgentChatTranscript: View {
                         }
                     }
 
+                    if appState.shouldShowAgentThinkingIndicator {
+                        AgentThinkingDivider()
+                            .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                    }
+
                     ForEach(appState.agentQueuedMessages) { queued in
                         QueuedMessageRow(message: queued)
                     }
 
+                    if appState.isCompressingAgentContext {
+                        AgentContextCompressionDivider()
+                            .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                    }
+
                     if let error = appState.agentErrorMessage {
-                        Text(error)
-                            .font(AgentDesign.secondaryFont)
-                            .foregroundStyle(.red)
-                            .padding(10)
+                        AgentErrorCard(message: error, details: appState.agentErrorDetails)
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
-                            .background(Color.red.opacity(0.06))
-                            .clipShape(RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius))
                     }
 
                     ForEach(appState.agentPatchProposals) { proposal in
                         AgentPatchProposalCard(proposal: proposal)
+                            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+                    }
+
+                    if !appState.agentWorktreeChanges.isEmpty {
+                        AgentWorktreeChangeCard()
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                     }
                 }
@@ -407,11 +417,17 @@ private struct AgentChatTranscript: View {
     }
 
     private var visibleMessages: [AgentMessage] {
-        appState.agentMessages.filter { $0.role != .tool }
+        appState.agentMessages.filter { message in
+            message.role != .tool && !isEmptyThinkingPlaceholder(message)
+        }
     }
 
     private func toolCalls(for messageID: AgentMessage.ID) -> [AgentToolCall] {
         appState.agentToolCalls.filter { $0.messageID == messageID }
+    }
+
+    private func isEmptyThinkingPlaceholder(_ message: AgentMessage) -> Bool {
+        message.role == .assistant && message.content.isEmpty && message.toolCalls.isEmpty
     }
 }
 
@@ -707,7 +723,7 @@ private struct SendStopButton: View {
         }
         .buttonStyle(.plain)
         .disabled(!appState.isAgentResponding && !canSend)
-        .help(appState.isAgentResponding ? "Stop" : "Send (⌘↩)")
+        .help(appState.isAgentResponding ? "Stop" : "Send (↩)")
     }
 
     private var canSend: Bool {
@@ -832,6 +848,10 @@ private struct AgentChatStatusBar: View {
                 Text("No workspace")
             }
 
+            if !appState.agentWorktreeChanges.isEmpty {
+                AgentWorktreeSummaryPill()
+            }
+
             Spacer(minLength: 0)
 
             CompressButton()
@@ -937,7 +957,7 @@ private struct ContextRingIndicator: View {
     }
 }
 
-// MARK: - NSTextView-backed composer (Cmd+V image intercept, Cmd+Return submit)
+// MARK: - NSTextView-backed composer (Cmd+V image intercept, Return submit)
 
 private struct ComposerTextEditor: NSViewRepresentable {
     @Binding var text: String
@@ -1001,8 +1021,11 @@ private struct ComposerTextEditor: NSViewRepresentable {
 
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-                let modifiers = NSEvent.modifierFlags
-                if modifiers.contains(.command) {
+                let modifiers = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                let wantsLineBreak = modifiers.contains(.shift)
+                    || modifiers.contains(.option)
+                    || modifiers.contains(.control)
+                if !wantsLineBreak {
                     onSubmit()
                     return true
                 }

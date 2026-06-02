@@ -57,18 +57,30 @@ struct AgentClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
 
-        request.httpBody = try Self.encodeChatRequest(
+        let requestMessages = Self.providerReadyMessages(messages)
+        let requestBody = try Self.encodeChatRequest(
             model: configuration.model,
-            messages: messages,
+            messages: requestMessages,
             tools: tools
         )
+        request.httpBody = requestBody
 
         let (bytes, response) = try await session.bytes(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AgentClientError.invalidResponse
         }
         guard (200..<300).contains(httpResponse.statusCode) else {
-            throw AgentClientError.serverStatus(httpResponse.statusCode)
+            let responseBody = try await Self.collectBody(from: bytes)
+            throw AgentClientError.serverStatus(
+                httpError(
+                    statusCode: httpResponse.statusCode,
+                    method: request.httpMethod ?? "POST",
+                    url: endpoint,
+                    requestBody: requestBody,
+                    responseBody: responseBody,
+                    messages: requestMessages
+                )
+            )
         }
 
         var pendingToolCalls: [Int: PendingToolCall] = [:]
@@ -132,7 +144,16 @@ struct AgentClient {
             throw AgentClientError.invalidResponse
         }
         guard (200..<300).contains(httpResponse.statusCode) else {
-            throw AgentClientError.serverStatus(httpResponse.statusCode)
+            throw AgentClientError.serverStatus(
+                httpError(
+                    statusCode: httpResponse.statusCode,
+                    method: request.httpMethod ?? "GET",
+                    url: endpoint,
+                    requestBody: nil,
+                    responseBody: String(data: data, encoding: .utf8) ?? "<non-UTF8 response body>",
+                    messages: []
+                )
+            )
         }
 
         let responseBody = try JSONDecoder().decode(ModelsResponse.self, from: data)
@@ -185,16 +206,66 @@ struct AgentClient {
         messages: [AgentMessage],
         tools: [AgentToolDescriptor]
     ) throws -> Data {
+        let providerMessages = providerReadyMessages(messages)
         var body: [String: Any] = [
             "model": model,
             "stream": true,
-            "messages": messages.map(encodeMessage)
+            "messages": providerMessages.map(encodeMessage)
         ]
         if !tools.isEmpty {
             body["tools"] = tools.map(encodeTool)
             body["tool_choice"] = "auto"
         }
         return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+    }
+
+    nonisolated static func providerReadyMessages(_ messages: [AgentMessage]) -> [AgentMessage] {
+        var result: [AgentMessage] = []
+        var index = 0
+
+        while index < messages.count {
+            let message = messages[index]
+
+            if message.role == .tool {
+                index += 1
+                continue
+            }
+
+            if message.role == .assistant, !message.toolCalls.isEmpty {
+                let expectedIDs = message.toolCalls.map(\.externalID).filter { !$0.isEmpty }
+                guard !expectedIDs.isEmpty else {
+                    index += 1
+                    continue
+                }
+
+                var collectedByID: [String: AgentMessage] = [:]
+                var cursor = index + 1
+                while cursor < messages.count, messages[cursor].role == .tool {
+                    if let toolCallID = messages[cursor].toolCallID,
+                       expectedIDs.contains(toolCallID),
+                       !collectedByID.keys.contains(toolCallID) {
+                        collectedByID[toolCallID] = messages[cursor]
+                    }
+                    cursor += 1
+                }
+
+                if expectedIDs.allSatisfy({ collectedByID[$0] != nil }) {
+                    result.append(message)
+                    for expectedID in expectedIDs {
+                        if let toolMessage = collectedByID[expectedID] {
+                            result.append(toolMessage)
+                        }
+                    }
+                }
+                index = cursor
+                continue
+            }
+
+            result.append(message)
+            index += 1
+        }
+
+        return result
     }
 
     nonisolated private static func encodeMessage(_ message: AgentMessage) -> [String: Any] {
@@ -300,6 +371,91 @@ struct AgentClient {
 
     private static func signature(of calls: [AgentMessageToolCall]) -> String {
         calls.map { "\($0.externalID)|\($0.toolName)|\($0.argumentsJSON)" }.joined(separator: "||")
+    }
+
+    private func httpError(
+        statusCode: Int,
+        method: String,
+        url: URL,
+        requestBody: Data?,
+        responseBody: String,
+        messages: [AgentMessage]
+    ) -> AgentProviderHTTPError {
+        AgentProviderHTTPError(
+            statusCode: statusCode,
+            method: method,
+            url: url.absoluteString,
+            providerID: configuration.providerID,
+            model: configuration.model,
+            requestSummary: Self.requestSummary(for: messages),
+            requestBody: Self.redactedJSONString(from: requestBody),
+            responseBody: Self.limitDebugText(responseBody)
+        )
+    }
+
+    private static func collectBody(from bytes: URLSession.AsyncBytes) async throws -> String {
+        var data = Data()
+        let limit = 64 * 1024
+        for try await byte in bytes {
+            if data.count < limit {
+                data.append(byte)
+            } else {
+                break
+            }
+        }
+        let text = String(data: data, encoding: .utf8) ?? "<non-UTF8 response body>"
+        return data.count >= limit ? "\(text)\n\n[truncated]" : text
+    }
+
+    private static func requestSummary(for messages: [AgentMessage]) -> String {
+        guard !messages.isEmpty else { return "(no chat messages)" }
+        return messages.enumerated().map { index, message in
+            let text = message.content
+                .replacingOccurrences(of: "\n", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let preview = text.isEmpty ? "(empty)" : String(text.prefix(240))
+            let imageText = message.images.isEmpty ? "" : " + \(message.images.count) image\(message.images.count == 1 ? "" : "s")"
+            return "\(index + 1). \(message.role.rawValue): \(preview)\(text.count > 240 ? "..." : "")\(imageText)"
+        }.joined(separator: "\n")
+    }
+
+    private static func redactedJSONString(from data: Data?) -> String {
+        guard let data else { return "(no request body)" }
+        guard let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
+            return limitDebugText(String(data: data, encoding: .utf8) ?? "<non-UTF8 request body>")
+        }
+        let redacted = redactImages(in: object)
+        guard let pretty = try? JSONSerialization.data(withJSONObject: redacted, options: [.prettyPrinted, .sortedKeys]),
+              let text = String(data: pretty, encoding: .utf8) else {
+            return limitDebugText(String(data: data, encoding: .utf8) ?? "<non-UTF8 request body>")
+        }
+        return limitDebugText(text)
+    }
+
+    private static func redactImages(in value: Any) -> Any {
+        if let dict = value as? [String: Any] {
+            var result: [String: Any] = [:]
+            for (key, raw) in dict {
+                if key == "url",
+                   let string = raw as? String,
+                   string.hasPrefix("data:image/") {
+                    result[key] = "[redacted image data URL]"
+                } else {
+                    result[key] = redactImages(in: raw)
+                }
+            }
+            return result
+        }
+        if let array = value as? [Any] {
+            return array.map { redactImages(in: $0) }
+        }
+        return value
+    }
+
+    private static func limitDebugText(_ text: String) -> String {
+        let limit = 32_000
+        guard text.count > limit else { return text }
+        return "\(text.prefix(limit))\n\n[truncated]"
     }
 }
 

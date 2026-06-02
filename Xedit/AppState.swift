@@ -73,6 +73,7 @@ final class AppState: ObservableObject {
     @Published private(set) var selectedText = ""
     @Published private(set) var hasExternalFileChanges = false
     @Published private(set) var gitStatus = GitRepositoryStatus()
+    @Published private(set) var agentWorktreeChanges = AgentWorktreeChangeSummary()
     @Published var isAgentPanelVisible = false
     @Published var agentConfiguration: AgentConfiguration {
         didSet {
@@ -85,6 +86,7 @@ final class AppState: ObservableObject {
     @Published var agentInput = ""
     @Published var isAgentResponding = false
     @Published var agentErrorMessage: String?
+    @Published var agentErrorDetails: AgentErrorDetails?
     /// Images staged in the composer for the next user message.
     @Published var agentPendingImages: [AgentImageAttachment] = []
     /// Messages the user queued while the agent was busy. Each entry is a
@@ -199,6 +201,44 @@ final class AppState: ObservableObject {
     var changedLineNumbers: Set<Int> {
         guard let activeTab else { return [] }
         return Self.changedLineNumbers(current: activeTab.content, saved: activeTab.savedContent)
+    }
+
+    var primaryAgentChangedFile: AgentFileChangeSummary? {
+        if let openedFileURL,
+           let repositoryRoot = agentWorktreeChanges.repositoryRoot {
+            let rootPath = repositoryRoot.standardizedFileURL.path
+            let filePath = openedFileURL.standardizedFileURL.path
+            if filePath == rootPath || filePath.hasPrefix(rootPath + "/") {
+                let relativePath = String(filePath.dropFirst(rootPath.count))
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                if let activeChange = agentWorktreeChanges.change(for: relativePath) {
+                    return activeChange
+                }
+            }
+        }
+
+        return agentWorktreeChanges.files.first
+    }
+
+    var shouldShowAgentThinkingIndicator: Bool {
+        guard isAgentResponding, !isCompressingAgentContext else { return false }
+        if agentToolCalls.contains(where: { call in
+            call.status == .pendingApproval
+                || call.status == .awaitingConfirm
+                || call.status == .awaitingUserAnswer
+        }) {
+            return false
+        }
+
+        guard let lastMessage = agentMessages.last else { return false }
+        switch lastMessage.role {
+        case .user, .tool:
+            return true
+        case .assistant:
+            return lastMessage.content.isEmpty && lastMessage.toolCalls.isEmpty
+        case .system:
+            return false
+        }
     }
 
     var canShowPreview: Bool {
@@ -316,6 +356,40 @@ final class AppState: ObservableObject {
         dispatchAgentMessage(text: prompt, images: images)
     }
 
+    func reviewAgentWorktreeChanges() {
+        guard !agentWorktreeChanges.isEmpty else { return }
+
+        let files = agentWorktreeChanges.files
+            .prefix(40)
+            .map { change in
+                "- \(change.path) \(Self.formatLineStats(change.lineStats))"
+            }
+            .joined(separator: "\n")
+        let extraCount = max(0, agentWorktreeChanges.fileCount - 40)
+        let extraLine = extraCount > 0 ? "\n- ...and \(extraCount) more files" : ""
+        let prompt = """
+        Please review the current uncommitted workspace changes.
+
+        Focus on bugs, hangs/freezes, regressions, approval/security risks, and missing tests. Start with findings ordered by severity and cite file paths.
+
+        Change summary:
+        \(files)\(extraLine)
+        """
+
+        agentInput = ""
+        agentPendingImages = []
+
+        if isAgentResponding {
+            agentQueuedMessages.append(AgentQueuedMessage(text: prompt, images: []))
+            return
+        }
+
+        if appMode == .editor {
+            isAgentPanelVisible = true
+        }
+        dispatchAgentMessage(text: prompt, images: [])
+    }
+
     /// Cancel the in-flight response (if any). Queued messages are kept and
     /// the next one is dispatched automatically. Use `clearAgentQueue` to
     /// drop them explicitly.
@@ -341,6 +415,7 @@ final class AppState: ObservableObject {
 
     private func dispatchAgentMessage(text: String, images: [AgentImageAttachment]) {
         agentErrorMessage = nil
+        agentErrorDetails = nil
         isAgentResponding = true
 
         agentMessages.append(AgentMessage(role: .user, content: text, images: images))
@@ -382,6 +457,7 @@ final class AppState: ObservableObject {
         agentQueuedMessages.removeAll()
         agentPendingImages.removeAll()
         agentErrorMessage = nil
+        agentErrorDetails = nil
         agentToolDecisionWaiter?.resume(returning: .denied(reason: "Conversation cleared"))
         agentToolDecisionWaiter = nil
         isAgentResponding = false
@@ -403,6 +479,7 @@ final class AppState: ObservableObject {
             agentQueuedMessages = []
             agentPendingImages = []
             agentErrorMessage = nil
+            agentErrorDetails = nil
             isAgentResponding = false
             startNewAgentSession()
         }
@@ -421,6 +498,7 @@ final class AppState: ObservableObject {
         agentQueuedMessages = []
         agentPendingImages = []
         agentErrorMessage = nil
+        agentErrorDetails = nil
         agentToolDecisionWaiter?.resume(returning: .denied(reason: "Session switched"))
         agentToolDecisionWaiter = nil
         isAgentResponding = false
@@ -455,6 +533,7 @@ final class AppState: ObservableObject {
         agentQueuedMessages = []
         agentPendingImages = []
         agentErrorMessage = nil
+        agentErrorDetails = nil
     }
 
     func deleteAgentSession(id: AgentSession.ID) {
@@ -468,6 +547,7 @@ final class AppState: ObservableObject {
             agentQueuedMessages = []
             agentPendingImages = []
             agentErrorMessage = nil
+            agentErrorDetails = nil
         }
     }
 
@@ -512,45 +592,140 @@ final class AppState: ObservableObject {
         persistActiveAgentSession()
     }
 
-    /// Best-effort token count for the messages currently in the
-    /// conversation. Uses a chars/4 rule of thumb plus a flat per-image
-    /// budget — accurate enough to drive the "context remaining" UI.
+    /// Best-effort token count for the next provider request. This mirrors
+    /// the actual Agent request shape instead of only counting visible chat
+    /// bubbles, so system context, tool schemas, collapsed tool history, and
+    /// provider-ready message normalization are all represented.
     var estimatedAgentTokens: Int {
+        let requestMessages = estimatedAgentRequestMessages
+        let tools = AgentToolRegistry.all
+        return Self.estimateAgentTokens(messages: requestMessages, tools: tools)
+    }
+
+    private var estimatedAgentRequestMessages: [AgentMessage] {
+        let systemPrompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: rootDirectory,
+            openedFileURL: openedFileURL,
+            fileContent: fileContent,
+            selectedText: selectedText,
+            language: effectiveLanguage,
+            toolsEnabled: true
+        )
+        let collapsedHistory = Self.collapseOldToolResults(in: agentMessages)
+        return AgentClient.providerReadyMessages([
+            AgentMessage(role: .system, content: systemPrompt)
+        ] + collapsedHistory)
+    }
+
+    nonisolated static func estimateAgentTokens(
+        messages: [AgentMessage],
+        tools: [AgentToolDescriptor]
+    ) -> Int {
         var total = 0
-        for message in agentMessages {
-            total += max(1, message.content.count / 4)
-            // Each image roughly equates to a 256x256 tile budget in the
-            // OpenAI and Claude vision pricing models — call it 600 tokens.
+
+        for message in AgentClient.providerReadyMessages(messages) {
+            total += 4
+            total += estimateTextTokens(message.role.rawValue)
+            total += estimateTextTokens(message.content)
             total += message.images.count * 600
             for call in message.toolCalls {
-                total += call.argumentsJSON.count / 4
+                total += 12
+                total += estimateTextTokens(call.externalID)
+                total += estimateTextTokens(call.toolName)
+                total += estimateTextTokens(call.argumentsJSON)
+            }
+            if let toolCallID = message.toolCallID {
+                total += estimateTextTokens(toolCallID)
             }
         }
-        // System prompt is a small constant; pad 500 tokens.
-        total += 500
+
+        if !tools.isEmpty {
+            total += 16
+            for tool in tools {
+                total += 24
+                total += estimateTextTokens(tool.name)
+                total += estimateTextTokens(tool.description)
+                for parameter in tool.parameters {
+                    total += 8
+                    total += estimateTextTokens(parameter.name)
+                    total += estimateTextTokens(parameter.type.rawValue)
+                    total += estimateTextTokens(parameter.description)
+                }
+            }
+        }
+
+        total += 2
         return total
     }
 
+    nonisolated private static func estimateTextTokens(_ text: String) -> Int {
+        guard !text.isEmpty else { return 0 }
+
+        var asciiNonWhitespace = 0
+        var cjkScalars = 0
+        var otherScalars = 0
+
+        for scalar in text.unicodeScalars {
+            if CharacterSet.whitespacesAndNewlines.contains(scalar) {
+                continue
+            }
+            if scalar.value <= 0x7F {
+                asciiNonWhitespace += 1
+            } else if isCJKScalar(scalar) {
+                cjkScalars += 1
+            } else {
+                otherScalars += 1
+            }
+        }
+
+        let asciiTokens = Int(ceil(Double(asciiNonWhitespace) / 4.0))
+        let otherTokens = Int(ceil(Double(otherScalars) * 0.8))
+        return max(1, asciiTokens + cjkScalars + otherTokens)
+    }
+
+    nonisolated private static func isCJKScalar(_ scalar: UnicodeScalar) -> Bool {
+        let value = scalar.value
+        return (0x4E00...0x9FFF).contains(value)
+            || (0x3400...0x4DBF).contains(value)
+            || (0x3040...0x30FF).contains(value)
+            || (0xAC00...0xD7AF).contains(value)
+    }
+
     /// Heuristic context-window budget for the active model. Falls back to
-    /// 8k for unknown models so the indicator stays informative without
-    /// over-promising.
+    /// a modern 128k window for unknown models so custom OpenAI-compatible
+    /// models don't look full after one ordinary turn.
     var agentContextWindow: Int {
-        let model = (agentSessionModelOverride ?? agentConfiguration.model).lowercased()
+        Self.agentContextWindow(
+            model: agentSessionModelOverride ?? agentConfiguration.model,
+            providerID: agentConfiguration.providerID
+        )
+    }
+
+    nonisolated static func agentContextWindow(model rawModel: String, providerID rawProviderID: String = "") -> Int {
+        let model = rawModel.lowercased()
+        let providerID = rawProviderID.lowercased()
         // Substring match — vendors include variants like `-32k`, `-128k` in the id.
-        if model.contains("1m") || model.contains("-1m") { return 1_000_000 }
+        if model.contains("1m") || model.contains("-1m") || model.contains("1000k") { return 1_000_000 }
+        if model.contains("512k") { return 512_000 }
+        if model.contains("400k") { return 400_000 }
         if model.contains("200k") { return 200_000 }
         if model.contains("128k") || model.contains("-128k") { return 128_000 }
         if model.contains("64k") { return 64_000 }
         if model.contains("32k") { return 32_000 }
         if model.contains("16k") { return 16_000 }
+        if model.contains("8k") { return 8_000 }
         // Known family defaults.
-        if model.contains("gpt-4.1") || model.contains("gpt-4o") || model.contains("o1") || model.contains("o3") { return 128_000 }
+        if model.contains("gpt-5") { return 400_000 }
+        if model.contains("gpt-4.1") { return 1_000_000 }
+        if model.contains("gpt-4o") || model.contains("o1") || model.contains("o3") || model.contains("o4") { return 128_000 }
         if model.contains("claude") { return 200_000 }
         if model.contains("deepseek") { return 64_000 }
-        if model.contains("qwen") || model.contains("dashscope") { return 32_000 }
+        if model.contains("qwen-long") { return 1_000_000 }
+        if model.contains("qwen") || model.contains("dashscope") { return 128_000 }
         if model.contains("kimi") || model.contains("moonshot") { return 128_000 }
         if model.contains("gpt-3.5") { return 16_000 }
-        return 8_000
+        if providerID == "openai" { return 128_000 }
+        return 128_000
     }
 
     func approveAgentToolCall(id: AgentToolCall.ID) {
@@ -661,7 +836,7 @@ final class AppState: ObservableObject {
                 fileContent: fileContent,
                 selectedText: selectedText,
                 language: effectiveLanguage,
-                toolsEnabled: rootDirectory != nil
+                toolsEnabled: true
             )
             let history = agentMessages.filter { $0.id != assistantID }
             let collapsedHistory = Self.collapseOldToolResults(in: history)
@@ -673,7 +848,7 @@ final class AppState: ObservableObject {
             do {
                 try await client.streamChat(
                     messages: requestMessages,
-                    tools: rootDirectory != nil ? AgentToolRegistry.all : []
+                    tools: AgentToolRegistry.all
                 ) { event in
                     await MainActor.run { [weak self] in
                         guard let self,
@@ -699,7 +874,7 @@ final class AppState: ObservableObject {
                 }
                 return
             } catch {
-                agentErrorMessage = error.localizedDescription
+                setAgentError(error)
                 if let index = agentMessages.firstIndex(where: { $0.id == assistantID }),
                    agentMessages[index].content.isEmpty,
                    agentMessages[index].toolCalls.isEmpty {
@@ -736,7 +911,11 @@ final class AppState: ObservableObject {
                     argsDict = [:]
                 }
 
-                let risk = AgentToolRegistry.risk(for: call.toolName, arguments: argsDict)
+                let risk = AgentToolRegistry.risk(
+                    for: call.toolName,
+                    arguments: argsDict,
+                    rootDirectory: rootDirectory
+                )
                 let isAlwaysAllowed = isAgentToolCallAlwaysAllowed(toolName: call.toolName, arguments: argsDict, risk: risk)
                 let initialStatus: AgentToolCallStatus
                 if isAlwaysAllowed {
@@ -826,6 +1005,9 @@ final class AppState: ObservableObject {
                         agentToolCalls[index].status = .succeeded
                         agentToolCalls[index].result = result
                     }
+                    if call.toolName == "run_command" || risk != .read {
+                        refreshGitStatus()
+                    }
                     appendToolMessage(toolCallID: call.externalID, payload: result.payload)
                 } catch {
                     if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
@@ -847,6 +1029,39 @@ final class AppState: ObservableObject {
         }
 
         agentErrorMessage = "Agent paused after \(Self.maxAgentToolRounds) tool-call rounds to avoid an accidental loop. Send another message to continue."
+        agentErrorDetails = nil
+    }
+
+    private func setAgentError(_ error: Error) {
+        agentErrorMessage = error.localizedDescription
+        agentErrorDetails = Self.details(for: error)
+    }
+
+    private static func details(for error: Error) -> AgentErrorDetails? {
+        guard case AgentClientError.serverStatus(let providerError) = error else {
+            return nil
+        }
+        return AgentErrorDetails(sections: [
+            AgentErrorDetails.Section(
+                title: "Request",
+                text: """
+                Method: \(providerError.method)
+                URL: \(providerError.url)
+                Provider: \(providerError.providerID)
+                Model: \(providerError.model)
+                """
+            ),
+            AgentErrorDetails.Section(title: "Input Messages", text: providerError.requestSummary),
+            AgentErrorDetails.Section(title: "Request Body", text: providerError.requestBody),
+            AgentErrorDetails.Section(
+                title: "Response",
+                text: """
+                HTTP \(providerError.statusCode)
+
+                \(providerError.responseBody.isEmpty ? "(empty response body)" : providerError.responseBody)
+                """
+            )
+        ])
     }
 
     private func awaitToolDecision(forCallID id: AgentToolCall.ID) async -> AgentToolDecision {
@@ -975,12 +1190,14 @@ final class AppState: ObservableObject {
             }
         } catch {
             agentErrorMessage = "Context compression failed: \(error.localizedDescription)"
+            agentErrorDetails = Self.details(for: error)
             return
         }
 
         let trimmed = await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             agentErrorMessage = "Context compression returned an empty summary; nothing changed."
+            agentErrorDetails = nil
             return
         }
 
@@ -1210,16 +1427,20 @@ final class AppState: ObservableObject {
 
         guard let rootDirectory else {
             let emptyStatus = GitRepositoryStatus()
+            let emptyChanges = AgentWorktreeChangeSummary()
             DispatchQueue.main.async { [weak self] in
                 self?.gitStatus = emptyStatus
+                self?.agentWorktreeChanges = emptyChanges
             }
             return
         }
 
         let targetDirectory = rootDirectory.standardizedFileURL
         gitStatusRefreshTask = Task { [weak self] in
-            let status = await Task.detached(priority: .utility) {
-                Self.loadGitStatus(for: targetDirectory)
+            let snapshot = await Task.detached(priority: .utility) {
+                let status = Self.loadGitStatus(for: targetDirectory)
+                let changes = Self.loadAgentWorktreeChangeSummary(status: status)
+                return (status: status, changes: changes)
             }.value
 
             guard !Task.isCancelled else { return }
@@ -1228,8 +1449,27 @@ final class AppState: ObservableObject {
                       self.rootDirectory?.standardizedFileURL.path == targetDirectory.path else {
                     return
                 }
-                self.gitStatus = status
+                self.gitStatus = snapshot.status
+                self.agentWorktreeChanges = snapshot.changes
             }
+        }
+    }
+
+    func openAgentChangedFile(_ relativePath: String) {
+        let base = agentWorktreeChanges.repositoryRoot ?? rootDirectory
+        guard let base else { return }
+
+        let url = base.appendingPathComponent(relativePath).standardizedFileURL
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              !isDirectory.boolValue else {
+            return
+        }
+
+        registerRecentFile(url)
+        openedFileURL = url
+        if appMode == .agent {
+            setAppMode(.editor)
         }
     }
 
@@ -2510,6 +2750,48 @@ final class AppState: ObservableObject {
             branchName: branch.isEmpty ? "detached" : branch,
             entries: entries
         )
+    }
+
+    nonisolated static func loadAgentWorktreeChangeSummary(status: GitRepositoryStatus) -> AgentWorktreeChangeSummary {
+        guard let repositoryRoot = status.repositoryRoot else {
+            return AgentWorktreeChangeSummary()
+        }
+
+        let numstatOutput = runGit(arguments: ["diff", "--numstat", "HEAD", "--"], in: repositoryRoot)
+        let lineStats = parseGitNumstat(numstatOutput)
+        let files = status.entries.map { path, kind in
+            AgentFileChangeSummary(
+                path: path,
+                kind: kind,
+                lineStats: lineStats[path] ?? AgentLineChangeStats(added: nil, deleted: nil)
+            )
+        }
+
+        return AgentWorktreeChangeSummary(repositoryRoot: repositoryRoot, files: files)
+    }
+
+    nonisolated static func parseGitNumstat(_ output: String) -> [String: AgentLineChangeStats] {
+        var result: [String: AgentLineChangeStats] = [:]
+
+        for line in output.split(separator: "\n", omittingEmptySubsequences: true) {
+            let parts = line.split(separator: "\t", omittingEmptySubsequences: false)
+            guard parts.count >= 3 else { continue }
+
+            let added = Int(parts[0])
+            let deleted = Int(parts[1])
+            let path = parts.dropFirst(2).joined(separator: "\t")
+            guard !path.isEmpty else { continue }
+
+            result[String(path)] = AgentLineChangeStats(added: added, deleted: deleted)
+        }
+
+        return result
+    }
+
+    nonisolated static func formatLineStats(_ stats: AgentLineChangeStats) -> String {
+        let added = stats.added.map { "+\($0)" } ?? "+?"
+        let deleted = stats.deleted.map { "-\($0)" } ?? "-?"
+        return "\(added) \(deleted)"
     }
 
     nonisolated static func parseGitStatusPorcelain(_ output: String) -> [String: GitFileStatusKind] {

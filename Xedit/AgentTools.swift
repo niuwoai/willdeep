@@ -439,6 +439,46 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "list_skills",
+            description: "List installed Codex skills from CODEX_HOME so the agent can choose a specialized workflow before acting. Read-only.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "query", type: .string, description: "Optional case-insensitive text filter for skill name or description.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "read_skill",
+            description: "Read one installed Codex skill's SKILL.md by skill name or identifier. Use after list_skills when a skill matches the task. Read-only.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "name", type: .string, description: "Skill name or identifier returned by list_skills.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "list_mcp_servers",
+            description: "List configured MCP servers from Codex config with sensitive environment values redacted. Does not start servers. Read-only.",
+            risk: .read,
+            parameters: []
+        ),
+        AgentToolDescriptor(
+            name: "list_mcp_tools",
+            description: "Start a configured MCP server and list its available MCP tools via JSON-RPC. Read-only discovery.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "server", type: .string, description: "MCP server name from list_mcp_servers.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "call_mcp_tool",
+            description: "Call a tool on a configured MCP server with JSON arguments. Requires user approval because MCP tools may perform writes or network actions.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "server", type: .string, description: "MCP server name from list_mcp_servers.", required: true),
+                AgentToolParameter(name: "tool", type: .string, description: "MCP tool name from list_mcp_tools.", required: true),
+                AgentToolParameter(name: "arguments_json", type: .string, description: "JSON object string to pass as the MCP tool arguments. Defaults to {}.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "ask_user",
             description: "Ask the user a clarifying question and wait for their answer before continuing. Use this whenever a required piece of information is missing or ambiguous; do not guess. Returns the user's answer as the tool result. When the question has a small, well-defined set of valid answers, pass them as `options` so the user can click instead of type.",
             risk: .userInput,
@@ -455,12 +495,20 @@ enum AgentToolRegistry {
     }
 
     /// Classify a `run_command` invocation: bumps to .danger when the command
-    /// matches a destructive pattern. All other tools use their declared risk.
-    static func risk(for name: String, arguments: [String: AgentJSONValue]) -> AgentToolRisk {
+    /// matches a destructive pattern. Pure read-only shell chains can be
+    /// auto-run when every directory hop stays inside the current workspace.
+    static func risk(
+        for name: String,
+        arguments: [String: AgentJSONValue],
+        rootDirectory: URL? = nil
+    ) -> AgentToolRisk {
         guard let descriptor = descriptor(for: name) else { return .danger }
         if descriptor.name == "run_command", let command = arguments["command"]?.stringValue() {
             if looksDangerous(command: command) {
                 return .danger
+            }
+            if isReadOnlyShellCommand(command, rootDirectory: rootDirectory) {
+                return .read
             }
         }
         return descriptor.risk
@@ -479,6 +527,846 @@ enum AgentToolRegistry {
     private static func looksDangerous(command: String) -> Bool {
         let lower = command.lowercased()
         return dangerousPatterns.contains { lower.contains($0) }
+    }
+
+    private static func isReadOnlyShellCommand(_ command: String, rootDirectory: URL?) -> Bool {
+        guard let segments = splitSimpleShellChain(command), !segments.isEmpty else {
+            return false
+        }
+        let normalizedRoot = rootDirectory?.standardizedFileURL
+        var workingDirectory = normalizedRoot
+
+        for segment in segments {
+            guard let tokens = shellTokens(from: segment), let executable = tokens.first?.lowercased() else {
+                return false
+            }
+            if executable == "cd" {
+                guard let resolved = resolvedSafeCD(tokens, workingDirectory: workingDirectory, rootDirectory: normalizedRoot) else {
+                    return false
+                }
+                workingDirectory = resolved
+                continue
+            }
+            guard isReadOnlyCommand(tokens, workingDirectory: workingDirectory, rootDirectory: normalizedRoot) else {
+                return false
+            }
+        }
+        return true
+    }
+
+    private static func splitSimpleShellChain(_ command: String) -> [String]? {
+        var segments: [String] = []
+        var current = ""
+        var activeQuote: Character?
+        var isEscaped = false
+        var index = command.startIndex
+
+        while index < command.endIndex {
+            let character = command[index]
+            if isEscaped {
+                current.append(character)
+                isEscaped = false
+                index = command.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                isEscaped = true
+                current.append(character)
+                index = command.index(after: index)
+                continue
+            }
+            if let quote = activeQuote {
+                if character == quote {
+                    activeQuote = nil
+                }
+                current.append(character)
+                index = command.index(after: index)
+                continue
+            }
+            if character == "\"" || character == "'" {
+                activeQuote = character
+                current.append(character)
+                index = command.index(after: index)
+                continue
+            }
+            if character == ";" {
+                let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return nil }
+                segments.append(trimmed)
+                current = ""
+                index = command.index(after: index)
+                continue
+            }
+            if character == "&" {
+                let next = command.index(after: index)
+                guard next < command.endIndex, command[next] == "&" else { return nil }
+                let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return nil }
+                segments.append(trimmed)
+                current = ""
+                index = command.index(after: next)
+                continue
+            }
+            if "|<>`$(){}".contains(character) {
+                return nil
+            }
+            current.append(character)
+            index = command.index(after: index)
+        }
+
+        guard activeQuote == nil, !isEscaped else { return nil }
+        let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            segments.append(trimmed)
+        }
+        return segments
+    }
+
+    private static func shellTokens(from command: String) -> [String]? {
+        var tokens: [String] = []
+        var current = ""
+        var activeQuote: Character?
+        var isEscaped = false
+
+        for character in command {
+            if isEscaped {
+                current.append(character)
+                isEscaped = false
+                continue
+            }
+            if character == "\\" {
+                isEscaped = true
+                continue
+            }
+            if let quote = activeQuote {
+                if character == quote {
+                    activeQuote = nil
+                } else {
+                    current.append(character)
+                }
+                continue
+            }
+            if character == "\"" || character == "'" {
+                activeQuote = character
+                continue
+            }
+            if character.isWhitespace {
+                if !current.isEmpty {
+                    tokens.append(current)
+                    current = ""
+                }
+                continue
+            }
+            if "&;|<>`$(){}".contains(character) {
+                return nil
+            }
+            current.append(character)
+        }
+        guard activeQuote == nil, !isEscaped else { return nil }
+        if !current.isEmpty {
+            tokens.append(current)
+        }
+        return tokens
+    }
+
+    private static func resolvedSafeCD(_ tokens: [String], workingDirectory: URL?, rootDirectory: URL?) -> URL? {
+        guard tokens.count <= 2 else { return nil }
+        guard let path = tokens.dropFirst().first else {
+            return rootDirectory == nil ? workingDirectory : nil
+        }
+        return resolvedSafePath(path, workingDirectory: workingDirectory, rootDirectory: rootDirectory)
+    }
+
+    private static func isReadOnlyCommand(_ tokens: [String], workingDirectory: URL?, rootDirectory: URL?) -> Bool {
+        guard let rawExecutable = tokens.first else { return false }
+        let executable = URL(fileURLWithPath: rawExecutable).lastPathComponent.lowercased()
+
+        switch executable {
+        case "git":
+            return isReadOnlyGitCommand(tokens, workingDirectory: workingDirectory, rootDirectory: rootDirectory)
+        case "pwd", "ls", "cat", "head", "tail", "wc", "grep", "rg", "tree", "du", "df", "file", "sort", "uniq":
+            return !containsUnsafePathToken(tokens.dropFirst(), workingDirectory: workingDirectory, rootDirectory: rootDirectory)
+        case "sed":
+            let args = Array(tokens.dropFirst())
+            guard !args.contains(where: { $0 == "-i" || $0.hasPrefix("-i.") || $0.hasPrefix("-i") }) else {
+                return false
+            }
+            return !containsUnsafePathToken(args, workingDirectory: workingDirectory, rootDirectory: rootDirectory)
+        case "find":
+            let args = Array(tokens.dropFirst())
+            guard !args.contains(where: { ["-delete", "-exec", "-execdir", "-ok", "-okdir"].contains($0) }) else {
+                return false
+            }
+            return !containsUnsafePathToken(args, workingDirectory: workingDirectory, rootDirectory: rootDirectory)
+        default:
+            return false
+        }
+    }
+
+    private static func isReadOnlyGitCommand(_ tokens: [String], workingDirectory: URL?, rootDirectory: URL?) -> Bool {
+        var index = 1
+        var commandDirectory = workingDirectory
+        while index < tokens.count {
+            let token = tokens[index]
+            if token == "-C" {
+                guard index + 1 < tokens.count,
+                      let resolved = resolvedSafePath(
+                        tokens[index + 1],
+                        workingDirectory: commandDirectory,
+                        rootDirectory: rootDirectory
+                      ) else {
+                    return false
+                }
+                commandDirectory = resolved
+                index += 2
+                continue
+            }
+            if token.hasPrefix("-") {
+                return false
+            }
+            break
+        }
+        guard index < tokens.count else { return false }
+
+        let subcommand = tokens[index].lowercased()
+        let args = Array(tokens.dropFirst(index + 1))
+        let readOnlySubcommands: Set<String> = [
+            "status", "diff", "log", "show", "rev-parse",
+            "ls-files", "grep", "describe", "blame"
+        ]
+        guard readOnlySubcommands.contains(subcommand) else { return false }
+
+        if subcommand == "diff" {
+            guard !args.contains(where: { $0 == "--output" || $0.hasPrefix("--output=") }) else {
+                return false
+            }
+        }
+
+        return !containsUnsafePathToken(args, workingDirectory: commandDirectory, rootDirectory: rootDirectory)
+    }
+
+    private static func containsUnsafePathToken<S: Sequence>(
+        _ tokens: S,
+        workingDirectory: URL?,
+        rootDirectory: URL?
+    ) -> Bool where S.Element == String {
+        tokens.contains { token in
+            guard !token.hasPrefix("-"), token != "--" else { return false }
+            if rootDirectory != nil {
+                return resolvedSafePath(token, workingDirectory: workingDirectory, rootDirectory: rootDirectory) == nil
+            }
+            return !isSafeRelativePathToken(token)
+        }
+    }
+
+    private static func resolvedSafePath(_ token: String, workingDirectory: URL?, rootDirectory: URL?) -> URL? {
+        guard isSafePathTokenSyntax(token, allowAbsolute: rootDirectory != nil) else {
+            return nil
+        }
+
+        guard let rootDirectory else {
+            guard isSafeRelativePathToken(token) else { return nil }
+            return workingDirectory?.appendingPathComponent(token).standardizedFileURL
+                ?? URL(fileURLWithPath: token).standardizedFileURL
+        }
+
+        let candidate: URL
+        if token.hasPrefix("/") {
+            candidate = URL(fileURLWithPath: token)
+        } else {
+            candidate = (workingDirectory ?? rootDirectory).appendingPathComponent(token)
+        }
+        let standardized = candidate.standardizedFileURL
+        return isPath(standardized, inside: rootDirectory) ? standardized : nil
+    }
+
+    private static func isSafePathTokenSyntax(_ token: String, allowAbsolute: Bool) -> Bool {
+        guard !token.isEmpty,
+              !token.hasPrefix("~"),
+              token != "-",
+              !token.contains("*"),
+              !token.contains("?") else {
+            return false
+        }
+        if token.hasPrefix("/") {
+            guard allowAbsolute else { return false }
+        }
+        return token
+            .split(separator: "/", omittingEmptySubsequences: false)
+            .allSatisfy { component in
+                component != ".."
+            }
+    }
+
+    private static func isPath(_ url: URL, inside rootDirectory: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        let rootPath = rootDirectory.standardizedFileURL.path
+        return path == rootPath || path.hasPrefix(rootPath + "/")
+    }
+
+    private static func isSafeRelativePathToken(_ token: String) -> Bool {
+        guard !token.isEmpty,
+              !token.hasPrefix("/"),
+              !token.hasPrefix("~"),
+              token != "-",
+              !token.contains("*"),
+              !token.contains("?") else {
+            return false
+        }
+        return token
+            .split(separator: "/", omittingEmptySubsequences: false)
+            .allSatisfy { component in
+                component != ".."
+            }
+    }
+}
+
+// MARK: - Codex skills
+
+private enum AgentSkillCatalog {
+    private struct SkillRecord {
+        let identifier: String
+        let name: String
+        let description: String
+        let url: URL
+    }
+
+    static func listSkills(arguments: [String: AgentJSONValue]) throws -> AgentToolResult {
+        let query = arguments["query"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let skills = discoverSkills().filter { record in
+            guard let query, !query.isEmpty else { return true }
+            return record.identifier.lowercased().contains(query)
+                || record.name.lowercased().contains(query)
+                || record.description.lowercased().contains(query)
+        }
+
+        let lines = skills.map { record in
+            "- \(record.identifier) | name=\(record.name) | \(record.description)"
+        }
+        let payload = lines.isEmpty
+            ? "No installed Codex skills found."
+            : lines.joined(separator: "\n")
+        return AgentToolResult(summary: "\(skills.count) skills", payload: payload)
+    }
+
+    static func readSkill(arguments: [String: AgentJSONValue]) throws -> AgentToolResult {
+        guard let rawName = arguments["name"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawName.isEmpty else {
+            throw AgentToolError.missingArgument("name")
+        }
+
+        guard let record = discoverSkills().first(where: {
+            $0.identifier == rawName || $0.name == rawName
+        }) else {
+            throw AgentToolError.notFound(rawName)
+        }
+
+        guard let data = try? Data(contentsOf: record.url),
+              let text = String(data: data, encoding: .utf8) else {
+            throw AgentToolError.notFound(record.url.path)
+        }
+
+        let limited = limit(text.trimmingCharacters(in: .whitespacesAndNewlines), to: 48_000)
+        return AgentToolResult(
+            summary: record.name,
+            payload: "Skill: \(record.identifier)\nPath: \(record.url.path)\n\n\(limited)"
+        )
+    }
+
+    private static func discoverSkills() -> [SkillRecord] {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let roots = [
+            home.appendingPathComponent(".codex/skills"),
+            home.appendingPathComponent(".codex/plugins/cache")
+        ]
+
+        var records: [SkillRecord] = []
+        for root in roots {
+            guard FileManager.default.fileExists(atPath: root.path),
+                  let enumerator = FileManager.default.enumerator(
+                    at: root,
+                    includingPropertiesForKeys: [.isRegularFileKey],
+                    options: [.skipsPackageDescendants]
+                  ) else {
+                continue
+            }
+
+            for case let url as URL in enumerator {
+                guard url.lastPathComponent == "SKILL.md",
+                      (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
+                      let data = try? Data(contentsOf: url),
+                      let text = String(data: data, encoding: .utf8) else {
+                    continue
+                }
+
+                let metadata = parseMetadata(from: text)
+                let fallbackName = url.deletingLastPathComponent().lastPathComponent
+                let name = metadata.name.isEmpty ? fallbackName : metadata.name
+                let identifier = skillIdentifier(for: url, root: root, name: name)
+                records.append(SkillRecord(
+                    identifier: identifier,
+                    name: name,
+                    description: metadata.description.isEmpty ? "(no description)" : metadata.description,
+                    url: url
+                ))
+
+                if records.count >= 200 { break }
+            }
+        }
+
+        return records.sorted { $0.identifier < $1.identifier }
+    }
+
+    private static func parseMetadata(from text: String) -> (name: String, description: String) {
+        let lines = text.components(separatedBy: .newlines)
+        guard lines.first == "---" else { return ("", "") }
+
+        var name = ""
+        var description = ""
+        for line in lines.dropFirst() {
+            if line == "---" { break }
+            if let value = yamlValue(line, key: "name") {
+                name = value
+            } else if let value = yamlValue(line, key: "description") {
+                description = value
+            }
+        }
+        return (name, description)
+    }
+
+    private static func yamlValue(_ line: String, key: String) -> String? {
+        let prefix = "\(key):"
+        guard line.hasPrefix(prefix) else { return nil }
+        var value = String(line.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.hasPrefix("\""), value.hasSuffix("\""), value.count >= 2 {
+            value.removeFirst()
+            value.removeLast()
+        }
+        return value
+    }
+
+    private static func skillIdentifier(for url: URL, root: URL, name: String) -> String {
+        let rootPath = root.standardizedFileURL.path
+        let skillPath = url.deletingLastPathComponent().standardizedFileURL.path
+        guard skillPath.hasPrefix(rootPath) else { return name }
+        let relative = String(skillPath.dropFirst(rootPath.count))
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !relative.isEmpty else { return name }
+
+        let parts = relative.split(separator: "/").map(String.init)
+        if let skillsIndex = parts.lastIndex(of: "skills"), skillsIndex + 1 < parts.count {
+            return parts[(skillsIndex + 1)...].joined(separator: ":")
+        }
+        return parts.joined(separator: ":")
+    }
+
+    private static func limit(_ text: String, to maxCharacters: Int) -> String {
+        guard text.count > maxCharacters else { return text }
+        let index = text.index(text.startIndex, offsetBy: maxCharacters)
+        return "\(text[..<index])\n\n[truncated]"
+    }
+}
+
+// MARK: - MCP bridge
+
+private enum AgentMCPBridge {
+    private struct ServerConfig: Sendable {
+        var name: String
+        var command: String = ""
+        var args: [String] = []
+        var env: [String: String] = [:]
+        var startupTimeout: TimeInterval = 30
+    }
+
+    static func listServers() throws -> AgentToolResult {
+        let servers = try loadServers()
+        guard !servers.isEmpty else {
+            return AgentToolResult(summary: "0 MCP servers", payload: "No MCP servers found in ~/.codex/config.toml.")
+        }
+
+        let lines = servers.map { server in
+            let envKeys = server.env.keys.sorted()
+            let envSummary = envKeys.isEmpty
+                ? "env=[]"
+                : "env=[" + envKeys.map { "\($0)=[redacted]" }.joined(separator: ", ") + "]"
+            return "- \(server.name): command=\(server.command), args=\(server.args), timeout=\(Int(server.startupTimeout))s, \(envSummary)"
+        }
+        return AgentToolResult(summary: "\(servers.count) MCP servers", payload: lines.joined(separator: "\n"))
+    }
+
+    static func listTools(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        let server = try server(named: requiredString("server", in: arguments))
+        let result = try await runRequest(server: server, method: "tools/list", params: [:])
+        return AgentToolResult(
+            summary: "tools from \(server.name)",
+            payload: result
+        )
+    }
+
+    static func callTool(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        let server = try server(named: requiredString("server", in: arguments))
+        let toolName = try requiredString("tool", in: arguments)
+        let rawArguments = arguments["arguments_json"]?.stringValue() ?? "{}"
+        let toolArguments = try parseJSONObject(rawArguments)
+        let params: [String: Any] = [
+            "name": toolName,
+            "arguments": toolArguments
+        ]
+        let result = try await runRequest(server: server, method: "tools/call", params: params)
+        return AgentToolResult(
+            summary: "\(server.name).\(toolName)",
+            payload: result
+        )
+    }
+
+    private static func requiredString(_ name: String, in arguments: [String: AgentJSONValue]) throws -> String {
+        guard let value = arguments[name]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            throw AgentToolError.missingArgument(name)
+        }
+        return value
+    }
+
+    private static func server(named name: String) throws -> ServerConfig {
+        let servers = try loadServers()
+        guard let server = servers.first(where: { $0.name == name }) else {
+            throw AgentToolError.notFound("MCP server \(name)")
+        }
+        return server
+    }
+
+    private static func loadServers() throws -> [ServerConfig] {
+        let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/config.toml")
+        guard let data = try? Data(contentsOf: url),
+              let text = String(data: data, encoding: .utf8) else {
+            return []
+        }
+        return parseServers(from: text)
+    }
+
+    private static func parseServers(from text: String) -> [ServerConfig] {
+        var serversByName: [String: ServerConfig] = [:]
+        var currentName: String?
+        var currentIsEnv = false
+
+        for rawLine in text.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty, !line.hasPrefix("#") else { continue }
+
+            if line.hasPrefix("["), line.hasSuffix("]") {
+                let body = String(line.dropFirst().dropLast())
+                if let section = parseMCPSection(body) {
+                    currentName = section.name
+                    currentIsEnv = section.isEnv
+                    if serversByName[section.name] == nil {
+                        serversByName[section.name] = ServerConfig(name: section.name)
+                    }
+                } else {
+                    currentName = nil
+                    currentIsEnv = false
+                }
+                continue
+            }
+
+            guard let currentName,
+                  let equalsIndex = line.firstIndex(of: "=") else {
+                continue
+            }
+
+            let key = line[..<equalsIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = line[line.index(after: equalsIndex)...].trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if currentIsEnv {
+                serversByName[currentName]?.env[key] = parseString(value) ?? ""
+                continue
+            }
+
+            switch key {
+            case "command":
+                serversByName[currentName]?.command = parseString(value) ?? ""
+            case "args":
+                serversByName[currentName]?.args = parseStringArray(value)
+            case "startup_timeout_sec":
+                if let timeout = Double(value) {
+                    serversByName[currentName]?.startupTimeout = min(max(timeout, 1), 180)
+                }
+            default:
+                continue
+            }
+        }
+
+        return serversByName.values
+            .filter { !$0.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .sorted { $0.name < $1.name }
+    }
+
+    private static func parseMCPSection(_ body: String) -> (name: String, isEnv: Bool)? {
+        let prefix = "mcp_servers."
+        guard body.hasPrefix(prefix) else { return nil }
+        var remainder = String(body.dropFirst(prefix.count))
+        let isEnv = remainder.hasSuffix(".env")
+        if isEnv {
+            remainder.removeLast(".env".count)
+        }
+        if remainder.hasPrefix("\""), remainder.hasSuffix("\""), remainder.count >= 2 {
+            remainder.removeFirst()
+            remainder.removeLast()
+        }
+        return remainder.isEmpty ? nil : (remainder, isEnv)
+    }
+
+    private static func parseString(_ raw: String) -> String? {
+        var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        if value.hasPrefix("\""), value.hasSuffix("\""), value.count >= 2 {
+            value.removeFirst()
+            value.removeLast()
+        }
+        return value
+    }
+
+    private static func parseStringArray(_ raw: String) -> [String] {
+        var values: [String] = []
+        var current = ""
+        var inString = false
+        var isEscaped = false
+
+        for character in raw {
+            if isEscaped {
+                current.append(character)
+                isEscaped = false
+                continue
+            }
+            if character == "\\" {
+                isEscaped = true
+                continue
+            }
+            if character == "\"" {
+                if inString {
+                    values.append(current)
+                    current = ""
+                }
+                inString.toggle()
+                continue
+            }
+            if inString {
+                current.append(character)
+            }
+        }
+        return values
+    }
+
+    private static func parseJSONObject(_ raw: String) throws -> [String: Any] {
+        guard let data = raw.data(using: .utf8) else {
+            throw AgentToolError.invalidArgument("arguments_json is not UTF-8")
+        }
+        let object = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        guard let dict = object as? [String: Any] else {
+            throw AgentToolError.invalidArgument("arguments_json must be a JSON object")
+        }
+        return dict
+    }
+
+    private static func runRequest(
+        server: ServerConfig,
+        method: String,
+        params: [String: Any]
+    ) async throws -> String {
+        let paramsData = try JSONSerialization.data(withJSONObject: params, options: [])
+        return try await Task.detached(priority: .userInitiated) {
+            try runRequestSync(server: server, method: method, paramsData: paramsData)
+        }.value
+    }
+
+    nonisolated private static func runRequestSync(
+        server: ServerConfig,
+        method: String,
+        paramsData: Data
+    ) throws -> String {
+        let params = try JSONSerialization.jsonObject(with: paramsData, options: [.fragmentsAllowed])
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: server.command)
+        process.arguments = server.args
+
+        var environment = ProcessInfo.processInfo.environment
+        for (key, value) in server.env {
+            environment[key] = value
+        }
+        process.environment = environment
+
+        let stdinPipe = Pipe()
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardInput = stdinPipe
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        let inbox = MCPLineInbox()
+        let stderrCollector = MCPDataCollector(limit: 32_000)
+        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+            inbox.append(handle.availableData)
+        }
+        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+            stderrCollector.append(handle.availableData)
+        }
+
+        do {
+            try process.run()
+        } catch {
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            throw AgentToolError.commandFailed(-1, error.localizedDescription)
+        }
+
+        defer {
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            if process.isRunning {
+                process.terminate()
+            }
+            try? stdinPipe.fileHandleForWriting.close()
+        }
+
+        try send([
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": [
+                "protocolVersion": "2024-11-05",
+                "capabilities": [:],
+                "clientInfo": ["name": "VeilWriter", "version": "1"]
+            ]
+        ], to: stdinPipe)
+        _ = try waitForResponse(id: 1, inbox: inbox, timeout: server.startupTimeout, stderr: stderrCollector, process: process)
+
+        try send([
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+            "params": [:]
+        ], to: stdinPipe)
+
+        try send([
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": method,
+            "params": params
+        ], to: stdinPipe)
+        let response = try waitForResponse(id: 2, inbox: inbox, timeout: server.startupTimeout, stderr: stderrCollector, process: process)
+        if let result = response["result"] {
+            return prettyJSON(result)
+        }
+        return prettyJSON(response)
+    }
+
+    nonisolated private static func send(_ object: [String: Any], to pipe: Pipe) throws {
+        let data = try JSONSerialization.data(withJSONObject: object, options: [])
+        pipe.fileHandleForWriting.write(data)
+        pipe.fileHandleForWriting.write(Data([0x0A]))
+    }
+
+    nonisolated private static func waitForResponse(
+        id: Int,
+        inbox: MCPLineInbox,
+        timeout: TimeInterval,
+        stderr: MCPDataCollector,
+        process: Process
+    ) throws -> [String: Any] {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            guard let line = inbox.nextLine(until: deadline) else { break }
+            guard let data = line.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]),
+                  let dict = object as? [String: Any] else {
+                continue
+            }
+            guard let responseID = dict["id"] as? NSNumber, responseID.intValue == id else {
+                continue
+            }
+            if let error = dict["error"] {
+                throw AgentToolError.commandFailed(-1, prettyJSON(error))
+            }
+            return dict
+        }
+
+        if process.isRunning {
+            process.terminate()
+        }
+        let stderrText = stderr.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if stderrText.isEmpty {
+            throw AgentToolError.commandTimeout
+        }
+        throw AgentToolError.commandFailed(-1, stderrText)
+    }
+
+    nonisolated private static func prettyJSON(_ value: Any) -> String {
+        guard JSONSerialization.isValidJSONObject(value),
+              let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys]),
+              let text = String(data: data, encoding: .utf8) else {
+            return "\(value)"
+        }
+        if text.count > 48_000 {
+            let index = text.index(text.startIndex, offsetBy: 48_000)
+            return "\(text[..<index])\n\n[truncated]"
+        }
+        return text
+    }
+
+    private nonisolated final class MCPLineInbox: @unchecked Sendable {
+        private let condition = NSCondition()
+        private var buffer = Data()
+        private var lines: [String] = []
+
+        func append(_ data: Data) {
+            guard !data.isEmpty else { return }
+            condition.lock()
+            buffer.append(data)
+            while let newlineIndex = buffer.firstIndex(of: 0x0A) {
+                let lineData = buffer.prefix(upTo: newlineIndex)
+                buffer.removeSubrange(buffer.startIndex...newlineIndex)
+                if let line = String(data: lineData, encoding: .utf8),
+                   !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    lines.append(line)
+                }
+            }
+            condition.signal()
+            condition.unlock()
+        }
+
+        func nextLine(until deadline: Date) -> String? {
+            condition.lock()
+            defer { condition.unlock() }
+
+            while lines.isEmpty {
+                guard condition.wait(until: deadline) else { return nil }
+            }
+            return lines.removeFirst()
+        }
+    }
+
+    private nonisolated final class MCPDataCollector: @unchecked Sendable {
+        private let limit: Int
+        private var data = Data()
+        private let lock = NSLock()
+
+        init(limit: Int) {
+            self.limit = limit
+        }
+
+        func append(_ chunk: Data) {
+            guard !chunk.isEmpty else { return }
+            lock.lock()
+            defer { lock.unlock() }
+            let remaining = max(0, limit - data.count)
+            if remaining > 0 {
+                data.append(chunk.prefix(remaining))
+            }
+        }
+
+        var stringValue: String {
+            lock.lock()
+            defer { lock.unlock() }
+            return String(data: data, encoding: .utf8) ?? ""
+        }
     }
 }
 
@@ -503,6 +1391,16 @@ enum AgentToolRunner {
             return try gitStatus(context: context)
         case "run_command":
             return try await runCommand(arguments: arguments, context: context)
+        case "list_skills":
+            return try AgentSkillCatalog.listSkills(arguments: arguments)
+        case "read_skill":
+            return try AgentSkillCatalog.readSkill(arguments: arguments)
+        case "list_mcp_servers":
+            return try AgentMCPBridge.listServers()
+        case "list_mcp_tools":
+            return try await AgentMCPBridge.listTools(arguments: arguments)
+        case "call_mcp_tool":
+            return try await AgentMCPBridge.callTool(arguments: arguments)
         default:
             throw AgentToolError.unknownTool(name)
         }

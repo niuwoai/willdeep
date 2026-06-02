@@ -709,6 +709,77 @@ struct VeilWriterTests {
         #expect(status.kind(for: root.appendingPathComponent("icons")) == .deleted)
     }
 
+    @Test("git numstat parser returns per-file line deltas")
+    func testGitNumstatParser() {
+        let stats = AppState.parseGitNumstat(
+            """
+            25\t13\tXedit/AgentClient.swift
+            -\t-\tAssets/icon.png
+            2\t0\tDocs/Name With Spaces.md
+            """
+        )
+
+        #expect(stats["Xedit/AgentClient.swift"]?.added == 25)
+        #expect(stats["Xedit/AgentClient.swift"]?.deleted == 13)
+        #expect(stats["Assets/icon.png"]?.added == nil)
+        #expect(stats["Assets/icon.png"]?.deleted == nil)
+        #expect(stats["Docs/Name With Spaces.md"]?.added == 2)
+        #expect(stats["Docs/Name With Spaces.md"]?.deleted == 0)
+    }
+
+    @Test("worktree change summary combines porcelain entries and numstat")
+    func testWorktreeChangeSummaryTotals() {
+        let root = URL(fileURLWithPath: "/tmp/veilwriter-git-root")
+        let summary = AgentWorktreeChangeSummary(
+            repositoryRoot: root,
+            files: [
+                AgentFileChangeSummary(
+                    path: "B.swift",
+                    kind: .modified,
+                    lineStats: AgentLineChangeStats(added: 10, deleted: 2)
+                ),
+                AgentFileChangeSummary(
+                    path: "A.swift",
+                    kind: .untracked,
+                    lineStats: AgentLineChangeStats(added: nil, deleted: nil)
+                )
+            ]
+        )
+
+        #expect(summary.fileCount == 2)
+        #expect(summary.totalAddedLines == 10)
+        #expect(summary.totalDeletedLines == 2)
+        #expect(summary.files.map(\.path) == ["A.swift", "B.swift"])
+        #expect(summary.change(for: "B.swift")?.fileName == "B.swift")
+    }
+
+    @MainActor
+    @Test("agent thinking indicator only shows while waiting for model output")
+    func testAgentThinkingIndicatorState() {
+        let appState = AppState()
+
+        appState.isAgentResponding = true
+        appState.agentMessages = [AgentMessage(role: .user, content: "Review this")]
+        #expect(appState.shouldShowAgentThinkingIndicator == true)
+
+        appState.agentMessages.append(AgentMessage(role: .assistant, content: "Done"))
+        #expect(appState.shouldShowAgentThinkingIndicator == false)
+
+        let assistant = AgentMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [AgentMessageToolCall(externalID: "tool-1", toolName: "git_status", argumentsJSON: "{}")]
+        )
+        appState.agentMessages = [assistant]
+        #expect(appState.shouldShowAgentThinkingIndicator == false)
+
+        appState.agentMessages = [AgentMessage(role: .tool, content: "ok", toolCallID: "tool-1")]
+        #expect(appState.shouldShowAgentThinkingIndicator == true)
+
+        appState.isCompressingAgentContext = true
+        #expect(appState.shouldShowAgentThinkingIndicator == false)
+    }
+
     @Test("command palette matcher supports fuzzy and keyword lookup")
     func testCommandPaletteMatcher() {
         let command = PaletteCommand(
@@ -1486,9 +1557,83 @@ struct VeilWriterTests {
             arguments: ["command": .string("git push --force origin main")]
         )
 
-        #expect(benignRisk == .write)
+        #expect(benignRisk == .read)
         #expect(dangerousRisk == .danger)
         #expect(forcePushRisk == .danger)
+    }
+
+    @Test("run_command classifies cd plus read-only commands as read risk")
+    func testRunCommandRiskAllowsReadOnlyShellChains() {
+        let gitDiffRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cd Xedit && git diff")]
+        )
+        let grepRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cd Sources; rg \"AgentTool\" .")]
+        )
+        let writeAfterCDRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cd Xedit && git add AgentTools.swift")]
+        )
+        let unsafeCDRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cd .. && git diff")]
+        )
+        let redirectedReadRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cd Xedit && git diff > /tmp/out.patch")]
+        )
+
+        #expect(gitDiffRisk == .read)
+        #expect(grepRisk == .read)
+        #expect(writeAfterCDRisk == .write)
+        #expect(unsafeCDRisk == .write)
+        #expect(redirectedReadRisk == .write)
+    }
+
+    @Test("run_command allows workspace absolute cd for read-only commands")
+    func testRunCommandRiskAllowsWorkspaceAbsoluteReadOnlyShellChains() {
+        let workspace = URL(fileURLWithPath: "/Users/rocky/Sites/Xedit").standardizedFileURL
+        let sourceDirectory = workspace.appendingPathComponent("Xedit").standardizedFileURL
+
+        let gitDiffRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cd \(workspace.path) && git diff")],
+            rootDirectory: workspace
+        )
+        let rgRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cd \(sourceDirectory.path) && rg AgentTool .")],
+            rootDirectory: workspace
+        )
+        let gitDashCRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("git -C \(workspace.path) diff -- Xedit/AgentTools.swift")],
+            rootDirectory: workspace
+        )
+        let outsideCDRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cd /tmp && git diff")],
+            rootDirectory: workspace
+        )
+        let outsideGitDashCRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("git -C /tmp diff")],
+            rootDirectory: workspace
+        )
+        let outsideReadRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cat /etc/passwd")],
+            rootDirectory: workspace
+        )
+
+        #expect(gitDiffRisk == .read)
+        #expect(rgRisk == .read)
+        #expect(gitDashCRisk == .read)
+        #expect(outsideCDRisk == .write)
+        #expect(outsideGitDashCRisk == .write)
+        #expect(outsideReadRisk == .write)
     }
 
     @Test("run_command drains large output without hanging")
@@ -1598,6 +1743,72 @@ struct VeilWriterTests {
         #expect(multi?.required == false)
     }
 
+    @Test("provider-ready messages drop orphan tool messages")
+    func testProviderReadyMessagesDropOrphanTools() {
+        let messages = [
+            AgentMessage(role: .user, content: "hi"),
+            AgentMessage(role: .tool, content: "orphan", toolCallID: "call_orphan"),
+            AgentMessage(role: .assistant, content: "done")
+        ]
+
+        let normalized = AgentClient.providerReadyMessages(messages)
+
+        #expect(normalized.map(\.role) == [.user, .assistant])
+    }
+
+    @Test("provider-ready messages keep complete assistant tool exchanges")
+    func testProviderReadyMessagesKeepCompleteToolExchange() {
+        let toolCallA = AgentMessageToolCall(
+            externalID: "call_a",
+            toolName: "read_file",
+            argumentsJSON: #"{"path":"A.swift"}"#
+        )
+        let toolCallB = AgentMessageToolCall(
+            externalID: "call_b",
+            toolName: "git_status",
+            argumentsJSON: "{}"
+        )
+        let assistant = AgentMessage(role: .assistant, content: "", toolCalls: [toolCallA, toolCallB])
+        let messages = [
+            AgentMessage(role: .user, content: "check"),
+            assistant,
+            AgentMessage(role: .tool, content: "b", toolCallID: "call_b"),
+            AgentMessage(role: .tool, content: "a", toolCallID: "call_a"),
+            AgentMessage(role: .assistant, content: "done")
+        ]
+
+        let normalized = AgentClient.providerReadyMessages(messages)
+
+        #expect(normalized.count == 5)
+        #expect(normalized[1].toolCalls.map(\.externalID) == ["call_a", "call_b"])
+        #expect(normalized[2].toolCallID == "call_a")
+        #expect(normalized[3].toolCallID == "call_b")
+    }
+
+    @Test("provider-ready messages drop incomplete assistant tool exchanges")
+    func testProviderReadyMessagesDropIncompleteToolExchange() {
+        let toolCallA = AgentMessageToolCall(
+            externalID: "call_a",
+            toolName: "read_file",
+            argumentsJSON: "{}"
+        )
+        let toolCallB = AgentMessageToolCall(
+            externalID: "call_b",
+            toolName: "git_status",
+            argumentsJSON: "{}"
+        )
+        let messages = [
+            AgentMessage(role: .assistant, content: "", toolCalls: [toolCallA, toolCallB]),
+            AgentMessage(role: .tool, content: "a", toolCallID: "call_a"),
+            AgentMessage(role: .user, content: "next")
+        ]
+
+        let normalized = AgentClient.providerReadyMessages(messages)
+
+        #expect(normalized.map(\.role) == [.user])
+        #expect(normalized.first?.content == "next")
+    }
+
     @Test("AgentJSONValue stringArrayValue and boolValue work")
     func testAgentJSONValueHelpers() {
         let validArray: AgentJSONValue = .array([.string("a"), .string("b"), .string("c")])
@@ -1612,6 +1823,32 @@ struct VeilWriterTests {
         #expect(AgentJSONValue.string("no").boolValue() == false)
         #expect(AgentJSONValue.number(0).boolValue() == false)
         #expect(AgentJSONValue.string("maybe").boolValue() == nil)
+    }
+
+    @Test("agent context window recognizes modern large-context models")
+    func testAgentContextWindowModernModels() {
+        #expect(AppState.agentContextWindow(model: "gpt-5.5", providerID: "openai") == 400_000)
+        #expect(AppState.agentContextWindow(model: "gpt-4.1", providerID: "openai") == 1_000_000)
+        #expect(AppState.agentContextWindow(model: "custom-model", providerID: "custom") == 128_000)
+    }
+
+    @Test("agent token estimate includes tool schemas without exploding short chats")
+    func testAgentTokenEstimateIncludesTools() {
+        let messages = [AgentMessage(role: .user, content: "hi")]
+        let withoutTools = AppState.estimateAgentTokens(messages: messages, tools: [])
+        let withTools = AppState.estimateAgentTokens(messages: messages, tools: AgentToolRegistry.all)
+
+        #expect(withTools > withoutTools)
+        #expect(withTools < 8_000)
+    }
+
+    @Test("MCP and skill tools are registered")
+    func testMCPAndSkillToolsAreRegistered() {
+        #expect(AgentToolRegistry.descriptor(for: "list_skills")?.risk == .read)
+        #expect(AgentToolRegistry.descriptor(for: "read_skill")?.risk == .read)
+        #expect(AgentToolRegistry.descriptor(for: "list_mcp_servers")?.risk == .read)
+        #expect(AgentToolRegistry.descriptor(for: "list_mcp_tools")?.risk == .read)
+        #expect(AgentToolRegistry.descriptor(for: "call_mcp_tool")?.risk == .write)
     }
 
     @Test("collapseOldToolResults keeps the most recent tool messages and replaces older ones with a placeholder")

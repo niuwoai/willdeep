@@ -300,6 +300,72 @@ struct AgentPatchProposal: Identifiable, Codable, Equatable {
     }
 }
 
+struct AgentLineChangeStats: Equatable {
+    var added: Int?
+    var deleted: Int?
+
+    nonisolated init(added: Int?, deleted: Int?) {
+        self.added = added
+        self.deleted = deleted
+    }
+}
+
+struct AgentFileChangeSummary: Identifiable, Equatable {
+    var path: String
+    var kind: GitFileStatusKind
+    var lineStats: AgentLineChangeStats
+
+    nonisolated var id: String { path }
+
+    nonisolated var fileName: String {
+        URL(fileURLWithPath: path).lastPathComponent
+    }
+
+    nonisolated var addedLines: Int {
+        lineStats.added ?? 0
+    }
+
+    nonisolated var deletedLines: Int {
+        lineStats.deleted ?? 0
+    }
+
+    nonisolated var hasKnownLineStats: Bool {
+        lineStats.added != nil || lineStats.deleted != nil
+    }
+}
+
+struct AgentWorktreeChangeSummary: Equatable {
+    var repositoryRoot: URL?
+    var files: [AgentFileChangeSummary]
+
+    nonisolated init(repositoryRoot: URL? = nil, files: [AgentFileChangeSummary] = []) {
+        self.repositoryRoot = repositoryRoot
+        self.files = files.sorted { lhs, rhs in
+            lhs.path.localizedStandardCompare(rhs.path) == .orderedAscending
+        }
+    }
+
+    nonisolated var isEmpty: Bool {
+        files.isEmpty
+    }
+
+    nonisolated var fileCount: Int {
+        files.count
+    }
+
+    nonisolated var totalAddedLines: Int {
+        files.reduce(0) { $0 + $1.addedLines }
+    }
+
+    nonisolated var totalDeletedLines: Int {
+        files.reduce(0) { $0 + $1.deletedLines }
+    }
+
+    nonisolated func change(for relativePath: String) -> AgentFileChangeSummary? {
+        files.first { $0.path == relativePath }
+    }
+}
+
 enum AgentPatchError: LocalizedError {
     case emptyDiff
     case unsupportedDiff
@@ -330,7 +396,7 @@ enum AgentClientError: LocalizedError {
     case missingAPIKey
     case invalidBaseURL
     case invalidResponse
-    case serverStatus(Int)
+    case serverStatus(AgentProviderHTTPError)
 
     var errorDescription: String? {
         switch self {
@@ -340,8 +406,30 @@ enum AgentClientError: LocalizedError {
             return "The agent base URL is invalid."
         case .invalidResponse:
             return "The model provider returned an invalid response."
-        case .serverStatus(let statusCode):
-            return "The model provider returned HTTP \(statusCode)."
+        case .serverStatus(let error):
+            return "The model provider returned HTTP \(error.statusCode)."
         }
+    }
+}
+
+struct AgentProviderHTTPError: Equatable {
+    let statusCode: Int
+    let method: String
+    let url: String
+    let providerID: String
+    let model: String
+    let requestSummary: String
+    let requestBody: String
+    let responseBody: String
+}
+
+struct AgentErrorDetails: Equatable, Identifiable {
+    let id = UUID()
+    let sections: [Section]
+
+    struct Section: Equatable, Identifiable {
+        let id = UUID()
+        let title: String
+        let text: String
     }
 }
