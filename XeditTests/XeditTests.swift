@@ -1571,6 +1571,59 @@ struct VeilWriterTests {
         }
     }
 
+    @Test("SafeCommand classifies common read-only commands as alwaysSafe")
+    func testSafeCommandAllowlist() {
+        // Single safe commands.
+        #expect(SafeCommand.classify(command: "cat README.md") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "head -n 50 src/main.rs") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "rg \"AgentSettingsStore\" Xedit") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "ls -la") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "pwd") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "wc -l Sources/*.swift") == .alwaysSafe)
+
+        // git read-only subcommands.
+        #expect(SafeCommand.classify(command: "git diff") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "git log --oneline -10") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "git status") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "git show HEAD") == .alwaysSafe)
+
+        // git config writes must NOT be auto-approved.
+        #expect(SafeCommand.classify(command: "git config user.email rocky@example.com") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "git config --add safe.directory /tmp/foo") == .needsJudgment)
+
+        // git stash without args (writes) must NOT be auto-approved.
+        #expect(SafeCommand.classify(command: "git stash") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "git stash list") == .alwaysSafe)
+    }
+
+    @Test("SafeCommand pipelines: every segment must be safe for the chain to auto-approve")
+    func testSafeCommandPipelines() {
+        // Two safe segments → safe.
+        #expect(SafeCommand.classify(command: "git diff | head -50") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "rg foo | wc -l") == .alwaysSafe)
+        // A dangerous segment poisons the whole chain.
+        #expect(SafeCommand.classify(command: "git diff && rm -rf node_modules") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "cat a.txt; sudo rm /tmp/x") == .alwaysDangerous)
+        // An unknown segment downgrades safe → needsJudgment.
+        #expect(SafeCommand.classify(command: "cat a.txt | xargs cargo run") == .needsJudgment)
+    }
+
+    @Test("SafeCommand rejects redirections and command substitution")
+    func testSafeCommandRejectsRedirectionAndSubstitution() {
+        #expect(SafeCommand.classify(command: "cat foo > bar") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "echo $(rm -rf /)") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "ls `pwd`") == .alwaysDangerous)
+        // Harmless stderr redirection should still be classified as safe.
+        #expect(SafeCommand.classify(command: "git status 2>/dev/null") == .alwaysSafe)
+    }
+
+    @Test("SafeCommand rejects find with -delete or -exec")
+    func testSafeCommandFindRules() {
+        #expect(SafeCommand.classify(command: "find . -name '*.swift'") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "find . -name '*.tmp' -delete") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "find . -name '*.log' -exec rm {} ;") == .alwaysDangerous)
+    }
+
     @Test("agent tool registry escalates dangerous run_command invocations to .danger")
     func testRunCommandRiskEscalatesForDestructiveShell() {
         let benignRisk = AgentToolRegistry.risk(

@@ -226,6 +226,19 @@ enum AgentCommandAuthorization {
 
 // MARK: - Tool call record (UI state)
 
+/// How a write-tier tool call ended up running. `.user` covers both the
+/// per-call Allow button and the legacy auto-allow path. `.alwaysAllowList`
+/// means the user previously pinned this command signature. `.staticAllowlist`
+/// means the SafeCommand classifier flagged it as read-only. `.llmJudge`
+/// means the LLM judge classifier approved it. nil = either pure read
+/// (never gated) or still pending.
+enum AgentToolApprovalSource: String, Equatable, Codable {
+    case user
+    case alwaysAllowList
+    case staticAllowlist
+    case llmJudge
+}
+
 struct AgentToolCall: Identifiable, Equatable {
     let id: UUID
     let messageID: UUID
@@ -237,6 +250,10 @@ struct AgentToolCall: Identifiable, Equatable {
     var status: AgentToolCallStatus
     var result: AgentToolResult?
     var errorMessage: String?
+    /// Set when a write-tier tool call was auto-approved. Used by the UI
+    /// to surface a small "Auto-approved" note so the user can audit
+    /// what slipped through.
+    var approvalSource: AgentToolApprovalSource?
 
     init(
         id: UUID = UUID(),
@@ -247,7 +264,8 @@ struct AgentToolCall: Identifiable, Equatable {
         risk: AgentToolRisk,
         status: AgentToolCallStatus,
         result: AgentToolResult? = nil,
-        errorMessage: String? = nil
+        errorMessage: String? = nil,
+        approvalSource: AgentToolApprovalSource? = nil
     ) {
         self.id = id
         self.messageID = messageID
@@ -258,6 +276,7 @@ struct AgentToolCall: Identifiable, Equatable {
         self.status = status
         self.result = result
         self.errorMessage = errorMessage
+        self.approvalSource = approvalSource
     }
 }
 

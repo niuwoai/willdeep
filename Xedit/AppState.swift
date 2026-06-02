@@ -101,6 +101,13 @@ final class AppState: ObservableObject {
     /// Command families the user has explicitly allowed Agent mode to run
     /// without prompting again, e.g. `git push`.
     @Published var agentAlwaysAllowedCommands: [AgentAlwaysAllowedCommand] = []
+    /// When true, `run_command` invocations the static SafeCommand
+    /// allowlist marks as `.alwaysSafe` (or the LLM judge confirms as
+    /// safe) skip the Allow/Deny prompt and run immediately. Defaults
+    /// to true so a fresh install gets the no-friction experience.
+    @Published var autoApproveSafeCommands: Bool = AgentSettingsStore.loadAutoApproveSafeCommands() {
+        didSet { AgentSettingsStore.saveAutoApproveSafeCommands(autoApproveSafeCommands) }
+    }
     /// Persisted Agent-mode chat sessions, newest-updated first.
     @Published private(set) var agentSessions: [AgentSession] = []
     /// Active Agent-mode session id. nil means "scratch" — Editor-mode
@@ -911,6 +918,48 @@ final class AppState: ObservableObject {
         return agentAlwaysAllowedCommands.contains { $0.commandSignature == signature }
     }
 
+    /// Resolve auto-approval for a write-tier tool call. Returns the
+    /// source that approved it, or `nil` to mean "user must decide".
+    /// Cheap paths (user allowlist, static SafeCommand) run inline; the
+    /// LLM judge round-trips only when nothing cheaper matched.
+    private func autoApprovalSource(
+        toolName: String,
+        arguments: [String: AgentJSONValue],
+        risk: AgentToolRisk
+    ) async -> AgentToolApprovalSource? {
+        guard risk == .write, toolName == "run_command" else { return nil }
+
+        // 1. User-pinned signatures (Always Allow button) — always honored.
+        if isAgentToolCallAlwaysAllowed(toolName: toolName, arguments: arguments, risk: risk) {
+            return .alwaysAllowList
+        }
+
+        // The remaining auto paths require both a command argument and
+        // the user opting in via the master toggle.
+        guard autoApproveSafeCommands,
+              let command = arguments["command"]?.stringValue() else {
+            return nil
+        }
+
+        // 2. Static read-only allowlist (zero latency, zero cost).
+        switch SafeCommand.classify(command: command) {
+        case .alwaysSafe:
+            return .staticAllowlist
+        case .alwaysDangerous:
+            return nil
+        case .needsJudgment:
+            break
+        }
+
+        // 3. LLM judge. Lightweight non-streaming request; defaults to
+        //    "no" on network errors so the user still gates anything we
+        //    couldn't certify.
+        let configuration = configurationForCurrentTurn()
+        let client = AgentClient(configuration: configuration)
+        let safe = await client.judgeCommandSafety(command: command)
+        return safe ? .llmJudge : nil
+    }
+
     private func resolveAgentToolCallDecision(id: AgentToolCall.ID, decision: AgentToolDecision) {
         guard let index = agentToolCalls.firstIndex(where: { $0.id == id }) else { return }
         guard agentToolCalls[index].status == .pendingApproval
@@ -1029,7 +1078,16 @@ final class AppState: ObservableObject {
                     arguments: argsDict,
                     rootDirectory: rootDirectory
                 )
-                let isAlwaysAllowed = isAgentToolCallAlwaysAllowed(toolName: call.toolName, arguments: argsDict, risk: risk)
+
+                // Resolve auto-approval before we even render the card
+                // so simple cases (cat / git diff / etc.) skip the
+                // pendingApproval flash entirely.
+                let autoApproval = await autoApprovalSource(
+                    toolName: call.toolName,
+                    arguments: argsDict,
+                    risk: risk
+                )
+                let isAlwaysAllowed = autoApproval != nil
                 let initialStatus: AgentToolCallStatus
                 if isAlwaysAllowed {
                     initialStatus = .running
@@ -1048,7 +1106,8 @@ final class AppState: ObservableObject {
                     toolName: call.toolName,
                     arguments: argsDict,
                     risk: risk,
-                    status: initialStatus
+                    status: initialStatus,
+                    approvalSource: autoApproval
                 )
                 agentToolCalls.append(record)
                 let recordID = record.id
@@ -1104,6 +1163,7 @@ final class AppState: ObservableObject {
                     }
                     if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
                         agentToolCalls[index].status = .running
+                        agentToolCalls[index].approvalSource = .user
                     }
                 }
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.41.0-rc1 - 2026-06-02
+
+- Added zero-friction auto-approval for safe Agent shell commands. A new `SafeCommand.classify` step runs before the per-call Allow/Deny prompt: commands whose every pipeline segment is in the built-in read-only allowlist (cat, head, tail, ls, find without -delete/-exec, git diff/log/status/show/branch/blame/etc., rg, grep, wc, file, stat, which, pwd, echo, sort, uniq, cut, awk, sed (read-only), md5, shasum, base64, …) run immediately with no prompt. Pipelines `|`, `&&`, `||`, `;` are tokenized respecting single/double quotes; any dangerous segment poisons the whole chain.
+- Added an LLM-judge fallback for commands the static allowlist can't certify. When auto-approval is on and a `run_command` invocation is `.needsJudgment`, AppState issues a non-streaming single-shot completion ("YES or NO, is this command read-only/safe?") to the currently configured model with `max_tokens=4`, `temperature=0`. Only an explicit `YES` auto-approves; everything else falls back to the user gate.
+- Added `Settings > Agent > Tool approval > Auto-approve safe commands` toggle (defaults to on). Turning it off restores the strict per-call Allow/Deny behavior for every write-tier command, while user-pinned "Always allow" signatures and the destructive `confirm` gate continue to work as before.
+- Added approval-source badges to tool-call cards: `AUTO` (static allowlist), `AI OK` (LLM judge), `ALWAYS` (user-pinned signature). Cards approved by a Allow click stay unbadged so the audit trail distinguishes "Claude decided" from "you decided".
+- Added `AgentToolApprovalSource` to `AgentToolCall` so the audit trail is part of the model, not the view.
+- Added unit tests for the allowlist, pipeline composition, redirection rejection, and find -delete/-exec rejection.
+
 ## 1.40.0-rc25 - 2026-06-02
 
 - Added a separate Agent Image Understanding provider configuration with its own provider, base URL, model, and Keychain API key so text-only main models can still accept pasted images through a vision-model description pass.

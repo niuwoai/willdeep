@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-02 | Current version: v1.40.0-rc25
+> Last updated: 2026-06-02 | Current version: v1.41.0-rc1
 
 ## Positioning
 
@@ -63,6 +63,7 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Queue follow-up messages while the agent is responding — additional sends become "Queued" bubbles that auto-fire when the current turn ends. Stop the current response without dropping the queue; Clear Queue removes them explicitly.
 - Show an inline "正在思考" activity divider while the Agent is waiting for the model to start responding or to continue after tool output.
 - See the estimated context-window utilization in the chat header (≈ remaining tokens / model window) based on the actual next provider request shape, including system context, normalized history, collapsed tool results, images, and tool schemas. Switch the active session to a concrete model override from a picker fed by previously fetched model IDs, while the default path follows the configured Flash/Pro route.
+- Auto-approve safe Agent shell commands: a built-in allowlist runs read-only commands (cat, head, tail, ls, find -name, git diff/log/status, rg, grep, wc, file, …) immediately. Anything else can fall through to an LLM judge (using the current chat model) that returns YES/NO; only a confirmed YES auto-runs. Destructive patterns still require typing `confirm`. Toggle via Settings > Agent > Tool approval > Auto-approve safe commands; user-pinned "Always allow" signatures continue to work alongside.
 - Reclaim context budget without losing state: a Compress button in the status bar (surfaces once usage crosses 50%) summarizes the older transcript into a single assistant message via the configured Flash model. The last few messages stay verbatim. Older `tool` results auto-collapse to a small placeholder in the request payload so long sessions don't blow up the prompt. Once usage crosses 75% the compression also runs automatically between turns — the status bar shows a `Compressing…` spinner and any queued message waits for compression to finish before dispatching.
 - Show an inline transcript divider while context compression is running so the chat view explains the temporary pause instead of looking idle.
 - Expand Agent provider errors to inspect the method, URL, provider, model, input message summary, redacted request body, HTTP status, and response body for debugging failed requests.

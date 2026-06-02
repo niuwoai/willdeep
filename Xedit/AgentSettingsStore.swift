@@ -12,6 +12,7 @@ enum AgentSettingsStore {
     private static let defaultsKey = "im.some.veilwriter.agentSettings.v1"
     private static let knownModelsKey = "im.some.veilwriter.agentSettings.knownModels.v1"
     private static let alwaysAllowedCommandsKey = "im.some.veilwriter.agentSettings.alwaysAllowedCommands.v1"
+    private static let autoApproveKey = "im.some.veilwriter.agentSettings.autoApproveSafeCommands.v1"
     private static let keychainService = "im.some.veilwriter.agent"
     private static let keychainAccount = "openai-compatible-api-key"
     private static let imageKeychainAccount = "openai-compatible-image-description-api-key"
@@ -36,6 +37,20 @@ enum AgentSettingsStore {
         return decoded
             .filter { !$0.commandSignature.isEmpty }
             .sorted { $0.commandSignature < $1.commandSignature }
+    }
+
+    /// Whether `run_command` should auto-approve commands the static
+    /// allowlist (or the LLM judge) certifies as safe. Defaults to true
+    /// on a fresh install; the toggle lives in Settings > Agent.
+    static func loadAutoApproveSafeCommands() -> Bool {
+        if UserDefaults.standard.object(forKey: autoApproveKey) == nil {
+            return true
+        }
+        return UserDefaults.standard.bool(forKey: autoApproveKey)
+    }
+
+    static func saveAutoApproveSafeCommands(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: autoApproveKey)
     }
 
     static func saveAlwaysAllowedCommands(_ commands: [AgentAlwaysAllowedCommand]) {

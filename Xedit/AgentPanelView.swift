@@ -532,6 +532,16 @@ struct AgentToolCallCard: View {
                     .foregroundStyle(statusColor)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
+                if let label = approvalSourceLabel {
+                    Text(label)
+                        .font(.system(size: 9, weight: .semibold))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Color.green.opacity(0.12))
+                        .foregroundStyle(.green)
+                        .clipShape(Capsule())
+                        .help(approvalSourceTooltip ?? "")
+                }
                 if hasExpandableContent {
                     Button {
                         isExpanded.toggle()
@@ -851,6 +861,31 @@ struct AgentToolCallCard: View {
         !argumentsLines.isEmpty
         || !(call.result?.payload.isEmpty ?? true)
         || !(call.errorMessage?.isEmpty ?? true)
+    }
+
+    /// Show a small badge next to the status text when a write-tier
+    /// tool call ran without the user clicking Allow, so it's auditable
+    /// after the fact.
+    private var approvalSourceLabel: String? {
+        guard call.risk == .write,
+              call.status == .running || call.status == .succeeded || call.status == .failed,
+              let source = call.approvalSource else { return nil }
+        switch source {
+        case .user: return nil // explicit user clicks don't need a badge
+        case .alwaysAllowList: return "ALWAYS"
+        case .staticAllowlist: return "AUTO"
+        case .llmJudge: return "AI OK"
+        }
+    }
+
+    private var approvalSourceTooltip: String? {
+        guard let source = call.approvalSource else { return nil }
+        switch source {
+        case .user: return nil
+        case .alwaysAllowList: return "You pinned this command signature as always-allowed."
+        case .staticAllowlist: return "Matched the built-in safe-command allowlist."
+        case .llmJudge: return "An LLM judge classified this command as read-only / safe."
+        }
     }
 
     private var cardBackground: Color {

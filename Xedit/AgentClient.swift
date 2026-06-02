@@ -131,6 +131,69 @@ struct AgentClient {
         }
     }
 
+    /// Ask the configured provider whether a shell command is safe to
+    /// auto-run. Non-streaming, low-token, single round trip. Returns
+    /// `true` only when the model unambiguously answers `YES`. Network
+    /// errors return `false` — the caller (AppState) treats that as
+    /// "fall back to user approval".
+    func judgeCommandSafety(command: String) async -> Bool {
+        guard !configuration.apiKey.isEmpty else { return false }
+
+        let endpoint: URL
+        do { endpoint = try chatCompletionsEndpoint(from: configuration.baseURL) }
+        catch { return false }
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 12
+        applyAuthenticationHeaders(to: &request)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let systemPrompt = """
+        You are a strict shell-command safety classifier. \
+        Reply with a single word: YES if the command is read-only and \
+        cannot delete files, modify state outside its process, send \
+        data over the network in a write capacity, or escalate \
+        privileges. Otherwise reply NO. \
+        Treat anything that writes files, mutates VCS state, installs \
+        software, opens network sockets to write, signals processes, \
+        or changes permissions as NO. \
+        Do not explain. Do not add punctuation. Output exactly YES or NO.
+        """
+
+        let body: [String: Any] = [
+            "model": configuration.model,
+            "stream": false,
+            "max_tokens": 4,
+            "temperature": 0,
+            "messages": [
+                ["role": "system", "content": systemPrompt],
+                ["role": "user", "content": "Command:\n\(command)"]
+            ]
+        ]
+        guard let payload = try? JSONSerialization.data(withJSONObject: body, options: []) else {
+            return false
+        }
+        request.httpBody = payload
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                return false
+            }
+            guard let decoded = try? JSONDecoder().decode(JudgmentResponse.self, from: data),
+                  let choice = decoded.choices.first else {
+                return false
+            }
+            let answer = choice.message.content
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .uppercased()
+            return answer.hasPrefix("YES")
+        } catch {
+            return false
+        }
+    }
+
     func fetchModels() async throws -> [String] {
         guard !configuration.apiKey.isEmpty else {
             throw AgentClientError.missingAPIKey
@@ -520,5 +583,21 @@ private struct ModelsResponse: Decodable {
 
     struct Model: Decodable {
         let id: String
+    }
+}
+
+/// Minimal non-streaming chat completion shape used only by
+/// `judgeCommandSafety`. Tolerates the small differences between
+/// OpenAI / Anthropic-via-compat / DashScope by reading the first
+/// choice's message.content as plain text.
+private struct JudgmentResponse: Decodable {
+    let choices: [Choice]
+
+    struct Choice: Decodable {
+        let message: Message
+    }
+
+    struct Message: Decodable {
+        let content: String
     }
 }

@@ -345,6 +345,16 @@ struct EditorSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section("Tool approval") {
+                Toggle("Auto-approve safe commands", isOn: Binding(
+                    get: { appState.autoApproveSafeCommands },
+                    set: { appState.autoApproveSafeCommands = $0 }
+                ))
+                Text("Read-only shell commands in the built-in allowlist (cat, head, tail, ls, find without -delete/-exec, git diff/log/status/show, rg, grep, wc, file, stat, which, pwd, echo, …) run without asking. Commands outside the allowlist are passed to a one-shot LLM judge using the currently configured model; only YES verdicts auto-run. Destructive patterns (rm, sudo, git push --force, git reset --hard, …) still require typing \"confirm\".")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .onAppear {
