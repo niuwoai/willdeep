@@ -705,6 +705,7 @@ private struct EmptyWorkspaceView: View {
 }
 
 private struct EmptyWorkspaceHero: View {
+    @EnvironmentObject var appState: AppState
     let onOpenFile: () -> Void
     let onOpenFolder: () -> Void
 
@@ -718,9 +719,10 @@ private struct EmptyWorkspaceHero: View {
                 Text("No Folder Open")
                     .font(.system(size: 28, weight: .semibold))
                     .foregroundStyle(.primary)
-                Text("Choose a file or folder to start editing.")
+                Text("Choose a file or folder to start editing — or jump straight into Agent mode for a workspace-free chat.")
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
 
             HStack(spacing: 10) {
@@ -741,6 +743,15 @@ private struct EmptyWorkspaceHero: View {
                 .buttonStyle(EmptyWorkspaceButtonStyle())
                 .help("Open Folder")
                 .accessibilityLabel("Open Folder")
+
+                Button {
+                    appState.setAppMode(.agent)
+                } label: {
+                    Label("Agent Mode", systemImage: "sparkles")
+                }
+                .buttonStyle(EmptyWorkspaceButtonStyle(tint: .accentColor))
+                .help("Enter Agent mode (⌘⇧A)")
+                .accessibilityLabel("Enter Agent Mode")
             }
             .labelStyle(.titleAndIcon)
         }
@@ -811,20 +822,25 @@ private struct EmptyWorkspaceRecentSection: View {
 }
 
 private struct EmptyWorkspaceButtonStyle: ButtonStyle {
+    /// Optional accent — when non-nil the button fills with this color
+    /// and renders white-on-color (used for the "primary call to
+    /// action" button in the empty-state hero).
+    var tint: Color? = nil
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(.primary)
+            .foregroundStyle(tint == nil ? Color.primary : Color.white)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .fill(tint ?? Color(nsColor: .controlBackgroundColor))
                     .shadow(color: .black.opacity(configuration.isPressed ? 0.04 : 0.08), radius: 8, y: 3)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color.primary.opacity(0.08))
+                    .stroke(tint == nil ? Color.primary.opacity(0.08) : Color.clear)
             )
             .opacity(configuration.isPressed ? 0.72 : 1)
     }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.47.0-rc2 - 2026-06-02
+
+- Added an **Agent Mode** button to the "No Folder Open" empty-state hero. Same row as Open File / Open Folder, but tinted in the accent color to read as the primary alternative for users who don't need to open a project before chatting. One click calls `setAppMode(.agent)` and lands directly in a workspace-free chat session. Subhead reworded to mention the new option. `EmptyWorkspaceButtonStyle` gained an optional `tint:` parameter so the accent treatment is reusable.
+
 ## 1.47.0-rc1 - 2026-06-02
 
 Four quality/polish phases shipped together — Markdown polish, per-entry routing, sidebar provider status, and parity tests for the chat picker primitive.
