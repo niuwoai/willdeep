@@ -113,6 +113,11 @@ final class AppState: ObservableObject {
     /// Active Agent-mode session id. nil means "scratch" — Editor-mode
     /// chat keeps working without forcing a session to exist.
     @Published var activeAgentSessionID: AgentSession.ID?
+    /// Mirrors `AgentSession.didEditFiles` for the active session — flips to
+    /// true the moment the Agent successfully applies a patch in this
+    /// session, and stays true until the session is replaced. Used to gate
+    /// the worktree-change card so a fresh New Chat never shows it.
+    @Published private(set) var agentSessionDidEditFiles: Bool = false
     /// Top-level UI mode. Editor is the classic file editor; agent hides
     /// the editor and shows the conversation-first layout.
     @Published var appMode: AppMode = .editor
@@ -613,8 +618,28 @@ final class AppState: ObservableObject {
         )
         agentSessions.insert(session, at: 0)
         activeAgentSessionID = session.id
+        agentSessionDidEditFiles = false
         AgentSessionStore.save(session)
         return session
+    }
+
+    /// Start a new session that belongs to a specific workspace, switching
+    /// the current window's `rootDirectory` to that workspace first so the
+    /// Agent's tool context matches the session's group. Used by the
+    /// sidebar workspace-row context menu. Pass `nil` for the "no
+    /// workspace" group — the new session is created with no root.
+    @discardableResult
+    func startNewAgentSession(inWorkspaceAt workspacePath: String?) -> AgentSession {
+        if let workspacePath, !workspacePath.isEmpty {
+            let url = URL(fileURLWithPath: workspacePath)
+            // Only switch root if the target really is an existing
+            // directory — a stale persisted path shouldn't break anything.
+            if Self.isExistingDirectory(url),
+               rootDirectory?.standardizedFileURL.path != url.standardizedFileURL.path {
+                openFolderURL(url)
+            }
+        }
+        return startNewAgentSession()
     }
 
     func selectAgentSession(id: AgentSession.ID) {
@@ -630,6 +655,7 @@ final class AppState: ObservableObject {
         let session = agentSessions[index]
         activeAgentSessionID = session.id
         agentMessages = session.messages
+        agentSessionDidEditFiles = session.didEditFiles
         let routedModel = agentConfiguration.normalized.model(for: .interactive)
         agentSessionModelOverride = session.modelID == routedModel ? nil : session.modelID
         agentPatchProposals = []
@@ -646,6 +672,7 @@ final class AppState: ObservableObject {
         if activeAgentSessionID == id {
             activeAgentSessionID = nil
             agentMessages = []
+            agentSessionDidEditFiles = false
             agentPatchProposals = []
             agentToolCalls = []
             agentQueuedMessages = []
@@ -666,6 +693,7 @@ final class AppState: ObservableObject {
         session.messages = agentMessages
         session.updatedAt = Date()
         session.title = AgentSessionStore.deriveTitle(from: agentMessages)
+        session.didEditFiles = agentSessionDidEditFiles
         if let override = agentSessionModelOverride, !override.isEmpty {
             session.modelID = override
         } else {
@@ -1490,6 +1518,14 @@ final class AppState: ObservableObject {
         for pendingWrite in pendingWrites {
             try pendingWrite.content.write(to: pendingWrite.url, atomically: true, encoding: .utf8)
             applyAgentPatchedContent(pendingWrite.content, to: pendingWrite.url)
+        }
+
+        // Mark this session as having had the Agent actually touch files so
+        // the worktree-change card can show. Fresh sessions with no applied
+        // patch never get the card, even if the repo has unrelated diffs.
+        if !pendingWrites.isEmpty {
+            agentSessionDidEditFiles = true
+            persistActiveAgentSession()
         }
 
         refreshGitStatus()

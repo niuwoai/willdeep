@@ -8,7 +8,7 @@
 
 [![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.43.0--rc4-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.43.0--rc7-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-see%20LICENSE-lightgrey)](#license)
 
 *No Electron. No 800MB Helper processes. No "loading workspace…" spinner that eats your afternoon.*
@@ -176,7 +176,7 @@ See [LICENSE](LICENSE) if present in the repository. Otherwise, treat the code a
 
 [![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.43.0--rc4-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.43.0--rc7-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-see%20LICENSE-lightgrey)](#license)
 
 *不靠 Electron。没有 800MB 的 Helper 子进程。没有那种让你怀疑人生的 "loading workspace…"。*

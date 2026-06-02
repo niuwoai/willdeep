@@ -2123,6 +2123,10 @@ struct MarkdownPreviewBlock: Equatable {
 
     let kind: Kind
     let text: String
+    /// Optional info string — currently only used for fenced code blocks
+    /// to carry the language hint after the opening ``` (e.g. "tsx",
+    /// "swift", "bash"). Nil for every other block kind.
+    var info: String? = nil
 }
 
 enum MarkdownPreviewParser {
@@ -2131,6 +2135,7 @@ enum MarkdownPreviewParser {
         var blocks: [MarkdownPreviewBlock] = []
         var paragraph: [String] = []
         var code: [String] = []
+        var codeLanguage: String? = nil
         var isInCodeBlock = false
 
         func flushParagraph() {
@@ -2140,19 +2145,38 @@ enum MarkdownPreviewParser {
         }
 
         func flushCode() {
-            guard !code.isEmpty else { return }
-            blocks.append(MarkdownPreviewBlock(kind: .code, text: code.joined(separator: "\n")))
+            // Don't emit a card for a completely empty fenced block — it
+            // would just be a stray rectangle. A block with only the
+            // language hint and no body yet (streaming case before the
+            // first content line arrives) is still emitted below by
+            // checking `isInCodeBlock` at EOF.
+            guard !code.isEmpty || codeLanguage != nil else {
+                code.removeAll()
+                codeLanguage = nil
+                return
+            }
+            blocks.append(MarkdownPreviewBlock(
+                kind: .code,
+                text: code.joined(separator: "\n"),
+                info: codeLanguage
+            ))
             code.removeAll()
+            codeLanguage = nil
         }
 
         for line in lines {
-            if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+            let trimmedLine = line.trimmingCharacters(in: .whitespaces)
+            if trimmedLine.hasPrefix("```") {
                 if isInCodeBlock {
                     flushCode()
                     isInCodeBlock = false
                 } else {
                     flushParagraph()
                     isInCodeBlock = true
+                    // Everything after the opening ``` (e.g. ```tsx) is
+                    // the language hint. Strip any extra whitespace.
+                    let hint = String(trimmedLine.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+                    codeLanguage = hint.isEmpty ? nil : hint
                 }
                 continue
             }
@@ -2162,44 +2186,43 @@ enum MarkdownPreviewParser {
                 continue
             }
 
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.isEmpty {
+            if trimmedLine.isEmpty {
                 flushParagraph()
                 continue
             }
 
-            if trimmed == "---" || trimmed == "***" || trimmed == "___" {
+            if trimmedLine == "---" || trimmedLine == "***" || trimmedLine == "___" {
                 flushParagraph()
                 blocks.append(MarkdownPreviewBlock(kind: .divider, text: ""))
                 continue
             }
 
-            if let heading = headingBlock(from: trimmed) {
+            if let heading = headingBlock(from: trimmedLine) {
                 flushParagraph()
                 blocks.append(heading)
                 continue
             }
 
-            if trimmed.hasPrefix(">") {
+            if trimmedLine.hasPrefix(">") {
                 flushParagraph()
-                let quote = trimmed.dropFirst().trimmingCharacters(in: .whitespaces)
+                let quote = trimmedLine.dropFirst().trimmingCharacters(in: .whitespaces)
                 blocks.append(MarkdownPreviewBlock(kind: .quote, text: quote))
                 continue
             }
 
-            if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
+            if trimmedLine.hasPrefix("- ") || trimmedLine.hasPrefix("* ") {
                 flushParagraph()
-                blocks.append(MarkdownPreviewBlock(kind: .unorderedList, text: String(trimmed.dropFirst(2))))
+                blocks.append(MarkdownPreviewBlock(kind: .unorderedList, text: String(trimmedLine.dropFirst(2))))
                 continue
             }
 
-            if let ordered = orderedListText(from: trimmed) {
+            if let ordered = orderedListText(from: trimmedLine) {
                 flushParagraph()
                 blocks.append(MarkdownPreviewBlock(kind: .orderedList, text: ordered))
                 continue
             }
 
-            paragraph.append(trimmed)
+            paragraph.append(trimmedLine)
         }
 
         if isInCodeBlock {
@@ -2319,7 +2342,7 @@ enum HTMLPreviewParser {
     }
 }
 
-private struct MarkdownPreviewBlockView: View {
+struct MarkdownPreviewBlockView: View {
     let block: MarkdownPreviewBlock
 
     var body: some View {
@@ -2357,15 +2380,7 @@ private struct MarkdownPreviewBlockView: View {
             }
             .font(.body)
         case .code:
-            ScrollView(.horizontal, showsIndicators: false) {
-                Text(block.text)
-                    .font(.system(.body, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            MarkdownCodeBlockView(text: block.text, languageHint: block.info)
         case .divider:
             Divider()
                 .padding(.vertical, 8)
@@ -2383,6 +2398,159 @@ private struct MarkdownPreviewBlockView: View {
 
     private func inlineText(_ text: String) -> AttributedString {
         (try? AttributedString(markdown: text)) ?? AttributedString(text)
+    }
+}
+
+// MARK: - Fenced code block view
+
+/// Renders a fenced code block with a small header (language label + copy
+/// button) and a syntax-highlighted body. Used by Agent-mode assistant
+/// messages and the Markdown preview pane. When `languageHint` maps to a
+/// known `Language`, `SyntaxHighlighter` colors the body via the shared
+/// editor pipeline; unknown languages fall through to monospaced plain
+/// text. The body is selectable and horizontally scrollable so long lines
+/// don't force the whole chat column wider.
+struct MarkdownCodeBlockView: View {
+    let text: String
+    let languageHint: String?
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var resolvedLanguage: Language? {
+        MarkdownCodeBlockView.language(forHint: languageHint)
+    }
+
+    private var theme: EditorTheme {
+        // Stay readable on both light and dark window backgrounds. The
+        // user's editor theme isn't threaded through here — code blocks
+        // in the chat use a fixed palette so they look the same across
+        // every Agent message.
+        colorScheme == .dark ? .graphite : .paper
+    }
+
+    private var displayLanguageLabel: String {
+        if let hint = languageHint?.trimmingCharacters(in: .whitespaces), !hint.isEmpty {
+            return hint
+        }
+        return "code"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Text(displayLanguageLabel)
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textCase(.lowercase)
+                Spacer(minLength: 0)
+                MarkdownCodeBlockCopyButton(text: text)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.primary.opacity(0.04))
+
+            Divider()
+                .opacity(0.4)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                bodyText
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .background(Color(nsColor: theme.backgroundColor).opacity(0.75))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private var bodyText: some View {
+        if let lang = resolvedLanguage {
+            // SyntaxHighlighter returns NSAttributedString — convert to
+            // SwiftUI's AttributedString for native rendering with
+            // selectable text. This runs synchronously per body pass,
+            // which is fine because chat code blocks are small.
+            let monoFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+            let ns = SyntaxHighlighter.highlightSync(text, language: lang, theme: theme, font: monoFont)
+            Text(AttributedString(ns))
+                .textSelection(.enabled)
+        } else {
+            Text(text)
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+        }
+    }
+
+    /// Maps a fenced-block info string to a `Language` value. Common
+    /// aliases (`sh`/`bash` → shell, `py` → python, `tsx`/`jsx` → ts/js,
+    /// etc.) are resolved here so model output can use whatever tag it
+    /// prefers without losing highlighting.
+    static func language(forHint hint: String?) -> Language? {
+        guard let raw = hint?.trimmingCharacters(in: .whitespaces).lowercased(),
+              !raw.isEmpty else { return nil }
+        switch raw {
+        case "swift": return .swift
+        case "py", "python", "python3": return .python
+        case "rb", "ruby": return .ruby
+        case "php": return .php
+        case "java": return .java
+        case "js", "javascript", "jsx", "mjs", "cjs", "node": return .javascript
+        case "ts", "typescript", "tsx": return .typescript
+        case "go", "golang": return .go
+        case "html", "htm": return .html
+        case "css", "scss", "sass", "less": return .css
+        case "json", "json5": return .json
+        case "md", "markdown": return .markdown
+        case "sh", "bash", "zsh", "shell", "console", "shellsession": return .shell
+        case "yml", "yaml": return .yaml
+        case "toml": return .toml
+        case "xml", "svg", "plist": return .xml
+        case "sql": return .sql
+        case "dockerfile", "docker": return .dockerfile
+        case "makefile", "make", "mk": return .makefile
+        case "ini", "conf", "config": return .ini
+        case "env", "dotenv": return .env
+        case "rs", "rust": return .rust
+        case "c", "h": return .c
+        case "cpp", "c++", "cxx", "cc", "hpp", "hxx": return .cpp
+        case "cs", "csharp", "c#": return .csharp
+        default: return nil
+        }
+    }
+}
+
+private struct MarkdownCodeBlockCopyButton: View {
+    let text: String
+    @State private var didCopy = false
+
+    var body: some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            withAnimation(.easeOut(duration: 0.15)) { didCopy = true }
+            // Reset the affordance after a short beat so back-to-back
+            // copies still visibly confirm.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+                withAnimation(.easeOut(duration: 0.2)) { didCopy = false }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(didCopy ? "Copied" : "Copy")
+                    .font(.system(size: 10, weight: .medium))
+            }
+            .foregroundStyle(didCopy ? Color.green : Color.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Copy code")
     }
 }
 

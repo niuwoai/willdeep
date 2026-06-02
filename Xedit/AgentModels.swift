@@ -134,6 +134,11 @@ struct AgentSession: Identifiable, Codable, Equatable {
     let createdAt: Date
     var updatedAt: Date
     var messages: [AgentMessage]
+    /// True once the Agent has successfully applied at least one patch in
+    /// this session. Drives whether the "正在编辑 / N 个文件已更改" worktree
+    /// card appears — empty/new sessions never show it, even when the
+    /// underlying repo has unrelated uncommitted changes.
+    var didEditFiles: Bool
 
     init(
         id: UUID = UUID(),
@@ -142,7 +147,8 @@ struct AgentSession: Identifiable, Codable, Equatable {
         modelID: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
-        messages: [AgentMessage] = []
+        messages: [AgentMessage] = [],
+        didEditFiles: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -151,11 +157,29 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.messages = messages
+        self.didEditFiles = didEditFiles
     }
 
     var workspaceName: String {
         guard let path = workspaceRootPath, !path.isEmpty else { return "No workspace" }
         return URL(fileURLWithPath: path).lastPathComponent
+    }
+
+    // Custom decoding so older session JSON without `didEditFiles` loads cleanly.
+    enum CodingKeys: String, CodingKey {
+        case id, title, workspaceRootPath, modelID, createdAt, updatedAt, messages, didEditFiles
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(UUID.self, forKey: .id)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.workspaceRootPath = try c.decodeIfPresent(String.self, forKey: .workspaceRootPath)
+        self.modelID = try c.decodeIfPresent(String.self, forKey: .modelID)
+        self.createdAt = try c.decode(Date.self, forKey: .createdAt)
+        self.updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        self.messages = try c.decode([AgentMessage].self, forKey: .messages)
+        self.didEditFiles = try c.decodeIfPresent(Bool.self, forKey: .didEditFiles) ?? false
     }
 }
 

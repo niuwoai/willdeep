@@ -101,7 +101,7 @@ struct AgentPanelView: View {
                         AgentPatchProposalCard(proposal: proposal)
                     }
 
-                    if !appState.agentWorktreeChanges.isEmpty {
+                    if appState.agentSessionDidEditFiles && !appState.agentWorktreeChanges.isEmpty {
                         AgentWorktreeChangeCard()
                     }
                 }
