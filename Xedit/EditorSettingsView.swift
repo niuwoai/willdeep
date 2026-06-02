@@ -68,9 +68,16 @@ struct EditorSettingsView: View {
                 }
         }
         .padding(20)
-        .frame(width: 560)
-        .frame(minHeight: 460)
+        .frame(
+            minWidth: 560,
+            idealWidth: 760,
+            maxWidth: .infinity,
+            minHeight: 520,
+            idealHeight: 680,
+            maxHeight: .infinity
+        )
         .background(SettingsKeyboardShortcutHandler())
+        .background(SettingsWindowResizableEnforcer())
         .onAppear {
             refreshCLIState()
         }
@@ -1166,5 +1173,40 @@ private struct AgentProviderEntryEditor: View {
         text.components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
+    }
+}
+
+/// SwiftUI's `Settings { }` scene installs an `NSPanel` whose default
+/// styleMask omits `.resizable`, so the user can't drag the corners
+/// even after the SwiftUI view advertises `maxWidth: .infinity`.  We
+/// reach into the host window once it's available and add the
+/// resizable + miniaturizable + zoom bits, drop the contentMaxSize
+/// cap, and give it a sensible content min size.  Result: feels like
+/// a normal mac document window.
+private struct SettingsWindowResizableEnforcer: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async { Self.apply(to: view.window) }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { Self.apply(to: nsView.window) }
+    }
+
+    private static func apply(to window: NSWindow?) {
+        guard let window else { return }
+        var mask = window.styleMask
+        mask.insert(.resizable)
+        mask.insert(.miniaturizable)
+        mask.insert(.closable)
+        mask.insert(.titled)
+        window.styleMask = mask
+        window.contentMinSize = NSSize(width: 560, height: 520)
+        window.contentMaxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
+                                       height: CGFloat.greatestFiniteMagnitude)
+        window.isMovableByWindowBackground = false
+        window.standardWindowButton(.zoomButton)?.isEnabled = true
+        window.standardWindowButton(.miniaturizeButton)?.isEnabled = true
     }
 }

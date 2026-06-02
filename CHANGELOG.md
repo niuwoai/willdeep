@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.47.0-rc4 - 2026-06-02
+
+- **Resizable Settings window.** Settings used to come up as a fixed 560-wide panel — the Agent provider editor in particular ran out of room and you couldn't drag the corners to fix it. Replaced the hard `frame(width: 560)` lock with `minWidth: 560 / idealWidth: 760 / maxWidth: .infinity` (height analogous, ideal 680), and added a `SettingsWindowResizableEnforcer` NSViewRepresentable that reaches into the host `NSWindow` and ORs `.resizable / .miniaturizable / .closable / .titled` into its styleMask, drops the contentMaxSize cap, and enables the zoom/minimize buttons. End result: behaves like a normal mac document window — drag any corner, minimize, zoom, all of it.
+
 ## 1.47.0-rc3 - 2026-06-02
 
 - Added an Apache License 2.0 `LICENSE` file at the repo root. README license badges now point to the actual file (blue "Apache 2.0" instead of grey "see LICENSE"), and both English and Chinese license sections were rewritten to state the terms explicitly (commercial use OK, retain notices, patent grant included) instead of the previous "source-available pending an explicit license" placeholder.
