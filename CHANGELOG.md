@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.47.0-rc3 - 2026-06-02
+
+- Added an Apache License 2.0 `LICENSE` file at the repo root. README license badges now point to the actual file (blue "Apache 2.0" instead of grey "see LICENSE"), and both English and Chinese license sections were rewritten to state the terms explicitly (commercial use OK, retain notices, patent grant included) instead of the previous "source-available pending an explicit license" placeholder.
+
 ## 1.47.0-rc2 - 2026-06-02
 
 - Added an **Agent Mode** button to the "No Folder Open" empty-state hero. Same row as Open File / Open Folder, but tinted in the accent color to read as the primary alternative for users who don't need to open a project before chatting. One click calls `setAppMode(.agent)` and lands directly in a workspace-free chat session. Subhead reworded to mention the new option. `EmptyWorkspaceButtonStyle` gained an optional `tint:` parameter so the accent treatment is reusable.

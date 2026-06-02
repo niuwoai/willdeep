@@ -8,8 +8,8 @@
 
 [![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.47.0--rc2-blue)](CHANGELOG.md)
-[![License](https://img.shields.io/badge/license-see%20LICENSE-lightgrey)](#license)
+[![Version](https://img.shields.io/badge/version-1.47.0--rc3-blue)](CHANGELOG.md)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *No Electron. No 800MB Helper processes. No "loading workspace…" spinner that eats your afternoon.*
 
@@ -149,7 +149,7 @@ When you open a PR, please:
 
 ## License
 
-See [LICENSE](LICENSE) if present in the repository. Otherwise, treat the code as source-available pending an explicit license being added — open an issue if you need clarity for downstream use.
+VeilWriter is licensed under the [Apache License 2.0](LICENSE). You are free to use, modify, and redistribute the code — including for commercial purposes — provided you comply with the terms in the license file (notably attribution and the patent grant clauses).
 
 ---
 
@@ -176,8 +176,8 @@ See [LICENSE](LICENSE) if present in the repository. Otherwise, treat the code a
 
 [![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.47.0--rc2-blue)](CHANGELOG.md)
-[![License](https://img.shields.io/badge/license-see%20LICENSE-lightgrey)](#license)
+[![Version](https://img.shields.io/badge/version-1.47.0--rc3-blue)](CHANGELOG.md)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *不靠 Electron。没有 800MB 的 Helper 子进程。没有那种让你怀疑人生的 "loading workspace…"。*
 
@@ -317,7 +317,7 @@ VeilWriter 当前在 `1.43.x` 上活跃迭代。编辑器主体已经很稳，�
 
 ## License
 
-参见仓库里的 [LICENSE](LICENSE)（如果存在）。如果还没加，请把代码当作 source-available 看待，需要明确授权用于下游分发时请开个 Issue。
+VeilWriter 采用 [Apache License 2.0](LICENSE) 许可。你可以自由使用、修改、再分发本项目（包括商用），前提是遵守许可证条款（保留版权声明、专利授权条款等）。
 
 ---
 
