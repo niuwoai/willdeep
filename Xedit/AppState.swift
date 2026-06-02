@@ -95,6 +95,14 @@ final class AppState: ObservableObject {
     /// cleared. The popover lives in the composer; AppState only stores
     /// the staged selection so the send path can splice them in.
     @Published var agentPendingSkills: [AgentSkillEntry] = []
+    /// Files the user attached via the `@` picker for the next send.
+    /// Same lifecycle as `agentPendingSkills` — chip strip in the
+    /// composer, content spliced into the user prompt at dispatch.
+    @Published var agentPendingFiles: [AgentFileAttachment] = []
+    /// Whether the next send should include a workspace overview block
+    /// (current root + truncated file tree). Triggered by the `@workspace`
+    /// shortcut in the `@` picker.
+    @Published var agentPendingIncludeWorkspaceOverview: Bool = false
     /// Top-level interaction mode for the active session. Plan locks
     /// write/exec tools until the user approves a plan; Goal pins an
     /// objective banner that's added to every system prompt.
@@ -374,23 +382,32 @@ final class AppState: ObservableObject {
         self.selectedText = selectedText
     }
 
-    /// Submit the composer (text + staged images). If the agent is already
-    /// responding, the message is queued and consumed when the current turn
-    /// finishes. Editor-mode and Agent-mode share this entry point.
+    /// Submit the composer (text + staged images + skills + files + optional
+    /// workspace overview). Queues if the agent is already responding.
+    /// Editor-mode and Agent-mode share this entry point.
     func sendAgentMessage() {
         let userText = agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
         let images = agentPendingImages
         let skills = agentPendingSkills
-        guard !userText.isEmpty || !images.isEmpty || !skills.isEmpty else { return }
+        let files = agentPendingFiles
+        let includeWorkspaceOverview = agentPendingIncludeWorkspaceOverview
+        guard !userText.isEmpty || !images.isEmpty || !skills.isEmpty || !files.isEmpty || includeWorkspaceOverview else { return }
 
-        // Splice attached skills in front of the user's prose under a
-        // clearly-labelled header so the model treats them as task
-        // guidance rather than verbatim user text.
-        let prompt = composeSkillAttachedPrompt(userText: userText, skills: skills)
+        // Splice attached context (skills / files / workspace overview) in
+        // front of the user's prose under labelled headers so the model
+        // treats them as task setup rather than verbatim user text.
+        let prompt = composeAttachedPrompt(
+            userText: userText,
+            skills: skills,
+            files: files,
+            includeWorkspaceOverview: includeWorkspaceOverview
+        )
 
         agentInput = ""
         agentPendingImages = []
         agentPendingSkills = []
+        agentPendingFiles = []
+        agentPendingIncludeWorkspaceOverview = false
 
         if isAgentResponding {
             agentQueuedMessages.append(AgentQueuedMessage(text: prompt, images: images))
@@ -400,13 +417,24 @@ final class AppState: ObservableObject {
         dispatchAgentMessage(text: prompt, images: images)
     }
 
-    /// Wraps each attached skill's SKILL.md body under a fenced header
-    /// and stitches them on top of the user's own text. Returns the
-    /// original text unchanged when no skills are attached.
-    private func composeSkillAttachedPrompt(userText: String, skills: [AgentSkillEntry]) -> String {
-        guard !skills.isEmpty else { return userText }
+    /// Build the outgoing prompt, prepending sections for attached
+    /// skills, file contents (re-read from disk so the model sees the
+    /// latest), and an optional workspace overview. Returns the user
+    /// text unchanged when nothing is attached.
+    private func composeAttachedPrompt(
+        userText: String,
+        skills: [AgentSkillEntry],
+        files: [AgentFileAttachment],
+        includeWorkspaceOverview: Bool
+    ) -> String {
+        guard !skills.isEmpty || !files.isEmpty || includeWorkspaceOverview else { return userText }
         var blocks: [String] = []
-        blocks.append("The user attached the following Codex skill(s) for this turn — treat them as task guidance, not verbatim user text:")
+        blocks.append("The user attached the following context for this turn — treat it as task setup, not verbatim user text:")
+
+        if includeWorkspaceOverview {
+            blocks.append(workspaceOverviewBlock())
+        }
+
         for skill in skills {
             let body = AgentSkillDirectory.loadBody(for: skill) ?? "(skill body unavailable)"
             blocks.append("""
@@ -416,11 +444,70 @@ final class AppState: ObservableObject {
             \(body)
             """)
         }
+
+        for file in files {
+            let body = readAttachedFileBody(at: file.url)
+            blocks.append("""
+            ### File: \(file.relativePath)
+
+            \(body)
+            """)
+        }
+
         if !userText.isEmpty {
             blocks.append("---")
             blocks.append(userText)
         }
         return blocks.joined(separator: "\n\n")
+    }
+
+    /// Fenced excerpt of a file's contents, capped to keep one
+    /// attachment from blowing the context budget. Falls back to a
+    /// short placeholder when the file is unreadable or binary.
+    private func readAttachedFileBody(at url: URL) -> String {
+        let maxChars = 20_000
+        guard let data = try? Data(contentsOf: url),
+              let text = String(data: data, encoding: .utf8) else {
+            return "```\n(file unreadable or binary)\n```"
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body: String
+        if trimmed.count > maxChars {
+            let idx = trimmed.index(trimmed.startIndex, offsetBy: maxChars)
+            body = "\(trimmed[..<idx])\n\n[truncated at \(maxChars) chars]"
+        } else {
+            body = trimmed
+        }
+        return "```\n\(body)\n```"
+    }
+
+    /// A compact workspace overview: root path + a flat list of project
+    /// files (already cached via `quickOpenFiles`). Capped so even a
+    /// large repo overview stays reasonable.
+    private func workspaceOverviewBlock() -> String {
+        guard let root = rootDirectory else {
+            return "### Workspace\n(no folder is currently open)"
+        }
+        let rootPath = root.standardizedFileURL.path
+        let entries = quickOpenFiles
+            .prefix(120)
+            .map { url -> String in
+                let path = url.standardizedFileURL.path
+                guard path.hasPrefix(rootPath) else { return url.lastPathComponent }
+                let rel = String(path.dropFirst(rootPath.count))
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                return rel.isEmpty ? url.lastPathComponent : rel
+            }
+        let extraCount = max(0, quickOpenFiles.count - 120)
+        let extraLine = extraCount > 0 ? "\n…and \(extraCount) more files" : ""
+        return """
+        ### Workspace
+        Root: \(rootPath)
+        Files (first \(entries.count)):
+        ```
+        \(entries.joined(separator: "\n"))\(extraLine)
+        ```
+        """
     }
 
     // MARK: - Skill attachment
@@ -435,6 +522,33 @@ final class AppState: ObservableObject {
     /// Drop a single staged skill by identifier.
     func detachAgentSkill(identifier: String) {
         agentPendingSkills.removeAll { $0.identifier == identifier }
+    }
+
+    // MARK: - File / workspace attachment
+
+    /// Stage a workspace file for the next send. Dedup by URL.
+    func attachAgentFile(url: URL) {
+        let standardized = url.standardizedFileURL
+        guard !agentPendingFiles.contains(where: { $0.url.standardizedFileURL == standardized }) else { return }
+        let relative: String = {
+            guard let root = rootDirectory?.standardizedFileURL.path else { return standardized.lastPathComponent }
+            let path = standardized.path
+            guard path.hasPrefix(root) else { return standardized.lastPathComponent }
+            let rel = String(path.dropFirst(root.count))
+                .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            return rel.isEmpty ? standardized.lastPathComponent : rel
+        }()
+        agentPendingFiles.append(AgentFileAttachment(url: standardized, relativePath: relative))
+    }
+
+    /// Drop a single staged file by id (which is its standardized path).
+    func detachAgentFile(id: String) {
+        agentPendingFiles.removeAll { $0.id == id }
+    }
+
+    /// Toggle whether the workspace overview rides along next send.
+    func toggleAgentWorkspaceOverview() {
+        agentPendingIncludeWorkspaceOverview.toggle()
     }
 
     // MARK: - Interaction modes (plan / goal)
@@ -537,6 +651,23 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Parse the most recent assistant message for a ```goal-check block
+    /// and apply its done/undone flips to `agentCurrentGoal`. Called
+    /// from the agent loop defer right after the plan capture. The
+    /// user retains override authority: any flip we apply here can be
+    /// reversed instantly with a manual checkbox toggle; conversely a
+    /// later ```goal-check from the model can re-flip a user override.
+    func captureAgentGoalEvaluationFromLatestMessage() {
+        guard agentInteractionMode == .goal,
+              let goal = agentCurrentGoal,
+              !goal.checklist.isEmpty else { return }
+        guard let last = agentMessages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else { return }
+        if let updated = AgentGoalChecklistParser.applyEvaluation(to: goal, from: last.content) {
+            agentCurrentGoal = updated
+            persistActiveAgentSession()
+        }
+    }
+
     /// Manually override a single step's status from the UI checkbox.
     /// Mirrors the model-driven path: bumps the plan to .executing on
     /// first touch, .done when everything is terminal.
@@ -552,6 +683,97 @@ final class AppState: ObservableObject {
         }
         agentCurrentPlan = plan
         persistActiveAgentSession()
+    }
+
+    /// Edit a step's text in place — handy when the agent's wording
+    /// isn't quite right and the user wants to fix it before/during
+    /// execution. Status is preserved.
+    func editAgentPlanStepText(id: UUID, newText: String) {
+        guard var plan = agentCurrentPlan,
+              let idx = plan.steps.firstIndex(where: { $0.id == id }) else { return }
+        let trimmed = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        plan.steps[idx].text = trimmed
+        agentCurrentPlan = plan
+        persistActiveAgentSession()
+    }
+
+    /// Insert a fresh pending step before/after another step (or at the
+    /// list start/end if `relativeToID` is nil). Plan status is left
+    /// alone — adding a step to an executing plan keeps it executing.
+    func insertAgentPlanStep(text: String, relativeToID: UUID?, before: Bool) {
+        guard var plan = agentCurrentPlan else { return }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let newStep = AgentPlan.Step(text: trimmed, status: .pending)
+        let insertIdx: Int
+        if let relativeToID, let i = plan.steps.firstIndex(where: { $0.id == relativeToID }) {
+            insertIdx = before ? i : i + 1
+        } else {
+            insertIdx = before ? 0 : plan.steps.count
+        }
+        plan.steps.insert(newStep, at: insertIdx)
+        // If the plan was already .done but a step was added, it's not
+        // done anymore — bump it back to executing.
+        if plan.status == .done {
+            plan.status = .executing
+        }
+        agentCurrentPlan = plan
+        persistActiveAgentSession()
+    }
+
+    /// Remove a step entirely. Promotes to .done if the remaining steps
+    /// are all terminal; demotes to .approved if the plan becomes empty.
+    func removeAgentPlanStep(id: UUID) {
+        guard var plan = agentCurrentPlan,
+              let idx = plan.steps.firstIndex(where: { $0.id == id }) else { return }
+        plan.steps.remove(at: idx)
+        let terminal: Set<AgentPlan.StepStatus> = [.done, .skipped, .failed]
+        if plan.steps.isEmpty {
+            plan.status = .approved   // back to "no progress yet" rather than .done
+        } else if plan.steps.allSatisfy({ terminal.contains($0.status) }) {
+            plan.status = .done
+        }
+        agentCurrentPlan = plan
+        persistActiveAgentSession()
+    }
+
+    /// Reset a step (and every step after it) back to .pending, then
+    /// ask the agent to resume from that point. "Run from here" — the
+    /// common need when an earlier step's output turned out wrong and
+    /// every downstream step has to be redone.
+    func restartAgentPlanFromStep(id: UUID, note: String) {
+        guard agentInteractionMode == .plan,
+              var plan = agentCurrentPlan,
+              let startIdx = plan.steps.firstIndex(where: { $0.id == id }) else { return }
+        for i in startIdx..<plan.steps.count {
+            plan.steps[i].status = .pending
+        }
+        // Plan stays approved/executing — we're not redoing the
+        // approval gate, just rewinding the execution head.
+        if plan.status == .done { plan.status = .executing }
+        agentCurrentPlan = plan
+        persistActiveAgentSession()
+
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let header = "Please restart execution from step \(startIdx + 1) onward."
+        let prompt: String
+        if trimmed.isEmpty {
+            prompt = "\(header) Steps \(startIdx + 1)..\(plan.steps.count) have been reset to pending. Pick up there and emit a `progress` block as you go."
+        } else {
+            prompt = """
+            \(header) Steps \(startIdx + 1)..\(plan.steps.count) have been reset to pending. Here's why:
+
+            \(trimmed)
+
+            Pick up from step \(startIdx + 1) and emit a `progress` block as you go.
+            """
+        }
+        if isAgentResponding {
+            agentQueuedMessages.append(AgentQueuedMessage(text: prompt, images: []))
+            return
+        }
+        dispatchAgentMessage(text: prompt, images: [])
     }
 
     /// Replace the goal definition for Goal mode. Empty values clear it.
@@ -1245,6 +1467,7 @@ final class AppState: ObservableObject {
             self.isAgentResponding = false
             self.agentRequestTask = nil
             self.captureAgentPlanFromLatestMessage()
+            self.captureAgentGoalEvaluationFromLatestMessage()
             self.persistActiveAgentSession()
             self.maybeAutoCompressContext()
             self.consumeNextQueuedMessageIfNeeded()

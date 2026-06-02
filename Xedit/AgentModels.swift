@@ -484,6 +484,24 @@ struct AgentConfiguration: Codable, Equatable {
         if result.proModel.isEmpty {
             result.proModel = preset?.defaultProModel ?? result.model
         }
+        // Detect a stale model carried over from a previous provider —
+        // e.g. user had OpenAI's `gpt-3.5-16k` as flashModel, then
+        // switched provider to DeepSeek in Settings. Without this check
+        // the chat-mode model picker keeps offering `gpt-3.5-16k` as
+        // the "route default", which is just confusing. If the model
+        // string contains no hint that matches the current preset,
+        // reset to that preset's documented default.
+        if let preset, preset.id != AgentProviderPreset.customID {
+            if !preset.recognizesModelID(result.flashModel) {
+                result.flashModel = preset.defaultFlashModel
+            }
+            if !preset.recognizesModelID(result.proModel) {
+                result.proModel = preset.defaultProModel
+            }
+            if !preset.recognizesModelID(result.model) {
+                result.model = preset.defaultModel
+            }
+        }
         if result.flashModel.isEmpty {
             result.flashModel = AgentConfiguration.default.flashModel
         }
@@ -533,6 +551,13 @@ struct AgentProviderPreset: Identifiable, Equatable {
     let defaultProModel: String
     let supportsModelFetch: Bool
     let supportsImageInput: Bool
+    /// Short list of substrings that identify a model as belonging to
+    /// this provider — used by `normalized()` to detect when a stale
+    /// flash/pro model name from a previous provider got carried over
+    /// after the user switched providers in Settings. Best-effort: an
+    /// unrecognised name doesn't crash, it just sticks until the user
+    /// picks one from the live model list.
+    let modelHints: [String]
 
     static let openAIID = "openai"
     static let customID = "custom"
@@ -556,7 +581,8 @@ struct AgentProviderPreset: Identifiable, Equatable {
         defaultFlashModel: String? = nil,
         defaultProModel: String? = nil,
         supportsModelFetch: Bool,
-        supportsImageInput: Bool = true
+        supportsImageInput: Bool = true,
+        modelHints: [String] = []
     ) {
         self.id = id
         self.displayName = displayName
@@ -565,6 +591,19 @@ struct AgentProviderPreset: Identifiable, Equatable {
         self.defaultProModel = defaultProModel ?? defaultModel
         self.supportsModelFetch = supportsModelFetch
         self.supportsImageInput = supportsImageInput
+        self.modelHints = modelHints
+    }
+
+    /// Quick "does this model name look like it could be one of mine"
+    /// check. Custom provider says yes to everything (no opinion); a
+    /// preset without hints also says yes (back-compat). Lowercase
+    /// substring match against `modelHints`.
+    func recognizesModelID(_ rawID: String) -> Bool {
+        let id = rawID.lowercased()
+        guard !id.isEmpty else { return true }
+        guard self.id != Self.customID else { return true }
+        guard !modelHints.isEmpty else { return true }
+        return modelHints.contains { id.contains($0.lowercased()) }
     }
 
     static let all: [AgentProviderPreset] = [
@@ -574,7 +613,8 @@ struct AgentProviderPreset: Identifiable, Equatable {
             baseURL: "https://api.openai.com/v1",
             defaultModel: "gpt-4.1-mini",
             defaultProModel: "gpt-4.1",
-            supportsModelFetch: true
+            supportsModelFetch: true,
+            modelHints: ["gpt-", "o1", "o3", "text-embedding", "davinci"]
         ),
         AgentProviderPreset(
             id: "dashscope",
@@ -582,7 +622,8 @@ struct AgentProviderPreset: Identifiable, Equatable {
             baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
             defaultModel: "qwen-plus",
             defaultProModel: "qwen-max",
-            supportsModelFetch: true
+            supportsModelFetch: true,
+            modelHints: ["qwen", "qwq"]
         ),
         AgentProviderPreset(
             id: "deepseek",
@@ -591,28 +632,32 @@ struct AgentProviderPreset: Identifiable, Equatable {
             defaultModel: "deepseek-v4-flash",
             defaultProModel: "deepseek-v4-pro",
             supportsModelFetch: true,
-            supportsImageInput: false
+            supportsImageInput: false,
+            modelHints: ["deepseek"]
         ),
         AgentProviderPreset(
             id: "kimi",
             displayName: "Kimi",
             baseURL: "https://api.moonshot.cn/v1",
             defaultModel: "kimi-k2.5",
-            supportsModelFetch: true
+            supportsModelFetch: true,
+            modelHints: ["kimi"]
         ),
         AgentProviderPreset(
             id: "moonshot",
             displayName: "Moonshot",
             baseURL: "https://api.moonshot.cn/v1",
             defaultModel: "moonshot-v1-8k",
-            supportsModelFetch: true
+            supportsModelFetch: true,
+            modelHints: ["moonshot"]
         ),
         AgentProviderPreset(
             id: "claude",
             displayName: "Claude",
             baseURL: "https://api.anthropic.com/v1",
             defaultModel: "claude-sonnet-4-5",
-            supportsModelFetch: true
+            supportsModelFetch: true,
+            modelHints: ["claude", "anthropic"]
         ),
         AgentProviderPreset(
             id: customID,
@@ -802,5 +847,175 @@ struct AgentErrorDetails: Equatable, Identifiable {
         let id = UUID()
         let title: String
         let text: String
+    }
+}
+
+/// A file the user attached via the composer's `@` picker. We carry the
+/// URL (for display + dedup) and a workspace-relative display path; the
+/// actual contents get re-read at send time so the model always sees
+/// the latest on-disk state, not a stale snapshot.
+struct AgentFileAttachment: Identifiable, Equatable {
+    let url: URL
+    let relativePath: String
+
+    var id: String { url.standardizedFileURL.path }
+}
+
+// MARK: - Multi-provider library
+
+/// One entry in the user's saved provider library. Each entry carries
+/// its own provider preset, base URL, API key, and primary/alternate
+/// model lists for both flash and pro tiers. The "active" entry drives
+/// `AgentConfiguration` for the current chat; alternates show up in
+/// the chat-mode picker as one-click switches.
+struct AgentProviderEntry: Identifiable, Codable, Equatable {
+    let id: UUID
+    var providerID: String
+    var displayName: String
+    var baseURL: String
+    /// Whether this entry should be used in routing right now. Exactly
+    /// one entry in `agentProviderLibrary` is the active one; toggling
+    /// activation is the library's job, not this struct's.
+    var apiKey: String
+    /// Primary model for Auto/Flash routing. Required when this entry
+    /// is active.
+    var flashPrimary: String
+    /// Alternate flash models surfaced in the chat picker so the user
+    /// can one-click try a different cheap model without leaving the
+    /// conversation.
+    var flashAlternates: [String]
+    /// Primary model for Pro routing.
+    var proPrimary: String
+    /// Alternate pro models surfaced in the chat picker.
+    var proAlternates: [String]
+
+    init(
+        id: UUID = UUID(),
+        providerID: String,
+        displayName: String? = nil,
+        baseURL: String,
+        apiKey: String = "",
+        flashPrimary: String,
+        flashAlternates: [String] = [],
+        proPrimary: String,
+        proAlternates: [String] = []
+    ) {
+        self.id = id
+        self.providerID = providerID
+        self.displayName = (displayName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                            ? displayName!
+                            : AgentProviderPreset.preset(id: providerID)?.displayName ?? providerID)
+        self.baseURL = baseURL
+        self.apiKey = apiKey
+        self.flashPrimary = flashPrimary
+        self.flashAlternates = AgentProviderEntry.cleanList(flashAlternates, excluding: flashPrimary)
+        self.proPrimary = proPrimary
+        self.proAlternates = AgentProviderEntry.cleanList(proAlternates, excluding: proPrimary)
+    }
+
+    /// All flash candidates with the primary first — convenient for
+    /// picker menus.
+    var allFlashModels: [String] {
+        var out = [flashPrimary]
+        out.append(contentsOf: flashAlternates)
+        return out.filter { !$0.isEmpty }
+    }
+
+    /// All pro candidates with the primary first.
+    var allProModels: [String] {
+        var out = [proPrimary]
+        out.append(contentsOf: proAlternates)
+        return out.filter { !$0.isEmpty }
+    }
+
+    /// Build an `AgentConfiguration` snapshot from this entry, choosing
+    /// a specific tier model (or falling back to the primaries).
+    func makeConfiguration(
+        flashOverride: String? = nil,
+        proOverride: String? = nil,
+        routingMode: AgentModelRoutingMode = .auto,
+        imageDescription: AgentImageDescriptionConfiguration = .default
+    ) -> AgentConfiguration {
+        let flash = flashOverride.nonEmpty ?? flashPrimary
+        let pro = proOverride.nonEmpty ?? proPrimary
+        return AgentConfiguration(
+            providerID: providerID,
+            baseURL: baseURL,
+            model: routingMode == .pro ? pro : flash,
+            flashModel: flash,
+            proModel: pro,
+            routingMode: routingMode,
+            imageDescription: imageDescription,
+            apiKey: apiKey
+        )
+    }
+
+    private static func cleanList(_ list: [String], excluding primary: String) -> [String] {
+        var seen = Set<String>()
+        seen.insert(primary)
+        return list
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .filter { seen.insert($0).inserted }
+    }
+}
+
+private extension Optional where Wrapped == String {
+    var nonEmpty: String? {
+        guard let v = self?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty else { return nil }
+        return v
+    }
+}
+
+/// Top-level container for the multi-provider library. Knows which
+/// entry is currently active. Persisted as a single JSON blob.
+struct AgentProviderLibrary: Codable, Equatable {
+    var entries: [AgentProviderEntry]
+    var activeID: UUID?
+
+    init(entries: [AgentProviderEntry] = [], activeID: UUID? = nil) {
+        self.entries = entries
+        self.activeID = activeID ?? entries.first?.id
+    }
+
+    var active: AgentProviderEntry? {
+        guard let id = activeID else { return entries.first }
+        return entries.first(where: { $0.id == id }) ?? entries.first
+    }
+
+    mutating func upsert(_ entry: AgentProviderEntry) {
+        if let idx = entries.firstIndex(where: { $0.id == entry.id }) {
+            entries[idx] = entry
+        } else {
+            entries.append(entry)
+        }
+        if activeID == nil { activeID = entry.id }
+    }
+
+    mutating func remove(id: UUID) {
+        entries.removeAll { $0.id == id }
+        if activeID == id { activeID = entries.first?.id }
+    }
+
+    mutating func setActive(_ id: UUID) {
+        guard entries.contains(where: { $0.id == id }) else { return }
+        activeID = id
+    }
+
+    /// Promote a legacy single-provider AgentConfiguration to the new
+    /// library shape. The single entry becomes the active one; its
+    /// existing flash/pro models start with no alternates. Caller
+    /// should only invoke this when no library yet exists in storage.
+    static func migrate(from configuration: AgentConfiguration) -> AgentProviderLibrary {
+        let entry = AgentProviderEntry(
+            providerID: configuration.providerID,
+            baseURL: configuration.baseURL,
+            apiKey: configuration.apiKey,
+            flashPrimary: configuration.flashModel.isEmpty ? configuration.model : configuration.flashModel,
+            flashAlternates: [],
+            proPrimary: configuration.proModel.isEmpty ? configuration.model : configuration.proModel,
+            proAlternates: []
+        )
+        return AgentProviderLibrary(entries: [entry], activeID: entry.id)
     }
 }

@@ -74,19 +74,34 @@ enum AgentContextBuilder {
             }
         }
 
-        // Goal mode: pin the objective + checklist to every turn.
+        // Goal mode: pin the objective + checklist to every turn, and
+        // ask the agent to self-evaluate via a fenced `goal-check`
+        // block whenever an item's status should change.
         if interactionMode == .goal, let goal = currentGoal, !goal.isEmpty {
             var goalBlock = "=== GOAL MODE — ACTIVE ===\n"
             if !goal.statement.isEmpty {
                 goalBlock += "Goal: \(goal.statement)\n"
             }
             if !goal.checklist.isEmpty {
-                goalBlock += "Acceptance checklist:\n"
-                for item in goal.checklist {
-                    goalBlock += "  - [\(item.done ? "x" : " ")] \(item.text)\n"
+                goalBlock += "Acceptance checklist (current state shown — 1-based indexes):\n"
+                for (idx, item) in goal.checklist.enumerated() {
+                    goalBlock += "  \(idx + 1). [\(item.done ? "x" : " ")] \(item.text)\n"
                 }
+                goalBlock += """
+
+                Acceptance reporting (REQUIRED whenever an item's status should change):
+                At the end of the reply, emit exactly one fenced block tagged `goal-check`. Each line lists a 1-based item index and its new state — only the items you're changing this turn:
+
+                ```goal-check
+                1: done
+                3: undone
+                ```
+
+                Use `done` only when you have concrete evidence the item is satisfied (file edited, command exited 0, tests passed). Use `undone` to flip a previously-ticked item back if you later discover it isn't actually satisfied. Items you didn't change this turn MUST be omitted. The user can override either direction at any time.
+                """
+            } else {
+                goalBlock += "\nAt the end of every reply, briefly state what blocks progress on the goal."
             }
-            goalBlock += "\nAt the end of every reply, briefly state which checklist items moved (use the exact item text) and what's still blocking."
             sections.append(goalBlock)
         }
 
@@ -268,7 +283,7 @@ enum AgentPlanParser {
         return next
     }
 
-    private static func fencedBody(in content: String, tag: String) -> String? {
+    fileprivate static func fencedBody(in content: String, tag: String) -> String? {
         let lines = content.components(separatedBy: .newlines)
         let wanted = tag.lowercased()
         var inBlock = false
@@ -309,7 +324,7 @@ enum AgentPlanParser {
     /// Returns the leading integer and the index right after it. Walks
     /// past any non-digit prefix (e.g. `"- "`, `"step "`) up to ~6 chars
     /// to forgive small formatting variations.
-    private static func leadingNumber(in s: String) -> (Int, String.Index)? {
+    fileprivate static func leadingNumber(in s: String) -> (Int, String.Index)? {
         var i = s.startIndex
         var skips = 0
         while i < s.endIndex, !s[i].isNumber, skips < 6 {
@@ -334,6 +349,59 @@ enum AgentPlanParser {
             return .skipped
         case "failed", "fail", "error", "blocked":
             return .failed
+        default:
+            return nil
+        }
+    }
+}
+
+// MARK: - Goal checklist evaluation parser
+
+/// Parses the agent-emitted ```goal-check fenced block and applies its
+/// done/undone flips to a goal's checklist. Mirrors AgentPlanParser's
+/// progress-block design but uses a boolean lifecycle (the only two
+/// states for a checklist item).
+enum AgentGoalChecklistParser {
+    /// Returns a copy of `goal` with checklist `done` flags updated from
+    /// the goal-check block in `content`. Unknown tokens and indexes
+    /// out of range are dropped silently — a sloppy reply can't corrupt
+    /// the whole checklist. Returns nil when no goal-check block is
+    /// present OR when nothing actually changes (so callers can avoid
+    /// no-op persistence).
+    static func applyEvaluation(to goal: AgentGoal, from content: String) -> AgentGoal? {
+        guard let body = AgentPlanParser.fencedBody(in: content, tag: "goal-check") else { return nil }
+        var updates: [Int: Bool] = [:]
+        for raw in body.components(separatedBy: .newlines) {
+            let trimmed = raw.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+            guard let (index, after) = AgentPlanParser.leadingNumber(in: trimmed),
+                  index >= 1, index <= goal.checklist.count else { continue }
+            let rest = trimmed[after...]
+                .drop { $0 == ":" || $0 == "." || $0 == ")" || $0 == "-" || $0 == " " || $0 == "\t" }
+            let token = rest.split(separator: " ", maxSplits: 1).first.map(String.init)?
+                .lowercased() ?? ""
+            if let flag = parseDoneFlag(token) {
+                updates[index - 1] = flag
+            }
+        }
+        guard !updates.isEmpty else { return nil }
+        var next = goal
+        var changed = false
+        for (i, newDone) in updates {
+            if next.checklist[i].done != newDone {
+                next.checklist[i].done = newDone
+                changed = true
+            }
+        }
+        return changed ? next : nil
+    }
+
+    private static func parseDoneFlag(_ token: String) -> Bool? {
+        switch token {
+        case "done", "x", "✓", "✔", "checked", "complete", "completed", "yes", "ok":
+            return true
+        case "undone", "uncheck", "unchecked", "todo", "pending", "incomplete", "no":
+            return false
         default:
             return nil
         }

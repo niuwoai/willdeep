@@ -231,6 +231,7 @@ private struct AgentSessionsSidebar: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Spacer(minLength: 0)
+                AgentSessionModeBadges(session: session)
             }
             .padding(.horizontal, 28)
             .frame(height: AgentDesign.sidebarRowHeight)
@@ -969,14 +970,59 @@ private struct ComposerCard: View {
         )
     }
 
-    private var filteredSkills: [AgentSkillEntry] {
-        guard !atMenuQuery.isEmpty else { return skillCatalog }
+    /// Unified entries for the `@` picker — skills + workspace shortcut
+    /// + project files (from the already-cached Quick Open list, which
+    /// honors the project file cache). All three are fuzzy-filtered by
+    /// the same query and capped so a 10k-file repo doesn't carpet the
+    /// popover.
+    private var filteredAtEntries: [AtPickerEntry] {
         let q = atMenuQuery.lowercased()
-        return skillCatalog.filter { entry in
-            entry.identifier.lowercased().contains(q)
-                || entry.name.lowercased().contains(q)
-                || entry.description.lowercased().contains(q)
+        var entries: [AtPickerEntry] = []
+
+        // Workspace shortcut — only shows when a folder is open, and
+        // either the query is empty or matches "workspace".
+        if appState.rootDirectory != nil,
+           q.isEmpty || "workspace".contains(q) {
+            entries.append(.workspace)
         }
+
+        // Skills (cached once per popover open).
+        let skills = q.isEmpty ? skillCatalog : skillCatalog.filter {
+            $0.identifier.lowercased().contains(q)
+                || $0.name.lowercased().contains(q)
+                || $0.description.lowercased().contains(q)
+        }
+        entries.append(contentsOf: skills.map { .skill($0) })
+
+        // Project files — limit to 30 matches so the popover stays
+        // navigable. Match by last path component first, then full
+        // relative path. Files already attached are filtered out so
+        // the user can't double-add.
+        let alreadyAttached = Set(appState.agentPendingFiles.map(\.url.standardizedFileURL.path))
+        if let root = appState.rootDirectory?.standardizedFileURL.path {
+            let files = appState.quickOpenFiles.lazy
+                .filter { !alreadyAttached.contains($0.standardizedFileURL.path) }
+                .filter { url in
+                    if q.isEmpty { return true }
+                    let name = url.lastPathComponent.lowercased()
+                    if name.hasPrefix(q) || name.contains(q) { return true }
+                    let rel = String(url.standardizedFileURL.path
+                        .dropFirst(root.count))
+                        .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                        .lowercased()
+                    return rel.contains(q)
+                }
+                .prefix(30)
+                .map { url -> AtPickerEntry in
+                    let rel = String(url.standardizedFileURL.path
+                        .dropFirst(root.count))
+                        .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                    return .file(url: url, relativePath: rel.isEmpty ? url.lastPathComponent : rel)
+                }
+            entries.append(contentsOf: files)
+        }
+
+        return entries
     }
 
     var body: some View {
@@ -991,6 +1037,15 @@ private struct ComposerCard: View {
                 AgentComposerSkillStrip(skills: appState.agentPendingSkills) { identifier in
                     appState.detachAgentSkill(identifier: identifier)
                 }
+            }
+
+            if !appState.agentPendingFiles.isEmpty || appState.agentPendingIncludeWorkspaceOverview {
+                AgentComposerAttachmentStrip(
+                    includeWorkspace: appState.agentPendingIncludeWorkspaceOverview,
+                    files: appState.agentPendingFiles,
+                    onRemoveWorkspace: { appState.toggleAgentWorkspaceOverview() },
+                    onRemoveFile: { appState.detachAgentFile(id: $0) }
+                )
             }
 
             ZStack(alignment: .topLeading) {
@@ -1009,8 +1064,8 @@ private struct ComposerCard: View {
                     onSlashCommit: { runSelectedSlashCommand() },
                     atMenuVisible: $atMenuVisible,
                     atMenuSelection: $atMenuSelection,
-                    atMenuItemCount: { filteredSkills.count },
-                    onAtCommit: { commitSelectedSkill() },
+                    atMenuItemCount: { filteredAtEntries.count },
+                    onAtCommit: { commitSelectedAtEntry() },
                     onAtQueryChange: { handleAtQueryChange($0) },
                     coordinatorRef: coordinatorRef
                 )
@@ -1035,12 +1090,12 @@ private struct ComposerCard: View {
                 }
 
                 if atMenuVisible {
-                    AtSkillMenu(
-                        skills: filteredSkills,
+                    AtPickerMenu(
+                        entries: filteredAtEntries,
                         selection: $atMenuSelection,
                         onPick: { index in
                             atMenuSelection = index
-                            _ = commitSelectedSkill()
+                            _ = commitSelectedAtEntry()
                         }
                     )
                     .offset(y: -8)
@@ -1099,17 +1154,26 @@ private struct ComposerCard: View {
     }
 
     @discardableResult
-    private func commitSelectedSkill() -> Bool {
-        let skills = filteredSkills
-        guard !skills.isEmpty else { return false }
-        let safeIndex = min(max(0, atMenuSelection), skills.count - 1)
-        let skill = skills[safeIndex]
-        // Drop the @-token from the buffer and stage the skill instead;
-        // the strip above the composer shows it as a chip the user can
-        // remove. The actual SKILL.md body is spliced into the prompt
-        // by AppState.composeSkillAttachedPrompt at send time.
+    private func commitSelectedAtEntry() -> Bool {
+        let entries = filteredAtEntries
+        guard !entries.isEmpty else { return false }
+        let safeIndex = min(max(0, atMenuSelection), entries.count - 1)
+        let entry = entries[safeIndex]
+        // Drop the @-token from the buffer. AppState side-effects then
+        // surface as chips above the composer; the actual context
+        // (SKILL.md body, file contents, workspace overview) is
+        // spliced into the prompt by composeAttachedPrompt at send time.
         _ = coordinatorRef.coordinator?.replaceCurrentAtToken(with: "")
-        appState.attachAgentSkill(skill)
+        switch entry {
+        case .workspace:
+            if !appState.agentPendingIncludeWorkspaceOverview {
+                appState.toggleAgentWorkspaceOverview()
+            }
+        case .skill(let skill):
+            appState.attachAgentSkill(skill)
+        case .file(let url, _):
+            appState.attachAgentFile(url: url)
+        }
         atMenuVisible = false
         atMenuQuery = ""
         return true
@@ -2044,29 +2108,136 @@ struct AgentComposerSkillStrip: View {
     }
 }
 
-private struct AtSkillMenu: View {
-    let skills: [AgentSkillEntry]
+/// Chips for non-skill attachments: workspace overview + per-file
+/// references. Same removable pill design as the skill strip, but in a
+/// distinct accent so users can tell at a glance which kind of context
+/// is riding along this turn.
+struct AgentComposerAttachmentStrip: View {
+    let includeWorkspace: Bool
+    let files: [AgentFileAttachment]
+    let onRemoveWorkspace: () -> Void
+    let onRemoveFile: (String) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                if includeWorkspace {
+                    chip(
+                        symbol: "folder",
+                        label: "@workspace",
+                        help: "Workspace root + file list will ride along",
+                        onRemove: onRemoveWorkspace
+                    )
+                }
+                ForEach(files) { file in
+                    chip(
+                        symbol: "doc.text",
+                        label: "@\(file.relativePath)",
+                        help: file.url.path,
+                        onRemove: { onRemoveFile(file.id) }
+                    )
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func chip(symbol: String, label: String, help: String, onRemove: @escaping () -> Void) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: symbol)
+                .font(.system(size: 10))
+                .foregroundStyle(Color.purple)
+            Text(label)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Button {
+                onRemove()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color.purple.opacity(0.10))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(Color.purple.opacity(0.30), lineWidth: 1)
+        )
+        .help(help)
+    }
+}
+
+/// One row in the `@` popover. Skills, project files, and the special
+/// `workspace` shortcut are unified so the user can fuzzy-match across
+/// every attachable thing in one list.
+enum AtPickerEntry: Identifiable, Equatable {
+    case workspace
+    case skill(AgentSkillEntry)
+    case file(url: URL, relativePath: String)
+
+    var id: String {
+        switch self {
+        case .workspace: return "@workspace"
+        case .skill(let s): return "skill:\(s.identifier)"
+        case .file(let url, _): return "file:\(url.standardizedFileURL.path)"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .workspace: return "folder"
+        case .skill: return "wand.and.stars"
+        case .file: return "doc.text"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .workspace: return "workspace"
+        case .skill(let s): return s.identifier
+        case .file(_, let rel): return rel
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .workspace: return "Attach the current workspace root + file list"
+        case .skill(let s): return s.description
+        case .file(let url, _): return url.deletingLastPathComponent().lastPathComponent
+        }
+    }
+}
+
+private struct AtPickerMenu: View {
+    let entries: [AtPickerEntry]
     @Binding var selection: Int
     let onPick: (Int) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if skills.isEmpty {
-                Text("No matching skills under ~/.codex/skills")
+            if entries.isEmpty {
+                Text("No matching skills, files, or shortcuts")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
             } else {
-                ForEach(Array(skills.enumerated()), id: \.element.id) { index, skill in
-                    AtSkillRow(skill: skill, isSelected: index == selection)
+                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                    AtPickerRow(entry: entry, isSelected: index == selection)
                         .contentShape(Rectangle())
                         .onTapGesture { onPick(index) }
                 }
             }
         }
         .padding(.vertical, 4)
-        .frame(maxWidth: 420, alignment: .leading)
+        .frame(maxWidth: 460, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color(nsColor: .controlBackgroundColor))
@@ -2080,21 +2251,23 @@ private struct AtSkillMenu: View {
     }
 }
 
-private struct AtSkillRow: View {
-    let skill: AgentSkillEntry
+private struct AtPickerRow: View {
+    let entry: AtPickerEntry
     let isSelected: Bool
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "wand.and.stars")
+            Image(systemName: entry.symbol)
                 .font(.system(size: 11))
                 .foregroundStyle(isSelected ? Color.white : Color.secondary)
                 .frame(width: 16)
             VStack(alignment: .leading, spacing: 1) {
-                Text(skill.identifier)
+                Text(entry.title)
                     .font(.system(size: 12, weight: .semibold, design: .monospaced))
                     .foregroundStyle(isSelected ? Color.white : Color.primary)
-                Text(skill.description)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(entry.subtitle)
                     .font(.system(size: 10))
                     .foregroundStyle(isSelected ? Color.white.opacity(0.85) : Color.secondary)
                     .lineLimit(2)
@@ -2104,6 +2277,77 @@ private struct AtSkillRow: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
         .background(isSelected ? Color.accentColor : Color.clear)
+    }
+}
+
+// MARK: - Sidebar session mode badges
+
+/// Tiny right-aligned indicators on each session row that summarise the
+/// session's plan/goal progress at a glance. Plan badge shows
+/// `done/total`; goal badge shows `done/total` of the checklist. Skipped
+/// here for sessions in Normal mode or with empty plan/goal so we don't
+/// add visual noise to ordinary chats.
+private struct AgentSessionModeBadges: View {
+    let session: AgentSession
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if let plan = session.currentPlan, !plan.steps.isEmpty {
+                badge(
+                    symbol: "list.number",
+                    color: planBadgeColor(plan),
+                    text: planProgress(plan),
+                    help: planHelp(plan)
+                )
+            }
+            if let goal = session.currentGoal, !goal.checklist.isEmpty {
+                let doneCount = goal.checklist.filter(\.done).count
+                badge(
+                    symbol: "target",
+                    color: doneCount == goal.checklist.count ? .green : .accentColor,
+                    text: "\(doneCount)/\(goal.checklist.count)",
+                    help: goal.statement.isEmpty ? "Goal progress" : goal.statement
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func badge(symbol: String, color: Color, text: String, help: String) -> some View {
+        HStack(spacing: 2) {
+            Image(systemName: symbol)
+                .font(.system(size: 8, weight: .semibold))
+            Text(text)
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+        }
+        .padding(.horizontal, 5)
+        .padding(.vertical, 1)
+        .foregroundStyle(color)
+        .background(color.opacity(0.12), in: Capsule(style: .continuous))
+        .help(help)
+    }
+
+    private func planProgress(_ plan: AgentPlan) -> String {
+        let done = plan.steps.filter { $0.status == .done }.count
+        return "\(done)/\(plan.steps.count)"
+    }
+
+    private func planBadgeColor(_ plan: AgentPlan) -> Color {
+        switch plan.status {
+        case .proposed, .rejected: return .orange
+        case .approved, .executing: return .accentColor
+        case .done: return .green
+        }
+    }
+
+    private func planHelp(_ plan: AgentPlan) -> String {
+        switch plan.status {
+        case .proposed: return "Plan awaiting approval"
+        case .approved: return "Plan approved, not started"
+        case .executing: return "Plan executing"
+        case .done: return "Plan complete"
+        case .rejected: return "Plan rejected"
+        }
     }
 }
 
@@ -2372,10 +2616,29 @@ private struct PlanStatusPill: View {
 /// still .proposed (awaiting approval), the glyph is shown but not
 /// interactive — checking off steps before approval doesn't make sense.
 private struct AgentPlanStepRow: View {
+    @EnvironmentObject var appState: AppState
     let index: Int
     let step: AgentPlan.Step
     let interactive: Bool
     let onCycle: (AgentPlan.StepStatus) -> Void
+
+    @State private var sheet: ActiveSheet?
+
+    private enum ActiveSheet: Identifiable {
+        case edit
+        case insertAbove
+        case insertBelow
+        case restart
+
+        var id: String {
+            switch self {
+            case .edit: return "edit"
+            case .insertAbove: return "above"
+            case .insertBelow: return "below"
+            case .restart: return "restart"
+            }
+        }
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -2402,6 +2665,73 @@ private struct AgentPlanStepRow: View {
                 .foregroundStyle(textColor)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
+        }
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button("Edit step…") { sheet = .edit }
+            Button("Insert step above…") { sheet = .insertAbove }
+            Button("Insert step below…") { sheet = .insertBelow }
+            if interactive {
+                Divider()
+                Button("Restart from this step…") { sheet = .restart }
+                    .disabled(appState.agentInteractionMode != .plan)
+            }
+            Divider()
+            Button("Remove step", role: .destructive) {
+                appState.removeAgentPlanStep(id: step.id)
+            }
+        }
+        .sheet(item: $sheet) { which in
+            switch which {
+            case .edit:
+                AgentPlanStepSimpleSheet(
+                    title: "Edit step \(index)",
+                    initialText: step.text,
+                    placeholder: "Step description",
+                    confirmTitle: "Save",
+                    onConfirm: { text in
+                        appState.editAgentPlanStepText(id: step.id, newText: text)
+                        sheet = nil
+                    },
+                    onCancel: { sheet = nil }
+                )
+            case .insertAbove:
+                AgentPlanStepSimpleSheet(
+                    title: "Insert step above \(index)",
+                    initialText: "",
+                    placeholder: "New step description",
+                    confirmTitle: "Insert",
+                    onConfirm: { text in
+                        appState.insertAgentPlanStep(text: text, relativeToID: step.id, before: true)
+                        sheet = nil
+                    },
+                    onCancel: { sheet = nil }
+                )
+            case .insertBelow:
+                AgentPlanStepSimpleSheet(
+                    title: "Insert step below \(index)",
+                    initialText: "",
+                    placeholder: "New step description",
+                    confirmTitle: "Insert",
+                    onConfirm: { text in
+                        appState.insertAgentPlanStep(text: text, relativeToID: step.id, before: false)
+                        sheet = nil
+                    },
+                    onCancel: { sheet = nil }
+                )
+            case .restart:
+                AgentPlanStepSimpleSheet(
+                    title: "Restart from step \(index)",
+                    initialText: "",
+                    placeholder: "Optional note for the agent (e.g. 'use sed instead')",
+                    confirmTitle: "Restart",
+                    onConfirm: { note in
+                        appState.restartAgentPlanFromStep(id: step.id, note: note)
+                        sheet = nil
+                    },
+                    onCancel: { sheet = nil }
+                )
+            }
         }
     }
 
@@ -2441,6 +2771,49 @@ private struct AgentPlanStepRow: View {
         case .skipped: return .pending
         case .failed: return .pending
         }
+    }
+}
+
+/// Reused single-field sheet for all four plan-step actions
+/// (edit / insert above / insert below / restart). One field, one
+/// confirm button — keeps the modal weight low.
+private struct AgentPlanStepSimpleSheet: View {
+    let title: String
+    @State private var text: String
+    let placeholder: String
+    let confirmTitle: String
+    let onConfirm: (String) -> Void
+    let onCancel: () -> Void
+
+    init(title: String, initialText: String, placeholder: String, confirmTitle: String,
+         onConfirm: @escaping (String) -> Void, onCancel: @escaping () -> Void) {
+        self.title = title
+        _text = State(initialValue: initialText)
+        self.placeholder = placeholder
+        self.confirmTitle = confirmTitle
+        self.onConfirm = onConfirm
+        self.onCancel = onCancel
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(title)
+                .font(.system(size: 14, weight: .semibold))
+            TextField(placeholder, text: $text, axis: .vertical)
+                .lineLimit(2...5)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { onConfirm(text) }
+            HStack {
+                Spacer()
+                Button("Cancel") { onCancel() }
+                    .keyboardShortcut(.cancelAction)
+                Button(confirmTitle) { onConfirm(text) }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
     }
 }
 
