@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.43.0-rc4 - 2026-06-02
+
+- Added a proper GitHub-facing `README.md`. The repo was previously surfacing only `product-overview.md` (an internal capability matrix), which is dense and unfriendly to a first-time visitor. The new README leads with the "why", lists actual existing features (editor performance posture, file-tree-only-on-explicit-open, agent mode + BYOK + tools + diff proposals + auto-approval + context compression + queued sends, CLI, Quick Open cache, etc.), and includes a keyboard map, install/build instructions, philosophy, and contribution notes. Strictly documentation — no behavioral change.
+
+## 1.43.0-rc3 - 2026-06-02
+
+- Stopped auto-promoting an opened file's parent folder to `rootDirectory`. Previously every "open file" path (NSOpenPanel via Open File…, the system Open With… handler / `onOpenURL`, drag-onto-Dock, double-click in Finder, even Save As) called `setRootDirectory(url.deletingLastPathComponent())`, which loaded the FileTree, kicked off a recursive Quick Open scan, and ran `git status` on the parent. Opening a single file inside `~/Downloads` or some other huge directory could lock up the UI for seconds. Now the FileTree only loads when the user explicitly opens a folder (⇧⌘O Open Folder…, Open Recent Folder…, dropping a directory on the app, or restoring a session that already had one). Single-file edits are snappy and never trigger a directory scan.
+- Save As (`writeCurrentFile`) no longer hijacks the workspace root either. If a folder was already open, it stays; if not, no sidebar appears just because you saved to a new location.
+- Session restore is unchanged — a workspace that was opened explicitly in a previous session still comes back with its FileTree on launch.
+
 ## 1.43.0-rc2 - 2026-06-02
 
 - Distinguished user and assistant messages visually in Agent mode. User messages now render as right-aligned bubbles with an accent fill and white text (capped at ~78% of the chat column so long pastes still wrap); assistant messages stay left-aligned without a bubble but gain a small accent `sparkles` glyph as a role anchor. Previously both roles drifted left and only differed by whether the bubble had a faint grey fill — easy to confuse when scrolling fast. Tool-call groups and queued/error rows are unchanged.

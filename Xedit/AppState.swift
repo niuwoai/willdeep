@@ -1569,9 +1569,12 @@ final class AppState: ObservableObject {
 
         registerRecentFile(fileURL)
         registerRecentFolder(fileURL.deletingLastPathComponent())
-        setRootDirectory(fileURL.deletingLastPathComponent())
+        // Don't auto-promote the file's parent to `rootDirectory`. That used to
+        // load the whole FileTree + run a recursive Quick Open scan + git
+        // status for every "open file" — fatal latency when the parent is a
+        // huge dir like ~/Downloads. The sidebar only appears now when the
+        // user explicitly opens a folder (⇧⌘O / Open Folder…).
         openedFileURL = fileURL
-        refreshGitStatus()
         persistSession()
     }
 
@@ -2457,9 +2460,10 @@ final class AppState: ObservableObject {
             guard response == .OK, let url = panel.url else { return }
             self?.registerRecentFile(url)
             self?.registerRecentFolder(url.deletingLastPathComponent())
+            // Same rationale as openExternalURL: opening a file no longer
+            // promotes its parent to rootDirectory. Use Open Folder… (⇧⌘O)
+            // to load the FileTree.
             self?.openedFileURL = url
-            self?.setRootDirectory(url.deletingLastPathComponent())
-            self?.refreshGitStatus()
             self?.persistSession()
         }
     }
@@ -2737,7 +2741,9 @@ final class AppState: ObservableObject {
             if updateOpenedURL {
                 suppressURLChangeProcessing = true
                 openedFileURL = url
-                rootDirectory = url.deletingLastPathComponent()
+                // Save As no longer hijacks the workspace root. If a folder
+                // was explicitly opened, it stays; otherwise no FileTree
+                // appears for the saved file's parent.
                 updateActiveTabAfterURLChange(to: url)
             }
             updateActiveTab { tab in
