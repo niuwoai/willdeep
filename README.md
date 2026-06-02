@@ -8,7 +8,7 @@
 
 [![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.47.0--rc4-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.47.0--rc5-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *No Electron. No 800MB Helper processes. No "loading workspace…" spinner that eats your afternoon.*
@@ -176,7 +176,7 @@ VeilWriter is licensed under the [Apache License 2.0](LICENSE). You are free to 
 
 [![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.47.0--rc4-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.47.0--rc5-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *不靠 Electron。没有 800MB 的 Helper 子进程。没有那种让你怀疑人生的 "loading workspace…"。*

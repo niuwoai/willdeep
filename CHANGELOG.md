@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.47.0-rc5 - 2026-06-02
+
+- **Per-message footer with copy / timing / tokens.** Chat bubbles in both the full-screen Agent mode and the right-side Agent panel now sport a small caption row right under the bubble. User rows show just a copy-to-clipboard button (square→checkmark for ~1.4s on success). Assistant rows additionally show the wall-clock elapsed seconds for that turn (e.g. `1.8s`, `42s`, `1m 12s`) and the prompt/completion token split when the provider returned a usage block (`in 1.2k · out 340`). Three new fields on `AgentMessage` — `elapsedSeconds`, `promptTokens`, `completionTokens` — all decoded with `decodeIfPresent` so older session JSON loads cleanly. `AppState` stamps `turnStartedAt` right before handing the request to `AgentClient`, then writes the elapsed delta back on the message once the stream resolves; the existing `.usageReported` event handler now also splits prompt vs completion into the new fields.
+- **Composer shrunk a touch.** Bottom-of-chat text editor minHeight 40→26, maxHeight 130→116. Same multiline behaviour, just less vertical real-estate burned when the buffer is empty.
+
 ## 1.47.0-rc4 - 2026-06-02
 
 - **Resizable Settings window.** Settings used to come up as a fixed 560-wide panel — the Agent provider editor in particular ran out of room and you couldn't drag the corners to fix it. Replaced the hard `frame(width: 560)` lock with `minWidth: 560 / idealWidth: 760 / maxWidth: .infinity` (height analogous, ideal 680), and added a `SettingsWindowResizableEnforcer` NSViewRepresentable that reaches into the host `NSWindow` and ORs `.resizable / .miniaturizable / .closable / .titled` into its styleMask, drops the contentMaxSize cap, and enables the zoom/minimize buttons. End result: behaves like a normal mac document window — drag any corner, minimize, zoom, all of it.

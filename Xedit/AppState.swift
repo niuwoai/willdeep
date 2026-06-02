@@ -1629,6 +1629,12 @@ final class AppState: ObservableObject {
             let assistantMessage = AgentMessage(role: .assistant, content: "")
             agentMessages.append(assistantMessage)
             let assistantID = assistantMessage.id
+            // Stamp the wall-clock start so we can attach an elapsed
+            // seconds value to the message footer once the stream
+            // finishes. We use the moment we hand the request off to
+            // the client — pre-network — because that's what the user
+            // perceives as "how long did the agent take".
+            let turnStartedAt = Date()
 
             let systemPrompt = AgentContextBuilder.systemPrompt(
                 rootDirectory: rootDirectory,
@@ -1674,11 +1680,16 @@ final class AppState: ObservableObject {
                             latestToolCalls = calls
                         case .finishedTurn(let reason):
                             finishReason = reason
-                        case .usageReported(_, _, let total):
+                        case .usageReported(let prompt, let completion, let total):
                             // Stamp real token usage on the assistant
                             // message so AgentUsageStats can show actual
                             // totals instead of falling back to estimates.
+                            // Also remember the prompt / completion split
+                            // so the per-message footer can render the
+                            // full "in 1.2k · out 340" breakdown.
                             self.agentMessages[index].usageTokens = total
+                            self.agentMessages[index].promptTokens = prompt > 0 ? prompt : nil
+                            self.agentMessages[index].completionTokens = completion > 0 ? completion : nil
                         }
                     }
                 }
@@ -1708,6 +1719,10 @@ final class AppState: ObservableObject {
                 } else {
                     agentMessages[index].toolCalls = latestToolCalls
                 }
+                // Stamp the assistant message with how long this round
+                // of streaming actually took — the footer renders this
+                // as a "2.3s" caption next to the copy button.
+                agentMessages[index].elapsedSeconds = Date().timeIntervalSince(turnStartedAt)
             }
 
             // No tool calls → assistant finished talking. Capture patches and return.

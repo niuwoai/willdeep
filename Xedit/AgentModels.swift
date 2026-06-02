@@ -68,6 +68,19 @@ struct AgentMessage: Identifiable, Codable, Equatable {
     /// messages populate this. Older sessions without it fall back to
     /// the chars/4 estimator.
     var usageTokens: Int?
+    /// Prompt-side tokens (input) reported by the provider on the final
+    /// streaming chunk. Only set on assistant messages, only when the
+    /// provider emits a usage block. Older sessions without this field
+    /// decode to nil.
+    var promptTokens: Int?
+    /// Completion-side tokens (output) reported by the provider.
+    var completionTokens: Int?
+    /// Wall-clock seconds the assistant streamed for — from first
+    /// stream connect to `.finishedTurn`. Only set on assistant
+    /// messages once the stream terminates. Used by the message
+    /// footer to render "2.3s". Nil on user/system/tool rows and on
+    /// in-flight assistant messages.
+    var elapsedSeconds: Double?
     let createdAt: Date
 
     nonisolated init(
@@ -79,6 +92,9 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         toolCalls: [AgentMessageToolCall] = [],
         toolCallID: String? = nil,
         usageTokens: Int? = nil,
+        promptTokens: Int? = nil,
+        completionTokens: Int? = nil,
+        elapsedSeconds: Double? = nil,
         createdAt: Date = Date()
     ) {
         self.id = id
@@ -89,7 +105,18 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         self.toolCalls = toolCalls
         self.toolCallID = toolCallID
         self.usageTokens = usageTokens
+        self.promptTokens = promptTokens
+        self.completionTokens = completionTokens
+        self.elapsedSeconds = elapsedSeconds
         self.createdAt = createdAt
+    }
+
+    /// Explicit keys so newer fields can use `decodeIfPresent` without
+    /// breaking older session JSON.
+    enum CodingKeys: String, CodingKey {
+        case id, role, content, reasoningContent, images, toolCalls, toolCallID
+        case usageTokens, promptTokens, completionTokens, elapsedSeconds
+        case createdAt
     }
 
     init(from decoder: Decoder) throws {
@@ -102,6 +129,9 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         toolCalls = try container.decodeIfPresent([AgentMessageToolCall].self, forKey: .toolCalls) ?? []
         toolCallID = try container.decodeIfPresent(String.self, forKey: .toolCallID)
         usageTokens = try container.decodeIfPresent(Int.self, forKey: .usageTokens)
+        promptTokens = try container.decodeIfPresent(Int.self, forKey: .promptTokens)
+        completionTokens = try container.decodeIfPresent(Int.self, forKey: .completionTokens)
+        elapsedSeconds = try container.decodeIfPresent(Double.self, forKey: .elapsedSeconds)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 }

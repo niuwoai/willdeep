@@ -560,31 +560,37 @@ private struct AgentModeMessageView: View {
     private var userBubble: some View {
         HStack {
             Spacer(minLength: 40)
-            VStack(alignment: .leading, spacing: 8) {
-                if !message.content.isEmpty {
-                    Text(message.content)
-                        .font(AgentDesign.bodyFont)
-                        .foregroundStyle(.white)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if !message.images.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(message.images) { image in
-                                AgentImageThumbnail(image: image, size: 96, allowsRemoval: false, onRemove: nil)
+            VStack(alignment: .trailing, spacing: 4) {
+                VStack(alignment: .leading, spacing: 8) {
+                    if !message.content.isEmpty {
+                        Text(message.content)
+                            .font(AgentDesign.bodyFont)
+                            .foregroundStyle(.white)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if !message.images.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(message.images) { image in
+                                    AgentImageThumbnail(image: image, size: 96, allowsRemoval: false, onRemove: nil)
+                                }
                             }
                         }
                     }
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
+                        .fill(Color.accentColor)
+                )
+                .frame(maxWidth: AgentDesign.chatMaxContentWidth * 0.78, alignment: .trailing)
+
+                if !message.content.isEmpty {
+                    AgentMessageFooter(message: message, alignment: .trailing)
+                }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                    .fill(Color.accentColor)
-            )
-            .frame(maxWidth: AgentDesign.chatMaxContentWidth * 0.78, alignment: .trailing)
         }
         .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .trailing)
     }
@@ -604,17 +610,28 @@ private struct AgentModeMessageView: View {
                 .frame(width: 16, height: 18, alignment: .center)
                 .padding(.top, 10)
             if !message.content.isEmpty {
-                AgentAssistantMarkdownBody(content: message.content, isStreaming: isStreamingThisMessage)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.55))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                            .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-                    )
+                VStack(alignment: .leading, spacing: 4) {
+                    AgentAssistantMarkdownBody(content: message.content, isStreaming: isStreamingThisMessage)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
+                                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.55))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
+                                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                        )
+                    // Don't show the footer while the stream is still
+                    // running — elapsedSeconds isn't stamped until
+                    // `.finishedTurn`, so the row would briefly read
+                    // "copy · — · —" and then update. Wait until the
+                    // turn settles.
+                    if !isStreamingThisMessage {
+                        AgentMessageFooter(message: message, alignment: .leading)
+                            .padding(.leading, 14)
+                    }
+                }
             }
         }
         .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
@@ -672,6 +689,99 @@ private struct AgentStreamingCursor: View {
                     visible.toggle()
                 }
             }
+    }
+}
+
+// MARK: - Message footer (copy button + timing + tokens)
+
+/// Tiny caption row that sits directly under a chat bubble. Renders a
+/// copy-to-clipboard button, plus — for assistant messages — the wall
+/// clock elapsed seconds for the turn and the prompt/completion token
+/// breakdown. User messages only show the copy button (timing and
+/// tokens belong to the model side of the exchange).
+private struct AgentMessageFooter: View {
+    let message: AgentMessage
+    /// `.leading` for assistant rows (left-aligned column), `.trailing`
+    /// for the right-aligned user bubble so the footer hugs the same
+    /// edge as the bubble.
+    let alignment: HorizontalAlignment
+
+    @State private var didJustCopy = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if alignment == .trailing { Spacer(minLength: 0) }
+
+            Button(action: copyToClipboard) {
+                Image(systemName: didJustCopy ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(didJustCopy ? Color.green : Color.secondary)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(didJustCopy ? "Copied" : "Copy message")
+            .accessibilityLabel("Copy message")
+
+            if message.role == .assistant, let elapsed = message.elapsedSeconds, elapsed > 0 {
+                Label(formatElapsed(elapsed), systemImage: "clock")
+                    .labelStyle(.titleAndIcon)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+
+            if message.role == .assistant, let tokenSummary = tokenSummary {
+                Label(tokenSummary, systemImage: "number")
+                    .labelStyle(.titleAndIcon)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+
+            if alignment == .leading { Spacer(minLength: 0) }
+        }
+    }
+
+    private var tokenSummary: String? {
+        // Prefer the prompt/completion split when both are present —
+        // gives the most information. Fall back to the bare total if
+        // only that arrived. Nothing renders if we have neither (older
+        // sessions, providers that don't emit usage at all).
+        if let prompt = message.promptTokens, let completion = message.completionTokens {
+            return "in \(formatTokens(prompt)) · out \(formatTokens(completion))"
+        }
+        if let total = message.usageTokens, total > 0 {
+            return "\(formatTokens(total)) tok"
+        }
+        return nil
+    }
+
+    private func formatElapsed(_ seconds: Double) -> String {
+        if seconds < 10 {
+            return String(format: "%.1fs", seconds)
+        }
+        if seconds < 60 {
+            return String(format: "%.0fs", seconds)
+        }
+        let minutes = Int(seconds) / 60
+        let remainder = Int(seconds) % 60
+        return "\(minutes)m \(remainder)s"
+    }
+
+    private func formatTokens(_ count: Int) -> String {
+        if count >= 1000 {
+            return String(format: "%.1fk", Double(count) / 1000.0)
+        }
+        return String(count)
+    }
+
+    private func copyToClipboard() {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(message.content, forType: .string)
+        didJustCopy = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            didJustCopy = false
+        }
     }
 }
 
@@ -1121,7 +1231,7 @@ private struct ComposerCard: View {
                     coordinatorRef: coordinatorRef
                 )
                 .focused($inputFocused)
-                .frame(minHeight: 40, maxHeight: 130)
+                .frame(minHeight: 26, maxHeight: 116)
                 .onDrop(of: [.image, .fileURL], isTargeted: nil) { providers in
                     handleDroppedProviders(providers)
                     return true

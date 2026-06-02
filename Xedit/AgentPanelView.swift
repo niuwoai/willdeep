@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 struct AgentPanelView: View {
     @EnvironmentObject var appState: AppState
@@ -1130,6 +1131,8 @@ private struct AgentEmptyState: View {
 struct AgentMessageBubble: View {
     let message: AgentMessage
 
+    @State private var didJustCopy = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
@@ -1148,10 +1151,79 @@ struct AgentMessageBubble: View {
                     }
                 }
             }
+            if shouldShowFooter {
+                footer
+            }
         }
         .padding(9)
         .background(backgroundColor)
         .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    private var shouldShowFooter: Bool {
+        // System / tool rows are pure plumbing — no copy button needed
+        // there. For user/assistant rows we always show at least the
+        // copy button (timing + tokens are assistant-only).
+        switch message.role {
+        case .system, .tool: return false
+        case .user, .assistant: return !message.content.isEmpty
+        }
+    }
+
+    private var footer: some View {
+        HStack(spacing: 8) {
+            Button(action: copyToClipboard) {
+                Image(systemName: didJustCopy ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(didJustCopy ? Color.green : Color.secondary)
+            }
+            .buttonStyle(.plain)
+            .help(didJustCopy ? "Copied" : "Copy message")
+
+            if message.role == .assistant, let elapsed = message.elapsedSeconds, elapsed > 0 {
+                Text(formatElapsed(elapsed))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+
+            if message.role == .assistant, let summary = tokenSummary {
+                Text(summary)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private var tokenSummary: String? {
+        if let prompt = message.promptTokens, let completion = message.completionTokens {
+            return "\(formatTokens(prompt))→\(formatTokens(completion))"
+        }
+        if let total = message.usageTokens, total > 0 {
+            return "\(formatTokens(total))t"
+        }
+        return nil
+    }
+
+    private func formatElapsed(_ seconds: Double) -> String {
+        if seconds < 10 { return String(format: "%.1fs", seconds) }
+        if seconds < 60 { return String(format: "%.0fs", seconds) }
+        return "\(Int(seconds) / 60)m\(Int(seconds) % 60)s"
+    }
+
+    private func formatTokens(_ count: Int) -> String {
+        count >= 1000 ? String(format: "%.1fk", Double(count) / 1000.0) : String(count)
+    }
+
+    private func copyToClipboard() {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(message.content, forType: .string)
+        didJustCopy = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            didJustCopy = false
+        }
     }
 
     private var displayContent: String {
