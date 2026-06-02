@@ -51,6 +51,12 @@ struct AgentMessage: Identifiable, Codable, Equatable {
     let id: UUID
     let role: AgentRole
     var content: String
+    /// Reasoning / thinking-mode trace from providers that emit it
+    /// separately (DashScope qwen3, qwq, DeepSeek-R1 family). When set
+    /// on an assistant message, we MUST send it back on the next turn
+    /// — DashScope returns HTTP 400 otherwise. Empty for providers
+    /// that don't split reasoning out.
+    var reasoningContent: String?
     /// User-attached images, only meaningful for `role == .user`.
     var images: [AgentImageAttachment]
     var toolCalls: [AgentMessageToolCall]
@@ -63,6 +69,7 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         id: UUID = UUID(),
         role: AgentRole,
         content: String,
+        reasoningContent: String? = nil,
         images: [AgentImageAttachment] = [],
         toolCalls: [AgentMessageToolCall] = [],
         toolCallID: String? = nil,
@@ -71,6 +78,7 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         self.id = id
         self.role = role
         self.content = content
+        self.reasoningContent = reasoningContent
         self.images = images
         self.toolCalls = toolCalls
         self.toolCallID = toolCallID
@@ -82,6 +90,7 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         id = try container.decode(UUID.self, forKey: .id)
         role = try container.decode(AgentRole.self, forKey: .role)
         content = try container.decode(String.self, forKey: .content)
+        reasoningContent = try container.decodeIfPresent(String.self, forKey: .reasoningContent)
         images = try container.decodeIfPresent([AgentImageAttachment].self, forKey: .images) ?? []
         toolCalls = try container.decodeIfPresent([AgentMessageToolCall].self, forKey: .toolCalls) ?? []
         toolCallID = try container.decodeIfPresent(String.self, forKey: .toolCallID)

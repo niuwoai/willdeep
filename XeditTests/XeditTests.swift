@@ -1571,6 +1571,48 @@ struct VeilWriterTests {
         }
     }
 
+    @Test("encodeChatRequest echoes assistant reasoning_content back to the provider")
+    func testReasoningContentRoundTrip() throws {
+        // Empty reasoning must not emit the key (some providers reject empty strings).
+        let withoutReasoning = AgentMessage(role: .assistant, content: "Hi.")
+        let dataWithout = try AgentClient.encodeChatRequest(
+            model: "qwen3-235b-a22b",
+            messages: [withoutReasoning],
+            tools: []
+        )
+        let jsonWithout = String(data: dataWithout, encoding: .utf8) ?? ""
+        #expect(!jsonWithout.contains("reasoning_content"))
+
+        // Non-empty reasoning MUST be present in the assistant message.
+        // DashScope's thinking-mode 400's without it.
+        let withReasoning = AgentMessage(
+            role: .assistant,
+            content: "The answer is 42.",
+            reasoningContent: "I considered alternatives and concluded 42."
+        )
+        let dataWith = try AgentClient.encodeChatRequest(
+            model: "qwen3-235b-a22b",
+            messages: [withReasoning],
+            tools: []
+        )
+        let jsonWith = String(data: dataWith, encoding: .utf8) ?? ""
+        #expect(jsonWith.contains("reasoning_content"))
+        #expect(jsonWith.contains("I considered alternatives"))
+
+        // The field must only attach to assistant messages — a user
+        // role with reasoningContent set (shouldn't happen, but defend)
+        // doesn't leak it.
+        var sneakyUser = AgentMessage(role: .user, content: "hello")
+        sneakyUser.reasoningContent = "secret"
+        let dataUser = try AgentClient.encodeChatRequest(
+            model: "qwen3-235b-a22b",
+            messages: [sneakyUser],
+            tools: []
+        )
+        let jsonUser = String(data: dataUser, encoding: .utf8) ?? ""
+        #expect(!jsonUser.contains("secret"))
+    }
+
     @Test("SafeCommand classifies common read-only commands as alwaysSafe")
     func testSafeCommandAllowlist() {
         // Single safe commands.

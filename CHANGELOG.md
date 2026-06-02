@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.41.0-rc2 - 2026-06-02
+
+- Fixed HTTP 400 `The reasoning_content in the thinking mode must be passed back to the API` from DashScope thinking-mode models (qwen3, qwq, qwen3-coder, etc.). Streaming responses can carry both `delta.content` and `delta.reasoning_content`; the previous implementation discarded the latter, so the next turn's request body was missing it and the provider rejected the whole conversation. `AgentMessage` now carries an optional `reasoningContent`, `streamChat` emits a new `.reasoningDelta` event, `runAgentLoop` accumulates it into the active assistant message, and `encodeMessage` echoes the field back on assistant messages so multi-turn thinking-mode conversations work end to end. The reasoning trace isn't shown in the UI — it exists purely to keep DashScope happy — but it does round-trip through session JSON so reloaded chats can keep replying.
+
 ## 1.41.0-rc1 - 2026-06-02
 
 - Added zero-friction auto-approval for safe Agent shell commands. A new `SafeCommand.classify` step runs before the per-call Allow/Deny prompt: commands whose every pipeline segment is in the built-in read-only allowlist (cat, head, tail, ls, find without -delete/-exec, git diff/log/status/show/branch/blame/etc., rg, grep, wc, file, stat, which, pwd, echo, sort, uniq, cut, awk, sed (read-only), md5, shasum, base64, …) run immediately with no prompt. Pipelines `|`, `&&`, `||`, `;` are tokenized respecting single/double quotes; any dangerous segment poisons the whole chain.

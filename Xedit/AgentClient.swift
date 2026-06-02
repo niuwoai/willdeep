@@ -12,6 +12,12 @@ import Foundation
 enum AgentClientEvent {
     /// Assistant text delta.
     case textDelta(String)
+    /// Reasoning / thinking-mode trace delta. Emitted by DashScope
+    /// (qwen3, qwq), DeepSeek-R1, and a few other providers in addition
+    /// to `textDelta`. The caller MUST retain the concatenated value and
+    /// echo it back on the next assistant message — DashScope responds
+    /// with HTTP 400 ("reasoning_content must be passed back") otherwise.
+    case reasoningDelta(String)
     /// Cumulative tool calls observed so far. Each provider streams tool call
     /// arguments in fragments; the client merges them and re-emits the full
     /// list on every change so the caller always has the latest view.
@@ -101,6 +107,9 @@ struct AgentClient {
             }
 
             for choice in chunk.choices {
+                if let reasoning = choice.delta.reasoning_content, !reasoning.isEmpty {
+                    await onEvent(.reasoningDelta(reasoning))
+                }
                 if let content = choice.delta.content, !content.isEmpty {
                     await onEvent(.textDelta(content))
                 }
@@ -399,6 +408,15 @@ struct AgentClient {
                 ]
             }
         }
+        // Echo back the assistant's reasoning trace if we captured one
+        // last turn. DashScope's thinking-mode contract requires it
+        // (returns HTTP 400 otherwise); other providers ignore the
+        // unknown field, so it's safe to always emit.
+        if message.role == .assistant,
+           let reasoning = message.reasoningContent,
+           !reasoning.isEmpty {
+            dict["reasoning_content"] = reasoning
+        }
         return dict
     }
 
@@ -563,6 +581,7 @@ private struct ChatCompletionChunk: Decodable {
 
     struct Delta: Decodable {
         let content: String?
+        let reasoning_content: String?
         let tool_calls: [ToolCallDelta]?
     }
 

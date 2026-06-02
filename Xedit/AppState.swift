@@ -1020,6 +1020,14 @@ final class AppState: ObservableObject {
                         switch event {
                         case .textDelta(let delta):
                             self.agentMessages[index].content += delta
+                        case .reasoningDelta(let delta):
+                            // Append into reasoningContent so the next
+                            // turn echoes it back verbatim. DashScope
+                            // thinking-mode returns HTTP 400 if this
+                            // field disappears between turns.
+                            var existing = self.agentMessages[index].reasoningContent ?? ""
+                            existing += delta
+                            self.agentMessages[index].reasoningContent = existing
                         case .toolCallsUpdated(let calls):
                             self.agentMessages[index].toolCalls = calls
                             latestToolCalls = calls
