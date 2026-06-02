@@ -1642,11 +1642,16 @@ private struct ModelPickerPill: View {
                 Divider()
             }
 
-            // Two-level Provider → Model menu, driven by the library.
-            // Each entry collapses into a Menu whose children are its
-            // Flash + Pro primaries (and any user-defined alternates).
+            // Library entries — one Section per provider, models
+            // listed flat under it. Previously this was a nested
+            // Menu-in-Menu but SwiftUI's macOS implementation
+            // dismisses the inner Menu on the slightest hover drift,
+            // so the user would click a provider and only see a
+            // brief flash. Sectioned flat layout sidesteps that
+            // entirely; the provider name renders as a non-clickable
+            // header above its model rows.
             ForEach(appState.agentProviderLibrary.entries) { entry in
-                providerSubmenu(entry: entry)
+                providerSection(entry: entry)
             }
 
             if appState.agentProviderLibrary.entries.isEmpty {
@@ -1697,16 +1702,19 @@ private struct ModelPickerPill: View {
         .help("Pick provider + model for this chat. The active provider also drives Auto/Flash/Pro routing.")
     }
 
-    /// One Menu per library entry — its children are Flash + Pro
-    /// primaries plus user-defined alternates. Checks live on the
-    /// currently-effective (entry+model) pair so the user can tell at
-    /// a glance which row is in play right now.
+    /// Flat-section layout for one library entry. The provider name
+    /// becomes the Section header (rendered as a non-clickable group
+    /// label in NSMenu) and every Flash/Pro model — primary first,
+    /// then alternates — is a direct Button inside that section.
+    /// A single click on a model row activates that provider entry
+    /// and sets the session model in one shot. No nested Menus, so
+    /// none of the SwiftUI hover-loses-focus weirdness.
     @ViewBuilder
-    private func providerSubmenu(entry: AgentProviderEntry) -> some View {
+    private func providerSection(entry: AgentProviderEntry) -> some View {
         let isActive = appState.agentProviderLibrary.activeID == entry.id
         let override = appState.agentSessionModelOverride
-        Menu {
-            // Flash tier (primary first, then alternates).
+
+        Section(sectionHeader(for: entry, isActive: isActive)) {
             if !entry.flashPrimary.isEmpty {
                 Button { pick(entry: entry, model: entry.flashPrimary) } label: {
                     modelRow(label: "Flash · \(entry.flashPrimary)",
@@ -1718,9 +1726,6 @@ private struct ModelPickerPill: View {
                     modelRow(label: "Flash · \(m)",
                              checked: isCurrent(entry: entry, model: m, override: override, isActive: isActive))
                 }
-            }
-            if !entry.proPrimary.isEmpty || !entry.proAlternates.isEmpty {
-                Divider()
             }
             if !entry.proPrimary.isEmpty {
                 Button { pick(entry: entry, model: entry.proPrimary) } label: {
@@ -1734,13 +1739,15 @@ private struct ModelPickerPill: View {
                              checked: isCurrent(entry: entry, model: m, override: override, isActive: isActive))
                 }
             }
-        } label: {
-            HStack {
-                Image(systemName: isActive ? "star.fill" : "star")
-                    .foregroundStyle(isActive ? Color.yellow : Color.secondary)
-                Text(entry.displayName)
-            }
         }
+    }
+
+    /// Header text for a provider section. NSMenu renders Section
+    /// headers as small uppercase greyed labels — we keep them plain
+    /// text and prefix the active provider with a star glyph so the
+    /// user can still tell which library entry is in play.
+    private func sectionHeader(for entry: AgentProviderEntry, isActive: Bool) -> String {
+        isActive ? "★ \(entry.displayName)" : entry.displayName
     }
 
     @ViewBuilder

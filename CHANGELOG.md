@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.47.0-rc7 - 2026-06-03
+
+- **Model picker no longer drops submenus on hover.** The chat-mode model picker used to be a two-level Menu (provider → its models). SwiftUI's macOS Menu dismisses nested Menus on the slightest hover drift, so clicking a provider row would only flash the submenu before it disappeared. Flattened to a single-level layout: each library entry becomes a `Section("ProviderName")` (active entry prefixed with ★) and its Flash/Pro models live directly under that header as one-click rows. Same activation behaviour (`selectAgentEntryAndModel` does provider + model in one go), just one click instead of fighting the submenu.
+
 ## 1.47.0-rc6 - 2026-06-03
 
 - **Workspace picker in the composer toolbar.** New `WorkspacePickerPill` sits between the `+` attach button and the model picker. Shows a folder icon plus either the current workspace name or "Pick folder" when nothing is open. Click → menu with three sections: (1) for the current folder — Show in Finder / Copy path / Copy branch name (last one only when on a git branch); (2) "Switch workspace" listing every known root (union of every agent session's `workspaceRootPath` and the global `recentFolders`, deduped by canonical path, sorted by name, ✓ on the active one); (3) a "Choose folder…" sentinel at the bottom that opens the system folder picker. Picking from (2) or (3) calls `openFolderURL`, which registers as recent + flips `rootDirectory` + refreshes git — so the next new chat in this window auto-groups under that workspace in the sidebar.
