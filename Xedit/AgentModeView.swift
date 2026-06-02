@@ -477,38 +477,58 @@ private struct AgentModeMessageView: View {
         }
     }
 
+    // User messages: right-aligned bubble with accent fill so the eye
+    // immediately tells them apart from assistant prose. Capped at ~78%
+    // of the chat column so long pastes still wrap nicely.
     private var userBubble: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if !message.content.isEmpty {
-                Text(message.content)
-                    .font(AgentDesign.bodyFont)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if !message.images.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(message.images) { image in
-                            AgentImageThumbnail(image: image, size: 96, allowsRemoval: false, onRemove: nil)
+        HStack {
+            Spacer(minLength: 40)
+            VStack(alignment: .leading, spacing: 8) {
+                if !message.content.isEmpty {
+                    Text(message.content)
+                        .font(AgentDesign.bodyFont)
+                        .foregroundStyle(.white)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if !message.images.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(message.images) { image in
+                                AgentImageThumbnail(image: image, size: 96, allowsRemoval: false, onRemove: nil)
+                            }
                         }
                     }
                 }
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
+                    .fill(Color.accentColor)
+            )
+            .frame(maxWidth: AgentDesign.chatMaxContentWidth * 0.78, alignment: .trailing)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
-        .background(AgentDesign.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius))
+        .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .trailing)
     }
 
+    // Assistant messages: left-aligned, no bubble fill, but anchored by a
+    // thin accent strip + small sparkles glyph so the role is obvious even
+    // when prose runs long.
     private var assistantContent: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if !message.content.isEmpty {
-                Text(message.content)
-                    .font(AgentDesign.bodyFont)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 16, height: 18, alignment: .center)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 6) {
+                if !message.content.isEmpty {
+                    Text(message.content)
+                        .font(AgentDesign.bodyFont)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
