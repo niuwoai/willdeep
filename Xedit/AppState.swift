@@ -447,6 +447,7 @@ final class AppState: ObservableObject {
         agentInteractionMode = mode
         if mode != .plan { agentCurrentPlan = nil }
         if mode != .goal { agentCurrentGoal = nil }
+        persistActiveAgentSession()
     }
 
     /// User clicks Approve on the proposed plan — flips it to approved
@@ -455,11 +456,13 @@ final class AppState: ObservableObject {
         guard var plan = agentCurrentPlan else { return }
         plan.status = .approved
         agentCurrentPlan = plan
+        persistActiveAgentSession()
     }
 
     /// User clicks Reject — drops the plan so the agent re-plans next turn.
     func rejectAgentPlan() {
         agentCurrentPlan = nil
+        persistActiveAgentSession()
     }
 
     /// Manually retire an approved plan (e.g. after the agent reported done).
@@ -467,6 +470,40 @@ final class AppState: ObservableObject {
         guard var plan = agentCurrentPlan else { return }
         plan.status = .done
         agentCurrentPlan = plan
+        persistActiveAgentSession()
+    }
+
+    /// Ask the agent to revise the current plan. Drops the existing
+    /// plan (so the system prompt flips back to "needs a plan") and
+    /// auto-sends a user message — either the bare "please revise"
+    /// boilerplate, or the caller's free-form note appended to it.
+    /// Falls through to the normal queue path if the agent is busy.
+    func requestPlanRevision(note: String) {
+        guard agentInteractionMode == .plan else { return }
+        // Drop the existing plan so the next turn's system prompt
+        // sends the "you must emit a ```plan block" instructions.
+        agentCurrentPlan = nil
+        persistActiveAgentSession()
+
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prompt: String
+        if trimmed.isEmpty {
+            prompt = "Please revise the plan. Re-emit a fresh ```plan``` block reflecting the new approach, then stop and wait for approval."
+        } else {
+            prompt = """
+            Please revise the plan with this guidance from me:
+
+            \(trimmed)
+
+            Re-emit a fresh ```plan``` block reflecting the new approach, then stop and wait for approval.
+            """
+        }
+
+        if isAgentResponding {
+            agentQueuedMessages.append(AgentQueuedMessage(text: prompt, images: []))
+            return
+        }
+        dispatchAgentMessage(text: prompt, images: [])
     }
 
     /// Parse the most recent assistant message looking for a ```plan
@@ -478,6 +515,8 @@ final class AppState: ObservableObject {
         // Don't clobber an already-approved plan.
         if let existing = agentCurrentPlan,
            existing.status == .approved || existing.status == .executing || existing.status == .done {
+            // But DO let an approved plan be progress-updated.
+            applyAgentPlanProgressFromLatestMessage(existingPlan: existing)
             return
         }
         guard let last = agentMessages.last(where: { $0.role == .assistant && !$0.content.isEmpty }),
@@ -487,7 +526,38 @@ final class AppState: ObservableObject {
         agentCurrentPlan = parsed
     }
 
+    /// Walks the latest assistant message for a ```progress block and
+    /// applies the step-status updates to `agentCurrentPlan`. Called
+    /// from `captureAgentPlanFromLatestMessage` after an approved plan
+    /// is already in place.
+    private func applyAgentPlanProgressFromLatestMessage(existingPlan: AgentPlan) {
+        guard let last = agentMessages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else { return }
+        if let next = AgentPlanParser.applyProgress(to: existingPlan, from: last.content) {
+            agentCurrentPlan = next
+        }
+    }
+
+    /// Manually override a single step's status from the UI checkbox.
+    /// Mirrors the model-driven path: bumps the plan to .executing on
+    /// first touch, .done when everything is terminal.
+    func setAgentPlanStepStatus(id: UUID, status: AgentPlan.StepStatus) {
+        guard var plan = agentCurrentPlan,
+              let idx = plan.steps.firstIndex(where: { $0.id == id }) else { return }
+        plan.steps[idx].status = status
+        let terminal: Set<AgentPlan.StepStatus> = [.done, .skipped, .failed]
+        if plan.steps.allSatisfy({ terminal.contains($0.status) }) {
+            plan.status = .done
+        } else if plan.status == .approved {
+            plan.status = .executing
+        }
+        agentCurrentPlan = plan
+        persistActiveAgentSession()
+    }
+
     /// Replace the goal definition for Goal mode. Empty values clear it.
+    /// Preserves existing checklist `done` state when an item's text
+    /// hasn't changed — so the user can tweak the goal statement or add
+    /// new items without losing what's already ticked.
     func setAgentGoal(statement: String, items: [String]) {
         let trimmedStatement = statement.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedItems = items
@@ -495,12 +565,18 @@ final class AppState: ObservableObject {
             .filter { !$0.isEmpty }
         if trimmedStatement.isEmpty && trimmedItems.isEmpty {
             agentCurrentGoal = nil
+            persistActiveAgentSession()
             return
         }
+        let priorDone: [String: Bool] = Dictionary(uniqueKeysWithValues:
+            (agentCurrentGoal?.checklist ?? []).map { ($0.text, $0.done) })
         agentCurrentGoal = AgentGoal(
             statement: trimmedStatement,
-            checklist: trimmedItems.map { AgentGoal.Item(text: $0) }
+            checklist: trimmedItems.map { text in
+                AgentGoal.Item(text: text, done: priorDone[text] ?? false)
+            }
         )
+        persistActiveAgentSession()
     }
 
     /// Toggle a single checklist item by id. The flipped state shows up
@@ -510,6 +586,7 @@ final class AppState: ObservableObject {
         guard let idx = goal.checklist.firstIndex(where: { $0.id == id }) else { return }
         goal.checklist[idx].done.toggle()
         agentCurrentGoal = goal
+        persistActiveAgentSession()
     }
 
     func reviewAgentWorktreeChanges() {
@@ -811,11 +888,12 @@ final class AppState: ObservableObject {
         agentPendingImages = []
         agentErrorMessage = nil
         agentErrorDetails = nil
-        // Plan/Goal state is per-session and not persisted (yet); reset
-        // when switching sessions so we don't bleed state across chats.
-        agentInteractionMode = .normal
-        agentCurrentPlan = nil
-        agentCurrentGoal = nil
+        // Restore per-session plan/goal state so re-selecting a session
+        // resumes the same workflow gate / pinned objective rather than
+        // silently dropping back to Normal.
+        agentInteractionMode = session.interactionMode
+        agentCurrentPlan = session.currentPlan
+        agentCurrentGoal = session.currentGoal
     }
 
     func deleteAgentSession(id: AgentSession.ID) {
@@ -846,6 +924,9 @@ final class AppState: ObservableObject {
         session.updatedAt = Date()
         session.title = AgentSessionStore.deriveTitle(from: agentMessages)
         session.didEditFiles = agentSessionDidEditFiles
+        session.interactionMode = agentInteractionMode
+        session.currentPlan = agentCurrentPlan
+        session.currentGoal = agentCurrentGoal
         if let override = agentSessionModelOverride, !override.isEmpty {
             session.modelID = override
         } else {

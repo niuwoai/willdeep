@@ -1,0 +1,169 @@
+//
+//  AgentPlanProgressTests.swift
+//  VeilWriterTests
+//
+//  Covers AgentPlanParser.extract step→Step conversion plus
+//  applyProgress(to:from:) — the model-driven progress reporting that
+//  flips per-step status as the agent works.
+//
+
+import Testing
+import Foundation
+@testable import VeilWriter
+
+@Suite
+struct AgentPlanProgressTests {
+    /// Initial extract turns numbered lines into Steps with .pending status.
+    @Test
+    func extractProducesPendingSteps() {
+        let content = """
+        Sure, here's the plan:
+
+        ```plan
+        We'll do it in three passes.
+        1. Read the file
+        2. Edit it
+        3. Run the tests
+        ```
+        """
+        let plan = AgentPlanParser.extract(from: content)
+        #expect(plan != nil)
+        #expect(plan?.steps.count == 3)
+        #expect(plan?.steps.map(\.status) == [.pending, .pending, .pending])
+        #expect(plan?.steps.first?.text == "Read the file")
+        #expect(plan?.summary == "We'll do it in three passes.")
+    }
+
+    /// A progress block flips matched step indexes to the new status and
+    /// promotes the plan to .executing once any step is touched.
+    @Test
+    func applyProgressFlipsStatuses() {
+        var plan = AgentPlan(
+            status: .approved,
+            steps: [
+                AgentPlan.Step(text: "A"),
+                AgentPlan.Step(text: "B"),
+                AgentPlan.Step(text: "C")
+            ],
+            summary: ""
+        )
+        let reply = """
+        Working on it.
+
+        ```progress
+        1: done
+        2: in_progress
+        ```
+        """
+        let next = AgentPlanParser.applyProgress(to: plan, from: reply)
+        #expect(next != nil)
+        plan = next!
+        #expect(plan.status == .executing)
+        #expect(plan.steps[0].status == .done)
+        #expect(plan.steps[1].status == .inProgress)
+        #expect(plan.steps[2].status == .pending)
+    }
+
+    /// All steps terminal ⇒ plan flips to .done.
+    @Test
+    func allTerminalStepsCompletesPlan() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [
+                AgentPlan.Step(text: "A", status: .done),
+                AgentPlan.Step(text: "B")
+            ],
+            summary: ""
+        )
+        let reply = """
+        ```progress
+        2: done
+        ```
+        """
+        let next = AgentPlanParser.applyProgress(to: plan, from: reply)
+        #expect(next?.status == .done)
+        #expect(next?.steps[1].status == .done)
+    }
+
+    /// Unknown status tokens are dropped — the rest of the block still applies.
+    @Test
+    func unknownStatusTokensIgnored() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [
+                AgentPlan.Step(text: "A"),
+                AgentPlan.Step(text: "B")
+            ],
+            summary: ""
+        )
+        let reply = """
+        ```progress
+        1: warp-speed
+        2: done
+        ```
+        """
+        let next = AgentPlanParser.applyProgress(to: plan, from: reply)
+        #expect(next?.steps[0].status == .pending)
+        #expect(next?.steps[1].status == .done)
+    }
+
+    /// Out-of-range step indexes don't crash and don't corrupt other steps.
+    @Test
+    func outOfRangeIndexesIgnored() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [AgentPlan.Step(text: "A")],
+            summary: ""
+        )
+        let reply = """
+        ```progress
+        99: done
+        1: in_progress
+        ```
+        """
+        let next = AgentPlanParser.applyProgress(to: plan, from: reply)
+        #expect(next?.steps.count == 1)
+        #expect(next?.steps[0].status == .inProgress)
+    }
+
+    /// No ```progress block → returns nil so the caller leaves the plan alone.
+    @Test
+    func noProgressBlockReturnsNil() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [AgentPlan.Step(text: "A")],
+            summary: ""
+        )
+        let reply = "Just prose, no progress block here."
+        #expect(AgentPlanParser.applyProgress(to: plan, from: reply) == nil)
+    }
+
+    /// Accepts a variety of separator + status token forms — the agent
+    /// shouldn't have to be pedantic.
+    @Test
+    func parserToleratesAlternateFormatting() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [
+                AgentPlan.Step(text: "A"),
+                AgentPlan.Step(text: "B"),
+                AgentPlan.Step(text: "C"),
+                AgentPlan.Step(text: "D")
+            ],
+            summary: ""
+        )
+        let reply = """
+        ```progress
+        - 1. complete
+          2) running
+        step 3: failed
+        4 skipped
+        ```
+        """
+        let next = AgentPlanParser.applyProgress(to: plan, from: reply)
+        #expect(next?.steps[0].status == .done)
+        #expect(next?.steps[1].status == .inProgress)
+        #expect(next?.steps[2].status == .failed)
+        #expect(next?.steps[3].status == .skipped)
+    }
+}

@@ -50,15 +50,26 @@ enum AgentContextBuilder {
                 If the user revises and re-prompts after a Reject, emit a new ```plan block.
                 """)
             } else if currentPlan?.status == .approved || currentPlan?.status == .executing {
-                let stepsText = (currentPlan?.steps ?? []).enumerated()
-                    .map { "\($0.offset + 1). \($0.element)" }
+                let plan = currentPlan!
+                let stepsText = plan.steps.enumerated()
+                    .map { "\($0.offset + 1). [\($0.element.status.rawValue)] \($0.element.text)" }
                     .joined(separator: "\n")
                 sections.append("""
                 === PLAN MODE — APPROVED ===
-                The user approved this plan. Execute it step-by-step. Tool calls (including writes) are now unlocked. After finishing the last step, summarize what was done.
+                The user approved this plan. Execute it step-by-step. Tool calls (including writes) are now unlocked.
 
-                Approved plan:
+                Approved plan (current statuses shown in brackets):
                 \(stepsText)
+
+                Progress reporting (REQUIRED):
+                At the end of EVERY reply where you advanced or finished a step, include exactly one fenced block tagged `progress` listing each step number you touched this turn and its new status. Use these status tokens: `pending`, `in_progress`, `done`, `skipped`, `failed`. Example:
+
+                ```progress
+                1: done
+                2: in_progress
+                ```
+
+                Steps you didn't touch this turn can be omitted. Mark a step `in_progress` before you start its tool calls; flip it to `done` (or `failed`) once finished. Once every step is `done`/`skipped`/`failed`, summarize what was accomplished.
                 """)
             }
         }
@@ -187,33 +198,79 @@ enum AgentContextBuilder {
 /// `summary`. Returns nil when no such block is present.
 enum AgentPlanParser {
     static func extract(from content: String) -> AgentPlan? {
-        guard let body = fencedPlanBody(in: content) else { return nil }
-        var steps: [String] = []
+        guard let body = fencedBody(in: content, tag: "plan") else { return nil }
+        var stepTexts: [String] = []
         var summaryLines: [String] = []
         for raw in body.components(separatedBy: .newlines) {
             let trimmed = raw.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty {
-                if !steps.isEmpty { continue }
+                if !stepTexts.isEmpty { continue }
                 summaryLines.append("")
                 continue
             }
             if let step = numberedStep(from: trimmed) {
-                steps.append(step)
-            } else if steps.isEmpty {
+                stepTexts.append(step)
+            } else if stepTexts.isEmpty {
                 summaryLines.append(trimmed)
             } else {
                 // Continuation line under the previous step — append.
-                let lastIdx = steps.count - 1
-                steps[lastIdx] = "\(steps[lastIdx]) \(trimmed)"
+                let lastIdx = stepTexts.count - 1
+                stepTexts[lastIdx] = "\(stepTexts[lastIdx]) \(trimmed)"
             }
         }
-        guard !steps.isEmpty else { return nil }
+        guard !stepTexts.isEmpty else { return nil }
         let summary = summaryLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        return AgentPlan(status: .proposed, steps: steps, summary: summary)
+        return AgentPlan(status: .proposed, summary: summary, stepTexts: stepTexts)
     }
 
-    private static func fencedPlanBody(in content: String) -> String? {
+    /// Returns a copy of `plan` with step statuses updated from any
+    /// ```progress fenced block in `content`. Block format:
+    ///
+    ///     ```progress
+    ///     1: done
+    ///     2: in_progress
+    ///     3: skipped
+    ///     ```
+    ///
+    /// `N` is the 1-based step index from the original plan. Unknown
+    /// keys are ignored so a sloppy agent reply can't corrupt the
+    /// whole plan. Returns nil when no progress block is present.
+    static func applyProgress(to plan: AgentPlan, from content: String) -> AgentPlan? {
+        guard let body = fencedBody(in: content, tag: "progress") else { return nil }
+        var updates: [Int: AgentPlan.StepStatus] = [:]
+        for raw in body.components(separatedBy: .newlines) {
+            let trimmed = raw.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+            // Accept "1: done", "1) done", "step 1: done", "- 1. done"
+            // Walk to the first run of digits, then to the separator.
+            guard let (index, after) = leadingNumber(in: trimmed),
+                  index >= 1, index <= plan.steps.count else { continue }
+            // Skip a single separator char (: . ) -) after the number.
+            let rest = trimmed[after...].drop { $0 == ":" || $0 == "." || $0 == ")" || $0 == "-" || $0 == " " || $0 == "\t" }
+            let token = rest.split(separator: " ", maxSplits: 1).first.map(String.init)?
+                .lowercased() ?? ""
+            if let parsed = parseStepStatus(token) {
+                updates[index - 1] = parsed
+            }
+        }
+        guard !updates.isEmpty else { return nil }
+        var next = plan
+        for (i, newStatus) in updates {
+            next.steps[i].status = newStatus
+        }
+        // Promote the whole plan to .executing the moment any step is
+        // touched, and .done when every step is in a terminal state.
+        if next.steps.allSatisfy({ [.done, .skipped, .failed].contains($0.status) }) {
+            next.status = .done
+        } else if next.status == .approved {
+            next.status = .executing
+        }
+        return next
+    }
+
+    private static func fencedBody(in content: String, tag: String) -> String? {
         let lines = content.components(separatedBy: .newlines)
+        let wanted = tag.lowercased()
         var inBlock = false
         var body: [String] = []
         for line in lines {
@@ -221,7 +278,7 @@ enum AgentPlanParser {
             if !inBlock {
                 if trimmed.hasPrefix("```") {
                     let info = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces).lowercased()
-                    if info == "plan" { inBlock = true }
+                    if info == wanted { inBlock = true }
                 }
                 continue
             }
@@ -235,11 +292,50 @@ enum AgentPlanParser {
 
     private static func numberedStep(from line: String) -> String? {
         var i = line.startIndex
+        // Allow a leading "- " before the number for bulleted variants.
+        if i < line.endIndex, line[i] == "-" {
+            i = line.index(after: i)
+            while i < line.endIndex, line[i] == " " { i = line.index(after: i) }
+        }
+        let numStart = i
         while i < line.endIndex, line[i].isNumber { i = line.index(after: i) }
-        guard i > line.startIndex, i < line.endIndex else { return nil }
+        guard i > numStart, i < line.endIndex else { return nil }
         let separator = line[i]
         guard separator == "." || separator == ")" else { return nil }
         let rest = line[line.index(after: i)...].trimmingCharacters(in: .whitespaces)
         return rest.isEmpty ? nil : rest
+    }
+
+    /// Returns the leading integer and the index right after it. Walks
+    /// past any non-digit prefix (e.g. `"- "`, `"step "`) up to ~6 chars
+    /// to forgive small formatting variations.
+    private static func leadingNumber(in s: String) -> (Int, String.Index)? {
+        var i = s.startIndex
+        var skips = 0
+        while i < s.endIndex, !s[i].isNumber, skips < 6 {
+            i = s.index(after: i)
+            skips += 1
+        }
+        guard i < s.endIndex, s[i].isNumber else { return nil }
+        let numStart = i
+        while i < s.endIndex, s[i].isNumber { i = s.index(after: i) }
+        return (Int(s[numStart..<i]) ?? 0, i)
+    }
+
+    private static func parseStepStatus(_ token: String) -> AgentPlan.StepStatus? {
+        switch token {
+        case "done", "complete", "completed", "finished", "ok", "✓", "✔":
+            return .done
+        case "in_progress", "in-progress", "inprogress", "running", "active", "wip", "doing":
+            return .inProgress
+        case "pending", "todo", "queued", "waiting":
+            return .pending
+        case "skipped", "skip":
+            return .skipped
+        case "failed", "fail", "error", "blocked":
+            return .failed
+        default:
+            return nil
+        }
     }
 }

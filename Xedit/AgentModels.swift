@@ -139,6 +139,16 @@ struct AgentSession: Identifiable, Codable, Equatable {
     /// card appears — empty/new sessions never show it, even when the
     /// underlying repo has unrelated uncommitted changes.
     var didEditFiles: Bool
+    /// Per-session interaction mode. Persisted so re-selecting a session
+    /// resumes plan/goal context without the user having to redo setup.
+    var interactionMode: AgentInteractionMode
+    /// Plan-mode state (proposed → approved → done). Nil outside Plan
+    /// mode, or when Plan mode is on but no plan has been drafted yet.
+    var currentPlan: AgentPlan?
+    /// Goal-mode definition (statement + acceptance checklist). Nil
+    /// outside Goal mode, or when Goal mode is on but the user hasn't
+    /// defined a goal yet.
+    var currentGoal: AgentGoal?
 
     init(
         id: UUID = UUID(),
@@ -148,7 +158,10 @@ struct AgentSession: Identifiable, Codable, Equatable {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         messages: [AgentMessage] = [],
-        didEditFiles: Bool = false
+        didEditFiles: Bool = false,
+        interactionMode: AgentInteractionMode = .normal,
+        currentPlan: AgentPlan? = nil,
+        currentGoal: AgentGoal? = nil
     ) {
         self.id = id
         self.title = title
@@ -158,6 +171,9 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.updatedAt = updatedAt
         self.messages = messages
         self.didEditFiles = didEditFiles
+        self.interactionMode = interactionMode
+        self.currentPlan = currentPlan
+        self.currentGoal = currentGoal
     }
 
     var workspaceName: String {
@@ -165,9 +181,12 @@ struct AgentSession: Identifiable, Codable, Equatable {
         return URL(fileURLWithPath: path).lastPathComponent
     }
 
-    // Custom decoding so older session JSON without `didEditFiles` loads cleanly.
+    // Custom decoding so older session JSON without the newer fields
+    // (didEditFiles, interactionMode, currentPlan, currentGoal) loads
+    // cleanly — every newer field uses decodeIfPresent with a default.
     enum CodingKeys: String, CodingKey {
-        case id, title, workspaceRootPath, modelID, createdAt, updatedAt, messages, didEditFiles
+        case id, title, workspaceRootPath, modelID, createdAt, updatedAt, messages
+        case didEditFiles, interactionMode, currentPlan, currentGoal
     }
 
     init(from decoder: Decoder) throws {
@@ -180,6 +199,9 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.updatedAt = try c.decode(Date.self, forKey: .updatedAt)
         self.messages = try c.decode([AgentMessage].self, forKey: .messages)
         self.didEditFiles = try c.decodeIfPresent(Bool.self, forKey: .didEditFiles) ?? false
+        self.interactionMode = try c.decodeIfPresent(AgentInteractionMode.self, forKey: .interactionMode) ?? .normal
+        self.currentPlan = try c.decodeIfPresent(AgentPlan.self, forKey: .currentPlan)
+        self.currentGoal = try c.decodeIfPresent(AgentGoal.self, forKey: .currentGoal)
     }
 }
 
@@ -221,15 +243,44 @@ enum AgentInteractionMode: String, Codable, CaseIterable, Identifiable {
 struct AgentPlan: Codable, Equatable {
     enum Status: String, Codable { case proposed, approved, rejected, executing, done }
 
+    /// Per-step lifecycle. Agent self-reports via a ```progress fenced
+    /// block; the user can also click checkboxes to override.
+    enum StepStatus: String, Codable, CaseIterable {
+        case pending
+        case inProgress = "in_progress"
+        case done
+        case skipped
+        case failed
+    }
+
+    struct Step: Codable, Equatable, Identifiable {
+        var id: UUID
+        var text: String
+        var status: StepStatus
+
+        init(id: UUID = UUID(), text: String, status: StepStatus = .pending) {
+            self.id = id
+            self.text = text
+            self.status = status
+        }
+    }
+
     var status: Status
-    var steps: [String]
+    var steps: [Step]
     /// Free-form preamble the agent put before the numbered list. Shown
     /// muted at the top of the plan card.
     var summary: String
 
-    init(status: Status = .proposed, steps: [String] = [], summary: String = "") {
+    init(status: Status = .proposed, steps: [Step] = [], summary: String = "") {
         self.status = status
         self.steps = steps
+        self.summary = summary
+    }
+
+    /// Convenience for older call sites that built plans from raw strings.
+    init(status: Status, summary: String, stepTexts: [String]) {
+        self.status = status
+        self.steps = stepTexts.map { Step(text: $0) }
         self.summary = summary
     }
 }

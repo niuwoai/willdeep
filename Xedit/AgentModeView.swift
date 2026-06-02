@@ -2210,16 +2210,15 @@ struct AgentPlanCard: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                ForEach(Array(plan.steps.enumerated()), id: \.offset) { index, step in
-                    HStack(alignment: .top, spacing: 8) {
-                        Text("\(index + 1).")
-                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 20, alignment: .trailing)
-                        Text(step)
-                            .font(.system(size: 12))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                ForEach(Array(plan.steps.enumerated()), id: \.element.id) { index, step in
+                    AgentPlanStepRow(
+                        index: index + 1,
+                        step: step,
+                        interactive: plan.status != .proposed && plan.status != .rejected,
+                        onCycle: { next in
+                            appState.setAgentPlanStepStatus(id: step.id, status: next)
+                        }
+                    )
                 }
             }
 
@@ -2241,6 +2240,11 @@ struct AgentPlanCard: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
             }
+
+            // Always offer a way to revise mid-execution — useful when
+            // the agent's plan diverged from what the user actually
+            // wanted, or when a constraint emerges partway through.
+            AgentPlanRevisionRow()
         }
         .padding(12)
         .background(
@@ -2251,6 +2255,81 @@ struct AgentPlanCard: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.orange.opacity(0.35), lineWidth: 1)
         )
+    }
+}
+
+/// "Replan" action collapsed by default; expands into a one-line note
+/// field + Send button so the user can either re-ask cold ("revise the
+/// plan") or pass guidance ("use sed instead of patches"). Sits at the
+/// bottom of every plan card.
+private struct AgentPlanRevisionRow: View {
+    @EnvironmentObject var appState: AppState
+    @State private var expanded = false
+    @State private var note = ""
+    @FocusState private var noteFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Divider()
+                .opacity(0.4)
+            HStack(spacing: 6) {
+                if expanded {
+                    TextField("Revision note (optional, e.g. 'skip step 2', 'use sed instead')", text: $note)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11))
+                        .focused($noteFocused)
+                        .onSubmit { send() }
+                    Button("Send") { send() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .disabled(appState.isAgentResponding && appState.agentQueuedMessages.count > 8)
+                    Button {
+                        expanded = false
+                        note = ""
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("Cancel")
+                } else {
+                    Button {
+                        expanded = true
+                        // Defer focus so the TextField has mounted first.
+                        DispatchQueue.main.async { noteFocused = true }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text("Replan")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .foregroundStyle(Color.orange)
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(Color.orange.opacity(0.45), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .help("Ask the agent to revise the plan — optionally with a note")
+                    Spacer(minLength: 0)
+                    if appState.isAgentResponding {
+                        Text("Note will queue until the current turn finishes.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private func send() {
+        appState.requestPlanRevision(note: note)
+        expanded = false
+        note = ""
     }
 }
 
@@ -2283,6 +2362,84 @@ private struct PlanStatusPill: View {
         case .approved, .executing: return .green
         case .done: return .blue
         case .rejected: return .red
+        }
+    }
+}
+
+/// One row of the plan card. The status glyph doubles as a button that
+/// cycles pending → in_progress → done → skipped → pending, so the
+/// user can override whatever the agent reported. While the plan is
+/// still .proposed (awaiting approval), the glyph is shown but not
+/// interactive — checking off steps before approval doesn't make sense.
+private struct AgentPlanStepRow: View {
+    let index: Int
+    let step: AgentPlan.Step
+    let interactive: Bool
+    let onCycle: (AgentPlan.StepStatus) -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Button {
+                guard interactive else { return }
+                onCycle(nextStatus(after: step.status))
+            } label: {
+                Image(systemName: glyph)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(glyphColor)
+                    .frame(width: 16, height: 16)
+            }
+            .buttonStyle(.plain)
+            .disabled(!interactive)
+            .help(interactive ? "Cycle status (was \(step.status.rawValue))" : "Approve the plan to track step progress")
+
+            Text("\(index).")
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 20, alignment: .trailing)
+            Text(step.text)
+                .font(.system(size: 12))
+                .strikethrough(step.status == .done || step.status == .skipped, color: .secondary)
+                .foregroundStyle(textColor)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var glyph: String {
+        switch step.status {
+        case .pending: return "circle"
+        case .inProgress: return "arrow.triangle.2.circlepath"
+        case .done: return "checkmark.circle.fill"
+        case .skipped: return "minus.circle"
+        case .failed: return "xmark.circle.fill"
+        }
+    }
+
+    private var glyphColor: Color {
+        switch step.status {
+        case .pending: return .secondary
+        case .inProgress: return .orange
+        case .done: return .green
+        case .skipped: return .secondary
+        case .failed: return .red
+        }
+    }
+
+    private var textColor: Color {
+        switch step.status {
+        case .done, .skipped: return .secondary
+        case .failed: return .red
+        default: return .primary
+        }
+    }
+
+    private func nextStatus(after current: AgentPlan.StepStatus) -> AgentPlan.StepStatus {
+        switch current {
+        case .pending: return .inProgress
+        case .inProgress: return .done
+        case .done: return .skipped
+        case .skipped: return .pending
+        case .failed: return .pending
         }
     }
 }

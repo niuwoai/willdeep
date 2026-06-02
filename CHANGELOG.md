@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.45.0-rc5 - 2026-06-02
+
+- Added a **Replan** affordance at the bottom of every plan card. Click expands an inline note field — leave it empty to ask the agent for a fresh plan cold, or type guidance like "use sed instead of patches" / "skip step 3" / "the file is read-only" and hit Enter. Mechanics: `AppState.requestPlanRevision(note:)` drops the existing plan (so the system prompt flips back to "you must emit a ```plan``` block"), then auto-sends a user message wrapping the note, queueing if the agent is still mid-turn. The next assistant reply's ```plan``` block flows through the existing `captureAgentPlanFromLatestMessage` path and the card auto-refreshes with the new steps.
+- The same row is shown for plans in every state (proposed / approved / executing / done), so mid-execution course corrections — the more common case — work without first clicking Reject.
+
+## 1.45.0-rc4 - 2026-06-02
+
+- Plan steps now have a lifecycle. `AgentPlan.steps` upgraded from `[String]` to `[Step]` (id + text + status: `pending` / `in_progress` / `done` / `skipped` / `failed`). The model is asked to self-report progress in a fenced ```progress block at the end of every reply it touches a step — `1: done`, `2: in_progress`, etc. The parser tolerates `1: done`, `- 1. complete`, `step 2: failed`, `4 skipped`, and the usual status-word aliases (`running`/`wip`/`doing` → in_progress, `done`/`complete`/`✓` → done, `blocked` → failed). Unknown tokens and out-of-range indexes are dropped silently rather than corrupting the whole plan.
+- Plan card UI gained per-step status glyphs. Each row now starts with a clickable status icon: ○ pending, ↻ in progress (orange), ✓ done (green, struck-through), − skipped (struck-through), ✗ failed (red). Clicking cycles pending → in_progress → done → skipped → pending, so the user can override whatever the agent reported. Cycling is disabled while the plan is still .proposed (awaiting approval). Plan auto-flips to `.executing` on the first touched step and `.done` once every step is in a terminal state.
+- System prompt in approved Plan mode now lists the **current** statuses inline (`1. [done] Inspect AppState`) and requires the ```progress block format, so the model has the full context to update accurately.
+- Added `AgentPlanProgressTests` (7 cases) covering: initial extract → pending, progress block flips, all-terminal auto-completion, unknown-token tolerance, out-of-range indexes, no-block returns nil, and alternate formatting tolerance. Updated `AgentSessionPersistenceTests.planAndGoalSurviveJSONRoundTrip` to assert per-step status survives the JSON round-trip. All 11 tests pass.
+
+## 1.45.0-rc3 - 2026-06-02
+
+- Persisted Plan + Goal state to session JSON. `AgentSession` gained `interactionMode`, `currentPlan`, and `currentGoal` fields, all decoded with `decodeIfPresent` so older session files keep loading. `persistActiveAgentSession` writes them; `selectAgentSession` restores them (previously hard-reset to `.normal`/nil, dropping any plan/goal the moment you switched tabs). Every plan/goal mutator (`setAgentInteractionMode`, `approveAgentPlan`, `rejectAgentPlan`, `completeAgentPlan`, `setAgentGoal`, `toggleAgentGoalItem`) now triggers `persistActiveAgentSession()` so quitting between turns doesn't lose state.
+- `setAgentGoal` preserves checklist `done` state when an item's text is unchanged across an edit, so the user can tweak the goal statement or add new items without losing what's already ticked.
+- Added `AgentSessionPersistenceTests` covering legacy JSON loading, plan+goal round-trip, goal-mode-with-nil-goal, and the loud-throw contract for unknown interactionMode strings. All 4 tests pass.
+
 ## 1.45.0-rc2 - 2026-06-02
 
 - Added a floating **Agent** pill at the upper-right of the editor window. Visible only when a workspace is open (`rootDirectory != nil`), the app is in editor mode, and focus/maximize aren't on — Agent mode needs project context to be meaningful. One click flips the window into Agent mode via `setAppMode(.agent)`. Rendered as an overlay on top of the tab bar (with a 72pt trailing reserve so the rightmost tab's close button never slips under it) and on top of the empty-project view (when a folder is open but no tab is active). Tooltip mentions the existing ⌘⇧A shortcut.
