@@ -17,6 +17,9 @@ struct EditorSettingsView: View {
     @State private var fetchedAgentModels: [String] = []
     @State private var isFetchingAgentModels = false
     @State private var agentModelFetchMessage = ""
+    @State private var fetchedImageModels: [String] = []
+    @State private var isFetchingImageModels = false
+    @State private var imageModelFetchMessage = ""
 
     // Local buffers for the Agent settings text fields. The previous
     // implementation bound directly to `appState.agentConfiguration`,
@@ -27,7 +30,14 @@ struct EditorSettingsView: View {
     // Save button is the only commit point.
     @State private var agentBaseURLBuffer: String = ""
     @State private var agentModelBuffer: String = ""
+    @State private var agentFlashModelBuffer: String = ""
+    @State private var agentProModelBuffer: String = ""
+    @State private var agentRoutingModeBuffer: AgentModelRoutingMode = .auto
     @State private var agentAPIKeyBuffer: String = ""
+    @State private var imageProviderIDBuffer: String = ""
+    @State private var imageBaseURLBuffer: String = ""
+    @State private var imageModelBuffer: String = ""
+    @State private var imageAPIKeyBuffer: String = ""
     @State private var agentSaveStatus: String = ""
 
     var body: some View {
@@ -253,25 +263,42 @@ struct EditorSettingsView: View {
                 TextField("Base URL", text: $agentBaseURLBuffer)
                     .textFieldStyle(.roundedBorder)
 
-                LabeledContent("Model") {
-                    HStack {
-                        TextField("Model", text: $agentModelBuffer)
-                            .textFieldStyle(.roundedBorder)
-
-                        if !fetchedAgentModels.isEmpty {
-                            Picker("Fetched Models", selection: $agentModelBuffer) {
-                                ForEach(fetchedAgentModels, id: \.self) { model in
-                                    Text(model).tag(model)
-                                }
-                            }
-                            .labelsHidden()
-                            .frame(width: 180)
-                        }
+                Picker("Routing", selection: $agentRoutingModeBuffer) {
+                    ForEach(AgentModelRoutingMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
                     }
                 }
+                .pickerStyle(.segmented)
+
+                Text(agentRoutingModeBuffer.description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                agentModelField("Flash Model", text: $agentFlashModelBuffer, models: fetchedAgentModels)
+                agentModelField("Pro Model", text: $agentProModelBuffer, models: fetchedAgentModels)
 
                 SecureField("API Key", text: $agentAPIKeyBuffer)
                     .textFieldStyle(.roundedBorder)
+            }
+
+            Section("Image Understanding") {
+                Picker("Provider", selection: imageProviderBinding) {
+                    ForEach(AgentProviderPreset.all.filter(\.supportsImageInput)) { provider in
+                        Text(provider.displayName).tag(provider.id)
+                    }
+                }
+
+                TextField("Base URL", text: $imageBaseURLBuffer)
+                    .textFieldStyle(.roundedBorder)
+
+                agentModelField("Vision Model", text: $imageModelBuffer, models: fetchedImageModels)
+
+                SecureField("API Key", text: $imageAPIKeyBuffer)
+                    .textFieldStyle(.roundedBorder)
+
+                Text("Used only when the active Agent provider cannot accept images directly. Multiple attached images are described in one request, then the description is sent to the main model.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 HStack {
                     Button("Save") {
@@ -291,6 +318,11 @@ struct EditorSettingsView: View {
                     }
                     .disabled(isFetchingAgentModels)
 
+                    Button(isFetchingImageModels ? "Fetching Images..." : "Fetch Image Models") {
+                        fetchImageModels()
+                    }
+                    .disabled(isFetchingImageModels)
+
                     if !agentSaveStatus.isEmpty {
                         Text(agentSaveStatus)
                             .font(.caption)
@@ -301,10 +333,15 @@ struct EditorSettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
+                    } else if !imageModelFetchMessage.isEmpty {
+                        Text(imageModelFetchMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
                     }
                 }
 
-                Text("Keystrokes stay local until you press Save (⌘↩). The API key is stored in Keychain.")
+                Text("Keystrokes stay local until you press Save (⌘↩). API keys are stored separately in Keychain.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -328,21 +365,44 @@ struct EditorSettingsView: View {
         let configuration = appState.agentConfiguration
         return agentBaseURLBuffer != configuration.baseURL
             || agentModelBuffer != configuration.model
+            || agentFlashModelBuffer != configuration.flashModel
+            || agentProModelBuffer != configuration.proModel
+            || agentRoutingModeBuffer != configuration.routingMode
             || agentAPIKeyBuffer != configuration.apiKey
+            || imageProviderIDBuffer != configuration.imageDescription.providerID
+            || imageBaseURLBuffer != configuration.imageDescription.baseURL
+            || imageModelBuffer != configuration.imageDescription.model
+            || imageAPIKeyBuffer != configuration.imageDescription.apiKey
     }
 
     private func loadAgentBuffersFromAppState() {
         let configuration = appState.agentConfiguration
         agentBaseURLBuffer = configuration.baseURL
         agentModelBuffer = configuration.model
+        agentFlashModelBuffer = configuration.flashModel
+        agentProModelBuffer = configuration.proModel
+        agentRoutingModeBuffer = configuration.routingMode
         agentAPIKeyBuffer = configuration.apiKey
+        imageProviderIDBuffer = configuration.imageDescription.providerID
+        imageBaseURLBuffer = configuration.imageDescription.baseURL
+        imageModelBuffer = configuration.imageDescription.model
+        imageAPIKeyBuffer = configuration.imageDescription.apiKey
     }
 
     private func commitAgentBuffers() {
         var configuration = appState.agentConfiguration
         configuration.baseURL = agentBaseURLBuffer
         configuration.model = agentModelBuffer
+        configuration.flashModel = agentFlashModelBuffer
+        configuration.proModel = agentProModelBuffer
+        configuration.routingMode = agentRoutingModeBuffer
         configuration.apiKey = agentAPIKeyBuffer
+        configuration.imageDescription = AgentImageDescriptionConfiguration(
+            providerID: imageProviderIDBuffer,
+            baseURL: imageBaseURLBuffer,
+            model: imageModelBuffer,
+            apiKey: imageAPIKeyBuffer
+        )
         appState.agentConfiguration = configuration.normalized
         // Reflect any normalization (trim, fallback baseURL) back into
         // the buffer so the user sees what was actually saved.
@@ -352,6 +412,25 @@ struct EditorSettingsView: View {
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_800_000_000)
             if agentSaveStatus == "Saved." { agentSaveStatus = "" }
+        }
+    }
+
+    private func agentModelField(_ title: String, text: Binding<String>, models: [String]) -> some View {
+        LabeledContent(title) {
+            HStack {
+                TextField(title, text: text)
+                    .textFieldStyle(.roundedBorder)
+
+                if !models.isEmpty {
+                    Picker("Fetched Models", selection: text) {
+                        ForEach(models, id: \.self) { model in
+                            Text(model).tag(model)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 180)
+                }
+            }
         }
     }
 
@@ -513,14 +592,60 @@ struct EditorSettingsView: View {
                         agentModelFetchMessage = "No models returned."
                     } else {
                         agentModelFetchMessage = "Fetched \(models.count) models."
-                        if agentModelBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                        if agentFlashModelBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                            let firstModel = models.first {
-                            agentModelBuffer = firstModel
+                            agentFlashModelBuffer = firstModel
+                        }
+                        if agentProModelBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                           let firstModel = models.first {
+                            agentProModelBuffer = firstModel
                         }
                     }
                 case .failure(let error):
                     fetchedAgentModels = []
                     agentModelFetchMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func fetchImageModels() {
+        isFetchingImageModels = true
+        imageModelFetchMessage = ""
+        let imageConfiguration = AgentImageDescriptionConfiguration(
+            providerID: imageProviderIDBuffer,
+            baseURL: imageBaseURLBuffer,
+            model: imageModelBuffer,
+            apiKey: imageAPIKeyBuffer
+        ).normalized.agentConfiguration
+
+        Task {
+            let result: Result<[String], Error>
+            do {
+                let models = try await AgentClient(configuration: imageConfiguration).fetchModels()
+                result = .success(models)
+            } catch {
+                result = .failure(error)
+            }
+
+            await MainActor.run {
+                isFetchingImageModels = false
+                switch result {
+                case .success(let models):
+                    fetchedImageModels = models
+                    appState.recordFetchedAgentModels(models)
+                    if models.isEmpty {
+                        imageModelFetchMessage = "No image models returned."
+                    } else {
+                        imageModelFetchMessage = "Fetched \(models.count) image models."
+                        if imageModelBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                           let firstModel = models.first {
+                            imageModelBuffer = firstModel
+                        }
+                    }
+                case .failure(let error):
+                    fetchedImageModels = []
+                    imageModelFetchMessage = error.localizedDescription
                 }
             }
         }
@@ -550,15 +675,36 @@ struct EditorSettingsView: View {
                preset.id != AgentProviderPreset.customID {
                 configuration.baseURL = preset.baseURL
                 configuration.model = preset.defaultModel
+                configuration.flashModel = preset.defaultFlashModel
+                configuration.proModel = preset.defaultProModel
+                configuration.routingMode = .auto
                 // Reflect the preset in the live buffers so the user
                 // doesn't have to click Save just to make the picker
                 // visibly take effect.
                 agentBaseURLBuffer = preset.baseURL
                 agentModelBuffer = preset.defaultModel
+                agentFlashModelBuffer = preset.defaultFlashModel
+                agentProModelBuffer = preset.defaultProModel
+                agentRoutingModeBuffer = .auto
             }
             fetchedAgentModels = []
             agentModelFetchMessage = ""
             appState.agentConfiguration = configuration.normalized
+        }
+    }
+
+    private var imageProviderBinding: Binding<String> {
+        Binding {
+            imageProviderIDBuffer
+        } set: { providerID in
+            imageProviderIDBuffer = providerID
+            if let preset = AgentProviderPreset.preset(id: providerID),
+               preset.id != AgentProviderPreset.customID {
+                imageBaseURLBuffer = preset.baseURL
+                imageModelBuffer = preset.defaultVisionModel
+            }
+            fetchedImageModels = []
+            imageModelFetchMessage = ""
         }
     }
 

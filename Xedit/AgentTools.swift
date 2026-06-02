@@ -1799,6 +1799,28 @@ enum AgentToolRunner {
     nonisolated private static let defaultCommandTimeout: TimeInterval = 20
     nonisolated private static let maxCommandTimeout: TimeInterval = 120
     nonisolated private static let maxCommandOutput = 32 * 1024
+    nonisolated static let supplementalCommandPathEntries = [
+        "/opt/homebrew/bin",
+        "/opt/homebrew/sbin",
+        "/usr/local/bin",
+        "/usr/local/sbin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+    ]
+
+    nonisolated static func shellEnvironment(from base: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
+        var environment = base
+        var pathEntries = (environment["PATH"] ?? "")
+            .split(separator: ":")
+            .map(String.init)
+        for entry in supplementalCommandPathEntries where !pathEntries.contains(entry) {
+            pathEntries.append(entry)
+        }
+        environment["PATH"] = pathEntries.joined(separator: ":")
+        return environment
+    }
 
     private static func runCommand(
         arguments: [String: AgentJSONValue],
@@ -1817,6 +1839,7 @@ enum AgentToolRunner {
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
             process.arguments = ["-c", command]
             process.currentDirectoryURL = root
+            process.environment = shellEnvironment()
 
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()

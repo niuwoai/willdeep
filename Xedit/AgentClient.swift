@@ -57,11 +57,15 @@ struct AgentClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
 
-        let requestMessages = Self.providerReadyMessages(messages)
+        let requestMessages = Self.providerReadyMessages(
+            messages,
+            supportsImages: configuration.supportsImageInput
+        )
         let requestBody = try Self.encodeChatRequest(
             model: configuration.model,
             messages: requestMessages,
-            tools: tools
+            tools: tools,
+            supportsImages: configuration.supportsImageInput
         )
         request.httpBody = requestBody
 
@@ -204,13 +208,14 @@ struct AgentClient {
     nonisolated static func encodeChatRequest(
         model: String,
         messages: [AgentMessage],
-        tools: [AgentToolDescriptor]
+        tools: [AgentToolDescriptor],
+        supportsImages: Bool = true
     ) throws -> Data {
-        let providerMessages = providerReadyMessages(messages)
+        let providerMessages = providerReadyMessages(messages, supportsImages: supportsImages)
         var body: [String: Any] = [
             "model": model,
             "stream": true,
-            "messages": providerMessages.map(encodeMessage)
+            "messages": providerMessages.map { encodeMessage($0, supportsImages: supportsImages) }
         ]
         if !tools.isEmpty {
             body["tools"] = tools.map(encodeTool)
@@ -219,7 +224,10 @@ struct AgentClient {
         return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
     }
 
-    nonisolated static func providerReadyMessages(_ messages: [AgentMessage]) -> [AgentMessage] {
+    nonisolated static func providerReadyMessages(
+        _ messages: [AgentMessage],
+        supportsImages: Bool = true
+    ) -> [AgentMessage] {
         var result: [AgentMessage] = []
         var index = 0
 
@@ -250,7 +258,7 @@ struct AgentClient {
                 }
 
                 if expectedIDs.allSatisfy({ collectedByID[$0] != nil }) {
-                    result.append(message)
+                    result.append(providerReadyMessage(message, supportsImages: supportsImages))
                     for expectedID in expectedIDs {
                         if let toolMessage = collectedByID[expectedID] {
                             result.append(toolMessage)
@@ -261,17 +269,40 @@ struct AgentClient {
                 continue
             }
 
-            result.append(message)
+            result.append(providerReadyMessage(message, supportsImages: supportsImages))
             index += 1
         }
 
         return result
     }
 
-    nonisolated private static func encodeMessage(_ message: AgentMessage) -> [String: Any] {
+    nonisolated private static func providerReadyMessage(
+        _ message: AgentMessage,
+        supportsImages: Bool
+    ) -> AgentMessage {
+        guard message.role == .user, !supportsImages, !message.images.isEmpty else {
+            return message
+        }
+
+        var result = message
+        let count = result.images.count
+        let notice = "[\(count) image attachment\(count == 1 ? "" : "s") omitted because this provider only accepts text messages.]"
+        if result.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            result.content = notice
+        } else {
+            result.content += "\n\n\(notice)"
+        }
+        result.images = []
+        return result
+    }
+
+    nonisolated private static func encodeMessage(
+        _ message: AgentMessage,
+        supportsImages: Bool
+    ) -> [String: Any] {
         var dict: [String: Any] = ["role": message.role.rawValue]
 
-        if message.role == .user, !message.images.isEmpty {
+        if supportsImages, message.role == .user, !message.images.isEmpty {
             // OpenAI multimodal: content is an array of typed parts.
             var parts: [[String: Any]] = []
             if !message.content.isEmpty {

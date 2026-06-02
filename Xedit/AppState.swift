@@ -14,7 +14,7 @@ import AppKit
 /// Manages the currently opened file URL, its text content, the dirty (edited) flag,
 /// and the root directory for the sidebar file tree.
 final class AppState: ObservableObject {
-    nonisolated private static let maxAgentToolRounds = 24
+    nonisolated private static let maxAgentToolRounds = 64
 
     @Published var openedFileURL: URL?
     @Published var fileContent: String {
@@ -92,8 +92,8 @@ final class AppState: ObservableObject {
     /// Messages the user queued while the agent was busy. Each entry is a
     /// snapshot of text + images, consumed FIFO once the current turn ends.
     @Published var agentQueuedMessages: [AgentQueuedMessage] = []
-    /// Per-session model override. If non-nil, takes precedence over
-    /// `agentConfiguration.model` for the active Agent-mode session.
+    /// Per-session concrete model override. If non-nil, takes precedence
+    /// over the configured Flash/Pro route for the active Agent session.
     @Published var agentSessionModelOverride: String?
     /// Model IDs the user has previously fetched in Settings — surfaced in
     /// the Agent-mode model picker as a quick switcher.
@@ -418,25 +418,121 @@ final class AppState: ObservableObject {
         agentErrorDetails = nil
         isAgentResponding = true
 
-        agentMessages.append(AgentMessage(role: .user, content: text, images: images))
+        let userMessage = AgentMessage(role: .user, content: text, images: images)
+        agentMessages.append(userMessage)
         let configuration = configurationForCurrentTurn()
+        let imageDescriptionConfiguration = agentConfiguration.normalized.imageDescription.agentConfiguration
 
         agentRequestTask?.cancel()
         agentRequestTask = Task { [weak self] in
+            await self?.prepareImagesForTextOnlyProvider(
+                userMessageID: userMessage.id,
+                mainConfiguration: configuration,
+                imageDescriptionConfiguration: imageDescriptionConfiguration
+            )
             await self?.runAgentLoop(configuration: configuration)
         }
     }
 
+    private func prepareImagesForTextOnlyProvider(
+        userMessageID: AgentMessage.ID,
+        mainConfiguration: AgentConfiguration,
+        imageDescriptionConfiguration: AgentConfiguration
+    ) async {
+        guard !mainConfiguration.supportsImageInput else { return }
+        guard let index = agentMessages.firstIndex(where: { $0.id == userMessageID }) else { return }
+        let images = agentMessages[index].images
+        guard !images.isEmpty else { return }
+
+        let description: String
+        do {
+            description = try await describeImagesForTextOnlyProvider(
+                images,
+                configuration: imageDescriptionConfiguration
+            )
+        } catch {
+            description = "Image description failed before sending to \(mainConfiguration.providerID): \(error.localizedDescription)"
+        }
+
+        guard !Task.isCancelled,
+              let liveIndex = agentMessages.firstIndex(where: { $0.id == userMessageID }) else {
+            return
+        }
+        agentMessages[liveIndex].content = Self.contentByAppendingImageDescription(
+            to: agentMessages[liveIndex].content,
+            description: description,
+            imageCount: images.count,
+            providerID: imageDescriptionConfiguration.providerID,
+            model: imageDescriptionConfiguration.model
+        )
+    }
+
+    private func describeImagesForTextOnlyProvider(
+        _ images: [AgentImageAttachment],
+        configuration: AgentConfiguration
+    ) async throws -> String {
+        let normalized = configuration.normalized
+        guard normalized.supportsImageInput else {
+            throw AgentClientError.serverStatus(
+                AgentProviderHTTPError(
+                    statusCode: 400,
+                    method: "POST",
+                    url: normalized.baseURL,
+                    providerID: normalized.providerID,
+                    model: normalized.model,
+                    requestSummary: "Image description provider does not support image input.",
+                    requestBody: "(not sent)",
+                    responseBody: "Choose an image-capable provider/model for Image Understanding."
+                )
+            )
+        }
+
+        let prompt = """
+        Describe each attached image for a coding agent that cannot see images directly.
+        Return concise but information-dense notes. For screenshots, include visible UI text, error messages, dialogs, file names, code snippets, tables, controls, layout, and anything likely relevant to debugging or implementation.
+        If there are multiple images, number them as Image 1, Image 2, etc.
+        """
+        let message = AgentMessage(role: .user, content: prompt, images: images)
+        let collector = CompressionSummaryCollector()
+        try await AgentClient(configuration: normalized).streamChat(messages: [message]) { event in
+            if case .textDelta(let delta) = event {
+                await collector.append(delta)
+            }
+        }
+        let result = await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !result.isEmpty else {
+            throw AgentClientError.invalidResponse
+        }
+        return result
+    }
+
+    nonisolated private static func contentByAppendingImageDescription(
+        to content: String,
+        description: String,
+        imageCount: Int,
+        providerID: String,
+        model: String
+    ) -> String {
+        let header = "[Image description generated by \(providerID) / \(model) for \(imageCount) attached image\(imageCount == 1 ? "" : "s")]"
+        let block = "\(header)\n\(description)"
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? block : "\(content)\n\n\(block)"
+    }
+
     /// Resolve the configuration to use for this turn. Honours the per-
-    /// session `agentSessionModelOverride` if one is set; falls back to the
-    /// global Settings model.
+    /// session concrete model override if one is set; otherwise follows the
+    /// global Flash/Pro route.
     private func configurationForCurrentTurn() -> AgentConfiguration {
-        var configuration = agentConfiguration
+        var configuration = agentConfiguration.normalized.resolved(for: .interactive)
         if let override = agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
            !override.isEmpty {
             configuration.model = override
         }
         return configuration.normalized
+    }
+
+    private func configurationForContextCompression() -> AgentConfiguration {
+        agentConfiguration.normalized.resolved(for: .compression)
     }
 
     private func consumeNextQueuedMessageIfNeeded() {
@@ -506,7 +602,7 @@ final class AppState: ObservableObject {
 
         let session = AgentSession(
             workspaceRootPath: rootDirectory?.standardizedFileURL.path,
-            modelID: agentConfiguration.model
+            modelID: activeAgentModelID
         )
         agentSessions.insert(session, at: 0)
         activeAgentSessionID = session.id
@@ -527,7 +623,8 @@ final class AppState: ObservableObject {
         let session = agentSessions[index]
         activeAgentSessionID = session.id
         agentMessages = session.messages
-        agentSessionModelOverride = session.modelID == agentConfiguration.model ? nil : session.modelID
+        let routedModel = agentConfiguration.normalized.model(for: .interactive)
+        agentSessionModelOverride = session.modelID == routedModel ? nil : session.modelID
         agentPatchProposals = []
         agentToolCalls = []
         agentQueuedMessages = []
@@ -565,7 +662,7 @@ final class AppState: ObservableObject {
         if let override = agentSessionModelOverride, !override.isEmpty {
             session.modelID = override
         } else {
-            session.modelID = agentConfiguration.model
+            session.modelID = activeAgentModelID
         }
         agentSessions[index] = session
         // Bubble most-recently-updated to the top.
@@ -602,6 +699,22 @@ final class AppState: ObservableObject {
         return Self.estimateAgentTokens(messages: requestMessages, tools: tools)
     }
 
+    var activeAgentModelID: String {
+        if let override = agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !override.isEmpty {
+            return override
+        }
+        return agentConfiguration.normalized.model(for: .interactive)
+    }
+
+    var agentModelStatusText: String {
+        if let override = agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !override.isEmpty {
+            return "Override · \(override)"
+        }
+        return agentConfiguration.normalized.routingLabel
+    }
+
     private var estimatedAgentRequestMessages: [AgentMessage] {
         let systemPrompt = AgentContextBuilder.systemPrompt(
             rootDirectory: rootDirectory,
@@ -614,7 +727,7 @@ final class AppState: ObservableObject {
         let collapsedHistory = Self.collapseOldToolResults(in: agentMessages)
         return AgentClient.providerReadyMessages([
             AgentMessage(role: .system, content: systemPrompt)
-        ] + collapsedHistory)
+        ] + collapsedHistory, supportsImages: agentConfiguration.normalized.supportsImageInput)
     }
 
     nonisolated static func estimateAgentTokens(
@@ -696,7 +809,7 @@ final class AppState: ObservableObject {
     /// models don't look full after one ordinary turn.
     var agentContextWindow: Int {
         Self.agentContextWindow(
-            model: agentSessionModelOverride ?? agentConfiguration.model,
+            model: activeAgentModelID,
             providerID: agentConfiguration.providerID
         )
     }
@@ -1106,7 +1219,7 @@ final class AppState: ObservableObject {
         guard agentMessages.count > keepRecent else { return }
 
         isCompressingAgentContext = true
-        let configuration = configurationForCurrentTurn()
+        let configuration = configurationForContextCompression()
         let head = Array(agentMessages.prefix(agentMessages.count - keepRecent))
         let tail = Array(agentMessages.suffix(keepRecent))
 
@@ -2759,15 +2872,45 @@ final class AppState: ObservableObject {
 
         let numstatOutput = runGit(arguments: ["diff", "--numstat", "HEAD", "--"], in: repositoryRoot)
         let lineStats = parseGitNumstat(numstatOutput)
-        let files = status.entries.map { path, kind in
-            AgentFileChangeSummary(
+        let files: [AgentFileChangeSummary] = status.entries.compactMap { entry in
+            let path = entry.key
+            let kind = entry.value
+            let stats = lineStats[path] ?? AgentLineChangeStats(added: nil, deleted: nil)
+            let hasNumstatEntry = lineStats[path] != nil
+            guard shouldIncludeAgentWorktreeChange(
+                kind: kind,
+                lineStats: stats,
+                hasNumstatEntry: hasNumstatEntry
+            ) else {
+                return nil
+            }
+            return AgentFileChangeSummary(
                 path: path,
                 kind: kind,
-                lineStats: lineStats[path] ?? AgentLineChangeStats(added: nil, deleted: nil)
+                lineStats: stats
             )
         }
 
         return AgentWorktreeChangeSummary(repositoryRoot: repositoryRoot, files: files)
+    }
+
+    nonisolated static func shouldIncludeAgentWorktreeChange(
+        kind: GitFileStatusKind,
+        lineStats: AgentLineChangeStats,
+        hasNumstatEntry: Bool
+    ) -> Bool {
+        if let added = lineStats.added, let deleted = lineStats.deleted {
+            return added > 0 || deleted > 0
+        }
+        if hasNumstatEntry {
+            return true
+        }
+        switch kind {
+        case .added, .deleted, .renamed, .untracked:
+            return true
+        case .modified:
+            return false
+        }
     }
 
     nonisolated static func parseGitNumstat(_ output: String) -> [String: AgentLineChangeStats] {

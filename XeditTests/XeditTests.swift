@@ -753,6 +753,35 @@ struct VeilWriterTests {
         #expect(summary.change(for: "B.swift")?.fileName == "B.swift")
     }
 
+    @Test("agent worktree summary skips modified files without real diff")
+    func testAgentWorktreeSummarySkipsModifiedFilesWithoutDiff() {
+        #expect(AppState.shouldIncludeAgentWorktreeChange(
+            kind: .modified,
+            lineStats: AgentLineChangeStats(added: nil, deleted: nil),
+            hasNumstatEntry: false
+        ) == false)
+        #expect(AppState.shouldIncludeAgentWorktreeChange(
+            kind: .modified,
+            lineStats: AgentLineChangeStats(added: 0, deleted: 0),
+            hasNumstatEntry: true
+        ) == false)
+        #expect(AppState.shouldIncludeAgentWorktreeChange(
+            kind: .modified,
+            lineStats: AgentLineChangeStats(added: 2, deleted: 0),
+            hasNumstatEntry: true
+        ) == true)
+        #expect(AppState.shouldIncludeAgentWorktreeChange(
+            kind: .modified,
+            lineStats: AgentLineChangeStats(added: nil, deleted: nil),
+            hasNumstatEntry: true
+        ) == true)
+        #expect(AppState.shouldIncludeAgentWorktreeChange(
+            kind: .untracked,
+            lineStats: AgentLineChangeStats(added: nil, deleted: nil),
+            hasNumstatEntry: false
+        ) == true)
+    }
+
     @MainActor
     @Test("agent thinking indicator only shows while waiting for model output")
     func testAgentThinkingIndicatorState() {
@@ -1657,6 +1686,27 @@ struct VeilWriterTests {
         #expect(result.payload.contains("[truncated]"))
     }
 
+    @Test("run_command exposes common user binary paths")
+    func testRunCommandUsesSupplementalShellPath() async throws {
+        let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("veilwriter_test_run_command_path_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let context = AgentToolContext(rootDirectory: workspace)
+        let result = try await AgentToolRunner.run(
+            name: "run_command",
+            arguments: [
+                "command": .string("printf '%s' \"$PATH\""),
+                "timeout_seconds": .number(5)
+            ],
+            context: context
+        )
+
+        #expect(result.payload.contains("/opt/homebrew/bin"))
+        #expect(result.payload.contains("/usr/local/bin"))
+    }
+
     @Test("quick open skips dependency directories")
     func testQuickOpenSkipsDependencyDirectories() throws {
         let tempDir = FileManager.default.temporaryDirectory
@@ -1684,6 +1734,8 @@ struct VeilWriterTests {
         // on the model fallback table.
         var config = appState.agentConfiguration
         config.model = "gpt-3.5-16k"
+        config.flashModel = "gpt-3.5-16k"
+        config.routingMode = .flash
         appState.agentConfiguration = config
 
         // Empty conversation must not trigger.
@@ -1809,6 +1861,31 @@ struct VeilWriterTests {
         #expect(normalized.first?.content == "next")
     }
 
+    @Test("provider-ready messages omit image parts when provider is text-only")
+    func testProviderReadyMessagesOmitImagesForTextOnlyProviders() throws {
+        let image = AgentImageAttachment(
+            mimeType: "image/png",
+            dataBase64: "aGVsbG8="
+        )
+        let messages = [
+            AgentMessage(role: .user, content: "please inspect", images: [image])
+        ]
+
+        let normalized = AgentClient.providerReadyMessages(messages, supportsImages: false)
+        #expect(normalized.first?.images.isEmpty == true)
+        #expect(normalized.first?.content.contains("omitted because this provider only accepts text messages") == true)
+
+        let request = try AgentClient.encodeChatRequest(
+            model: "deepseek-v4-flash",
+            messages: messages,
+            tools: [],
+            supportsImages: false
+        )
+        let body = String(data: request, encoding: .utf8) ?? ""
+        #expect(!body.contains("image_url"))
+        #expect(body.contains("please inspect"))
+    }
+
     @Test("AgentJSONValue stringArrayValue and boolValue work")
     func testAgentJSONValueHelpers() {
         let validArray: AgentJSONValue = .array([.string("a"), .string("b"), .string("c")])
@@ -1830,6 +1907,37 @@ struct VeilWriterTests {
         #expect(AppState.agentContextWindow(model: "gpt-5.5", providerID: "openai") == 400_000)
         #expect(AppState.agentContextWindow(model: "gpt-4.1", providerID: "openai") == 1_000_000)
         #expect(AppState.agentContextWindow(model: "custom-model", providerID: "custom") == 128_000)
+    }
+
+    @Test("agent configuration routes auto and compression through flash")
+    func testAgentConfigurationRoutesAutoAndCompressionThroughFlash() {
+        var configuration = AgentConfiguration(
+            providerID: "deepseek",
+            baseURL: "https://api.deepseek.com",
+            model: "legacy-model",
+            flashModel: "deepseek-chat",
+            proModel: "deepseek-reasoner",
+            routingMode: .auto,
+            apiKey: ""
+        ).normalized
+
+        #expect(configuration.model(for: .interactive) == "deepseek-chat")
+        #expect(configuration.model(for: .compression) == "deepseek-chat")
+
+        configuration.routingMode = .pro
+        #expect(configuration.normalized.model(for: .interactive) == "deepseek-reasoner")
+    }
+
+    @Test("agent image description configuration defaults to DashScope vision")
+    func testAgentImageDescriptionConfigurationDefaultsToDashScopeVision() {
+        let configuration = AgentConfiguration.default.normalized
+
+        #expect(configuration.supportsImageInput == true)
+        #expect(configuration.imageDescription.providerID == "dashscope")
+        #expect(configuration.imageDescription.model == "qwen3-vl-plus")
+        #expect(configuration.imageDescription.agentConfiguration.supportsImageInput == true)
+        #expect(AgentProviderPreset.preset(id: "deepseek")?.supportsImageInput == false)
+        #expect(AgentProviderPreset.preset(id: "dashscope")?.defaultVisionModel == "qwen3-vl-plus")
     }
 
     @Test("agent token estimate includes tool schemas without exploding short chats")

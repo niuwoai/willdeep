@@ -36,7 +36,7 @@ struct AgentPanelView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Agent")
                     .font(.system(size: 13, weight: .semibold))
-                Text(appState.agentConfiguration.model)
+                Text(appState.agentModelStatusText)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -73,11 +73,14 @@ struct AgentPanelView: View {
                             .padding(.top, 44)
                     } else {
                         ForEach(visibleMessages) { message in
-                            AgentMessageBubble(message: message)
-                                .id(message.id)
-                            ForEach(toolCalls(for: message.id)) { call in
-                                AgentToolCallCard(call: call)
-                                    .id(call.id)
+                            if shouldShowMessageBubble(message) {
+                                AgentMessageBubble(message: message)
+                                    .id(message.id)
+                            }
+                            let calls = toolCalls(for: message.id)
+                            if !calls.isEmpty {
+                                AgentToolCallGroup(calls: calls)
+                                    .id(toolGroupScrollID(for: message.id))
                             }
                         }
                     }
@@ -110,7 +113,7 @@ struct AgentPanelView: View {
             }
             .onChange(of: appState.agentToolCalls.count) { _, _ in
                 guard let last = appState.agentToolCalls.last else { return }
-                proxy.scrollTo(last.id, anchor: .bottom)
+                proxy.scrollTo(toolGroupScrollID(for: last.messageID), anchor: .bottom)
             }
         }
     }
@@ -127,6 +130,14 @@ struct AgentPanelView: View {
 
     private func isEmptyThinkingPlaceholder(_ message: AgentMessage) -> Bool {
         message.role == .assistant && message.content.isEmpty && message.toolCalls.isEmpty
+    }
+
+    private func shouldShowMessageBubble(_ message: AgentMessage) -> Bool {
+        !(message.role == .assistant && message.content.isEmpty && !message.toolCalls.isEmpty)
+    }
+
+    private func toolGroupScrollID(for messageID: AgentMessage.ID) -> String {
+        "agent-tools-\(messageID.uuidString)"
     }
 
     private var composer: some View {
@@ -334,6 +345,161 @@ struct AgentLineStatsView: View {
         }
         .font(.system(size: 12, weight: .medium, design: .monospaced))
         .monospacedDigit()
+    }
+}
+
+struct AgentToolCallGroup: View {
+    let calls: [AgentToolCall]
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: detailsVisible ? 5 : 0) {
+            Button {
+                if canToggleDetails {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: groupIconName)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(groupIconColor)
+                        .frame(width: 14)
+                    Text(titleText)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(statusSummary)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                    Text(previewSummary)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: detailsVisible ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(canToggleDetails ? .secondary : Color.clear)
+                        .frame(width: 12)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canToggleDetails)
+            .help(detailsVisible ? "Hide tool calls" : "Show tool calls")
+
+            if detailsVisible {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(calls) { call in
+                        AgentToolCallCard(call: call)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.28))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(groupBorderColor, lineWidth: 1)
+        )
+    }
+
+    private var detailsVisible: Bool {
+        isExpanded || containsInteractiveCall
+    }
+
+    private var canToggleDetails: Bool {
+        !containsInteractiveCall
+    }
+
+    private var containsInteractiveCall: Bool {
+        calls.contains { call in
+            switch call.status {
+            case .pendingApproval, .awaitingConfirm, .awaitingUserAnswer:
+                return true
+            case .running, .succeeded, .failed, .denied:
+                return false
+            }
+        }
+    }
+
+    private var titleText: String {
+        calls.count == 1 ? "1 tool" : "\(calls.count) tools"
+    }
+
+    private var statusSummary: String {
+        let waiting = calls.filter {
+            $0.status == .pendingApproval || $0.status == .awaitingConfirm || $0.status == .awaitingUserAnswer
+        }.count
+        let running = calls.filter { $0.status == .running }.count
+        let failed = calls.filter { $0.status == .failed }.count
+        let denied = calls.filter { $0.status == .denied }.count
+        let succeeded = calls.filter { $0.status == .succeeded }.count
+        var parts: [String] = []
+        if waiting > 0 { parts.append("\(waiting) waiting") }
+        if running > 0 { parts.append("\(running) running") }
+        if failed > 0 { parts.append("\(failed) failed") }
+        if denied > 0 { parts.append("\(denied) denied") }
+        if succeeded > 0 { parts.append("\(succeeded) done") }
+        return parts.joined(separator: " · ")
+    }
+
+    private var previewSummary: String {
+        let previews = calls.prefix(4).map { call in
+            var text = call.toolName
+            if let summary = call.result?.summary, !summary.isEmpty {
+                text += " \(summary)"
+            } else if let compactArguments = compactArguments(for: call), !compactArguments.isEmpty {
+                text += " \(compactArguments)"
+            }
+            return text
+        }
+        let suffix = calls.count > previews.count ? " · +\(calls.count - previews.count) more" : ""
+        return previews.joined(separator: " · ") + suffix
+    }
+
+    private func compactArguments(for call: AgentToolCall) -> String? {
+        if call.toolName == "run_command", let command = call.arguments["command"]?.stringValue() {
+            return "command=\(trimmed(command, limit: 34))"
+        }
+        if let path = call.arguments["path"]?.stringValue() {
+            return "path=\(trimmed(path, limit: 34))"
+        }
+        if let pattern = call.arguments["pattern"]?.stringValue() {
+            return "pattern=\(trimmed(pattern, limit: 34))"
+        }
+        return nil
+    }
+
+    private func trimmed(_ value: String, limit: Int) -> String {
+        let normalized = value.replacingOccurrences(of: "\n", with: " ")
+        guard normalized.count > limit else { return normalized }
+        let end = normalized.index(normalized.startIndex, offsetBy: limit)
+        return String(normalized[..<end]) + "…"
+    }
+
+    private var groupIconName: String {
+        if calls.contains(where: { $0.status == .failed }) { return "exclamationmark.triangle.fill" }
+        if calls.contains(where: { $0.status == .running }) { return "hourglass" }
+        if containsInteractiveCall { return "questionmark.circle" }
+        return "checkmark.circle.fill"
+    }
+
+    private var groupIconColor: Color {
+        if calls.contains(where: { $0.status == .failed }) { return .orange }
+        if calls.contains(where: { $0.status == .running }) { return .secondary }
+        if containsInteractiveCall { return .blue }
+        return .green
+    }
+
+    private var groupBorderColor: Color {
+        if containsInteractiveCall { return Color.blue.opacity(0.28) }
+        if calls.contains(where: { $0.status == .failed }) { return Color.orange.opacity(0.28) }
+        return Color.primary.opacity(0.06)
     }
 }
 

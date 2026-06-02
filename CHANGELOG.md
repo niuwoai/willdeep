@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.40.0-rc25 - 2026-06-02
+
+- Added a separate Agent Image Understanding provider configuration with its own provider, base URL, model, and Keychain API key so text-only main models can still accept pasted images through a vision-model description pass.
+- When the active Agent provider is text-only, multiple attached images are described in one image-provider request and the generated notes are appended to the user message before the main model runs.
+
+## 1.40.0-rc24 - 2026-06-02
+
+- Marked DeepSeek as text-only for Agent image handling so attached images are omitted from provider requests instead of sending unsupported `image_url` parts that cause HTTP 400 responses.
+- Updated the DeepSeek preset defaults to `deepseek-v4-flash` and `deepseek-v4-pro`, matching the current API model names while keeping existing saved settings compatible.
+
+## 1.40.0-rc23 - 2026-06-02
+
+- Added Flash/Pro/Auto Agent model routing so Settings can keep separate low-cost and stronger model slots instead of forcing a single global model.
+- Routed context compression through the Flash model slot and updated Agent headers/model pickers to show the active route or per-session override.
+
+## 1.40.0-rc22 - 2026-06-02
+
+- Raised the Agent tool-call round guardrail from 24 to 64 rounds so longer multi-step project work can continue before pausing for loop protection.
+
+## 1.40.0-rc21 - 2026-06-02
+
+- Added a supplemental shell PATH for Agent `run_command`, covering common Homebrew and local binary directories so commands like `rg` work when the app is launched from the macOS GUI.
+- Added regression coverage that verifies `run_command` exposes common user binary paths to its shell environment.
+
+## 1.40.0-rc20 - 2026-06-02
+
+- Suppressed Agent worktree change cards for modified entries that have no real diff or only `+0 -0` numstat output, preventing noisy "files changed" prompts when nothing actually changed.
+- Added regression coverage for Agent worktree summary filtering while keeping real additions, deletions, renames, untracked files, and binary diffs visible.
+
+## 1.40.0-rc19 - 2026-06-02
+
+- Collapsed consecutive Agent tool calls into a compact expandable group in both the side panel and full Agent mode, reducing transcript height during multi-tool runs.
+- Hid empty assistant "Using tools..." placeholder messages when a tool group already represents the same activity, while keeping approval and user-question tool calls automatically expanded.
+
 ## 1.40.0-rc18 - 2026-06-02
 
 - Let Agent `run_command` risk checks resolve workspace-aware paths, so pure read-only chains such as `cd /path/to/workspace && git diff` and `git -C /path/to/workspace diff` run without approval.

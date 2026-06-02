@@ -358,11 +358,14 @@ private struct AgentChatTranscript: View {
                             .padding(.top, 80)
                     } else {
                         ForEach(visibleMessages) { message in
-                            AgentModeMessageView(message: message)
-                                .id(message.id)
-                            ForEach(toolCalls(for: message.id)) { call in
-                                AgentToolCallCard(call: call)
-                                    .id(call.id)
+                            if shouldShowMessageBubble(message) {
+                                AgentModeMessageView(message: message)
+                                    .id(message.id)
+                            }
+                            let calls = toolCalls(for: message.id)
+                            if !calls.isEmpty {
+                                AgentToolCallGroup(calls: calls)
+                                    .id(toolGroupScrollID(for: message.id))
                                     .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                             }
                         }
@@ -410,7 +413,7 @@ private struct AgentChatTranscript: View {
             }
             .onChange(of: appState.agentToolCalls.count) { _, _ in
                 if let last = appState.agentToolCalls.last {
-                    proxy.scrollTo(last.id, anchor: .bottom)
+                    proxy.scrollTo(toolGroupScrollID(for: last.messageID), anchor: .bottom)
                 }
             }
         }
@@ -428,6 +431,14 @@ private struct AgentChatTranscript: View {
 
     private func isEmptyThinkingPlaceholder(_ message: AgentMessage) -> Bool {
         message.role == .assistant && message.content.isEmpty && message.toolCalls.isEmpty
+    }
+
+    private func shouldShowMessageBubble(_ message: AgentMessage) -> Bool {
+        !(message.role == .assistant && message.content.isEmpty && !message.toolCalls.isEmpty)
+    }
+
+    private func toolGroupScrollID(for messageID: AgentMessage.ID) -> String {
+        "agent-tools-\(messageID.uuidString)"
     }
 }
 
@@ -472,11 +483,7 @@ private struct AgentModeMessageView: View {
 
     private var assistantContent: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if message.content.isEmpty, !message.toolCalls.isEmpty {
-                Text("Using tools…")
-                    .font(AgentDesign.secondaryFont)
-                    .foregroundStyle(.secondary)
-            } else if !message.content.isEmpty {
+            if !message.content.isEmpty {
                 Text(message.content)
                     .font(AgentDesign.bodyFont)
                     .textSelection(.enabled)
@@ -766,13 +773,13 @@ private struct ModelPickerPill: View {
 
     var body: some View {
         Menu {
-            let configured = appState.agentConfiguration.model
+            let configured = appState.agentConfiguration.normalized.model(for: .interactive)
             if !configured.isEmpty {
                 Button {
                     appState.setAgentSessionModel(nil)
                 } label: {
                     HStack {
-                        Text(configured)
+                        Text("Use route default: \(configured)")
                         if appState.agentSessionModelOverride == nil {
                             Image(systemName: "checkmark")
                         }
@@ -816,7 +823,7 @@ private struct ModelPickerPill: View {
     }
 
     private var currentModel: String {
-        appState.agentSessionModelOverride ?? appState.agentConfiguration.model
+        appState.agentModelStatusText
     }
 }
 
