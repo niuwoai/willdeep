@@ -14,6 +14,8 @@ import AppKit
 /// Manages the currently opened file URL, its text content, the dirty (edited) flag,
 /// and the root directory for the sidebar file tree.
 final class AppState: ObservableObject {
+    nonisolated private static let maxAgentToolRounds = 64
+
     @Published var openedFileURL: URL?
     @Published var fileContent: String {
         didSet {
@@ -68,8 +70,55 @@ final class AppState: ObservableObject {
     @Published private(set) var cursorColumn = 1
     @Published private(set) var selectedCharacterCount = 0
     @Published private(set) var selectedLineCount = 0
+    @Published private(set) var selectedText = ""
     @Published private(set) var hasExternalFileChanges = false
     @Published private(set) var gitStatus = GitRepositoryStatus()
+    @Published private(set) var agentWorktreeChanges = AgentWorktreeChangeSummary()
+    @Published var isAgentPanelVisible = false
+    @Published var agentConfiguration: AgentConfiguration {
+        didSet {
+            AgentSettingsStore.save(agentConfiguration)
+        }
+    }
+    @Published var agentMessages: [AgentMessage] = []
+    @Published var agentPatchProposals: [AgentPatchProposal] = []
+    @Published var agentToolCalls: [AgentToolCall] = []
+    @Published var agentInput = ""
+    @Published var isAgentResponding = false
+    @Published var agentErrorMessage: String?
+    @Published var agentErrorDetails: AgentErrorDetails?
+    /// Images staged in the composer for the next user message.
+    @Published var agentPendingImages: [AgentImageAttachment] = []
+    /// Messages the user queued while the agent was busy. Each entry is a
+    /// snapshot of text + images, consumed FIFO once the current turn ends.
+    @Published var agentQueuedMessages: [AgentQueuedMessage] = []
+    /// Per-session concrete model override. If non-nil, takes precedence
+    /// over the configured Flash/Pro route for the active Agent session.
+    @Published var agentSessionModelOverride: String?
+    /// Model IDs the user has previously fetched in Settings — surfaced in
+    /// the Agent-mode model picker as a quick switcher.
+    @Published var agentKnownModelIDs: [String] = []
+    /// Command families the user has explicitly allowed Agent mode to run
+    /// without prompting again, e.g. `git push`.
+    @Published var agentAlwaysAllowedCommands: [AgentAlwaysAllowedCommand] = []
+    /// When true, `run_command` invocations the static SafeCommand
+    /// allowlist marks as `.alwaysSafe` (or the LLM judge confirms as
+    /// safe) skip the Allow/Deny prompt and run immediately. Defaults
+    /// to true so a fresh install gets the no-friction experience.
+    @Published var autoApproveSafeCommands: Bool = AgentSettingsStore.loadAutoApproveSafeCommands() {
+        didSet { AgentSettingsStore.saveAutoApproveSafeCommands(autoApproveSafeCommands) }
+    }
+    /// Persisted Agent-mode chat sessions, newest-updated first.
+    @Published private(set) var agentSessions: [AgentSession] = []
+    /// Active Agent-mode session id. nil means "scratch" — Editor-mode
+    /// chat keeps working without forcing a session to exist.
+    @Published var activeAgentSessionID: AgentSession.ID?
+    /// Top-level UI mode. Editor is the classic file editor; agent hides
+    /// the editor and shows the conversation-first layout.
+    @Published var appMode: AppMode = .editor
+    /// Continuation resumed when the user resolves (approve/deny/confirm) the
+    /// currently-blocked tool call. Internal to the agent loop.
+    private var agentToolDecisionWaiter: CheckedContinuation<AgentToolDecision, Never>?
     /// Display-ready Quick Open file list, backed by `ProjectFileListCache`.
     /// Populated instantly from disk cache on project open, then verified and
     /// backfilled by a background scan. `QuickOpenPanel` filters this in-memory
@@ -77,12 +126,7 @@ final class AppState: ObservableObject {
     @Published private(set) var quickOpenFiles: [URL] = []
     @Published var editorSettings: EditorSettings {
         didSet {
-            if editorSettings.preferredInspectorMode != oldValue.preferredInspectorMode {
-                inspectorMode = editorSettings.preferredInspectorMode
-            }
-            EditorSettingsStore.save(editorSettings)
-            bumpEditorRenderRevision()
-            bumpEditorHighlightRevision()
+            scheduleEditorSettingsSideEffects()
         }
     }
 
@@ -95,6 +139,8 @@ final class AppState: ObservableObject {
     private var securityScopedAccessURLs: Set<URL> = []
     private var gitStatusRefreshTask: Task<Void, Never>?
     private var quickOpenRefreshTask: Task<Void, Never>?
+    private var agentRequestTask: Task<Void, Never>?
+    private var editorSettingsSideEffectsWorkItem: DispatchWorkItem?
     private var editorSettingsObserver: AnyCancellable?
 
     init(
@@ -117,6 +163,7 @@ final class AppState: ObservableObject {
             self.activeTabID = nil
         }
         self.editorSettings = editorSettings.normalized()
+        self.agentConfiguration = AgentSettingsStore.load()
         self.inspectorMode = self.editorSettings.preferredInspectorMode
         self.recentFiles = RecentItemsStore.loadFiles()
         self.recentFolders = RecentItemsStore.loadFolders()
@@ -129,11 +176,15 @@ final class AppState: ObservableObject {
                 guard self.editorSettings != normalizedSettings else { return }
                 self.editorSettings = normalizedSettings
             }
+        self.agentSessions = AgentSessionStore.loadAll()
+        self.agentKnownModelIDs = AgentSettingsStore.loadKnownModelIDs()
+        self.agentAlwaysAllowedCommands = AgentSettingsStore.loadAlwaysAllowedCommands()
     }
 
     deinit {
         gitStatusRefreshTask?.cancel()
         quickOpenRefreshTask?.cancel()
+        agentRequestTask?.cancel()
         for url in securityScopedAccessURLs {
             url.stopAccessingSecurityScopedResource()
         }
@@ -157,6 +208,44 @@ final class AppState: ObservableObject {
     var changedLineNumbers: Set<Int> {
         guard let activeTab else { return [] }
         return Self.changedLineNumbers(current: activeTab.content, saved: activeTab.savedContent)
+    }
+
+    var primaryAgentChangedFile: AgentFileChangeSummary? {
+        if let openedFileURL,
+           let repositoryRoot = agentWorktreeChanges.repositoryRoot {
+            let rootPath = repositoryRoot.standardizedFileURL.path
+            let filePath = openedFileURL.standardizedFileURL.path
+            if filePath == rootPath || filePath.hasPrefix(rootPath + "/") {
+                let relativePath = String(filePath.dropFirst(rootPath.count))
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                if let activeChange = agentWorktreeChanges.change(for: relativePath) {
+                    return activeChange
+                }
+            }
+        }
+
+        return agentWorktreeChanges.files.first
+    }
+
+    var shouldShowAgentThinkingIndicator: Bool {
+        guard isAgentResponding, !isCompressingAgentContext else { return false }
+        if agentToolCalls.contains(where: { call in
+            call.status == .pendingApproval
+                || call.status == .awaitingConfirm
+                || call.status == .awaitingUserAnswer
+        }) {
+            return false
+        }
+
+        guard let lastMessage = agentMessages.last else { return false }
+        switch lastMessage.role {
+        case .user, .tool:
+            return true
+        case .assistant:
+            return lastMessage.content.isEmpty && lastMessage.toolCalls.isEmpty
+        case .system:
+            return false
+        }
     }
 
     var canShowPreview: Bool {
@@ -238,16 +327,1214 @@ final class AppState: ObservableObject {
         isFocusModeEnabled.toggle()
     }
 
+    func toggleAgentPanel() {
+        isAgentPanelVisible.toggle()
+    }
+
     func togglePreview() {
         guard canShowPreview else { return }
         isPreviewVisible.toggle()
     }
 
-    func updateSelectionInfo(line: Int, column: Int, selectedCharacters: Int, selectedLines: Int) {
+    func updateSelectionInfo(line: Int, column: Int, selectedCharacters: Int, selectedLines: Int, selectedText: String = "") {
         cursorLine = max(1, line)
         cursorColumn = max(1, column)
         selectedCharacterCount = max(0, selectedCharacters)
         selectedLineCount = max(0, selectedLines)
+        self.selectedText = selectedText
+    }
+
+    /// Submit the composer (text + staged images). If the agent is already
+    /// responding, the message is queued and consumed when the current turn
+    /// finishes. Editor-mode and Agent-mode share this entry point.
+    func sendAgentMessage() {
+        let prompt = agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let images = agentPendingImages
+        guard !prompt.isEmpty || !images.isEmpty else { return }
+
+        agentInput = ""
+        agentPendingImages = []
+
+        if isAgentResponding {
+            agentQueuedMessages.append(AgentQueuedMessage(text: prompt, images: images))
+            return
+        }
+
+        dispatchAgentMessage(text: prompt, images: images)
+    }
+
+    func reviewAgentWorktreeChanges() {
+        guard !agentWorktreeChanges.isEmpty else { return }
+
+        let files = agentWorktreeChanges.files
+            .prefix(40)
+            .map { change in
+                "- \(change.path) \(Self.formatLineStats(change.lineStats))"
+            }
+            .joined(separator: "\n")
+        let extraCount = max(0, agentWorktreeChanges.fileCount - 40)
+        let extraLine = extraCount > 0 ? "\n- ...and \(extraCount) more files" : ""
+        let prompt = """
+        Please review the current uncommitted workspace changes.
+
+        Focus on bugs, hangs/freezes, regressions, approval/security risks, and missing tests. Start with findings ordered by severity and cite file paths.
+
+        Change summary:
+        \(files)\(extraLine)
+        """
+
+        agentInput = ""
+        agentPendingImages = []
+
+        if isAgentResponding {
+            agentQueuedMessages.append(AgentQueuedMessage(text: prompt, images: []))
+            return
+        }
+
+        if appMode == .editor {
+            isAgentPanelVisible = true
+        }
+        dispatchAgentMessage(text: prompt, images: [])
+    }
+
+    /// Cancel the in-flight response (if any). Queued messages are kept and
+    /// the next one is dispatched automatically. Use `clearAgentQueue` to
+    /// drop them explicitly.
+    func stopAgentResponse() {
+        guard isAgentResponding else { return }
+        agentRequestTask?.cancel()
+        // The loop's defer clears `isAgentResponding` and triggers
+        // `consumeNextQueuedMessageIfNeeded()`.
+    }
+
+    func clearAgentQueue() {
+        agentQueuedMessages.removeAll()
+    }
+
+    func addAgentImage(data: Data, mimeType: String) {
+        let attachment = AgentImageAttachment(mimeType: mimeType, dataBase64: data.base64EncodedString())
+        agentPendingImages.append(attachment)
+    }
+
+    func removeAgentImage(id: AgentImageAttachment.ID) {
+        agentPendingImages.removeAll { $0.id == id }
+    }
+
+    private func dispatchAgentMessage(text: String, images: [AgentImageAttachment]) {
+        agentErrorMessage = nil
+        agentErrorDetails = nil
+        isAgentResponding = true
+
+        let userMessage = AgentMessage(role: .user, content: text, images: images)
+        agentMessages.append(userMessage)
+        let configuration = configurationForCurrentTurn()
+        let imageDescriptionConfiguration = agentConfiguration.normalized.imageDescription.agentConfiguration
+
+        agentRequestTask?.cancel()
+        agentRequestTask = Task { [weak self] in
+            await self?.prepareImagesForTextOnlyProvider(
+                userMessageID: userMessage.id,
+                mainConfiguration: configuration,
+                imageDescriptionConfiguration: imageDescriptionConfiguration
+            )
+            await self?.runAgentLoop(configuration: configuration)
+        }
+    }
+
+    private func prepareImagesForTextOnlyProvider(
+        userMessageID: AgentMessage.ID,
+        mainConfiguration: AgentConfiguration,
+        imageDescriptionConfiguration: AgentConfiguration
+    ) async {
+        guard !mainConfiguration.supportsImageInput else { return }
+        guard let index = agentMessages.firstIndex(where: { $0.id == userMessageID }) else { return }
+        let images = agentMessages[index].images
+        guard !images.isEmpty else { return }
+
+        let description: String
+        do {
+            description = try await describeImagesForTextOnlyProvider(
+                images,
+                configuration: imageDescriptionConfiguration
+            )
+        } catch {
+            description = "Image description failed before sending to \(mainConfiguration.providerID): \(error.localizedDescription)"
+        }
+
+        guard !Task.isCancelled,
+              let liveIndex = agentMessages.firstIndex(where: { $0.id == userMessageID }) else {
+            return
+        }
+        agentMessages[liveIndex].content = Self.contentByAppendingImageDescription(
+            to: agentMessages[liveIndex].content,
+            description: description,
+            imageCount: images.count,
+            providerID: imageDescriptionConfiguration.providerID,
+            model: imageDescriptionConfiguration.model
+        )
+    }
+
+    private func describeImagesForTextOnlyProvider(
+        _ images: [AgentImageAttachment],
+        configuration: AgentConfiguration
+    ) async throws -> String {
+        let normalized = configuration.normalized
+        guard normalized.supportsImageInput else {
+            throw AgentClientError.serverStatus(
+                AgentProviderHTTPError(
+                    statusCode: 400,
+                    method: "POST",
+                    url: normalized.baseURL,
+                    providerID: normalized.providerID,
+                    model: normalized.model,
+                    requestSummary: "Image description provider does not support image input.",
+                    requestBody: "(not sent)",
+                    responseBody: "Choose an image-capable provider/model for Image Understanding."
+                )
+            )
+        }
+
+        let prompt = """
+        Describe each attached image for a coding agent that cannot see images directly.
+        Return concise but information-dense notes. For screenshots, include visible UI text, error messages, dialogs, file names, code snippets, tables, controls, layout, and anything likely relevant to debugging or implementation.
+        If there are multiple images, number them as Image 1, Image 2, etc.
+        """
+        let message = AgentMessage(role: .user, content: prompt, images: images)
+        let collector = CompressionSummaryCollector()
+        try await AgentClient(configuration: normalized).streamChat(messages: [message]) { event in
+            if case .textDelta(let delta) = event {
+                await collector.append(delta)
+            }
+        }
+        let result = await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !result.isEmpty else {
+            throw AgentClientError.invalidResponse
+        }
+        return result
+    }
+
+    nonisolated private static func contentByAppendingImageDescription(
+        to content: String,
+        description: String,
+        imageCount: Int,
+        providerID: String,
+        model: String
+    ) -> String {
+        let header = "[Image description generated by \(providerID) / \(model) for \(imageCount) attached image\(imageCount == 1 ? "" : "s")]"
+        let block = "\(header)\n\(description)"
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? block : "\(content)\n\n\(block)"
+    }
+
+    /// Resolve the configuration to use for this turn. Honours the per-
+    /// session concrete model override if one is set; otherwise follows the
+    /// global Flash/Pro route.
+    private func configurationForCurrentTurn() -> AgentConfiguration {
+        var configuration = agentConfiguration.normalized.resolved(for: .interactive)
+        if let override = agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !override.isEmpty {
+            configuration.model = override
+        }
+        return configuration.normalized
+    }
+
+    private func configurationForContextCompression() -> AgentConfiguration {
+        agentConfiguration.normalized.resolved(for: .compression)
+    }
+
+    private func consumeNextQueuedMessageIfNeeded() {
+        // Wait for any in-flight compression to finish — otherwise the
+        // user's queued message would race a compression that just got
+        // kicked off in the same defer block.
+        guard !isAgentResponding, !isCompressingAgentContext else { return }
+        guard let next = agentQueuedMessages.first else { return }
+        agentQueuedMessages.removeFirst()
+        dispatchAgentMessage(text: next.text, images: next.images)
+    }
+
+    func clearAgentConversation() {
+        agentRequestTask?.cancel()
+        agentMessages.removeAll()
+        agentPatchProposals.removeAll()
+        agentToolCalls.removeAll()
+        agentQueuedMessages.removeAll()
+        agentPendingImages.removeAll()
+        agentErrorMessage = nil
+        agentErrorDetails = nil
+        agentToolDecisionWaiter?.resume(returning: .denied(reason: "Conversation cleared"))
+        agentToolDecisionWaiter = nil
+        isAgentResponding = false
+        persistActiveAgentSession()
+    }
+
+    // MARK: - Agent mode + sessions
+
+    func setAppMode(_ mode: AppMode) {
+        guard appMode != mode else { return }
+        appMode = mode
+        if mode == .agent, activeAgentSessionID == nil {
+            // Drop any stale Editor-mode chat state when first entering
+            // Agent mode so the user lands on an empty New Chat.
+            agentRequestTask?.cancel()
+            agentMessages = []
+            agentPatchProposals = []
+            agentToolCalls = []
+            agentQueuedMessages = []
+            agentPendingImages = []
+            agentErrorMessage = nil
+            agentErrorDetails = nil
+            isAgentResponding = false
+            startNewAgentSession()
+        }
+    }
+
+    func toggleAppMode() {
+        setAppMode(appMode == .agent ? .editor : .agent)
+    }
+
+    @discardableResult
+    func startNewAgentSession() -> AgentSession {
+        agentRequestTask?.cancel()
+        agentMessages = []
+        agentPatchProposals = []
+        agentToolCalls = []
+        agentQueuedMessages = []
+        agentPendingImages = []
+        agentErrorMessage = nil
+        agentErrorDetails = nil
+        agentToolDecisionWaiter?.resume(returning: .denied(reason: "Session switched"))
+        agentToolDecisionWaiter = nil
+        isAgentResponding = false
+        agentSessionModelOverride = nil
+
+        let session = AgentSession(
+            workspaceRootPath: rootDirectory?.standardizedFileURL.path,
+            modelID: activeAgentModelID
+        )
+        agentSessions.insert(session, at: 0)
+        activeAgentSessionID = session.id
+        AgentSessionStore.save(session)
+        return session
+    }
+
+    func selectAgentSession(id: AgentSession.ID) {
+        guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
+        // Save the outgoing session first.
+        persistActiveAgentSession()
+
+        agentRequestTask?.cancel()
+        agentToolDecisionWaiter?.resume(returning: .denied(reason: "Session switched"))
+        agentToolDecisionWaiter = nil
+        isAgentResponding = false
+
+        let session = agentSessions[index]
+        activeAgentSessionID = session.id
+        agentMessages = session.messages
+        let routedModel = agentConfiguration.normalized.model(for: .interactive)
+        agentSessionModelOverride = session.modelID == routedModel ? nil : session.modelID
+        agentPatchProposals = []
+        agentToolCalls = []
+        agentQueuedMessages = []
+        agentPendingImages = []
+        agentErrorMessage = nil
+        agentErrorDetails = nil
+    }
+
+    func deleteAgentSession(id: AgentSession.ID) {
+        AgentSessionStore.delete(id: id)
+        agentSessions.removeAll { $0.id == id }
+        if activeAgentSessionID == id {
+            activeAgentSessionID = nil
+            agentMessages = []
+            agentPatchProposals = []
+            agentToolCalls = []
+            agentQueuedMessages = []
+            agentPendingImages = []
+            agentErrorMessage = nil
+            agentErrorDetails = nil
+        }
+    }
+
+    /// Write the active session back to disk. No-op if no session is
+    /// active (Editor-mode chats aren't persisted).
+    func persistActiveAgentSession() {
+        guard let id = activeAgentSessionID,
+              let index = agentSessions.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        var session = agentSessions[index]
+        session.messages = agentMessages
+        session.updatedAt = Date()
+        session.title = AgentSessionStore.deriveTitle(from: agentMessages)
+        if let override = agentSessionModelOverride, !override.isEmpty {
+            session.modelID = override
+        } else {
+            session.modelID = activeAgentModelID
+        }
+        agentSessions[index] = session
+        // Bubble most-recently-updated to the top.
+        agentSessions.sort { $0.updatedAt > $1.updatedAt }
+        AgentSessionStore.save(session)
+    }
+
+    func recordFetchedAgentModels(_ ids: [String]) {
+        let merged = Array(Set(agentKnownModelIDs + ids))
+            .filter { !$0.isEmpty }
+            .sorted()
+        agentKnownModelIDs = merged
+        AgentSettingsStore.saveKnownModelIDs(merged)
+    }
+
+    func setAgentSessionModel(_ model: String?) {
+        let trimmed = model?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmed, !trimmed.isEmpty {
+            agentSessionModelOverride = trimmed
+            recordFetchedAgentModels([trimmed])
+        } else {
+            agentSessionModelOverride = nil
+        }
+        persistActiveAgentSession()
+    }
+
+    /// Best-effort token count for the next provider request. This mirrors
+    /// the actual Agent request shape instead of only counting visible chat
+    /// bubbles, so system context, tool schemas, collapsed tool history, and
+    /// provider-ready message normalization are all represented.
+    var estimatedAgentTokens: Int {
+        let requestMessages = estimatedAgentRequestMessages
+        let tools = AgentToolRegistry.all
+        return Self.estimateAgentTokens(messages: requestMessages, tools: tools)
+    }
+
+    var activeAgentModelID: String {
+        if let override = agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !override.isEmpty {
+            return override
+        }
+        return agentConfiguration.normalized.model(for: .interactive)
+    }
+
+    var agentModelStatusText: String {
+        if let override = agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !override.isEmpty {
+            return "Override · \(override)"
+        }
+        return agentConfiguration.normalized.routingLabel
+    }
+
+    private var estimatedAgentRequestMessages: [AgentMessage] {
+        let systemPrompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: rootDirectory,
+            openedFileURL: openedFileURL,
+            fileContent: fileContent,
+            selectedText: selectedText,
+            language: effectiveLanguage,
+            toolsEnabled: true
+        )
+        let collapsedHistory = Self.collapseOldToolResults(in: agentMessages)
+        return AgentClient.providerReadyMessages([
+            AgentMessage(role: .system, content: systemPrompt)
+        ] + collapsedHistory, supportsImages: agentConfiguration.normalized.supportsImageInput)
+    }
+
+    nonisolated static func estimateAgentTokens(
+        messages: [AgentMessage],
+        tools: [AgentToolDescriptor]
+    ) -> Int {
+        var total = 0
+
+        for message in AgentClient.providerReadyMessages(messages) {
+            total += 4
+            total += estimateTextTokens(message.role.rawValue)
+            total += estimateTextTokens(message.content)
+            total += message.images.count * 600
+            for call in message.toolCalls {
+                total += 12
+                total += estimateTextTokens(call.externalID)
+                total += estimateTextTokens(call.toolName)
+                total += estimateTextTokens(call.argumentsJSON)
+            }
+            if let toolCallID = message.toolCallID {
+                total += estimateTextTokens(toolCallID)
+            }
+        }
+
+        if !tools.isEmpty {
+            total += 16
+            for tool in tools {
+                total += 24
+                total += estimateTextTokens(tool.name)
+                total += estimateTextTokens(tool.description)
+                for parameter in tool.parameters {
+                    total += 8
+                    total += estimateTextTokens(parameter.name)
+                    total += estimateTextTokens(parameter.type.rawValue)
+                    total += estimateTextTokens(parameter.description)
+                }
+            }
+        }
+
+        total += 2
+        return total
+    }
+
+    nonisolated private static func estimateTextTokens(_ text: String) -> Int {
+        guard !text.isEmpty else { return 0 }
+
+        var asciiNonWhitespace = 0
+        var cjkScalars = 0
+        var otherScalars = 0
+
+        for scalar in text.unicodeScalars {
+            if CharacterSet.whitespacesAndNewlines.contains(scalar) {
+                continue
+            }
+            if scalar.value <= 0x7F {
+                asciiNonWhitespace += 1
+            } else if isCJKScalar(scalar) {
+                cjkScalars += 1
+            } else {
+                otherScalars += 1
+            }
+        }
+
+        let asciiTokens = Int(ceil(Double(asciiNonWhitespace) / 4.0))
+        let otherTokens = Int(ceil(Double(otherScalars) * 0.8))
+        return max(1, asciiTokens + cjkScalars + otherTokens)
+    }
+
+    nonisolated private static func isCJKScalar(_ scalar: UnicodeScalar) -> Bool {
+        let value = scalar.value
+        return (0x4E00...0x9FFF).contains(value)
+            || (0x3400...0x4DBF).contains(value)
+            || (0x3040...0x30FF).contains(value)
+            || (0xAC00...0xD7AF).contains(value)
+    }
+
+    /// Heuristic context-window budget for the active model. Falls back to
+    /// a modern 128k window for unknown models so custom OpenAI-compatible
+    /// models don't look full after one ordinary turn.
+    var agentContextWindow: Int {
+        Self.agentContextWindow(
+            model: activeAgentModelID,
+            providerID: agentConfiguration.providerID
+        )
+    }
+
+    nonisolated static func agentContextWindow(model rawModel: String, providerID rawProviderID: String = "") -> Int {
+        let model = rawModel.lowercased()
+        let providerID = rawProviderID.lowercased()
+        // Substring match — vendors include variants like `-32k`, `-128k` in the id.
+        if model.contains("1m") || model.contains("-1m") || model.contains("1000k") { return 1_000_000 }
+        if model.contains("512k") { return 512_000 }
+        if model.contains("400k") { return 400_000 }
+        if model.contains("200k") { return 200_000 }
+        if model.contains("128k") || model.contains("-128k") { return 128_000 }
+        if model.contains("64k") { return 64_000 }
+        if model.contains("32k") { return 32_000 }
+        if model.contains("16k") { return 16_000 }
+        if model.contains("8k") { return 8_000 }
+        // Known family defaults.
+        if model.contains("gpt-5") { return 400_000 }
+        if model.contains("gpt-4.1") { return 1_000_000 }
+        if model.contains("gpt-4o") || model.contains("o1") || model.contains("o3") || model.contains("o4") { return 128_000 }
+        if model.contains("claude") { return 200_000 }
+        if model.contains("deepseek") { return 64_000 }
+        if model.contains("qwen-long") { return 1_000_000 }
+        if model.contains("qwen") || model.contains("dashscope") { return 128_000 }
+        if model.contains("kimi") || model.contains("moonshot") { return 128_000 }
+        if model.contains("gpt-3.5") { return 16_000 }
+        if providerID == "openai" { return 128_000 }
+        return 128_000
+    }
+
+    func approveAgentToolCall(id: AgentToolCall.ID) {
+        resolveAgentToolCallDecision(id: id, decision: .approved)
+    }
+
+    func alwaysAllowAgentToolCall(id: AgentToolCall.ID) {
+        guard let call = agentToolCalls.first(where: { $0.id == id }) else { return }
+        if let rule = alwaysAllowedCommand(for: call) {
+            addAgentAlwaysAllowedCommand(rule)
+        }
+        resolveAgentToolCallDecision(id: id, decision: .approved)
+    }
+
+    func denyAgentToolCall(id: AgentToolCall.ID) {
+        resolveAgentToolCallDecision(id: id, decision: .denied(reason: "User denied"))
+    }
+
+    func confirmAgentToolCall(id: AgentToolCall.ID, typedConfirmation: String) -> Bool {
+        let expected = "confirm"
+        guard typedConfirmation.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == expected else {
+            return false
+        }
+        resolveAgentToolCallDecision(id: id, decision: .approved)
+        return true
+    }
+
+    /// Resolve an `ask_user` call with the user's typed answer. Empty
+    /// strings still resume the loop (so the model can react to "no answer
+    /// provided"); use `denyAgentToolCall` to skip outright.
+    func answerAgentToolCall(id: AgentToolCall.ID, answer: String) {
+        resolveAgentToolCallDecision(id: id, decision: .answered(answer))
+    }
+
+    func removeAgentAlwaysAllowedCommand(id: AgentAlwaysAllowedCommand.ID) {
+        agentAlwaysAllowedCommands.removeAll { $0.id == id }
+        AgentSettingsStore.saveAlwaysAllowedCommands(agentAlwaysAllowedCommands)
+    }
+
+    func clearAgentAlwaysAllowedCommands() {
+        agentAlwaysAllowedCommands = []
+        AgentSettingsStore.saveAlwaysAllowedCommands(agentAlwaysAllowedCommands)
+    }
+
+    private func addAgentAlwaysAllowedCommand(_ command: AgentAlwaysAllowedCommand) {
+        guard !agentAlwaysAllowedCommands.contains(where: { $0.commandSignature == command.commandSignature }) else {
+            return
+        }
+        agentAlwaysAllowedCommands.append(command)
+        agentAlwaysAllowedCommands.sort { $0.commandSignature < $1.commandSignature }
+        AgentSettingsStore.saveAlwaysAllowedCommands(agentAlwaysAllowedCommands)
+    }
+
+    private func alwaysAllowedCommand(for call: AgentToolCall) -> AgentAlwaysAllowedCommand? {
+        guard call.toolName == "run_command",
+              let command = call.arguments["command"]?.stringValue(),
+              let signature = AgentCommandAuthorization.signature(for: command) else {
+            return nil
+        }
+        return AgentAlwaysAllowedCommand(commandSignature: signature)
+    }
+
+    private func isAgentToolCallAlwaysAllowed(toolName: String, arguments: [String: AgentJSONValue], risk: AgentToolRisk) -> Bool {
+        guard risk == .write,
+              toolName == "run_command",
+              let command = arguments["command"]?.stringValue(),
+              let signature = AgentCommandAuthorization.signature(for: command) else {
+            return false
+        }
+        return agentAlwaysAllowedCommands.contains { $0.commandSignature == signature }
+    }
+
+    /// Resolve auto-approval for a write-tier tool call. Returns the
+    /// source that approved it, or `nil` to mean "user must decide".
+    /// Cheap paths (user allowlist, static SafeCommand) run inline; the
+    /// LLM judge round-trips only when nothing cheaper matched.
+    private func autoApprovalSource(
+        toolName: String,
+        arguments: [String: AgentJSONValue],
+        risk: AgentToolRisk
+    ) async -> AgentToolApprovalSource? {
+        guard risk == .write, toolName == "run_command" else { return nil }
+
+        // 1. User-pinned signatures (Always Allow button) — always honored.
+        if isAgentToolCallAlwaysAllowed(toolName: toolName, arguments: arguments, risk: risk) {
+            return .alwaysAllowList
+        }
+
+        // The remaining auto paths require both a command argument and
+        // the user opting in via the master toggle.
+        guard autoApproveSafeCommands,
+              let command = arguments["command"]?.stringValue() else {
+            return nil
+        }
+
+        // 2. Static read-only allowlist (zero latency, zero cost).
+        switch SafeCommand.classify(command: command) {
+        case .alwaysSafe:
+            return .staticAllowlist
+        case .alwaysDangerous:
+            return nil
+        case .needsJudgment:
+            break
+        }
+
+        // 3. LLM judge. Lightweight non-streaming request; defaults to
+        //    "no" on network errors so the user still gates anything we
+        //    couldn't certify.
+        let configuration = configurationForCurrentTurn()
+        let client = AgentClient(configuration: configuration)
+        let safe = await client.judgeCommandSafety(command: command)
+        return safe ? .llmJudge : nil
+    }
+
+    private func resolveAgentToolCallDecision(id: AgentToolCall.ID, decision: AgentToolDecision) {
+        guard let index = agentToolCalls.firstIndex(where: { $0.id == id }) else { return }
+        guard agentToolCalls[index].status == .pendingApproval
+            || agentToolCalls[index].status == .awaitingConfirm
+            || agentToolCalls[index].status == .awaitingUserAnswer else {
+            return
+        }
+        if case .denied(let reason) = decision {
+            agentToolCalls[index].status = .denied
+            agentToolCalls[index].errorMessage = reason
+        }
+        agentToolDecisionWaiter?.resume(returning: decision)
+        agentToolDecisionWaiter = nil
+    }
+
+    @MainActor
+    private func runAgentLoop(configuration: AgentConfiguration) async {
+        defer {
+            self.isAgentResponding = false
+            self.agentRequestTask = nil
+            self.persistActiveAgentSession()
+            self.maybeAutoCompressContext()
+            self.consumeNextQueuedMessageIfNeeded()
+        }
+
+        let client = AgentClient(configuration: configuration)
+
+        for _ in 0..<Self.maxAgentToolRounds {
+            let assistantMessage = AgentMessage(role: .assistant, content: "")
+            agentMessages.append(assistantMessage)
+            let assistantID = assistantMessage.id
+
+            let systemPrompt = AgentContextBuilder.systemPrompt(
+                rootDirectory: rootDirectory,
+                openedFileURL: openedFileURL,
+                fileContent: fileContent,
+                selectedText: selectedText,
+                language: effectiveLanguage,
+                toolsEnabled: true
+            )
+            let history = agentMessages.filter { $0.id != assistantID }
+            let collapsedHistory = Self.collapseOldToolResults(in: history)
+            let requestMessages = [AgentMessage(role: .system, content: systemPrompt)] + collapsedHistory
+
+            var finishReason: String?
+            var latestToolCalls: [AgentMessageToolCall] = []
+
+            do {
+                try await client.streamChat(
+                    messages: requestMessages,
+                    tools: AgentToolRegistry.all
+                ) { event in
+                    await MainActor.run { [weak self] in
+                        guard let self,
+                              let index = self.agentMessages.firstIndex(where: { $0.id == assistantID }) else {
+                            return
+                        }
+                        switch event {
+                        case .textDelta(let delta):
+                            self.agentMessages[index].content += delta
+                        case .reasoningDelta(let delta):
+                            // Append into reasoningContent so the next
+                            // turn echoes it back verbatim. DashScope
+                            // thinking-mode returns HTTP 400 if this
+                            // field disappears between turns.
+                            var existing = self.agentMessages[index].reasoningContent ?? ""
+                            existing += delta
+                            self.agentMessages[index].reasoningContent = existing
+                        case .toolCallsUpdated(let calls):
+                            self.agentMessages[index].toolCalls = calls
+                            latestToolCalls = calls
+                        case .finishedTurn(let reason):
+                            finishReason = reason
+                        case .usageReported(_, _, let total):
+                            // Stamp real token usage on the assistant
+                            // message so AgentUsageStats can show actual
+                            // totals instead of falling back to estimates.
+                            self.agentMessages[index].usageTokens = total
+                        }
+                    }
+                }
+            } catch is CancellationError {
+                if let index = agentMessages.firstIndex(where: { $0.id == assistantID }),
+                   agentMessages[index].content.isEmpty,
+                   agentMessages[index].toolCalls.isEmpty {
+                    agentMessages.remove(at: index)
+                }
+                return
+            } catch {
+                setAgentError(error)
+                if let index = agentMessages.firstIndex(where: { $0.id == assistantID }),
+                   agentMessages[index].content.isEmpty,
+                   agentMessages[index].toolCalls.isEmpty {
+                    agentMessages.remove(at: index)
+                }
+                return
+            }
+
+            // Snapshot the assistant's final tool_calls list (the .toolCallsUpdated
+            // closure may not have published the very last fragment yet if the
+            // stream ended on the same chunk).
+            if let index = agentMessages.firstIndex(where: { $0.id == assistantID }) {
+                if latestToolCalls.isEmpty {
+                    latestToolCalls = agentMessages[index].toolCalls
+                } else {
+                    agentMessages[index].toolCalls = latestToolCalls
+                }
+            }
+
+            // No tool calls → assistant finished talking. Capture patches and return.
+            guard !latestToolCalls.isEmpty else {
+                captureAgentPatchProposals(fromMessageID: assistantID)
+                return
+            }
+
+            // Execute every tool call, gating on the user when necessary.
+            var anyDenied = false
+            for call in latestToolCalls {
+                let arguments = AgentJSONValue.decode(from: call.argumentsJSON.isEmpty ? "{}" : call.argumentsJSON)
+                let argsDict: [String: AgentJSONValue]
+                if case .object(let dict) = arguments {
+                    argsDict = dict
+                } else {
+                    argsDict = [:]
+                }
+
+                let risk = AgentToolRegistry.risk(
+                    for: call.toolName,
+                    arguments: argsDict,
+                    rootDirectory: rootDirectory
+                )
+
+                // Resolve auto-approval before we even render the card
+                // so simple cases (cat / git diff / etc.) skip the
+                // pendingApproval flash entirely.
+                let autoApproval = await autoApprovalSource(
+                    toolName: call.toolName,
+                    arguments: argsDict,
+                    risk: risk
+                )
+                let isAlwaysAllowed = autoApproval != nil
+                let initialStatus: AgentToolCallStatus
+                if isAlwaysAllowed {
+                    initialStatus = .running
+                } else {
+                    switch risk {
+                    case .read: initialStatus = .running
+                    case .write: initialStatus = .pendingApproval
+                    case .danger: initialStatus = .awaitingConfirm
+                    case .userInput: initialStatus = .awaitingUserAnswer
+                    }
+                }
+
+                let record = AgentToolCall(
+                    messageID: assistantID,
+                    externalID: call.externalID,
+                    toolName: call.toolName,
+                    arguments: argsDict,
+                    risk: risk,
+                    status: initialStatus,
+                    approvalSource: autoApproval
+                )
+                agentToolCalls.append(record)
+                let recordID = record.id
+
+                // ask_user short-circuits the runner: surface the question,
+                // wait for the user's typed answer, feed it back as the
+                // tool result.
+                if risk == .userInput {
+                    let decision = await awaitToolDecision(forCallID: recordID)
+                    let answer: String
+                    switch decision {
+                    case .answered(let typed):
+                        answer = typed
+                    case .denied(let reason):
+                        anyDenied = true
+                        if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
+                            agentToolCalls[index].status = .denied
+                            agentToolCalls[index].errorMessage = reason
+                        }
+                        appendToolMessage(
+                            toolCallID: call.externalID,
+                            payload: "User skipped the question."
+                        )
+                        continue
+                    case .approved:
+                        // No explicit answer recorded — treat as empty.
+                        answer = ""
+                    }
+                    if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
+                        agentToolCalls[index].status = .succeeded
+                        agentToolCalls[index].result = AgentToolResult(
+                            summary: answer.isEmpty ? "(no answer)" : "answered",
+                            payload: answer
+                        )
+                    }
+                    appendToolMessage(toolCallID: call.externalID, payload: answer)
+                    continue
+                }
+
+                if risk != .read && !isAlwaysAllowed {
+                    let decision = await awaitToolDecision(forCallID: recordID)
+                    if case .denied(let reason) = decision {
+                        anyDenied = true
+                        if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
+                            agentToolCalls[index].status = .denied
+                            agentToolCalls[index].errorMessage = reason
+                        }
+                        appendToolMessage(
+                            toolCallID: call.externalID,
+                            payload: "Tool call denied by the user."
+                        )
+                        continue
+                    }
+                    if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
+                        agentToolCalls[index].status = .running
+                        agentToolCalls[index].approvalSource = .user
+                    }
+                }
+
+                let context = AgentToolContext(rootDirectory: rootDirectory)
+                do {
+                    let result = try await AgentToolRunner.run(
+                        name: call.toolName,
+                        arguments: argsDict,
+                        context: context
+                    )
+                    if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
+                        agentToolCalls[index].status = .succeeded
+                        agentToolCalls[index].result = result
+                    }
+                    if call.toolName == "run_command" || risk != .read {
+                        refreshGitStatus()
+                    }
+                    appendToolMessage(toolCallID: call.externalID, payload: result.payload)
+                } catch {
+                    if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
+                        agentToolCalls[index].status = .failed
+                        agentToolCalls[index].errorMessage = error.localizedDescription
+                    }
+                    appendToolMessage(
+                        toolCallID: call.externalID,
+                        payload: "Tool error: \(error.localizedDescription)"
+                    )
+                }
+            }
+
+            if anyDenied, finishReason == "stop" {
+                // Model already decided it was done; don't loop further.
+                return
+            }
+            // Otherwise: loop again so the model can react to the tool outputs.
+        }
+
+        agentErrorMessage = "Agent paused after \(Self.maxAgentToolRounds) tool-call rounds to avoid an accidental loop. Send another message to continue."
+        agentErrorDetails = nil
+    }
+
+    private func setAgentError(_ error: Error) {
+        agentErrorMessage = error.localizedDescription
+        agentErrorDetails = Self.details(for: error)
+    }
+
+    private static func details(for error: Error) -> AgentErrorDetails? {
+        guard case AgentClientError.serverStatus(let providerError) = error else {
+            return nil
+        }
+        return AgentErrorDetails(sections: [
+            AgentErrorDetails.Section(
+                title: "Request",
+                text: """
+                Method: \(providerError.method)
+                URL: \(providerError.url)
+                Provider: \(providerError.providerID)
+                Model: \(providerError.model)
+                """
+            ),
+            AgentErrorDetails.Section(title: "Input Messages", text: providerError.requestSummary),
+            AgentErrorDetails.Section(title: "Request Body", text: providerError.requestBody),
+            AgentErrorDetails.Section(
+                title: "Response",
+                text: """
+                HTTP \(providerError.statusCode)
+
+                \(providerError.responseBody.isEmpty ? "(empty response body)" : providerError.responseBody)
+                """
+            )
+        ])
+    }
+
+    private func awaitToolDecision(forCallID id: AgentToolCall.ID) async -> AgentToolDecision {
+        await withCheckedContinuation { continuation in
+            // Already resolved before we got to register (e.g. user clicked
+            // Deny while the previous tool was still running) — resume now.
+            if let call = agentToolCalls.first(where: { $0.id == id }),
+               call.status != .pendingApproval, call.status != .awaitingConfirm,
+               call.status != .awaitingUserAnswer {
+                if call.status == .denied {
+                    continuation.resume(returning: .denied(reason: call.errorMessage ?? "User denied"))
+                } else {
+                    continuation.resume(returning: .approved)
+                }
+                return
+            }
+            self.agentToolDecisionWaiter = continuation
+        }
+    }
+
+    private func appendToolMessage(toolCallID: String, payload: String) {
+        let limited: String
+        let maxPayload = 24_000
+        if payload.count > maxPayload {
+            limited = String(payload.prefix(maxPayload)) + "\n...[tool output truncated]"
+        } else {
+            limited = payload
+        }
+        agentMessages.append(
+            AgentMessage(role: .tool, content: limited, toolCallID: toolCallID)
+        )
+    }
+
+    @Published var isCompressingAgentContext = false
+
+    /// Summarize older conversation history into a single assistant
+    /// message to reclaim context budget. Keeps the most recent
+    /// `keepRecent` messages verbatim. Runs concurrently with whatever
+    /// the user is doing (Send still works once compression resolves).
+    func compressAgentContext(keepRecent: Int = 4) {
+        guard !isCompressingAgentContext, !isAgentResponding else { return }
+        guard agentMessages.count > keepRecent else { return }
+
+        isCompressingAgentContext = true
+        let configuration = configurationForContextCompression()
+        let head = Array(agentMessages.prefix(agentMessages.count - keepRecent))
+        let tail = Array(agentMessages.suffix(keepRecent))
+
+        Task { [weak self] in
+            await self?.runContextCompression(
+                head: head,
+                tail: tail,
+                configuration: configuration
+            )
+        }
+    }
+
+    /// Pure predicate: true if `maybeAutoCompressContext` would launch a
+    /// compression right now. Exposed mainly for tests; the production
+    /// caller is `maybeAutoCompressContext` itself.
+    var shouldAutoCompressNow: Bool {
+        guard !isCompressingAgentContext, !isAgentResponding else { return false }
+        guard agentMessages.count > 6 else { return false }
+        let window = max(1, agentContextWindow)
+        let usedFraction = Double(estimatedAgentTokens) / Double(window)
+        return usedFraction > 0.75
+    }
+
+    /// Auto-compress when token usage crosses 75% and nothing else is in
+    /// flight. Invoked from `runAgentLoop`'s defer so it runs between
+    /// turns and never interrupts a streaming response.
+    func maybeAutoCompressContext() {
+        guard shouldAutoCompressNow else { return }
+        compressAgentContext()
+    }
+
+    @MainActor
+    private func runContextCompression(
+        head: [AgentMessage],
+        tail: [AgentMessage],
+        configuration: AgentConfiguration
+    ) async {
+        defer {
+            self.isCompressingAgentContext = false
+            self.persistActiveAgentSession()
+            // Auto-compression can be racing with a queued message —
+            // resume the queue once compression resolves so the user
+            // doesn't see "queued" forever.
+            self.consumeNextQueuedMessageIfNeeded()
+        }
+
+        let transcript = head
+            .filter { $0.role != .system }
+            .map { message -> String in
+                let label: String
+                switch message.role {
+                case .user: label = "USER"
+                case .assistant: label = "ASSISTANT"
+                case .tool: label = "TOOL(\(message.toolCallID ?? "?"))"
+                case .system: label = "SYSTEM"
+                }
+                return "\(label):\n\(message.content)"
+            }
+            .joined(separator: "\n\n---\n\n")
+
+        let system = AgentMessage(
+            role: .system,
+            content: """
+            You compress a coding-agent conversation transcript into a tight summary.
+            Goal: preserve enough state that the agent can continue without re-reading the old turns.
+            Cover, in this order: the user's goal, key decisions, file paths examined or modified, important findings, and any open questions. Skip pleasantries and verbatim quotes. Keep under 300 words. Output plain text, no preamble like "Here's the summary".
+            """
+        )
+        let payload = AgentMessage(
+            role: .user,
+            content: "Transcript to compress:\n\n\(transcript)"
+        )
+
+        let client = AgentClient(configuration: configuration)
+        let collector = CompressionSummaryCollector()
+        do {
+            try await client.streamChat(messages: [system, payload]) { event in
+                if case .textDelta(let delta) = event {
+                    await collector.append(delta)
+                }
+            }
+        } catch {
+            agentErrorMessage = "Context compression failed: \(error.localizedDescription)"
+            agentErrorDetails = Self.details(for: error)
+            return
+        }
+
+        let trimmed = await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            agentErrorMessage = "Context compression returned an empty summary; nothing changed."
+            agentErrorDetails = nil
+            return
+        }
+
+        let summaryMessage = AgentMessage(
+            role: .assistant,
+            content: "[Earlier conversation summary]\n\n\(trimmed)"
+        )
+        agentMessages = [summaryMessage] + tail
+        // Tool calls referencing pre-compression assistant messages no
+        // longer have a valid messageID; drop them so they stop rendering.
+        let liveMessageIDs = Set(agentMessages.map(\.id))
+        agentToolCalls.removeAll { !liveMessageIDs.contains($0.messageID) }
+    }
+
+    /// Replace the body of older `tool` role messages with a tiny
+    /// placeholder so they stop dominating the request payload. The most
+    /// recent `keepRecentToolMessages` tool messages are left untouched so
+    /// the model can still reason about what it just did.
+    nonisolated static func collapseOldToolResults(
+        in messages: [AgentMessage],
+        keepRecentToolMessages: Int = 4
+    ) -> [AgentMessage] {
+        // Find tool message indices.
+        let toolIndices = messages.enumerated().compactMap { offset, message in
+            message.role == .tool ? offset : nil
+        }
+        guard toolIndices.count > keepRecentToolMessages else { return messages }
+        let collapseUpTo = toolIndices[toolIndices.count - keepRecentToolMessages - 1]
+
+        var copy = messages
+        for index in 0...collapseUpTo where copy[index].role == .tool {
+            let original = copy[index]
+            // Already collapsed.
+            if original.content.hasPrefix("[tool result hidden") { continue }
+            let bytes = original.content.utf8.count
+            let placeholder = "[tool result hidden — earlier turn, was \(bytes) bytes; ask the user or re-run the tool if you need it again]"
+            copy[index] = AgentMessage(
+                id: original.id,
+                role: .tool,
+                content: placeholder,
+                images: original.images,
+                toolCalls: original.toolCalls,
+                toolCallID: original.toolCallID,
+                createdAt: original.createdAt
+            )
+        }
+        return copy
+    }
+
+    func rejectAgentPatchProposal(id: AgentPatchProposal.ID) {
+        guard let index = agentPatchProposals.firstIndex(where: { $0.id == id }) else { return }
+        agentPatchProposals[index].status = .rejected
+        agentPatchProposals[index].statusMessage = "Rejected"
+    }
+
+    func applyAgentPatchProposal(id: AgentPatchProposal.ID) {
+        guard let index = agentPatchProposals.firstIndex(where: { $0.id == id }) else { return }
+
+        do {
+            try applyAgentPatch(agentPatchProposals[index].diff)
+            agentPatchProposals[index].status = .applied
+            agentPatchProposals[index].statusMessage = "Applied"
+        } catch {
+            agentPatchProposals[index].status = .failed
+            agentPatchProposals[index].statusMessage = error.localizedDescription
+        }
+    }
+
+    private func captureAgentPatchProposals(fromMessageID messageID: UUID) {
+        guard let message = agentMessages.first(where: { $0.id == messageID }) else { return }
+        let diffs = AgentPatchApplier.extractDiffBlocks(from: message.content)
+        guard !diffs.isEmpty else { return }
+
+        let existingDiffs = Set(agentPatchProposals.map(\.diff))
+        for (offset, diff) in diffs.enumerated() where !existingDiffs.contains(diff) {
+            let title = diffs.count == 1 ? "Agent Patch" : "Agent Patch \(offset + 1)"
+            agentPatchProposals.append(
+                AgentPatchProposal(messageID: messageID, title: title, diff: diff)
+            )
+        }
+    }
+
+    private func applyAgentPatch(_ diff: String) throws {
+        guard let rootDirectory else {
+            throw AgentPatchError.noWorkspace
+        }
+
+        let changes = try AgentPatchApplier.parse(diff)
+        let root = rootDirectory.standardizedFileURL
+        let rootPath = root.path
+        var pendingWrites: [(url: URL, content: String)] = []
+
+        for change in changes {
+            let url = try resolveAgentPatchURL(change.path, root: root, rootPath: rootPath)
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                throw AgentPatchError.missingFile(change.path)
+            }
+
+            let currentContent = try editableContent(forAgentPatchURL: url)
+            let newContent = try AgentPatchApplier.apply(change, to: currentContent)
+            pendingWrites.append((url, newContent))
+        }
+
+        for pendingWrite in pendingWrites {
+            try pendingWrite.content.write(to: pendingWrite.url, atomically: true, encoding: .utf8)
+            applyAgentPatchedContent(pendingWrite.content, to: pendingWrite.url)
+        }
+
+        refreshGitStatus()
+        persistSession()
+    }
+
+    private func resolveAgentPatchURL(_ path: String, root: URL, rootPath: String) throws -> URL {
+        let url = root.appendingPathComponent(path).standardizedFileURL
+        let filePath = url.path
+        guard filePath == rootPath || filePath.hasPrefix(rootPath + "/") else {
+            throw AgentPatchError.pathOutsideWorkspace(path)
+        }
+        return url
+    }
+
+    private func editableContent(forAgentPatchURL url: URL) throws -> String {
+        if let tab = tabs.first(where: { $0.url.standardizedFileURL.path == url.standardizedFileURL.path }) {
+            return tab.content
+        }
+
+        let data = try Self.readFileData(from: url, allowLargeFile: true)
+        return Self.decodeText(from: data)
+    }
+
+    private func applyAgentPatchedContent(_ content: String, to url: URL) {
+        let standardizedPath = url.standardizedFileURL.path
+
+        for index in tabs.indices where tabs[index].url.standardizedFileURL.path == standardizedPath {
+            tabs[index].content = content
+            tabs[index].savedContent = content
+            tabs[index].isEdited = false
+        }
+
+        if openedFileURL?.standardizedFileURL.path == standardizedPath {
+            isApplyingTabSnapshot = true
+            fileContent = content
+            isEdited = false
+            isApplyingTabSnapshot = false
+            bumpEditorRenderRevision()
+            bumpEditorHighlightRevision()
+            updateWindowTitle(url: url, isEdited: false)
+        }
+
+        knownModificationDates[url] = Self.modificationDate(at: url)
+        hasExternalFileChanges = false
     }
 
     func navigateEditor(toLine line: Int) {
@@ -282,9 +1569,12 @@ final class AppState: ObservableObject {
 
         registerRecentFile(fileURL)
         registerRecentFolder(fileURL.deletingLastPathComponent())
-        setRootDirectory(fileURL.deletingLastPathComponent())
+        // Don't auto-promote the file's parent to `rootDirectory`. That used to
+        // load the whole FileTree + run a recursive Quick Open scan + git
+        // status for every "open file" — fatal latency when the parent is a
+        // huge dir like ~/Downloads. The sidebar only appears now when the
+        // user explicitly opens a folder (⇧⌘O / Open Folder…).
         openedFileURL = fileURL
-        refreshGitStatus()
         persistSession()
     }
 
@@ -326,16 +1616,20 @@ final class AppState: ObservableObject {
 
         guard let rootDirectory else {
             let emptyStatus = GitRepositoryStatus()
+            let emptyChanges = AgentWorktreeChangeSummary()
             DispatchQueue.main.async { [weak self] in
                 self?.gitStatus = emptyStatus
+                self?.agentWorktreeChanges = emptyChanges
             }
             return
         }
 
         let targetDirectory = rootDirectory.standardizedFileURL
         gitStatusRefreshTask = Task { [weak self] in
-            let status = await Task.detached(priority: .utility) {
-                Self.loadGitStatus(for: targetDirectory)
+            let snapshot = await Task.detached(priority: .utility) {
+                let status = Self.loadGitStatus(for: targetDirectory)
+                let changes = Self.loadAgentWorktreeChangeSummary(status: status)
+                return (status: status, changes: changes)
             }.value
 
             guard !Task.isCancelled else { return }
@@ -344,8 +1638,27 @@ final class AppState: ObservableObject {
                       self.rootDirectory?.standardizedFileURL.path == targetDirectory.path else {
                     return
                 }
-                self.gitStatus = status
+                self.gitStatus = snapshot.status
+                self.agentWorktreeChanges = snapshot.changes
             }
+        }
+    }
+
+    func openAgentChangedFile(_ relativePath: String) {
+        let base = agentWorktreeChanges.repositoryRoot ?? rootDirectory
+        guard let base else { return }
+
+        let url = base.appendingPathComponent(relativePath).standardizedFileURL
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              !isDirectory.boolValue else {
+            return
+        }
+
+        registerRecentFile(url)
+        openedFileURL = url
+        if appMode == .agent {
+            setAppMode(.editor)
         }
     }
 
@@ -846,25 +2159,33 @@ final class AppState: ObservableObject {
         return urls
     }
 
-    static let quickOpenFileLimit = 1_500
+    nonisolated static let quickOpenFileLimit = 1_500
 
     nonisolated static func quickOpenFileURLs(in folder: URL, limit: Int = quickOpenFileLimit) -> [URL] {
         guard let enumerator = FileManager.default.enumerator(
             at: folder,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         ) else {
             return []
         }
 
         var urls: [URL] = []
+        let candidateLimit = max(limit * 4, limit)
         for case let url as URL in enumerator {
-            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey]),
-                  values.isRegularFile == true else {
+            guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey]) else {
                 continue
             }
+            if values.isDirectory == true {
+                if ProjectDirectoryExclusions.shouldSkip(url) {
+                    enumerator.skipDescendants()
+                }
+                continue
+            }
+            guard values.isRegularFile == true else { continue }
 
             urls.append(url)
+            if urls.count >= candidateLimit { break }
         }
 
         return urls
@@ -1013,6 +2334,24 @@ final class AppState: ObservableObject {
         editorHighlightRevision += 1
     }
 
+    private func scheduleEditorSettingsSideEffects() {
+        editorSettingsSideEffectsWorkItem?.cancel()
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            let normalizedSettings = self.editorSettings.normalized()
+            if self.inspectorMode != normalizedSettings.preferredInspectorMode {
+                self.inspectorMode = normalizedSettings.preferredInspectorMode
+            }
+            EditorSettingsStore.save(normalizedSettings)
+            self.bumpEditorRenderRevision()
+            self.bumpEditorHighlightRevision()
+        }
+
+        editorSettingsSideEffectsWorkItem = workItem
+        DispatchQueue.main.async(execute: workItem)
+    }
+
     private func updateActiveTab(_ mutation: (inout EditorTab) -> Void) {
         guard !isApplyingTabSnapshot,
               let activeTabID,
@@ -1121,9 +2460,10 @@ final class AppState: ObservableObject {
             guard response == .OK, let url = panel.url else { return }
             self?.registerRecentFile(url)
             self?.registerRecentFolder(url.deletingLastPathComponent())
+            // Same rationale as openExternalURL: opening a file no longer
+            // promotes its parent to rootDirectory. Use Open Folder… (⇧⌘O)
+            // to load the FileTree.
             self?.openedFileURL = url
-            self?.setRootDirectory(url.deletingLastPathComponent())
-            self?.refreshGitStatus()
             self?.persistSession()
         }
     }
@@ -1401,7 +2741,9 @@ final class AppState: ObservableObject {
             if updateOpenedURL {
                 suppressURLChangeProcessing = true
                 openedFileURL = url
-                rootDirectory = url.deletingLastPathComponent()
+                // Save As no longer hijacks the workspace root. If a folder
+                // was explicitly opened, it stays; otherwise no FileTree
+                // appears for the saved file's parent.
                 updateActiveTabAfterURLChange(to: url)
             }
             updateActiveTab { tab in
@@ -1602,6 +2944,78 @@ final class AppState: ObservableObject {
         )
     }
 
+    nonisolated static func loadAgentWorktreeChangeSummary(status: GitRepositoryStatus) -> AgentWorktreeChangeSummary {
+        guard let repositoryRoot = status.repositoryRoot else {
+            return AgentWorktreeChangeSummary()
+        }
+
+        let numstatOutput = runGit(arguments: ["diff", "--numstat", "HEAD", "--"], in: repositoryRoot)
+        let lineStats = parseGitNumstat(numstatOutput)
+        let files: [AgentFileChangeSummary] = status.entries.compactMap { entry in
+            let path = entry.key
+            let kind = entry.value
+            let stats = lineStats[path] ?? AgentLineChangeStats(added: nil, deleted: nil)
+            let hasNumstatEntry = lineStats[path] != nil
+            guard shouldIncludeAgentWorktreeChange(
+                kind: kind,
+                lineStats: stats,
+                hasNumstatEntry: hasNumstatEntry
+            ) else {
+                return nil
+            }
+            return AgentFileChangeSummary(
+                path: path,
+                kind: kind,
+                lineStats: stats
+            )
+        }
+
+        return AgentWorktreeChangeSummary(repositoryRoot: repositoryRoot, files: files)
+    }
+
+    nonisolated static func shouldIncludeAgentWorktreeChange(
+        kind: GitFileStatusKind,
+        lineStats: AgentLineChangeStats,
+        hasNumstatEntry: Bool
+    ) -> Bool {
+        if let added = lineStats.added, let deleted = lineStats.deleted {
+            return added > 0 || deleted > 0
+        }
+        if hasNumstatEntry {
+            return true
+        }
+        switch kind {
+        case .added, .deleted, .renamed, .untracked:
+            return true
+        case .modified:
+            return false
+        }
+    }
+
+    nonisolated static func parseGitNumstat(_ output: String) -> [String: AgentLineChangeStats] {
+        var result: [String: AgentLineChangeStats] = [:]
+
+        for line in output.split(separator: "\n", omittingEmptySubsequences: true) {
+            let parts = line.split(separator: "\t", omittingEmptySubsequences: false)
+            guard parts.count >= 3 else { continue }
+
+            let added = Int(parts[0])
+            let deleted = Int(parts[1])
+            let path = parts.dropFirst(2).joined(separator: "\t")
+            guard !path.isEmpty else { continue }
+
+            result[String(path)] = AgentLineChangeStats(added: added, deleted: deleted)
+        }
+
+        return result
+    }
+
+    nonisolated static func formatLineStats(_ stats: AgentLineChangeStats) -> String {
+        let added = stats.added.map { "+\($0)" } ?? "+?"
+        let deleted = stats.deleted.map { "-\($0)" } ?? "-?"
+        return "\(added) \(deleted)"
+    }
+
     nonisolated static func parseGitStatusPorcelain(_ output: String) -> [String: GitFileStatusKind] {
         var result: [String: GitFileStatusKind] = [:]
 
@@ -1640,26 +3054,102 @@ final class AppState: ObservableObject {
         }
     }
 
+    nonisolated private static let maxGitOutputBytes = 512 * 1024
+    nonisolated private static let gitCommandTimeout: TimeInterval = 5
+
     nonisolated private static func runGit(arguments: [String], in repositoryRoot: URL) -> String {
         let process = Process()
-        let pipe = Pipe()
+        let stdoutPipe = Pipe()
+        let collector = ProcessOutputCollector(limit: maxGitOutputBytes)
+        let runState = TimedProcessState()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         process.arguments = arguments
         process.currentDirectoryURL = repositoryRoot
-        process.standardOutput = pipe
+        process.environment = ProcessInfo.processInfo.environment.merging([
+            "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_TERMINAL_PROMPT": "0"
+        ]) { current, _ in current }
+        process.standardOutput = stdoutPipe
         process.standardError = Pipe()
+        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if !data.isEmpty { collector.append(data) }
+        }
 
         do {
             try process.run()
         } catch {
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
             return ""
         }
 
+        let timeoutWorkItem = DispatchWorkItem {
+            runState.markTimedOut()
+            if process.isRunning {
+                process.terminate()
+            }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) {
+                if process.isRunning {
+                    process.interrupt()
+                }
+            }
+        }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + gitCommandTimeout, execute: timeoutWorkItem)
+
         process.waitUntilExit()
+        timeoutWorkItem.cancel()
+        stdoutPipe.fileHandleForReading.readabilityHandler = nil
+        collector.append(stdoutPipe.fileHandleForReading.availableData)
+
+        guard !runState.didTimeout else { return "" }
         guard process.terminationStatus == 0 else { return "" }
 
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        return String(data: data, encoding: .utf8) ?? ""
+        return collector.stringValue
+    }
+}
+
+private nonisolated final class ProcessOutputCollector: @unchecked Sendable {
+    private let limit: Int
+    private var data = Data()
+    private let lock = NSLock()
+
+    init(limit: Int) {
+        self.limit = limit
+    }
+
+    func append(_ chunk: Data) {
+        guard !chunk.isEmpty else { return }
+        lock.lock()
+        defer { lock.unlock() }
+
+        let remaining = max(0, limit - data.count)
+        guard remaining > 0 else { return }
+        data.append(chunk.prefix(remaining))
+    }
+
+    var stringValue: String {
+        lock.lock()
+        let snapshot = data
+        lock.unlock()
+        return String(data: snapshot, encoding: .utf8) ?? AppState.decodeText(from: snapshot)
+    }
+}
+
+private nonisolated final class TimedProcessState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var timedOut = false
+
+    func markTimedOut() {
+        lock.lock()
+        timedOut = true
+        lock.unlock()
+    }
+
+    var didTimeout: Bool {
+        lock.lock()
+        let value = timedOut
+        lock.unlock()
+        return value
     }
 }
 
@@ -1815,6 +3305,15 @@ private struct EditorSessionSnapshot: Codable {
     let rootDirectoryBookmarkData: Data?
     let tabPaths: [String]
     let activeTabPath: String?
+}
+
+/// Tiny actor used to thread-safely accumulate a streamed summary
+/// without leaking `@MainActor` isolation into the streaming callback.
+private actor CompressionSummaryCollector {
+    private(set) var value: String = ""
+    func append(_ chunk: String) {
+        value += chunk
+    }
 }
 
 private enum SessionStore {

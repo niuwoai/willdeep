@@ -17,9 +17,11 @@ struct VeilWriterApp: App {
         WindowGroup {
             WindowRootView()
         }
+        .windowStyle(.hiddenTitleBar)
         WindowGroup(for: URL.self) { $url in
             WindowRootView(initialExternalURL: url)
         }
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Window…") {
@@ -146,6 +148,16 @@ struct VeilWriterApp: App {
                 }
                 .keyboardShortcut("i", modifiers: [.command, .option])
                 .disabled(appState?.activeTabID == nil)
+
+                Button("Toggle Agent") {
+                    appState?.toggleAgentPanel()
+                }
+                .keyboardShortcut("a", modifiers: [.command, .option])
+
+                Button(appState?.appMode == .agent ? "Switch to Editor Mode" : "Switch to Agent Mode") {
+                    appState?.toggleAppMode()
+                }
+                .keyboardShortcut("a", modifiers: [.command, .shift])
             }
 
             CommandGroup(before: .windowArrangement) {
@@ -224,9 +236,7 @@ private struct WindowRootView: View {
                 if !didHandleInitialExternalURL, let initialExternalURL {
                     didHandleInitialExternalURL = true
                     appState.openExternalURL(initialExternalURL)
-                    return
                 }
-                appState.restoreSessionIfAvailable()
             }
     }
 }

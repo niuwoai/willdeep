@@ -13,11 +13,20 @@ struct EditorSettings: Codable, Equatable {
     var fontSize: Double
     var lineHeightMultiple: Double
     var fileTreeFontSize: Double
+    var fileTreeLineHeightMultiple: Double
     var themeID: String
     var showsLineNumbers: Bool
     var highlightsCurrentLine: Bool
     var preferredInspectorMode: EditorInspectorMode
     var inspectorPanelOrder: EditorInspectorPanelOrder
+    var windowBackgroundImagePath: String?
+    var windowBackgroundImageOpacity: Double
+    var windowBackgroundImageMode: EditorBackgroundImageMode
+    var windowBackgroundImageScale: Double
+    var editorGlassEnabled: Bool
+    var editorGlassMaterial: EditorGlassMaterial
+    var editorGlassOpacity: Double
+    var editorSurfaceOpacity: Double
     var trimsTrailingWhitespaceOnSave: Bool
     var ensuresFinalNewlineOnSave: Bool
 
@@ -26,11 +35,20 @@ struct EditorSettings: Codable, Equatable {
         fontSize: 13,
         lineHeightMultiple: 1.15,
         fileTreeFontSize: 12,
+        fileTreeLineHeightMultiple: 1.25,
         themeID: EditorTheme.paper.id,
         showsLineNumbers: true,
         highlightsCurrentLine: true,
         preferredInspectorMode: .minimap,
         inspectorPanelOrder: .minimapFirst,
+        windowBackgroundImagePath: nil,
+        windowBackgroundImageOpacity: 0.28,
+        windowBackgroundImageMode: .fill,
+        windowBackgroundImageScale: 1.0,
+        editorGlassEnabled: false,
+        editorGlassMaterial: .contentBackground,
+        editorGlassOpacity: 0.75,
+        editorSurfaceOpacity: 0.82,
         trimsTrailingWhitespaceOnSave: false,
         ensuresFinalNewlineOnSave: false
     )
@@ -40,11 +58,20 @@ struct EditorSettings: Codable, Equatable {
         fontSize: Double,
         lineHeightMultiple: Double,
         fileTreeFontSize: Double,
+        fileTreeLineHeightMultiple: Double,
         themeID: String,
         showsLineNumbers: Bool,
         highlightsCurrentLine: Bool,
         preferredInspectorMode: EditorInspectorMode,
         inspectorPanelOrder: EditorInspectorPanelOrder,
+        windowBackgroundImagePath: String?,
+        windowBackgroundImageOpacity: Double,
+        windowBackgroundImageMode: EditorBackgroundImageMode,
+        windowBackgroundImageScale: Double,
+        editorGlassEnabled: Bool,
+        editorGlassMaterial: EditorGlassMaterial,
+        editorGlassOpacity: Double,
+        editorSurfaceOpacity: Double,
         trimsTrailingWhitespaceOnSave: Bool,
         ensuresFinalNewlineOnSave: Bool
     ) {
@@ -52,11 +79,20 @@ struct EditorSettings: Codable, Equatable {
         self.fontSize = fontSize
         self.lineHeightMultiple = lineHeightMultiple
         self.fileTreeFontSize = fileTreeFontSize
+        self.fileTreeLineHeightMultiple = fileTreeLineHeightMultiple
         self.themeID = themeID
         self.showsLineNumbers = showsLineNumbers
         self.highlightsCurrentLine = highlightsCurrentLine
         self.preferredInspectorMode = preferredInspectorMode
         self.inspectorPanelOrder = inspectorPanelOrder
+        self.windowBackgroundImagePath = windowBackgroundImagePath
+        self.windowBackgroundImageOpacity = windowBackgroundImageOpacity
+        self.windowBackgroundImageMode = windowBackgroundImageMode
+        self.windowBackgroundImageScale = windowBackgroundImageScale
+        self.editorGlassEnabled = editorGlassEnabled
+        self.editorGlassMaterial = editorGlassMaterial
+        self.editorGlassOpacity = editorGlassOpacity
+        self.editorSurfaceOpacity = editorSurfaceOpacity
         self.trimsTrailingWhitespaceOnSave = trimsTrailingWhitespaceOnSave
         self.ensuresFinalNewlineOnSave = ensuresFinalNewlineOnSave
     }
@@ -69,11 +105,20 @@ struct EditorSettings: Codable, Equatable {
         fontSize = try container.decodeIfPresent(Double.self, forKey: .fontSize) ?? fallback.fontSize
         lineHeightMultiple = try container.decodeIfPresent(Double.self, forKey: .lineHeightMultiple) ?? fallback.lineHeightMultiple
         fileTreeFontSize = try container.decodeIfPresent(Double.self, forKey: .fileTreeFontSize) ?? fallback.fileTreeFontSize
+        fileTreeLineHeightMultiple = try container.decodeIfPresent(Double.self, forKey: .fileTreeLineHeightMultiple) ?? fallback.fileTreeLineHeightMultiple
         themeID = try container.decodeIfPresent(String.self, forKey: .themeID) ?? fallback.themeID
         showsLineNumbers = try container.decodeIfPresent(Bool.self, forKey: .showsLineNumbers) ?? fallback.showsLineNumbers
         highlightsCurrentLine = try container.decodeIfPresent(Bool.self, forKey: .highlightsCurrentLine) ?? fallback.highlightsCurrentLine
         preferredInspectorMode = try container.decodeIfPresent(EditorInspectorMode.self, forKey: .preferredInspectorMode) ?? fallback.preferredInspectorMode
         inspectorPanelOrder = try container.decodeIfPresent(EditorInspectorPanelOrder.self, forKey: .inspectorPanelOrder) ?? fallback.inspectorPanelOrder
+        windowBackgroundImagePath = try container.decodeIfPresent(String.self, forKey: .windowBackgroundImagePath) ?? fallback.windowBackgroundImagePath
+        windowBackgroundImageOpacity = try container.decodeIfPresent(Double.self, forKey: .windowBackgroundImageOpacity) ?? fallback.windowBackgroundImageOpacity
+        windowBackgroundImageMode = try container.decodeIfPresent(EditorBackgroundImageMode.self, forKey: .windowBackgroundImageMode) ?? fallback.windowBackgroundImageMode
+        windowBackgroundImageScale = try container.decodeIfPresent(Double.self, forKey: .windowBackgroundImageScale) ?? fallback.windowBackgroundImageScale
+        editorGlassEnabled = try container.decodeIfPresent(Bool.self, forKey: .editorGlassEnabled) ?? fallback.editorGlassEnabled
+        editorGlassMaterial = try container.decodeIfPresent(EditorGlassMaterial.self, forKey: .editorGlassMaterial) ?? fallback.editorGlassMaterial
+        editorGlassOpacity = try container.decodeIfPresent(Double.self, forKey: .editorGlassOpacity) ?? fallback.editorGlassOpacity
+        editorSurfaceOpacity = try container.decodeIfPresent(Double.self, forKey: .editorSurfaceOpacity) ?? fallback.editorSurfaceOpacity
         trimsTrailingWhitespaceOnSave = try container.decodeIfPresent(Bool.self, forKey: .trimsTrailingWhitespaceOnSave) ?? fallback.trimsTrailingWhitespaceOnSave
         ensuresFinalNewlineOnSave = try container.decodeIfPresent(Bool.self, forKey: .ensuresFinalNewlineOnSave) ?? fallback.ensuresFinalNewlineOnSave
     }
@@ -111,6 +156,14 @@ extension EditorSettings {
         result.fontSize = min(max(result.fontSize, 10), 28)
         result.lineHeightMultiple = min(max(result.lineHeightMultiple, 1.0), 1.8)
         result.fileTreeFontSize = min(max(result.fileTreeFontSize, 10), 16)
+        result.fileTreeLineHeightMultiple = min(max(result.fileTreeLineHeightMultiple, 1.0), 2.0)
+        if let path = result.windowBackgroundImagePath?.trimmingCharacters(in: .whitespacesAndNewlines), path.isEmpty {
+            result.windowBackgroundImagePath = nil
+        }
+        result.windowBackgroundImageOpacity = min(max(result.windowBackgroundImageOpacity, 0), 1)
+        result.windowBackgroundImageScale = min(max(result.windowBackgroundImageScale, 0.25), 3)
+        result.editorGlassOpacity = min(max(result.editorGlassOpacity, 0), 1)
+        result.editorSurfaceOpacity = min(max(result.editorSurfaceOpacity, 0.25), 1)
         return result
     }
 
@@ -134,6 +187,68 @@ extension EditorSettings {
 
     var orderedInspectorModes: [EditorInspectorMode] {
         inspectorPanelOrder.modes
+    }
+}
+
+enum EditorBackgroundImageMode: String, Codable, CaseIterable, Identifiable {
+    case fill
+    case fit
+    case stretch
+    case center
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .fill:
+            return "Fill & Crop"
+        case .fit:
+            return "Fit"
+        case .stretch:
+            return "Stretch"
+        case .center:
+            return "Center"
+        }
+    }
+}
+
+enum EditorGlassMaterial: String, Codable, CaseIterable, Identifiable {
+    case contentBackground
+    case windowBackground
+    case underWindowBackground
+    case hudWindow
+    case sidebar
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .contentBackground:
+            return "Content"
+        case .windowBackground:
+            return "Window"
+        case .underWindowBackground:
+            return "Under Window"
+        case .hudWindow:
+            return "HUD"
+        case .sidebar:
+            return "Sidebar"
+        }
+    }
+
+    var material: NSVisualEffectView.Material {
+        switch self {
+        case .contentBackground:
+            return .contentBackground
+        case .windowBackground:
+            return .windowBackground
+        case .underWindowBackground:
+            return .underWindowBackground
+        case .hudWindow:
+            return .hudWindow
+        case .sidebar:
+            return .sidebar
+        }
     }
 }
 

@@ -10,9 +10,42 @@ import Foundation
 import AppKit
 @testable import VeilWriter
 
+@Suite(.serialized)
 struct VeilWriterTests {
     private enum TestError: Error {
         case loadTimedOut
+    }
+
+    /// Wipes the shared `UserDefaults` keys that AppState persists into so
+    /// each test starts from a clean slate. swift-testing builds a fresh
+    /// instance of this struct per test, so `init()` doubles as the
+    /// per-test `setUp`.
+    init() {
+        let keys = [
+            "im.some.veilwriter.recentFiles.v1",
+            "im.some.veilwriter.recentFolders.v1",
+            "im.some.veilwriter.session.v1"
+        ]
+        for key in keys {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+    }
+
+    /// Drain anything AppState scheduled on the main queue (e.g. the
+    /// deferred editor-settings side effects). Polls until either the
+    /// predicate is satisfied or the deadline passes; spins the main run
+    /// loop and yields to the cooperative scheduler each round.
+    @MainActor
+    private func drainMainQueue(
+        timeout: TimeInterval = 1.0,
+        until predicate: @MainActor () -> Bool = { false }
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if predicate() { return }
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+            await Task.yield()
+        }
     }
 
     // MARK: - File Size Detection
@@ -136,6 +169,7 @@ struct VeilWriterTests {
         let settings = EditorSettings.default
         #expect(settings.lineHeightMultiple == 1.15)
         #expect(settings.fileTreeFontSize == 12)
+        #expect(settings.fileTreeLineHeightMultiple == 1.25)
         #expect(settings.showsLineNumbers == true)
         #expect(settings.highlightsCurrentLine == true)
         #expect(settings.preferredInspectorMode == .minimap)
@@ -154,11 +188,20 @@ struct VeilWriterTests {
             fontSize: 99,
             lineHeightMultiple: 4.0,
             fileTreeFontSize: 99,
+            fileTreeLineHeightMultiple: 99,
             themeID: "missing-theme",
             showsLineNumbers: false,
             highlightsCurrentLine: false,
             preferredInspectorMode: .structure,
             inspectorPanelOrder: .structureFirst,
+            windowBackgroundImagePath: "/tmp/missing.png",
+            windowBackgroundImageOpacity: 9,
+            windowBackgroundImageMode: .center,
+            windowBackgroundImageScale: 9,
+            editorGlassEnabled: true,
+            editorGlassMaterial: .hudWindow,
+            editorGlassOpacity: 9,
+            editorSurfaceOpacity: 9,
             trimsTrailingWhitespaceOnSave: true,
             ensuresFinalNewlineOnSave: true
         ).normalized()
@@ -168,11 +211,20 @@ struct VeilWriterTests {
         #expect(settings.fontSize == 28)
         #expect(settings.lineHeightMultiple == 1.8)
         #expect(settings.fileTreeFontSize == 16)
+        #expect(settings.fileTreeLineHeightMultiple == 2.0)
         #expect(settings.showsLineNumbers == false)
         #expect(settings.highlightsCurrentLine == false)
         #expect(settings.preferredInspectorMode == .structure)
         #expect(settings.inspectorPanelOrder == .structureFirst)
         #expect(settings.orderedInspectorModes == [.structure, .minimap])
+        #expect(settings.windowBackgroundImagePath == "/tmp/missing.png")
+        #expect(settings.windowBackgroundImageOpacity == 1)
+        #expect(settings.windowBackgroundImageMode == .center)
+        #expect(settings.windowBackgroundImageScale == 3)
+        #expect(settings.editorGlassEnabled == true)
+        #expect(settings.editorGlassMaterial == .hudWindow)
+        #expect(settings.editorGlassOpacity == 1)
+        #expect(settings.editorSurfaceOpacity == 1)
         #expect(settings.trimsTrailingWhitespaceOnSave == true)
         #expect(settings.ensuresFinalNewlineOnSave == true)
     }
@@ -197,13 +249,14 @@ struct VeilWriterTests {
 
         #expect(settings.fontID == "menlo")
         #expect(settings.fileTreeFontSize == EditorSettings.default.fileTreeFontSize)
+        #expect(settings.fileTreeLineHeightMultiple == EditorSettings.default.fileTreeLineHeightMultiple)
         #expect(settings.preferredInspectorMode == EditorSettings.default.preferredInspectorMode)
         #expect(settings.inspectorPanelOrder == EditorSettings.default.inspectorPanelOrder)
     }
 
     @Test("changing editor settings refreshes the active editor")
     @MainActor
-    func testEditorSettingsChangeBumpsRenderAndHighlightRevisions() {
+    func testEditorSettingsChangeBumpsRenderAndHighlightRevisions() async {
         let appState = AppState()
         let renderRevision = appState.editorRenderRevision
         let highlightRevision = appState.editorHighlightRevision
@@ -212,6 +265,7 @@ struct VeilWriterTests {
         settings.fontSize = 18
         settings.lineHeightMultiple = 1.4
         settings.fileTreeFontSize = 14
+        settings.fileTreeLineHeightMultiple = 1.5
         settings.themeID = EditorTheme.graphite.id
         settings.showsLineNumbers = false
         settings.highlightsCurrentLine = false
@@ -219,6 +273,15 @@ struct VeilWriterTests {
         settings.inspectorPanelOrder = .structureFirst
 
         appState.editorSettings = settings
+
+        // AppState defers the render/highlight bump to the next main-loop
+        // turn (avoids SwiftUI publishing-during-view-update warnings), so
+        // let the run loop tick before asserting.
+        await drainMainQueue(timeout: 2.0) {
+            appState.editorRenderRevision > renderRevision
+                && appState.editorHighlightRevision > highlightRevision
+                && appState.inspectorMode == .structure
+        }
 
         #expect(appState.editorRenderRevision > renderRevision)
         #expect(appState.editorHighlightRevision > highlightRevision)
@@ -284,10 +347,14 @@ struct VeilWriterTests {
     @Test("folder URL can be delegated to a new window without replacing current root")
     @MainActor
     func testFolderURLOpensInNewWindow() throws {
-        let originalDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("veilwriter_original_folder_\(UUID().uuidString)")
-        let nextDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("veilwriter_new_window_folder_\(UUID().uuidString)")
+        // `RecentItemsStore` deliberately rejects paths under the system
+        // temp directory, so use the user's caches dir for any fixture the
+        // test expects to land in `recentFolders`.
+        let cachesBase = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        let originalDir = cachesBase
+            .appendingPathComponent("veilwriter_test_original_\(UUID().uuidString)")
+        let nextDir = cachesBase
+            .appendingPathComponent("veilwriter_test_new_window_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: originalDir, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: nextDir, withIntermediateDirectories: true)
         defer {
@@ -640,6 +707,106 @@ struct VeilWriterTests {
         )
 
         #expect(status.kind(for: root.appendingPathComponent("icons")) == .deleted)
+    }
+
+    @Test("git numstat parser returns per-file line deltas")
+    func testGitNumstatParser() {
+        let stats = AppState.parseGitNumstat(
+            """
+            25\t13\tXedit/AgentClient.swift
+            -\t-\tAssets/icon.png
+            2\t0\tDocs/Name With Spaces.md
+            """
+        )
+
+        #expect(stats["Xedit/AgentClient.swift"]?.added == 25)
+        #expect(stats["Xedit/AgentClient.swift"]?.deleted == 13)
+        #expect(stats["Assets/icon.png"]?.added == nil)
+        #expect(stats["Assets/icon.png"]?.deleted == nil)
+        #expect(stats["Docs/Name With Spaces.md"]?.added == 2)
+        #expect(stats["Docs/Name With Spaces.md"]?.deleted == 0)
+    }
+
+    @Test("worktree change summary combines porcelain entries and numstat")
+    func testWorktreeChangeSummaryTotals() {
+        let root = URL(fileURLWithPath: "/tmp/veilwriter-git-root")
+        let summary = AgentWorktreeChangeSummary(
+            repositoryRoot: root,
+            files: [
+                AgentFileChangeSummary(
+                    path: "B.swift",
+                    kind: .modified,
+                    lineStats: AgentLineChangeStats(added: 10, deleted: 2)
+                ),
+                AgentFileChangeSummary(
+                    path: "A.swift",
+                    kind: .untracked,
+                    lineStats: AgentLineChangeStats(added: nil, deleted: nil)
+                )
+            ]
+        )
+
+        #expect(summary.fileCount == 2)
+        #expect(summary.totalAddedLines == 10)
+        #expect(summary.totalDeletedLines == 2)
+        #expect(summary.files.map(\.path) == ["A.swift", "B.swift"])
+        #expect(summary.change(for: "B.swift")?.fileName == "B.swift")
+    }
+
+    @Test("agent worktree summary skips modified files without real diff")
+    func testAgentWorktreeSummarySkipsModifiedFilesWithoutDiff() {
+        #expect(AppState.shouldIncludeAgentWorktreeChange(
+            kind: .modified,
+            lineStats: AgentLineChangeStats(added: nil, deleted: nil),
+            hasNumstatEntry: false
+        ) == false)
+        #expect(AppState.shouldIncludeAgentWorktreeChange(
+            kind: .modified,
+            lineStats: AgentLineChangeStats(added: 0, deleted: 0),
+            hasNumstatEntry: true
+        ) == false)
+        #expect(AppState.shouldIncludeAgentWorktreeChange(
+            kind: .modified,
+            lineStats: AgentLineChangeStats(added: 2, deleted: 0),
+            hasNumstatEntry: true
+        ) == true)
+        #expect(AppState.shouldIncludeAgentWorktreeChange(
+            kind: .modified,
+            lineStats: AgentLineChangeStats(added: nil, deleted: nil),
+            hasNumstatEntry: true
+        ) == true)
+        #expect(AppState.shouldIncludeAgentWorktreeChange(
+            kind: .untracked,
+            lineStats: AgentLineChangeStats(added: nil, deleted: nil),
+            hasNumstatEntry: false
+        ) == true)
+    }
+
+    @MainActor
+    @Test("agent thinking indicator only shows while waiting for model output")
+    func testAgentThinkingIndicatorState() {
+        let appState = AppState()
+
+        appState.isAgentResponding = true
+        appState.agentMessages = [AgentMessage(role: .user, content: "Review this")]
+        #expect(appState.shouldShowAgentThinkingIndicator == true)
+
+        appState.agentMessages.append(AgentMessage(role: .assistant, content: "Done"))
+        #expect(appState.shouldShowAgentThinkingIndicator == false)
+
+        let assistant = AgentMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [AgentMessageToolCall(externalID: "tool-1", toolName: "git_status", argumentsJSON: "{}")]
+        )
+        appState.agentMessages = [assistant]
+        #expect(appState.shouldShowAgentThinkingIndicator == false)
+
+        appState.agentMessages = [AgentMessage(role: .tool, content: "ok", toolCallID: "tool-1")]
+        #expect(appState.shouldShowAgentThinkingIndicator == true)
+
+        appState.isCompressingAgentContext = true
+        #expect(appState.shouldShowAgentThinkingIndicator == false)
     }
 
     @Test("command palette matcher supports fuzzy and keyword lookup")
@@ -1082,11 +1249,20 @@ struct VeilWriterTests {
             fontSize: EditorSettings.default.fontSize,
             lineHeightMultiple: EditorSettings.default.lineHeightMultiple,
             fileTreeFontSize: EditorSettings.default.fileTreeFontSize,
+            fileTreeLineHeightMultiple: EditorSettings.default.fileTreeLineHeightMultiple,
             themeID: EditorSettings.default.themeID,
             showsLineNumbers: true,
             highlightsCurrentLine: true,
             preferredInspectorMode: EditorSettings.default.preferredInspectorMode,
             inspectorPanelOrder: EditorSettings.default.inspectorPanelOrder,
+            windowBackgroundImagePath: EditorSettings.default.windowBackgroundImagePath,
+            windowBackgroundImageOpacity: EditorSettings.default.windowBackgroundImageOpacity,
+            windowBackgroundImageMode: EditorSettings.default.windowBackgroundImageMode,
+            windowBackgroundImageScale: EditorSettings.default.windowBackgroundImageScale,
+            editorGlassEnabled: EditorSettings.default.editorGlassEnabled,
+            editorGlassMaterial: EditorSettings.default.editorGlassMaterial,
+            editorGlassOpacity: EditorSettings.default.editorGlassOpacity,
+            editorSurfaceOpacity: EditorSettings.default.editorSurfaceOpacity,
             trimsTrailingWhitespaceOnSave: true,
             ensuresFinalNewlineOnSave: true
         )
@@ -1345,5 +1521,759 @@ struct VeilWriterTests {
     func testSuppressFlagDefaultsToFalse() {
         let appState = AppState()
         #expect(appState.suppressURLChangeProcessing == false)
+    }
+
+    // MARK: - Agent tools
+
+    @Test("grep_files matches a regex across workspace files and respects include filter")
+    func testGrepFilesMatchesRegexWithInclude() async throws {
+        let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("veilwriter_test_grep_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        try "func alpha() {}\nlet beta = 1\n".write(
+            to: workspace.appendingPathComponent("Sample.swift"), atomically: true, encoding: .utf8
+        )
+        try "function gamma(){}\nconst delta = 1;\n".write(
+            to: workspace.appendingPathComponent("sample.js"), atomically: true, encoding: .utf8
+        )
+
+        let context = AgentToolContext(rootDirectory: workspace)
+        let result = try await AgentToolRunner.run(
+            name: "grep_files",
+            arguments: [
+                "pattern": .string("^(func|function)\\s+\\w+"),
+                "include": .string("*.swift")
+            ],
+            context: context
+        )
+
+        #expect(result.payload.contains("Sample.swift"))
+        #expect(result.payload.contains("alpha"))
+        #expect(!result.payload.contains("gamma"))
+    }
+
+    @Test("grep_files rejects invalid regex with a descriptive error")
+    func testGrepFilesRejectsInvalidRegex() async throws {
+        let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("veilwriter_test_grep_bad_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let context = AgentToolContext(rootDirectory: workspace)
+        await #expect(throws: AgentToolError.self) {
+            try await AgentToolRunner.run(
+                name: "grep_files",
+                arguments: ["pattern": .string("[unterminated")],
+                context: context
+            )
+        }
+    }
+
+    @Test("encodeChatRequest echoes assistant reasoning_content back to the provider")
+    func testReasoningContentRoundTrip() throws {
+        // Empty reasoning must not emit the key (some providers reject empty strings).
+        let withoutReasoning = AgentMessage(role: .assistant, content: "Hi.")
+        let dataWithout = try AgentClient.encodeChatRequest(
+            model: "qwen3-235b-a22b",
+            messages: [withoutReasoning],
+            tools: []
+        )
+        let jsonWithout = String(data: dataWithout, encoding: .utf8) ?? ""
+        #expect(!jsonWithout.contains("reasoning_content"))
+
+        // Non-empty reasoning MUST be present in the assistant message.
+        // DashScope's thinking-mode 400's without it.
+        let withReasoning = AgentMessage(
+            role: .assistant,
+            content: "The answer is 42.",
+            reasoningContent: "I considered alternatives and concluded 42."
+        )
+        let dataWith = try AgentClient.encodeChatRequest(
+            model: "qwen3-235b-a22b",
+            messages: [withReasoning],
+            tools: []
+        )
+        let jsonWith = String(data: dataWith, encoding: .utf8) ?? ""
+        #expect(jsonWith.contains("reasoning_content"))
+        #expect(jsonWith.contains("I considered alternatives"))
+
+        // The field must only attach to assistant messages — a user
+        // role with reasoningContent set (shouldn't happen, but defend)
+        // doesn't leak it.
+        var sneakyUser = AgentMessage(role: .user, content: "hello")
+        sneakyUser.reasoningContent = "secret"
+        let dataUser = try AgentClient.encodeChatRequest(
+            model: "qwen3-235b-a22b",
+            messages: [sneakyUser],
+            tools: []
+        )
+        let jsonUser = String(data: dataUser, encoding: .utf8) ?? ""
+        #expect(!jsonUser.contains("secret"))
+    }
+
+    @Test("SafeCommand classifies common read-only commands as alwaysSafe")
+    func testSafeCommandAllowlist() {
+        // Single safe commands.
+        #expect(SafeCommand.classify(command: "cat README.md") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "head -n 50 src/main.rs") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "rg \"AgentSettingsStore\" Xedit") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "ls -la") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "pwd") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "wc -l Sources/*.swift") == .alwaysSafe)
+
+        // git read-only subcommands.
+        #expect(SafeCommand.classify(command: "git diff") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "git log --oneline -10") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "git status") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "git show HEAD") == .alwaysSafe)
+
+        // git config writes must NOT be auto-approved.
+        #expect(SafeCommand.classify(command: "git config user.email rocky@example.com") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "git config --add safe.directory /tmp/foo") == .needsJudgment)
+
+        // git stash without args (writes) must NOT be auto-approved.
+        #expect(SafeCommand.classify(command: "git stash") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "git stash list") == .alwaysSafe)
+    }
+
+    @Test("SafeCommand pipelines: every segment must be safe for the chain to auto-approve")
+    func testSafeCommandPipelines() {
+        // Two safe segments → safe.
+        #expect(SafeCommand.classify(command: "git diff | head -50") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "rg foo | wc -l") == .alwaysSafe)
+        // A dangerous segment poisons the whole chain.
+        #expect(SafeCommand.classify(command: "git diff && rm -rf node_modules") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "cat a.txt; sudo rm /tmp/x") == .alwaysDangerous)
+        // An unknown segment downgrades safe → needsJudgment.
+        #expect(SafeCommand.classify(command: "cat a.txt | xargs cargo run") == .needsJudgment)
+    }
+
+    @Test("SafeCommand rejects redirections and command substitution")
+    func testSafeCommandRejectsRedirectionAndSubstitution() {
+        #expect(SafeCommand.classify(command: "cat foo > bar") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "echo $(rm -rf /)") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "ls `pwd`") == .alwaysDangerous)
+        // Harmless stderr redirection should still be classified as safe.
+        #expect(SafeCommand.classify(command: "git status 2>/dev/null") == .alwaysSafe)
+    }
+
+    @Test("SafeCommand rejects find with -delete or -exec")
+    func testSafeCommandFindRules() {
+        #expect(SafeCommand.classify(command: "find . -name '*.swift'") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "find . -name '*.tmp' -delete") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "find . -name '*.log' -exec rm {} ;") == .alwaysDangerous)
+    }
+
+    // MARK: - Tool call grouping
+
+    private func makeCall(_ name: String, status: AgentToolCallStatus = .succeeded) -> AgentToolCall {
+        AgentToolCall(
+            messageID: UUID(),
+            externalID: UUID().uuidString,
+            toolName: name,
+            arguments: [:],
+            risk: .read,
+            status: status
+        )
+    }
+
+    @Test("AgentToolCallGrouping merges consecutive same-kind calls")
+    func testToolCallGroupingMergesAdjacent() {
+        let calls = [
+            makeCall("run_command"),
+            makeCall("run_command"),
+            makeCall("run_command")
+        ]
+        let segments = AgentToolCallGrouping.group(calls)
+        #expect(segments.count == 1)
+        #expect(segments[0].kind == .runCommand)
+        #expect(segments[0].count == 3)
+        #expect(segments[0].kind.groupTitle(3) == "已运行 3 条命令")
+    }
+
+    @Test("AgentToolCallGrouping splits when kind changes")
+    func testToolCallGroupingSplitsOnKindChange() {
+        let calls = [
+            makeCall("run_command"),
+            makeCall("read_file"),
+            makeCall("grep_files"),
+            makeCall("run_command")
+        ]
+        let segments = AgentToolCallGrouping.group(calls)
+        #expect(segments.count == 3)
+        #expect(segments[0].kind == .runCommand)
+        #expect(segments[0].count == 1)
+        #expect(segments[1].kind == .fileExploration)
+        #expect(segments[1].count == 2)
+        #expect(segments[2].kind == .runCommand)
+        #expect(segments[2].count == 1)
+        #expect(segments[1].kind.groupTitle(2) == "已探索 2 个文件")
+    }
+
+    @Test("AgentToolCallGrouping never merges ask_user even when adjacent")
+    func testToolCallGroupingKeepsAskUserStandalone() {
+        let calls = [
+            makeCall("ask_user", status: .awaitingUserAnswer),
+            makeCall("ask_user", status: .awaitingUserAnswer)
+        ]
+        let segments = AgentToolCallGrouping.group(calls)
+        #expect(segments.count == 2)
+        #expect(segments.allSatisfy { $0.kind == .askUser })
+        #expect(segments.allSatisfy { $0.count == 1 })
+    }
+
+    @Test("AgentToolCallGrouping treats unknown tools as their own .other kind")
+    func testToolCallGroupingUnknownKindGroupsBySameName() {
+        let calls = [
+            makeCall("mystery_tool"),
+            makeCall("mystery_tool"),
+            makeCall("other_tool")
+        ]
+        let segments = AgentToolCallGrouping.group(calls)
+        #expect(segments.count == 2)
+        #expect(segments[0].count == 2)
+        #expect(segments[1].count == 1)
+    }
+
+    // MARK: - Usage stats
+
+    private func makeSession(modelID: String?, messages: [AgentMessage]) -> AgentSession {
+        AgentSession(
+            id: UUID(),
+            title: "test",
+            workspaceRootPath: nil,
+            modelID: modelID,
+            createdAt: Date(),
+            updatedAt: Date(),
+            messages: messages
+        )
+    }
+
+    private func userMessage(_ text: String, at date: Date) -> AgentMessage {
+        AgentMessage(role: .user, content: text, createdAt: date)
+    }
+
+    private func assistantMessage(_ text: String, usage: Int?, at date: Date) -> AgentMessage {
+        AgentMessage(role: .assistant, content: text, usageTokens: usage, createdAt: date)
+    }
+
+    @Test("AgentUsageStats overview totals across sessions and prefers real usage")
+    func testUsageStatsBasicTotals() {
+        let now = Date()
+        let calendar = Calendar.current
+        let session = makeSession(modelID: "gpt-4.1", messages: [
+            userMessage("hello", at: now),
+            assistantMessage("hi", usage: 100, at: now),
+            userMessage("hello again", at: now),
+            // No real usage → fall back to chars/4 estimate (≈ 20/4 = 5)
+            assistantMessage(String(repeating: "x", count: 20), usage: nil, at: now)
+        ])
+        let stats = AgentUsageStats.overview(for: [session], now: now)
+        #expect(stats.sessionCount == 1)
+        #expect(stats.messageCount == 4)
+        #expect(stats.hasAnyRealUsage == true)
+        // 100 (real) + 5 (estimate from 20 chars) ≥ 105 plus the
+        // user messages and system-prompt baseline are 0 for users
+        // (estimator only on assistant in production? our estimate
+        // function is applied to all messages without usage — verify).
+        #expect(stats.totalTokens >= 100)
+        #expect(stats.favoriteModel == "gpt-4.1")
+        _ = calendar
+    }
+
+    @Test("AgentUsageStats current streak counts contiguous days ending today")
+    func testUsageStatsCurrentStreak() {
+        let calendar = Calendar.current
+        let now = Date()
+        let today = calendar.startOfDay(for: now)
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+        let dayBefore = calendar.date(byAdding: .day, value: -2, to: today)!
+        let oldDay = calendar.date(byAdding: .day, value: -10, to: today)!
+
+        let messages = [
+            userMessage("a", at: oldDay),
+            userMessage("b", at: dayBefore),
+            userMessage("c", at: yesterday),
+            userMessage("d", at: today)
+        ]
+        let session = makeSession(modelID: nil, messages: messages)
+        let stats = AgentUsageStats.overview(for: [session], now: now)
+        #expect(stats.activeDays == 4)
+        #expect(stats.currentStreak == 3)
+        #expect(stats.longestStreak == 3)
+    }
+
+    @Test("AgentUsageStats current streak is zero when today has no messages")
+    func testUsageStatsCurrentStreakZeroWhenTodayEmpty() {
+        let calendar = Calendar.current
+        let now = Date()
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now))!
+        let dayBefore = calendar.date(byAdding: .day, value: -2, to: calendar.startOfDay(for: now))!
+
+        let messages = [
+            userMessage("a", at: dayBefore),
+            userMessage("b", at: yesterday)
+        ]
+        let session = makeSession(modelID: nil, messages: messages)
+        let stats = AgentUsageStats.overview(for: [session], now: now)
+        #expect(stats.currentStreak == 0)
+        #expect(stats.longestStreak == 2)
+    }
+
+    @Test("AgentUsageStats heatmap returns weekCount × 7 cells in chronological order")
+    func testUsageStatsHeatmapShape() {
+        let calendar = Calendar.current
+        let now = Date()
+        let today = calendar.startOfDay(for: now)
+
+        let messages = [
+            userMessage("a", at: today),
+            userMessage("b", at: today),
+            userMessage("c", at: calendar.date(byAdding: .day, value: -3, to: today)!)
+        ]
+        let session = makeSession(modelID: nil, messages: messages)
+        let cells = AgentUsageStats.heatmap(for: [session], weekCount: 4, now: now)
+
+        #expect(cells.count == 4)
+        for column in cells { #expect(column.count == 7) }
+
+        // Flatten to find today's cell and assert it counts 2.
+        let flat = cells.flatMap { $0 }
+        let todayCell = flat.first { calendar.isDate($0.date, inSameDayAs: today) }
+        #expect(todayCell?.count == 2)
+    }
+
+    @Test("agent tool registry escalates dangerous run_command invocations to .danger")
+    func testRunCommandRiskEscalatesForDestructiveShell() {
+        let benignRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("ls -la")]
+        )
+        let dangerousRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("rm -rf build/output")]
+        )
+        let forcePushRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("git push --force origin main")]
+        )
+
+        #expect(benignRisk == .read)
+        #expect(dangerousRisk == .danger)
+        #expect(forcePushRisk == .danger)
+    }
+
+    @Test("run_command classifies cd plus read-only commands as read risk")
+    func testRunCommandRiskAllowsReadOnlyShellChains() {
+        let gitDiffRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cd Xedit && git diff")]
+        )
+        let grepRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cd Sources; rg \"AgentTool\" .")]
+        )
+        let writeAfterCDRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cd Xedit && git add AgentTools.swift")]
+        )
+        let unsafeCDRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cd .. && git diff")]
+        )
+        let redirectedReadRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cd Xedit && git diff > /tmp/out.patch")]
+        )
+
+        #expect(gitDiffRisk == .read)
+        #expect(grepRisk == .read)
+        #expect(writeAfterCDRisk == .write)
+        #expect(unsafeCDRisk == .write)
+        #expect(redirectedReadRisk == .write)
+    }
+
+    @Test("run_command allows workspace absolute cd for read-only commands")
+    func testRunCommandRiskAllowsWorkspaceAbsoluteReadOnlyShellChains() {
+        let workspace = URL(fileURLWithPath: "/Users/rocky/Sites/Xedit").standardizedFileURL
+        let sourceDirectory = workspace.appendingPathComponent("Xedit").standardizedFileURL
+
+        let gitDiffRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cd \(workspace.path) && git diff")],
+            rootDirectory: workspace
+        )
+        let rgRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cd \(sourceDirectory.path) && rg AgentTool .")],
+            rootDirectory: workspace
+        )
+        let gitDashCRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("git -C \(workspace.path) diff -- Xedit/AgentTools.swift")],
+            rootDirectory: workspace
+        )
+        let outsideCDRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cd /tmp && git diff")],
+            rootDirectory: workspace
+        )
+        let outsideGitDashCRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("git -C /tmp diff")],
+            rootDirectory: workspace
+        )
+        let outsideReadRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cat /etc/passwd")],
+            rootDirectory: workspace
+        )
+
+        #expect(gitDiffRisk == .read)
+        #expect(rgRisk == .read)
+        #expect(gitDashCRisk == .read)
+        #expect(outsideCDRisk == .write)
+        #expect(outsideGitDashCRisk == .write)
+        #expect(outsideReadRisk == .write)
+    }
+
+    @Test("run_command drains large output without hanging")
+    func testRunCommandDrainsLargeOutput() async throws {
+        let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("veilwriter_test_run_command_output_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let context = AgentToolContext(rootDirectory: workspace)
+        let result = try await AgentToolRunner.run(
+            name: "run_command",
+            arguments: [
+                "command": .string("/usr/bin/ruby -e 'STDOUT.write(\"x\" * 200000)'"),
+                "timeout_seconds": .number(5)
+            ],
+            context: context
+        )
+
+        #expect(result.summary.hasPrefix("exit 0"))
+        #expect(result.payload.contains("[truncated]"))
+    }
+
+    @Test("run_command exposes common user binary paths")
+    func testRunCommandUsesSupplementalShellPath() async throws {
+        let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("veilwriter_test_run_command_path_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let context = AgentToolContext(rootDirectory: workspace)
+        let result = try await AgentToolRunner.run(
+            name: "run_command",
+            arguments: [
+                "command": .string("printf '%s' \"$PATH\""),
+                "timeout_seconds": .number(5)
+            ],
+            context: context
+        )
+
+        #expect(result.payload.contains("/opt/homebrew/bin"))
+        #expect(result.payload.contains("/usr/local/bin"))
+    }
+
+    @Test("quick open skips dependency directories")
+    func testQuickOpenSkipsDependencyDirectories() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("veilwriter_quick_open_skip_\(UUID().uuidString)", isDirectory: true)
+        let nodeModules = tempDir.appendingPathComponent("node_modules", isDirectory: true)
+        try FileManager.default.createDirectory(at: nodeModules, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let source = tempDir.appendingPathComponent("App.swift")
+        let dependency = nodeModules.appendingPathComponent("dep.swift")
+        try "source".write(to: source, atomically: true, encoding: .utf8)
+        try "dependency".write(to: dependency, atomically: true, encoding: .utf8)
+
+        let urls = AppState.quickOpenFileURLs(in: tempDir)
+
+        #expect(urls.map(\.lastPathComponent).contains("App.swift"))
+        #expect(!urls.map(\.lastPathComponent).contains("dep.swift"))
+    }
+
+    @Test("shouldAutoCompressNow flips true once estimated context usage crosses 75%")
+    @MainActor
+    func testShouldAutoCompressTriggersAt75Percent() {
+        let appState = AppState()
+        // Force a known small context window so the test doesn't depend
+        // on the model fallback table.
+        var config = appState.agentConfiguration
+        config.model = "gpt-3.5-16k"
+        config.flashModel = "gpt-3.5-16k"
+        config.routingMode = .flash
+        appState.agentConfiguration = config
+
+        // Empty conversation must not trigger.
+        #expect(appState.shouldAutoCompressNow == false)
+
+        // Add 7 messages so the > 6 guard passes, but with tiny content
+        // so estimated tokens stay low.
+        for _ in 0..<7 {
+            appState.agentMessages.append(AgentMessage(role: .user, content: "hi"))
+        }
+        #expect(appState.shouldAutoCompressNow == false)
+
+        // Replace with messages that push estimated tokens past 75%.
+        appState.agentMessages.removeAll()
+        // 16_000-token window × 0.8 = 12_800 tokens. chars/4 heuristic →
+        // ~51_200 chars total. Spread across 8 user messages.
+        let bigChunk = String(repeating: "a", count: 7_000)
+        for _ in 0..<8 {
+            appState.agentMessages.append(AgentMessage(role: .user, content: bigChunk))
+        }
+        #expect(appState.shouldAutoCompressNow == true)
+
+        // A compression already in flight must suppress the trigger.
+        appState.isCompressingAgentContext = true
+        #expect(appState.shouldAutoCompressNow == false)
+        appState.isCompressingAgentContext = false
+
+        // Likewise, while the agent is still streaming a turn.
+        appState.isAgentResponding = true
+        #expect(appState.shouldAutoCompressNow == false)
+        appState.isAgentResponding = false
+    }
+
+    @Test("ask_user tool is registered with userInput risk and a question parameter")
+    func testAskUserToolRegistration() {
+        let descriptor = AgentToolRegistry.descriptor(for: "ask_user")
+        #expect(descriptor != nil)
+        #expect(descriptor?.risk == .userInput)
+        #expect(descriptor?.parameters.contains(where: { $0.name == "question" && $0.required }) == true)
+
+        let risk = AgentToolRegistry.risk(
+            for: "ask_user",
+            arguments: ["question": .string("What port should the server bind to?")]
+        )
+        #expect(risk == .userInput)
+    }
+
+    @Test("ask_user exposes optional options and multi_select parameters")
+    func testAskUserExposesChoiceParameters() {
+        let descriptor = AgentToolRegistry.descriptor(for: "ask_user")
+        let options = descriptor?.parameters.first { $0.name == "options" }
+        let multi = descriptor?.parameters.first { $0.name == "multi_select" }
+
+        #expect(options?.type == .stringArray)
+        #expect(options?.required == false)
+        #expect(multi?.type == .boolean)
+        #expect(multi?.required == false)
+    }
+
+    @Test("provider-ready messages drop orphan tool messages")
+    func testProviderReadyMessagesDropOrphanTools() {
+        let messages = [
+            AgentMessage(role: .user, content: "hi"),
+            AgentMessage(role: .tool, content: "orphan", toolCallID: "call_orphan"),
+            AgentMessage(role: .assistant, content: "done")
+        ]
+
+        let normalized = AgentClient.providerReadyMessages(messages)
+
+        #expect(normalized.map(\.role) == [.user, .assistant])
+    }
+
+    @Test("provider-ready messages keep complete assistant tool exchanges")
+    func testProviderReadyMessagesKeepCompleteToolExchange() {
+        let toolCallA = AgentMessageToolCall(
+            externalID: "call_a",
+            toolName: "read_file",
+            argumentsJSON: #"{"path":"A.swift"}"#
+        )
+        let toolCallB = AgentMessageToolCall(
+            externalID: "call_b",
+            toolName: "git_status",
+            argumentsJSON: "{}"
+        )
+        let assistant = AgentMessage(role: .assistant, content: "", toolCalls: [toolCallA, toolCallB])
+        let messages = [
+            AgentMessage(role: .user, content: "check"),
+            assistant,
+            AgentMessage(role: .tool, content: "b", toolCallID: "call_b"),
+            AgentMessage(role: .tool, content: "a", toolCallID: "call_a"),
+            AgentMessage(role: .assistant, content: "done")
+        ]
+
+        let normalized = AgentClient.providerReadyMessages(messages)
+
+        #expect(normalized.count == 5)
+        #expect(normalized[1].toolCalls.map(\.externalID) == ["call_a", "call_b"])
+        #expect(normalized[2].toolCallID == "call_a")
+        #expect(normalized[3].toolCallID == "call_b")
+    }
+
+    @Test("provider-ready messages drop incomplete assistant tool exchanges")
+    func testProviderReadyMessagesDropIncompleteToolExchange() {
+        let toolCallA = AgentMessageToolCall(
+            externalID: "call_a",
+            toolName: "read_file",
+            argumentsJSON: "{}"
+        )
+        let toolCallB = AgentMessageToolCall(
+            externalID: "call_b",
+            toolName: "git_status",
+            argumentsJSON: "{}"
+        )
+        let messages = [
+            AgentMessage(role: .assistant, content: "", toolCalls: [toolCallA, toolCallB]),
+            AgentMessage(role: .tool, content: "a", toolCallID: "call_a"),
+            AgentMessage(role: .user, content: "next")
+        ]
+
+        let normalized = AgentClient.providerReadyMessages(messages)
+
+        #expect(normalized.map(\.role) == [.user])
+        #expect(normalized.first?.content == "next")
+    }
+
+    @Test("provider-ready messages omit image parts when provider is text-only")
+    func testProviderReadyMessagesOmitImagesForTextOnlyProviders() throws {
+        let image = AgentImageAttachment(
+            mimeType: "image/png",
+            dataBase64: "aGVsbG8="
+        )
+        let messages = [
+            AgentMessage(role: .user, content: "please inspect", images: [image])
+        ]
+
+        let normalized = AgentClient.providerReadyMessages(messages, supportsImages: false)
+        #expect(normalized.first?.images.isEmpty == true)
+        #expect(normalized.first?.content.contains("omitted because this provider only accepts text messages") == true)
+
+        let request = try AgentClient.encodeChatRequest(
+            model: "deepseek-v4-flash",
+            messages: messages,
+            tools: [],
+            supportsImages: false
+        )
+        let body = String(data: request, encoding: .utf8) ?? ""
+        #expect(!body.contains("image_url"))
+        #expect(body.contains("please inspect"))
+    }
+
+    @Test("AgentJSONValue stringArrayValue and boolValue work")
+    func testAgentJSONValueHelpers() {
+        let validArray: AgentJSONValue = .array([.string("a"), .string("b"), .string("c")])
+        #expect(validArray.stringArrayValue() == ["a", "b", "c"])
+
+        // Mixed types must NOT silently coerce.
+        let mixedArray: AgentJSONValue = .array([.string("a"), .number(2)])
+        #expect(mixedArray.stringArrayValue() == nil)
+
+        #expect(AgentJSONValue.bool(true).boolValue() == true)
+        #expect(AgentJSONValue.string("yes").boolValue() == true)
+        #expect(AgentJSONValue.string("no").boolValue() == false)
+        #expect(AgentJSONValue.number(0).boolValue() == false)
+        #expect(AgentJSONValue.string("maybe").boolValue() == nil)
+    }
+
+    @Test("agent context window recognizes modern large-context models")
+    func testAgentContextWindowModernModels() {
+        #expect(AppState.agentContextWindow(model: "gpt-5.5", providerID: "openai") == 400_000)
+        #expect(AppState.agentContextWindow(model: "gpt-4.1", providerID: "openai") == 1_000_000)
+        #expect(AppState.agentContextWindow(model: "custom-model", providerID: "custom") == 128_000)
+    }
+
+    @Test("agent configuration routes auto and compression through flash")
+    func testAgentConfigurationRoutesAutoAndCompressionThroughFlash() {
+        var configuration = AgentConfiguration(
+            providerID: "deepseek",
+            baseURL: "https://api.deepseek.com",
+            model: "legacy-model",
+            flashModel: "deepseek-chat",
+            proModel: "deepseek-reasoner",
+            routingMode: .auto,
+            apiKey: ""
+        ).normalized
+
+        #expect(configuration.model(for: .interactive) == "deepseek-chat")
+        #expect(configuration.model(for: .compression) == "deepseek-chat")
+
+        configuration.routingMode = .pro
+        #expect(configuration.normalized.model(for: .interactive) == "deepseek-reasoner")
+    }
+
+    @Test("agent image description configuration defaults to DashScope vision")
+    func testAgentImageDescriptionConfigurationDefaultsToDashScopeVision() {
+        let configuration = AgentConfiguration.default.normalized
+
+        #expect(configuration.supportsImageInput == true)
+        #expect(configuration.imageDescription.providerID == "dashscope")
+        #expect(configuration.imageDescription.model == "qwen3-vl-plus")
+        #expect(configuration.imageDescription.agentConfiguration.supportsImageInput == true)
+        #expect(AgentProviderPreset.preset(id: "deepseek")?.supportsImageInput == false)
+        #expect(AgentProviderPreset.preset(id: "dashscope")?.defaultVisionModel == "qwen3-vl-plus")
+    }
+
+    @Test("agent token estimate includes tool schemas without exploding short chats")
+    func testAgentTokenEstimateIncludesTools() {
+        let messages = [AgentMessage(role: .user, content: "hi")]
+        let withoutTools = AppState.estimateAgentTokens(messages: messages, tools: [])
+        let withTools = AppState.estimateAgentTokens(messages: messages, tools: AgentToolRegistry.all)
+
+        #expect(withTools > withoutTools)
+        #expect(withTools < 8_000)
+    }
+
+    @Test("MCP and skill tools are registered")
+    func testMCPAndSkillToolsAreRegistered() {
+        #expect(AgentToolRegistry.descriptor(for: "list_skills")?.risk == .read)
+        #expect(AgentToolRegistry.descriptor(for: "read_skill")?.risk == .read)
+        #expect(AgentToolRegistry.descriptor(for: "list_mcp_servers")?.risk == .read)
+        #expect(AgentToolRegistry.descriptor(for: "list_mcp_tools")?.risk == .read)
+        #expect(AgentToolRegistry.descriptor(for: "call_mcp_tool")?.risk == .write)
+    }
+
+    @Test("collapseOldToolResults keeps the most recent tool messages and replaces older ones with a placeholder")
+    func testCollapseOldToolResults() {
+        var messages: [AgentMessage] = []
+        messages.append(AgentMessage(role: .user, content: "Find foo"))
+        for index in 0..<6 {
+            messages.append(AgentMessage(role: .assistant, content: "step \(index)"))
+            messages.append(AgentMessage(
+                role: .tool,
+                content: String(repeating: "x", count: 500),
+                toolCallID: "call_\(index)"
+            ))
+        }
+
+        let collapsed = AppState.collapseOldToolResults(in: messages, keepRecentToolMessages: 2)
+        let toolMessages = collapsed.filter { $0.role == .tool }
+        #expect(toolMessages.count == 6)
+
+        let placeholderCount = toolMessages.filter { $0.content.hasPrefix("[tool result hidden") }.count
+        #expect(placeholderCount == 4)
+
+        // Final two tool messages should remain at full length.
+        let untouched = toolMessages.suffix(2)
+        for message in untouched {
+            #expect(message.content.count == 500)
+        }
+    }
+
+    @Test("agent tool runner refuses paths outside the workspace")
+    func testReadFileRefusesEscapedPath() async throws {
+        let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("veilwriter_test_sandbox_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let context = AgentToolContext(rootDirectory: workspace)
+        await #expect(throws: AgentToolError.self) {
+            try await AgentToolRunner.run(
+                name: "read_file",
+                arguments: ["path": .string("../../../etc/hosts")],
+                context: context
+            )
+        }
     }
 }

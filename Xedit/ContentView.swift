@@ -16,190 +16,34 @@ struct ContentView: View {
     /// Derived from `appState.rootDirectory` — the tree model root node.
     /// Re-created whenever the root directory changes.
     @State private var rootNode: FileSystemNode?
+    @State private var sidebarWidth: CGFloat = 220
+    @State private var isFileTreeCollapsed = false
+    @State private var isEditorMaximized = false
+    @State private var fileTreeCollapsedBeforeEditorMaximize = false
+    @State private var inspectorVisibleBeforeEditorMaximize: Bool?
+
+    private let minSidebarWidth: CGFloat = 170
+    private let maxSidebarWidth: CGFloat = 380
+    private let sidebarTopPadding: CGFloat = 48
 
     var body: some View {
-        NavigationSplitView {
-            // Sidebar: directory tree
-            Group {
-                if appState.isFocusModeEnabled {
-                    Color.clear
-                        .frame(width: 0)
-                } else if let root = rootNode {
-                    FileTreeView(
-                        root: root,
-                        selectedURL: $appState.openedFileURL,
-                        selectedFolderURL: $appState.selectedFolderURL
-                    )
-                    .id(root.url.standardizedFileURL)
-                } else {
-                    VStack(spacing: 14) {
-                        Image(systemName: "folder")
-                            .font(.system(size: 32))
-                        Text("No Folder Open")
-                            .font(.headline)
-                        Text("Choose a file or folder to start editing.")
-                            .font(.caption)
-                            .multilineTextAlignment(.center)
+        ZStack {
+            WorkspaceWindowBackground()
 
-                        HStack(spacing: 8) {
-                            Button {
-                                appState.openFile()
-                            } label: {
-                                Label("Open File", systemImage: "doc")
-                            }
-                            .buttonStyle(EmptyStateIconButtonStyle())
-                            .focusable(false)
-                            .help("Open File")
-                            .accessibilityLabel("Open File")
+            if appState.appMode == .agent {
+                AgentModeView()
+            } else {
+                HStack(spacing: 0) {
+                    sidebar
+                    sidebarControl
 
-                            Button {
-                                appState.openFolder { url in
-                                    openWindow(value: url)
-                                }
-                            } label: {
-                                Label("Open Folder", systemImage: "folder")
-                            }
-                            .buttonStyle(EmptyStateIconButtonStyle())
-                            .focusable(false)
-                            .help("Open Folder")
-                            .accessibilityLabel("Open Folder")
-                        }
-                        .labelStyle(.iconOnly)
-
-                        RecentItemsView()
-                            .environmentObject(appState)
-                    }
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    detail
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .frame(minWidth: appState.isFocusModeEnabled ? 0 : 180)
-            .navigationSplitViewColumnWidth(
-                min: appState.isFocusModeEnabled ? 0 : 160,
-                ideal: appState.isFocusModeEnabled ? 0 : 220,
-                max: appState.isFocusModeEnabled ? 0 : 400
-            )
-        } detail: {
-            VStack(spacing: 0) {
-                if let imageURL = appState.imagePreviewURL {
-                    ImagePreviewPane(url: imageURL) {
-                        appState.closeImagePreview()
-                    }
-                    .frame(minWidth: 400, minHeight: 400)
-                } else if appState.activeTab != nil {
-                    if !appState.isFocusModeEnabled {
-                        EditorTabBar(
-                            tabs: appState.tabs,
-                            activeTabID: appState.activeTabID,
-                            onSelect: { appState.activateTab(id: $0) },
-                            onClose: { appState.closeTab(id: $0) }
-                        )
-                    }
 
-                    if appState.isFindBarVisible && !appState.isFocusModeEnabled {
-                        FindReplaceBar()
-                            .environmentObject(appState)
-                    }
-
-                    // Detail: editor area with syntax highlighting.
-                    let detectedLanguage = appState.detectedLanguage
-                    let editorLanguage = appState.effectiveLanguage
-
-                    HStack(spacing: 0) {
-                        EditorView(
-                            text: $appState.fileContent,
-                            language: editorLanguage,
-                            detectedLanguage: detectedLanguage,
-                            syntaxHighlightingSelection: appState.syntaxHighlightingSelection,
-                            settings: appState.editorSettings,
-                            activeTabID: appState.activeTabID,
-                            renderRevision: appState.editorRenderRevision,
-                            highlightRevision: appState.editorHighlightRevision,
-                            navigationRequest: appState.editorNavigationRequest,
-                            changedLineNumbers: appState.changedLineNumbers,
-                            searchRanges: appState.findMatchRanges,
-                            activeSearchRange: appState.activeFindRange,
-                            onEdit: {
-                                // Mark dirty when the user types.
-                                appState.isEdited = true
-                                NSApplication.shared.keyWindow?.isDocumentEdited = true
-                            },
-                            onSelectionChange: { line, column, selectedCharacters, selectedLines in
-                                appState.updateSelectionInfo(
-                                    line: line,
-                                    column: column,
-                                    selectedCharacters: selectedCharacters,
-                                    selectedLines: selectedLines
-                                )
-                            },
-                            onSyntaxHighlightingChange: { selection in
-                                appState.setSyntaxHighlightingSelection(selection)
-                            }
-                        )
-                        .frame(minWidth: 400, minHeight: 400)
-
-                        if appState.isSplitEditorVisible {
-                            SplitEditorPane()
-                                .environmentObject(appState)
-                                .frame(minWidth: 280, idealWidth: 360)
-                        }
-
-                        if appState.isPreviewVisible, PreviewPane.supports(editorLanguage) {
-                            PreviewPane(text: appState.fileContent, language: editorLanguage) {
-                                appState.isPreviewVisible = false
-                            }
-                            .frame(minWidth: 280, idealWidth: 360)
-                        }
-
-                        if appState.isInspectorVisible && !appState.isFocusModeEnabled {
-                            EditorInspectorSidebar(
-                                text: appState.fileContent,
-                                language: editorLanguage,
-                                mode: $appState.inspectorMode,
-                                orderedModes: appState.editorSettings.orderedInspectorModes,
-                                onNavigateToLine: { line in
-                                    appState.navigateEditor(toLine: line)
-                                },
-                                onClose: {
-                                    appState.isInspectorVisible = false
-                                }
-                            )
-                            .frame(width: 220)
-                        } else if !appState.isFocusModeEnabled {
-                            InspectorCollapsedRail {
-                                appState.isInspectorVisible = true
-                            }
-                        }
-                    }
-
-                    if !appState.isFocusModeEnabled {
-                        EditorStatusBar(language: editorLanguage)
-                            .environmentObject(appState)
-                    }
-                } else {
-                    Color(nsColor: .textBackgroundColor)
-                        .frame(minWidth: 400, minHeight: 400)
-                }
-            }
-            .overlay {
-                if appState.isQuickOpenVisible {
-                    QuickOpenPanel()
-                        .environmentObject(appState)
-                }
-                if appState.isGoToLineVisible {
-                    GoToLinePanel()
-                        .environmentObject(appState)
-                }
-                if appState.isCommandPaletteVisible {
-                    CommandPalettePanel()
-                        .environmentObject(appState)
-                }
-                if appState.isSymbolJumpVisible {
-                    SymbolJumpPanel()
-                        .environmentObject(appState)
-                }
-            }
         }
+        .ignoresSafeArea(.container, edges: .top)
         .onChange(of: appState.rootDirectory) { _, newDirectory in
             if let dir = newDirectory {
                 let node = FileSystemNode(url: dir)
@@ -244,6 +88,227 @@ struct ContentView: View {
                 }
             )
         )
+        .background(WindowChromeConfigurator())
+    }
+
+    private var sidebar: some View {
+        Group {
+            if appState.isFocusModeEnabled {
+                Color.clear
+                    .frame(width: 0)
+            } else if let root = rootNode {
+                FileTreeView(
+                    root: root,
+                    selectedURL: $appState.openedFileURL,
+                    selectedFolderURL: $appState.selectedFolderURL
+                )
+                .id(root.url.standardizedFileURL)
+            } else {
+                Color.clear
+                    .frame(width: 0)
+            }
+        }
+        .padding(.top, shouldShowSidebar ? sidebarTopPadding : 0)
+        .frame(width: shouldShowSidebar ? sidebarWidth : 0)
+        .frame(maxHeight: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .clipped()
+    }
+
+    private var shouldShowSidebar: Bool {
+        !appState.isFocusModeEnabled
+            && rootNode != nil
+            && !isFileTreeCollapsed
+            && !isEditorMaximized
+    }
+
+    private var tabBarLeadingReserve: CGFloat {
+        shouldShowSidebar ? 0 : 72
+    }
+
+    private var shouldShowSidebarControl: Bool {
+        !appState.isFocusModeEnabled && rootNode != nil && !isEditorMaximized
+    }
+
+    @ViewBuilder
+    private var sidebarControl: some View {
+        if shouldShowSidebarControl && shouldShowSidebar {
+            SidebarResizeHandle(
+                width: $sidebarWidth,
+                minWidth: minSidebarWidth,
+                maxWidth: maxSidebarWidth
+            )
+        }
+    }
+
+    private var detail: some View {
+        VStack(spacing: 0) {
+                if let imageURL = appState.imagePreviewURL {
+                    ImagePreviewPane(url: imageURL) {
+                        appState.closeImagePreview()
+                    }
+                    .frame(minWidth: 400, minHeight: 400)
+                } else if appState.activeTab != nil {
+                    if !appState.isFocusModeEnabled {
+                        EditorTabBar(
+                            tabs: appState.tabs,
+                            activeTabID: appState.activeTabID,
+                            leadingReserve: tabBarLeadingReserve,
+                            onSelect: { appState.activateTab(id: $0) },
+                            onClose: { appState.closeTab(id: $0) },
+                            onDoubleClick: { id in
+                                appState.activateTab(id: id)
+                                toggleEditorMaximized()
+                            }
+                        )
+                    }
+
+                    if appState.isFindBarVisible && !appState.isFocusModeEnabled {
+                        FindReplaceBar()
+                            .environmentObject(appState)
+                    }
+
+                    // Detail: editor area with syntax highlighting.
+                    let detectedLanguage = appState.detectedLanguage
+                    let editorLanguage = appState.effectiveLanguage
+
+                    HStack(spacing: 0) {
+                        EditorView(
+                            text: $appState.fileContent,
+                            language: editorLanguage,
+                            detectedLanguage: detectedLanguage,
+                            syntaxHighlightingSelection: appState.syntaxHighlightingSelection,
+                            settings: appState.editorSettings,
+                            activeTabID: appState.activeTabID,
+                            renderRevision: appState.editorRenderRevision,
+                            highlightRevision: appState.editorHighlightRevision,
+                            navigationRequest: appState.editorNavigationRequest,
+                            changedLineNumbers: appState.changedLineNumbers,
+                            searchRanges: appState.findMatchRanges,
+                            activeSearchRange: appState.activeFindRange,
+                            onEdit: {
+                                // Mark dirty when the user types.
+                                appState.isEdited = true
+                                NSApplication.shared.keyWindow?.isDocumentEdited = true
+                            },
+                            onSelectionChange: { line, column, selectedCharacters, selectedLines, selectedText in
+                                appState.updateSelectionInfo(
+                                    line: line,
+                                    column: column,
+                                    selectedCharacters: selectedCharacters,
+                                    selectedLines: selectedLines,
+                                    selectedText: selectedText
+                                )
+                            },
+                            onSyntaxHighlightingChange: { selection in
+                                appState.setSyntaxHighlightingSelection(selection)
+                            }
+                        )
+                        .editorGlassBackground(settings: appState.editorSettings)
+                        .frame(minWidth: 400, minHeight: 400)
+
+                        if appState.isSplitEditorVisible {
+                            SplitEditorPane()
+                                .environmentObject(appState)
+                                .frame(minWidth: 280, idealWidth: 360)
+                        }
+
+                        if appState.isPreviewVisible, PreviewPane.supports(editorLanguage) {
+                            PreviewPane(text: appState.fileContent, language: editorLanguage) {
+                                appState.isPreviewVisible = false
+                            }
+                            .frame(minWidth: 280, idealWidth: 360)
+                        }
+
+                        if appState.isInspectorVisible && !appState.isFocusModeEnabled && !isEditorMaximized {
+                            EditorInspectorSidebar(
+                                text: appState.fileContent,
+                                language: editorLanguage,
+                                mode: $appState.inspectorMode,
+                                orderedModes: appState.editorSettings.orderedInspectorModes,
+                                onNavigateToLine: { line in
+                                    appState.navigateEditor(toLine: line)
+                                },
+                                onClose: {
+                                    appState.isInspectorVisible = false
+                                }
+                            )
+                            .frame(width: 220)
+                        } else if !appState.isFocusModeEnabled && !isEditorMaximized {
+                            InspectorCollapsedRail {
+                                appState.isInspectorVisible = true
+                            }
+                        }
+
+                        if appState.isAgentPanelVisible && !appState.isFocusModeEnabled && !isEditorMaximized {
+                            AgentPanelView()
+                                .environmentObject(appState)
+                                .frame(width: 330)
+                        }
+                    }
+
+                    if !appState.isFocusModeEnabled {
+                        EditorStatusBar(language: editorLanguage)
+                            .environmentObject(appState)
+                    }
+                } else {
+                    if rootNode == nil {
+                        EmptyWorkspaceView {
+                            appState.openFile()
+                        } onOpenFolder: {
+                            appState.openFolder { url in
+                                openWindow(value: url)
+                            }
+                        }
+                        .frame(minWidth: 400, minHeight: 400)
+                        .environmentObject(appState)
+                    } else {
+                        EmptyProjectEditorView {
+                            appState.showQuickOpen()
+                        } onOpenFile: {
+                            appState.openFile()
+                        }
+                        .frame(minWidth: 400, minHeight: 400)
+                    }
+                }
+            }
+            .background(EditorAreaBackground(settings: appState.editorSettings))
+            .overlay {
+                if appState.isQuickOpenVisible {
+                    QuickOpenPanel()
+                        .environmentObject(appState)
+                }
+                if appState.isGoToLineVisible {
+                    GoToLinePanel()
+                        .environmentObject(appState)
+                }
+                if appState.isCommandPaletteVisible {
+                    CommandPalettePanel()
+                        .environmentObject(appState)
+                }
+                if appState.isSymbolJumpVisible {
+                    SymbolJumpPanel()
+                        .environmentObject(appState)
+                }
+            }
+    }
+
+    private func toggleEditorMaximized() {
+        if isEditorMaximized {
+            isEditorMaximized = false
+            isFileTreeCollapsed = fileTreeCollapsedBeforeEditorMaximize
+            if let inspectorVisibleBeforeEditorMaximize {
+                appState.isInspectorVisible = inspectorVisibleBeforeEditorMaximize
+            }
+            inspectorVisibleBeforeEditorMaximize = nil
+            return
+        }
+
+        fileTreeCollapsedBeforeEditorMaximize = isFileTreeCollapsed
+        inspectorVisibleBeforeEditorMaximize = appState.isInspectorVisible
+        isFileTreeCollapsed = true
+        appState.isInspectorVisible = false
+        isEditorMaximized = true
     }
 
     // MARK: - File Selection Handling
@@ -323,53 +388,417 @@ struct ContentView: View {
     }
 }
 
-private struct RecentItemsView: View {
+private struct WorkspaceWindowBackground: View {
+    var body: some View {
+        Color(nsColor: .windowBackgroundColor)
+            .ignoresSafeArea()
+    }
+}
+
+private struct EditorAreaBackground: View {
+    let settings: EditorSettings
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Color(nsColor: .windowBackgroundColor)
+
+                if let image = backgroundImage {
+                    imageView(image, in: proxy.size)
+                        .opacity(settings.windowBackgroundImageOpacity)
+                }
+            }
+        }
+        .clipped()
+    }
+
+    private var backgroundImage: NSImage? {
+        guard let path = settings.windowBackgroundImagePath else { return nil }
+        return NSImage(contentsOfFile: path)
+    }
+
+    @ViewBuilder
+    private func imageView(_ image: NSImage, in size: CGSize) -> some View {
+        switch settings.windowBackgroundImageMode {
+        case .fill:
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: size.width, height: size.height)
+                .scaleEffect(settings.windowBackgroundImageScale)
+                .clipped()
+        case .fit:
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: size.width, height: size.height)
+                .scaleEffect(settings.windowBackgroundImageScale)
+                .clipped()
+        case .stretch:
+            Image(nsImage: image)
+                .resizable()
+                .frame(
+                    width: max(1, size.width * settings.windowBackgroundImageScale),
+                    height: max(1, size.height * settings.windowBackgroundImageScale)
+                )
+                .frame(width: size.width, height: size.height)
+                .clipped()
+        case .center:
+            Image(nsImage: image)
+                .resizable()
+                .frame(
+                    width: max(1, image.size.width * settings.windowBackgroundImageScale),
+                    height: max(1, image.size.height * settings.windowBackgroundImageScale)
+                )
+                .frame(width: size.width, height: size.height)
+                .clipped()
+        }
+    }
+}
+
+private struct EditorGlassBackgroundModifier: ViewModifier {
+    let settings: EditorSettings
+
+    func body(content: Content) -> some View {
+        if settings.editorGlassEnabled {
+            ZStack {
+                VisualEffectView(material: settings.editorGlassMaterial.material)
+                    .opacity(settings.editorGlassOpacity)
+                content
+            }
+        } else {
+            content
+        }
+    }
+}
+
+private extension View {
+    func editorGlassBackground(settings: EditorSettings) -> some View {
+        modifier(EditorGlassBackgroundModifier(settings: settings))
+    }
+}
+
+private struct VisualEffectView: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.blendingMode = .behindWindow
+        view.state = .active
+        view.material = material
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
+        nsView.blendingMode = .behindWindow
+        nsView.state = .active
+    }
+}
+
+private struct SidebarResizeHandle: View {
+    @Binding var width: CGFloat
+    let minWidth: CGFloat
+    let maxWidth: CGFloat
+
+    @State private var dragStartWidth: CGFloat?
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor).opacity(0.22))
+                .frame(width: 1)
+        }
+        .frame(width: 10)
+        .contentShape(Rectangle())
+        .cursor(.resizeLeftRight)
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { value in
+                    let startWidth = dragStartWidth ?? width
+                    dragStartWidth = startWidth
+                    width = min(max(startWidth + value.translation.width, minWidth), maxWidth)
+                }
+                .onEnded { _ in
+                    dragStartWidth = nil
+                }
+        )
+    }
+}
+
+private struct CursorModifier: ViewModifier {
+    let cursor: NSCursor
+
+    func body(content: Content) -> some View {
+        content.onHover { isHovering in
+            if isHovering {
+                cursor.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+    }
+}
+
+private extension View {
+    func cursor(_ cursor: NSCursor) -> some View {
+        modifier(CursorModifier(cursor: cursor))
+    }
+}
+
+private struct EmptyProjectEditorView: View {
+    let onQuickOpen: () -> Void
+    let onOpenFile: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color(nsColor: .textBackgroundColor)
+
+            VStack(spacing: 18) {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.system(size: 36, weight: .light))
+                    .foregroundStyle(.secondary)
+
+                VStack(spacing: 6) {
+                    Text("No File Open")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    Text("Select a file from the sidebar to start editing.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack(spacing: 10) {
+                    Button {
+                        onQuickOpen()
+                    } label: {
+                        Label("Quick Open", systemImage: "doc.text.magnifyingglass")
+                    }
+                    .buttonStyle(EmptyWorkspaceButtonStyle())
+                    .help("Quick Open")
+                    .accessibilityLabel("Quick Open")
+
+                    Button {
+                        onOpenFile()
+                    } label: {
+                        Label("Open File", systemImage: "doc")
+                    }
+                    .buttonStyle(EmptyWorkspaceButtonStyle())
+                    .help("Open File")
+                    .accessibilityLabel("Open File")
+                }
+                .labelStyle(.titleAndIcon)
+            }
+            .padding(.horizontal, 40)
+            .frame(maxWidth: 520)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+private struct EmptyWorkspaceView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
 
+    let onOpenFile: () -> Void
+    let onOpenFolder: () -> Void
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if !appState.recentFolders.isEmpty {
-                recentSection(title: "Recent Folders", urls: appState.recentFolders, icon: "folder") { url in
+        ZStack {
+            Color(nsColor: .textBackgroundColor)
+
+            ScrollView {
+                VStack(spacing: 34) {
+                    EmptyWorkspaceHero(
+                        onOpenFile: onOpenFile,
+                        onOpenFolder: onOpenFolder
+                    )
+
+                    if hasRecentItems {
+                        recentContent
+                    }
+                }
+                .padding(.horizontal, 48)
+                .padding(.vertical, 72)
+                .frame(maxWidth: 720)
+                .frame(maxWidth: .infinity, minHeight: 520)
+            }
+        }
+    }
+
+    private var hasRecentItems: Bool {
+        !appState.recentFolders.isEmpty || !appState.recentFiles.isEmpty
+    }
+
+    private var recentContent: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 24) {
+                recentFoldersSection
+                recentFilesSection
+            }
+
+            VStack(spacing: 18) {
+                recentFoldersSection
+                recentFilesSection
+            }
+        }
+        .frame(maxWidth: 660)
+    }
+
+    @ViewBuilder
+    private var recentFoldersSection: some View {
+        if !appState.recentFolders.isEmpty {
+            EmptyWorkspaceRecentSection(
+                title: "Recent Folders",
+                urls: Array(appState.recentFolders.prefix(5)),
+                icon: "folder",
+                action: { url in
                     appState.openRecentFolder(url) { folderURL in
                         openWindow(value: folderURL)
                     }
                 }
-            }
-            if !appState.recentFiles.isEmpty {
-                recentSection(title: "Recent Files", urls: appState.recentFiles, icon: "doc") { url in
-                    appState.openRecentFile(url)
-                }
-            }
+            )
         }
-        .frame(maxWidth: 220, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.top, 4)
     }
 
-    private func recentSection(
-        title: String,
-        urls: [URL],
-        icon: String,
-        action: @escaping (URL) -> Void
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption2)
-                .foregroundColor(.secondary)
-            ForEach(urls.prefix(4), id: \.self) { url in
-                Button {
-                    action(url)
-                } label: {
-                    Label(url.lastPathComponent, systemImage: icon)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+    @ViewBuilder
+    private var recentFilesSection: some View {
+        if !appState.recentFiles.isEmpty {
+            EmptyWorkspaceRecentSection(
+                title: "Recent Files",
+                urls: Array(appState.recentFiles.prefix(5)),
+                icon: "doc",
+                action: { url in
+                    appState.openRecentFile(url)
                 }
-                .buttonStyle(.plain)
-                .font(.caption)
+            )
+        }
+    }
+}
+
+private struct EmptyWorkspaceHero: View {
+    let onOpenFile: () -> Void
+    let onOpenFolder: () -> Void
+
+    var body: some View {
+        VStack(spacing: 22) {
+            Image(systemName: "folder")
+                .font(.system(size: 54, weight: .light))
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 8) {
+                Text("No Folder Open")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(.primary)
+                Text("Choose a file or folder to start editing.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    onOpenFile()
+                } label: {
+                    Label("Open File", systemImage: "doc")
+                }
+                .buttonStyle(EmptyWorkspaceButtonStyle())
+                .help("Open File")
+                .accessibilityLabel("Open File")
+
+                Button {
+                    onOpenFolder()
+                } label: {
+                    Label("Open Folder", systemImage: "folder")
+                }
+                .buttonStyle(EmptyWorkspaceButtonStyle())
+                .help("Open Folder")
+                .accessibilityLabel("Open Folder")
+            }
+            .labelStyle(.titleAndIcon)
+        }
+    }
+}
+
+private struct EmptyWorkspaceRecentSection: View {
+    let title: String
+    let urls: [URL]
+    let icon: String
+    let action: (URL) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 4) {
+                ForEach(urls, id: \.self) { url in
+                    recentButton(for: url)
+                }
             }
         }
+        .frame(width: 318, alignment: .topLeading)
+    }
+
+    private func recentButton(for url: URL) -> some View {
+        Button {
+            action(url)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 15))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 18)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(url.lastPathComponent)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(url.deletingLastPathComponent().path)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .background {
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color.primary.opacity(0.06))
+        }
+    }
+}
+
+private struct EmptyWorkspaceButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .shadow(color: .black.opacity(configuration.isPressed ? 0.04 : 0.08), radius: 8, y: 3)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color.primary.opacity(0.08))
+            )
+            .opacity(configuration.isPressed ? 0.72 : 1)
     }
 }
 
@@ -402,6 +831,10 @@ private struct CommandPalettePanel: View {
             PaletteCommand(title: "Toggle Inspector", subtitle: "Show or hide minimap and structure", icon: "sidebar.right", isEnabled: appState.activeTabID != nil, keywords: ["minimap", "outline"]) {
                 appState.hideCommandPalette()
                 appState.isInspectorVisible.toggle()
+            },
+            PaletteCommand(title: "Toggle Agent", subtitle: "Show or hide the project agent", icon: "sparkles", isEnabled: true, keywords: ["ai", "chat", "assistant"]) {
+                appState.hideCommandPalette()
+                appState.toggleAgentPanel()
             },
             PaletteCommand(title: "Toggle Focus Mode", subtitle: "Hide chrome and keep only the editor", icon: "viewfinder", isEnabled: appState.activeTabID != nil, keywords: ["zen", "clean"]) {
                 appState.hideCommandPalette()
@@ -738,6 +1171,117 @@ private struct MainWindowKeyboardShortcutHandler: NSViewRepresentable {
 
             onCloseTab()
             return nil
+        }
+    }
+}
+
+/// Collapses the system title-bar row so the tab bar sits at the very top of the
+/// window instead of below a dead file-name strip. We hide the title text, make
+/// the title bar transparent, and — crucially — turn on `.fullSizeContentView`
+/// so the content area extends up through the title-bar height (otherwise that
+/// ~28pt row keeps occupying space even with no title drawn). The traffic-light
+/// buttons stay on top of the content because they live in their own layer.
+private struct WindowChromeConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        context.coordinator.attach(to: view)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.attach(to: nsView)
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator {
+        private weak var view: NSView?
+        private var retriesLeft = 30
+
+        func attach(to view: NSView) {
+            self.view = view
+            retriesLeft = 30
+            poll()
+        }
+
+        /// `view.window` is often still nil on the first runloop turn after the
+        /// representable is created (the helper NSView hasn't been inserted into
+        /// the window yet), and SwiftUI re-applies its own title-bar chrome a few
+        /// turns later. Poll until we get a window, then keep configuring for a
+        /// short while so our settings win over SwiftUI's late reset.
+        private func poll() {
+            guard retriesLeft > 0 else { return }
+            retriesLeft -= 1
+            if let window = view?.window {
+                WindowChromeConfigurator.configure(window)
+            }
+            DispatchQueue.main.async { [weak self] in self?.poll() }
+        }
+    }
+
+    private static func configure(_ window: NSWindow) {
+        if window.titleVisibility != .hidden { window.titleVisibility = .hidden }
+        if !window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = true }
+        if !window.styleMask.contains(.fullSizeContentView) {
+            window.styleMask.insert(.fullSizeContentView)
+        }
+        restoreStandardWindowButtons(in: window)
+        window.titlebarSeparatorStyle = .none
+        window.contentView?.superview?.hideTitlebarSeparatorViews()
+
+        // Hide the 1px divider NavigationSplitView's underlying NSSplitView draws
+        // between the sidebar and the editor. There is no SwiftUI API for it, so
+        // we find that NSSplitView and reclass it to a subclass whose
+        // `dividerColor` is clear.
+        if let contentView = window.contentView {
+            for split in contentView.descendantSplitViews()
+            where !(split is ClearDividerSplitView) {
+                object_setClass(split, ClearDividerSplitView.self)
+                split.needsDisplay = true
+            }
+            contentView.hideTitlebarSeparatorViews()
+        }
+    }
+
+    private static func restoreStandardWindowButtons(in window: NSWindow) {
+        let buttons: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
+        for buttonType in buttons {
+            guard let button = window.standardWindowButton(buttonType) else { continue }
+            button.isHidden = false
+            button.alphaValue = 1
+            button.superview?.isHidden = false
+            button.superview?.alphaValue = 1
+        }
+    }
+}
+
+/// NSSplitView subclass that paints no visible divider line. Used to suppress the
+/// hairline NavigationSplitView draws between the sidebar and the editor.
+private final class ClearDividerSplitView: NSSplitView {
+    override var dividerColor: NSColor { .clear }
+}
+
+private extension NSView {
+    /// All `NSSplitView`s anywhere beneath this view (depth-first).
+    func descendantSplitViews() -> [NSSplitView] {
+        var result: [NSSplitView] = []
+        if let split = self as? NSSplitView {
+            result.append(split)
+        }
+        for subview in subviews {
+            result.append(contentsOf: subview.descendantSplitViews())
+        }
+        return result
+    }
+
+    func hideTitlebarSeparatorViews() {
+        let className = NSStringFromClass(type(of: self))
+        if className.contains("Separator") || className.contains("TrackingSeparator") {
+            isHidden = true
+            alphaValue = 0
+        }
+        for subview in subviews {
+            subview.hideTitlebarSeparatorViews()
         }
     }
 }
@@ -2138,29 +2682,13 @@ private struct FindReplaceBar: View {
     }
 }
 
-private struct EmptyStateIconButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 15, weight: .medium))
-            .foregroundColor(Color(nsColor: .secondaryLabelColor))
-            .frame(width: 40, height: 26)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(
-                        configuration.isPressed
-                            ? Color(nsColor: .quaternaryLabelColor).opacity(0.35)
-                            : Color(nsColor: .quaternaryLabelColor).opacity(0.16)
-                    )
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 6))
-    }
-}
-
 private struct EditorTabBar: View {
     let tabs: [EditorTab]
     let activeTabID: EditorTab.ID?
+    let leadingReserve: CGFloat
     let onSelect: (EditorTab.ID) -> Void
     let onClose: (EditorTab.ID) -> Void
+    let onDoubleClick: (EditorTab.ID) -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -2188,18 +2716,19 @@ private struct EditorTabBar: View {
                     .background(tab.id == activeTabID ? Color(nsColor: .controlBackgroundColor) : Color.clear)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
                     .contentShape(RoundedRectangle(cornerRadius: 6))
+                    .onTapGesture(count: 2) {
+                        onDoubleClick(tab.id)
+                    }
                     .onTapGesture {
                         onSelect(tab.id)
                     }
                     .help(tab.url.path)
                 }
             }
-            .padding(.horizontal, 8)
+            .padding(.leading, 8 + leadingReserve)
+            .padding(.trailing, 8)
             .padding(.vertical, 6)
         }
         .background(Color(nsColor: .windowBackgroundColor))
-        .overlay(alignment: .bottom) {
-            Divider()
-        }
     }
 }

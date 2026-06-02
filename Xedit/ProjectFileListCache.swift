@@ -15,7 +15,7 @@ import CryptoKit
 ///   project dirs, and needs no extra sandbox write permission.
 /// - Invalidation is layered and cheap: an entry is "unchanged" when its
 ///   modification time *and* size both match. No content hashing in this phase.
-enum ProjectFileListCache {
+nonisolated enum ProjectFileListCache {
     /// Bump when the on-disk JSON shape changes; a mismatch is treated as a miss.
     static let schemaVersion = 1
 
@@ -103,27 +103,36 @@ enum ProjectFileListCache {
 
     /// Full enumerator walk producing display-ready, sorted entries. Mirrors the
     /// ordering and limit of `AppState.quickOpenFileURLs` so cached and freshly
-    /// scanned lists are directly comparable. `mtime`/`size` are read from the
-    /// same `resourceValues` call that already classifies each file, so there's
-    /// no extra per-file IO round-trip.
+    /// scanned lists are directly comparable. Heavy generated directories are
+    /// skipped, and candidate collection is capped before sorting so huge
+    /// dependency trees cannot monopolize a background worker.
     static func scan(root: URL, limit: Int) -> CacheFile {
         let rootPath = root.standardizedFileURL.path
         var collected: [(url: URL, mtime: Double, size: Int64)] = []
+        let candidateLimit = max(limit * 4, limit)
 
         if let enumerator = FileManager.default.enumerator(
             at: root,
-            includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey, .fileSizeKey],
+            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .contentModificationDateKey, .fileSizeKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         ) {
             for case let url as URL in enumerator {
                 guard let values = try? url.resourceValues(
-                    forKeys: [.isRegularFileKey, .contentModificationDateKey, .fileSizeKey]
-                ), values.isRegularFile == true else {
+                    forKeys: [.isDirectoryKey, .isRegularFileKey, .contentModificationDateKey, .fileSizeKey]
+                ) else {
                     continue
                 }
+                if values.isDirectory == true {
+                    if ProjectDirectoryExclusions.shouldSkip(url) {
+                        enumerator.skipDescendants()
+                    }
+                    continue
+                }
+                guard values.isRegularFile == true else { continue }
                 let mtime = values.contentModificationDate?.timeIntervalSince1970 ?? 0
                 let size = Int64(values.fileSize ?? 0)
                 collected.append((url, mtime, size))
+                if collected.count >= candidateLimit { break }
             }
         }
 
@@ -189,5 +198,27 @@ enum ProjectFileListCache {
         for stale in sorted.dropFirst(maxCachedProjects) {
             try? FileManager.default.removeItem(at: stale)
         }
+    }
+}
+
+nonisolated enum ProjectDirectoryExclusions {
+    private static let names: Set<String> = [
+        ".build",
+        ".git",
+        ".next",
+        ".swiftpm",
+        ".turbo",
+        ".venv",
+        "DerivedData",
+        "build",
+        "coverage",
+        "dist",
+        "node_modules",
+        "target",
+        "vendor"
+    ]
+
+    static func shouldSkip(_ url: URL) -> Bool {
+        names.contains(url.lastPathComponent)
     }
 }

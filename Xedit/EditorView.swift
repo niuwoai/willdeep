@@ -52,7 +52,7 @@ struct EditorView: NSViewRepresentable {
     var onEdit: (() -> Void)?
 
     /// Called when the caret or selection moves so the status bar can stay current.
-    var onSelectionChange: ((Int, Int, Int, Int) -> Void)?
+    var onSelectionChange: ((Int, Int, Int, Int, String) -> Void)?
 
     /// Called when the user picks a syntax highlighting mode from the editor menu.
     var onSyntaxHighlightingChange: ((SyntaxHighlightingSelection) -> Void)?
@@ -67,6 +67,10 @@ struct EditorView: NSViewRepresentable {
 
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
+        // Default NSScrollView border is `.bezelBorder`, which draws a hairline
+        // along the top edge — it peeked out above the gutter ruler as a stray
+        // line sitting just over line "1". Drop it.
+        scrollView.borderType = .noBorder
         scrollView.documentView = textView
         scrollView.autoresizingMask = [.width, .height]
         scrollView.contentView.postsBoundsChangedNotifications = true
@@ -310,14 +314,17 @@ struct EditorView: NSViewRepresentable {
             let theme = parent.settings.theme
             let font = parent.settings.editorFont()
             let paragraphStyle = parent.settings.editorParagraphStyle()
+            let surfaceOpacity = parent.settings.editorGlassEnabled ? CGFloat(parent.settings.editorSurfaceOpacity) : 1
+            let editorBackgroundColor = theme.backgroundColor.withAlphaComponent(surfaceOpacity)
 
-            scrollView.drawsBackground = true
-            scrollView.backgroundColor = theme.backgroundColor
+            scrollView.drawsBackground = !parent.settings.editorGlassEnabled
+            scrollView.backgroundColor = editorBackgroundColor
             scrollView.rulersVisible = parent.settings.showsLineNumbers
             scrollView.hasVerticalRuler = parent.settings.showsLineNumbers
 
             textView.font = font
-            textView.backgroundColor = theme.backgroundColor
+            textView.drawsBackground = true
+            textView.backgroundColor = editorBackgroundColor
             textView.insertionPointColor = theme.insertionPointColor
             textView.currentLineColor = theme.currentLineBackgroundColor
             textView.foldedPlaceholderColor = theme.gutterTextColor
@@ -740,7 +747,8 @@ struct EditorView: NSViewRepresentable {
             let selectedRange = textView.selectedRange()
             let position = Self.lineAndColumn(for: selectedRange.location, in: textView.string)
             let selectedLines = Self.selectedLineCount(for: selectedRange, in: textView.string)
-            parent.onSelectionChange?(position.line, position.column, selectedRange.length, selectedLines)
+            let selectedText = Self.selectedText(for: selectedRange, in: textView.string)
+            parent.onSelectionChange?(position.line, position.column, selectedRange.length, selectedLines, selectedText)
         }
 
         /// The two single-character ranges currently carrying the bracket-match
@@ -859,6 +867,15 @@ struct EditorView: NSViewRepresentable {
             let boundedEnd = min(max(boundedLocation, NSMaxRange(range)), nsText.length)
             let selected = nsText.substring(with: NSRange(location: boundedLocation, length: boundedEnd - boundedLocation))
             return selected.components(separatedBy: .newlines).count
+        }
+
+        static func selectedText(for range: NSRange, in text: String) -> String {
+            guard range.length > 0 else { return "" }
+            let nsText = text as NSString
+            let boundedLocation = min(max(0, range.location), nsText.length)
+            let boundedEnd = min(max(boundedLocation, NSMaxRange(range)), nsText.length)
+            guard boundedEnd > boundedLocation else { return "" }
+            return nsText.substring(with: NSRange(location: boundedLocation, length: boundedEnd - boundedLocation))
         }
 
         // MARK: - Debounced Highlighting
@@ -1426,8 +1443,21 @@ final class LineNumberRulerView: NSRulerView {
         return digits != lastThicknessDigits
     }
 
+    override func draw(_ dirtyRect: NSRect) {
+        drawHashMarksAndLabels(in: dirtyRect)
+    }
+
     override func drawHashMarksAndLabels(in rect: NSRect) {
-        theme.gutterBackgroundColor.setFill()
+        // Clip drawing to our own bounds. NSRulerView's drawing isn't clipped
+        // automatically — line-number labels whose Y falls just above the
+        // ruler's top end up rendering into the tab bar above (the "line 12
+        // appearing in the tab bar row" glitch).
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        NSBezierPath(rect: bounds).addClip()
+
+        let backgroundOpacity = settings.editorGlassEnabled ? CGFloat(settings.editorSurfaceOpacity) : 1
+        theme.backgroundColor.withAlphaComponent(backgroundOpacity).setFill()
         bounds.fill()
 
         guard let textView = textView,

@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 /// A recursive file-tree view that renders a `FileSystemNode` tree using
 /// compact custom rows for directories and files.
@@ -21,17 +22,22 @@ struct FileTreeView: View {
     @Binding var selectedURL: URL?
     @Binding var selectedFolderURL: URL?
 
+    private let treeContentLeadingPadding: CGFloat = 10
+
     var body: some View {
-        List {
-            FileNodeRow(
-                node: root,
-                selectedURL: $selectedURL,
-                selectedFolderURL: $selectedFolderURL,
-                level: 0
-            )
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                FileNodeRow(
+                    node: root,
+                    selectedURL: $selectedURL,
+                    selectedFolderURL: $selectedFolderURL,
+                    level: 0
+                )
+            }
+            .padding(.leading, treeContentLeadingPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .listStyle(.sidebar)
-        .environment(\.defaultMinListRowHeight, CGFloat(max(18, appState.editorSettings.fileTreeFontSize + 6)))
+        .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             root.isExpanded = true
             root.loadChildren()
@@ -146,7 +152,11 @@ private struct FileNodeRow: View {
     }
 
     private var rowHeight: CGFloat {
-        CGFloat(max(18, appState.editorSettings.fileTreeFontSize + 6))
+        let fontSize = appState.editorSettings.fileTreeFontSize
+        let font = NSFont.systemFont(ofSize: CGFloat(fontSize))
+        let naturalLineHeight = Double(font.ascender - font.descender + font.leading)
+        let configuredHeight = naturalLineHeight * appState.editorSettings.fileTreeLineHeightMultiple
+        return CGFloat(ceil(max(configuredHeight, naturalLineHeight)))
     }
 
     private func toggleDirectory() {

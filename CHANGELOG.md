@@ -1,5 +1,343 @@
 # Changelog
 
+## 1.43.0-rc4 - 2026-06-02
+
+- Added a proper GitHub-facing `README.md`. The repo was previously surfacing only `product-overview.md` (an internal capability matrix), which is dense and unfriendly to a first-time visitor. The new README leads with the "why", lists actual existing features (editor performance posture, file-tree-only-on-explicit-open, agent mode + BYOK + tools + diff proposals + auto-approval + context compression + queued sends, CLI, Quick Open cache, etc.), and includes a keyboard map, install/build instructions, philosophy, and contribution notes. Strictly documentation — no behavioral change.
+
+## 1.43.0-rc3 - 2026-06-02
+
+- Stopped auto-promoting an opened file's parent folder to `rootDirectory`. Previously every "open file" path (NSOpenPanel via Open File…, the system Open With… handler / `onOpenURL`, drag-onto-Dock, double-click in Finder, even Save As) called `setRootDirectory(url.deletingLastPathComponent())`, which loaded the FileTree, kicked off a recursive Quick Open scan, and ran `git status` on the parent. Opening a single file inside `~/Downloads` or some other huge directory could lock up the UI for seconds. Now the FileTree only loads when the user explicitly opens a folder (⇧⌘O Open Folder…, Open Recent Folder…, dropping a directory on the app, or restoring a session that already had one). Single-file edits are snappy and never trigger a directory scan.
+- Save As (`writeCurrentFile`) no longer hijacks the workspace root either. If a folder was already open, it stays; if not, no sidebar appears just because you saved to a new location.
+- Session restore is unchanged — a workspace that was opened explicitly in a previous session still comes back with its FileTree on launch.
+
+## 1.43.0-rc2 - 2026-06-02
+
+- Distinguished user and assistant messages visually in Agent mode. User messages now render as right-aligned bubbles with an accent fill and white text (capped at ~78% of the chat column so long pastes still wrap); assistant messages stay left-aligned without a bubble but gain a small accent `sparkles` glyph as a role anchor. Previously both roles drifted left and only differed by whether the bubble had a faint grey fill — easy to confuse when scrolling fast. Tool-call groups and queued/error rows are unchanged.
+
+## 1.43.0-rc1 - 2026-06-02
+
+- Added a Claude-Code-style stats dashboard to Agent mode's empty state. When there's at least one persisted session, the new-chat screen shows "What's up next, $USER?" plus an Overview / Models tab and an All / 30d / 7d range selector, with eight stat cells (Sessions / Messages / Tokens / Active days / Current streak / Longest streak / Peak hour / Favorite model), a GitHub-style 12-week × 7-day activity heatmap colored by message density, and a fun-fact line comparing token usage to War and Peace. Fresh installs without sessions keep the simple hero.
+- Added `AgentUsageStats` (pure analytics over `[AgentSession]`) computing the overview snapshot and heatmap. Streaks are calendar-day runs; the current streak only counts when today is active; favorite model is the modelID with the most messages across all sessions.
+- Started capturing real token usage. `AgentClient.streamChat` now sends `stream_options.include_usage: true` (OpenAI requires it, DashScope/DeepSeek ignore it harmlessly), decodes the final-chunk `usage` block, and emits a new `.usageReported(prompt:completion:total:)` event. AppState stamps the running assistant message's new `AgentMessage.usageTokens` field with the total. Older messages without it fall back to the chars/4 estimator, and the dashboard labels the cell "Tokens (est.)" until at least one real number lands.
+- Codable bumped for `AgentMessage.usageTokens` with `decodeIfPresent`, so existing session JSON keeps loading cleanly.
+- Added unit tests for usage-stats totals, current-streak with-and-without today, and heatmap shape.
+
+## 1.42.0-rc1 - 2026-06-02
+
+- Collapsed consecutive same-kind Agent tool calls into a single codex-style row in Agent mode. Three back-to-back `run_command` calls now render as "已运行 3 条命令"; four reads/searches/lists render as "已探索 4 个文件". Click the row to see the underlying calls; click an individual call for the full payload. `ask_user` tool calls and patch proposals always stay full-size because they require interaction.
+- Added `AgentToolKind` (`runCommand`, `fileExploration`, `askUser`, `other`) plus `AgentToolCallGrouping.group(_:)` that walks the transcript's tool-call array and emits a flat `[AgentToolCallSegment]` — adjacent groupable calls of the same kind merge, everything else lands as a singleton segment. Headlines and SF Symbol icons are derived from the kind.
+- Extended the existing `AgentToolCallGroup` view to accept an optional `headline` / `headlineIcon` so the codex-style "已运行/已探索" labels replace the generic "N tools" string. Status-derived icons (failed / running / asking) still win for visibility when the row is collapsed.
+- Added unit tests for adjacency merging, splitting on kind change, ask_user staying standalone, and unknown-tool grouping.
+
+## 1.41.0-rc3 - 2026-06-02
+
+- Fixed Agent mode sidebar header colliding with the macOS traffic-light buttons. The window keeps `titlebarAppearsTransparent`, which floats close/minimize/zoom over the first ~28pt of sidebar content. The Agent sidebar now reserves that band as empty space and renders the "CHATS" header on the row below it.
+- Removed the Automations and Customize placeholder rows from the Agent mode sidebar. They had no behavior since their introduction in v1.39.0-rc3 — pure visual filler matching the Cursor screenshot they were copied from. They'll come back when there's a real feature behind them.
+
+## 1.41.0-rc2 - 2026-06-02
+
+- Fixed HTTP 400 `The reasoning_content in the thinking mode must be passed back to the API` from DashScope thinking-mode models (qwen3, qwq, qwen3-coder, etc.). Streaming responses can carry both `delta.content` and `delta.reasoning_content`; the previous implementation discarded the latter, so the next turn's request body was missing it and the provider rejected the whole conversation. `AgentMessage` now carries an optional `reasoningContent`, `streamChat` emits a new `.reasoningDelta` event, `runAgentLoop` accumulates it into the active assistant message, and `encodeMessage` echoes the field back on assistant messages so multi-turn thinking-mode conversations work end to end. The reasoning trace isn't shown in the UI — it exists purely to keep DashScope happy — but it does round-trip through session JSON so reloaded chats can keep replying.
+
+## 1.41.0-rc1 - 2026-06-02
+
+- Added zero-friction auto-approval for safe Agent shell commands. A new `SafeCommand.classify` step runs before the per-call Allow/Deny prompt: commands whose every pipeline segment is in the built-in read-only allowlist (cat, head, tail, ls, find without -delete/-exec, git diff/log/status/show/branch/blame/etc., rg, grep, wc, file, stat, which, pwd, echo, sort, uniq, cut, awk, sed (read-only), md5, shasum, base64, …) run immediately with no prompt. Pipelines `|`, `&&`, `||`, `;` are tokenized respecting single/double quotes; any dangerous segment poisons the whole chain.
+- Added an LLM-judge fallback for commands the static allowlist can't certify. When auto-approval is on and a `run_command` invocation is `.needsJudgment`, AppState issues a non-streaming single-shot completion ("YES or NO, is this command read-only/safe?") to the currently configured model with `max_tokens=4`, `temperature=0`. Only an explicit `YES` auto-approves; everything else falls back to the user gate.
+- Added `Settings > Agent > Tool approval > Auto-approve safe commands` toggle (defaults to on). Turning it off restores the strict per-call Allow/Deny behavior for every write-tier command, while user-pinned "Always allow" signatures and the destructive `confirm` gate continue to work as before.
+- Added approval-source badges to tool-call cards: `AUTO` (static allowlist), `AI OK` (LLM judge), `ALWAYS` (user-pinned signature). Cards approved by a Allow click stay unbadged so the audit trail distinguishes "Claude decided" from "you decided".
+- Added `AgentToolApprovalSource` to `AgentToolCall` so the audit trail is part of the model, not the view.
+- Added unit tests for the allowlist, pipeline composition, redirection rejection, and find -delete/-exec rejection.
+
+## 1.40.0-rc25 - 2026-06-02
+
+- Added a separate Agent Image Understanding provider configuration with its own provider, base URL, model, and Keychain API key so text-only main models can still accept pasted images through a vision-model description pass.
+- When the active Agent provider is text-only, multiple attached images are described in one image-provider request and the generated notes are appended to the user message before the main model runs.
+
+## 1.40.0-rc24 - 2026-06-02
+
+- Marked DeepSeek as text-only for Agent image handling so attached images are omitted from provider requests instead of sending unsupported `image_url` parts that cause HTTP 400 responses.
+- Updated the DeepSeek preset defaults to `deepseek-v4-flash` and `deepseek-v4-pro`, matching the current API model names while keeping existing saved settings compatible.
+
+## 1.40.0-rc23 - 2026-06-02
+
+- Added Flash/Pro/Auto Agent model routing so Settings can keep separate low-cost and stronger model slots instead of forcing a single global model.
+- Routed context compression through the Flash model slot and updated Agent headers/model pickers to show the active route or per-session override.
+
+## 1.40.0-rc22 - 2026-06-02
+
+- Raised the Agent tool-call round guardrail from 24 to 64 rounds so longer multi-step project work can continue before pausing for loop protection.
+
+## 1.40.0-rc21 - 2026-06-02
+
+- Added a supplemental shell PATH for Agent `run_command`, covering common Homebrew and local binary directories so commands like `rg` work when the app is launched from the macOS GUI.
+- Added regression coverage that verifies `run_command` exposes common user binary paths to its shell environment.
+
+## 1.40.0-rc20 - 2026-06-02
+
+- Suppressed Agent worktree change cards for modified entries that have no real diff or only `+0 -0` numstat output, preventing noisy "files changed" prompts when nothing actually changed.
+- Added regression coverage for Agent worktree summary filtering while keeping real additions, deletions, renames, untracked files, and binary diffs visible.
+
+## 1.40.0-rc19 - 2026-06-02
+
+- Collapsed consecutive Agent tool calls into a compact expandable group in both the side panel and full Agent mode, reducing transcript height during multi-tool runs.
+- Hid empty assistant "Using tools..." placeholder messages when a tool group already represents the same activity, while keeping approval and user-question tool calls automatically expanded.
+
+## 1.40.0-rc18 - 2026-06-02
+
+- Let Agent `run_command` risk checks resolve workspace-aware paths, so pure read-only chains such as `cd /path/to/workspace && git diff` and `git -C /path/to/workspace diff` run without approval.
+- Kept read-only auto-allow conservative by rejecting `cd`, `git -C`, and file arguments that resolve outside the current workspace.
+
+## 1.40.0-rc17 - 2026-06-02
+
+- Reworked Agent context estimation to mirror the next provider request, including the system prompt, normalized message history, collapsed tool results, attached images, and tool schemas.
+- Expanded model context-window detection for modern large-context model IDs such as `gpt-5.5` and `gpt-4.1`, with a safer 128k fallback for unknown OpenAI-compatible models.
+- Added Codex skill tools (`list_skills`, `read_skill`) so Agent mode can discover installed skills and load a matching `SKILL.md` on demand.
+- Added MCP tools (`list_mcp_servers`, `list_mcp_tools`, `call_mcp_tool`) backed by Codex MCP config, with sensitive environment values redacted and MCP tool calls kept behind approval.
+
+## 1.40.0-rc16 - 2026-06-02
+
+- Normalized Agent provider request history so orphan `tool` messages and incomplete assistant tool-call exchanges are dropped before sending, preventing OpenAI-compatible HTTP 400 errors.
+- Added regression coverage for provider-ready Agent tool-call message ordering and incomplete tool exchanges.
+
+## 1.40.0-rc15 - 2026-06-02
+
+- Added an inline "正在思考" Agent transcript divider while the model request is waiting for the first assistant content or post-tool response.
+- Hid empty assistant placeholder bubbles so thinking state appears as an intentional activity row instead of a blank message.
+
+## 1.40.0-rc14 - 2026-06-02
+
+- Added an inline Agent transcript divider while context compression is running, matching the centered status-line style used by coding agents.
+
+## 1.40.0-rc13 - 2026-06-02
+
+- Added an Agent worktree change summary that shows the currently changed file with added/deleted line counts and a clickable filename.
+- Added a review action from the Agent change summary so users can ask the Agent to inspect current uncommitted changes directly.
+
+## 1.40.0-rc12 - 2026-06-02
+
+- Added expandable Agent provider error details showing the request method, URL, provider, model, input message summary, redacted request body, HTTP status, and response body.
+- Redacted inline image data from debug request bodies so provider errors remain useful without dumping large base64 payloads.
+
+## 1.40.0-rc11 - 2026-06-02
+
+- Classified conservatively parsed read-only `run_command` chains as read risk, including safe `cd` prefixes followed by commands such as `git diff`, `ls`, `cat`, `rg`, or `grep`, so they can run without approval.
+- Kept write-like, unsafe-directory, redirection, pipeline, command-substitution, and destructive shell commands behind approval or typed confirmation.
+
+## 1.40.0-rc10 - 2026-06-02
+
+- Show the full `run_command` text prominently on Agent approval and destructive-confirmation cards so users can review the exact command before allowing it.
+
+## 1.40.0-rc9 - 2026-06-02
+
+- Made Return submit the Agent-mode composer by default, matching chat-style input behavior.
+- Kept multiline composition available with Shift-Return, Option-Return, or Control-Return, while Command-Return continues to submit.
+
+## 1.40.0-rc8 - 2026-06-02
+
+- Compacted Agent tool-call cards so completed and running tools render as a one-line execution row by default, reducing transcript height during multi-step work.
+- Reduced expanded tool output height while keeping arguments, output, and errors available on demand.
+
+## 1.40.0-rc7 - 2026-06-02
+
+- Raised the Agent tool-call round guardrail from 6 to 24 rounds so normal multi-step project work does not stop after only a few tool batches.
+- Reworded the tool-round guardrail message to explain that the Agent paused to avoid accidental loops and can be continued with another message.
+
+## 1.40.0-rc6 - 2026-06-02
+
+- Added an Agent-mode `Always Allow` action for approved `run_command` calls. Matching command families such as `git push` can now run automatically in future turns while dangerous commands still require confirmation.
+- Added Tools settings management for Agent always-allowed command rules, including per-rule removal and clear-all controls.
+
+## 1.40.0-rc5 - 2026-06-02
+
+- Hardened Git status refresh against large repositories by draining `git` stdout while the process is running, capping captured output, disabling optional Git locks, and timing out stuck commands instead of blocking sidebar/status refresh.
+- Added request and resource timeouts to the Agent HTTP client so model discovery and streaming chat fail cleanly when a provider connection stalls.
+
+## 1.40.0-rc4 - 2026-06-02
+
+- Fixed the Agent-mode composer "+" (Attach Image) button freezing the app again. `NSOpenPanel.begin { }` without a parent window has been racing the SwiftUI main run loop under macOS 26 + default-isolation=MainActor. Now the panel attaches as a sheet on the key window (`beginSheetModal(for:completionHandler:)`), with the bare `begin` form kept only as a fallback when no key window exists.
+- Softened the Agent-mode visual hierarchy. The sidebar and status bar no longer paint a heavy `underPageBackgroundColor` grey band — both now sit on `windowBackgroundColor` and the sidebar gets a very light 2.5% label-color tint instead. Regions read as a single calm canvas separated by thin dividers, not three competing grey blocks.
+
+## 1.40.0-rc3 - 2026-06-02
+
+- Fixed the Agent Settings API Key (and Base URL / Model) field clearing while typing. The fields now use local `@State` buffers and only commit to `agentConfiguration` when the new Save button is pressed (⌘↩). Provider preset switches refresh the buffers automatically; external writes (like Fetch Models picking a default) only overwrite the buffer when it currently matches what was last saved, so in-flight typing is never clobbered.
+- Extended the `ask_user` tool with optional `options: string[]` and `multi_select: boolean` parameters. When `options` is provided the card shows clickable choice buttons (single-select) or checkboxes + Confirm (multi-select); the free-form text input stays available as an escape hatch. Returned answer is the chosen option, comma-separated list (for multi-select), or the typed text if non-empty.
+- Added `boolValue()` and `stringArrayValue()` helpers on `AgentJSONValue`, and a new `stringArray` JSON-schema parameter type that emits `{"type": "array", "items": {"type": "string"}}` to the provider.
+- Fetched models from Settings now also flow into `agentKnownModelIDs`, so the Agent-mode model picker pill sees them immediately.
+- Fixed a potential Agent `run_command` deadlock by draining stdout and stderr while the subprocess is still running, then enforcing timeout termination with a short SIGKILL fallback.
+- Skipped common generated dependency/build directories during Agent file search and Quick Open scans so large projects do not spend time walking `node_modules`, `.git`, `DerivedData`, `dist`, and similar trees.
+- Capped Quick Open cache candidate collection before sorting, preventing very large workspaces from monopolizing a background worker.
+- Added regression tests for large command output draining, Quick Open dependency-directory skipping, and `ask_user` option metadata.
+
+## 1.40.0-rc2 - 2026-06-02
+
+- Made context compression automatic. `runAgentLoop`'s defer now calls a new `maybeAutoCompressContext()` that fires `compressAgentContext()` whenever the estimated context usage crosses 75% (and the conversation has more than 6 messages, and nothing else is in flight). The status bar continues to show only a `Compressing…` spinner — no popups, no extra prompt for the user.
+- Made the queued-message pump wait for compression to finish. `consumeNextQueuedMessageIfNeeded` now also gates on `!isCompressingAgentContext`, and `runContextCompression`'s defer kicks the queue once compression resolves. This prevents a queued user message from racing an auto-compression that the same defer block just started.
+- Added unit test `testShouldAutoCompressTriggersAt75Percent` covering the empty-conversation, low-usage, high-usage, in-flight-compression, and in-flight-turn branches of the new `shouldAutoCompressNow` predicate.
+
+## 1.40.0-rc1 - 2026-06-02
+
+- Added the `ask_user` tool so the Agent can pause mid-turn and ask the user a clarifying question instead of guessing. Surfaces a purple tool-call card with a question, an inline answer field, and Send / Skip buttons; the typed answer is fed back as the tool result and the turn resumes. Tracked through a new `.userInput` risk level and `.awaitingUserAnswer` status.
+- Added context compression: a Compress button appears in the status bar once estimated usage crosses 50% (and the conversation has more than 6 messages). Clicking it streams a tight summary of the older transcript from the current model and replaces them with a single `[Earlier conversation summary]` assistant message; the most recent 4 messages stay verbatim. Tool calls whose owner message vanished are dropped from the rendered list.
+- Auto-collapse old tool results: when the request payload is being built, every `tool` role message beyond the most recent 4 is replaced with a small `[tool result hidden — earlier turn, was N bytes; ask the user or re-run the tool if you need it again]` placeholder. The UI still shows the original content in the tool-call card.
+- Updated the agent system prompt to instruct the model: when something is ambiguous or a required piece of information is missing, call `ask_user` with a single concrete question instead of guessing.
+- Added unit tests for ask_user registration and old-tool-result collapsing.
+
+## 1.39.0-rc3 - 2026-06-02
+
+- Reworked the Agent mode visual language to track Cursor's layout: lighter window background using `windowBackgroundColor` / `underPageBackgroundColor` so it follows system appearance, narrower header that just shows the chat title and a copy/new-chat affordance, assistant messages rendered flush against the background (no bubble), user messages as compact left-aligned cards with capped width, and a refreshed composer card with attach icon + model picker pill on the lower-left and a circular send/stop button on the lower-right.
+- Replaced the in-header context progress bar with a small bottom status bar showing git branch, workspace folder, and a circular context-usage ring with percentage and an estimate tooltip.
+- Reworked the sessions sidebar with grouped workspaces, bold folder rows, and per-project "See more" expansion (5 rows by default). Active session is marked with a tinted row and accent dot; right-click still deletes.
+- Added a queue badge in the composer that opens a Clear Queue action; queued messages render as a compact bordered orange row instead of a colored bubble.
+- Centralized all Agent-mode spacing, font sizes, and colors in an `AgentDesign` enum to keep future visual passes one-file changes.
+
+## 1.39.0-rc2 - 2026-06-02
+
+- Fixed the "Attach Image" button freezing the whole app in Agent mode. `NSOpenPanel.runModal()` from a SwiftUI Button action was blocking the main run loop under the new MainActor-default isolation; switched to the async `panel.begin { ... }` form.
+
+## 1.39.0-rc1 - 2026-06-02
+
+- Added a dedicated Agent mode (View > Switch to Agent Mode, Cmd+Shift+A) with a project-grouped chat sidebar on the left and a wide chat pane on the right. The editor is hidden in this mode.
+- Added persistent Agent chat sessions: each conversation lives as a JSON file under `~/Library/Application Support/VeilWriter/agent-sessions/`. Sessions are grouped by workspace folder in the sidebar with collapsible sections and right-click "Delete Chat".
+- Added image attachments to the Agent composer: paste from clipboard, drag-and-drop, or pick via "Attach Image". Multiple images can be staged with removable thumbnails and are sent inline as OpenAI multimodal `image_url` parts.
+- Added a per-session model picker (fed from previously fetched model IDs in Settings) so individual chats can use a different model than the global default.
+- Added an estimated context-window indicator in the chat header (`≈ N left / window`) using a chars/4 token heuristic plus a flat per-image budget, with a model-aware fallback table covering OpenAI, Claude, DeepSeek, Qwen, and Kimi/Moonshot families.
+- Added a message queue: sending while the agent is responding queues the new message as a dim "Queued" bubble that fires automatically when the current turn ends. Stop cancels just the current turn; Clear Queue drops pending messages.
+- Added a Stop button that cancels the in-flight response and tool execution loop without dropping queued messages; the next queued message dispatches automatically.
+
+## 1.38.0-rc1 - 2026-06-02
+
+- Added a sixth Agent tool, `grep_files`, that searches the workspace using ICU/NSRegularExpression patterns and supports an optional `include` filename glob (`*.swift`, `*.{ts,tsx}`, etc.) and a `case_sensitive` flag. `search_files` keeps doing literal text matching for cases where regex is overkill.
+- Fixed `testEditorSettingsChangeBumpsRenderAndHighlightRevisions` by letting the test drain the main run loop before asserting; AppState defers editor-settings side effects to the next main-loop turn (1.33.0-rc11) so the bumps were never visible in-line.
+- Fixed `testFolderURLOpensInNewWindow` by moving its fixture out of the system temp directory, which `RecentItemsStore` deliberately filters out — the test was asserting that a path the store will never accept ends up in recent folders.
+- Hardened the test suite against shared-state surprises: each test now wipes the AppState-owned `UserDefaults` keys on entry, and the suite is marked `@Suite(.serialized)` so the recent-folders defaults can't be raced by parallel test processes.
+- Added unit tests covering `grep_files` happy path and invalid regex, run_command risk escalation for destructive shells, and workspace-escape rejection in `read_file`.
+
+## 1.37.0-rc1 - 2026-06-02
+
+- Added five built-in Agent tools: `search_files`, `read_file`, `list_directory`, `git_status`, and `run_command`. Filesystem access is sandboxed to the workspace root.
+- Added OpenAI function-calling support to the Agent client: tool definitions are sent with each chat completion request, tool_call deltas are streamed and merged, and tool results are fed back to the model in a multi-turn loop (max 6 rounds).
+- Added a tiered tool-permission model in the Agent panel: read tools auto-allow, `run_command` shows Allow/Deny buttons, and destructive shell commands (`rm -rf`, `git push --force`, `git reset --hard`, etc.) require typing `confirm` before running.
+- Added a per-tool call card in the Agent panel showing the tool name, risk badge, argument summary, live status, and expandable arguments/output/error blocks.
+
+## 1.36.0-rc1 - 2026-06-02
+
+- Added tabbed Settings categories for typography, appearance, workspace, Agent, and tools.
+- Added built-in Agent provider presets for OpenAI, DashScope, DeepSeek, Kimi, Moonshot, Claude, and custom OpenAI-compatible endpoints.
+- Added Agent model discovery from provider `/models` endpoints, with fetched model IDs selectable in Settings.
+
+## 1.35.0-rc1 - 2026-06-02
+
+- Added Agent edit proposals: unified diff blocks in Agent replies are detected and shown as pending patch cards.
+- Added accept/reject controls for Agent patch proposals, with workspace path checks before writing files.
+- Added conservative unified-diff application for existing workspace files, updating open tabs and Git status after accepted patches.
+
+## 1.34.0-rc1 - 2026-06-02
+
+- Added a first-phase project Agent panel with OpenAI-compatible streaming chat, current-workspace context, active-file context, and selected-text context.
+- Added Agent settings for base URL, model, and API key, storing the API key in Keychain.
+- Added menu and command-palette actions for toggling the Agent panel.
+
+## 1.33.0-rc13 - 2026-06-01
+
+- Removed the manual file-tree collapse and restore icons, leaving the divider as a resize-only control.
+
+## 1.33.0-rc12 - 2026-06-01
+
+- Removed the collapsed file-tree rail from the main layout and replaced it with a compact floating restore button at the left edge of the editor.
+
+## 1.33.0-rc11 - 2026-06-01
+
+- Deferred editor settings persistence and editor refresh side effects to the next main-loop turn to avoid SwiftUI publishing changes during view updates.
+
+## 1.33.0-rc10 - 2026-06-01
+
+- Added editor background image fit controls for fill-and-crop, fit, stretch, center, and image size scaling.
+- Limited custom background images to the editor/detail area so the file tree and collapsed file-tree rail stay on the native window background.
+
+## 1.33.0-rc9 - 2026-06-01
+
+- Added a leading tab-bar reserve when the editor reaches the window edge so the first tab title no longer overlaps the macOS window controls.
+
+## 1.33.0-rc8 - 2026-06-01
+
+- Added Settings controls for a custom window background image and image opacity.
+- Added an optional glass editor background with material, glass strength, and editor surface opacity controls.
+
+## 1.33.0-rc7 - 2026-06-01
+
+- Added a draggable file-tree divider with collapse and expand controls.
+- Added tab-title double-click editor maximization, hiding the file tree and inspector/minimap until the tab title is double-clicked again.
+
+## 1.33.0-rc6 - 2026-06-01
+
+- Removed the tinted icon tile from the no-folder empty workspace header so the folder icon no longer appears focused or selected.
+
+## 1.33.0-rc5 - 2026-06-01
+
+- Hid the full recent-files workspace when a folder tree is already open, replacing it with a focused no-file editor prompt.
+- Stopped automatically restoring the previous folder and open tabs on window launch; recent files and folders remain available as explicit choices.
+
+## 1.33.0-rc4 - 2026-06-01
+
+- Moved recent files and folders into the centered empty workspace view and collapsed the sidebar when no folder is open.
+
+## 1.33.0-rc3 - 2026-06-01
+
+- Moved the no-folder empty state into the main editor area with a larger centered welcome layout and primary open actions, leaving the sidebar for recent files and folders only.
+
+## 1.33.0-rc2 - 2026-06-01
+
+- Restored the standard macOS close, minimize, and zoom window buttons while keeping the hidden-titlebar editor layout.
+
+## 1.33.0-rc1 - 2026-06-01
+
+- Added a File Tree line-height setting in Settings > Sidebar. The file tree now uses the configured row-height multiple directly, with a default of 1.25x.
+
+## 1.32.0-rc18 - 2026-06-01
+
+- Added left padding to the custom file tree content so root and child rows no longer sit flush against the rounded window edge.
+
+## 1.32.0-rc17 - 2026-06-01
+
+- Removed the vertical line tied to the line-number gutter. `LineNumberRulerView` now overrides `draw(_:)` so AppKit's default `NSRulerView` border/edge drawing is bypassed, and the gutter fills with the editor background color instead of a separate gutter color. Line numbers and fold controls remain visible without a distinct vertical gutter edge.
+
+## 1.32.0-rc16 - 2026-06-01
+
+- Removed the remaining sidebar edge hairline by replacing the file tree's system `.sidebar` `List` with a plain `ScrollView`/`LazyVStack`. The line was coming from the AppKit-backed sidebar list itself, not from the outer split view or titlebar chrome.
+
+## 1.32.0-rc15 - 2026-06-01
+
+- Replaced the main `NavigationSplitView` shell with a custom two-column `HStack` so SwiftUI no longer generates titlebar/sidebar tracking separator chrome. The right editor/detail column now ignores the top safe-area inset, letting the tab bar sit flush at the top of the window, while the left sidebar keeps its own named top padding for the traffic-light controls.
+
+## 1.32.0-rc14 - 2026-06-01
+
+- Fixed a crash introduced in rc13 by no longer removing `NSTrackingSeparatorToolbarItem` from the toolbar. AppKit owns KVO wiring for that private tracking separator item, and removing it can trigger an `NSInternalInconsistencyException`. The window toolbar is now hidden via SwiftUI's `.toolbar(.hidden, for: .windowToolbar)` so the sidebar toggle/tracking separator chrome is suppressed without mutating AppKit's private toolbar item list.
+
+## 1.32.0-rc13 - 2026-06-01
+
+- Tried to remove the remaining title-bar vertical separator by targeting SwiftUI/AppKit's sidebar tracking separator in the window toolbar/titlebar chrome. This approach was superseded in rc14 because directly removing `NSTrackingSeparatorToolbarItem` is unsafe.
+
+## 1.32.0-rc12 - 2026-06-01
+
+- Actually collapsed the title-bar row this time. rc11's AppKit-only approach (`titleVisibility = .hidden` + `.fullSizeContentView` poked onto the window) was being reset by SwiftUI's `WindowGroup`, so the "VeilWriter" strip stayed. Switched to the native SwiftUI modifier `.windowStyle(.hiddenTitleBar)` on both window groups, which SwiftUI honors and doesn't override.
+
+## 1.32.0-rc11 - 2026-06-01
+
+- Collapsed the empty title-bar row entirely (not just its text). `.fullSizeContentView` is now added to the window style mask so the content area — and the tab bar — extends up through the former title-bar height, sitting flush at the top of the window.
+- Removed the vertical hairline NavigationSplitView draws between the sidebar and the editor. The underlying `NSSplitView` is reclassed to a `ClearDividerSplitView` whose `dividerColor` is `.clear`.
+
+## 1.32.0-rc10 - 2026-06-01
+
+- Removed the stray hairline that sat directly above line "1" across the gutter ruler. It was the default `NSScrollView` `.bezelBorder` peeking out along the editor's top edge; the scroll view's `borderType` is now set to `.noBorder`, so the gutter joins the tab bar above it cleanly.
+
+## 1.32.0-rc9 - 2026-06-01
+
+- Removed the standalone window title strip that showed the current file name (e.g. "AppState.swift") on its own row directly above the tab bar — it duplicated the active tab's label and wasted vertical space. The system title bar is now hidden (`titleVisibility = .hidden`) and made transparent (`titlebarAppearsTransparent = true`) via a `WindowChromeConfigurator`, so the tab bar tucks up under the traffic-light buttons.
+- Removed the horizontal divider line under the tab bar (the `Divider()` overlay at the bottom of `EditorTabBar`), leaving the tab row visually cleaner and eliminating the stray separator that appeared to bleed upward.
+
+## 1.32.0-rc8 - 2026-06-01
+
+- Fixed line numbers from the gutter ruler bleeding into the tab bar above the editor (e.g. line "12" appearing inside the tab bar row, alongside the gutter's dark strip extending upward through the tab area). NSRulerView's drawing isn't automatically clipped to its bounds, so line-number labels whose Y position falls just above the ruler's top — which happens for the first visible row at certain scroll positions — leaked into the tab-bar area above. The ruler now explicitly clips drawing to its own bounds via `NSGraphicsContext.saveGraphicsState()` + `NSBezierPath(rect: bounds).addClip()`. Probed via on-screen geometry logs: ruler in window y=24..476, window content height=515, tab bar 39px — fix verified by side-by-side before/after screenshot.
+
 ## 1.32.0-rc7 - 2026-06-01
 
 - Fixed a residual ~5-line scroll truncation when restoring a tab whose cursor sat near the viewport's bottom edge (e.g. cursor on line 928 with viewport's bottom being line 932 -> after switching away and back, bottom became 927, hiding the cursor). Restore previously laid out only from offset 0 to the saved top character, so AppKit clamped the new scroll origin against a content size that didn't yet include the content below — pulling the viewport up by a few lines. Restore now lays out the entire document before setting the scroll origin, so the document height is fully known and the viewport's bottom matches what was saved.
