@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.47.0-rc8 - 2026-06-03
+
+- **Toned down the Stop button.** The streaming-active state was a fully-saturated solid red disc with a white `stop.fill` glyph — a visual alarm bell for what is, in practice, "click to interrupt the model". Now it's a soft red-tinted disc (12% fill) with a thin red stroke (55%) and a red-foreground `square.fill` glyph. Same target size, same affordance, much calmer.
+
 ## 1.47.0-rc7 - 2026-06-03
 
 - **Model picker no longer drops submenus on hover.** The chat-mode model picker used to be a two-level Menu (provider → its models). SwiftUI's macOS Menu dismisses nested Menus on the slightest hover drift, so clicking a provider row would only flash the submenu before it disappeared. Flattened to a single-level layout: each library entry becomes a `Section("ProviderName")` (active entry prefixed with ★) and its Flash/Pro models live directly under that header as one-click rows. Same activation behaviour (`selectAgentEntryAndModel` does provider + model in one go), just one click instead of fighting the submenu.

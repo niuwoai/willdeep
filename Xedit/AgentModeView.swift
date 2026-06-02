@@ -1434,12 +1434,31 @@ private struct SendStopButton: View {
             }
         } label: {
             ZStack {
-                Circle()
-                    .fill(appState.isAgentResponding ? Color.red : (canSend ? Color.accentColor : Color.secondary.opacity(0.3)))
-                    .frame(width: 26, height: 26)
-                Image(systemName: appState.isAgentResponding ? "stop.fill" : "arrow.up")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.white)
+                // Stopping state used to be a fully-saturated red
+                // circle — visually shouted "danger" out of all
+                // proportion to "click to interrupt streaming". Now
+                // it's a soft red-tinted disc with a red stroke and a
+                // red-foreground glyph: still unmistakably the stop
+                // action, but no longer alarm-bell red.
+                if appState.isAgentResponding {
+                    Circle()
+                        .fill(Color.red.opacity(0.12))
+                        .frame(width: 26, height: 26)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.red.opacity(0.55), lineWidth: 1.2)
+                        )
+                    Image(systemName: "square.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Color.red.opacity(0.85))
+                } else {
+                    Circle()
+                        .fill(canSend ? Color.accentColor : Color.secondary.opacity(0.3))
+                        .frame(width: 26, height: 26)
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white)
+                }
             }
         }
         .buttonStyle(.plain)
