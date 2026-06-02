@@ -1266,6 +1266,7 @@ private struct ComposerCard: View {
 
             HStack(spacing: 6) {
                 AttachButton(action: attachImageFromPanel)
+                WorkspacePickerPill()
                 ModelPickerPill()
                 AgentModePickerPill()
                 Spacer(minLength: 0)
@@ -1476,6 +1477,144 @@ private struct QueueBadge: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
+    }
+}
+
+// MARK: - Workspace picker pill
+
+/// A small dropdown next to the model picker that lets the user pick
+/// (or change) which folder this chat thinks of as its workspace.
+///
+/// Two states:
+///   1. No workspace yet → label reads "Pick folder", clicking opens
+///      a menu of every known workspace (sessions' roots ∪ recent
+///      folders, deduped) with a "Choose folder…" sentinel at the
+///      bottom that triggers the system folder picker.
+///   2. A workspace is set → label shows the folder name. Clicking
+///      opens a menu with the same picker on top, plus three
+///      affordances against the *current* folder: Show in Finder /
+///      Copy path / Copy branch name.
+private struct WorkspacePickerPill: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        Menu {
+            menuContent
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "folder")
+                    .font(.system(size: 10))
+                Text(label)
+                    .font(AgentDesign.secondaryFont)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(AgentDesign.subtleBackground)
+            .clipShape(RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(helpText)
+    }
+
+    private var label: String {
+        if let root = appState.rootDirectory {
+            return root.lastPathComponent
+        }
+        return "Pick folder"
+    }
+
+    private var helpText: String {
+        if let root = appState.rootDirectory {
+            return root.path
+        }
+        return "Choose a workspace for this chat"
+    }
+
+    @ViewBuilder
+    private var menuContent: some View {
+        // Section 1 — the "current folder" affordances (only if one is set).
+        if let root = appState.rootDirectory {
+            Section(root.lastPathComponent) {
+                Button {
+                    appState.revealInFinder(root)
+                } label: {
+                    Label("Show in Finder", systemImage: "folder")
+                }
+                Button {
+                    appState.copyPath(root)
+                } label: {
+                    Label("Copy path", systemImage: "doc.on.doc")
+                }
+                if let branch = appState.gitStatus.branchName, !branch.isEmpty {
+                    Button {
+                        let pb = NSPasteboard.general
+                        pb.clearContents()
+                        pb.setString(branch, forType: .string)
+                    } label: {
+                        Label("Copy branch name", systemImage: "arrow.triangle.branch")
+                    }
+                }
+            }
+            Divider()
+        }
+
+        // Section 2 — Switch to a known workspace. Dedupes against
+        // the current root so the active folder doesn't double up.
+        let knownRoots = sortedKnownWorkspaces()
+        if !knownRoots.isEmpty {
+            Section("Switch workspace") {
+                ForEach(knownRoots, id: \.self) { url in
+                    Button {
+                        appState.openFolderURL(url)
+                    } label: {
+                        HStack {
+                            Text(url.lastPathComponent)
+                            if appState.rootDirectory?.standardizedFileURL == url.standardizedFileURL {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+            Divider()
+        }
+
+        // Section 3 — Always show the chooser sentinel last.
+        Button {
+            appState.openFolder()
+        } label: {
+            Label("Choose folder…", systemImage: "folder.badge.plus")
+        }
+    }
+
+    /// Union of (a) folder paths that appear as workspaceRootPath on
+    /// any agent session, and (b) recentFolders. Both deduped to a
+    /// canonical URL; sorted by lastPathComponent for menu stability.
+    private func sortedKnownWorkspaces() -> [URL] {
+        var seen = Set<String>()
+        var result: [URL] = []
+
+        let sessionRoots: [URL] = appState.agentSessions
+            .compactMap { session -> URL? in
+                guard let path = session.workspaceRootPath, !path.isEmpty else { return nil }
+                return URL(fileURLWithPath: path).standardizedFileURL
+            }
+
+        for url in sessionRoots + appState.recentFolders.map(\.standardizedFileURL) {
+            let key = url.path
+            if seen.insert(key).inserted {
+                result.append(url)
+            }
+        }
+
+        return result.sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
     }
 }
 

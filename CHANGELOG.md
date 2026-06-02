@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.47.0-rc6 - 2026-06-03
+
+- **Workspace picker in the composer toolbar.** New `WorkspacePickerPill` sits between the `+` attach button and the model picker. Shows a folder icon plus either the current workspace name or "Pick folder" when nothing is open. Click → menu with three sections: (1) for the current folder — Show in Finder / Copy path / Copy branch name (last one only when on a git branch); (2) "Switch workspace" listing every known root (union of every agent session's `workspaceRootPath` and the global `recentFolders`, deduped by canonical path, sorted by name, ✓ on the active one); (3) a "Choose folder…" sentinel at the bottom that opens the system folder picker. Picking from (2) or (3) calls `openFolderURL`, which registers as recent + flips `rootDirectory` + refreshes git — so the next new chat in this window auto-groups under that workspace in the sidebar.
+
 ## 1.47.0-rc5 - 2026-06-02
 
 - **Per-message footer with copy / timing / tokens.** Chat bubbles in both the full-screen Agent mode and the right-side Agent panel now sport a small caption row right under the bubble. User rows show just a copy-to-clipboard button (square→checkmark for ~1.4s on success). Assistant rows additionally show the wall-clock elapsed seconds for that turn (e.g. `1.8s`, `42s`, `1m 12s`) and the prompt/completion token split when the provider returned a usage block (`in 1.2k · out 340`). Three new fields on `AgentMessage` — `elapsedSeconds`, `promptTokens`, `completionTokens` — all decoded with `decodeIfPresent` so older session JSON loads cleanly. `AppState` stamps `turnStartedAt` right before handing the request to `AgentClient`, then writes the elapsed delta back on the message once the stream resolves; the existing `.usageReported` event handler now also splits prompt vs completion into the new fields.
