@@ -183,6 +183,84 @@ struct AgentSession: Identifiable, Codable, Equatable {
     }
 }
 
+// MARK: - Plan & Goal modes
+
+/// Top-level interaction mode for an Agent session. Plan locks all write
+/// tools until the user approves a plan; Goal pins a long-term objective
+/// + checklist to every system prompt. Normal is the default.
+enum AgentInteractionMode: String, Codable, CaseIterable, Identifiable {
+    case normal
+    case plan
+    case goal
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .normal: return "Normal"
+        case .plan: return "Plan"
+        case .goal: return "Goal"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .normal: return "bubble.left.and.bubble.right"
+        case .plan: return "list.number"
+        case .goal: return "target"
+        }
+    }
+}
+
+/// A user-approvable execution plan parsed from the agent's reply.
+/// Lifecycle:
+///   proposed → awaiting user click
+///   approved → write tools unlocked, agent continues
+///   rejected → user dismissed; agent should re-plan on next turn
+///   executing/done used purely for display once approved.
+struct AgentPlan: Codable, Equatable {
+    enum Status: String, Codable { case proposed, approved, rejected, executing, done }
+
+    var status: Status
+    var steps: [String]
+    /// Free-form preamble the agent put before the numbered list. Shown
+    /// muted at the top of the plan card.
+    var summary: String
+
+    init(status: Status = .proposed, steps: [String] = [], summary: String = "") {
+        self.status = status
+        self.steps = steps
+        self.summary = summary
+    }
+}
+
+/// A long-term goal pinned to a session. Sticks to every system prompt so
+/// the agent stays aligned, and renders as a banner at the top of the
+/// transcript. `checklist` entries can be ticked off independently.
+struct AgentGoal: Codable, Equatable {
+    var statement: String
+    var checklist: [Item]
+
+    struct Item: Codable, Equatable, Identifiable {
+        var id: UUID
+        var text: String
+        var done: Bool
+
+        init(id: UUID = UUID(), text: String, done: Bool = false) {
+            self.id = id
+            self.text = text
+            self.done = done
+        }
+    }
+
+    init(statement: String = "", checklist: [Item] = []) {
+        self.statement = statement
+        self.checklist = checklist
+    }
+
+    var isEmpty: Bool { statement.isEmpty && checklist.isEmpty }
+}
+
 enum AgentModelRoutingMode: String, Codable, CaseIterable, Identifiable {
     case auto
     case flash

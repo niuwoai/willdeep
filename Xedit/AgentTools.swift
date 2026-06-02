@@ -986,6 +986,120 @@ private enum AgentSkillCatalog {
     }
 }
 
+/// Public skill record + discovery surface for UI consumers (the `@skill`
+/// composer popover). Mirrors `AgentSkillCatalog.SkillRecord` but exposed
+/// outside the private enum so views and AppState helpers can list and
+/// inline skills without going through the LLM tool-call round-trip.
+struct AgentSkillEntry: Identifiable, Equatable {
+    let identifier: String
+    let name: String
+    let description: String
+    let url: URL
+
+    var id: String { identifier }
+}
+
+enum AgentSkillDirectory {
+    /// Discovers installed Codex skills under ~/.codex/skills and the
+    /// plugin cache. Returns up to ~200 records sorted by identifier.
+    static func list() -> [AgentSkillEntry] {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let roots = [
+            home.appendingPathComponent(".codex/skills"),
+            home.appendingPathComponent(".codex/plugins/cache")
+        ]
+
+        var records: [AgentSkillEntry] = []
+        for root in roots {
+            guard FileManager.default.fileExists(atPath: root.path),
+                  let enumerator = FileManager.default.enumerator(
+                    at: root,
+                    includingPropertiesForKeys: [.isRegularFileKey],
+                    options: [.skipsPackageDescendants]
+                  ) else {
+                continue
+            }
+
+            for case let url as URL in enumerator {
+                guard url.lastPathComponent == "SKILL.md",
+                      (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
+                      let data = try? Data(contentsOf: url),
+                      let text = String(data: data, encoding: .utf8) else {
+                    continue
+                }
+
+                let metadata = parseMetadata(from: text)
+                let fallbackName = url.deletingLastPathComponent().lastPathComponent
+                let name = metadata.name.isEmpty ? fallbackName : metadata.name
+                let identifier = identifier(for: url, root: root, fallback: name)
+                records.append(AgentSkillEntry(
+                    identifier: identifier,
+                    name: name,
+                    description: metadata.description.isEmpty ? "(no description)" : metadata.description,
+                    url: url
+                ))
+
+                if records.count >= 200 { break }
+            }
+        }
+
+        return records.sorted { $0.identifier < $1.identifier }
+    }
+
+    /// Reads the full SKILL.md body, capped at `maxCharacters` to keep
+    /// any single skill from blowing the context budget. Returns nil if
+    /// the file is unreadable.
+    static func loadBody(for entry: AgentSkillEntry, maxCharacters: Int = 24_000) -> String? {
+        guard let data = try? Data(contentsOf: entry.url),
+              let text = String(data: data, encoding: .utf8) else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.count <= maxCharacters { return trimmed }
+        let idx = trimmed.index(trimmed.startIndex, offsetBy: maxCharacters)
+        return "\(trimmed[..<idx])\n\n[truncated]"
+    }
+
+    private static func parseMetadata(from text: String) -> (name: String, description: String) {
+        let lines = text.components(separatedBy: .newlines)
+        guard lines.first == "---" else { return ("", "") }
+
+        var name = ""
+        var description = ""
+        for line in lines.dropFirst() {
+            if line == "---" { break }
+            if let value = yamlValue(line, key: "name") {
+                name = value
+            } else if let value = yamlValue(line, key: "description") {
+                description = value
+            }
+        }
+        return (name, description)
+    }
+
+    private static func yamlValue(_ line: String, key: String) -> String? {
+        let prefix = "\(key):"
+        guard line.hasPrefix(prefix) else { return nil }
+        var value = String(line.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.hasPrefix("\""), value.hasSuffix("\""), value.count >= 2 {
+            value.removeFirst()
+            value.removeLast()
+        }
+        return value
+    }
+
+    private static func identifier(for url: URL, root: URL, fallback: String) -> String {
+        let rootPath = root.standardizedFileURL.path
+        let skillPath = url.deletingLastPathComponent().standardizedFileURL.path
+        guard skillPath.hasPrefix(rootPath) else { return fallback }
+        let relative = String(skillPath.dropFirst(rootPath.count))
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let parts = relative.split(separator: "/").map(String.init)
+        if let skillsIndex = parts.lastIndex(of: "skills"), skillsIndex + 1 < parts.count {
+            return parts[(skillsIndex + 1)...].joined(separator: ":")
+        }
+        return parts.joined(separator: ":")
+    }
+}
+
 // MARK: - MCP bridge
 
 private enum AgentMCPBridge {

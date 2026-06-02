@@ -130,6 +130,17 @@ struct ContentView: View {
         !appState.isFocusModeEnabled && rootNode != nil && !isEditorMaximized
     }
 
+    /// Floating "Enter Agent Mode" pill is meaningful only when a real
+    /// workspace is open — Agent mode needs project context — and the
+    /// editor isn't currently in focus/maximized mode (would collide
+    /// with the chrome-free intent).
+    private var shouldShowEnterAgentButton: Bool {
+        appState.rootDirectory != nil
+            && appState.appMode == .editor
+            && !appState.isFocusModeEnabled
+            && !isEditorMaximized
+    }
+
     @ViewBuilder
     private var sidebarControl: some View {
         if shouldShowSidebarControl && shouldShowSidebar {
@@ -153,7 +164,11 @@ struct ContentView: View {
                         EditorTabBar(
                             tabs: appState.tabs,
                             activeTabID: appState.activeTabID,
+                            // Reserve room on the right for the floating
+                            // Agent-mode toggle so the rightmost tab's
+                            // close button doesn't slip under it.
                             leadingReserve: tabBarLeadingReserve,
+                            trailingReserve: shouldShowEnterAgentButton ? 72 : 0,
                             onSelect: { appState.activateTab(id: $0) },
                             onClose: { appState.closeTab(id: $0) },
                             onDoubleClick: { id in
@@ -161,6 +176,12 @@ struct ContentView: View {
                                 toggleEditorMaximized()
                             }
                         )
+                        .overlay(alignment: .trailing) {
+                            if shouldShowEnterAgentButton {
+                                EnterAgentModeButton()
+                                    .padding(.trailing, 12)
+                            }
+                        }
                     }
 
                     if appState.isFindBarVisible && !appState.isFocusModeEnabled {
@@ -269,6 +290,13 @@ struct ContentView: View {
                             appState.openFile()
                         }
                         .frame(minWidth: 400, minHeight: 400)
+                        .overlay(alignment: .topTrailing) {
+                            if shouldShowEnterAgentButton {
+                                EnterAgentModeButton()
+                                    .padding(.top, 10)
+                                    .padding(.trailing, 12)
+                            }
+                        }
                     }
                 }
             }
@@ -2854,6 +2882,9 @@ private struct EditorTabBar: View {
     let tabs: [EditorTab]
     let activeTabID: EditorTab.ID?
     let leadingReserve: CGFloat
+    /// Extra space at the trailing edge so a floating overlay (e.g. the
+    /// Enter Agent Mode button) doesn't sit on top of a tab.
+    var trailingReserve: CGFloat = 0
     let onSelect: (EditorTab.ID) -> Void
     let onClose: (EditorTab.ID) -> Void
     let onDoubleClick: (EditorTab.ID) -> Void
@@ -2894,9 +2925,36 @@ private struct EditorTabBar: View {
                 }
             }
             .padding(.leading, 8 + leadingReserve)
-            .padding(.trailing, 8)
+            .padding(.trailing, 8 + trailingReserve)
             .padding(.vertical, 6)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+}
+
+/// Small floating pill anchored to the right of the editor tab bar that
+/// flips the window into Agent mode. Only meaningful when a workspace
+/// is open (otherwise Agent mode lands on an empty New Chat with no
+/// project context), so it shows up alongside the regular tab bar.
+private struct EnterAgentModeButton: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        Button {
+            appState.setAppMode(.agent)
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("Agent")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .foregroundStyle(Color.white)
+            .background(Capsule(style: .continuous).fill(Color.accentColor))
+        }
+        .buttonStyle(.plain)
+        .help("Switch this window into Agent mode (⌘⇧A)")
     }
 }

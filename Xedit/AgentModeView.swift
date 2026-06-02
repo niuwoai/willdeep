@@ -371,6 +371,18 @@ private struct AgentChatTranscript: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: AgentDesign.messageVerticalSpacing) {
+                    // Plan + Goal banners — pinned above the transcript so
+                    // the user always sees the current execution gate /
+                    // long-term objective.
+                    if appState.agentInteractionMode == .plan, let plan = appState.agentCurrentPlan {
+                        AgentPlanCard(plan: plan)
+                            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+                    }
+                    if appState.agentInteractionMode == .goal, let goal = appState.agentCurrentGoal, !goal.isEmpty {
+                        AgentGoalCard(goal: goal)
+                            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+                    }
+
                     if appState.agentMessages.isEmpty {
                         AgentEmptyState()
                             .frame(maxWidth: .infinity)
@@ -937,6 +949,35 @@ private struct AgentChatComposer: View {
 private struct ComposerCard: View {
     @EnvironmentObject var appState: AppState
     @FocusState private var inputFocused: Bool
+    @State private var slashMenuVisible: Bool = false
+    @State private var slashMenuSelection: Int = 0
+    @State private var atMenuVisible: Bool = false
+    @State private var atMenuSelection: Int = 0
+    @State private var atMenuQuery: String = ""
+    /// Cached skill list — re-fetched whenever the @ popover opens so we
+    /// pick up newly installed skills without recomputing on every
+    /// keystroke.
+    @State private var skillCatalog: [AgentSkillEntry] = []
+    /// Strong ref to the coordinator so the @-token replacement helper
+    /// can call back into it from SwiftUI callbacks.
+    @State private var coordinatorRef = ComposerCoordinatorRef()
+
+    private var filteredSlashCommands: [SlashCommand] {
+        SlashCommand.filter(
+            appState.agentInput,
+            allCommands: SlashCommand.builtIn(state: appState)
+        )
+    }
+
+    private var filteredSkills: [AgentSkillEntry] {
+        guard !atMenuQuery.isEmpty else { return skillCatalog }
+        let q = atMenuQuery.lowercased()
+        return skillCatalog.filter { entry in
+            entry.identifier.lowercased().contains(q)
+                || entry.name.lowercased().contains(q)
+                || entry.description.lowercased().contains(q)
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -946,21 +987,71 @@ private struct ComposerCard: View {
                 }
             }
 
-            ComposerTextEditor(
-                text: $appState.agentInput,
-                onSubmit: { appState.sendAgentMessage() },
-                onPasteImage: handlePastedImage
-            )
-            .focused($inputFocused)
-            .frame(minHeight: 40, maxHeight: 130)
-            .onDrop(of: [.image, .fileURL], isTargeted: nil) { providers in
-                handleDroppedProviders(providers)
-                return true
+            if !appState.agentPendingSkills.isEmpty {
+                AgentComposerSkillStrip(skills: appState.agentPendingSkills) { identifier in
+                    appState.detachAgentSkill(identifier: identifier)
+                }
+            }
+
+            ZStack(alignment: .topLeading) {
+                ComposerTextEditor(
+                    text: $appState.agentInput,
+                    onSubmit: { appState.sendAgentMessage() },
+                    onPasteImage: handlePastedImage,
+                    historyProvider: { appState.agentMessages
+                        .filter { $0.role == .user }
+                        .map(\.content)
+                        .filter { !$0.isEmpty }
+                    },
+                    slashMenuVisible: $slashMenuVisible,
+                    slashMenuSelection: $slashMenuSelection,
+                    slashMenuItemCount: { filteredSlashCommands.count },
+                    onSlashCommit: { runSelectedSlashCommand() },
+                    atMenuVisible: $atMenuVisible,
+                    atMenuSelection: $atMenuSelection,
+                    atMenuItemCount: { filteredSkills.count },
+                    onAtCommit: { commitSelectedSkill() },
+                    onAtQueryChange: { handleAtQueryChange($0) },
+                    coordinatorRef: coordinatorRef
+                )
+                .focused($inputFocused)
+                .frame(minHeight: 40, maxHeight: 130)
+                .onDrop(of: [.image, .fileURL], isTargeted: nil) { providers in
+                    handleDroppedProviders(providers)
+                    return true
+                }
+
+                if slashMenuVisible {
+                    SlashCommandMenu(
+                        commands: filteredSlashCommands,
+                        selection: $slashMenuSelection,
+                        onPick: { index in
+                            slashMenuSelection = index
+                            _ = runSelectedSlashCommand()
+                        }
+                    )
+                    .offset(y: -8)
+                    .transition(.opacity)
+                }
+
+                if atMenuVisible {
+                    AtSkillMenu(
+                        skills: filteredSkills,
+                        selection: $atMenuSelection,
+                        onPick: { index in
+                            atMenuSelection = index
+                            _ = commitSelectedSkill()
+                        }
+                    )
+                    .offset(y: -8)
+                    .transition(.opacity)
+                }
             }
 
             HStack(spacing: 6) {
                 AttachButton(action: attachImageFromPanel)
                 ModelPickerPill()
+                AgentModePickerPill()
                 Spacer(minLength: 0)
                 if !appState.agentQueuedMessages.isEmpty {
                     QueueBadge()
@@ -977,6 +1068,51 @@ private struct ComposerCard: View {
                 .stroke(Color.primary.opacity(0.06), lineWidth: 1)
         )
         .onAppear { inputFocused = true }
+    }
+
+    /// Runs the currently-highlighted slash command. Returns true when a
+    /// command was executed so the text view swallows the key, false to
+    /// let the keystroke fall through (no match → treat as a normal Enter).
+    @discardableResult
+    private func runSelectedSlashCommand() -> Bool {
+        let commands = filteredSlashCommands
+        guard !commands.isEmpty else { return false }
+        let safeIndex = min(max(0, slashMenuSelection), commands.count - 1)
+        let command = commands[safeIndex]
+        slashMenuVisible = false
+        appState.agentInput = ""
+        command.action()
+        return true
+    }
+
+    private func handleAtQueryChange(_ query: String?) {
+        if let q = query {
+            // Refresh the catalog on transition from closed → open so a
+            // newly installed skill shows up the next time `@` is typed.
+            if !atMenuVisible || skillCatalog.isEmpty {
+                skillCatalog = AgentSkillDirectory.list()
+            }
+            atMenuQuery = q
+        } else {
+            atMenuQuery = ""
+        }
+    }
+
+    @discardableResult
+    private func commitSelectedSkill() -> Bool {
+        let skills = filteredSkills
+        guard !skills.isEmpty else { return false }
+        let safeIndex = min(max(0, atMenuSelection), skills.count - 1)
+        let skill = skills[safeIndex]
+        // Drop the @-token from the buffer and stage the skill instead;
+        // the strip above the composer shows it as a chip the user can
+        // remove. The actual SKILL.md body is spliced into the prompt
+        // by AppState.composeSkillAttachedPrompt at send time.
+        _ = coordinatorRef.coordinator?.replaceCurrentAtToken(with: "")
+        appState.attachAgentSkill(skill)
+        atMenuVisible = false
+        atMenuQuery = ""
+        return true
     }
 
     private func handlePastedImage() {
@@ -1318,13 +1454,54 @@ private struct ContextRingIndicator: View {
 
 // MARK: - NSTextView-backed composer (Cmd+V image intercept, Return submit)
 
-private struct ComposerTextEditor: NSViewRepresentable {
+struct ComposerTextEditor: NSViewRepresentable {
     @Binding var text: String
     let onSubmit: () -> Void
     let onPasteImage: () -> Void
+    /// Returns the user's prior messages in chronological order. `↑` walks
+    /// from the most recent backwards; `↓` walks forward and eventually
+    /// restores the draft the user was typing before they started cycling.
+    let historyProvider: () -> [String]
+    /// Bound state for the "/" slash command palette. The composer card
+    /// owns these so the menu can render in SwiftUI above the text view.
+    @Binding var slashMenuVisible: Bool
+    @Binding var slashMenuSelection: Int
+    let slashMenuItemCount: () -> Int
+    /// Called when the user presses Enter / Tab with the slash menu
+    /// visible. Returning true tells the text view to swallow the key.
+    let onSlashCommit: () -> Bool
+    /// Same shape as the slash palette, used for the "@" skill picker.
+    @Binding var atMenuVisible: Bool
+    @Binding var atMenuSelection: Int
+    let atMenuItemCount: () -> Int
+    let onAtCommit: () -> Bool
+    /// Notifies the composer card that the @ token in the buffer has
+    /// changed (e.g. user kept typing letters after `@`), so the popover
+    /// can re-filter its entries.
+    let onAtQueryChange: (String?) -> Void
+    /// Holder the parent passes in so it can hand the coordinator
+    /// pointer back to SwiftUI menu callbacks (used by the @-token
+    /// replacement helper). Filled in inside `makeCoordinator`.
+    let coordinatorRef: ComposerCoordinatorRef
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, onSubmit: onSubmit, onPasteImage: onPasteImage)
+        let coord = Coordinator(
+            text: $text,
+            onSubmit: onSubmit,
+            onPasteImage: onPasteImage,
+            historyProvider: historyProvider,
+            slashMenuVisible: $slashMenuVisible,
+            slashMenuSelection: $slashMenuSelection,
+            slashMenuItemCount: slashMenuItemCount,
+            onSlashCommit: onSlashCommit,
+            atMenuVisible: $atMenuVisible,
+            atMenuSelection: $atMenuSelection,
+            atMenuItemCount: atMenuItemCount,
+            onAtCommit: onAtCommit,
+            onAtQueryChange: onAtQueryChange
+        )
+        coordinatorRef.coordinator = coord
+        return coord
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -1358,6 +1535,11 @@ private struct ComposerTextEditor: NSViewRepresentable {
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let textView = nsView.documentView as? NSTextView else { return }
         if textView.string != text {
+            // Track programmatic text changes so the history cursor
+            // doesn't think the user kept typing on top of a recalled
+            // message — this also covers the slash-command path
+            // emptying the buffer after running an action.
+            context.coordinator.markTextReplacedExternally(to: text)
             textView.string = text
         }
     }
@@ -1366,19 +1548,140 @@ private struct ComposerTextEditor: NSViewRepresentable {
         var text: Binding<String>
         let onSubmit: () -> Void
         let onPasteImage: () -> Void
+        let historyProvider: () -> [String]
+        var slashMenuVisible: Binding<Bool>
+        var slashMenuSelection: Binding<Int>
+        let slashMenuItemCount: () -> Int
+        let onSlashCommit: () -> Bool
+        var atMenuVisible: Binding<Bool>
+        var atMenuSelection: Binding<Int>
+        let atMenuItemCount: () -> Int
+        let onAtCommit: () -> Bool
+        let onAtQueryChange: (String?) -> Void
 
-        init(text: Binding<String>, onSubmit: @escaping () -> Void, onPasteImage: @escaping () -> Void) {
+        // History cursor state. `historyIndex` counts back from the most
+        // recent user message: 0 = newest, 1 = next-newest, etc. nil
+        // means "not cycling — the buffer holds the user's own draft".
+        private var historyIndex: Int? = nil
+        private var savedDraft: String = ""
+        /// The exact string the composer last published from history, so
+        /// we can tell whether the user has edited on top of it.
+        private var lastHistoryString: String? = nil
+        /// Tracks the active NSTextView so textDidChange handlers can
+        /// inspect the live selection (NSTextStorage's didChange fires
+        /// before selection updates, so we use the cached pointer rather
+        /// than relying on the notification's object).
+        fileprivate weak var activeTextView: NSTextView?
+
+        init(
+            text: Binding<String>,
+            onSubmit: @escaping () -> Void,
+            onPasteImage: @escaping () -> Void,
+            historyProvider: @escaping () -> [String],
+            slashMenuVisible: Binding<Bool>,
+            slashMenuSelection: Binding<Int>,
+            slashMenuItemCount: @escaping () -> Int,
+            onSlashCommit: @escaping () -> Bool,
+            atMenuVisible: Binding<Bool>,
+            atMenuSelection: Binding<Int>,
+            atMenuItemCount: @escaping () -> Int,
+            onAtCommit: @escaping () -> Bool,
+            onAtQueryChange: @escaping (String?) -> Void
+        ) {
             self.text = text
             self.onSubmit = onSubmit
             self.onPasteImage = onPasteImage
+            self.historyProvider = historyProvider
+            self.slashMenuVisible = slashMenuVisible
+            self.slashMenuSelection = slashMenuSelection
+            self.slashMenuItemCount = slashMenuItemCount
+            self.onSlashCommit = onSlashCommit
+            self.atMenuVisible = atMenuVisible
+            self.atMenuSelection = atMenuSelection
+            self.atMenuItemCount = atMenuItemCount
+            self.onAtCommit = onAtCommit
+            self.onAtQueryChange = onAtQueryChange
+        }
+
+        func markTextReplacedExternally(to newValue: String) {
+            // If something other than the user typed (slash action,
+            // history binding push), reset our cursor so the next ↑
+            // starts fresh.
+            if newValue != lastHistoryString {
+                historyIndex = nil
+                lastHistoryString = nil
+            }
         }
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
-            text.wrappedValue = textView.string
+            activeTextView = textView
+            let newValue = textView.string
+            text.wrappedValue = newValue
+            // Any user edit invalidates the history cursor and re-derives
+            // slash + @ visibility.
+            if newValue != lastHistoryString {
+                historyIndex = nil
+                lastHistoryString = nil
+            }
+            updateSlashMenuVisibility(for: newValue)
+            updateAtMenuVisibility(for: textView)
         }
 
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            activeTextView = textView
+            // Slash command palette takes priority over history + submit
+            // while it's open.
+            if slashMenuVisible.wrappedValue {
+                switch commandSelector {
+                case #selector(NSResponder.moveUp(_:)):
+                    let count = slashMenuItemCount()
+                    guard count > 0 else { return true }
+                    slashMenuSelection.wrappedValue = (slashMenuSelection.wrappedValue - 1 + count) % count
+                    return true
+                case #selector(NSResponder.moveDown(_:)):
+                    let count = slashMenuItemCount()
+                    guard count > 0 else { return true }
+                    slashMenuSelection.wrappedValue = (slashMenuSelection.wrappedValue + 1) % count
+                    return true
+                case #selector(NSResponder.insertNewline(_:)),
+                     #selector(NSResponder.insertTab(_:)):
+                    return onSlashCommit()
+                case #selector(NSResponder.cancelOperation(_:)):
+                    slashMenuVisible.wrappedValue = false
+                    return true
+                default:
+                    break
+                }
+            }
+
+            // @ skill picker takes priority over submit while it's open,
+            // but defers caret motion (↑/↓) ONLY when the menu actually
+            // has items to step through — keeps multi-line composition
+            // unaffected when there are no skill matches.
+            if atMenuVisible.wrappedValue {
+                switch commandSelector {
+                case #selector(NSResponder.moveUp(_:)):
+                    let count = atMenuItemCount()
+                    guard count > 0 else { break }
+                    atMenuSelection.wrappedValue = (atMenuSelection.wrappedValue - 1 + count) % count
+                    return true
+                case #selector(NSResponder.moveDown(_:)):
+                    let count = atMenuItemCount()
+                    guard count > 0 else { break }
+                    atMenuSelection.wrappedValue = (atMenuSelection.wrappedValue + 1) % count
+                    return true
+                case #selector(NSResponder.insertNewline(_:)),
+                     #selector(NSResponder.insertTab(_:)):
+                    if onAtCommit() { return true }
+                case #selector(NSResponder.cancelOperation(_:)):
+                    atMenuVisible.wrappedValue = false
+                    return true
+                default:
+                    break
+                }
+            }
+
             if commandSelector == #selector(NSResponder.insertNewline(_:)) {
                 let modifiers = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
                 let wantsLineBreak = modifiers.contains(.shift)
@@ -1386,10 +1689,162 @@ private struct ComposerTextEditor: NSViewRepresentable {
                     || modifiers.contains(.control)
                 if !wantsLineBreak {
                     onSubmit()
+                    historyIndex = nil
+                    lastHistoryString = nil
+                    return true
+                }
+            }
+
+            if commandSelector == #selector(NSResponder.moveUp(_:)) {
+                if let recalled = stepHistory(direction: -1, currentText: textView.string) {
+                    applyHistory(recalled, to: textView)
+                    return true
+                }
+            }
+            if commandSelector == #selector(NSResponder.moveDown(_:)) {
+                if let recalled = stepHistory(direction: +1, currentText: textView.string) {
+                    applyHistory(recalled, to: textView)
                     return true
                 }
             }
             return false
+        }
+
+        /// Returns the next/previous history entry (or the saved draft on
+        /// the way back down) — or nil to let the text view's normal
+        /// caret-movement command run.
+        private func stepHistory(direction: Int, currentText: String) -> String? {
+            let history = historyProvider()
+            guard !history.isEmpty else { return nil }
+
+            // Only intercept ↑/↓ when the buffer is empty OR currently
+            // showing a recalled history entry. Anything else means the
+            // user is editing prose and expects caret motion.
+            let isOnHistory = historyIndex != nil && currentText == lastHistoryString
+            let isEmpty = currentText.isEmpty
+            guard isEmpty || isOnHistory else { return nil }
+
+            if direction < 0 {
+                // ↑ — walk further back. If we weren't cycling yet, save
+                // whatever was in the buffer (probably empty) as the draft.
+                if historyIndex == nil {
+                    savedDraft = currentText
+                    historyIndex = 0
+                } else if let i = historyIndex, i + 1 < history.count {
+                    historyIndex = i + 1
+                } else {
+                    return nil // already at oldest
+                }
+            } else {
+                // ↓ — walk forward toward the draft.
+                guard let i = historyIndex else { return nil }
+                if i == 0 {
+                    historyIndex = nil
+                    return savedDraft
+                }
+                historyIndex = i - 1
+            }
+            guard let i = historyIndex else { return savedDraft }
+            return history[history.count - 1 - i]
+        }
+
+        private func applyHistory(_ value: String, to textView: NSTextView) {
+            textView.string = value
+            text.wrappedValue = value
+            lastHistoryString = value
+            // Park the caret at end so the user can keep typing.
+            let end = (value as NSString).length
+            textView.setSelectedRange(NSRange(location: end, length: 0))
+        }
+
+        private func updateSlashMenuVisibility(for newValue: String) {
+            // Show the palette only when the buffer starts with "/" and
+            // has no embedded newline yet. A trailing space ends the
+            // command name and dismisses the menu.
+            let trimmed = newValue.trimmingCharacters(in: .whitespaces)
+            let shouldShow = newValue.hasPrefix("/")
+                && !newValue.contains("\n")
+                && !trimmed.isEmpty
+            if slashMenuVisible.wrappedValue != shouldShow {
+                slashMenuVisible.wrappedValue = shouldShow
+                if shouldShow {
+                    slashMenuSelection.wrappedValue = 0
+                }
+            }
+        }
+
+        /// Looks at the caret position and decides whether the user is
+        /// inside an `@token` (counting backwards from the caret to the
+        /// nearest `@`, stopping at whitespace/newline/another `@`).
+        /// Returns the substring after `@` so the popover can filter.
+        fileprivate func currentAtQuery(in textView: NSTextView) -> String? {
+            let nsString = textView.string as NSString
+            let caret = textView.selectedRange().location
+            guard caret > 0, caret <= nsString.length else { return nil }
+            var i = caret - 1
+            while i >= 0 {
+                let ch = nsString.character(at: i)
+                let scalar = UnicodeScalar(ch)
+                if ch == 0x40 { // '@'
+                    // Require that '@' sits at the start of the buffer
+                    // or right after whitespace — avoids matching email
+                    // addresses, file paths, etc.
+                    if i == 0 {
+                        return (nsString.substring(with: NSRange(location: i + 1, length: caret - i - 1)))
+                    }
+                    let prev = nsString.character(at: i - 1)
+                    if let prevScalar = UnicodeScalar(prev),
+                       CharacterSet.whitespacesAndNewlines.contains(prevScalar) {
+                        return (nsString.substring(with: NSRange(location: i + 1, length: caret - i - 1)))
+                    }
+                    return nil
+                }
+                if let s = scalar, CharacterSet.whitespacesAndNewlines.contains(s) {
+                    return nil
+                }
+                i -= 1
+            }
+            return nil
+        }
+
+        private func updateAtMenuVisibility(for textView: NSTextView) {
+            let query = currentAtQuery(in: textView)
+            onAtQueryChange(query)
+            let shouldShow = query != nil
+            if atMenuVisible.wrappedValue != shouldShow {
+                atMenuVisible.wrappedValue = shouldShow
+                if shouldShow {
+                    atMenuSelection.wrappedValue = 0
+                }
+            }
+        }
+
+        /// Replace the in-progress `@token` at the caret with the chosen
+        /// skill's identifier (kept around for transparency — actual
+        /// skill content gets spliced in at send time) and dismiss the
+        /// popover. Returns true if it edited the buffer.
+        func replaceCurrentAtToken(with replacement: String) -> Bool {
+            guard let textView = activeTextView else { return false }
+            let nsString = textView.string as NSString
+            let caret = textView.selectedRange().location
+            guard caret > 0, caret <= nsString.length else { return false }
+            var i = caret - 1
+            while i >= 0 {
+                let ch = nsString.character(at: i)
+                if ch == 0x40 { break }
+                if let s = UnicodeScalar(ch), CharacterSet.whitespacesAndNewlines.contains(s) { return false }
+                i -= 1
+            }
+            guard i >= 0 else { return false }
+            let replaceRange = NSRange(location: i, length: caret - i)
+            let mutable = NSMutableString(string: textView.string)
+            mutable.replaceCharacters(in: replaceRange, with: replacement)
+            textView.string = mutable as String
+            text.wrappedValue = mutable as String
+            let newCaret = i + (replacement as NSString).length
+            textView.setSelectedRange(NSRange(location: newCaret, length: 0))
+            atMenuVisible.wrappedValue = false
+            return true
         }
     }
 
@@ -1413,5 +1868,560 @@ fileprivate final class ComposerNSTextView: NSTextView {
             return
         }
         super.paste(sender)
+    }
+}
+
+// MARK: - Slash commands
+
+/// A single command shown in the "/" palette. Pure local actions — no
+/// network, no LLM round-trip. Each one runs synchronously against
+/// AppState. The model-picker case opens the existing model picker
+/// surface; the others call public AppState APIs directly.
+struct SlashCommand: Identifiable {
+    let id: String          // canonical name without slash, used for filter
+    let title: String       // e.g. "/new"
+    let subtitle: String    // one-liner shown under the title
+    let symbol: String      // SF Symbol name
+    let action: () -> Void
+
+    static func builtIn(state: AppState) -> [SlashCommand] {
+        [
+            SlashCommand(id: "new", title: "/new", subtitle: "Start a fresh chat in this workspace", symbol: "square.and.pencil") {
+                state.startNewAgentSession()
+            },
+            SlashCommand(id: "clear", title: "/clear", subtitle: "Clear the current chat's messages", symbol: "eraser") {
+                state.clearAgentConversation()
+            },
+            SlashCommand(id: "compress", title: "/compress", subtitle: "Summarize older turns to free context", symbol: "rectangle.compress.vertical") {
+                state.compressAgentContext()
+            },
+            SlashCommand(id: "stop", title: "/stop", subtitle: "Stop the current model response", symbol: "stop.circle") {
+                state.stopAgentResponse()
+            },
+            SlashCommand(id: "clear-queue", title: "/clear-queue", subtitle: "Drop any pending queued messages", symbol: "tray.2") {
+                state.clearAgentQueue()
+            },
+            SlashCommand(id: "copy-last", title: "/copy-last", subtitle: "Copy the last assistant message", symbol: "doc.on.doc") {
+                guard let last = state.agentMessages.last(where: { $0.role == .assistant }) else { return }
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(last.content, forType: .string)
+            },
+        ]
+    }
+
+    /// Filters by fuzzy-ish prefix on the slash-stripped query. The text
+    /// view passes `"/cl"` etc. — we strip the leading slash and match
+    /// either the canonical id or the title prefix. Empty query (just
+    /// `/`) lists everything.
+    static func filter(_ rawInput: String, allCommands: [SlashCommand]) -> [SlashCommand] {
+        let trimmed = rawInput.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix("/") else { return [] }
+        let query = String(trimmed.dropFirst()).lowercased()
+        guard !query.isEmpty else { return allCommands }
+        return allCommands.filter { c in
+            c.id.lowercased().contains(query) || c.title.lowercased().contains(query)
+        }
+    }
+}
+
+private struct SlashCommandMenu: View {
+    let commands: [SlashCommand]
+    @Binding var selection: Int
+    let onPick: (Int) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if commands.isEmpty {
+                Text("No matching commands")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+            } else {
+                ForEach(Array(commands.enumerated()), id: \.element.id) { index, command in
+                    SlashCommandRow(
+                        command: command,
+                        isSelected: index == selection
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture { onPick(index) }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .frame(maxWidth: 360, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.18), radius: 12, y: 4)
+        .alignmentGuide(.top) { $0[.bottom] }   // sit above the input
+        .fixedSize()
+    }
+}
+
+private struct SlashCommandRow: View {
+    let command: SlashCommand
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: command.symbol)
+                .font(.system(size: 11))
+                .foregroundStyle(isSelected ? Color.white : Color.secondary)
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(command.title)
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(isSelected ? Color.white : Color.primary)
+                Text(command.subtitle)
+                    .font(.system(size: 10))
+                    .foregroundStyle(isSelected ? Color.white.opacity(0.85) : Color.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(isSelected ? Color.accentColor : Color.clear)
+    }
+}
+
+// MARK: - @ skill picker
+
+/// Thin holder so the composer card can hand its coordinator reference
+/// out to SwiftUI menu callbacks. NSViewRepresentable's `makeCoordinator`
+/// is the canonical owner; we just need to surface a way to call
+/// `replaceCurrentAtToken` from outside the text view's own delegate.
+final class ComposerCoordinatorRef {
+    weak var coordinator: ComposerTextEditor.Coordinator?
+}
+
+/// Chips of currently-attached skills, sitting above the text editor so
+/// the user always sees what's about to ride along with the next send.
+struct AgentComposerSkillStrip: View {
+    let skills: [AgentSkillEntry]
+    let onRemove: (String) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(skills) { skill in
+                    HStack(spacing: 4) {
+                        Image(systemName: "wand.and.stars")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.accentColor)
+                        Text("@\(skill.identifier)")
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .lineLimit(1)
+                        Button {
+                            onRemove(skill.identifier)
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.accentColor.opacity(0.10))
+                    )
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(Color.accentColor.opacity(0.30), lineWidth: 1)
+                    )
+                    .help(skill.description)
+                }
+            }
+        }
+    }
+}
+
+private struct AtSkillMenu: View {
+    let skills: [AgentSkillEntry]
+    @Binding var selection: Int
+    let onPick: (Int) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if skills.isEmpty {
+                Text("No matching skills under ~/.codex/skills")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+            } else {
+                ForEach(Array(skills.enumerated()), id: \.element.id) { index, skill in
+                    AtSkillRow(skill: skill, isSelected: index == selection)
+                        .contentShape(Rectangle())
+                        .onTapGesture { onPick(index) }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .frame(maxWidth: 420, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.18), radius: 12, y: 4)
+        .fixedSize()
+    }
+}
+
+private struct AtSkillRow: View {
+    let skill: AgentSkillEntry
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "wand.and.stars")
+                .font(.system(size: 11))
+                .foregroundStyle(isSelected ? Color.white : Color.secondary)
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(skill.identifier)
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(isSelected ? Color.white : Color.primary)
+                Text(skill.description)
+                    .font(.system(size: 10))
+                    .foregroundStyle(isSelected ? Color.white.opacity(0.85) : Color.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(isSelected ? Color.accentColor : Color.clear)
+    }
+}
+
+// MARK: - Mode picker (Normal / Plan / Goal)
+
+private struct AgentModePickerPill: View {
+    @EnvironmentObject var appState: AppState
+    @State private var showingGoalEditor = false
+
+    var body: some View {
+        Menu {
+            ForEach(AgentInteractionMode.allCases) { mode in
+                Button {
+                    if mode == .goal {
+                        // Goal mode requires a definition; if there's
+                        // already a goal we just flip the mode, otherwise
+                        // open the editor sheet first.
+                        appState.setAgentInteractionMode(.goal)
+                        if appState.agentCurrentGoal == nil { showingGoalEditor = true }
+                    } else {
+                        appState.setAgentInteractionMode(mode)
+                    }
+                } label: {
+                    Label(mode.displayName, systemImage: mode.symbol)
+                }
+            }
+            if appState.agentInteractionMode == .goal {
+                Divider()
+                Button("Edit goal…") { showingGoalEditor = true }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: appState.agentInteractionMode.symbol)
+                    .font(.system(size: 10, weight: .semibold))
+                Text(appState.agentInteractionMode.displayName)
+                    .font(.system(size: 11, weight: .medium))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .foregroundStyle(pillForeground)
+            .background(Capsule(style: .continuous).fill(pillBackground))
+            .overlay(Capsule(style: .continuous).stroke(pillBorder, lineWidth: 1))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Conversation mode — Plan locks writes until you approve; Goal pins an objective to every reply.")
+        .sheet(isPresented: $showingGoalEditor) {
+            AgentGoalEditorSheet { statement, items in
+                appState.setAgentGoal(statement: statement, items: items)
+                if appState.agentInteractionMode != .goal {
+                    appState.setAgentInteractionMode(.goal)
+                }
+                showingGoalEditor = false
+            } onCancel: {
+                showingGoalEditor = false
+            }
+        }
+    }
+
+    private var pillForeground: Color {
+        appState.agentInteractionMode == .normal ? Color.secondary : Color.white
+    }
+
+    private var pillBackground: Color {
+        switch appState.agentInteractionMode {
+        case .normal: return Color.secondary.opacity(0.10)
+        case .plan: return Color.orange
+        case .goal: return Color.accentColor
+        }
+    }
+
+    private var pillBorder: Color {
+        appState.agentInteractionMode == .normal ? Color.secondary.opacity(0.25) : Color.clear
+    }
+}
+
+// MARK: - Plan card
+
+struct AgentPlanCard: View {
+    @EnvironmentObject var appState: AppState
+    let plan: AgentPlan
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "list.number")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.orange)
+                Text("Plan")
+                    .font(.system(size: 11, weight: .semibold))
+                    .textCase(.uppercase)
+                    .foregroundStyle(.secondary)
+                PlanStatusPill(status: plan.status)
+                Spacer(minLength: 0)
+            }
+
+            if !plan.summary.isEmpty {
+                Text(plan.summary)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(plan.steps.enumerated()), id: \.offset) { index, step in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("\(index + 1).")
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 20, alignment: .trailing)
+                        Text(step)
+                            .font(.system(size: 12))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            if plan.status == .proposed {
+                HStack(spacing: 8) {
+                    Button("Approve") { appState.approveAgentPlan() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    Button("Reject") { appState.rejectAgentPlan() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    Spacer(minLength: 0)
+                    Text("Plan mode blocks writes until you Approve.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+            } else if plan.status == .approved || plan.status == .executing {
+                Button("Mark plan complete") { appState.completeAgentPlan() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.orange.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.orange.opacity(0.35), lineWidth: 1)
+        )
+    }
+}
+
+private struct PlanStatusPill: View {
+    let status: AgentPlan.Status
+
+    var body: some View {
+        Text(labelText)
+            .font(.system(size: 10, weight: .semibold))
+            .textCase(.uppercase)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .foregroundStyle(Color.white)
+            .background(Capsule(style: .continuous).fill(pillColor))
+    }
+
+    private var labelText: String {
+        switch status {
+        case .proposed: return "Awaiting Approval"
+        case .approved: return "Approved"
+        case .executing: return "Executing"
+        case .done: return "Done"
+        case .rejected: return "Rejected"
+        }
+    }
+
+    private var pillColor: Color {
+        switch status {
+        case .proposed: return .orange
+        case .approved, .executing: return .green
+        case .done: return .blue
+        case .rejected: return .red
+        }
+    }
+}
+
+// MARK: - Goal card
+
+struct AgentGoalCard: View {
+    @EnvironmentObject var appState: AppState
+    let goal: AgentGoal
+    @State private var showingEditor = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "target")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                Text("Goal")
+                    .font(.system(size: 11, weight: .semibold))
+                    .textCase(.uppercase)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Button {
+                    showingEditor = true
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Edit goal")
+            }
+
+            if !goal.statement.isEmpty {
+                Text(goal.statement)
+                    .font(.system(size: 13, weight: .medium))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !goal.checklist.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(goal.checklist) { item in
+                        HStack(alignment: .top, spacing: 8) {
+                            Button {
+                                appState.toggleAgentGoalItem(item.id)
+                            } label: {
+                                Image(systemName: item.done ? "checkmark.square.fill" : "square")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(item.done ? Color.accentColor : Color.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            Text(item.text)
+                                .font(.system(size: 12))
+                                .strikethrough(item.done, color: .secondary)
+                                .foregroundStyle(item.done ? .secondary : .primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.accentColor.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.accentColor.opacity(0.35), lineWidth: 1)
+        )
+        .sheet(isPresented: $showingEditor) {
+            AgentGoalEditorSheet(
+                initialStatement: goal.statement,
+                initialItems: goal.checklist.map(\.text),
+                onSave: { statement, items in
+                    appState.setAgentGoal(statement: statement, items: items)
+                    showingEditor = false
+                },
+                onCancel: { showingEditor = false }
+            )
+        }
+    }
+}
+
+// MARK: - Goal editor sheet
+
+private struct AgentGoalEditorSheet: View {
+    @State private var statement: String
+    @State private var itemsText: String
+    let onSave: (String, [String]) -> Void
+    let onCancel: () -> Void
+
+    init(initialStatement: String = "", initialItems: [String] = [], onSave: @escaping (String, [String]) -> Void, onCancel: @escaping () -> Void) {
+        _statement = State(initialValue: initialStatement)
+        _itemsText = State(initialValue: initialItems.joined(separator: "\n"))
+        self.onSave = onSave
+        self.onCancel = onCancel
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Define Goal")
+                .font(.system(size: 14, weight: .semibold))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Goal statement")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextField("What are we trying to accomplish?", text: $statement, axis: .vertical)
+                    .lineLimit(2...4)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Acceptance checklist (one per line)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextEditor(text: $itemsText)
+                    .font(.system(size: 12))
+                    .frame(minHeight: 120)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
+                    )
+            }
+
+            HStack {
+                Spacer()
+                Button("Cancel") { onCancel() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Save") {
+                    let items = itemsText.components(separatedBy: .newlines)
+                    onSave(statement, items)
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(20)
+        .frame(width: 460)
     }
 }

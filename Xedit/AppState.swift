@@ -89,6 +89,31 @@ final class AppState: ObservableObject {
     @Published var agentErrorDetails: AgentErrorDetails?
     /// Images staged in the composer for the next user message.
     @Published var agentPendingImages: [AgentImageAttachment] = []
+    /// Skills the user attached via `@skill` for the next send. Each
+    /// entry's SKILL.md body gets prepended (collapsed under a header)
+    /// to the user message right before it goes out, then this list is
+    /// cleared. The popover lives in the composer; AppState only stores
+    /// the staged selection so the send path can splice them in.
+    @Published var agentPendingSkills: [AgentSkillEntry] = []
+    /// Top-level interaction mode for the active session. Plan locks
+    /// write/exec tools until the user approves a plan; Goal pins an
+    /// objective banner that's added to every system prompt.
+    @Published var agentInteractionMode: AgentInteractionMode = .normal
+    /// Current proposed/approved plan for Plan mode. Parsed out of the
+    /// assistant's reply when a ```plan fenced block arrives.
+    @Published var agentCurrentPlan: AgentPlan?
+    /// Currently-pinned goal for Goal mode. Created via the goal-mode
+    /// definition sheet; cleared when mode flips back to normal.
+    @Published var agentCurrentGoal: AgentGoal?
+
+    /// True when Plan mode is on AND no plan exists yet OR the existing
+    /// plan hasn't been approved. While true, all write/exec tools and
+    /// patch application are blocked.
+    var isPlanGateActive: Bool {
+        guard agentInteractionMode == .plan else { return false }
+        guard let plan = agentCurrentPlan else { return true }
+        return plan.status != .approved && plan.status != .executing && plan.status != .done
+    }
     /// Messages the user queued while the agent was busy. Each entry is a
     /// snapshot of text + images, consumed FIFO once the current turn ends.
     @Published var agentQueuedMessages: [AgentQueuedMessage] = []
@@ -353,12 +378,19 @@ final class AppState: ObservableObject {
     /// responding, the message is queued and consumed when the current turn
     /// finishes. Editor-mode and Agent-mode share this entry point.
     func sendAgentMessage() {
-        let prompt = agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let userText = agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
         let images = agentPendingImages
-        guard !prompt.isEmpty || !images.isEmpty else { return }
+        let skills = agentPendingSkills
+        guard !userText.isEmpty || !images.isEmpty || !skills.isEmpty else { return }
+
+        // Splice attached skills in front of the user's prose under a
+        // clearly-labelled header so the model treats them as task
+        // guidance rather than verbatim user text.
+        let prompt = composeSkillAttachedPrompt(userText: userText, skills: skills)
 
         agentInput = ""
         agentPendingImages = []
+        agentPendingSkills = []
 
         if isAgentResponding {
             agentQueuedMessages.append(AgentQueuedMessage(text: prompt, images: images))
@@ -366,6 +398,118 @@ final class AppState: ObservableObject {
         }
 
         dispatchAgentMessage(text: prompt, images: images)
+    }
+
+    /// Wraps each attached skill's SKILL.md body under a fenced header
+    /// and stitches them on top of the user's own text. Returns the
+    /// original text unchanged when no skills are attached.
+    private func composeSkillAttachedPrompt(userText: String, skills: [AgentSkillEntry]) -> String {
+        guard !skills.isEmpty else { return userText }
+        var blocks: [String] = []
+        blocks.append("The user attached the following Codex skill(s) for this turn — treat them as task guidance, not verbatim user text:")
+        for skill in skills {
+            let body = AgentSkillDirectory.loadBody(for: skill) ?? "(skill body unavailable)"
+            blocks.append("""
+            ### Skill: \(skill.identifier)
+            > \(skill.description)
+
+            \(body)
+            """)
+        }
+        if !userText.isEmpty {
+            blocks.append("---")
+            blocks.append(userText)
+        }
+        return blocks.joined(separator: "\n\n")
+    }
+
+    // MARK: - Skill attachment
+
+    /// Stage a skill for the next send. Idempotent — re-attaching the
+    /// same skill is a no-op.
+    func attachAgentSkill(_ skill: AgentSkillEntry) {
+        guard !agentPendingSkills.contains(where: { $0.identifier == skill.identifier }) else { return }
+        agentPendingSkills.append(skill)
+    }
+
+    /// Drop a single staged skill by identifier.
+    func detachAgentSkill(identifier: String) {
+        agentPendingSkills.removeAll { $0.identifier == identifier }
+    }
+
+    // MARK: - Interaction modes (plan / goal)
+
+    /// Flip the session into a different interaction mode. Switching out
+    /// of Plan or Goal also drops any associated state so the next
+    /// session pick-up starts clean.
+    func setAgentInteractionMode(_ mode: AgentInteractionMode) {
+        guard agentInteractionMode != mode else { return }
+        agentInteractionMode = mode
+        if mode != .plan { agentCurrentPlan = nil }
+        if mode != .goal { agentCurrentGoal = nil }
+    }
+
+    /// User clicks Approve on the proposed plan — flips it to approved
+    /// so the next turn's system prompt unlocks write tools.
+    func approveAgentPlan() {
+        guard var plan = agentCurrentPlan else { return }
+        plan.status = .approved
+        agentCurrentPlan = plan
+    }
+
+    /// User clicks Reject — drops the plan so the agent re-plans next turn.
+    func rejectAgentPlan() {
+        agentCurrentPlan = nil
+    }
+
+    /// Manually retire an approved plan (e.g. after the agent reported done).
+    func completeAgentPlan() {
+        guard var plan = agentCurrentPlan else { return }
+        plan.status = .done
+        agentCurrentPlan = plan
+    }
+
+    /// Parse the most recent assistant message looking for a ```plan
+    /// fenced block and replace `agentCurrentPlan` if one is found and
+    /// the user hasn't already approved a plan this session. Called by
+    /// the agent loop after each assistant message lands.
+    func captureAgentPlanFromLatestMessage() {
+        guard agentInteractionMode == .plan else { return }
+        // Don't clobber an already-approved plan.
+        if let existing = agentCurrentPlan,
+           existing.status == .approved || existing.status == .executing || existing.status == .done {
+            return
+        }
+        guard let last = agentMessages.last(where: { $0.role == .assistant && !$0.content.isEmpty }),
+              let parsed = AgentPlanParser.extract(from: last.content) else {
+            return
+        }
+        agentCurrentPlan = parsed
+    }
+
+    /// Replace the goal definition for Goal mode. Empty values clear it.
+    func setAgentGoal(statement: String, items: [String]) {
+        let trimmedStatement = statement.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedItems = items
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if trimmedStatement.isEmpty && trimmedItems.isEmpty {
+            agentCurrentGoal = nil
+            return
+        }
+        agentCurrentGoal = AgentGoal(
+            statement: trimmedStatement,
+            checklist: trimmedItems.map { AgentGoal.Item(text: $0) }
+        )
+    }
+
+    /// Toggle a single checklist item by id. The flipped state shows up
+    /// in the next system prompt, so the agent sees progress.
+    func toggleAgentGoalItem(_ id: UUID) {
+        guard var goal = agentCurrentGoal else { return }
+        guard let idx = goal.checklist.firstIndex(where: { $0.id == id }) else { return }
+        goal.checklist[idx].done.toggle()
+        agentCurrentGoal = goal
     }
 
     func reviewAgentWorktreeChanges() {
@@ -619,6 +763,9 @@ final class AppState: ObservableObject {
         agentSessions.insert(session, at: 0)
         activeAgentSessionID = session.id
         agentSessionDidEditFiles = false
+        agentInteractionMode = .normal
+        agentCurrentPlan = nil
+        agentCurrentGoal = nil
         AgentSessionStore.save(session)
         return session
     }
@@ -664,6 +811,11 @@ final class AppState: ObservableObject {
         agentPendingImages = []
         agentErrorMessage = nil
         agentErrorDetails = nil
+        // Plan/Goal state is per-session and not persisted (yet); reset
+        // when switching sessions so we don't bleed state across chats.
+        agentInteractionMode = .normal
+        agentCurrentPlan = nil
+        agentCurrentGoal = nil
     }
 
     func deleteAgentSession(id: AgentSession.ID) {
@@ -757,7 +909,10 @@ final class AppState: ObservableObject {
             fileContent: fileContent,
             selectedText: selectedText,
             language: effectiveLanguage,
-            toolsEnabled: true
+            toolsEnabled: true,
+            interactionMode: agentInteractionMode,
+            currentPlan: agentCurrentPlan,
+            currentGoal: agentCurrentGoal
         )
         let collapsedHistory = Self.collapseOldToolResults(in: agentMessages)
         return AgentClient.providerReadyMessages([
@@ -1008,6 +1163,7 @@ final class AppState: ObservableObject {
         defer {
             self.isAgentResponding = false
             self.agentRequestTask = nil
+            self.captureAgentPlanFromLatestMessage()
             self.persistActiveAgentSession()
             self.maybeAutoCompressContext()
             self.consumeNextQueuedMessageIfNeeded()
@@ -1026,7 +1182,10 @@ final class AppState: ObservableObject {
                 fileContent: fileContent,
                 selectedText: selectedText,
                 language: effectiveLanguage,
-                toolsEnabled: true
+                toolsEnabled: true,
+                interactionMode: agentInteractionMode,
+                currentPlan: agentCurrentPlan,
+                currentGoal: agentCurrentGoal
             )
             let history = agentMessages.filter { $0.id != assistantID }
             let collapsedHistory = Self.collapseOldToolResults(in: history)
@@ -1185,6 +1344,22 @@ final class AppState: ObservableObject {
                         )
                     }
                     appendToolMessage(toolCallID: call.externalID, payload: answer)
+                    continue
+                }
+
+                // Plan mode: block any write/exec tool until the user has
+                // approved a plan. The reply goes back as a tool error so
+                // the model knows to stop and emit a plan.
+                if risk != .read && isPlanGateActive {
+                    anyDenied = true
+                    if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
+                        agentToolCalls[index].status = .denied
+                        agentToolCalls[index].errorMessage = "Plan mode: needs user approval"
+                    }
+                    appendToolMessage(
+                        toolCallID: call.externalID,
+                        payload: "Blocked: Plan mode is active and no plan has been approved yet. Emit a ```plan``` block listing the steps you intend to take, then stop and wait for the user to approve."
+                    )
                     continue
                 }
 
