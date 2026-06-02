@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.43.0-rc1 - 2026-06-02
+
+- Added a Claude-Code-style stats dashboard to Agent mode's empty state. When there's at least one persisted session, the new-chat screen shows "What's up next, $USER?" plus an Overview / Models tab and an All / 30d / 7d range selector, with eight stat cells (Sessions / Messages / Tokens / Active days / Current streak / Longest streak / Peak hour / Favorite model), a GitHub-style 12-week × 7-day activity heatmap colored by message density, and a fun-fact line comparing token usage to War and Peace. Fresh installs without sessions keep the simple hero.
+- Added `AgentUsageStats` (pure analytics over `[AgentSession]`) computing the overview snapshot and heatmap. Streaks are calendar-day runs; the current streak only counts when today is active; favorite model is the modelID with the most messages across all sessions.
+- Started capturing real token usage. `AgentClient.streamChat` now sends `stream_options.include_usage: true` (OpenAI requires it, DashScope/DeepSeek ignore it harmlessly), decodes the final-chunk `usage` block, and emits a new `.usageReported(prompt:completion:total:)` event. AppState stamps the running assistant message's new `AgentMessage.usageTokens` field with the total. Older messages without it fall back to the chars/4 estimator, and the dashboard labels the cell "Tokens (est.)" until at least one real number lands.
+- Codable bumped for `AgentMessage.usageTokens` with `decodeIfPresent`, so existing session JSON keeps loading cleanly.
+- Added unit tests for usage-stats totals, current-streak with-and-without today, and heatmap shape.
+
 ## 1.42.0-rc1 - 2026-06-02
 
 - Collapsed consecutive same-kind Agent tool calls into a single codex-style row in Agent mode. Three back-to-back `run_command` calls now render as "已运行 3 条命令"; four reads/searches/lists render as "已探索 4 个文件". Click the row to see the underlying calls; click an individual call for the full payload. `ask_user` tool calls and patch proposals always stay full-size because they require interaction.

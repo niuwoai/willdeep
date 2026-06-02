@@ -24,6 +24,10 @@ enum AgentClientEvent {
     case toolCallsUpdated([AgentMessageToolCall])
     /// Finish reason reported by the provider (e.g. "stop", "tool_calls").
     case finishedTurn(String?)
+    /// Token usage emitted by the provider on the final streaming chunk
+    /// (OpenAI-compatible `usage.total_tokens`). Not every provider
+    /// includes it; absent → caller falls back to the estimator.
+    case usageReported(prompt: Int, completion: Int, total: Int)
 }
 
 struct AgentClient {
@@ -136,6 +140,18 @@ struct AgentClient {
                 if let finishReason = choice.finish_reason {
                     await onEvent(.finishedTurn(finishReason))
                 }
+            }
+
+            // Top-level `usage` arrives on the final chunk for providers
+            // that include it. We surface it once so the caller can stamp
+            // the last assistant message with real token counts.
+            if let usage = chunk.usage,
+               let total = usage.total_tokens, total > 0 {
+                await onEvent(.usageReported(
+                    prompt: usage.prompt_tokens ?? 0,
+                    completion: usage.completion_tokens ?? 0,
+                    total: total
+                ))
             }
         }
     }
@@ -287,6 +303,11 @@ struct AgentClient {
         var body: [String: Any] = [
             "model": model,
             "stream": true,
+            // OpenAI requires this flag to include the final `usage`
+            // chunk in a streaming response. DashScope / DeepSeek / Kimi
+            // all ignore it harmlessly when they already emit usage by
+            // default, so it's safe to send unconditionally.
+            "stream_options": ["include_usage": true],
             "messages": providerMessages.map { encodeMessage($0, supportsImages: supportsImages) }
         ]
         if !tools.isEmpty {
@@ -573,6 +594,10 @@ struct AgentClient {
 
 private struct ChatCompletionChunk: Decodable {
     let choices: [Choice]
+    /// OpenAI-compatible usage block. Only the final streaming chunk
+    /// carries it (and only when `stream_options.include_usage = true`
+    /// or the provider sends it by default — DashScope/DeepSeek do).
+    let usage: Usage?
 
     struct Choice: Decodable {
         let delta: Delta
@@ -594,6 +619,12 @@ private struct ChatCompletionChunk: Decodable {
     struct FunctionDelta: Decodable {
         let name: String?
         let arguments: String?
+    }
+
+    struct Usage: Decodable {
+        let prompt_tokens: Int?
+        let completion_tokens: Int?
+        let total_tokens: Int?
     }
 }
 

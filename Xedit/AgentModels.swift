@@ -63,6 +63,11 @@ struct AgentMessage: Identifiable, Codable, Equatable {
     /// When `role == .tool`, the external id of the assistant tool_call this
     /// message answers.
     var toolCallID: String?
+    /// Real prompt+completion tokens reported by the provider for the
+    /// turn that produced this assistant message. Only assistant
+    /// messages populate this. Older sessions without it fall back to
+    /// the chars/4 estimator.
+    var usageTokens: Int?
     let createdAt: Date
 
     nonisolated init(
@@ -73,6 +78,7 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         images: [AgentImageAttachment] = [],
         toolCalls: [AgentMessageToolCall] = [],
         toolCallID: String? = nil,
+        usageTokens: Int? = nil,
         createdAt: Date = Date()
     ) {
         self.id = id
@@ -82,6 +88,7 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         self.images = images
         self.toolCalls = toolCalls
         self.toolCallID = toolCallID
+        self.usageTokens = usageTokens
         self.createdAt = createdAt
     }
 
@@ -94,6 +101,7 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         images = try container.decodeIfPresent([AgentImageAttachment].self, forKey: .images) ?? []
         toolCalls = try container.decodeIfPresent([AgentMessageToolCall].self, forKey: .toolCalls) ?? []
         toolCallID = try container.decodeIfPresent(String.self, forKey: .toolCallID)
+        usageTokens = try container.decodeIfPresent(Int.self, forKey: .usageTokens)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 }

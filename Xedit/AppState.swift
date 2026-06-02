@@ -1033,6 +1033,11 @@ final class AppState: ObservableObject {
                             latestToolCalls = calls
                         case .finishedTurn(let reason):
                             finishReason = reason
+                        case .usageReported(_, _, let total):
+                            // Stamp real token usage on the assistant
+                            // message so AgentUsageStats can show actual
+                            // totals instead of falling back to estimates.
+                            self.agentMessages[index].usageTokens = total
                         }
                     }
                 }
