@@ -169,6 +169,7 @@ private struct AgentSessionsSidebar: View {
     private func workspaceGroup(workspace: String, sessions: [AgentSession]) -> some View {
         let isExpanded = expandedWorkspaces.contains(workspace)
         let visible = isExpanded ? sessions : Array(sessions.prefix(initialRowCount))
+        let hasRealWorkspace = workspace != "_no_workspace_"
 
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
@@ -183,6 +184,12 @@ private struct AgentSessionsSidebar: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 4)
+            .contentShape(Rectangle())
+            .contextMenu {
+                Button("New Chat in this Workspace") {
+                    appState.startNewAgentSession(inWorkspaceAt: hasRealWorkspace ? workspace : nil)
+                }
+            }
 
             ForEach(visible) { session in
                 sessionRow(session)
@@ -416,7 +423,12 @@ private struct AgentChatTranscript: View {
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                     }
 
-                    if !appState.agentWorktreeChanges.isEmpty {
+                    // Only show the worktree-change card once the Agent has
+                    // actually applied a patch in this session — otherwise a
+                    // brand-new chat opened inside a git repo with unrelated
+                    // uncommitted changes would surface a misleading
+                    // "正在编辑 / N 个文件已更改" banner.
+                    if appState.agentSessionDidEditFiles && !appState.agentWorktreeChanges.isEmpty {
                         AgentWorktreeChangeCard()
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                     }
@@ -1131,7 +1143,7 @@ private struct AgentChatStatusBar: View {
                 Text("No workspace")
             }
 
-            if !appState.agentWorktreeChanges.isEmpty {
+            if appState.agentSessionDidEditFiles && !appState.agentWorktreeChanges.isEmpty {
                 AgentWorktreeSummaryPill()
             }
 

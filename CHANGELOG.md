@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.43.0-rc5 - 2026-06-02
+
+- Fixed the Agent worktree-change card ("正在编辑 / N 个文件已更改") appearing in brand-new chats. The condition was just `!agentWorktreeChanges.isEmpty`, which surfaces any uncommitted change in the repo — so opening a New Chat inside a git workspace with unrelated dirty files showed a misleading banner (sometimes with thousands of files and SHA-like filenames). Now gated on a per-session `didEditFiles` flag that flips to true only after `applyAgentPatch` successfully writes at least one file. `AgentSession.didEditFiles` persists through session JSON (decoded with `decodeIfPresent` so older sessions keep loading), and `agentSessionDidEditFiles` on `AppState` mirrors it for the active session — reset on new-session / select-session / delete-session, restored on session restore. The card is suppressed in both Agent-mode transcript, Agent side-panel, and the editor status-bar pill.
+- Added a right-click "New Chat in this Workspace" context menu on the Agent-mode sidebar workspace rows. Selecting it switches the current window's `rootDirectory` to that workspace (via the existing `openFolderURL` path, so FileTree / git / Quick Open / security scope all follow), then creates a fresh session grouped under it. The "No workspace" group keeps working too (creates a session with no root, no folder switch).
+
 ## 1.43.0-rc4 - 2026-06-02
 
 - Added a proper GitHub-facing `README.md`. The repo was previously surfacing only `product-overview.md` (an internal capability matrix), which is dense and unfriendly to a first-time visitor. The new README leads with the "why", lists actual existing features (editor performance posture, file-tree-only-on-explicit-open, agent mode + BYOK + tools + diff proposals + auto-approval + context compression + queued sends, CLI, Quick Open cache, etc.), and includes a keyboard map, install/build instructions, philosophy, and contribution notes. Strictly documentation — no behavioral change.
