@@ -130,6 +130,17 @@ struct ContentView: View {
         !appState.isFocusModeEnabled && rootNode != nil && !isEditorMaximized
     }
 
+    /// Floating "Enter Agent Mode" pill is meaningful only when a real
+    /// workspace is open — Agent mode needs project context — and the
+    /// editor isn't currently in focus/maximized mode (would collide
+    /// with the chrome-free intent).
+    private var shouldShowEnterAgentButton: Bool {
+        appState.rootDirectory != nil
+            && appState.appMode == .editor
+            && !appState.isFocusModeEnabled
+            && !isEditorMaximized
+    }
+
     @ViewBuilder
     private var sidebarControl: some View {
         if shouldShowSidebarControl && shouldShowSidebar {
@@ -153,7 +164,11 @@ struct ContentView: View {
                         EditorTabBar(
                             tabs: appState.tabs,
                             activeTabID: appState.activeTabID,
+                            // Reserve room on the right for the floating
+                            // Agent-mode toggle so the rightmost tab's
+                            // close button doesn't slip under it.
                             leadingReserve: tabBarLeadingReserve,
+                            trailingReserve: shouldShowEnterAgentButton ? 72 : 0,
                             onSelect: { appState.activateTab(id: $0) },
                             onClose: { appState.closeTab(id: $0) },
                             onDoubleClick: { id in
@@ -161,6 +176,12 @@ struct ContentView: View {
                                 toggleEditorMaximized()
                             }
                         )
+                        .overlay(alignment: .trailing) {
+                            if shouldShowEnterAgentButton {
+                                EnterAgentModeButton()
+                                    .padding(.trailing, 12)
+                            }
+                        }
                     }
 
                     if appState.isFindBarVisible && !appState.isFocusModeEnabled {
@@ -269,6 +290,13 @@ struct ContentView: View {
                             appState.openFile()
                         }
                         .frame(minWidth: 400, minHeight: 400)
+                        .overlay(alignment: .topTrailing) {
+                            if shouldShowEnterAgentButton {
+                                EnterAgentModeButton()
+                                    .padding(.top, 10)
+                                    .padding(.trailing, 12)
+                            }
+                        }
                     }
                 }
             }
@@ -677,6 +705,7 @@ private struct EmptyWorkspaceView: View {
 }
 
 private struct EmptyWorkspaceHero: View {
+    @EnvironmentObject var appState: AppState
     let onOpenFile: () -> Void
     let onOpenFolder: () -> Void
 
@@ -690,9 +719,10 @@ private struct EmptyWorkspaceHero: View {
                 Text("No Folder Open")
                     .font(.system(size: 28, weight: .semibold))
                     .foregroundStyle(.primary)
-                Text("Choose a file or folder to start editing.")
+                Text("Choose a file or folder to start editing — or jump straight into Agent mode for a workspace-free chat.")
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
 
             HStack(spacing: 10) {
@@ -713,6 +743,15 @@ private struct EmptyWorkspaceHero: View {
                 .buttonStyle(EmptyWorkspaceButtonStyle())
                 .help("Open Folder")
                 .accessibilityLabel("Open Folder")
+
+                Button {
+                    appState.setAppMode(.agent)
+                } label: {
+                    Label("Agent Mode", systemImage: "sparkles")
+                }
+                .buttonStyle(EmptyWorkspaceButtonStyle(tint: .accentColor))
+                .help("Enter Agent mode (⌘⇧A)")
+                .accessibilityLabel("Enter Agent Mode")
             }
             .labelStyle(.titleAndIcon)
         }
@@ -783,20 +822,25 @@ private struct EmptyWorkspaceRecentSection: View {
 }
 
 private struct EmptyWorkspaceButtonStyle: ButtonStyle {
+    /// Optional accent — when non-nil the button fills with this color
+    /// and renders white-on-color (used for the "primary call to
+    /// action" button in the empty-state hero).
+    var tint: Color? = nil
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(.primary)
+            .foregroundStyle(tint == nil ? Color.primary : Color.white)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .fill(tint ?? Color(nsColor: .controlBackgroundColor))
                     .shadow(color: .black.opacity(configuration.isPressed ? 0.04 : 0.08), radius: 8, y: 3)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color.primary.opacity(0.08))
+                    .stroke(tint == nil ? Color.primary.opacity(0.08) : Color.clear)
             )
             .opacity(configuration.isPressed ? 0.72 : 1)
     }
@@ -2119,6 +2163,7 @@ struct MarkdownPreviewBlock: Equatable {
         case orderedList
         case code
         case divider
+        case table
     }
 
     let kind: Kind
@@ -2127,6 +2172,16 @@ struct MarkdownPreviewBlock: Equatable {
     /// to carry the language hint after the opening ``` (e.g. "tsx",
     /// "swift", "bash"). Nil for every other block kind.
     var info: String? = nil
+    /// Header cells for `.table` blocks. Nil for every other kind.
+    var tableHeaders: [String]? = nil
+    /// Body rows for `.table` blocks. Each row is a flat array of cell
+    /// strings, already trimmed and inline-Markdown-ready. Nil for
+    /// every other kind.
+    var tableRows: [[String]]? = nil
+    /// Indentation level for list blocks (0 = top-level). 2-space and
+    /// 4-space leading indentation both count as one level. Always 0
+    /// for non-list blocks.
+    var indent: Int = 0
 }
 
 enum MarkdownPreviewParser {
@@ -2164,7 +2219,9 @@ enum MarkdownPreviewParser {
             codeLanguage = nil
         }
 
-        for line in lines {
+        var i = 0
+        while i < lines.count {
+            let line = lines[i]
             let trimmedLine = line.trimmingCharacters(in: .whitespaces)
             if trimmedLine.hasPrefix("```") {
                 if isInCodeBlock {
@@ -2178,51 +2235,81 @@ enum MarkdownPreviewParser {
                     let hint = String(trimmedLine.dropFirst(3)).trimmingCharacters(in: .whitespaces)
                     codeLanguage = hint.isEmpty ? nil : hint
                 }
-                continue
+                i += 1; continue
             }
 
             if isInCodeBlock {
                 code.append(line)
-                continue
+                i += 1; continue
             }
 
             if trimmedLine.isEmpty {
                 flushParagraph()
-                continue
+                i += 1; continue
             }
 
             if trimmedLine == "---" || trimmedLine == "***" || trimmedLine == "___" {
                 flushParagraph()
                 blocks.append(MarkdownPreviewBlock(kind: .divider, text: ""))
-                continue
+                i += 1; continue
             }
 
             if let heading = headingBlock(from: trimmedLine) {
                 flushParagraph()
                 blocks.append(heading)
-                continue
+                i += 1; continue
             }
 
             if trimmedLine.hasPrefix(">") {
                 flushParagraph()
                 let quote = trimmedLine.dropFirst().trimmingCharacters(in: .whitespaces)
                 blocks.append(MarkdownPreviewBlock(kind: .quote, text: quote))
+                i += 1; continue
+            }
+
+            // GFM table — header row + alignment row + zero or more
+            // body rows. Header has to be a pipe-delimited line; the
+            // immediately following line must match the alignment row
+            // pattern (cells of `:?---+:?`). Without the alignment row
+            // we treat the pipe-delimited line as paragraph text so
+            // accidental single `|`-laden prose doesn't get hijacked.
+            if isPipeRow(trimmedLine),
+               i + 1 < lines.count,
+               isAlignmentRow(lines[i + 1].trimmingCharacters(in: .whitespaces)) {
+                flushParagraph()
+                let headers = parseRow(trimmedLine)
+                var rows: [[String]] = []
+                var j = i + 2
+                while j < lines.count {
+                    let nextTrim = lines[j].trimmingCharacters(in: .whitespaces)
+                    guard isPipeRow(nextTrim) else { break }
+                    rows.append(parseRow(nextTrim))
+                    j += 1
+                }
+                blocks.append(MarkdownPreviewBlock(
+                    kind: .table,
+                    text: "",
+                    tableHeaders: headers,
+                    tableRows: rows
+                ))
+                i = j
                 continue
             }
 
-            if trimmedLine.hasPrefix("- ") || trimmedLine.hasPrefix("* ") {
+            if let (indent, body) = listItem(from: line, unordered: true) {
                 flushParagraph()
-                blocks.append(MarkdownPreviewBlock(kind: .unorderedList, text: String(trimmedLine.dropFirst(2))))
-                continue
+                blocks.append(MarkdownPreviewBlock(kind: .unorderedList, text: body, indent: indent))
+                i += 1; continue
             }
 
-            if let ordered = orderedListText(from: trimmedLine) {
+            if let (indent, body) = listItem(from: line, unordered: false) {
                 flushParagraph()
-                blocks.append(MarkdownPreviewBlock(kind: .orderedList, text: ordered))
-                continue
+                blocks.append(MarkdownPreviewBlock(kind: .orderedList, text: body, indent: indent))
+                i += 1; continue
             }
 
             paragraph.append(trimmedLine)
+            i += 1
         }
 
         if isInCodeBlock {
@@ -2230,6 +2317,49 @@ enum MarkdownPreviewParser {
         }
         flushParagraph()
         return blocks
+    }
+
+    /// A pipe-delimited row: starts with `|`, ends with `|`, and has at
+    /// least two cells. Models often forget the leading `|` — allow
+    /// "cell | cell | cell" as long as there's at least one internal
+    /// `|` and the line doesn't look like a list item.
+    private static func isPipeRow(_ line: String) -> Bool {
+        guard line.contains("|") else { return false }
+        // Avoid eating list items like "- some | thing".
+        if line.hasPrefix("- ") || line.hasPrefix("* ") { return false }
+        // Strict form: leading and trailing pipe.
+        if line.hasPrefix("|") && line.hasSuffix("|") && line.count >= 3 {
+            return true
+        }
+        // Looser form: at least one internal `|` (so there are at least
+        // two cells). Conservative — we still require the alignment
+        // row immediately after to actually commit to table parsing,
+        // so an offhand pipe in prose won't hijack the parser.
+        return line.components(separatedBy: "|").count >= 2
+    }
+
+    /// Alignment row: cells of optional `:`, `---+`, optional `:`,
+    /// separated by `|`. e.g. `|---|:---:|---:|`. Lenient about extra
+    /// outer pipes / whitespace.
+    private static func isAlignmentRow(_ line: String) -> Bool {
+        guard line.contains("|"), line.contains("-") else { return false }
+        let trimmed = line.trimmingCharacters(in: CharacterSet(charactersIn: "|"))
+        let cells = trimmed.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard !cells.isEmpty else { return false }
+        return cells.allSatisfy { cell in
+            guard !cell.isEmpty else { return false }
+            var c = cell
+            if c.hasPrefix(":") { c = String(c.dropFirst()) }
+            if c.hasSuffix(":") { c = String(c.dropLast()) }
+            return !c.isEmpty && c.allSatisfy { $0 == "-" }
+        }
+    }
+
+    /// Split a pipe-delimited row into trimmed cell strings, dropping
+    /// the leading/trailing empty cells caused by `|` at either end.
+    private static func parseRow(_ line: String) -> [String] {
+        let trimmed = line.trimmingCharacters(in: CharacterSet(charactersIn: "|"))
+        return trimmed.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
     }
 
     private static func headingBlock(from line: String) -> MarkdownPreviewBlock? {
@@ -2248,6 +2378,43 @@ enum MarkdownPreviewParser {
         let afterDot = line[line.index(after: dotIndex)...]
         guard afterDot.hasPrefix(" ") else { return nil }
         return String(afterDot.dropFirst())
+    }
+
+    /// Detect a list item line. Reads the raw (un-trimmed) line so we
+    /// can count leading spaces / tabs as indentation. Returns
+    /// `(indent, body)` on match; `indent` is the nesting level
+    /// (`leadingSpaces / 2`, tabs count as 4 spaces). `unordered`
+    /// selects bullet (`- ` / `* `) vs ordered (`N. `).
+    private static func listItem(from rawLine: String, unordered: Bool) -> (Int, String)? {
+        var spaces = 0
+        var i = rawLine.startIndex
+        while i < rawLine.endIndex {
+            let ch = rawLine[i]
+            if ch == " " { spaces += 1 }
+            else if ch == "\t" { spaces += 4 }
+            else { break }
+            i = rawLine.index(after: i)
+        }
+        guard i < rawLine.endIndex else { return nil }
+        let rest = rawLine[i...]
+        if unordered {
+            if rest.hasPrefix("- ") || rest.hasPrefix("* ") {
+                let body = String(rest.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+                return (spaces / 2, body)
+            }
+        } else {
+            if let dotIndex = rest.firstIndex(of: ".") {
+                let number = rest[..<dotIndex]
+                if !number.isEmpty, number.allSatisfy(\.isNumber) {
+                    let afterDot = rest[rest.index(after: dotIndex)...]
+                    if afterDot.hasPrefix(" ") {
+                        let body = String(afterDot.dropFirst()).trimmingCharacters(in: .whitespaces)
+                        return (spaces / 2, body)
+                    }
+                }
+            }
+        }
+        return nil
     }
 }
 
@@ -2368,10 +2535,12 @@ struct MarkdownPreviewBlockView: View {
             .padding(.vertical, 4)
         case .unorderedList:
             HStack(alignment: .top, spacing: 8) {
-                Text("•")
+                Text(bulletGlyph(for: block.indent))
+                    .foregroundColor(.secondary)
                 Text(inlineText(block.text))
             }
             .font(.body)
+            .padding(.leading, listIndentPadding(block.indent))
         case .orderedList:
             HStack(alignment: .top, spacing: 8) {
                 Text("1.")
@@ -2379,11 +2548,17 @@ struct MarkdownPreviewBlockView: View {
                 Text(inlineText(block.text))
             }
             .font(.body)
+            .padding(.leading, listIndentPadding(block.indent))
         case .code:
             MarkdownCodeBlockView(text: block.text, languageHint: block.info)
         case .divider:
             Divider()
                 .padding(.vertical, 8)
+        case .table:
+            MarkdownTableBlockView(
+                headers: block.tableHeaders ?? [],
+                rows: block.tableRows ?? []
+            )
         }
     }
 
@@ -2397,7 +2572,127 @@ struct MarkdownPreviewBlockView: View {
     }
 
     private func inlineText(_ text: String) -> AttributedString {
-        (try? AttributedString(markdown: text)) ?? AttributedString(text)
+        MarkdownInline.attributedString(from: text)
+    }
+
+    /// Bullet glyph cycles by nesting level so the eye can pick out
+    /// sub-lists at a glance. Caps at level 2 (▪).
+    private func bulletGlyph(for indent: Int) -> String {
+        switch indent {
+        case 0: return "•"
+        case 1: return "◦"
+        default: return "▪"
+        }
+    }
+
+    /// 18pt of left padding per nesting level — enough to read as
+    /// "child of the previous item" without pushing the text off the
+    /// chat column.
+    private func listIndentPadding(_ indent: Int) -> CGFloat {
+        CGFloat(min(indent, 4)) * 18
+    }
+}
+
+/// Inline-Markdown helper used by every block renderer. Wraps
+/// `AttributedString(markdown:)` and then walks the runs to give
+/// `inlineCode` spans the monospace-with-tinted-background treatment
+/// that Apple's built-in renderer skips. Centralised here so headings,
+/// paragraphs, quotes, list items, and table cells stay visually
+/// consistent.
+enum MarkdownInline {
+    static func attributedString(from raw: String) -> AttributedString {
+        guard var attributed = try? AttributedString(markdown: raw) else {
+            return AttributedString(raw)
+        }
+        // SwiftUI's parsed AttributedString tags inline code runs with
+        // .code; we re-style those runs to look like a real code chip:
+        // monospaced font + light grey pill background.
+        for run in attributed.runs {
+            guard let intent = run.inlinePresentationIntent,
+                  intent.contains(.code) else { continue }
+            attributed[run.range].font = .system(.body, design: .monospaced)
+            attributed[run.range].backgroundColor = Color.primary.opacity(0.08)
+            attributed[run.range].foregroundColor = Color(nsColor: .labelColor)
+        }
+        return attributed
+    }
+}
+
+// MARK: - Table block view
+
+/// Renders a GFM-style pipe table. Header row bold + lightly tinted;
+/// body rows alternating background for legibility. The whole table sits
+/// in a horizontal ScrollView so wide tables don't squeeze the chat
+/// column. Inline Markdown (e.g. `code`, **bold**) inside cells is
+/// rendered via `AttributedString(markdown:)` just like paragraph text.
+struct MarkdownTableBlockView: View {
+    let headers: [String]
+    let rows: [[String]]
+
+    private var columnCount: Int {
+        max(headers.count, rows.map(\.count).max() ?? 0)
+    }
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                if !headers.isEmpty {
+                    headerRow
+                    Divider()
+                }
+                ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                    bodyRow(row, isOdd: index % 2 == 1)
+                    if index < rows.count - 1 {
+                        Divider().opacity(0.4)
+                    }
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.45))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(Color.primary.opacity(0.10), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+    }
+
+    @ViewBuilder
+    private var headerRow: some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(0..<columnCount, id: \.self) { col in
+                cell(text: col < headers.count ? headers[col] : "", isHeader: true)
+            }
+        }
+        .background(Color.primary.opacity(0.05))
+    }
+
+    @ViewBuilder
+    private func bodyRow(_ row: [String], isOdd: Bool) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(0..<columnCount, id: \.self) { col in
+                cell(text: col < row.count ? row[col] : "", isHeader: false)
+            }
+        }
+        .background(isOdd ? Color.primary.opacity(0.025) : Color.clear)
+    }
+
+    @ViewBuilder
+    private func cell(text: String, isHeader: Bool) -> some View {
+        Text(MarkdownInline.attributedString(from: text))
+            .font(.system(size: 12, weight: isHeader ? .semibold : .regular))
+            .foregroundStyle(isHeader ? .primary : .primary)
+            .textSelection(.enabled)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(minWidth: 80, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .overlay(alignment: .trailing) {
+                Divider()
+                    .opacity(0.25)
+            }
     }
 }
 
@@ -2854,6 +3149,9 @@ private struct EditorTabBar: View {
     let tabs: [EditorTab]
     let activeTabID: EditorTab.ID?
     let leadingReserve: CGFloat
+    /// Extra space at the trailing edge so a floating overlay (e.g. the
+    /// Enter Agent Mode button) doesn't sit on top of a tab.
+    var trailingReserve: CGFloat = 0
     let onSelect: (EditorTab.ID) -> Void
     let onClose: (EditorTab.ID) -> Void
     let onDoubleClick: (EditorTab.ID) -> Void
@@ -2894,9 +3192,36 @@ private struct EditorTabBar: View {
                 }
             }
             .padding(.leading, 8 + leadingReserve)
-            .padding(.trailing, 8)
+            .padding(.trailing, 8 + trailingReserve)
             .padding(.vertical, 6)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+}
+
+/// Small floating pill anchored to the right of the editor tab bar that
+/// flips the window into Agent mode. Only meaningful when a workspace
+/// is open (otherwise Agent mode lands on an empty New Chat with no
+/// project context), so it shows up alongside the regular tab bar.
+private struct EnterAgentModeButton: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        Button {
+            appState.setAppMode(.agent)
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("Agent")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .foregroundStyle(Color.white)
+            .background(Capsule(style: .continuous).fill(Color.accentColor))
+        }
+        .buttonStyle(.plain)
+        .help("Switch this window into Agent mode (⌘⇧A)")
     }
 }

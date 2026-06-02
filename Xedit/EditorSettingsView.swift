@@ -253,32 +253,15 @@ struct EditorSettingsView: View {
 
     private var agentSettings: some View {
         Form {
-            Section("Agent") {
-                Picker("Provider", selection: agentProviderBinding) {
-                    ForEach(AgentProviderPreset.all) { provider in
-                        Text(provider.displayName).tag(provider.id)
+            Section("Agent Providers") {
+                AgentProviderLibrarySection(
+                    fetchedAgentModels: $fetchedAgentModels,
+                    isFetchingAgentModels: $isFetchingAgentModels,
+                    agentModelFetchMessage: $agentModelFetchMessage,
+                    onFetchModels: { entry in
+                        fetchAgentModels(forEntry: entry)
                     }
-                }
-
-                TextField("Base URL", text: $agentBaseURLBuffer)
-                    .textFieldStyle(.roundedBorder)
-
-                Picker("Routing", selection: $agentRoutingModeBuffer) {
-                    ForEach(AgentModelRoutingMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                Text(agentRoutingModeBuffer.description)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                agentModelField("Flash Model", text: $agentFlashModelBuffer, models: fetchedAgentModels)
-                agentModelField("Pro Model", text: $agentProModelBuffer, models: fetchedAgentModels)
-
-                SecureField("API Key", text: $agentAPIKeyBuffer)
-                    .textFieldStyle(.roundedBorder)
+                )
             }
 
             Section("Image Understanding") {
@@ -371,14 +354,12 @@ struct EditorSettingsView: View {
         }
     }
 
+    /// Save button now only covers the Image Understanding fields and
+    /// routing mode — all the per-provider Agent fields are managed
+    /// live by the new `AgentProviderLibrarySection`.
     private var agentBuffersDiffer: Bool {
         let configuration = appState.agentConfiguration
-        return agentBaseURLBuffer != configuration.baseURL
-            || agentModelBuffer != configuration.model
-            || agentFlashModelBuffer != configuration.flashModel
-            || agentProModelBuffer != configuration.proModel
-            || agentRoutingModeBuffer != configuration.routingMode
-            || agentAPIKeyBuffer != configuration.apiKey
+        return agentRoutingModeBuffer != configuration.routingMode
             || imageProviderIDBuffer != configuration.imageDescription.providerID
             || imageBaseURLBuffer != configuration.imageDescription.baseURL
             || imageModelBuffer != configuration.imageDescription.model
@@ -401,12 +382,7 @@ struct EditorSettingsView: View {
 
     private func commitAgentBuffers() {
         var configuration = appState.agentConfiguration
-        configuration.baseURL = agentBaseURLBuffer
-        configuration.model = agentModelBuffer
-        configuration.flashModel = agentFlashModelBuffer
-        configuration.proModel = agentProModelBuffer
         configuration.routingMode = agentRoutingModeBuffer
-        configuration.apiKey = agentAPIKeyBuffer
         configuration.imageDescription = AgentImageDescriptionConfiguration(
             providerID: imageProviderIDBuffer,
             baseURL: imageBaseURLBuffer,
@@ -414,11 +390,8 @@ struct EditorSettingsView: View {
             apiKey: imageAPIKeyBuffer
         )
         appState.agentConfiguration = configuration.normalized
-        // Reflect any normalization (trim, fallback baseURL) back into
-        // the buffer so the user sees what was actually saved.
         loadAgentBuffersFromAppState()
         agentSaveStatus = "Saved."
-        // Clear the status after a beat so it doesn't linger forever.
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_800_000_000)
             if agentSaveStatus == "Saved." { agentSaveStatus = "" }
@@ -619,6 +592,41 @@ struct EditorSettingsView: View {
         }
     }
 
+    /// Fetch /models from a specific library entry (as opposed to the
+    /// currently active configuration). Used by the multi-provider
+    /// section so each row can pull its own model list independently
+    /// of which entry is currently active in the chat.
+    private func fetchAgentModels(forEntry entry: AgentProviderEntry) {
+        isFetchingAgentModels = true
+        agentModelFetchMessage = ""
+        let configuration = entry.makeConfiguration().normalized
+
+        Task {
+            let result: Result<[String], Error>
+            do {
+                let models = try await AgentClient(configuration: configuration).fetchModels()
+                result = .success(models)
+            } catch {
+                result = .failure(error)
+            }
+
+            await MainActor.run {
+                isFetchingAgentModels = false
+                switch result {
+                case .success(let models):
+                    fetchedAgentModels = models
+                    appState.recordFetchedAgentModels(models)
+                    agentModelFetchMessage = models.isEmpty
+                        ? "No models returned."
+                        : "Fetched \(models.count) models for \(entry.displayName)."
+                case .failure(let error):
+                    fetchedAgentModels = []
+                    agentModelFetchMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
     private func fetchImageModels() {
         isFetchingImageModels = true
         imageModelFetchMessage = ""
@@ -792,5 +800,371 @@ private struct ThemeSwatch: View {
             RoundedRectangle(cornerRadius: 4)
                 .stroke(Color(nsColor: theme.gutterTextColor).opacity(0.45), lineWidth: 1)
         )
+    }
+}
+
+// MARK: - Agent provider library section
+
+/// Phase C: Settings UI for the multi-provider library. Left pane lists
+/// the user's saved providers with active-marker / add / remove
+/// controls; right pane edits the selected entry's preset, base URL,
+/// API key, flash primary + alternates, pro primary + alternates,
+/// with a Fetch Models button that pulls per-entry. Edits commit
+/// immediately to `appState.agentProviderLibrary` (no Save button) —
+/// the legacy single-config Save flow continues to cover Image
+/// Understanding and routing.
+struct AgentProviderLibrarySection: View {
+    @EnvironmentObject var appState: AppState
+    @Binding var fetchedAgentModels: [String]
+    @Binding var isFetchingAgentModels: Bool
+    @Binding var agentModelFetchMessage: String
+    let onFetchModels: (AgentProviderEntry) -> Void
+
+    @State private var selectedEntryID: UUID?
+
+    private var selectedEntry: AgentProviderEntry? {
+        guard let id = selectedEntryID else { return nil }
+        return appState.agentProviderLibrary.entries.first(where: { $0.id == id })
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
+                providerList
+                    .frame(width: 170)
+                Divider()
+                editorPane
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            Text("Edits to a provider entry save immediately. The active provider (★) drives the next chat turn; switch active by clicking the star.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .onAppear(perform: ensureSelection)
+        .onChange(of: appState.agentProviderLibrary.activeID) { _, _ in
+            ensureSelection()
+        }
+    }
+
+    private var providerList: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 2) {
+                    ForEach(appState.agentProviderLibrary.entries) { entry in
+                        providerRow(entry)
+                    }
+                }
+            }
+            .frame(minHeight: 220)
+            HStack(spacing: 4) {
+                Button {
+                    addEntry()
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .help("Add provider")
+
+                Button {
+                    if let id = selectedEntryID {
+                        appState.removeProviderLibraryEntry(id: id)
+                        selectedEntryID = appState.agentProviderLibrary.entries.first?.id
+                    }
+                } label: {
+                    Image(systemName: "minus")
+                }
+                .disabled(selectedEntryID == nil || appState.agentProviderLibrary.entries.count <= 1)
+                .help("Remove selected provider")
+
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func providerRow(_ entry: AgentProviderEntry) -> some View {
+        let isSelected = selectedEntryID == entry.id
+        let isActive = appState.agentProviderLibrary.activeID == entry.id
+        HStack(spacing: 6) {
+            Button {
+                appState.setActiveProviderLibraryEntry(id: entry.id)
+            } label: {
+                Image(systemName: isActive ? "star.fill" : "star")
+                    .font(.system(size: 11))
+                    .foregroundStyle(isActive ? Color.yellow : Color.secondary.opacity(0.5))
+            }
+            .buttonStyle(.plain)
+            .help(isActive ? "Active provider" : "Make active")
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(entry.displayName)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Text(entry.flashPrimary)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .background(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedEntryID = entry.id
+        }
+    }
+
+    @ViewBuilder
+    private var editorPane: some View {
+        if let entry = selectedEntry {
+            AgentProviderEntryEditor(
+                entry: entry,
+                fetchedAgentModels: fetchedAgentModels,
+                isFetchingAgentModels: isFetchingAgentModels,
+                agentModelFetchMessage: agentModelFetchMessage,
+                onFetch: { onFetchModels(entry) },
+                onChange: { updated in
+                    appState.upsertProviderLibraryEntry(updated)
+                }
+            )
+        } else {
+            Text("Pick a provider on the left, or add one with +")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(8)
+        }
+    }
+
+    private func addEntry() {
+        // Default new entries to the OpenAI preset so the user has
+        // something to overwrite immediately.
+        let preset = AgentProviderPreset.preset(id: AgentProviderPreset.openAIID) ?? AgentProviderPreset.all[0]
+        let entry = AgentProviderEntry(
+            providerID: preset.id,
+            baseURL: preset.baseURL,
+            apiKey: "",
+            flashPrimary: preset.defaultFlashModel,
+            proPrimary: preset.defaultProModel
+        )
+        appState.upsertProviderLibraryEntry(entry)
+        selectedEntryID = entry.id
+    }
+
+    private func ensureSelection() {
+        if selectedEntryID == nil
+            || appState.agentProviderLibrary.entries.first(where: { $0.id == selectedEntryID }) == nil {
+            selectedEntryID = appState.agentProviderLibrary.activeID
+                ?? appState.agentProviderLibrary.entries.first?.id
+        }
+    }
+}
+
+/// Right-pane editor for one library entry. State buffers locally to
+/// keep typing snappy; commits to AppState on `.onChange` so there's
+/// no Save button to forget.
+private struct AgentProviderEntryEditor: View {
+    let entry: AgentProviderEntry
+    let fetchedAgentModels: [String]
+    let isFetchingAgentModels: Bool
+    let agentModelFetchMessage: String
+    let onFetch: () -> Void
+    let onChange: (AgentProviderEntry) -> Void
+
+    @State private var providerID: String = ""
+    @State private var displayName: String = ""
+    @State private var baseURL: String = ""
+    @State private var apiKey: String = ""
+    @State private var flashPrimary: String = ""
+    @State private var flashAlternatesText: String = ""
+    @State private var proPrimary: String = ""
+    @State private var proAlternatesText: String = ""
+    @State private var routingMode: AgentModelRoutingMode = .auto
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Display name")
+                    .frame(width: 100, alignment: .leading)
+                TextField("e.g. Work OpenAI", text: $displayName, onCommit: commit)
+                    .textFieldStyle(.roundedBorder)
+            }
+            HStack {
+                Text("Preset")
+                    .frame(width: 100, alignment: .leading)
+                Picker("", selection: $providerID) {
+                    ForEach(AgentProviderPreset.all) { p in
+                        Text(p.displayName).tag(p.id)
+                    }
+                }
+                .labelsHidden()
+                .onChange(of: providerID) { _, newID in
+                    // Snap to preset defaults so the user doesn't have
+                    // to retype everything when switching brands.
+                    if let preset = AgentProviderPreset.preset(id: newID), preset.id != AgentProviderPreset.customID {
+                        baseURL = preset.baseURL
+                        if !preset.recognizesModelID(flashPrimary) {
+                            flashPrimary = preset.defaultFlashModel
+                        }
+                        if !preset.recognizesModelID(proPrimary) {
+                            proPrimary = preset.defaultProModel
+                        }
+                        if displayName.isEmpty || AgentProviderPreset.all.map(\.displayName).contains(displayName) {
+                            displayName = preset.displayName
+                        }
+                    }
+                    commit()
+                }
+            }
+            HStack {
+                Text("Base URL")
+                    .frame(width: 100, alignment: .leading)
+                TextField("https://...", text: $baseURL, onCommit: commit)
+                    .textFieldStyle(.roundedBorder)
+            }
+            HStack {
+                Text("API key")
+                    .frame(width: 100, alignment: .leading)
+                SecureField("sk-...", text: $apiKey, onCommit: commit)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            Divider().padding(.vertical, 2)
+
+            modelGroup(
+                title: "Flash",
+                primaryBinding: $flashPrimary,
+                alternatesBinding: $flashAlternatesText,
+                placeholder: "e.g. gpt-4o-mini\nclaude-haiku-4-5"
+            )
+            modelGroup(
+                title: "Pro",
+                primaryBinding: $proPrimary,
+                alternatesBinding: $proAlternatesText,
+                placeholder: "e.g. gpt-4.1\nclaude-opus-4-7"
+            )
+
+            // Per-entry routing default. Each entry can prefer Auto /
+            // Flash / Pro independently — useful when one provider's
+            // Pro tier is too pricey to be the default but another's
+            // is a no-brainer.
+            HStack {
+                Text("Routing")
+                    .frame(width: 100, alignment: .leading)
+                Picker("", selection: $routingMode) {
+                    ForEach(AgentModelRoutingMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .onChange(of: routingMode) { _, _ in commit() }
+            }
+            Text(routingMode.description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.leading, 100)
+
+            HStack {
+                Button(isFetchingAgentModels ? "Fetching…" : "Fetch Models") {
+                    onFetch()
+                }
+                .disabled(isFetchingAgentModels)
+                if !agentModelFetchMessage.isEmpty {
+                    Text(agentModelFetchMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .padding(.leading, 4)
+        .onAppear(perform: loadFromEntry)
+        .onChange(of: entry.id) { _, _ in loadFromEntry() }
+    }
+
+    @ViewBuilder
+    private func modelGroup(title: String, primaryBinding: Binding<String>, alternatesBinding: Binding<String>, placeholder: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("\(title) primary")
+                    .frame(width: 100, alignment: .leading)
+                modelField(text: primaryBinding)
+            }
+            HStack(alignment: .top) {
+                Text("\(title) alternates")
+                    .frame(width: 100, alignment: .leading)
+                VStack(alignment: .leading, spacing: 2) {
+                    TextEditor(text: alternatesBinding)
+                        .font(.system(size: 12, design: .monospaced))
+                        .frame(minHeight: 48, maxHeight: 96)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
+                        )
+                        .onChange(of: alternatesBinding.wrappedValue) { _, _ in commit() }
+                    Text("One model id per line — surfaces in the chat picker as one-click switches.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func modelField(text: Binding<String>) -> some View {
+        HStack {
+            TextField("model-id", text: text, onCommit: commit)
+                .textFieldStyle(.roundedBorder)
+            if !fetchedAgentModels.isEmpty {
+                Menu {
+                    ForEach(fetchedAgentModels, id: \.self) { id in
+                        Button(id) { text.wrappedValue = id; commit() }
+                    }
+                } label: {
+                    Image(systemName: "list.bullet")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+            }
+        }
+        .onChange(of: text.wrappedValue) { _, _ in commit() }
+    }
+
+    private func loadFromEntry() {
+        providerID = entry.providerID
+        displayName = entry.displayName
+        baseURL = entry.baseURL
+        apiKey = entry.apiKey
+        flashPrimary = entry.flashPrimary
+        flashAlternatesText = entry.flashAlternates.joined(separator: "\n")
+        proPrimary = entry.proPrimary
+        proAlternatesText = entry.proAlternates.joined(separator: "\n")
+        routingMode = entry.routingMode
+    }
+
+    private func commit() {
+        let updated = AgentProviderEntry(
+            id: entry.id,
+            providerID: providerID,
+            displayName: displayName,
+            baseURL: baseURL,
+            apiKey: apiKey,
+            flashPrimary: flashPrimary,
+            flashAlternates: splitLines(flashAlternatesText),
+            proPrimary: proPrimary,
+            proAlternates: splitLines(proAlternatesText),
+            routingMode: routingMode
+        )
+        onChange(updated)
+    }
+
+    private func splitLines(_ text: String) -> [String] {
+        text.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
     }
 }

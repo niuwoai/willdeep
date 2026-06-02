@@ -67,6 +67,11 @@ enum SafeCommand {
     /// Commands whose entire output is read-only and side-effect free.
     /// Matched on the first token of a segment.
     static let alwaysSafeFirstTokens: Set<String> = [
+        // directory navigation — only changes shell state, no FS writes.
+        // Command-substitution forms like `cd $(...)` are already blocked
+        // upstream by the `$(` needle check, so we don't need to filter
+        // args here.
+        "cd", "pushd", "popd",
         // file inspection
         "cat", "head", "tail", "less", "more", "wc", "nl",
         "file", "stat", "du", "df",

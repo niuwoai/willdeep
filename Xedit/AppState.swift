@@ -78,6 +78,21 @@ final class AppState: ObservableObject {
     @Published var agentConfiguration: AgentConfiguration {
         didSet {
             AgentSettingsStore.save(agentConfiguration)
+            // Mirror back into the active library entry so the new
+            // Settings UI doesn't drift from the legacy single-cfg
+            // path. We only sync the fields that overlap (provider /
+            // baseURL / api key / flash primary / pro primary); the
+            // alternate lists are library-only and stay untouched.
+            syncActiveLibraryEntryFromConfiguration()
+        }
+    }
+    /// Multi-provider library — the durable source of truth for the
+    /// Settings rewrite (Phase C). `agentConfiguration` above is
+    /// derived from the active entry; selecting a different entry in
+    /// Settings rebuilds the configuration on the spot.
+    @Published var agentProviderLibrary: AgentProviderLibrary {
+        didSet {
+            AgentSettingsStore.saveProviderLibrary(agentProviderLibrary)
         }
     }
     @Published var agentMessages: [AgentMessage] = []
@@ -89,6 +104,39 @@ final class AppState: ObservableObject {
     @Published var agentErrorDetails: AgentErrorDetails?
     /// Images staged in the composer for the next user message.
     @Published var agentPendingImages: [AgentImageAttachment] = []
+    /// Skills the user attached via `@skill` for the next send. Each
+    /// entry's SKILL.md body gets prepended (collapsed under a header)
+    /// to the user message right before it goes out, then this list is
+    /// cleared. The popover lives in the composer; AppState only stores
+    /// the staged selection so the send path can splice them in.
+    @Published var agentPendingSkills: [AgentSkillEntry] = []
+    /// Files the user attached via the `@` picker for the next send.
+    /// Same lifecycle as `agentPendingSkills` — chip strip in the
+    /// composer, content spliced into the user prompt at dispatch.
+    @Published var agentPendingFiles: [AgentFileAttachment] = []
+    /// Whether the next send should include a workspace overview block
+    /// (current root + truncated file tree). Triggered by the `@workspace`
+    /// shortcut in the `@` picker.
+    @Published var agentPendingIncludeWorkspaceOverview: Bool = false
+    /// Top-level interaction mode for the active session. Plan locks
+    /// write/exec tools until the user approves a plan; Goal pins an
+    /// objective banner that's added to every system prompt.
+    @Published var agentInteractionMode: AgentInteractionMode = .normal
+    /// Current proposed/approved plan for Plan mode. Parsed out of the
+    /// assistant's reply when a ```plan fenced block arrives.
+    @Published var agentCurrentPlan: AgentPlan?
+    /// Currently-pinned goal for Goal mode. Created via the goal-mode
+    /// definition sheet; cleared when mode flips back to normal.
+    @Published var agentCurrentGoal: AgentGoal?
+
+    /// True when Plan mode is on AND no plan exists yet OR the existing
+    /// plan hasn't been approved. While true, all write/exec tools and
+    /// patch application are blocked.
+    var isPlanGateActive: Bool {
+        guard agentInteractionMode == .plan else { return false }
+        guard let plan = agentCurrentPlan else { return true }
+        return plan.status != .approved && plan.status != .executing && plan.status != .done
+    }
     /// Messages the user queued while the agent was busy. Each entry is a
     /// snapshot of text + images, consumed FIFO once the current turn ends.
     @Published var agentQueuedMessages: [AgentQueuedMessage] = []
@@ -169,6 +217,11 @@ final class AppState: ObservableObject {
         }
         self.editorSettings = editorSettings.normalized()
         self.agentConfiguration = AgentSettingsStore.load()
+        // Load the multi-provider library — on first launch after the
+        // Phase B change this auto-migrates the legacy configuration
+        // into a single-entry library, so existing users land with
+        // their previous setup already present in the new UI.
+        self.agentProviderLibrary = AgentSettingsStore.loadProviderLibrary()
         self.inspectorMode = self.editorSettings.preferredInspectorMode
         self.recentFiles = RecentItemsStore.loadFiles()
         self.recentFolders = RecentItemsStore.loadFolders()
@@ -349,16 +402,32 @@ final class AppState: ObservableObject {
         self.selectedText = selectedText
     }
 
-    /// Submit the composer (text + staged images). If the agent is already
-    /// responding, the message is queued and consumed when the current turn
-    /// finishes. Editor-mode and Agent-mode share this entry point.
+    /// Submit the composer (text + staged images + skills + files + optional
+    /// workspace overview). Queues if the agent is already responding.
+    /// Editor-mode and Agent-mode share this entry point.
     func sendAgentMessage() {
-        let prompt = agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let userText = agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
         let images = agentPendingImages
-        guard !prompt.isEmpty || !images.isEmpty else { return }
+        let skills = agentPendingSkills
+        let files = agentPendingFiles
+        let includeWorkspaceOverview = agentPendingIncludeWorkspaceOverview
+        guard !userText.isEmpty || !images.isEmpty || !skills.isEmpty || !files.isEmpty || includeWorkspaceOverview else { return }
+
+        // Splice attached context (skills / files / workspace overview) in
+        // front of the user's prose under labelled headers so the model
+        // treats them as task setup rather than verbatim user text.
+        let prompt = composeAttachedPrompt(
+            userText: userText,
+            skills: skills,
+            files: files,
+            includeWorkspaceOverview: includeWorkspaceOverview
+        )
 
         agentInput = ""
         agentPendingImages = []
+        agentPendingSkills = []
+        agentPendingFiles = []
+        agentPendingIncludeWorkspaceOverview = false
 
         if isAgentResponding {
             agentQueuedMessages.append(AgentQueuedMessage(text: prompt, images: images))
@@ -366,6 +435,502 @@ final class AppState: ObservableObject {
         }
 
         dispatchAgentMessage(text: prompt, images: images)
+    }
+
+    /// Build the outgoing prompt, prepending sections for attached
+    /// skills, file contents (re-read from disk so the model sees the
+    /// latest), and an optional workspace overview. Returns the user
+    /// text unchanged when nothing is attached.
+    private func composeAttachedPrompt(
+        userText: String,
+        skills: [AgentSkillEntry],
+        files: [AgentFileAttachment],
+        includeWorkspaceOverview: Bool
+    ) -> String {
+        guard !skills.isEmpty || !files.isEmpty || includeWorkspaceOverview else { return userText }
+        var blocks: [String] = []
+        blocks.append("The user attached the following context for this turn — treat it as task setup, not verbatim user text:")
+
+        if includeWorkspaceOverview {
+            blocks.append(workspaceOverviewBlock())
+        }
+
+        for skill in skills {
+            let body = AgentSkillDirectory.loadBody(for: skill) ?? "(skill body unavailable)"
+            blocks.append("""
+            ### Skill: \(skill.identifier)
+            > \(skill.description)
+
+            \(body)
+            """)
+        }
+
+        for file in files {
+            let body = readAttachedFileBody(at: file.url)
+            blocks.append("""
+            ### File: \(file.relativePath)
+
+            \(body)
+            """)
+        }
+
+        if !userText.isEmpty {
+            blocks.append("---")
+            blocks.append(userText)
+        }
+        return blocks.joined(separator: "\n\n")
+    }
+
+    /// Fenced excerpt of a file's contents, capped to keep one
+    /// attachment from blowing the context budget. Falls back to a
+    /// short placeholder when the file is unreadable or binary.
+    private func readAttachedFileBody(at url: URL) -> String {
+        let maxChars = 20_000
+        guard let data = try? Data(contentsOf: url),
+              let text = String(data: data, encoding: .utf8) else {
+            return "```\n(file unreadable or binary)\n```"
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body: String
+        if trimmed.count > maxChars {
+            let idx = trimmed.index(trimmed.startIndex, offsetBy: maxChars)
+            body = "\(trimmed[..<idx])\n\n[truncated at \(maxChars) chars]"
+        } else {
+            body = trimmed
+        }
+        return "```\n\(body)\n```"
+    }
+
+    /// A compact workspace overview: root path + a flat list of project
+    /// files (already cached via `quickOpenFiles`). Capped so even a
+    /// large repo overview stays reasonable.
+    private func workspaceOverviewBlock() -> String {
+        guard let root = rootDirectory else {
+            return "### Workspace\n(no folder is currently open)"
+        }
+        let rootPath = root.standardizedFileURL.path
+        let entries = quickOpenFiles
+            .prefix(120)
+            .map { url -> String in
+                let path = url.standardizedFileURL.path
+                guard path.hasPrefix(rootPath) else { return url.lastPathComponent }
+                let rel = String(path.dropFirst(rootPath.count))
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                return rel.isEmpty ? url.lastPathComponent : rel
+            }
+        let extraCount = max(0, quickOpenFiles.count - 120)
+        let extraLine = extraCount > 0 ? "\n…and \(extraCount) more files" : ""
+        return """
+        ### Workspace
+        Root: \(rootPath)
+        Files (first \(entries.count)):
+        ```
+        \(entries.joined(separator: "\n"))\(extraLine)
+        ```
+        """
+    }
+
+    // MARK: - Skill attachment
+
+    /// Stage a skill for the next send. Idempotent — re-attaching the
+    /// same skill is a no-op.
+    func attachAgentSkill(_ skill: AgentSkillEntry) {
+        guard !agentPendingSkills.contains(where: { $0.identifier == skill.identifier }) else { return }
+        agentPendingSkills.append(skill)
+    }
+
+    /// Drop a single staged skill by identifier.
+    func detachAgentSkill(identifier: String) {
+        agentPendingSkills.removeAll { $0.identifier == identifier }
+    }
+
+    // MARK: - File / workspace attachment
+
+    /// Stage a workspace file for the next send. Dedup by URL.
+    func attachAgentFile(url: URL) {
+        let standardized = url.standardizedFileURL
+        guard !agentPendingFiles.contains(where: { $0.url.standardizedFileURL == standardized }) else { return }
+        let relative: String = {
+            guard let root = rootDirectory?.standardizedFileURL.path else { return standardized.lastPathComponent }
+            let path = standardized.path
+            guard path.hasPrefix(root) else { return standardized.lastPathComponent }
+            let rel = String(path.dropFirst(root.count))
+                .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            return rel.isEmpty ? standardized.lastPathComponent : rel
+        }()
+        agentPendingFiles.append(AgentFileAttachment(url: standardized, relativePath: relative))
+    }
+
+    /// Drop a single staged file by id (which is its standardized path).
+    func detachAgentFile(id: String) {
+        agentPendingFiles.removeAll { $0.id == id }
+    }
+
+    /// Toggle whether the workspace overview rides along next send.
+    func toggleAgentWorkspaceOverview() {
+        agentPendingIncludeWorkspaceOverview.toggle()
+    }
+
+    // MARK: - Provider library
+
+    /// Reentrancy guard. Both `agentConfiguration` and
+    /// `agentProviderLibrary` have didSets that talk to each other;
+    /// the flag stops the loop on the second hop.
+    private var isReconcilingProviderLibrary = false
+
+    /// Reflect the active library entry's tier picks back into
+    /// `agentConfiguration` so the existing agent loop (which still
+    /// reads from the single configuration) sees the right provider
+    /// + key + model the moment the user picks one in Settings.
+    func applyActiveProviderLibraryEntry() {
+        guard let entry = agentProviderLibrary.active else { return }
+        isReconcilingProviderLibrary = true
+        defer { isReconcilingProviderLibrary = false }
+        var cfg = agentConfiguration
+        cfg.providerID = entry.providerID
+        cfg.baseURL = entry.baseURL
+        cfg.apiKey = entry.apiKey
+        cfg.flashModel = entry.flashPrimary
+        cfg.proModel = entry.proPrimary
+        // The active entry's routing mode wins — that's the whole
+        // point of having a per-entry override. The user can still
+        // pick a session-only override via the chat-mode picker.
+        cfg.routingMode = entry.routingMode
+        if cfg.model.isEmpty { cfg.model = entry.flashPrimary }
+        agentConfiguration = cfg.normalized
+    }
+
+    /// Activate a different library entry by id and immediately apply
+    /// it to the live configuration. No-op if the id is unknown.
+    func setActiveProviderLibraryEntry(id: UUID) {
+        guard agentProviderLibrary.entries.contains(where: { $0.id == id }) else { return }
+        agentProviderLibrary.setActive(id)
+        applyActiveProviderLibraryEntry()
+    }
+
+    /// Add or update a library entry. If the entry is the active one,
+    /// the live configuration is refreshed too.
+    func upsertProviderLibraryEntry(_ entry: AgentProviderEntry) {
+        agentProviderLibrary.upsert(entry)
+        if agentProviderLibrary.activeID == entry.id {
+            applyActiveProviderLibraryEntry()
+        }
+    }
+
+    /// Remove a library entry. The library auto-repoints `activeID`
+    /// to the next entry; if nothing remains the live configuration
+    /// is left as-is (the Settings UI is expected to require at
+    /// least one entry to chat).
+    func removeProviderLibraryEntry(id: UUID) {
+        let wasActive = agentProviderLibrary.activeID == id
+        agentProviderLibrary.remove(id: id)
+        // Drop the Keychain row for the removed entry's API key.
+        AgentSettingsStore.deleteLibraryEntryAPIKey(for: id)
+        if wasActive, agentProviderLibrary.active != nil {
+            applyActiveProviderLibraryEntry()
+        }
+    }
+
+    /// Called from `agentConfiguration.didSet` — keeps the active
+    /// library entry's mirrored fields in sync when an older code
+    /// path (e.g. an in-flight Settings save, the model picker)
+    /// writes directly to the configuration.
+    private func syncActiveLibraryEntryFromConfiguration() {
+        guard !isReconcilingProviderLibrary else { return }
+        guard var active = agentProviderLibrary.active else {
+            // No library yet — bootstrap one from the configuration
+            // so the new UI has something to show.
+            agentProviderLibrary = AgentProviderLibrary.migrate(from: agentConfiguration)
+            return
+        }
+        var changed = false
+        if active.providerID != agentConfiguration.providerID {
+            active.providerID = agentConfiguration.providerID
+            active.displayName = AgentProviderPreset.preset(id: agentConfiguration.providerID)?.displayName ?? active.displayName
+            changed = true
+        }
+        if active.baseURL != agentConfiguration.baseURL {
+            active.baseURL = agentConfiguration.baseURL
+            changed = true
+        }
+        if active.apiKey != agentConfiguration.apiKey {
+            active.apiKey = agentConfiguration.apiKey
+            changed = true
+        }
+        if active.flashPrimary != agentConfiguration.flashModel {
+            active.flashPrimary = agentConfiguration.flashModel
+            changed = true
+        }
+        if active.proPrimary != agentConfiguration.proModel {
+            active.proPrimary = agentConfiguration.proModel
+            changed = true
+        }
+        if active.routingMode != agentConfiguration.routingMode {
+            active.routingMode = agentConfiguration.routingMode
+            changed = true
+        }
+        guard changed else { return }
+        agentProviderLibrary.upsert(active)
+    }
+
+    // MARK: - Interaction modes (plan / goal)
+
+    /// Flip the session into a different interaction mode. Switching out
+    /// of Plan or Goal also drops any associated state so the next
+    /// session pick-up starts clean.
+    func setAgentInteractionMode(_ mode: AgentInteractionMode) {
+        guard agentInteractionMode != mode else { return }
+        agentInteractionMode = mode
+        if mode != .plan { agentCurrentPlan = nil }
+        if mode != .goal { agentCurrentGoal = nil }
+        persistActiveAgentSession()
+    }
+
+    /// User clicks Approve on the proposed plan — flips it to approved
+    /// so the next turn's system prompt unlocks write tools.
+    func approveAgentPlan() {
+        guard var plan = agentCurrentPlan else { return }
+        plan.status = .approved
+        agentCurrentPlan = plan
+        persistActiveAgentSession()
+    }
+
+    /// User clicks Reject — drops the plan so the agent re-plans next turn.
+    func rejectAgentPlan() {
+        agentCurrentPlan = nil
+        persistActiveAgentSession()
+    }
+
+    /// Manually retire an approved plan (e.g. after the agent reported done).
+    func completeAgentPlan() {
+        guard var plan = agentCurrentPlan else { return }
+        plan.status = .done
+        agentCurrentPlan = plan
+        persistActiveAgentSession()
+    }
+
+    /// Ask the agent to revise the current plan. Drops the existing
+    /// plan (so the system prompt flips back to "needs a plan") and
+    /// auto-sends a user message — either the bare "please revise"
+    /// boilerplate, or the caller's free-form note appended to it.
+    /// Falls through to the normal queue path if the agent is busy.
+    func requestPlanRevision(note: String) {
+        guard agentInteractionMode == .plan else { return }
+        // Drop the existing plan so the next turn's system prompt
+        // sends the "you must emit a ```plan block" instructions.
+        agentCurrentPlan = nil
+        persistActiveAgentSession()
+
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prompt: String
+        if trimmed.isEmpty {
+            prompt = "Please revise the plan. Re-emit a fresh ```plan``` block reflecting the new approach, then stop and wait for approval."
+        } else {
+            prompt = """
+            Please revise the plan with this guidance from me:
+
+            \(trimmed)
+
+            Re-emit a fresh ```plan``` block reflecting the new approach, then stop and wait for approval.
+            """
+        }
+
+        if isAgentResponding {
+            agentQueuedMessages.append(AgentQueuedMessage(text: prompt, images: []))
+            return
+        }
+        dispatchAgentMessage(text: prompt, images: [])
+    }
+
+    /// Parse the most recent assistant message looking for a ```plan
+    /// fenced block and replace `agentCurrentPlan` if one is found and
+    /// the user hasn't already approved a plan this session. Called by
+    /// the agent loop after each assistant message lands.
+    func captureAgentPlanFromLatestMessage() {
+        guard agentInteractionMode == .plan else { return }
+        // Don't clobber an already-approved plan.
+        if let existing = agentCurrentPlan,
+           existing.status == .approved || existing.status == .executing || existing.status == .done {
+            // But DO let an approved plan be progress-updated.
+            applyAgentPlanProgressFromLatestMessage(existingPlan: existing)
+            return
+        }
+        guard let last = agentMessages.last(where: { $0.role == .assistant && !$0.content.isEmpty }),
+              let parsed = AgentPlanParser.extract(from: last.content) else {
+            return
+        }
+        agentCurrentPlan = parsed
+    }
+
+    /// Walks the latest assistant message for a ```progress block and
+    /// applies the step-status updates to `agentCurrentPlan`. Called
+    /// from `captureAgentPlanFromLatestMessage` after an approved plan
+    /// is already in place.
+    private func applyAgentPlanProgressFromLatestMessage(existingPlan: AgentPlan) {
+        guard let last = agentMessages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else { return }
+        if let next = AgentPlanParser.applyProgress(to: existingPlan, from: last.content) {
+            agentCurrentPlan = next
+        }
+    }
+
+    /// Parse the most recent assistant message for a ```goal-check block
+    /// and apply its done/undone flips to `agentCurrentGoal`. Called
+    /// from the agent loop defer right after the plan capture. The
+    /// user retains override authority: any flip we apply here can be
+    /// reversed instantly with a manual checkbox toggle; conversely a
+    /// later ```goal-check from the model can re-flip a user override.
+    func captureAgentGoalEvaluationFromLatestMessage() {
+        guard agentInteractionMode == .goal,
+              let goal = agentCurrentGoal,
+              !goal.checklist.isEmpty else { return }
+        guard let last = agentMessages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else { return }
+        if let updated = AgentGoalChecklistParser.applyEvaluation(to: goal, from: last.content) {
+            agentCurrentGoal = updated
+            persistActiveAgentSession()
+        }
+    }
+
+    /// Manually override a single step's status from the UI checkbox.
+    /// Mirrors the model-driven path: bumps the plan to .executing on
+    /// first touch, .done when everything is terminal.
+    func setAgentPlanStepStatus(id: UUID, status: AgentPlan.StepStatus) {
+        guard var plan = agentCurrentPlan,
+              let idx = plan.steps.firstIndex(where: { $0.id == id }) else { return }
+        plan.steps[idx].status = status
+        let terminal: Set<AgentPlan.StepStatus> = [.done, .skipped, .failed]
+        if plan.steps.allSatisfy({ terminal.contains($0.status) }) {
+            plan.status = .done
+        } else if plan.status == .approved {
+            plan.status = .executing
+        }
+        agentCurrentPlan = plan
+        persistActiveAgentSession()
+    }
+
+    /// Edit a step's text in place — handy when the agent's wording
+    /// isn't quite right and the user wants to fix it before/during
+    /// execution. Status is preserved.
+    func editAgentPlanStepText(id: UUID, newText: String) {
+        guard var plan = agentCurrentPlan,
+              let idx = plan.steps.firstIndex(where: { $0.id == id }) else { return }
+        let trimmed = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        plan.steps[idx].text = trimmed
+        agentCurrentPlan = plan
+        persistActiveAgentSession()
+    }
+
+    /// Insert a fresh pending step before/after another step (or at the
+    /// list start/end if `relativeToID` is nil). Plan status is left
+    /// alone — adding a step to an executing plan keeps it executing.
+    func insertAgentPlanStep(text: String, relativeToID: UUID?, before: Bool) {
+        guard var plan = agentCurrentPlan else { return }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let newStep = AgentPlan.Step(text: trimmed, status: .pending)
+        let insertIdx: Int
+        if let relativeToID, let i = plan.steps.firstIndex(where: { $0.id == relativeToID }) {
+            insertIdx = before ? i : i + 1
+        } else {
+            insertIdx = before ? 0 : plan.steps.count
+        }
+        plan.steps.insert(newStep, at: insertIdx)
+        // If the plan was already .done but a step was added, it's not
+        // done anymore — bump it back to executing.
+        if plan.status == .done {
+            plan.status = .executing
+        }
+        agentCurrentPlan = plan
+        persistActiveAgentSession()
+    }
+
+    /// Remove a step entirely. Promotes to .done if the remaining steps
+    /// are all terminal; demotes to .approved if the plan becomes empty.
+    func removeAgentPlanStep(id: UUID) {
+        guard var plan = agentCurrentPlan,
+              let idx = plan.steps.firstIndex(where: { $0.id == id }) else { return }
+        plan.steps.remove(at: idx)
+        let terminal: Set<AgentPlan.StepStatus> = [.done, .skipped, .failed]
+        if plan.steps.isEmpty {
+            plan.status = .approved   // back to "no progress yet" rather than .done
+        } else if plan.steps.allSatisfy({ terminal.contains($0.status) }) {
+            plan.status = .done
+        }
+        agentCurrentPlan = plan
+        persistActiveAgentSession()
+    }
+
+    /// Reset a step (and every step after it) back to .pending, then
+    /// ask the agent to resume from that point. "Run from here" — the
+    /// common need when an earlier step's output turned out wrong and
+    /// every downstream step has to be redone.
+    func restartAgentPlanFromStep(id: UUID, note: String) {
+        guard agentInteractionMode == .plan,
+              var plan = agentCurrentPlan,
+              let startIdx = plan.steps.firstIndex(where: { $0.id == id }) else { return }
+        for i in startIdx..<plan.steps.count {
+            plan.steps[i].status = .pending
+        }
+        // Plan stays approved/executing — we're not redoing the
+        // approval gate, just rewinding the execution head.
+        if plan.status == .done { plan.status = .executing }
+        agentCurrentPlan = plan
+        persistActiveAgentSession()
+
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let header = "Please restart execution from step \(startIdx + 1) onward."
+        let prompt: String
+        if trimmed.isEmpty {
+            prompt = "\(header) Steps \(startIdx + 1)..\(plan.steps.count) have been reset to pending. Pick up there and emit a `progress` block as you go."
+        } else {
+            prompt = """
+            \(header) Steps \(startIdx + 1)..\(plan.steps.count) have been reset to pending. Here's why:
+
+            \(trimmed)
+
+            Pick up from step \(startIdx + 1) and emit a `progress` block as you go.
+            """
+        }
+        if isAgentResponding {
+            agentQueuedMessages.append(AgentQueuedMessage(text: prompt, images: []))
+            return
+        }
+        dispatchAgentMessage(text: prompt, images: [])
+    }
+
+    /// Replace the goal definition for Goal mode. Empty values clear it.
+    /// Preserves existing checklist `done` state when an item's text
+    /// hasn't changed — so the user can tweak the goal statement or add
+    /// new items without losing what's already ticked.
+    func setAgentGoal(statement: String, items: [String]) {
+        let trimmedStatement = statement.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedItems = items
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if trimmedStatement.isEmpty && trimmedItems.isEmpty {
+            agentCurrentGoal = nil
+            persistActiveAgentSession()
+            return
+        }
+        let priorDone: [String: Bool] = Dictionary(uniqueKeysWithValues:
+            (agentCurrentGoal?.checklist ?? []).map { ($0.text, $0.done) })
+        agentCurrentGoal = AgentGoal(
+            statement: trimmedStatement,
+            checklist: trimmedItems.map { text in
+                AgentGoal.Item(text: text, done: priorDone[text] ?? false)
+            }
+        )
+        persistActiveAgentSession()
+    }
+
+    /// Toggle a single checklist item by id. The flipped state shows up
+    /// in the next system prompt, so the agent sees progress.
+    func toggleAgentGoalItem(_ id: UUID) {
+        guard var goal = agentCurrentGoal else { return }
+        guard let idx = goal.checklist.firstIndex(where: { $0.id == id }) else { return }
+        goal.checklist[idx].done.toggle()
+        agentCurrentGoal = goal
+        persistActiveAgentSession()
     }
 
     func reviewAgentWorktreeChanges() {
@@ -619,6 +1184,9 @@ final class AppState: ObservableObject {
         agentSessions.insert(session, at: 0)
         activeAgentSessionID = session.id
         agentSessionDidEditFiles = false
+        agentInteractionMode = .normal
+        agentCurrentPlan = nil
+        agentCurrentGoal = nil
         AgentSessionStore.save(session)
         return session
     }
@@ -664,6 +1232,12 @@ final class AppState: ObservableObject {
         agentPendingImages = []
         agentErrorMessage = nil
         agentErrorDetails = nil
+        // Restore per-session plan/goal state so re-selecting a session
+        // resumes the same workflow gate / pinned objective rather than
+        // silently dropping back to Normal.
+        agentInteractionMode = session.interactionMode
+        agentCurrentPlan = session.currentPlan
+        agentCurrentGoal = session.currentGoal
     }
 
     func deleteAgentSession(id: AgentSession.ID) {
@@ -694,6 +1268,9 @@ final class AppState: ObservableObject {
         session.updatedAt = Date()
         session.title = AgentSessionStore.deriveTitle(from: agentMessages)
         session.didEditFiles = agentSessionDidEditFiles
+        session.interactionMode = agentInteractionMode
+        session.currentPlan = agentCurrentPlan
+        session.currentGoal = agentCurrentGoal
         if let override = agentSessionModelOverride, !override.isEmpty {
             session.modelID = override
         } else {
@@ -722,6 +1299,34 @@ final class AppState: ObservableObject {
             agentSessionModelOverride = nil
         }
         persistActiveAgentSession()
+    }
+
+    /// Chat-mode picker entry point — pick a (library entry, model)
+    /// pair in one shot. When `entryID` differs from the current
+    /// active, activates that entry first (rebuilds configuration),
+    /// then sets the session override to `model`. Picking a model
+    /// that already matches the route default clears the override so
+    /// the chip falls back to displaying the routed name.
+    func selectAgentEntryAndModel(entryID: UUID, model: String) {
+        // Activate the target library entry — this rebuilds
+        // agentConfiguration's provider / base URL / key / primaries.
+        if agentProviderLibrary.activeID != entryID {
+            setActiveProviderLibraryEntry(id: entryID)
+        }
+        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            setAgentSessionModel(nil)
+            return
+        }
+        // If the chosen model is already what the route would pick by
+        // default, clear the override so the picker shows the natural
+        // "Use route default" state instead of a redundant lock.
+        let routed = agentConfiguration.normalized.model(for: .interactive)
+        if trimmed == routed {
+            setAgentSessionModel(nil)
+        } else {
+            setAgentSessionModel(trimmed)
+        }
     }
 
     /// Best-effort token count for the next provider request. This mirrors
@@ -757,7 +1362,10 @@ final class AppState: ObservableObject {
             fileContent: fileContent,
             selectedText: selectedText,
             language: effectiveLanguage,
-            toolsEnabled: true
+            toolsEnabled: true,
+            interactionMode: agentInteractionMode,
+            currentPlan: agentCurrentPlan,
+            currentGoal: agentCurrentGoal
         )
         let collapsedHistory = Self.collapseOldToolResults(in: agentMessages)
         return AgentClient.providerReadyMessages([
@@ -1008,6 +1616,8 @@ final class AppState: ObservableObject {
         defer {
             self.isAgentResponding = false
             self.agentRequestTask = nil
+            self.captureAgentPlanFromLatestMessage()
+            self.captureAgentGoalEvaluationFromLatestMessage()
             self.persistActiveAgentSession()
             self.maybeAutoCompressContext()
             self.consumeNextQueuedMessageIfNeeded()
@@ -1026,7 +1636,10 @@ final class AppState: ObservableObject {
                 fileContent: fileContent,
                 selectedText: selectedText,
                 language: effectiveLanguage,
-                toolsEnabled: true
+                toolsEnabled: true,
+                interactionMode: agentInteractionMode,
+                currentPlan: agentCurrentPlan,
+                currentGoal: agentCurrentGoal
             )
             let history = agentMessages.filter { $0.id != assistantID }
             let collapsedHistory = Self.collapseOldToolResults(in: history)
@@ -1185,6 +1798,22 @@ final class AppState: ObservableObject {
                         )
                     }
                     appendToolMessage(toolCallID: call.externalID, payload: answer)
+                    continue
+                }
+
+                // Plan mode: block any write/exec tool until the user has
+                // approved a plan. The reply goes back as a tool error so
+                // the model knows to stop and emit a plan.
+                if risk != .read && isPlanGateActive {
+                    anyDenied = true
+                    if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
+                        agentToolCalls[index].status = .denied
+                        agentToolCalls[index].errorMessage = "Plan mode: needs user approval"
+                    }
+                    appendToolMessage(
+                        toolCallID: call.externalID,
+                        payload: "Blocked: Plan mode is active and no plan has been approved yet. Emit a ```plan``` block listing the steps you intend to take, then stop and wait for the user to approve."
+                    )
                     continue
                 }
 
