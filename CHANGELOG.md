@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.46.0-rc3 - 2026-06-02
+
+- **Settings → Agent rewritten as a multi-provider library** (Phase C). The old single-form layout is replaced by a left-pane provider list (with active star, add `+` / remove `−` controls) and a right-pane editor for the selected entry. The editor lets you set display name / preset / base URL / API key, plus separate primary + alternate model lists for Flash and Pro tiers (one model id per line). Edits commit immediately to `agentProviderLibrary` — no Save button needed for per-provider fields; the existing Save button still covers Image Understanding + routing mode.
+- Clicking the star on any row activates that entry: `setActiveProviderLibraryEntry(id:)` rebuilds the live `agentConfiguration` from the entry's preset id, base URL, key, and primary flash/pro models — so the chat picks it up on the next turn without restarting.
+- `AppState` exposes `agentProviderLibrary` as a `@Published` source of truth alongside the legacy `agentConfiguration`. Both are kept in sync: edits in the new UI rebuild the configuration; older code paths that write directly to the configuration are mirrored back into the active entry. A reentrancy guard breaks the obvious loop.
+- Per-entry "Fetch Models" pulls /models against that entry's own base URL + API key (not the active configuration), so each provider's catalog can be inspected independently of which one is currently active in chat. Picker icons next to the primary fields drop fetched ids straight in.
+- Switching the preset of an entry snaps the base URL to the preset's default and replaces flash/pro primaries if they don't look like they belong to the new preset (reusing the `recognizesModelID` heuristic added in rc2).
+- Chat-side picker still uses the single-config flat list — Phase D (two-level Provider → Model picker that walks the library) comes next.
+
 ## 1.46.0-rc2 - 2026-06-02
 
 - Fixed the chat-mode model picker showing a stale "Use route default: gpt-3.5-16k" after the user switched the agent provider (e.g. from OpenAI to DeepSeek) in Settings without explicitly resetting the flash/pro model fields. `AgentProviderPreset` now carries a `modelHints` substring list and a `recognizesModelID(_:)` helper; `AgentConfiguration.normalized` uses them to detect when the saved flash/pro/model still looks like it belongs to a previous provider and rewrites it to the current preset's documented default. Custom-provider entries (where we have no opinion about model naming) are left alone.

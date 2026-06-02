@@ -78,6 +78,21 @@ final class AppState: ObservableObject {
     @Published var agentConfiguration: AgentConfiguration {
         didSet {
             AgentSettingsStore.save(agentConfiguration)
+            // Mirror back into the active library entry so the new
+            // Settings UI doesn't drift from the legacy single-cfg
+            // path. We only sync the fields that overlap (provider /
+            // baseURL / api key / flash primary / pro primary); the
+            // alternate lists are library-only and stay untouched.
+            syncActiveLibraryEntryFromConfiguration()
+        }
+    }
+    /// Multi-provider library — the durable source of truth for the
+    /// Settings rewrite (Phase C). `agentConfiguration` above is
+    /// derived from the active entry; selecting a different entry in
+    /// Settings rebuilds the configuration on the spot.
+    @Published var agentProviderLibrary: AgentProviderLibrary {
+        didSet {
+            AgentSettingsStore.saveProviderLibrary(agentProviderLibrary)
         }
     }
     @Published var agentMessages: [AgentMessage] = []
@@ -202,6 +217,11 @@ final class AppState: ObservableObject {
         }
         self.editorSettings = editorSettings.normalized()
         self.agentConfiguration = AgentSettingsStore.load()
+        // Load the multi-provider library — on first launch after the
+        // Phase B change this auto-migrates the legacy configuration
+        // into a single-entry library, so existing users land with
+        // their previous setup already present in the new UI.
+        self.agentProviderLibrary = AgentSettingsStore.loadProviderLibrary()
         self.inspectorMode = self.editorSettings.preferredInspectorMode
         self.recentFiles = RecentItemsStore.loadFiles()
         self.recentFolders = RecentItemsStore.loadFolders()
@@ -549,6 +569,100 @@ final class AppState: ObservableObject {
     /// Toggle whether the workspace overview rides along next send.
     func toggleAgentWorkspaceOverview() {
         agentPendingIncludeWorkspaceOverview.toggle()
+    }
+
+    // MARK: - Provider library
+
+    /// Reentrancy guard. Both `agentConfiguration` and
+    /// `agentProviderLibrary` have didSets that talk to each other;
+    /// the flag stops the loop on the second hop.
+    private var isReconcilingProviderLibrary = false
+
+    /// Reflect the active library entry's tier picks back into
+    /// `agentConfiguration` so the existing agent loop (which still
+    /// reads from the single configuration) sees the right provider
+    /// + key + model the moment the user picks one in Settings.
+    func applyActiveProviderLibraryEntry() {
+        guard let entry = agentProviderLibrary.active else { return }
+        isReconcilingProviderLibrary = true
+        defer { isReconcilingProviderLibrary = false }
+        var cfg = agentConfiguration
+        cfg.providerID = entry.providerID
+        cfg.baseURL = entry.baseURL
+        cfg.apiKey = entry.apiKey
+        cfg.flashModel = entry.flashPrimary
+        cfg.proModel = entry.proPrimary
+        if cfg.model.isEmpty { cfg.model = entry.flashPrimary }
+        agentConfiguration = cfg.normalized
+    }
+
+    /// Activate a different library entry by id and immediately apply
+    /// it to the live configuration. No-op if the id is unknown.
+    func setActiveProviderLibraryEntry(id: UUID) {
+        guard agentProviderLibrary.entries.contains(where: { $0.id == id }) else { return }
+        agentProviderLibrary.setActive(id)
+        applyActiveProviderLibraryEntry()
+    }
+
+    /// Add or update a library entry. If the entry is the active one,
+    /// the live configuration is refreshed too.
+    func upsertProviderLibraryEntry(_ entry: AgentProviderEntry) {
+        agentProviderLibrary.upsert(entry)
+        if agentProviderLibrary.activeID == entry.id {
+            applyActiveProviderLibraryEntry()
+        }
+    }
+
+    /// Remove a library entry. The library auto-repoints `activeID`
+    /// to the next entry; if nothing remains the live configuration
+    /// is left as-is (the Settings UI is expected to require at
+    /// least one entry to chat).
+    func removeProviderLibraryEntry(id: UUID) {
+        let wasActive = agentProviderLibrary.activeID == id
+        agentProviderLibrary.remove(id: id)
+        // Drop the Keychain row for the removed entry's API key.
+        AgentSettingsStore.deleteLibraryEntryAPIKey(for: id)
+        if wasActive, agentProviderLibrary.active != nil {
+            applyActiveProviderLibraryEntry()
+        }
+    }
+
+    /// Called from `agentConfiguration.didSet` — keeps the active
+    /// library entry's mirrored fields in sync when an older code
+    /// path (e.g. an in-flight Settings save, the model picker)
+    /// writes directly to the configuration.
+    private func syncActiveLibraryEntryFromConfiguration() {
+        guard !isReconcilingProviderLibrary else { return }
+        guard var active = agentProviderLibrary.active else {
+            // No library yet — bootstrap one from the configuration
+            // so the new UI has something to show.
+            agentProviderLibrary = AgentProviderLibrary.migrate(from: agentConfiguration)
+            return
+        }
+        var changed = false
+        if active.providerID != agentConfiguration.providerID {
+            active.providerID = agentConfiguration.providerID
+            active.displayName = AgentProviderPreset.preset(id: agentConfiguration.providerID)?.displayName ?? active.displayName
+            changed = true
+        }
+        if active.baseURL != agentConfiguration.baseURL {
+            active.baseURL = agentConfiguration.baseURL
+            changed = true
+        }
+        if active.apiKey != agentConfiguration.apiKey {
+            active.apiKey = agentConfiguration.apiKey
+            changed = true
+        }
+        if active.flashPrimary != agentConfiguration.flashModel {
+            active.flashPrimary = agentConfiguration.flashModel
+            changed = true
+        }
+        if active.proPrimary != agentConfiguration.proModel {
+            active.proPrimary = agentConfiguration.proModel
+            changed = true
+        }
+        guard changed else { return }
+        agentProviderLibrary.upsert(active)
     }
 
     // MARK: - Interaction modes (plan / goal)
