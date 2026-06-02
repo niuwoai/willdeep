@@ -376,9 +376,18 @@ private struct AgentChatTranscript: View {
                             }
                             let calls = toolCalls(for: message.id)
                             if !calls.isEmpty {
-                                AgentToolCallGroup(calls: calls)
-                                    .id(toolGroupScrollID(for: message.id))
-                                    .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+                                let segments = AgentToolCallGrouping.group(calls)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    ForEach(segments) { segment in
+                                        AgentToolCallGroup(
+                                            calls: segment.calls,
+                                            headline: segment.kind.groupTitle(segment.count),
+                                            headlineIcon: segment.kind.groupIcon
+                                        )
+                                    }
+                                }
+                                .id(toolGroupScrollID(for: message.id))
+                                .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                             }
                         }
                     }

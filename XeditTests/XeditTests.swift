@@ -1666,6 +1666,77 @@ struct VeilWriterTests {
         #expect(SafeCommand.classify(command: "find . -name '*.log' -exec rm {} ;") == .alwaysDangerous)
     }
 
+    // MARK: - Tool call grouping
+
+    private func makeCall(_ name: String, status: AgentToolCallStatus = .succeeded) -> AgentToolCall {
+        AgentToolCall(
+            messageID: UUID(),
+            externalID: UUID().uuidString,
+            toolName: name,
+            arguments: [:],
+            risk: .read,
+            status: status
+        )
+    }
+
+    @Test("AgentToolCallGrouping merges consecutive same-kind calls")
+    func testToolCallGroupingMergesAdjacent() {
+        let calls = [
+            makeCall("run_command"),
+            makeCall("run_command"),
+            makeCall("run_command")
+        ]
+        let segments = AgentToolCallGrouping.group(calls)
+        #expect(segments.count == 1)
+        #expect(segments[0].kind == .runCommand)
+        #expect(segments[0].count == 3)
+        #expect(segments[0].kind.groupTitle(3) == "已运行 3 条命令")
+    }
+
+    @Test("AgentToolCallGrouping splits when kind changes")
+    func testToolCallGroupingSplitsOnKindChange() {
+        let calls = [
+            makeCall("run_command"),
+            makeCall("read_file"),
+            makeCall("grep_files"),
+            makeCall("run_command")
+        ]
+        let segments = AgentToolCallGrouping.group(calls)
+        #expect(segments.count == 3)
+        #expect(segments[0].kind == .runCommand)
+        #expect(segments[0].count == 1)
+        #expect(segments[1].kind == .fileExploration)
+        #expect(segments[1].count == 2)
+        #expect(segments[2].kind == .runCommand)
+        #expect(segments[2].count == 1)
+        #expect(segments[1].kind.groupTitle(2) == "已探索 2 个文件")
+    }
+
+    @Test("AgentToolCallGrouping never merges ask_user even when adjacent")
+    func testToolCallGroupingKeepsAskUserStandalone() {
+        let calls = [
+            makeCall("ask_user", status: .awaitingUserAnswer),
+            makeCall("ask_user", status: .awaitingUserAnswer)
+        ]
+        let segments = AgentToolCallGrouping.group(calls)
+        #expect(segments.count == 2)
+        #expect(segments.allSatisfy { $0.kind == .askUser })
+        #expect(segments.allSatisfy { $0.count == 1 })
+    }
+
+    @Test("AgentToolCallGrouping treats unknown tools as their own .other kind")
+    func testToolCallGroupingUnknownKindGroupsBySameName() {
+        let calls = [
+            makeCall("mystery_tool"),
+            makeCall("mystery_tool"),
+            makeCall("other_tool")
+        ]
+        let segments = AgentToolCallGrouping.group(calls)
+        #expect(segments.count == 2)
+        #expect(segments[0].count == 2)
+        #expect(segments[1].count == 1)
+    }
+
     @Test("agent tool registry escalates dangerous run_command invocations to .danger")
     func testRunCommandRiskEscalatesForDestructiveShell() {
         let benignRisk = AgentToolRegistry.risk(

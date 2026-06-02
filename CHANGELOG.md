@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.42.0-rc1 - 2026-06-02
+
+- Collapsed consecutive same-kind Agent tool calls into a single codex-style row in Agent mode. Three back-to-back `run_command` calls now render as "已运行 3 条命令"; four reads/searches/lists render as "已探索 4 个文件". Click the row to see the underlying calls; click an individual call for the full payload. `ask_user` tool calls and patch proposals always stay full-size because they require interaction.
+- Added `AgentToolKind` (`runCommand`, `fileExploration`, `askUser`, `other`) plus `AgentToolCallGrouping.group(_:)` that walks the transcript's tool-call array and emits a flat `[AgentToolCallSegment]` — adjacent groupable calls of the same kind merge, everything else lands as a singleton segment. Headlines and SF Symbol icons are derived from the kind.
+- Extended the existing `AgentToolCallGroup` view to accept an optional `headline` / `headlineIcon` so the codex-style "已运行/已探索" labels replace the generic "N tools" string. Status-derived icons (failed / running / asking) still win for visibility when the row is collapsed.
+- Added unit tests for adjacency merging, splitting on kind change, ask_user staying standalone, and unknown-tool grouping.
+
 ## 1.41.0-rc3 - 2026-06-02
 
 - Fixed Agent mode sidebar header colliding with the macOS traffic-light buttons. The window keeps `titlebarAppearsTransparent`, which floats close/minimize/zoom over the first ~28pt of sidebar content. The Agent sidebar now reserves that band as empty space and renders the "CHATS" header on the row below it.

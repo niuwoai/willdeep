@@ -350,6 +350,11 @@ struct AgentLineStatsView: View {
 
 struct AgentToolCallGroup: View {
     let calls: [AgentToolCall]
+    /// Optional codex-style headline ("已运行 3 条命令"). When set, it
+    /// replaces the default "N tools" label and we also swap the icon
+    /// to match the kind.
+    var headline: String? = nil
+    var headlineIcon: String? = nil
     @State private var isExpanded = false
 
     var body: some View {
@@ -428,7 +433,8 @@ struct AgentToolCallGroup: View {
     }
 
     private var titleText: String {
-        calls.count == 1 ? "1 tool" : "\(calls.count) tools"
+        if let headline, !headline.isEmpty { return headline }
+        return calls.count == 1 ? "1 tool" : "\(calls.count) tools"
     }
 
     private var statusSummary: String {
@@ -483,9 +489,13 @@ struct AgentToolCallGroup: View {
     }
 
     private var groupIconName: String {
+        // Status-derived icons (failed / running / asking) take precedence
+        // so the user can see a problem at a glance, even when the row is
+        // collapsed. A static headline icon is only the calm-state default.
         if calls.contains(where: { $0.status == .failed }) { return "exclamationmark.triangle.fill" }
         if calls.contains(where: { $0.status == .running }) { return "hourglass" }
         if containsInteractiveCall { return "questionmark.circle" }
+        if let headlineIcon, !headlineIcon.isEmpty { return headlineIcon }
         return "checkmark.circle.fill"
     }
 
