@@ -7,42 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		5C3BEDFC2FD0115300B5D995 /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 5C3BEDF62FD0115300B5D995 /* Info.plist */; };
-		5C3BEDFD2FD0115300B5D995 /* AgentRuntime.swift in Resources */ = {isa = PBXBuildFile; fileRef = 5C3BEDE32FD0115300B5D995 /* AgentRuntime.swift */; };
-		5C3BEDFE2FD0115300B5D995 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5C3BEDEB2FD0115300B5D995 /* Assets.xcassets */; };
-		5C3BEDFF2FD0115300B5D995 /* EditorSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDF02FD0115300B5D995 /* EditorSettingsView.swift */; };
-		5C3BEE002FD0115300B5D995 /* AgentTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDE82FD0115300B5D995 /* AgentTools.swift */; };
-		5C3BEE012FD0115300B5D995 /* AgentRoutineEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDDF2FD0115300B5D995 /* AgentRoutineEditorView.swift */; };
-		5C3BEE022FD0115300B5D995 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDEA2FD0115300B5D995 /* AppState.swift */; };
-		5C3BEE032FD0115300B5D995 /* AgentImageViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDD92FD0115300B5D995 /* AgentImageViews.swift */; };
-		5C3BEE042FD0115300B5D995 /* AgentPatchApplier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDDD2FD0115300B5D995 /* AgentPatchApplier.swift */; };
-		5C3BEE052FD0115300B5D995 /* AgentContextBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDD82FD0115300B5D995 /* AgentContextBuilder.swift */; };
-		5C3BEE062FD0115300B5D995 /* AgentUsageStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDE92FD0115300B5D995 /* AgentUsageStats.swift */; };
-		5C3BEE072FD0115300B5D995 /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDF22FD0115300B5D995 /* EditorView.swift */; };
-		5C3BEE082FD0115300B5D995 /* AgentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDDA2FD0115300B5D995 /* AgentModels.swift */; };
-		5C3BEE092FD0115300B5D995 /* AgentClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDD72FD0115300B5D995 /* AgentClient.swift */; };
-		5C3BEE0A2FD0115300B5D995 /* EditorInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDEF2FD0115300B5D995 /* EditorInspector.swift */; };
-		5C3BEE0B2FD0115300B5D995 /* AgentRoutinesSidebarSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDE12FD0115300B5D995 /* AgentRoutinesSidebarSection.swift */; };
-		5C3BEE0C2FD0115300B5D995 /* SyntaxHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDF92FD0115300B5D995 /* SyntaxHighlighter.swift */; };
-		5C3BEE0D2FD0115300B5D995 /* ScopeGuideCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDF82FD0115300B5D995 /* ScopeGuideCalculator.swift */; };
-		5C3BEE0E2FD0115300B5D995 /* AgentRoutineScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDE02FD0115300B5D995 /* AgentRoutineScheduler.swift */; };
-		5C3BEE0F2FD0115300B5D995 /* AgentToolCallGrouping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDE72FD0115300B5D995 /* AgentToolCallGrouping.swift */; };
-		5C3BEE102FD0115300B5D995 /* AgentSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDE62FD0115300B5D995 /* AgentSettingsStore.swift */; };
-		5C3BEE112FD0115300B5D995 /* EditorAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDEE2FD0115300B5D995 /* EditorAppearance.swift */; };
-		5C3BEE122FD0115300B5D995 /* XeditApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDFA2FD0115300B5D995 /* XeditApp.swift */; };
-		5C3BEE132FD0115300B5D995 /* EditorTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDF12FD0115300B5D995 /* EditorTab.swift */; };
-		5C3BEE142FD0115300B5D995 /* AgentSafeCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDE42FD0115300B5D995 /* AgentSafeCommand.swift */; };
-		5C3BEE152FD0115300B5D995 /* AgentSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDE52FD0115300B5D995 /* AgentSessionStore.swift */; };
-		5C3BEE162FD0115300B5D995 /* FindReplaceScope.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDF52FD0115300B5D995 /* FindReplaceScope.swift */; };
-		5C3BEE172FD0115300B5D995 /* AgentModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDDB2FD0115300B5D995 /* AgentModeView.swift */; };
-		5C3BEE182FD0115300B5D995 /* ProjectFileListCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDF72FD0115300B5D995 /* ProjectFileListCache.swift */; };
-		5C3BEE192FD0115300B5D995 /* AgentRoutine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDDE2FD0115300B5D995 /* AgentRoutine.swift */; };
-		5C3BEE1A2FD0115300B5D995 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDED2FD0115300B5D995 /* ContentView.swift */; };
-		5C3BEE1B2FD0115300B5D995 /* FileTreeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDF42FD0115300B5D995 /* FileTreeView.swift */; };
-		5C3BEE1C2FD0115300B5D995 /* AgentPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDDC2FD0115300B5D995 /* AgentPanelView.swift */; };
-		5C3BEE1D2FD0115300B5D995 /* FileSystemNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDF32FD0115300B5D995 /* FileSystemNode.swift */; };
-		5C3BEE1E2FD0115300B5D995 /* AgentRoutineStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDE22FD0115300B5D995 /* AgentRoutineStore.swift */; };
-		5C3BEE1F2FD0115300B5D995 /* CommandLineToolInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3BEDEC2FD0115300B5D995 /* CommandLineToolInstaller.swift */; };
 		5CA6B0922FC70A00006DFCCC /* VeilWriter.help in Resources */ = {isa = PBXBuildFile; fileRef = 5CA6B0912FC70A00006DFCCC /* VeilWriter.help */; };
 /* End PBXBuildFile section */
 
@@ -64,42 +28,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		5C3BEDD72FD0115300B5D995 /* AgentClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentClient.swift; sourceTree = "<group>"; };
-		5C3BEDD82FD0115300B5D995 /* AgentContextBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentContextBuilder.swift; sourceTree = "<group>"; };
-		5C3BEDD92FD0115300B5D995 /* AgentImageViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentImageViews.swift; sourceTree = "<group>"; };
-		5C3BEDDA2FD0115300B5D995 /* AgentModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentModels.swift; sourceTree = "<group>"; };
-		5C3BEDDB2FD0115300B5D995 /* AgentModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentModeView.swift; sourceTree = "<group>"; };
-		5C3BEDDC2FD0115300B5D995 /* AgentPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentPanelView.swift; sourceTree = "<group>"; };
-		5C3BEDDD2FD0115300B5D995 /* AgentPatchApplier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentPatchApplier.swift; sourceTree = "<group>"; };
-		5C3BEDDE2FD0115300B5D995 /* AgentRoutine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRoutine.swift; sourceTree = "<group>"; };
-		5C3BEDDF2FD0115300B5D995 /* AgentRoutineEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRoutineEditorView.swift; sourceTree = "<group>"; };
-		5C3BEDE02FD0115300B5D995 /* AgentRoutineScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRoutineScheduler.swift; sourceTree = "<group>"; };
-		5C3BEDE12FD0115300B5D995 /* AgentRoutinesSidebarSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRoutinesSidebarSection.swift; sourceTree = "<group>"; };
-		5C3BEDE22FD0115300B5D995 /* AgentRoutineStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRoutineStore.swift; sourceTree = "<group>"; };
-		5C3BEDE32FD0115300B5D995 /* AgentRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = text; path = AgentRuntime.swift; sourceTree = "<group>"; };
-		5C3BEDE42FD0115300B5D995 /* AgentSafeCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSafeCommand.swift; sourceTree = "<group>"; };
-		5C3BEDE52FD0115300B5D995 /* AgentSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSessionStore.swift; sourceTree = "<group>"; };
-		5C3BEDE62FD0115300B5D995 /* AgentSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSettingsStore.swift; sourceTree = "<group>"; };
-		5C3BEDE72FD0115300B5D995 /* AgentToolCallGrouping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentToolCallGrouping.swift; sourceTree = "<group>"; };
-		5C3BEDE82FD0115300B5D995 /* AgentTools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentTools.swift; sourceTree = "<group>"; };
-		5C3BEDE92FD0115300B5D995 /* AgentUsageStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentUsageStats.swift; sourceTree = "<group>"; };
-		5C3BEDEA2FD0115300B5D995 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
-		5C3BEDEB2FD0115300B5D995 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		5C3BEDEC2FD0115300B5D995 /* CommandLineToolInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandLineToolInstaller.swift; sourceTree = "<group>"; };
-		5C3BEDED2FD0115300B5D995 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		5C3BEDEE2FD0115300B5D995 /* EditorAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAppearance.swift; sourceTree = "<group>"; };
-		5C3BEDEF2FD0115300B5D995 /* EditorInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorInspector.swift; sourceTree = "<group>"; };
-		5C3BEDF02FD0115300B5D995 /* EditorSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorSettingsView.swift; sourceTree = "<group>"; };
-		5C3BEDF12FD0115300B5D995 /* EditorTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorTab.swift; sourceTree = "<group>"; };
-		5C3BEDF22FD0115300B5D995 /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
-		5C3BEDF32FD0115300B5D995 /* FileSystemNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileSystemNode.swift; sourceTree = "<group>"; };
-		5C3BEDF42FD0115300B5D995 /* FileTreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTreeView.swift; sourceTree = "<group>"; };
-		5C3BEDF52FD0115300B5D995 /* FindReplaceScope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindReplaceScope.swift; sourceTree = "<group>"; };
-		5C3BEDF62FD0115300B5D995 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		5C3BEDF72FD0115300B5D995 /* ProjectFileListCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectFileListCache.swift; sourceTree = "<group>"; };
-		5C3BEDF82FD0115300B5D995 /* ScopeGuideCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScopeGuideCalculator.swift; sourceTree = "<group>"; };
-		5C3BEDF92FD0115300B5D995 /* SyntaxHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntaxHighlighter.swift; sourceTree = "<group>"; };
-		5C3BEDFA2FD0115300B5D995 /* XeditApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XeditApp.swift; sourceTree = "<group>"; };
 		5CA6B0612FC6D8F9006DFCCC /* VeilWriter.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VeilWriter.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5CA6B0712FC6D8FA006DFCCC /* XeditTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = XeditTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5CA6B07B2FC6D8FA006DFCCC /* XeditUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = XeditUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -162,53 +90,9 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		5C3BEDFB2FD0115300B5D995 /* Xedit */ = {
-			isa = PBXGroup;
-			children = (
-				5C3BEDD72FD0115300B5D995 /* AgentClient.swift */,
-				5C3BEDD82FD0115300B5D995 /* AgentContextBuilder.swift */,
-				5C3BEDD92FD0115300B5D995 /* AgentImageViews.swift */,
-				5C3BEDDA2FD0115300B5D995 /* AgentModels.swift */,
-				5C3BEDDB2FD0115300B5D995 /* AgentModeView.swift */,
-				5C3BEDDC2FD0115300B5D995 /* AgentPanelView.swift */,
-				5C3BEDDD2FD0115300B5D995 /* AgentPatchApplier.swift */,
-				5C3BEDDE2FD0115300B5D995 /* AgentRoutine.swift */,
-				5C3BEDDF2FD0115300B5D995 /* AgentRoutineEditorView.swift */,
-				5C3BEDE02FD0115300B5D995 /* AgentRoutineScheduler.swift */,
-				5C3BEDE12FD0115300B5D995 /* AgentRoutinesSidebarSection.swift */,
-				5C3BEDE22FD0115300B5D995 /* AgentRoutineStore.swift */,
-				5C3BEDE32FD0115300B5D995 /* AgentRuntime.swift */,
-				5C3BEDE42FD0115300B5D995 /* AgentSafeCommand.swift */,
-				5C3BEDE52FD0115300B5D995 /* AgentSessionStore.swift */,
-				5C3BEDE62FD0115300B5D995 /* AgentSettingsStore.swift */,
-				5C3BEDE72FD0115300B5D995 /* AgentToolCallGrouping.swift */,
-				5C3BEDE82FD0115300B5D995 /* AgentTools.swift */,
-				5C3BEDE92FD0115300B5D995 /* AgentUsageStats.swift */,
-				5C3BEDEA2FD0115300B5D995 /* AppState.swift */,
-				5C3BEDEB2FD0115300B5D995 /* Assets.xcassets */,
-				5C3BEDEC2FD0115300B5D995 /* CommandLineToolInstaller.swift */,
-				5C3BEDED2FD0115300B5D995 /* ContentView.swift */,
-				5C3BEDEE2FD0115300B5D995 /* EditorAppearance.swift */,
-				5C3BEDEF2FD0115300B5D995 /* EditorInspector.swift */,
-				5C3BEDF02FD0115300B5D995 /* EditorSettingsView.swift */,
-				5C3BEDF12FD0115300B5D995 /* EditorTab.swift */,
-				5C3BEDF22FD0115300B5D995 /* EditorView.swift */,
-				5C3BEDF32FD0115300B5D995 /* FileSystemNode.swift */,
-				5C3BEDF42FD0115300B5D995 /* FileTreeView.swift */,
-				5C3BEDF52FD0115300B5D995 /* FindReplaceScope.swift */,
-				5C3BEDF62FD0115300B5D995 /* Info.plist */,
-				5C3BEDF72FD0115300B5D995 /* ProjectFileListCache.swift */,
-				5C3BEDF82FD0115300B5D995 /* ScopeGuideCalculator.swift */,
-				5C3BEDF92FD0115300B5D995 /* SyntaxHighlighter.swift */,
-				5C3BEDFA2FD0115300B5D995 /* XeditApp.swift */,
-			);
-			path = Xedit;
-			sourceTree = "<group>";
-		};
 		5CA6B0582FC6D8F9006DFCCC = {
 			isa = PBXGroup;
 			children = (
-				5C3BEDFB2FD0115300B5D995 /* Xedit */,
 				5CA6B0632FC6D8F9006DFCCC /* Xedit */,
 				5CA6B0902FC70A00006DFCCC /* Help */,
 				5CA6B0742FC6D8FA006DFCCC /* XeditTests */,
@@ -355,9 +239,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				5C3BEDFC2FD0115300B5D995 /* Info.plist in Resources */,
-				5C3BEDFD2FD0115300B5D995 /* AgentRuntime.swift in Resources */,
-				5C3BEDFE2FD0115300B5D995 /* Assets.xcassets in Resources */,
 				5CA6B0922FC70A00006DFCCC /* VeilWriter.help in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -383,39 +264,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				5C3BEDFF2FD0115300B5D995 /* EditorSettingsView.swift in Sources */,
-				5C3BEE002FD0115300B5D995 /* AgentTools.swift in Sources */,
-				5C3BEE012FD0115300B5D995 /* AgentRoutineEditorView.swift in Sources */,
-				5C3BEE022FD0115300B5D995 /* AppState.swift in Sources */,
-				5C3BEE032FD0115300B5D995 /* AgentImageViews.swift in Sources */,
-				5C3BEE042FD0115300B5D995 /* AgentPatchApplier.swift in Sources */,
-				5C3BEE052FD0115300B5D995 /* AgentContextBuilder.swift in Sources */,
-				5C3BEE062FD0115300B5D995 /* AgentUsageStats.swift in Sources */,
-				5C3BEE072FD0115300B5D995 /* EditorView.swift in Sources */,
-				5C3BEE082FD0115300B5D995 /* AgentModels.swift in Sources */,
-				5C3BEE092FD0115300B5D995 /* AgentClient.swift in Sources */,
-				5C3BEE0A2FD0115300B5D995 /* EditorInspector.swift in Sources */,
-				5C3BEE0B2FD0115300B5D995 /* AgentRoutinesSidebarSection.swift in Sources */,
-				5C3BEE0C2FD0115300B5D995 /* SyntaxHighlighter.swift in Sources */,
-				5C3BEE0D2FD0115300B5D995 /* ScopeGuideCalculator.swift in Sources */,
-				5C3BEE0E2FD0115300B5D995 /* AgentRoutineScheduler.swift in Sources */,
-				5C3BEE0F2FD0115300B5D995 /* AgentToolCallGrouping.swift in Sources */,
-				5C3BEE102FD0115300B5D995 /* AgentSettingsStore.swift in Sources */,
-				5C3BEE112FD0115300B5D995 /* EditorAppearance.swift in Sources */,
-				5C3BEE122FD0115300B5D995 /* XeditApp.swift in Sources */,
-				5C3BEE132FD0115300B5D995 /* EditorTab.swift in Sources */,
-				5C3BEE142FD0115300B5D995 /* AgentSafeCommand.swift in Sources */,
-				5C3BEE152FD0115300B5D995 /* AgentSessionStore.swift in Sources */,
-				5C3BEE162FD0115300B5D995 /* FindReplaceScope.swift in Sources */,
-				5C3BEE172FD0115300B5D995 /* AgentModeView.swift in Sources */,
-				5C3BEE182FD0115300B5D995 /* ProjectFileListCache.swift in Sources */,
-				5C3BEE192FD0115300B5D995 /* AgentRoutine.swift in Sources */,
-				5C3BEE1A2FD0115300B5D995 /* ContentView.swift in Sources */,
-				5C3BEE1B2FD0115300B5D995 /* FileTreeView.swift in Sources */,
-				5C3BEE1C2FD0115300B5D995 /* AgentPanelView.swift in Sources */,
-				5C3BEE1D2FD0115300B5D995 /* FileSystemNode.swift in Sources */,
-				5C3BEE1E2FD0115300B5D995 /* AgentRoutineStore.swift in Sources */,
-				5C3BEE1F2FD0115300B5D995 /* CommandLineToolInstaller.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -471,7 +319,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = "1.49.0-rc4";
+				MARKETING_VERSION = "1.49.0-rc5";
 				PRODUCT_BUNDLE_IDENTIFIER = im.some.veilwriter;
 				PRODUCT_NAME = VeilWriter;
 				REGISTER_APP_GROUPS = YES;
@@ -506,7 +354,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = "1.49.0-rc4";
+				MARKETING_VERSION = "1.49.0-rc5";
 				PRODUCT_BUNDLE_IDENTIFIER = im.some.veilwriter;
 				PRODUCT_NAME = VeilWriter;
 				REGISTER_APP_GROUPS = YES;
@@ -648,7 +496,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.4;
-				MARKETING_VERSION = "1.49.0-rc4";
+				MARKETING_VERSION = "1.49.0-rc5";
 				PRODUCT_BUNDLE_IDENTIFIER = im.some.veilwritertests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -669,7 +517,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.4;
-				MARKETING_VERSION = "1.49.0-rc4";
+				MARKETING_VERSION = "1.49.0-rc5";
 				PRODUCT_BUNDLE_IDENTIFIER = im.some.veilwritertests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -688,7 +536,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.49.0-rc4";
+				MARKETING_VERSION = "1.49.0-rc5";
 				PRODUCT_BUNDLE_IDENTIFIER = im.some.veilwriteruitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -707,7 +555,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.49.0-rc4";
+				MARKETING_VERSION = "1.49.0-rc5";
 				PRODUCT_BUNDLE_IDENTIFIER = im.some.veilwriteruitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;

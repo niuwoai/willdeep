@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.49.0-rc5 - 2026-06-03
+
+- **修复并发 Routine / Runtime 的几个 rc4 回归。** ① provider slot 已经抢到、但 session 立刻被删除时，Task 早退也会释放 slot，避免同 provider 队列永远卡住；② 空会话清理会跳过仍在 `pendingDispatchQueue` 中的 session，避免 provider 满载时 queued routine 被误删且 `lastRunAt` 已更新后不再补跑；③ 后台 runtime 落盘不再读取 active session 的模型 override，routine 未指定模型时按当前全局 Flash/Pro 路由初始化；④ Routine 编辑器的「立即运行一次」和「保存」使用同一套 name/prompt 非空校验；⑤ `UserNotifications` 走 `@preconcurrency import`，清掉 Routine 通知发送处的 Sendable 警告。
+- **清理 Xcode project 重复引用。** 移除 rc4 误加入的手工 `PBXGroup` / `PBXBuildFile` 段，继续使用现有 `PBXFileSystemSynchronizedRootGroup` 自动纳入 `Xedit/` 下 Swift 文件，消除重复 Compile Sources、`Info.plist in Resources`、`AgentRuntime.swift in Resources` 等构建警告。
+
 ## 1.49.0-rc4 - 2026-06-03
 
 - **并发 Agent Runtime 重构，第 4/4 步：UI 跟上 + 用户可调。** rc3 的并发能跑但视觉上看不见——active 之外的 runtime 在背后流式输出，sidebar 那一行仍是静默的灰点。rc4 把这一刀补完：

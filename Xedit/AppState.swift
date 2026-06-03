@@ -1228,7 +1228,14 @@ final class AppState: ObservableObject {
 
         runtime.requestTask?.cancel()
         runtime.requestTask = Task { [weak self, weak runtime] in
-            guard let self, let runtime else { return }
+            guard let self else { return }
+            guard let runtime else {
+                // The session can be deleted after claiming a provider slot
+                // but before the Task starts. In that case runAgentLoop's
+                // defer never executes, so release the slot here.
+                self.releaseProviderSlot(providerID: providerID)
+                return
+            }
             await self.prepareImagesForTextOnlyProvider(
                 for: runtime,
                 userMessageID: userMessage.id,
@@ -1546,6 +1553,7 @@ final class AppState: ObservableObject {
         let activeID = activeAgentSessionID
         let toRemove = agentSessions.filter { session in
             if session.id == activeID { return false }
+            if pendingDispatchQueue.contains(where: { $0.runtimeID == session.id }) { return false }
             return !session.messages.contains(where: { $0.role == .user })
         }
         guard !toRemove.isEmpty else { return }
@@ -1675,7 +1683,9 @@ final class AppState: ObservableObject {
         // out of whatever they're reading.
         let session = AgentSession(
             workspaceRootPath: routine.workspaceRootPath,
-            modelID: routine.modelID?.isEmpty == false ? routine.modelID : activeAgentModelID
+            modelID: routine.modelID?.isEmpty == false
+                ? routine.modelID
+                : agentConfiguration.normalized.model(for: .interactive)
         )
         agentSessions.insert(session, at: 0)
         AgentSessionStore.save(session)
@@ -1745,8 +1755,10 @@ final class AppState: ObservableObject {
         guard let index = agentSessions.firstIndex(where: { $0.id == runtime.id }) else { return }
         if let override = runtime.sessionModelOverride, !override.isEmpty {
             runtime.session.modelID = override
-        } else {
-            runtime.session.modelID = activeAgentModelID
+        } else if runtime.id == activeAgentSessionID {
+            runtime.session.modelID = agentConfiguration.normalized.model(for: .interactive)
+        } else if runtime.session.modelID == nil {
+            runtime.session.modelID = agentConfiguration.normalized.model(for: .interactive)
         }
         runtime.persist()
         agentSessions[index] = runtime.session

@@ -318,6 +318,7 @@ struct AgentRoutineEditorView: View {
                     dismiss()
                 }
                 .help("不影响调度计划。即使 Routine 被禁用也会运行一次。")
+                .disabled(!isSaveEnabled)
             }
             Spacer()
             Button("取消") { dismiss() }
