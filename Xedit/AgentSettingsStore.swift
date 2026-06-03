@@ -13,6 +13,7 @@ enum AgentSettingsStore {
     private static let knownModelsKey = "im.some.veilwriter.agentSettings.knownModels.v1"
     private static let alwaysAllowedCommandsKey = "im.some.veilwriter.agentSettings.alwaysAllowedCommands.v1"
     private static let autoApproveKey = "im.some.veilwriter.agentSettings.autoApproveSafeCommands.v1"
+    private static let perProviderConcurrencyKey = "im.some.veilwriter.agentSettings.perProviderConcurrencyLimit.v1"
     /// JSON-encoded `AgentProviderLibrary` minus the API keys, which
     /// live in Keychain under the entry's UUID.
     private static let providerLibraryKey = "im.some.veilwriter.agentSettings.providerLibrary.v1"
@@ -57,6 +58,23 @@ enum AgentSettingsStore {
 
     static func saveAutoApproveSafeCommands(_ enabled: Bool) {
         UserDefaults.standard.set(enabled, forKey: autoApproveKey)
+    }
+
+    /// Cap on simultaneous in-flight Agent turns per provider. The
+    /// concurrency model splits this per `providerID` so different
+    /// providers don't share a single quota — see AppState. Defaults
+    /// to 3 on fresh installs; user-tunable 1–8.
+    static func loadPerProviderConcurrencyLimit() -> Int {
+        if UserDefaults.standard.object(forKey: perProviderConcurrencyKey) == nil {
+            return 3
+        }
+        let stored = UserDefaults.standard.integer(forKey: perProviderConcurrencyKey)
+        return max(1, min(8, stored == 0 ? 3 : stored))
+    }
+
+    static func savePerProviderConcurrencyLimit(_ limit: Int) {
+        let clamped = max(1, min(8, limit))
+        UserDefaults.standard.set(clamped, forKey: perProviderConcurrencyKey)
     }
 
     static func saveAlwaysAllowedCommands(_ commands: [AgentAlwaysAllowedCommand]) {
@@ -230,22 +248,67 @@ enum AgentSettingsStore {
         return value
     }
 
+    /// Why this is more careful than "delete then add":
+    ///
+    /// 1. **No-op fast path.** `saveProviderLibrary` is called from
+    ///    `AppState`'s `didSet` for the whole library, which fires on
+    ///    every Settings tweak — base URL, model, entry name, anything.
+    ///    Before this rewrite that meant `SecItemDelete + SecItemAdd`
+    ///    ran on *every* entry on *every* edit, and macOS reads each
+    ///    Add as a fresh write of secret material — which triggers the
+    ///    "VeilWriter wants to access 'im.some.veilwriter.agent'"
+    ///    prompt repeatedly. We now read the current stored value
+    ///    first and skip the entire write if it's identical.
+    /// 2. **Prefer `SecItemUpdate` over delete+add.** When the value
+    ///    actually changed we update the existing row in place. Delete
+    ///    + add severs the Keychain ACL (the list of binaries that
+    ///    were granted access via "Always Allow"), forcing the user to
+    ///    re-grant on next read. `SecItemUpdate` keeps the ACL intact.
+    /// 3. **`kSecAttrAccessible: AfterFirstUnlock`.** Without this the
+    ///    row gets a default policy that some macOS releases interpret
+    ///    as "ask the user on every access". After-first-unlock means
+    ///    once the user has logged into the Mac after boot, the row is
+    ///    readable for the rest of the session without prompting.
     private static func saveAPIKey(_ apiKey: String, account: String) {
-        let deleteQuery: [String: Any] = [
+        // Empty value → delete the row (don't store empty data).
+        guard !apiKey.isEmpty, let data = apiKey.data(using: .utf8) else {
+            let deleteQuery: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: keychainService,
+                kSecAttrAccount as String: account
+            ]
+            SecItemDelete(deleteQuery as CFDictionary)
+            return
+        }
+
+        // No-op when the stored value is already what we'd write — the
+        // single biggest source of the repeated Keychain prompts.
+        let existing = loadAPIKey(account: account)
+        if existing == apiKey { return }
+
+        let baseQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: account
         ]
-        SecItemDelete(deleteQuery as CFDictionary)
-
-        guard !apiKey.isEmpty, let data = apiKey.data(using: .utf8) else { return }
-
-        let addQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account,
-            kSecValueData as String: data
+        // Try update first; if the row doesn't exist (`errSecItemNotFound`)
+        // fall through to add. This keeps the ACL list intact so users
+        // who have clicked "Always Allow" stay granted.
+        let updateAttrs: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
         ]
+        let updateStatus = SecItemUpdate(baseQuery as CFDictionary, updateAttrs as CFDictionary)
+        if updateStatus == errSecSuccess { return }
+        if updateStatus != errSecItemNotFound {
+            // Something weirder than "row doesn't exist" — wipe and
+            // re-add so we don't leave a half-written row behind.
+            SecItemDelete(baseQuery as CFDictionary)
+        }
+
+        var addQuery = baseQuery
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         SecItemAdd(addQuery as CFDictionary, nil)
     }
 }

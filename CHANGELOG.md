@@ -1,5 +1,91 @@
 # Changelog
 
+## 1.49.0-rc4 - 2026-06-03
+
+- **并发 Agent Runtime 重构，第 4/4 步：UI 跟上 + 用户可调。** rc3 的并发能跑但视觉上看不见——active 之外的 runtime 在背后流式输出，sidebar 那一行仍是静默的灰点。rc4 把这一刀补完：
+  - **Sidebar 状态点活了**。每条 session 行左侧的 5pt 圆点现在按 runtime 状态变色 + 脉动：① runtime 正在跑 → **绿色脉冲**（1.6× scale 反复 0.85s easeInOut）；② runtime 卡在 tool 审批（`toolDecisionWaiter != nil`）→ **橙色脉冲**；③ active 会话且空闲 → accent color 静态；④ 没 runtime 或 runtime 闲着 → 老灰色。脉动用 `@State pulse + .animation(.repeatForever, value: pulse)` 实现，在 `onAppear` / `onChange(of: shouldPulse)` 切换，没在跑的时候**不参与 animation**避免主线程白白渲染。新文件 `AgentSessionRowStatusDot.swift`（独立出去，AgentModeView 早已超 3000 行，不再恶化）。
+  - **AppState 改成订阅所有 runtime 的 objectWillChange**，不是只订阅 active。rc2/rc3 的 `activeRuntimeSubscription: AnyCancellable?` 升级为 `runtimeSubscriptions: [SessionID: AnyCancellable]`，每次 `subscribeToRuntime(_:)` 一次（创建 runtime 时一定调），`unsubscribeFromRuntime(id:)` 在 delete / prune 时调；订阅幂等。这让 sidebar 的状态点能在背景 runtime `isResponding` 翻转的瞬间重画——不再卡到下次 active 切换。代价：active 不变时背景 runtime 任一状态变化都会触发 AppState.objectWillChange，整棵 SwiftUI 子树重算一次；SwiftUI diff 是浅的，实测无感知，但如果未来 sidebar 性能有问题可以改成"只发给 sidebar 的 publisher"。
+  - **切 session 不再杀 outgoing turn**。pre-rc4 `selectAgentSession` / `startNewAgentSession` 会 `outgoing.requestTask?.cancel()` + 复位 isResponding——那是单 runtime 时代"我要换思路了"的等价物。现在每个 runtime 有自己的 task，切走只是 UI 焦点换了，**outgoing 该跑还是跑**，sidebar 上看得见。要真停只能在那个 runtime 的 chat pane 上点 Stop。这是并发体验的核心——切到 session B 写代码时，session A 的长 turn 仍在背后流式推进，回到 A 立刻看到中间状态。
+  - **Settings 加 "Per-provider concurrency" slider（1–8，默认 3）**。`perProviderConcurrencyLimit` 从 `static let` 升级为 `@Published var` + `AgentSettingsStore.{load,save}PerProviderConcurrencyLimit()` 持久化。`didSet` 钳 1–8、写盘、**立刻 `drainPendingDispatchQueue()`**——把 cap 从 3 调到 5 的瞬间，队列里前两个本来要等的 dispatch 立刻起步；从 5 调到 1 不会粗暴中断已经在跑的 turn，只是后续 cap 满了就排队。Settings → Agent → Concurrency section 新增。
+
+## 1.49.0-rc3 - 2026-06-03
+
+- **并发 Agent Runtime 重构，第 3/4 步：真并发。** `dispatchAgentMessage` / `runAgentLoop` / `prepareImagesForTextOnlyProvider` / `configurationForCurrentTurn` / `consumeNextQueuedMessageIfNeeded` / `captureAgentPlanFromLatestMessage` / `captureAgentGoalEvaluationFromLatestMessage` / `captureAgentPatchProposals` / `awaitToolDecision` / `appendToolMessage` / `setAgentError` / `maybeAutoCompressContext` / `shouldAutoCompressNow` / `compressAgentContext` / `runContextCompression` 全部改成 `(for runtime: AgentRuntime, …)` 签名。函数体内 `self.agent*` 一律改成 `runtime.*` 对应字段——这样多个 runtime 各自跑 `Task` 时谁也不会写错对方的 messages / toolCalls。原 API 保留薄壳转发到 `activeRuntime`（如 `persistActiveAgentSession()` / `clearAgentConversation()` / UI 直接调的 `stopAgentResponse()`），UI 侧零改动。`runAgentLoop` 现在用 `runtime.workspaceRootPath` 而不是 `AppState.rootDirectory` 解析 workspace——并发跑两个不同 workspace 的 session 时，背景 runtime 的 tool 不再被前台窗口切项目污染。
+- **Per-provider 并发上限。** `AppState` 新增 `inFlightCountByProvider: [String: Int]` + `pendingDispatchQueue: [PendingDispatch]`。`dispatchAgentMessage` 入口先 `acquireProviderSlotIfPossible(providerID:)`：当前 provider 在跑的 turn < 3（`perProviderConcurrencyLimit`）就 +1 通过；满了就入队 `PendingDispatch(runtimeID, text, images, providerID, enqueuedAt)` FIFO 排队。`runAgentLoop` 的 defer 末尾 `releaseProviderSlot(providerID:)` → -1 + `drainPendingDispatchQueue()` 扫一遍队列 promote 可以放行的（每 provider 一次只 promote 一个，保持公平）。**关键**：上限按 `providerID` 分桶（不是 baseURL 也不是 model），DashScope key 限 3 个 ↔ OpenAI key 同时再开 3 个互不挤；用户用多个 provider 时实际并发是 3 × provider 数。Settings slider 留给 rc4。
+- **Routine 改后台启动。** `fireRoutine` 不再 `appMode = .agent`，不再 `startNewAgentSession(inWorkspaceAt:)`（那俩会切 `activeAgentSessionID` + 切窗口当前文件夹），改成直接 `agentSessions.insert(session, at: 0)` + `AgentRuntime(session:)` + `agentRuntimes[id] = runtime`，然后 `dispatchAgentMessage(for: runtime, …)`——一切走并发 gate。Routine 跑起来时 sidebar 上会出现那条 session，但用户正在看的 chat pane 不受打扰；新建的那个 routine session 后台静默跑，rc4 会给 sidebar 加状态点让"哪些在跑"一眼可见。旧的"isAgentResponding 时退避，下个 tick 再试"逻辑废弃——并发 gate 接管这事，多条 routine 同时 fire 也都进队不会丢。
+- **runtime 删除清场。** `deleteAgentSession` 现在 cancel 该 runtime 的 `requestTask`、resume 它的 `toolDecisionWaiter`、从 `pendingDispatchQueue` 移除该 runtime 的所有排队条目——避免"session 删了但它的网络请求还在跑"或"队列里还有它的待 dispatch"的悬挂状态。
+- **关于 UI：rc3 不动一行 UI 代码。** chat pane / composer / sidebar / status bar 全部继续读 `appState.agent*` 委托属性——指向 active runtime。UI 上看起来还是"只有一个对话框"，但底下 active 之外的 runtime 已经真在并发跑了。rc4 会改 UI 直接绑 runtime 并加 sidebar 状态点，那时多 session 并发的"看得见"也跟上。**rc3 行为目标**：多 session / routine 真同时跑且互不阻塞，但视觉上跟 rc2 一致——active 切到正在跑的 routine session 上可以看到它的 messages 实时流入。
+- **空状态欢迎页顶部留白收一收，header 复制按钮不再被 focus ring 描蓝。** ① `AgentEmptyState` 在 transcript 里被 `.padding(.top, 80)` 推得太低，"What's up next, rocky?" 上方一大片空白，视觉上像把欢迎语生硬地按到了页面中段——改 `40`，整体往上提一截，但仍跟 header 留出可呼吸的间距，不会贴脸。② `AgentChatHeader` 顶部"复制 title"那个 `square.on.square` 小按钮，因为是 `.buttonStyle(.plain)` 但仍可被 macOS keyboard focus 系统抓住，键盘 tab 一过或者鼠标点完之后就挂一圈蓝色 focus ring，跟正文标题挤在一起非常脏。加 `.focusable(false)` 后这个按钮不再吃 focus，描边消失；顺手给同 header 里"新会话 / 切到 Editor 模式"两个 icon button 也补上同样的 `.focusable(false)`，避免哪天用户 tab 一下整个 header 又被框起来。视觉行为：只去掉 focus ring，按钮本身的点击/hover/help tooltip 全部保留，accessibility 仍可通过 VoiceOver rotor 访问。
+
+## 1.49.0-rc2 - 2026-06-03
+
+- **并发 Agent Runtime 重构，第 2/4 步：状态真搬。** `AgentRuntime` 扩成持有完整 per-session 运行状态：22 个 @Published 字段（messages / patchProposals / toolCalls / input / pendingImages,Skills,Files / pendingIncludeWorkspaceOverview / isResponding / turnStartedAt / errorMessage,Details / interactionMode / currentPlan,Goal / queuedMessages / sessionModelOverride / didEditFiles / worktreeChanges / isCompressingContext）+ 2 个非 Published 字段（requestTask / toolDecisionWaiter）。`AppState` 上的同名字段从 stored `@Published` 改成 get/set **委托属性**——读写自动路由到 `activeRuntime`，nil 时回安全默认（空数组 / nil / false）。这意味着 313 处 AppState 内部代码 + 75 处 UI 代码**一行不改**就完成数据迁移，靠的是相同符号名的语义重定向。
+- **关键防御：UI 刷新通知通过 objectWillChange 转发。** AppState 在 init 末尾 `subscribeToActiveRuntime()`，订阅 active runtime 的 `objectWillChange`，每次 runtime 内部 @Published 字段变化时调用 `appState.objectWillChange.send()`。`activeAgentSessionID` 切换时重订（startNew / select / delete 三处都加了 `subscribeToActiveRuntime()` 调用）。这让 SwiftUI 视图通过 `appState.agentMessages` 等绑定的现有路径继续收到刷新通知，不需要任何 @ObservedObject runtime 改动——UI 完全不动。
+- **三个 session 生命周期函数语义重写。** `startNewAgentSession` / `selectAgentSession` / `deleteAgentSession` / `pruneEmptyAgentSessions` 全部针对委托语义重写：① 不再"清 AppState 上唯一一份 agent\* 字段"（那个动作在委托下会**真把上一任 runtime 的状态清掉**——和原意"清出新槽"完全不等价）；② 改为"取消 outgoing runtime 的 in-flight 任务和 waiter"，per-session 状态保留在 runtime 上不变；③ runtime 在 activeAgentSessionID 切到它之前装好，避免委托 setter 写到 nil 黑洞；④ delete 时如果命中正在跑的 session 还会取消它的 requestTask 和 waiter，避免 URL session 泄漏；⑤ `persistActiveAgentSession` 改为通过 `runtime.persist()` 落盘，再把更新过的 session 镜像回 `agentSessions[index]` 让 sidebar 跟上 title/updatedAt。
+- **rc2 不动 UI。** 75 处 `appState.agent*` 读写继续工作。UI 直接绑 runtime 留给 rc3——那时真并发上线，sidebar 需要给每个 runtime 各画"正在跑"指示器，那是 UI 不得不动的最自然时机。**rc2 行为目标：和 v1.48 一致**——只跑一个 active turn，切 session 时 outgoing 被取消、incoming 显示自己的 messages。如果发现行为差异，那是 bug，不是 feature。
+
+## 1.49.0-rc1 - 2026-06-03
+
+- **并发 Agent Runtime 重构，第 1/4 步：脚手架。** 新增 `AgentRuntime` 类（`@MainActor`、`ObservableObject`、`Identifiable`），目前只持有 session 引用和 `workspaceRootPath`——真状态字段下个 rc 才搬。`AppState` 新增 `agentRuntimes: [AgentSession.ID: AgentRuntime]` 字典、`activeRuntime` 计算属性、`runtime(for:)` 懒加载。`startNewAgentSession` / `selectAgentSession` / `deleteAgentSession` 钩进生命周期：开 session 创建 runtime，删 session 销毁 runtime。**rc1 行为零变化**——UI 完全没动，所有 `@Published agent*` 字段还在 `AppState` 上原样工作，runtime 只是个空容器先就位。这一步的价值是：rc2 把状态搬进 runtime 并改 UI 绑定时，session 生命周期代码已经备好钩子，不会变成"两件事在一个 PR 里搅在一起"。`workspaceRootPath` 在 runtime 上是 `let`（构造时冻结）——为 rc3 真并发铺路：那时多个 runtime 各跑各 turn，谁也不能回头读 `AppState.rootDirectory`（窗口当前文件夹会因用户切项目而变化）。
+
+## 1.48.0-rc1 - 2026-06-03
+
+- **新增 Routines：到点自动开新 Agent session 跑预设 Prompt。** 数据模型 `AgentRoutine`（id / name / prompt / workspaceRootPath / modelID / schedule / isEnabled / lastRunAt / lastSessionID）落盘到 `~/Library/Application Support/VeilWriter/agent-routines/<uuid>.json`，一文件一 routine，复刻 `AgentSessionStore` 的容错读写——单条 JSON 坏掉只影响它自己。`AgentRoutineSchedule` 是 tagged enum，四种节奏：① `.interval(minutes)` 间隔；② `.dailyAt(h,m)` 每天定点；③ `.weekdaysAt(h,m)` 工作日定点（截图里 "Runs weekdays at 20:30" 的形态）；④ `.weeklyAt(weekday,h,m)`；`nextFireDate(after:calendar:)` 用 `Calendar.nextDate(after:matching:matchingPolicy:.nextTime)` 计算下次触发，避免自己造 DST/夏令时 bug。`AgentRoutineScheduler` 是 `@MainActor` 单例式持有：30s 间隔 `Timer.scheduledTimer` 挂到 `.common` runloop mode（菜单/拖动时也照走），每 tick 遍历快照判断哪些 routine `nextFireDate <= now`；启动时先做一次 `evaluate(catchUp: true)` 把睡眠/未启动期间错过的补跑一次；`UserNotifications` 懒申请权限——用户拒绝也不影响 routine 跑，只是少了系统通知。关键防御：trigger 返回 `Bool`——`AppState.fireRoutine` 在 `isAgentResponding == true` 时返回 false，scheduler 不更新 `lastDispatchedAt`，下个 tick 再试，**绝不打断你正在写代码时的当前对话**；同一 tick 重入用 `lastDispatchedAt[id]` < tickInterval 拦截，避免一个 minute 边界双发。`AppState` 新增 `agentRoutines: [AgentRoutine]`（@Published）+ `saveAgentRoutine` / `deleteAgentRoutine` / `toggleAgentRoutineEnabled` / `runAgentRoutineNow` / 内部 `fireRoutine(force:)`；fire 时先 `appMode = .agent` 再 `startNewAgentSession(inWorkspaceAt:)`（自动切到对的 workspace），按需要叠加 `agentSessionModelOverride`，最后复用现成的 `dispatchAgentMessage(text:images:)`——一行接进核心 turn loop。
+- **Sidebar 新增 "Routines" 区段（独立文件 `AgentRoutinesSidebarSection.swift`，避免恶化已超 3000 行的 `AgentModeView`）。** 区段插在 primary actions 和 Workspaces 之间。每行：左侧 `clock.fill`（启用）/ `clock`（停用）+ 名称 + 下面小字调度摘要（`schedule.summary` 输出 "每天 09:00" / "工作日 20:30" / "周一 09:00" / "每 30 分钟"）；hover 出 ▶ 立即运行 + ⏸ 启停按钮，右键菜单提供 启用/停用、立即运行、编辑、删除（destructive）；右上角 + 直接弹空白编辑器 sheet（默认绑当前 `rootDirectory`，省一步选 workspace）。空状态文案"还没有 Routine。点击 + 创建一条到点自动运行的提示词。"
+- **Routine 编辑器 sheet（`AgentRoutineEditorView`）。** 字段：名称（TextField）、Prompt（多行 TextEditor + 边框 overlay）、Workspace（Menu 列出 sessions 已用过的根 ∪ 最近文件夹 ∪ 当前 root，dedup + 按 lastPathComponent 字母序；带"不绑定 Workspace"选项）、模型（Menu 列出 `agentKnownModelIDs` ∪ provider library 每个 entry 的 `flashPrimary` / `proPrimary` / `flashAlternates` / `proAlternates`；带"跟随当前 Flash / Pro 路由"占位）、调度（segmented picker 四选一，下方 Stepper/Picker 联动配出小时分钟/星期）、启用开关。底部：左下"立即运行一次"（不影响调度时间表，且禁用态也能手动跑），右下取消 / 保存（保存按钮在 name 或 prompt 任一空时 disabled）。`assembledSchedule()` 从 local @State 重组回 enum，保存时 `appState.saveAgentRoutine(_:)` 一并刷新 scheduler 快照。
+
+## 1.47.0-rc22 - 2026-06-03
+
+- **会话置顶 + 归档（Cursor 风格的行内 icon 操作）。** `AgentSession` 新增 `pinnedAt: Date?` / `archivedAt: Date?` 两个字段（用时间戳而不是 bool：钉住的多条按 `pinnedAt` desc 排序，再钉一次自动浮到最顶；老 JSON 走 `decodeIfPresent` 兼容）；`AppState` 加 `toggleAgentSessionPinned(id:)` / `toggleAgentSessionArchived(id:)`，每次写回 `AgentSessionStore`。`AgentSessionsSidebar` 的 sessionRow 新增 `.onHover` + `hoveredSessionID` 状态，hover 时右侧浮出 pin（`pin` ↔ `pin.slash`）和 archive（`archivebox` ↔ `tray.and.arrow.up`）两个小按钮；未 hover 但已置顶的行常驻显示一个 45° 旋转的 `pin.fill` badge，让置顶状态一眼可见。右键菜单加「置顶 / 取消置顶」「归档 / 取消归档」「删除会话」。归档项不再混在主列表里：`workspaceGroup` 拆 `activeSessions` / `archivedSessions`，archived 走 workspace 末尾一个 `已归档 (N) ▸` 折叠条（`expandedArchivedGroups: Set<String>`），点开才展开，看完再点收起。组内排序新增 `sessionOrder(_:_:)`：① 已置顶在前，按 `pinnedAt` desc；② 其余按 `updatedAt` desc——workspace 之间的稳定顺序不变，只是组内多了一个"置顶块"。
+
+## 1.47.0-rc21 - 2026-06-03
+
+- **Agent 输入框：Cmd+V 真的能粘贴图片了（不再只对极少数 app 工作）。** 旧实现的 `hasImage` 只检查 pasteboard items 里有没有 `.png` / `.tiff`，但很多来源（Notes、Sketch、Figma、Safari/Chrome 网页图片、Cmd+Shift+Ctrl+4 截屏到剪贴板）放进 pasteboard 的是 `public.image`、`com.apple.icns` 或 NSImage 归档，这些类型一律不命中 → 用户感觉"粘贴对图片不生效"，只能点加号选文件。`AgentImagePasteboardHelper` 新增 `pasteboardHasImage(_:)`，先用 AppKit 官方推荐的 `NSImage.canInit(with:)` 做存在性判断，再退回到具体类型探测；`readImages(from:)` 也加了 `NSImage(pasteboard:)` 兜底分支——前面三条具体类型都没匹中就让 AppKit 自己解码，再 flatten 成 PNG。`ComposerNSTextView.paste(_:)` 切到新 helper，于是不管图片是从哪个 app 复制来的，Cmd+V 都能直接挂到 `agentPendingImages` 里。
+
+## 1.47.0-rc20 - 2026-06-03
+
+- **Keychain"想要使用机密信息"弹窗不再频繁出现。** 旧版 `saveAPIKey` 每次都 `SecItemDelete + SecItemAdd`，而 `AppState.agentProviderLibrary.didSet` 在 Settings 任何字段（base URL、model、entry 名）改动时都会触发，结果每动一下设置都对所有 entry 做一遍"删了再加"，每次 add 都被 macOS 视作新写入秘密 → 反复弹"VeilWriter 想使用钥匙串里的 'im.some.veilwriter.agent'"。三件套修复：① **no-op 快路径** —— 先读现有值，和要写的一样就直接 return，砍掉 99% 的重复写入；② **优先 `SecItemUpdate` 而不是 delete+add**，保住 Keychain ACL 列表（之前 delete 会清掉用户"始终允许"的授权，下次读就再问一次）；③ 写入时显式设 `kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlock`，避免默认策略在某些 macOS 版本上被解读为"每次访问都问"。空字符串路径还原成只 delete 不重建。
+
+## 1.47.0-rc19 - 2026-06-03
+
+- **粘贴一律按纯文本来，外部字体/段落样式不再污染编辑器。** 默认 `NSTextView.paste(_:)` 会优先挑选 pasteboard 里的 RTF/HTML，把源应用（Notes、Safari、终端、富文本编辑器）的字体、字号、行距、背景色整段灌进来，于是出现截图里粘贴命令突然字号变大 / 配色错乱的情况。`VeilWriterTextView.paste(_:)` 重写：自己读 `pasteboard.string(forType: .string)`，走 `insertText:replacementRange:` 注入——和敲键盘走同一条路径，undo / textDidChange / 语法高亮全部正常触发；只有真没字符串表示时才回落 `pasteAsPlainText:`。`ComposerNSTextView` 同步：原本图片分支 `super.paste` 也会带格式，改成同样的"读 string + insertText"；非图片分支也一并修。这样代码编辑器和 Agent 对话框两边粘贴体验都干净，外部样式一律剥离，渲染交由我们自己的高亮 / 主题来。
+
+## 1.47.0-rc18 - 2026-06-03
+
+- **新增 Developer ID 打包 + 公证 + DMG 一键脚本（`scripts/release.sh`）和发布手册（`docs/RELEASE.md`）。** 脚本流程：`xcodebuild archive`（Release + Manual + Developer ID 身份）→ `xcodebuild -exportArchive`（method=developer-id, 临时 ExportOptions.plist 内联生成）→ 优先 `create-dmg`、回落 `hdiutil` 打包 → `codesign --timestamp` 给 dmg 自身签名 → `xcrun notarytool submit --keychain-profile veilwriter-notary --wait` 同步公证 → `xcrun stapler staple` 钉公证票 → `spctl --assess` 自检；支持 `--skip-notarize` 跳过公证用于本地验证。证书身份从钥匙串里 `Developer ID Application: Beijing Alibaba ... (ZH2S7D6PL6)` 取，TEAM_ID 写死 `ZH2S7D6PL6`，版本号从 pbxproj 的 `MARKETING_VERSION` 抓。`docs/RELEASE.md` 详细写了 App-Specific Password 的申请路径（appleid.apple.com → 登录与安全 → 专用密码）、`xcrun notarytool store-credentials` 怎么把密码安全存进 Keychain、create-dmg 可选安装、常见公证失败排查、撤销/重发流程。
+
+## 1.47.0-rc17 - 2026-06-03
+
+- **窗口尺寸真正"记住上次退出时的状态"，且首次启动就开到屏幕 80%。** SwiftUI `WindowGroup` 既没设 `defaultSize` 也没设 frame autosave，于是每次启动都用一个小默认 frame，看着就像"我上次明明拖大了，它怎么又变小了"。新增 `applyFrameAutosaveAndDefaultSize(_:)`：① 第一次见到 `NSWindow` 时检查 `UserDefaults` 下 `"NSWindow Frame VeilWriterMainWindow"` 是否已有记录；没有就主动 `setFrame` 到 `screen.visibleFrame` 的 80% 并居中。② 之后调用 `setFrameAutosaveName("VeilWriterMainWindow")`，让 AppKit 自动把后续 resize 写回 UserDefaults，下次启动直接复原。③ 用 `NSHashTable.weakObjects()` + `didBindFrameAutosaveName` 守门：`WindowChromeConfigurator.poll()` 每个 runloop 都重入 `configure`，但 resize 和 setFrameAutosaveName 只在每个 window 首见时各跑一次；同时 AppKit 不允许两个 window 共用同一 autosave name，多窗口场景下只让第一个窗口持有 binding，后续窗口仍能拿到首次启动的 80% 居中行为但不污染 UserDefaults。
+
+## 1.47.0-rc16 - 2026-06-03
+
+- **点击 Workspace 前的文件夹图标可整组收起/展开。** 新增 `collapsedWorkspaces: Set<String>` 状态，独立于既有的"超过 5 条 → See more"展开标志。文件夹图标外面包了个 `Button`：点一下整组所有 session 立刻隐藏（带 150ms `easeInOut` 动画），只剩 workspace 标题；再点一下还原。视觉提示用 SF Symbol `folder` ↔ `folder.fill` 切换——填充态暗示"里面藏着东西"，空心态是"已打开"；`help` 文案也对应"展开 / 收起会话列表"。点击命中区域只盖住 14×14 的图标本身，标题行其余部分维持原 contextMenu（"New Chat in this Workspace"）不变，不会因为收起改动撞到右键菜单。
+
+## 1.47.0-rc15 - 2026-06-03
+
+- **Workspaces 顺序进一步固化，连"当前项目置顶"都去掉。** rc14 把当前 `rootDirectory` 置顶 + 其余字母序，但用户希望完全固定，不要因为切项目而动。新规则：所有命名 workspace 按 `workspaceDisplayName`（也就是 folder 的 `lastPathComponent`，更像 Finder 体验）做 `localizedCaseInsensitiveCompare`；"No workspace" 仍钉在最末。顺序只跟"有哪些 workspace"有关，跟"现在打开的是哪个"无关，跨启动跨切换 100% 稳定。
+
+## 1.47.0-rc14 - 2026-06-03
+
+- **Workspaces 分组顺序冻结，不再每发一条消息就上下乱跳。** 旧版 `groupedSessions` 按"组内 first session 的 updatedAt"排 workspace group，发条消息组就被顶到第一位，导致 Teamify / No workspace 反复换位置。新规则：① 当前 `rootDirectory` 对应的 workspace 永远置顶（眼睛最容易看到正在用的项目）；② 其余 workspace 按路径 `localizedCaseInsensitiveCompare` 字母序——跨启动跨操作全程稳定；③ "No workspace" 兜底组钉在最末。组**内**的 session 仍按 `updatedAt` 倒序，所以单组内"刚聊过的在上面"的直觉没丢，只是文件夹层不再乱动。
+
+## 1.47.0-rc13 - 2026-06-03
+
+- **qwen-vl 图片描述默认折叠成小胶囊，不再霸屏。** 文本-only 模型走 qwen-vl 兜底时，`contentByAppendingImageDescription` 把整段 AI 描述拼进了 user 消息的 content 里，于是用户的气泡里"图片说的啥"只占一行、底下却跟着一整版 markdown bullets（见截图）。新增 `AgentUserContentSplitter`：用正则匹配 `[Image description generated by … for N attached image(s)]` 头部行，把它和后面所有内容剥离成独立的 `description` 段；`userBubble` 渲染时只把用户本人那句话保留为正文，剥出来的描述塞进 `AgentImageDescriptionDisclosure` —— 一个白底 18% 透明胶囊，默认收起显示"图片 AI 描述 ⌄"，点击展开后才用半透明卡片显示完整内容。底层存储不变（依然是完整 content，下一轮模型仍能看到描述、上下文连贯性不受影响），只是看图省心了。
+
+## 1.47.0-rc12 - 2026-06-03
+
+- **侧栏不再堆"New Chat"垃圾。** 每按一次 ⌘N 都会建一条空 session 并落盘，时间一久 Workspaces 列表就密密麻麻全是同名"New Chat"，根本分不清哪个是哪个。本次：① `groupedSessions` 渲染前过滤掉"无 user 消息且非当前激活"的 session，UI 立刻干净；② 新增 `pruneEmptyAgentSessions()`，把这种空 session 从内存和磁盘（`AgentSessionStore.delete(id:)`）一并清掉；③ 在 `init` 加载 sessions 之后调用一次（启动时清存量），在 `startNewAgentSession()` insert 新 session 之前再调用一次（避免连按 ⌘N 累积）。规则上当前激活的会话即使空也保留——用户正打算往里写呢，藏起来高亮就没了。
+
+## 1.47.0-rc11 - 2026-06-03
+
+- **API 超时三件套：调大超时 + 友好中文报错 + 错误卡上的「重试」按钮。** 旧版 `AgentClient.requestTimeout = 45` 用在 `URLSessionConfiguration.timeoutIntervalForRequest`，这个语义是"两次字节之间最多等多久"，对带 reasoning 的 Qwen3/QwQ/DeepSeek-R1 来说首字节经常超 45s，于是好端端的请求被 NSURLErrorTimedOut 干掉，UI 只甩出一行英文 *"The request timed out."* 就没了。本次：① `requestTimeout: 45 → 120`；② 新增 `friendlyMessage(for:)`，把 `URLError`（timed out / 无网 / DNS / TLS / 连接重置 / 被取消…）和 `AgentClientError.serverStatus(401/403/404/429/5xx/504…)` 全部翻译成中文一行话 + 建议下一步操作；③ `AgentErrorCard` 右侧加「重试」「关闭」按钮，新增 `AppState.retryLastAgentTurn()` 直接复用 `runAgentLoop`（user 消息本来就还在历史里，错只是把空 assistant 占位删了），新增 `dismissAgentError()` 给关闭按钮用。`canRetryLastAgentTurn` 计算属性把"非响应中且历史里有 user 消息"作为重试可用条件，避免在压缩上下文或新会话上误触发。
+
+## 1.47.0-rc10 - 2026-06-03
+
+- **"正在思考"分隔条现在带实时秒表。** 之前思考中的横线只显示静态的"正在思考"和一个转圈圈，模型卡几十秒甚至几分钟也分不清是慢还是挂了。`dispatchAgentMessage` 时新写入 `agentTurnStartedAt`，`AgentThinkingDivider` 用 `TimelineView(.periodic(from:by:1))` 每秒读一次，渲染 `正在思考 · 12s`（>60s 自动切 `1m 5s`，>1h 切 `1h 03m`）；turn 结束、会话切换、清空对话、进入 Agent 模式时一并清空时间戳，避免残留。等于给用户一个"还活着"的脉搏，怀疑挂了直接看秒数有没有走就行。
+
 ## 1.47.0-rc9 - 2026-06-03
 
 - **Auto-approval safety judge always runs on Flash now.** The LLM judge that classifies "is this `run_command` shell command safe enough to auto-run" used to use the currently-active model — which for users on Pro routing meant every `find -name "*.swift"` decision burned Pro tokens *and* waited Pro latency, often timing out the 12s budget and falling back to the user gate. New `configurationForSafetyJudge()` always resolves to the active library entry's Flash model regardless of the turn's routing (with a graceful fallback to the per-turn config if Flash isn't set). Same YES/NO contract on the wire, an order of magnitude faster and cheaper in practice. Settings → Tool approval text updated to reflect the new behaviour.

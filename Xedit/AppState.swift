@@ -73,7 +73,6 @@ final class AppState: ObservableObject {
     @Published private(set) var selectedText = ""
     @Published private(set) var hasExternalFileChanges = false
     @Published private(set) var gitStatus = GitRepositoryStatus()
-    @Published private(set) var agentWorktreeChanges = AgentWorktreeChangeSummary()
     @Published var isAgentPanelVisible = false
     @Published var agentConfiguration: AgentConfiguration {
         didSet {
@@ -95,54 +94,117 @@ final class AppState: ObservableObject {
             AgentSettingsStore.saveProviderLibrary(agentProviderLibrary)
         }
     }
-    @Published var agentMessages: [AgentMessage] = []
-    @Published var agentPatchProposals: [AgentPatchProposal] = []
-    @Published var agentToolCalls: [AgentToolCall] = []
-    @Published var agentInput = ""
-    @Published var isAgentResponding = false
-    @Published var agentErrorMessage: String?
-    @Published var agentErrorDetails: AgentErrorDetails?
+    // MARK: - Per-session state (rc2: delegated to activeRuntime)
+    //
+    // The 22 fields below used to be `@Published` stored properties.
+    // rc2 moved them onto `AgentRuntime` (one runtime per AgentSession)
+    // and turned the AppState-side names into get/set delegates that
+    // route to `activeRuntime`. UI and AppState-internal call sites
+    // are unchanged — they read/write `appState.agentMessages` etc.
+    // exactly as before, but the data now lives on the runtime.
+    //
+    // Change notifications: `subscribeToActiveRuntime()` republishes
+    // the active runtime's `objectWillChange` through AppState's own
+    // publisher, so SwiftUI bindings against `appState.foo` still
+    // refresh when the underlying runtime field mutates.
+    //
+    // When there is no active runtime (no session opened yet), reads
+    // return safe defaults and writes are dropped. That matches the
+    // pre-rc2 "empty AppState fields before any session exists" state.
+
+    var agentMessages: [AgentMessage] {
+        get { activeRuntime?.messages ?? [] }
+        set { activeRuntime?.messages = newValue }
+    }
+    var agentPatchProposals: [AgentPatchProposal] {
+        get { activeRuntime?.patchProposals ?? [] }
+        set { activeRuntime?.patchProposals = newValue }
+    }
+    var agentToolCalls: [AgentToolCall] {
+        get { activeRuntime?.toolCalls ?? [] }
+        set { activeRuntime?.toolCalls = newValue }
+    }
+    var agentInput: String {
+        get { activeRuntime?.input ?? "" }
+        set { activeRuntime?.input = newValue }
+    }
+    var isAgentResponding: Bool {
+        get { activeRuntime?.isResponding ?? false }
+        set { activeRuntime?.isResponding = newValue }
+    }
+    /// Wall-clock moment the current turn started — set when the user's
+    /// message is dispatched, cleared when the loop exits. The thinking
+    /// banner reads this through a `TimelineView` so the elapsed seconds
+    /// tick visibly while the model is still working.
+    var agentTurnStartedAt: Date? {
+        get { activeRuntime?.turnStartedAt }
+        set { activeRuntime?.turnStartedAt = newValue }
+    }
+    var agentErrorMessage: String? {
+        get { activeRuntime?.errorMessage }
+        set { activeRuntime?.errorMessage = newValue }
+    }
+    var agentErrorDetails: AgentErrorDetails? {
+        get { activeRuntime?.errorDetails }
+        set { activeRuntime?.errorDetails = newValue }
+    }
     /// Images staged in the composer for the next user message.
-    @Published var agentPendingImages: [AgentImageAttachment] = []
-    /// Skills the user attached via `@skill` for the next send. Each
-    /// entry's SKILL.md body gets prepended (collapsed under a header)
-    /// to the user message right before it goes out, then this list is
-    /// cleared. The popover lives in the composer; AppState only stores
-    /// the staged selection so the send path can splice them in.
-    @Published var agentPendingSkills: [AgentSkillEntry] = []
+    var agentPendingImages: [AgentImageAttachment] {
+        get { activeRuntime?.pendingImages ?? [] }
+        set { activeRuntime?.pendingImages = newValue }
+    }
+    /// Skills the user attached via `@skill` for the next send.
+    var agentPendingSkills: [AgentSkillEntry] {
+        get { activeRuntime?.pendingSkills ?? [] }
+        set { activeRuntime?.pendingSkills = newValue }
+    }
     /// Files the user attached via the `@` picker for the next send.
-    /// Same lifecycle as `agentPendingSkills` — chip strip in the
-    /// composer, content spliced into the user prompt at dispatch.
-    @Published var agentPendingFiles: [AgentFileAttachment] = []
-    /// Whether the next send should include a workspace overview block
-    /// (current root + truncated file tree). Triggered by the `@workspace`
-    /// shortcut in the `@` picker.
-    @Published var agentPendingIncludeWorkspaceOverview: Bool = false
-    /// Top-level interaction mode for the active session. Plan locks
-    /// write/exec tools until the user approves a plan; Goal pins an
-    /// objective banner that's added to every system prompt.
-    @Published var agentInteractionMode: AgentInteractionMode = .normal
-    /// Current proposed/approved plan for Plan mode. Parsed out of the
-    /// assistant's reply when a ```plan fenced block arrives.
-    @Published var agentCurrentPlan: AgentPlan?
-    /// Currently-pinned goal for Goal mode. Created via the goal-mode
-    /// definition sheet; cleared when mode flips back to normal.
-    @Published var agentCurrentGoal: AgentGoal?
+    var agentPendingFiles: [AgentFileAttachment] {
+        get { activeRuntime?.pendingFiles ?? [] }
+        set { activeRuntime?.pendingFiles = newValue }
+    }
+    /// Whether the next send should include a workspace overview block.
+    var agentPendingIncludeWorkspaceOverview: Bool {
+        get { activeRuntime?.pendingIncludeWorkspaceOverview ?? false }
+        set { activeRuntime?.pendingIncludeWorkspaceOverview = newValue }
+    }
+    /// Top-level interaction mode for the active session.
+    var agentInteractionMode: AgentInteractionMode {
+        get { activeRuntime?.interactionMode ?? .normal }
+        set { activeRuntime?.interactionMode = newValue }
+    }
+    /// Current proposed/approved plan for Plan mode.
+    var agentCurrentPlan: AgentPlan? {
+        get { activeRuntime?.currentPlan }
+        set { activeRuntime?.currentPlan = newValue }
+    }
+    /// Currently-pinned goal for Goal mode.
+    var agentCurrentGoal: AgentGoal? {
+        get { activeRuntime?.currentGoal }
+        set { activeRuntime?.currentGoal = newValue }
+    }
 
     /// True when Plan mode is on AND no plan exists yet OR the existing
     /// plan hasn't been approved. While true, all write/exec tools and
     /// patch application are blocked.
     var isPlanGateActive: Bool {
-        guard agentInteractionMode == .plan else { return false }
-        guard let plan = agentCurrentPlan else { return true }
-        return plan.status != .approved && plan.status != .executing && plan.status != .done
+        activeRuntime?.isPlanGateActive ?? false
     }
-    /// Messages the user queued while the agent was busy. Each entry is a
-    /// snapshot of text + images, consumed FIFO once the current turn ends.
-    @Published var agentQueuedMessages: [AgentQueuedMessage] = []
-    /// Per-session concrete model override. If non-nil, takes precedence
-    /// over the configured Flash/Pro route for the active Agent session.
-    @Published var agentSessionModelOverride: String?
+    /// Messages the user queued while the agent was busy.
+    var agentQueuedMessages: [AgentQueuedMessage] {
+        get { activeRuntime?.queuedMessages ?? [] }
+        set { activeRuntime?.queuedMessages = newValue }
+    }
+    /// Per-session concrete model override.
+    var agentSessionModelOverride: String? {
+        get { activeRuntime?.sessionModelOverride }
+        set { activeRuntime?.sessionModelOverride = newValue }
+    }
+    /// Live `git status` snapshot for the active session's workspace.
+    var agentWorktreeChanges: AgentWorktreeChangeSummary {
+        get { activeRuntime?.worktreeChanges ?? .init() }
+        set { activeRuntime?.worktreeChanges = newValue }
+    }
     /// Model IDs the user has previously fetched in Settings — surfaced in
     /// the Agent-mode model picker as a quick switcher.
     @Published var agentKnownModelIDs: [String] = []
@@ -158,6 +220,29 @@ final class AppState: ObservableObject {
     }
     /// Persisted Agent-mode chat sessions, newest-updated first.
     @Published private(set) var agentSessions: [AgentSession] = []
+    /// Persisted Agent routines (scheduled prompts), most-recently-updated
+    /// first. Surfaces in the Agent-mode sidebar's Routines section and
+    /// drives the AgentRoutineScheduler that wakes them up on schedule.
+    @Published private(set) var agentRoutines: [AgentRoutine] = []
+    private let agentRoutineScheduler = AgentRoutineScheduler()
+
+    /// rc1 scaffold for v1.49's concurrent runtimes. One entry per
+    /// session that the user has touched this launch. AppState still
+    /// owns every `@Published agent*` field for now — rc2 starts
+    /// moving real state in here and rewires UI bindings; rc3 enables
+    /// per-runtime dispatch tasks for true parallel turns. Keeping the
+    /// dictionary alive in rc1 just means session lifecycle code already
+    /// knows where to create/destroy runtimes — when rc2 lands there's
+    /// no scramble to retrofit lifecycle.
+    @Published private(set) var agentRuntimes: [AgentSession.ID: AgentRuntime] = [:]
+
+    /// The runtime backing the currently-selected session, or nil if
+    /// no session is selected (or its session was deleted underneath
+    /// us). Computed so it always reflects `activeAgentSessionID`.
+    var activeRuntime: AgentRuntime? {
+        guard let id = activeAgentSessionID else { return nil }
+        return agentRuntimes[id]
+    }
     /// Active Agent-mode session id. nil means "scratch" — Editor-mode
     /// chat keeps working without forcing a session to exist.
     @Published var activeAgentSessionID: AgentSession.ID?
@@ -165,13 +250,25 @@ final class AppState: ObservableObject {
     /// true the moment the Agent successfully applies a patch in this
     /// session, and stays true until the session is replaced. Used to gate
     /// the worktree-change card so a fresh New Chat never shows it.
-    @Published private(set) var agentSessionDidEditFiles: Bool = false
+    /// Mirrors `AgentRuntime.didEditFiles` for the active session.
+    /// Pre-rc2 this was `@Published private(set)`; the delegate keeps
+    /// the same surface. Internal write call sites use `appState.agentSessionDidEditFiles = ...`
+    /// which routes to the active runtime.
+    var agentSessionDidEditFiles: Bool {
+        get { activeRuntime?.didEditFiles ?? false }
+        set { activeRuntime?.didEditFiles = newValue }
+    }
     /// Top-level UI mode. Editor is the classic file editor; agent hides
     /// the editor and shows the conversation-first layout.
     @Published var appMode: AppMode = .editor
     /// Continuation resumed when the user resolves (approve/deny/confirm) the
-    /// currently-blocked tool call. Internal to the agent loop.
-    private var agentToolDecisionWaiter: CheckedContinuation<AgentToolDecision, Never>?
+    /// currently-blocked tool call. Internal to the agent loop. Delegated
+    /// to `activeRuntime` post-rc2 — each runtime owns its own waiter so
+    /// concurrent sessions don't fight over one slot.
+    private var agentToolDecisionWaiter: CheckedContinuation<AgentToolDecision, Never>? {
+        get { activeRuntime?.toolDecisionWaiter }
+        set { activeRuntime?.toolDecisionWaiter = newValue }
+    }
     /// Display-ready Quick Open file list, backed by `ProjectFileListCache`.
     /// Populated instantly from disk cache on project open, then verified and
     /// backfilled by a background scan. `QuickOpenPanel` filters this in-memory
@@ -192,9 +289,61 @@ final class AppState: ObservableObject {
     private var securityScopedAccessURLs: Set<URL> = []
     private var gitStatusRefreshTask: Task<Void, Never>?
     private var quickOpenRefreshTask: Task<Void, Never>?
-    private var agentRequestTask: Task<Void, Never>?
+    /// Provider request `Task` for the active turn. Delegated to
+    /// `activeRuntime` post-rc2 so each runtime can hold its own.
+    private var agentRequestTask: Task<Void, Never>? {
+        get { activeRuntime?.requestTask }
+        set { activeRuntime?.requestTask = newValue }
+    }
     private var editorSettingsSideEffectsWorkItem: DispatchWorkItem?
     private var editorSettingsObserver: AnyCancellable?
+    /// Republishes EVERY runtime's `objectWillChange` through AppState's
+    /// own publisher. Pre-rc4 this only forwarded the active runtime —
+    /// fine for the chat pane (delegated `agent*` props point at active),
+    /// but the sidebar busy dot needs to know when a background runtime
+    /// flips `isResponding` too. One subscription per runtime, indexed by
+    /// session id so we can drop them when sessions are deleted.
+    private var runtimeSubscriptions: [AgentSession.ID: AnyCancellable] = [:]
+
+    // MARK: - Per-provider concurrency (v1.49 rc3)
+    //
+    // Allow multiple sessions to run simultaneously, but cap each
+    // provider so a routine fleet can't sprint past its rate limit.
+    // The cap is per `providerID` (not per baseURL) — same provider,
+    // different base URL, still one quota pool.
+    //
+    // When the cap is hit, additional dispatches go into
+    // `pendingDispatchQueue` (FIFO) and drain as soon as a slot frees.
+
+    /// Cap on simultaneous in-flight turns per provider. User-tunable
+    /// via Settings → Agent → "Per-provider concurrency". Persisted to
+    /// UserDefaults and applied immediately — raising it lets queued
+    /// dispatches drain right away; lowering it stops promoting new
+    /// dispatches until current ones finish (it never aborts running
+    /// turns to enforce a smaller cap).
+    @Published var perProviderConcurrencyLimit: Int = AgentSettingsStore.loadPerProviderConcurrencyLimit() {
+        didSet {
+            let clamped = max(1, min(8, perProviderConcurrencyLimit))
+            if clamped != perProviderConcurrencyLimit {
+                perProviderConcurrencyLimit = clamped
+                return
+            }
+            AgentSettingsStore.savePerProviderConcurrencyLimit(clamped)
+            // Raising the cap may free up slots for queued dispatches.
+            drainPendingDispatchQueue()
+        }
+    }
+
+    private var inFlightCountByProvider: [String: Int] = [:]
+    private var pendingDispatchQueue: [PendingDispatch] = []
+
+    private struct PendingDispatch {
+        let runtimeID: AgentSession.ID
+        let text: String
+        let images: [AgentImageAttachment]
+        let providerID: String
+        let enqueuedAt: Date
+    }
 
     init(
         openedFileURL: URL? = nil,
@@ -237,15 +386,55 @@ final class AppState: ObservableObject {
         self.agentSessions = AgentSessionStore.loadAll()
         self.agentKnownModelIDs = AgentSettingsStore.loadKnownModelIDs()
         self.agentAlwaysAllowedCommands = AgentSettingsStore.loadAlwaysAllowedCommands()
+        // Sweep persisted "New Chat" rows that never received a user
+        // message — every ⌘N press creates one on disk, and over time
+        // the sidebar fills with identical empty placeholders. At launch
+        // there's no active session yet, so this purges all of them.
+        pruneEmptyAgentSessions()
+        self.agentRoutines = AgentRoutineStore.loadAll()
+        agentRoutineScheduler.start(initialRoutines: agentRoutines) { [weak self] routineID in
+            self?.fireRoutine(id: routineID) ?? false
+        }
+        // No initial subscriptions to set up: runtimes are created
+        // lazily as the user opens sessions, and `subscribeToRuntime`
+        // runs at every creation site.
     }
 
     deinit {
         gitStatusRefreshTask?.cancel()
         quickOpenRefreshTask?.cancel()
         agentRequestTask?.cancel()
+        for cancellable in runtimeSubscriptions.values { cancellable.cancel() }
         for url in securityScopedAccessURLs {
             url.stopAccessingSecurityScopedResource()
         }
+    }
+
+    /// Compatibility shim — pre-rc4 callers used to ask AppState to
+    /// re-establish the change-forward link whenever `activeAgentSessionID`
+    /// flipped. With per-runtime subscriptions the active flip is no
+    /// longer special, but we make sure subscriptions exist for the
+    /// active runtime (in case it was created off the lifecycle hooks).
+    private func subscribeToActiveRuntime() {
+        if let runtime = activeRuntime {
+            subscribeToRuntime(runtime)
+        }
+    }
+
+    /// Add the runtime's `objectWillChange` into AppState's republish
+    /// chain. Idempotent — calling it twice for the same runtime is a
+    /// no-op. Paired with `unsubscribeFromRuntime(id:)` when a session
+    /// is deleted so cancellables don't leak.
+    private func subscribeToRuntime(_ runtime: AgentRuntime) {
+        if runtimeSubscriptions[runtime.id] != nil { return }
+        runtimeSubscriptions[runtime.id] = runtime.objectWillChange
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+    }
+
+    private func unsubscribeFromRuntime(id: AgentSession.ID) {
+        runtimeSubscriptions.removeValue(forKey: id)?.cancel()
     }
 
     var activeTab: EditorTab? {
@@ -406,11 +595,17 @@ final class AppState: ObservableObject {
     /// workspace overview). Queues if the agent is already responding.
     /// Editor-mode and Agent-mode share this entry point.
     func sendAgentMessage() {
-        let userText = agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        let images = agentPendingImages
-        let skills = agentPendingSkills
-        let files = agentPendingFiles
-        let includeWorkspaceOverview = agentPendingIncludeWorkspaceOverview
+        // The UI's send button always targets whatever session is on
+        // screen — that's the active runtime by definition. If there
+        // isn't one, lazily create one so a brand-new install can fire
+        // off its first message without manually picking ⌘N first.
+        guard let runtime = activeRuntime ?? activeRuntimeAfterCreatingNewSession() else { return }
+
+        let userText = runtime.input.trimmingCharacters(in: .whitespacesAndNewlines)
+        let images = runtime.pendingImages
+        let skills = runtime.pendingSkills
+        let files = runtime.pendingFiles
+        let includeWorkspaceOverview = runtime.pendingIncludeWorkspaceOverview
         guard !userText.isEmpty || !images.isEmpty || !skills.isEmpty || !files.isEmpty || includeWorkspaceOverview else { return }
 
         // Splice attached context (skills / files / workspace overview) in
@@ -423,18 +618,26 @@ final class AppState: ObservableObject {
             includeWorkspaceOverview: includeWorkspaceOverview
         )
 
-        agentInput = ""
-        agentPendingImages = []
-        agentPendingSkills = []
-        agentPendingFiles = []
-        agentPendingIncludeWorkspaceOverview = false
+        runtime.input = ""
+        runtime.pendingImages = []
+        runtime.pendingSkills = []
+        runtime.pendingFiles = []
+        runtime.pendingIncludeWorkspaceOverview = false
 
-        if isAgentResponding {
-            agentQueuedMessages.append(AgentQueuedMessage(text: prompt, images: images))
+        if runtime.isResponding {
+            runtime.queuedMessages.append(AgentQueuedMessage(text: prompt, images: images))
             return
         }
 
-        dispatchAgentMessage(text: prompt, images: images)
+        dispatchAgentMessage(for: runtime, text: prompt, images: images)
+    }
+
+    /// Fallback used by `sendAgentMessage` when the user typed into the
+    /// composer before ever opening a session. Starts a new one so
+    /// their message has somewhere to go.
+    private func activeRuntimeAfterCreatingNewSession() -> AgentRuntime? {
+        _ = startNewAgentSession()
+        return activeRuntime
     }
 
     /// Build the outgoing prompt, prepending sections for attached
@@ -735,58 +938,59 @@ final class AppState: ObservableObject {
             """
         }
 
-        if isAgentResponding {
-            agentQueuedMessages.append(AgentQueuedMessage(text: prompt, images: []))
+        guard let runtime = activeRuntime else { return }
+        if runtime.isResponding {
+            runtime.queuedMessages.append(AgentQueuedMessage(text: prompt, images: []))
             return
         }
-        dispatchAgentMessage(text: prompt, images: [])
+        dispatchAgentMessage(for: runtime, text: prompt, images: [])
     }
 
     /// Parse the most recent assistant message looking for a ```plan
     /// fenced block and replace `agentCurrentPlan` if one is found and
-    /// the user hasn't already approved a plan this session. Called by
-    /// the agent loop after each assistant message lands.
+    /// the user hasn't already approved a plan this session. Convenience
+    /// wrapper that targets `activeRuntime`; the turn loop calls the
+    /// runtime-explicit variant below.
     func captureAgentPlanFromLatestMessage() {
-        guard agentInteractionMode == .plan else { return }
-        // Don't clobber an already-approved plan.
-        if let existing = agentCurrentPlan,
+        guard let runtime = activeRuntime else { return }
+        captureAgentPlanFromLatestMessage(for: runtime)
+    }
+
+    func captureAgentPlanFromLatestMessage(for runtime: AgentRuntime) {
+        guard runtime.interactionMode == .plan else { return }
+        if let existing = runtime.currentPlan,
            existing.status == .approved || existing.status == .executing || existing.status == .done {
-            // But DO let an approved plan be progress-updated.
-            applyAgentPlanProgressFromLatestMessage(existingPlan: existing)
+            applyAgentPlanProgressFromLatestMessage(for: runtime, existingPlan: existing)
             return
         }
-        guard let last = agentMessages.last(where: { $0.role == .assistant && !$0.content.isEmpty }),
+        guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }),
               let parsed = AgentPlanParser.extract(from: last.content) else {
             return
         }
-        agentCurrentPlan = parsed
+        runtime.currentPlan = parsed
     }
 
-    /// Walks the latest assistant message for a ```progress block and
-    /// applies the step-status updates to `agentCurrentPlan`. Called
-    /// from `captureAgentPlanFromLatestMessage` after an approved plan
-    /// is already in place.
-    private func applyAgentPlanProgressFromLatestMessage(existingPlan: AgentPlan) {
-        guard let last = agentMessages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else { return }
+    private func applyAgentPlanProgressFromLatestMessage(for runtime: AgentRuntime, existingPlan: AgentPlan) {
+        guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else { return }
         if let next = AgentPlanParser.applyProgress(to: existingPlan, from: last.content) {
-            agentCurrentPlan = next
+            runtime.currentPlan = next
         }
     }
 
-    /// Parse the most recent assistant message for a ```goal-check block
-    /// and apply its done/undone flips to `agentCurrentGoal`. Called
-    /// from the agent loop defer right after the plan capture. The
-    /// user retains override authority: any flip we apply here can be
-    /// reversed instantly with a manual checkbox toggle; conversely a
-    /// later ```goal-check from the model can re-flip a user override.
+    /// Convenience wrapper that targets `activeRuntime`.
     func captureAgentGoalEvaluationFromLatestMessage() {
-        guard agentInteractionMode == .goal,
-              let goal = agentCurrentGoal,
+        guard let runtime = activeRuntime else { return }
+        captureAgentGoalEvaluationFromLatestMessage(for: runtime)
+    }
+
+    func captureAgentGoalEvaluationFromLatestMessage(for runtime: AgentRuntime) {
+        guard runtime.interactionMode == .goal,
+              let goal = runtime.currentGoal,
               !goal.checklist.isEmpty else { return }
-        guard let last = agentMessages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else { return }
+        guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else { return }
         if let updated = AgentGoalChecklistParser.applyEvaluation(to: goal, from: last.content) {
-            agentCurrentGoal = updated
-            persistActiveAgentSession()
+            runtime.currentGoal = updated
+            persistAgentSession(runtime: runtime)
         }
     }
 
@@ -891,11 +1095,12 @@ final class AppState: ObservableObject {
             Pick up from step \(startIdx + 1) and emit a `progress` block as you go.
             """
         }
-        if isAgentResponding {
-            agentQueuedMessages.append(AgentQueuedMessage(text: prompt, images: []))
+        guard let runtime = activeRuntime else { return }
+        if runtime.isResponding {
+            runtime.queuedMessages.append(AgentQueuedMessage(text: prompt, images: []))
             return
         }
-        dispatchAgentMessage(text: prompt, images: [])
+        dispatchAgentMessage(for: runtime, text: prompt, images: [])
     }
 
     /// Replace the goal definition for Goal mode. Empty values clear it.
@@ -953,18 +1158,19 @@ final class AppState: ObservableObject {
         \(files)\(extraLine)
         """
 
-        agentInput = ""
-        agentPendingImages = []
+        guard let runtime = activeRuntime else { return }
+        runtime.input = ""
+        runtime.pendingImages = []
 
-        if isAgentResponding {
-            agentQueuedMessages.append(AgentQueuedMessage(text: prompt, images: []))
+        if runtime.isResponding {
+            runtime.queuedMessages.append(AgentQueuedMessage(text: prompt, images: []))
             return
         }
 
         if appMode == .editor {
             isAgentPanelVisible = true
         }
-        dispatchAgentMessage(text: prompt, images: [])
+        dispatchAgentMessage(for: runtime, text: prompt, images: [])
     }
 
     /// Cancel the in-flight response (if any). Queued messages are kept and
@@ -990,35 +1196,111 @@ final class AppState: ObservableObject {
         agentPendingImages.removeAll { $0.id == id }
     }
 
-    private func dispatchAgentMessage(text: String, images: [AgentImageAttachment]) {
-        agentErrorMessage = nil
-        agentErrorDetails = nil
-        isAgentResponding = true
+    private func dispatchAgentMessage(for runtime: AgentRuntime, text: String, images: [AgentImageAttachment]) {
+        let configuration = configurationForCurrentTurn(for: runtime)
+        let providerID = configuration.providerID
+
+        // Concurrency gate: cap simultaneous turns per provider so a
+        // routine fleet can't blow past the provider's rate limit. If
+        // the slot isn't open, queue this dispatch — `releaseProviderSlot`
+        // drains pending entries FIFO as turns finish.
+        guard acquireProviderSlotIfPossible(providerID: providerID) else {
+            pendingDispatchQueue.append(
+                PendingDispatch(
+                    runtimeID: runtime.id,
+                    text: text,
+                    images: images,
+                    providerID: providerID,
+                    enqueuedAt: Date()
+                )
+            )
+            return
+        }
+
+        runtime.errorMessage = nil
+        runtime.errorDetails = nil
+        runtime.isResponding = true
+        runtime.turnStartedAt = Date()
 
         let userMessage = AgentMessage(role: .user, content: text, images: images)
-        agentMessages.append(userMessage)
-        let configuration = configurationForCurrentTurn()
+        runtime.messages.append(userMessage)
         let imageDescriptionConfiguration = agentConfiguration.normalized.imageDescription.agentConfiguration
 
-        agentRequestTask?.cancel()
-        agentRequestTask = Task { [weak self] in
-            await self?.prepareImagesForTextOnlyProvider(
+        runtime.requestTask?.cancel()
+        runtime.requestTask = Task { [weak self, weak runtime] in
+            guard let self, let runtime else { return }
+            await self.prepareImagesForTextOnlyProvider(
+                for: runtime,
                 userMessageID: userMessage.id,
                 mainConfiguration: configuration,
                 imageDescriptionConfiguration: imageDescriptionConfiguration
             )
-            await self?.runAgentLoop(configuration: configuration)
+            await self.runAgentLoop(for: runtime, configuration: configuration)
         }
     }
 
+    /// Try to claim a slot for `providerID`. Returns true if the cap
+    /// wasn't reached and a slot was reserved; false if the caller
+    /// should queue. Always pairs with `releaseProviderSlot(providerID:)`
+    /// from the turn loop's defer so counts stay accurate even on
+    /// thrown errors / cancellation.
+    private func acquireProviderSlotIfPossible(providerID: String) -> Bool {
+        let current = inFlightCountByProvider[providerID] ?? 0
+        guard current < perProviderConcurrencyLimit else { return false }
+        inFlightCountByProvider[providerID] = current + 1
+        return true
+    }
+
+    private func releaseProviderSlot(providerID: String) {
+        let current = inFlightCountByProvider[providerID] ?? 0
+        if current <= 1 {
+            inFlightCountByProvider.removeValue(forKey: providerID)
+        } else {
+            inFlightCountByProvider[providerID] = current - 1
+        }
+        // Drain any pending entries that can now grab the freshly
+        // released slot. Walk once: each released slot can promote at
+        // most one queued entry for the same provider; entries for
+        // other providers stay in line.
+        drainPendingDispatchQueue()
+    }
+
+    private func drainPendingDispatchQueue() {
+        guard !pendingDispatchQueue.isEmpty else { return }
+        var remaining: [PendingDispatch] = []
+        remaining.reserveCapacity(pendingDispatchQueue.count)
+        // Walk in FIFO order; promote the first entry per provider
+        // that fits under the cap, leave the rest queued.
+        var promotedByProvider: Set<String> = []
+        for entry in pendingDispatchQueue {
+            if promotedByProvider.contains(entry.providerID) {
+                remaining.append(entry)
+                continue
+            }
+            let current = inFlightCountByProvider[entry.providerID] ?? 0
+            guard current < perProviderConcurrencyLimit else {
+                remaining.append(entry)
+                continue
+            }
+            guard let runtime = agentRuntimes[entry.runtimeID] else {
+                // Runtime was torn down (session deleted) — drop it.
+                continue
+            }
+            promotedByProvider.insert(entry.providerID)
+            dispatchAgentMessage(for: runtime, text: entry.text, images: entry.images)
+        }
+        pendingDispatchQueue = remaining
+    }
+
     private func prepareImagesForTextOnlyProvider(
+        for runtime: AgentRuntime,
         userMessageID: AgentMessage.ID,
         mainConfiguration: AgentConfiguration,
         imageDescriptionConfiguration: AgentConfiguration
     ) async {
         guard !mainConfiguration.supportsImageInput else { return }
-        guard let index = agentMessages.firstIndex(where: { $0.id == userMessageID }) else { return }
-        let images = agentMessages[index].images
+        guard let index = runtime.messages.firstIndex(where: { $0.id == userMessageID }) else { return }
+        let images = runtime.messages[index].images
         guard !images.isEmpty else { return }
 
         let description: String
@@ -1032,11 +1314,11 @@ final class AppState: ObservableObject {
         }
 
         guard !Task.isCancelled,
-              let liveIndex = agentMessages.firstIndex(where: { $0.id == userMessageID }) else {
+              let liveIndex = runtime.messages.firstIndex(where: { $0.id == userMessageID }) else {
             return
         }
-        agentMessages[liveIndex].content = Self.contentByAppendingImageDescription(
-            to: agentMessages[liveIndex].content,
+        runtime.messages[liveIndex].content = Self.contentByAppendingImageDescription(
+            to: runtime.messages[liveIndex].content,
             description: description,
             imageCount: images.count,
             providerID: imageDescriptionConfiguration.providerID,
@@ -1098,10 +1380,12 @@ final class AppState: ObservableObject {
 
     /// Resolve the configuration to use for this turn. Honours the per-
     /// session concrete model override if one is set; otherwise follows the
-    /// global Flash/Pro route.
-    private func configurationForCurrentTurn() -> AgentConfiguration {
+    /// global Flash/Pro route. Takes the runtime so concurrent runs each
+    /// pick up their own override rather than whatever happened to be on
+    /// the currently-selected one.
+    private func configurationForCurrentTurn(for runtime: AgentRuntime) -> AgentConfiguration {
         var configuration = agentConfiguration.normalized.resolved(for: .interactive)
-        if let override = agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+        if let override = runtime.sessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
            !override.isEmpty {
             configuration.model = override
         }
@@ -1112,14 +1396,14 @@ final class AppState: ObservableObject {
         agentConfiguration.normalized.resolved(for: .compression)
     }
 
-    private func consumeNextQueuedMessageIfNeeded() {
+    private func consumeNextQueuedMessageIfNeeded(for runtime: AgentRuntime) {
         // Wait for any in-flight compression to finish — otherwise the
         // user's queued message would race a compression that just got
         // kicked off in the same defer block.
-        guard !isAgentResponding, !isCompressingAgentContext else { return }
-        guard let next = agentQueuedMessages.first else { return }
-        agentQueuedMessages.removeFirst()
-        dispatchAgentMessage(text: next.text, images: next.images)
+        guard !runtime.isResponding, !runtime.isCompressingContext else { return }
+        guard let next = runtime.queuedMessages.first else { return }
+        runtime.queuedMessages.removeFirst()
+        dispatchAgentMessage(for: runtime, text: next.text, images: next.images)
     }
 
     func clearAgentConversation() {
@@ -1134,6 +1418,7 @@ final class AppState: ObservableObject {
         agentToolDecisionWaiter?.resume(returning: .denied(reason: "Conversation cleared"))
         agentToolDecisionWaiter = nil
         isAgentResponding = false
+        agentTurnStartedAt = nil
         persistActiveAgentSession()
     }
 
@@ -1154,6 +1439,7 @@ final class AppState: ObservableObject {
             agentErrorMessage = nil
             agentErrorDetails = nil
             isAgentResponding = false
+            agentTurnStartedAt = nil
             startNewAgentSession()
         }
     }
@@ -1164,25 +1450,35 @@ final class AppState: ObservableObject {
 
     @discardableResult
     func startNewAgentSession() -> AgentSession {
-        agentRequestTask?.cancel()
-        agentMessages = []
-        agentPatchProposals = []
-        agentToolCalls = []
-        agentQueuedMessages = []
-        agentPendingImages = []
-        agentErrorMessage = nil
-        agentErrorDetails = nil
-        agentToolDecisionWaiter?.resume(returning: .denied(reason: "Session switched"))
-        agentToolDecisionWaiter = nil
-        isAgentResponding = false
-        agentSessionModelOverride = nil
+        // Pre-rc2 this function cleared a wall of `agent*` fields on
+        // AppState (messages, toolCalls, queued, errors, …). Under rc2
+        // those fields delegate to `activeRuntime`, so clearing them
+        // here would actually wipe the OUTGOING session's runtime —
+        // the wrong thing. rc4 went further: the outgoing turn isn't
+        // even cancelled. With per-runtime concurrency, "I want a new
+        // chat" no longer implies "kill the one I was on" — the old
+        // one keeps streaming in the background and the user can pick
+        // it back up from the sidebar.
+
+        // Garbage-collect any prior empty "New Chat" rows before adding a
+        // fresh one — otherwise repeatedly pressing ⌘N stacks up empty
+        // placeholders in the sidebar.
+        pruneEmptyAgentSessions()
 
         let session = AgentSession(
             workspaceRootPath: rootDirectory?.standardizedFileURL.path,
             modelID: activeAgentModelID
         )
         agentSessions.insert(session, at: 0)
+        // Build the runtime BEFORE flipping activeAgentSessionID — the
+        // delegated `agent*` setters below all route to `activeRuntime`,
+        // and there has to be one in `agentRuntimes` for those writes
+        // to land somewhere.
+        let newRuntime = AgentRuntime(session: session)
+        agentRuntimes[session.id] = newRuntime
+        subscribeToRuntime(newRuntime)
         activeAgentSessionID = session.id
+        // These now go to the freshly-built runtime via delegation.
         agentSessionDidEditFiles = false
         agentInteractionMode = .normal
         agentCurrentPlan = nil
@@ -1211,75 +1507,250 @@ final class AppState: ObservableObject {
     }
 
     func selectAgentSession(id: AgentSession.ID) {
-        guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
+        guard agentSessions.contains(where: { $0.id == id }) else { return }
         // Save the outgoing session first.
         persistActiveAgentSession()
 
-        agentRequestTask?.cancel()
-        agentToolDecisionWaiter?.resume(returning: .denied(reason: "Session switched"))
-        agentToolDecisionWaiter = nil
-        isAgentResponding = false
+        // rc4: switching away from a session no longer kills its in-flight
+        // turn. Each runtime owns its own request task and waiter; with
+        // real concurrency in place, switching is purely a UI focus
+        // change. The outgoing turn keeps streaming, and the sidebar's
+        // status dot makes that visible (green pulse on the row you
+        // just left). If the user actually wants to stop it, the Stop
+        // button on that runtime's chat pane is the explicit affordance.
 
-        let session = agentSessions[index]
-        activeAgentSessionID = session.id
-        agentMessages = session.messages
-        agentSessionDidEditFiles = session.didEditFiles
-        let routedModel = agentConfiguration.normalized.model(for: .interactive)
-        agentSessionModelOverride = session.modelID == routedModel ? nil : session.modelID
-        agentPatchProposals = []
-        agentToolCalls = []
-        agentQueuedMessages = []
-        agentPendingImages = []
-        agentErrorMessage = nil
-        agentErrorDetails = nil
-        // Restore per-session plan/goal state so re-selecting a session
-        // resumes the same workflow gate / pinned objective rather than
-        // silently dropping back to Normal.
-        agentInteractionMode = session.interactionMode
-        agentCurrentPlan = session.currentPlan
-        agentCurrentGoal = session.currentGoal
+        // Make sure the destination runtime is built before flipping
+        // `activeAgentSessionID` — delegated readers fall back to
+        // safe defaults if the runtime is missing, which would briefly
+        // show the new session as empty before the runtime appears.
+        _ = runtime(for: id)
+        activeAgentSessionID = id
+
+        // Re-derive the session model override from the persisted
+        // session record. The runtime carries it across the lifetime
+        // of one launch, but a freshly-built runtime started from a
+        // disk session needs this seeded.
+        if let runtime = activeRuntime {
+            let session = runtime.session
+            let routedModel = agentConfiguration.normalized.model(for: .interactive)
+            runtime.sessionModelOverride = session.modelID == routedModel ? nil : session.modelID
+        }
+    }
+
+    /// Drop sessions that never received a user message — they're
+    /// indistinguishable "New Chat" placeholders left behind by users
+    /// who hit ⌘N and walked away. The currently-active session is
+    /// preserved even when empty (the user is presumably about to type
+    /// into it). Wipes both the in-memory list and the persisted JSON.
+    private func pruneEmptyAgentSessions() {
+        let activeID = activeAgentSessionID
+        let toRemove = agentSessions.filter { session in
+            if session.id == activeID { return false }
+            return !session.messages.contains(where: { $0.role == .user })
+        }
+        guard !toRemove.isEmpty else { return }
+        for session in toRemove {
+            AgentSessionStore.delete(id: session.id)
+        }
+        let removedIDs = Set(toRemove.map(\.id))
+        agentSessions.removeAll { removedIDs.contains($0.id) }
+        // Tear down any runtimes left for the pruned sessions, lest
+        // they keep republishing change events into AppState and
+        // hold onto in-flight tasks for sessions that no longer exist.
+        for id in removedIDs {
+            agentRuntimes.removeValue(forKey: id)
+            unsubscribeFromRuntime(id: id)
+        }
+    }
+
+    /// Lazy lookup: returns the existing runtime for `sessionID` or
+    /// builds one on demand from the persisted session list. Used by
+    /// the session lifecycle hooks below to make sure every selected
+    /// session has a runtime entry sitting in `agentRuntimes`. Returns
+    /// nil only when the session id doesn't exist anymore (e.g. it was
+    /// just deleted on disk).
+    @discardableResult
+    func runtime(for sessionID: AgentSession.ID) -> AgentRuntime? {
+        if let existing = agentRuntimes[sessionID] { return existing }
+        guard let session = agentSessions.first(where: { $0.id == sessionID }) else { return nil }
+        let runtime = AgentRuntime(session: session)
+        agentRuntimes[sessionID] = runtime
+        subscribeToRuntime(runtime)
+        return runtime
     }
 
     func deleteAgentSession(id: AgentSession.ID) {
+        // If the doomed session is currently mid-turn, cancel its
+        // in-flight work before tearing down the runtime so the URL
+        // session task and tool-decision waiter don't leak. The
+        // turn loop's defer will release the provider slot when the
+        // cancellation propagates.
+        if let doomed = agentRuntimes[id] {
+            doomed.requestTask?.cancel()
+            doomed.toolDecisionWaiter?.resume(returning: .denied(reason: "Session deleted"))
+            doomed.toolDecisionWaiter = nil
+        }
+        // Drop any not-yet-started dispatches queued for this session
+        // so they don't fire after the session is gone.
+        pendingDispatchQueue.removeAll { $0.runtimeID == id }
+
         AgentSessionStore.delete(id: id)
         agentSessions.removeAll { $0.id == id }
+        agentRuntimes.removeValue(forKey: id)
+        unsubscribeFromRuntime(id: id)
         if activeAgentSessionID == id {
             activeAgentSessionID = nil
-            agentMessages = []
-            agentSessionDidEditFiles = false
-            agentPatchProposals = []
-            agentToolCalls = []
-            agentQueuedMessages = []
-            agentPendingImages = []
-            agentErrorMessage = nil
-            agentErrorDetails = nil
         }
     }
 
-    /// Write the active session back to disk. No-op if no session is
-    /// active (Editor-mode chats aren't persisted).
-    func persistActiveAgentSession() {
-        guard let id = activeAgentSessionID,
-              let index = agentSessions.firstIndex(where: { $0.id == id }) else {
-            return
-        }
-        var session = agentSessions[index]
-        session.messages = agentMessages
-        session.updatedAt = Date()
-        session.title = AgentSessionStore.deriveTitle(from: agentMessages)
-        session.didEditFiles = agentSessionDidEditFiles
-        session.interactionMode = agentInteractionMode
-        session.currentPlan = agentCurrentPlan
-        session.currentGoal = agentCurrentGoal
-        if let override = agentSessionModelOverride, !override.isEmpty {
-            session.modelID = override
+    // MARK: - Routines
+
+    /// Insert or replace a routine, then persist + notify the scheduler.
+    /// Used by both "create" (id not in list) and "edit" (id already
+    /// present) paths from the routine editor sheet.
+    func saveAgentRoutine(_ routine: AgentRoutine) {
+        var updated = routine
+        updated.updatedAt = Date()
+        if let index = agentRoutines.firstIndex(where: { $0.id == updated.id }) {
+            agentRoutines[index] = updated
         } else {
-            session.modelID = activeAgentModelID
+            agentRoutines.insert(updated, at: 0)
         }
-        agentSessions[index] = session
-        // Bubble most-recently-updated to the top.
-        agentSessions.sort { $0.updatedAt > $1.updatedAt }
+        AgentRoutineStore.save(updated)
+        agentRoutines.sort { $0.updatedAt > $1.updatedAt }
+        agentRoutineScheduler.routinesChanged(agentRoutines)
+        if updated.isEnabled {
+            agentRoutineScheduler.requestNotificationAuthorizationIfNeeded()
+        }
+    }
+
+    func deleteAgentRoutine(id: AgentRoutine.ID) {
+        AgentRoutineStore.delete(id: id)
+        agentRoutines.removeAll { $0.id == id }
+        agentRoutineScheduler.routinesChanged(agentRoutines)
+    }
+
+    /// Flip enabled on/off in place. Cheaper than going through the
+    /// editor sheet for the sidebar inline toggle.
+    func toggleAgentRoutineEnabled(id: AgentRoutine.ID) {
+        guard let index = agentRoutines.firstIndex(where: { $0.id == id }) else { return }
+        agentRoutines[index].isEnabled.toggle()
+        agentRoutines[index].updatedAt = Date()
+        AgentRoutineStore.save(agentRoutines[index])
+        agentRoutineScheduler.routinesChanged(agentRoutines)
+        if agentRoutines[index].isEnabled {
+            agentRoutineScheduler.requestNotificationAuthorizationIfNeeded()
+        }
+    }
+
+    /// User-driven manual fire ("Run now" button in editor or sidebar).
+    /// Ignores `isEnabled` — a disabled routine can still be run on demand.
+    func runAgentRoutineNow(id: AgentRoutine.ID) {
+        _ = fireRoutine(id: id, force: true)
+    }
+
+    /// Scheduler entry point. Returns true if the routine actually
+    /// started a session; false if the routine was empty / missing
+    /// (the scheduler will retry next tick if appropriate).
+    ///
+    /// Concurrency model (rc3+): routines spawn a background runtime
+    /// rather than yanking the user's UI. They do NOT change
+    /// `activeAgentSessionID` and do NOT flip `appMode`. The user
+    /// keeps working in whatever session they had on screen; the
+    /// routine's session shows up in the sidebar (with a "busy" dot
+    /// once rc4 lands) and they can click into it later to inspect.
+    @discardableResult
+    private func fireRoutine(id: AgentRoutine.ID, force: Bool = false) -> Bool {
+        _ = force // The per-provider concurrency cap replaces the old
+                  // "is anyone responding?" gate; manual "Run now"
+                  // doesn't need to bypass anything different.
+
+        guard let index = agentRoutines.firstIndex(where: { $0.id == id }) else { return false }
+        let routine = agentRoutines[index]
+        let prompt = routine.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return false }
+
+        // Build the session and its runtime, but DO NOT touch
+        // activeAgentSessionID or appMode — that would yank the user
+        // out of whatever they're reading.
+        let session = AgentSession(
+            workspaceRootPath: routine.workspaceRootPath,
+            modelID: routine.modelID?.isEmpty == false ? routine.modelID : activeAgentModelID
+        )
+        agentSessions.insert(session, at: 0)
         AgentSessionStore.save(session)
+        let runtime = AgentRuntime(session: session)
+        agentRuntimes[session.id] = runtime
+        subscribeToRuntime(runtime)
+        if let modelID = routine.modelID, !modelID.isEmpty {
+            runtime.sessionModelOverride = modelID
+        }
+
+        agentRoutines[index].lastRunAt = Date()
+        agentRoutines[index].lastSessionID = session.id
+        agentRoutines[index].updatedAt = Date()
+        AgentRoutineStore.save(agentRoutines[index])
+        agentRoutineScheduler.routinesChanged(agentRoutines)
+
+        // dispatchAgentMessage handles the per-provider concurrency
+        // cap — if the cap is hit, the dispatch queues and drains
+        // FIFO as slots free. So even a fleet of 10 routines hitting
+        // the same provider all at 09:00 won't stomp on each other.
+        dispatchAgentMessage(for: runtime, text: prompt, images: [])
+        return true
+    }
+
+    /// Toggle pin state. Pinned sessions float to the top of their
+    /// workspace group, sorted by `pinnedAt` (most recently pinned
+    /// first). The timestamp doubles as both the on/off flag and the
+    /// within-pinned ordering key, so re-pinning sends the row back to
+    /// the top of the pinned block.
+    func toggleAgentSessionPinned(id: AgentSession.ID) {
+        guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
+        agentSessions[index].pinnedAt = agentSessions[index].pinnedAt == nil ? Date() : nil
+        _ = AgentSessionStore.save(agentSessions[index])
+    }
+
+    /// Toggle archive state. Archived sessions disappear from the main
+    /// workspace list and instead live under a collapsed "已归档" row
+    /// at the bottom of each workspace group. Unarchiving puts them
+    /// back into the active set with their original `updatedAt` intact
+    /// so they sort back into their natural recency position.
+    func toggleAgentSessionArchived(id: AgentSession.ID) {
+        guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
+        let willArchive = agentSessions[index].archivedAt == nil
+        agentSessions[index].archivedAt = willArchive ? Date() : nil
+        // Archiving the currently-active session shouldn't kick the
+        // user out — the chat stays selected. They can pick another
+        // session whenever they want; in the meantime the row simply
+        // vanishes from the visible list, which is exactly what every
+        // other chat app (Cursor, Slack, Linear) does.
+        _ = AgentSessionStore.save(agentSessions[index])
+    }
+
+    /// Write the active session back to disk. No-op if no session is
+    /// active (Editor-mode chats aren't persisted). Convenience wrapper
+    /// that targets `activeRuntime`; concurrent code paths that need to
+    /// persist a specific (potentially background) runtime should call
+    /// `persistAgentSession(runtime:)` directly.
+    func persistActiveAgentSession() {
+        guard let runtime = activeRuntime else { return }
+        persistAgentSession(runtime: runtime)
+    }
+
+    /// Persist a specific runtime's session. Used by the turn loop's
+    /// defer so background runtimes that finish while the user is on a
+    /// different session still write their final state to disk.
+    func persistAgentSession(runtime: AgentRuntime) {
+        guard let index = agentSessions.firstIndex(where: { $0.id == runtime.id }) else { return }
+        if let override = runtime.sessionModelOverride, !override.isEmpty {
+            runtime.session.modelID = override
+        } else {
+            runtime.session.modelID = activeAgentModelID
+        }
+        runtime.persist()
+        agentSessions[index] = runtime.session
+        agentSessions.sort { $0.updatedAt > $1.updatedAt }
     }
 
     func recordFetchedAgentModels(_ ids: [String]) {
@@ -1632,22 +2103,32 @@ final class AppState: ObservableObject {
     }
 
     @MainActor
-    private func runAgentLoop(configuration: AgentConfiguration) async {
+    private func runAgentLoop(for runtime: AgentRuntime, configuration: AgentConfiguration) async {
         defer {
-            self.isAgentResponding = false
-            self.agentRequestTask = nil
-            self.captureAgentPlanFromLatestMessage()
-            self.captureAgentGoalEvaluationFromLatestMessage()
-            self.persistActiveAgentSession()
-            self.maybeAutoCompressContext()
-            self.consumeNextQueuedMessageIfNeeded()
+            runtime.isResponding = false
+            runtime.turnStartedAt = nil
+            runtime.requestTask = nil
+            captureAgentPlanFromLatestMessage(for: runtime)
+            captureAgentGoalEvaluationFromLatestMessage(for: runtime)
+            persistAgentSession(runtime: runtime)
+            maybeAutoCompressContext(for: runtime)
+            consumeNextQueuedMessageIfNeeded(for: runtime)
+            // Always release the provider slot last so the queue drain
+            // sees a fully cleared `isResponding` and won't refuse to
+            // dispatch a queued user message that's for the same runtime.
+            releaseProviderSlot(providerID: configuration.providerID)
         }
 
         let client = AgentClient(configuration: configuration)
+        // Resolve the runtime's workspace path for tool execution —
+        // never read AppState.rootDirectory here. Concurrent runtimes
+        // can be running against different workspaces; the window's
+        // current folder is a UI concept, not a session concept.
+        let workspaceURL = runtime.workspaceRootPath.map { URL(fileURLWithPath: $0) }
 
         for _ in 0..<Self.maxAgentToolRounds {
             let assistantMessage = AgentMessage(role: .assistant, content: "")
-            agentMessages.append(assistantMessage)
+            runtime.messages.append(assistantMessage)
             let assistantID = assistantMessage.id
             // Stamp the wall-clock start so we can attach an elapsed
             // seconds value to the message footer once the stream
@@ -1656,18 +2137,24 @@ final class AppState: ObservableObject {
             // perceives as "how long did the agent take".
             let turnStartedAt = Date()
 
+            // Build the system prompt against the runtime's workspace,
+            // not whatever the window happens to be focused on. The
+            // active tab / selection still come from AppState — that's
+            // window-level context the user can flip while another
+            // session is running, and the model just sees it as
+            // "what's on screen right now".
             let systemPrompt = AgentContextBuilder.systemPrompt(
-                rootDirectory: rootDirectory,
+                rootDirectory: workspaceURL,
                 openedFileURL: openedFileURL,
                 fileContent: fileContent,
                 selectedText: selectedText,
                 language: effectiveLanguage,
                 toolsEnabled: true,
-                interactionMode: agentInteractionMode,
-                currentPlan: agentCurrentPlan,
-                currentGoal: agentCurrentGoal
+                interactionMode: runtime.interactionMode,
+                currentPlan: runtime.currentPlan,
+                currentGoal: runtime.currentGoal
             )
-            let history = agentMessages.filter { $0.id != assistantID }
+            let history = runtime.messages.filter { $0.id != assistantID }
             let collapsedHistory = Self.collapseOldToolResults(in: history)
             let requestMessages = [AgentMessage(role: .system, content: systemPrompt)] + collapsedHistory
 
@@ -1679,53 +2166,47 @@ final class AppState: ObservableObject {
                     messages: requestMessages,
                     tools: AgentToolRegistry.all
                 ) { event in
-                    await MainActor.run { [weak self] in
-                        guard let self,
-                              let index = self.agentMessages.firstIndex(where: { $0.id == assistantID }) else {
+                    await MainActor.run { [weak runtime] in
+                        guard let runtime,
+                              let index = runtime.messages.firstIndex(where: { $0.id == assistantID }) else {
                             return
                         }
                         switch event {
                         case .textDelta(let delta):
-                            self.agentMessages[index].content += delta
+                            runtime.messages[index].content += delta
                         case .reasoningDelta(let delta):
                             // Append into reasoningContent so the next
                             // turn echoes it back verbatim. DashScope
                             // thinking-mode returns HTTP 400 if this
                             // field disappears between turns.
-                            var existing = self.agentMessages[index].reasoningContent ?? ""
+                            var existing = runtime.messages[index].reasoningContent ?? ""
                             existing += delta
-                            self.agentMessages[index].reasoningContent = existing
+                            runtime.messages[index].reasoningContent = existing
                         case .toolCallsUpdated(let calls):
-                            self.agentMessages[index].toolCalls = calls
+                            runtime.messages[index].toolCalls = calls
                             latestToolCalls = calls
                         case .finishedTurn(let reason):
                             finishReason = reason
                         case .usageReported(let prompt, let completion, let total):
-                            // Stamp real token usage on the assistant
-                            // message so AgentUsageStats can show actual
-                            // totals instead of falling back to estimates.
-                            // Also remember the prompt / completion split
-                            // so the per-message footer can render the
-                            // full "in 1.2k · out 340" breakdown.
-                            self.agentMessages[index].usageTokens = total
-                            self.agentMessages[index].promptTokens = prompt > 0 ? prompt : nil
-                            self.agentMessages[index].completionTokens = completion > 0 ? completion : nil
+                            runtime.messages[index].usageTokens = total
+                            runtime.messages[index].promptTokens = prompt > 0 ? prompt : nil
+                            runtime.messages[index].completionTokens = completion > 0 ? completion : nil
                         }
                     }
                 }
             } catch is CancellationError {
-                if let index = agentMessages.firstIndex(where: { $0.id == assistantID }),
-                   agentMessages[index].content.isEmpty,
-                   agentMessages[index].toolCalls.isEmpty {
-                    agentMessages.remove(at: index)
+                if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }),
+                   runtime.messages[index].content.isEmpty,
+                   runtime.messages[index].toolCalls.isEmpty {
+                    runtime.messages.remove(at: index)
                 }
                 return
             } catch {
-                setAgentError(error)
-                if let index = agentMessages.firstIndex(where: { $0.id == assistantID }),
-                   agentMessages[index].content.isEmpty,
-                   agentMessages[index].toolCalls.isEmpty {
-                    agentMessages.remove(at: index)
+                setAgentError(error, for: runtime)
+                if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }),
+                   runtime.messages[index].content.isEmpty,
+                   runtime.messages[index].toolCalls.isEmpty {
+                    runtime.messages.remove(at: index)
                 }
                 return
             }
@@ -1733,21 +2214,18 @@ final class AppState: ObservableObject {
             // Snapshot the assistant's final tool_calls list (the .toolCallsUpdated
             // closure may not have published the very last fragment yet if the
             // stream ended on the same chunk).
-            if let index = agentMessages.firstIndex(where: { $0.id == assistantID }) {
+            if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }) {
                 if latestToolCalls.isEmpty {
-                    latestToolCalls = agentMessages[index].toolCalls
+                    latestToolCalls = runtime.messages[index].toolCalls
                 } else {
-                    agentMessages[index].toolCalls = latestToolCalls
+                    runtime.messages[index].toolCalls = latestToolCalls
                 }
-                // Stamp the assistant message with how long this round
-                // of streaming actually took — the footer renders this
-                // as a "2.3s" caption next to the copy button.
-                agentMessages[index].elapsedSeconds = Date().timeIntervalSince(turnStartedAt)
+                runtime.messages[index].elapsedSeconds = Date().timeIntervalSince(turnStartedAt)
             }
 
             // No tool calls → assistant finished talking. Capture patches and return.
             guard !latestToolCalls.isEmpty else {
-                captureAgentPatchProposals(fromMessageID: assistantID)
+                captureAgentPatchProposals(for: runtime, fromMessageID: assistantID)
                 return
             }
 
@@ -1765,12 +2243,9 @@ final class AppState: ObservableObject {
                 let risk = AgentToolRegistry.risk(
                     for: call.toolName,
                     arguments: argsDict,
-                    rootDirectory: rootDirectory
+                    rootDirectory: workspaceURL
                 )
 
-                // Resolve auto-approval before we even render the card
-                // so simple cases (cat / git diff / etc.) skip the
-                // pendingApproval flash entirely.
                 let autoApproval = await autoApprovalSource(
                     toolName: call.toolName,
                     arguments: argsDict,
@@ -1798,54 +2273,52 @@ final class AppState: ObservableObject {
                     status: initialStatus,
                     approvalSource: autoApproval
                 )
-                agentToolCalls.append(record)
+                runtime.toolCalls.append(record)
                 let recordID = record.id
 
-                // ask_user short-circuits the runner: surface the question,
-                // wait for the user's typed answer, feed it back as the
-                // tool result.
                 if risk == .userInput {
-                    let decision = await awaitToolDecision(forCallID: recordID)
+                    let decision = await awaitToolDecision(for: runtime, forCallID: recordID)
                     let answer: String
                     switch decision {
                     case .answered(let typed):
                         answer = typed
                     case .denied(let reason):
                         anyDenied = true
-                        if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
-                            agentToolCalls[index].status = .denied
-                            agentToolCalls[index].errorMessage = reason
+                        if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                            runtime.toolCalls[index].status = .denied
+                            runtime.toolCalls[index].errorMessage = reason
                         }
                         appendToolMessage(
+                            for: runtime,
                             toolCallID: call.externalID,
                             payload: "User skipped the question."
                         )
                         continue
                     case .approved:
-                        // No explicit answer recorded — treat as empty.
                         answer = ""
                     }
-                    if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
-                        agentToolCalls[index].status = .succeeded
-                        agentToolCalls[index].result = AgentToolResult(
+                    if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                        runtime.toolCalls[index].status = .succeeded
+                        runtime.toolCalls[index].result = AgentToolResult(
                             summary: answer.isEmpty ? "(no answer)" : "answered",
                             payload: answer
                         )
                     }
-                    appendToolMessage(toolCallID: call.externalID, payload: answer)
+                    appendToolMessage(for: runtime, toolCallID: call.externalID, payload: answer)
                     continue
                 }
 
                 // Plan mode: block any write/exec tool until the user has
                 // approved a plan. The reply goes back as a tool error so
                 // the model knows to stop and emit a plan.
-                if risk != .read && isPlanGateActive {
+                if risk != .read && runtime.isPlanGateActive {
                     anyDenied = true
-                    if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
-                        agentToolCalls[index].status = .denied
-                        agentToolCalls[index].errorMessage = "Plan mode: needs user approval"
+                    if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                        runtime.toolCalls[index].status = .denied
+                        runtime.toolCalls[index].errorMessage = "Plan mode: needs user approval"
                     }
                     appendToolMessage(
+                        for: runtime,
                         toolCallID: call.externalID,
                         payload: "Blocked: Plan mode is active and no plan has been approved yet. Emit a ```plan``` block listing the steps you intend to take, then stop and wait for the user to approve."
                     )
@@ -1853,46 +2326,48 @@ final class AppState: ObservableObject {
                 }
 
                 if risk != .read && !isAlwaysAllowed {
-                    let decision = await awaitToolDecision(forCallID: recordID)
+                    let decision = await awaitToolDecision(for: runtime, forCallID: recordID)
                     if case .denied(let reason) = decision {
                         anyDenied = true
-                        if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
-                            agentToolCalls[index].status = .denied
-                            agentToolCalls[index].errorMessage = reason
+                        if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                            runtime.toolCalls[index].status = .denied
+                            runtime.toolCalls[index].errorMessage = reason
                         }
                         appendToolMessage(
+                            for: runtime,
                             toolCallID: call.externalID,
                             payload: "Tool call denied by the user."
                         )
                         continue
                     }
-                    if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
-                        agentToolCalls[index].status = .running
-                        agentToolCalls[index].approvalSource = .user
+                    if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                        runtime.toolCalls[index].status = .running
+                        runtime.toolCalls[index].approvalSource = .user
                     }
                 }
 
-                let context = AgentToolContext(rootDirectory: rootDirectory)
+                let context = AgentToolContext(rootDirectory: workspaceURL)
                 do {
                     let result = try await AgentToolRunner.run(
                         name: call.toolName,
                         arguments: argsDict,
                         context: context
                     )
-                    if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
-                        agentToolCalls[index].status = .succeeded
-                        agentToolCalls[index].result = result
+                    if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                        runtime.toolCalls[index].status = .succeeded
+                        runtime.toolCalls[index].result = result
                     }
                     if call.toolName == "run_command" || risk != .read {
                         refreshGitStatus()
                     }
-                    appendToolMessage(toolCallID: call.externalID, payload: result.payload)
+                    appendToolMessage(for: runtime, toolCallID: call.externalID, payload: result.payload)
                 } catch {
-                    if let index = agentToolCalls.firstIndex(where: { $0.id == recordID }) {
-                        agentToolCalls[index].status = .failed
-                        agentToolCalls[index].errorMessage = error.localizedDescription
+                    if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                        runtime.toolCalls[index].status = .failed
+                        runtime.toolCalls[index].errorMessage = error.localizedDescription
                     }
                     appendToolMessage(
+                        for: runtime,
                         toolCallID: call.externalID,
                         payload: "Tool error: \(error.localizedDescription)"
                     )
@@ -1906,13 +2381,116 @@ final class AppState: ObservableObject {
             // Otherwise: loop again so the model can react to the tool outputs.
         }
 
-        agentErrorMessage = "Agent paused after \(Self.maxAgentToolRounds) tool-call rounds to avoid an accidental loop. Send another message to continue."
-        agentErrorDetails = nil
+        runtime.errorMessage = "Agent paused after \(Self.maxAgentToolRounds) tool-call rounds to avoid an accidental loop. Send another message to continue."
+        runtime.errorDetails = nil
     }
 
-    private func setAgentError(_ error: Error) {
-        agentErrorMessage = error.localizedDescription
-        agentErrorDetails = Self.details(for: error)
+    private func setAgentError(_ error: Error, for runtime: AgentRuntime) {
+        runtime.errorMessage = Self.friendlyMessage(for: error)
+        runtime.errorDetails = Self.details(for: error)
+    }
+
+    /// Translate the raw `Error` thrown by `AgentClient` into a one-line
+    /// Chinese caption that tells the user what happened and what to do
+    /// next. Falls back to `localizedDescription` for the long tail of
+    /// errors we don't specifically classify. The "Details" disclosure
+    /// still surfaces the full provider payload for debugging.
+    private static func friendlyMessage(for error: Error) -> String {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut:
+                return "连接模型超时（120 秒内没收到数据）。可能是网络慢、代理掉线，或者模型本身排队。点击「重试」再试一次，或检查网络/代理。"
+            case .notConnectedToInternet:
+                return "当前似乎没有网络。检查 Wi-Fi 或网线后点「重试」。"
+            case .networkConnectionLost:
+                return "连接被中途断开。可能是网络抖动或代理重置。点「重试」再发一次。"
+            case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed:
+                return "无法连接到模型服务（DNS / 主机解析失败）。检查 Settings 里的 Base URL 是否正确，或代理是否能访问到该域名。"
+            case .secureConnectionFailed, .serverCertificateUntrusted,
+                 .serverCertificateHasBadDate, .serverCertificateNotYetValid,
+                 .serverCertificateHasUnknownRoot, .clientCertificateRejected:
+                return "TLS / 证书校验失败。如果你在使用自签代理或镜像服务，需要先信任对应证书。"
+            case .cancelled:
+                return "请求被取消。"
+            default:
+                return "网络请求失败：\(urlError.localizedDescription)。点「重试」再发一次。"
+            }
+        }
+        if let clientError = error as? AgentClientError {
+            switch clientError {
+            case .missingAPIKey:
+                return "尚未配置 API Key。先到 Settings → Agent 里填好再发请求。"
+            case .invalidBaseURL:
+                return "Agent Base URL 不合法，先到 Settings 检查一下。"
+            case .invalidResponse:
+                return "模型返回了无法识别的内容（非标准 SSE/JSON）。如果反复出现，多半是 Base URL 指向了不兼容的服务。"
+            case .serverStatus(let provider):
+                let code = provider.statusCode
+                let hint: String
+                switch code {
+                case 401, 403: hint = "鉴权失败，检查 API Key 是否正确、是否过期。"
+                case 404:      hint = "接口路径找不到，检查 Base URL 与模型名是否匹配。"
+                case 408, 504: hint = "上游网关超时。稍等片刻点「重试」即可。"
+                case 429:      hint = "触发限流（QPS / 配额）。等几秒再点「重试」，或换一个更宽松的模型。"
+                case 500...599: hint = "模型服务端 5xx 错误。多半是临时抽风，点「重试」。"
+                default:       hint = "查看「Details」里的响应体定位原因。"
+                }
+                return "模型服务返回 HTTP \(code)。\(hint)"
+            }
+        }
+        return error.localizedDescription
+    }
+
+    /// Whether the error banner should expose a "Retry" affordance.
+    /// We allow retry whenever the loop is idle and there's at least one
+    /// user message in the history — i.e. there's something to retry.
+    var canRetryLastAgentTurn: Bool {
+        guard !isAgentResponding, !isCompressingAgentContext else { return false }
+        guard agentMessages.contains(where: { $0.role == .user }) else { return false }
+        return true
+    }
+
+    /// Re-run `runAgentLoop` against the existing conversation. The user's
+    /// last message is already in `agentMessages` (it stays in the history
+    /// even when the assistant turn errors out), so we just kick the loop
+    /// again with the current configuration. Used by the error card's
+    /// "Retry" button when the previous turn died on a timeout or other
+    /// transient network error.
+    func retryLastAgentTurn() {
+        guard canRetryLastAgentTurn,
+              let runtime = activeRuntime else { return }
+        let configuration = configurationForCurrentTurn(for: runtime)
+
+        // Same gate as the dispatch path — a retry counts against the
+        // provider quota just like a fresh send. Queueing is fine: when
+        // a slot frees, the queue drain will pick up the runtime's
+        // existing transcript and re-run.
+        guard acquireProviderSlotIfPossible(providerID: configuration.providerID) else {
+            // Retry button on the error card while the cap is busy:
+            // do nothing rather than silently queue a re-run, because
+            // the user's expectation is "right now" — leave the error
+            // visible so they can click again in a moment.
+            return
+        }
+
+        runtime.errorMessage = nil
+        runtime.errorDetails = nil
+        runtime.isResponding = true
+        runtime.turnStartedAt = Date()
+
+        runtime.requestTask?.cancel()
+        runtime.requestTask = Task { [weak self, weak runtime] in
+            guard let self, let runtime else { return }
+            await self.runAgentLoop(for: runtime, configuration: configuration)
+        }
+    }
+
+    /// Dismiss the error banner without retrying — used by the "Close"
+    /// (×) affordance on the error card. Keeps the user's last message in
+    /// history so they can edit/copy and re-send manually.
+    func dismissAgentError() {
+        agentErrorMessage = nil
+        agentErrorDetails = nil
     }
 
     private static func details(for error: Error) -> AgentErrorDetails? {
@@ -1942,11 +2520,11 @@ final class AppState: ObservableObject {
         ])
     }
 
-    private func awaitToolDecision(forCallID id: AgentToolCall.ID) async -> AgentToolDecision {
+    private func awaitToolDecision(for runtime: AgentRuntime, forCallID id: AgentToolCall.ID) async -> AgentToolDecision {
         await withCheckedContinuation { continuation in
             // Already resolved before we got to register (e.g. user clicked
             // Deny while the previous tool was still running) — resume now.
-            if let call = agentToolCalls.first(where: { $0.id == id }),
+            if let call = runtime.toolCalls.first(where: { $0.id == id }),
                call.status != .pendingApproval, call.status != .awaitingConfirm,
                call.status != .awaitingUserAnswer {
                 if call.status == .denied {
@@ -1956,11 +2534,11 @@ final class AppState: ObservableObject {
                 }
                 return
             }
-            self.agentToolDecisionWaiter = continuation
+            runtime.toolDecisionWaiter = continuation
         }
     }
 
-    private func appendToolMessage(toolCallID: String, payload: String) {
+    private func appendToolMessage(for runtime: AgentRuntime, toolCallID: String, payload: String) {
         let limited: String
         let maxPayload = 24_000
         if payload.count > maxPayload {
@@ -1968,28 +2546,40 @@ final class AppState: ObservableObject {
         } else {
             limited = payload
         }
-        agentMessages.append(
+        runtime.messages.append(
             AgentMessage(role: .tool, content: limited, toolCallID: toolCallID)
         )
     }
 
-    @Published var isCompressingAgentContext = false
+    /// True while context compression is running for the active session.
+    /// Delegated to `activeRuntime.isCompressingContext`.
+    var isCompressingAgentContext: Bool {
+        get { activeRuntime?.isCompressingContext ?? false }
+        set { activeRuntime?.isCompressingContext = newValue }
+    }
 
     /// Summarize older conversation history into a single assistant
     /// message to reclaim context budget. Keeps the most recent
     /// `keepRecent` messages verbatim. Runs concurrently with whatever
     /// the user is doing (Send still works once compression resolves).
     func compressAgentContext(keepRecent: Int = 4) {
-        guard !isCompressingAgentContext, !isAgentResponding else { return }
-        guard agentMessages.count > keepRecent else { return }
+        guard let runtime = activeRuntime else { return }
+        compressAgentContext(for: runtime, keepRecent: keepRecent)
+    }
 
-        isCompressingAgentContext = true
+    func compressAgentContext(for runtime: AgentRuntime, keepRecent: Int = 4) {
+        guard !runtime.isCompressingContext, !runtime.isResponding else { return }
+        guard runtime.messages.count > keepRecent else { return }
+
+        runtime.isCompressingContext = true
         let configuration = configurationForContextCompression()
-        let head = Array(agentMessages.prefix(agentMessages.count - keepRecent))
-        let tail = Array(agentMessages.suffix(keepRecent))
+        let head = Array(runtime.messages.prefix(runtime.messages.count - keepRecent))
+        let tail = Array(runtime.messages.suffix(keepRecent))
 
-        Task { [weak self] in
-            await self?.runContextCompression(
+        Task { [weak self, weak runtime] in
+            guard let self, let runtime else { return }
+            await self.runContextCompression(
+                for: runtime,
                 head: head,
                 tail: tail,
                 configuration: configuration
@@ -1998,13 +2588,23 @@ final class AppState: ObservableObject {
     }
 
     /// Pure predicate: true if `maybeAutoCompressContext` would launch a
-    /// compression right now. Exposed mainly for tests; the production
-    /// caller is `maybeAutoCompressContext` itself.
+    /// compression right now for the active runtime. Exposed mainly for
+    /// tests; the production caller is `maybeAutoCompressContext` itself.
     var shouldAutoCompressNow: Bool {
-        guard !isCompressingAgentContext, !isAgentResponding else { return false }
-        guard agentMessages.count > 6 else { return false }
+        guard let runtime = activeRuntime else { return false }
+        return shouldAutoCompressNow(for: runtime)
+    }
+
+    func shouldAutoCompressNow(for runtime: AgentRuntime) -> Bool {
+        guard !runtime.isCompressingContext, !runtime.isResponding else { return false }
+        guard runtime.messages.count > 6 else { return false }
         let window = max(1, agentContextWindow)
-        let usedFraction = Double(estimatedAgentTokens) / Double(window)
+        // Token estimate uses the runtime's own message list, not the
+        // currently-displayed conversation — a background runtime can
+        // get compressed while its session is not on screen.
+        let collapsed = Self.collapseOldToolResults(in: runtime.messages)
+        let used = Self.estimateAgentTokens(messages: collapsed, tools: AgentToolRegistry.all)
+        let usedFraction = Double(used) / Double(window)
         return usedFraction > 0.75
     }
 
@@ -2012,23 +2612,29 @@ final class AppState: ObservableObject {
     /// flight. Invoked from `runAgentLoop`'s defer so it runs between
     /// turns and never interrupts a streaming response.
     func maybeAutoCompressContext() {
-        guard shouldAutoCompressNow else { return }
-        compressAgentContext()
+        guard let runtime = activeRuntime else { return }
+        maybeAutoCompressContext(for: runtime)
+    }
+
+    func maybeAutoCompressContext(for runtime: AgentRuntime) {
+        guard shouldAutoCompressNow(for: runtime) else { return }
+        compressAgentContext(for: runtime)
     }
 
     @MainActor
     private func runContextCompression(
+        for runtime: AgentRuntime,
         head: [AgentMessage],
         tail: [AgentMessage],
         configuration: AgentConfiguration
     ) async {
         defer {
-            self.isCompressingAgentContext = false
-            self.persistActiveAgentSession()
+            runtime.isCompressingContext = false
+            persistAgentSession(runtime: runtime)
             // Auto-compression can be racing with a queued message —
             // resume the queue once compression resolves so the user
             // doesn't see "queued" forever.
-            self.consumeNextQueuedMessageIfNeeded()
+            consumeNextQueuedMessageIfNeeded(for: runtime)
         }
 
         let transcript = head
@@ -2067,15 +2673,15 @@ final class AppState: ObservableObject {
                 }
             }
         } catch {
-            agentErrorMessage = "Context compression failed: \(error.localizedDescription)"
-            agentErrorDetails = Self.details(for: error)
+            runtime.errorMessage = "Context compression failed: \(error.localizedDescription)"
+            runtime.errorDetails = Self.details(for: error)
             return
         }
 
         let trimmed = await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            agentErrorMessage = "Context compression returned an empty summary; nothing changed."
-            agentErrorDetails = nil
+            runtime.errorMessage = "Context compression returned an empty summary; nothing changed."
+            runtime.errorDetails = nil
             return
         }
 
@@ -2083,11 +2689,11 @@ final class AppState: ObservableObject {
             role: .assistant,
             content: "[Earlier conversation summary]\n\n\(trimmed)"
         )
-        agentMessages = [summaryMessage] + tail
+        runtime.messages = [summaryMessage] + tail
         // Tool calls referencing pre-compression assistant messages no
         // longer have a valid messageID; drop them so they stop rendering.
-        let liveMessageIDs = Set(agentMessages.map(\.id))
-        agentToolCalls.removeAll { !liveMessageIDs.contains($0.messageID) }
+        let liveMessageIDs = Set(runtime.messages.map(\.id))
+        runtime.toolCalls.removeAll { !liveMessageIDs.contains($0.messageID) }
     }
 
     /// Replace the body of older `tool` role messages with a tiny
@@ -2144,15 +2750,15 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func captureAgentPatchProposals(fromMessageID messageID: UUID) {
-        guard let message = agentMessages.first(where: { $0.id == messageID }) else { return }
+    private func captureAgentPatchProposals(for runtime: AgentRuntime, fromMessageID messageID: UUID) {
+        guard let message = runtime.messages.first(where: { $0.id == messageID }) else { return }
         let diffs = AgentPatchApplier.extractDiffBlocks(from: message.content)
         guard !diffs.isEmpty else { return }
 
-        let existingDiffs = Set(agentPatchProposals.map(\.diff))
+        let existingDiffs = Set(runtime.patchProposals.map(\.diff))
         for (offset, diff) in diffs.enumerated() where !existingDiffs.contains(diff) {
             let title = diffs.count == 1 ? "Agent Patch" : "Agent Patch \(offset + 1)"
-            agentPatchProposals.append(
+            runtime.patchProposals.append(
                 AgentPatchProposal(messageID: messageID, title: title, diff: diff)
             )
         }

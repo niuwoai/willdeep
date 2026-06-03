@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-03 | Current version: v1.47.0-rc9
+> Last updated: 2026-06-03 | Current version: v1.49.0-rc4
 
 ## Positioning
 
@@ -69,6 +69,8 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Expand Agent provider errors to inspect the method, URL, provider, model, input message summary, redacted request body, HTTP status, and response body for debugging failed requests.
 - Normalize Agent tool-call history before provider requests so stale or incomplete tool messages from older sessions do not cause OpenAI-compatible request errors.
 - See current Agent worktree changes with clickable filenames, per-file added/deleted line counts, total changed files, total line deltas, and a one-click review action for the Agent to inspect uncommitted changes. Modified entries with no real diff or only `+0 -0` line stats are suppressed so the summary does not appear when nothing actually changed.
+- Define Agent Routines that fire on a schedule (interval / daily HH:MM / weekdays HH:MM / specific weekday HH:MM) and automatically start a brand-new Agent session with the routine's prompt, bound to the routine's workspace and optional model override. Routines are managed from a dedicated section in the Agent-mode sidebar (hover to enable/disable or run immediately; right-click for full menu) and edited in a sheet with name, prompt, workspace picker, model picker, schedule, and enabled switch. A 30s scheduler tick coalesces double-fires, catches up routines whose target time slipped past app sleep, and politely waits if the current chat is mid-turn so a scheduled run never interrupts a live conversation. Optional macOS notifications announce each run when the user has granted permission. Routines persist as JSON under `~/Library/Application Support/VeilWriter/agent-routines/`, one file per routine.
+- Run multiple Agent sessions concurrently — each session owns its own runtime (messages, request task, tool waiter, composer draft, mode/plan/goal) and dispatches its own provider request, so switching away from a streaming session doesn't kill it; the outgoing turn keeps running in the background and the sidebar status dot pulses green while it works (orange when it's paused on a tool decision). Routines spawn background runtimes that don't yank the user's UI — they appear as new rows in the sidebar with their own status indicator. Concurrent dispatches are capped per-provider (default 3, user-tunable 1–8 in Settings → Agent → Concurrency) so a fleet of routines hitting the same provider queues FIFO instead of stomping the rate limit; different providers are isolated, so running 3 DashScope sessions never blocks an OpenAI session.
 - Preview Markdown and HTML beside the editor with richer lightweight block rendering for headings, lists, quotes, dividers, code, and common HTML content nodes.
 - Read current file state from a compact status bar with cursor position, language, file size, and version.
 - Reload when the active file has changed on disk outside VeilWriter.

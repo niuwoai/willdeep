@@ -207,13 +207,48 @@ struct AgentContextCompressionDivider: View {
 }
 
 struct AgentThinkingDivider: View {
+    @EnvironmentObject var appState: AppState
+
     var body: some View {
-        AgentInlineStatusDivider(text: "正在思考")
+        // When we have a turn start timestamp, render a live ticker so the
+        // user can see the seconds advance — proof that the request hasn't
+        // silently hung. When we don't (e.g. legacy code paths that don't
+        // stamp the start), fall back to the static label.
+        if let startedAt = appState.agentTurnStartedAt {
+            TimelineView(.periodic(from: startedAt, by: 1)) { context in
+                AgentInlineStatusDivider(
+                    text: "正在思考",
+                    trailing: formatThinkingElapsed(
+                        context.date.timeIntervalSince(startedAt)
+                    )
+                )
+            }
+        } else {
+            AgentInlineStatusDivider(text: "正在思考")
+        }
     }
+}
+
+private func formatThinkingElapsed(_ seconds: TimeInterval) -> String {
+    let total = max(0, Int(seconds))
+    if total < 60 {
+        return "\(total)s"
+    }
+    let minutes = total / 60
+    let remaining = total % 60
+    if minutes < 60 {
+        return "\(minutes)m \(remaining)s"
+    }
+    let hours = minutes / 60
+    let mm = minutes % 60
+    return "\(hours)h \(mm)m"
 }
 
 private struct AgentInlineStatusDivider: View {
     let text: String
+    /// Optional trailing caption rendered next to the label — used by the
+    /// thinking divider to show live elapsed seconds.
+    var trailing: String? = nil
 
     var body: some View {
         HStack(spacing: 10) {
@@ -229,6 +264,15 @@ private struct AgentInlineStatusDivider: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                if let trailing {
+                    Text("·")
+                        .font(.caption)
+                        .foregroundStyle(.secondary.opacity(0.55))
+                    Text(trailing)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             .fixedSize()
             Rectangle()
@@ -237,7 +281,7 @@ private struct AgentInlineStatusDivider: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
-        .accessibilityLabel(text)
+        .accessibilityLabel(trailing.map { "\(text) · \($0)" } ?? text)
     }
 }
 
@@ -952,6 +996,7 @@ struct AgentToolCallCard: View {
 }
 
 struct AgentErrorCard: View {
+    @EnvironmentObject var appState: AppState
     let message: String
     let details: AgentErrorDetails?
     @State private var isExpanded = false
@@ -968,17 +1013,38 @@ struct AgentErrorCard: View {
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
+                if appState.canRetryLastAgentTurn {
+                    Button {
+                        appState.retryLastAgentTurn()
+                    } label: {
+                        Label("重试", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .help("重新发送上一条消息")
+                }
                 if details != nil {
                     Button {
                         isExpanded.toggle()
                     } label: {
-                        Label(isExpanded ? "Hide Details" : "Details",
+                        Label(isExpanded ? "收起详情" : "详情",
                               systemImage: isExpanded ? "chevron.up" : "chevron.down")
                     }
                     .buttonStyle(.borderless)
                     .font(.caption)
-                    .help(isExpanded ? "Hide provider error details" : "Show provider error details")
+                    .help(isExpanded ? "隐藏详细错误信息" : "查看详细错误信息")
                 }
+                Button {
+                    appState.dismissAgentError()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(2)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("关闭")
             }
 
             if isExpanded, let details {

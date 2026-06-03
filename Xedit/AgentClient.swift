@@ -31,7 +31,14 @@ enum AgentClientEvent {
 }
 
 struct AgentClient {
-    nonisolated private static let requestTimeout: TimeInterval = 45
+    // `timeoutIntervalForRequest` is "no bytes seen for this long" — not a
+    // total budget. Reasoning models (Qwen3, QwQ, DeepSeek-R1, o-series)
+    // can spend 60+ seconds inside `<thinking>` before the first visible
+    // delta hits the SSE pipe, and 45s was tripping NSURLErrorTimedOut on
+    // legitimately-working requests. 120s covers the long tail without
+    // making genuinely-stuck connections wait too long before the user
+    // sees the friendly timeout banner and the retry button.
+    nonisolated private static let requestTimeout: TimeInterval = 120
     nonisolated private static let resourceTimeout: TimeInterval = 10 * 60
 
     private let configuration: AgentConfiguration

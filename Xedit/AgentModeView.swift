@@ -89,6 +89,19 @@ enum AgentDesign {
 private struct AgentSessionsSidebar: View {
     @EnvironmentObject var appState: AppState
     @State private var expandedWorkspaces: Set<String> = []
+    /// Workspace keys the user has manually collapsed by clicking the
+    /// folder icon — the whole group hides every session row and only
+    /// the title line stays. Independent from `expandedWorkspaces` (that
+    /// one controls the "more than 5 sessions → show all" toggle).
+    @State private var collapsedWorkspaces: Set<String> = []
+    /// Workspace keys whose "已归档" sub-section is currently expanded.
+    /// Archived sessions sit behind a disclosure row so they don't add
+    /// noise to the main list but stay one click away.
+    @State private var expandedArchivedGroups: Set<String> = []
+    /// The session row the mouse is hovering. Drives the on-row
+    /// pin/archive button visibility — cursor-style "they only show up
+    /// when you're aiming at them".
+    @State private var hoveredSessionID: AgentSession.ID?
 
     private let initialRowCount = 5
 
@@ -110,6 +123,8 @@ private struct AgentSessionsSidebar: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     primaryActions
                     Spacer().frame(height: 18)
+                    AgentRoutinesSidebarSection()
+                    Spacer().frame(height: 4)
                     workspacesSection
                     if appState.agentSessions.isEmpty {
                         Text("Sessions you start will appear here.")
@@ -218,15 +233,40 @@ private struct AgentSessionsSidebar: View {
 
     @ViewBuilder
     private func workspaceGroup(workspace: String, sessions: [AgentSession]) -> some View {
+        let activeSessions = sessions.filter { !$0.isArchived }
+        let archivedSessions = sessions.filter { $0.isArchived }
+            .sorted { ($0.archivedAt ?? .distantPast) > ($1.archivedAt ?? .distantPast) }
         let isExpanded = expandedWorkspaces.contains(workspace)
-        let visible = isExpanded ? sessions : Array(sessions.prefix(initialRowCount))
+        let isCollapsed = collapsedWorkspaces.contains(workspace)
+        let visible = isExpanded ? activeSessions : Array(activeSessions.prefix(initialRowCount))
+        let archivedExpanded = expandedArchivedGroups.contains(workspace)
         let hasRealWorkspace = workspace != "_no_workspace_"
 
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
-                Image(systemName: "folder")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                // Clicking the folder glyph collapses / expands the whole
+                // group. Using `folder` vs `folder.fill` as the visual
+                // affordance — filled means "closed, stuff hidden behind
+                // it", outline means "open". The hit target stays small
+                // (just the icon) so dragging across the title line or
+                // hitting the right-click menu still works as before.
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        if isCollapsed {
+                            collapsedWorkspaces.remove(workspace)
+                        } else {
+                            collapsedWorkspaces.insert(workspace)
+                        }
+                    }
+                } label: {
+                    Image(systemName: isCollapsed ? "folder.fill" : "folder")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 14, height: 14)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(isCollapsed ? "展开会话列表" : "收起会话列表")
                 Text(workspaceDisplayName(workspace))
                     .font(.system(size: 12, weight: .semibold))
                     .lineLimit(1)
@@ -242,40 +282,106 @@ private struct AgentSessionsSidebar: View {
                 }
             }
 
-            ForEach(visible) { session in
-                sessionRow(session)
-            }
-
-            if sessions.count > initialRowCount {
-                Button {
-                    if isExpanded {
-                        expandedWorkspaces.remove(workspace)
-                    } else {
-                        expandedWorkspaces.insert(workspace)
-                    }
-                } label: {
-                    Text(isExpanded ? "Show less" : "See more")
-                        .font(AgentDesign.secondaryFont)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 34)
-                        .padding(.vertical, 3)
+            if !isCollapsed {
+                ForEach(visible) { session in
+                    sessionRow(session)
                 }
-                .buttonStyle(.plain)
+
+                if activeSessions.count > initialRowCount {
+                    Button {
+                        if isExpanded {
+                            expandedWorkspaces.remove(workspace)
+                        } else {
+                            expandedWorkspaces.insert(workspace)
+                        }
+                    } label: {
+                        Text(isExpanded ? "Show less" : "See more")
+                            .font(AgentDesign.secondaryFont)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 34)
+                            .padding(.vertical, 3)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if !archivedSessions.isEmpty {
+                    archivedDisclosure(
+                        workspace: workspace,
+                        sessions: archivedSessions,
+                        isExpanded: archivedExpanded
+                    )
+                }
             }
 
             Spacer().frame(height: 10)
         }
     }
 
+    /// Collapsed disclosure row that sits at the bottom of each
+    /// workspace group and reveals archived sessions when clicked.
+    /// Kept dim and small so the eye treats it as secondary chrome —
+    /// archived chats are out of sight by default, one click away.
+    @ViewBuilder
+    private func archivedDisclosure(
+        workspace: String,
+        sessions: [AgentSession],
+        isExpanded: Bool
+    ) -> some View {
+        Button {
+            if isExpanded {
+                expandedArchivedGroups.remove(workspace)
+            } else {
+                expandedArchivedGroups.insert(workspace)
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Image(systemName: "archivebox")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                Text("已归档 (\(sessions.count))")
+                    .font(AgentDesign.secondaryFont)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 3)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+
+        if isExpanded {
+            ForEach(sessions) { session in
+                sessionRow(session)
+            }
+        }
+    }
+
+    @ViewBuilder
     private func sessionRow(_ session: AgentSession) -> some View {
         let isActive = appState.activeAgentSessionID == session.id
-        return Button {
+        let isHovered = (hoveredSessionID == session.id)
+
+        Button {
             appState.selectAgentSession(id: session.id)
         } label: {
             HStack(spacing: 6) {
-                Circle()
-                    .fill(isActive ? Color.accentColor : Color.secondary.opacity(0.4))
-                    .frame(width: 5, height: 5)
+                // The status dot has three lives:
+                //   • active session       → accent color (no animation)
+                //   • runtime mid-turn     → green pulse (background runner)
+                //   • runtime awaits user  → amber pulse (needs your eyes)
+                //   • idle / cold          → default grey
+                // Pulled out to its own view because we need to observe
+                // the per-session runtime (if there is one); a static
+                // expression here would only refresh when the row's
+                // session changes, not when the runtime's `isResponding`
+                // flips mid-stream.
+                AgentSessionRowStatusDot(
+                    runtime: appState.agentRuntimes[session.id],
+                    isActive: isActive
+                )
                 Text(session.title)
                     .font(AgentDesign.sidebarRowFont)
                     .foregroundStyle(isActive ? .primary : .secondary)
@@ -283,6 +389,7 @@ private struct AgentSessionsSidebar: View {
                     .truncationMode(.tail)
                 Spacer(minLength: 0)
                 AgentSessionModeBadges(session: session)
+                sessionRowTrailingActions(session: session, isHovered: isHovered)
             }
             .padding(.horizontal, 28)
             .frame(height: AgentDesign.sidebarRowHeight)
@@ -290,29 +397,138 @@ private struct AgentSessionsSidebar: View {
             .background(isActive ? Color.accentColor.opacity(0.12) : Color.clear)
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            if hovering {
+                hoveredSessionID = session.id
+            } else if hoveredSessionID == session.id {
+                hoveredSessionID = nil
+            }
+        }
         .contextMenu {
-            Button("Delete Chat", role: .destructive) {
+            Button(session.isPinned ? "取消置顶" : "置顶") {
+                appState.toggleAgentSessionPinned(id: session.id)
+            }
+            Button(session.isArchived ? "取消归档" : "归档") {
+                appState.toggleAgentSessionArchived(id: session.id)
+            }
+            Divider()
+            Button("删除会话", role: .destructive) {
                 appState.deleteAgentSession(id: session.id)
             }
         }
     }
 
+    /// Trailing icon cluster on each session row — pin & archive
+    /// buttons that fade in on hover, plus a persistent `pin.fill`
+    /// badge when the row is pinned so users can see the state at a
+    /// glance even without hovering. Cursor-style: the actions stay
+    /// out of the way until the user is aiming at the row.
+    @ViewBuilder
+    private func sessionRowTrailingActions(session: AgentSession, isHovered: Bool) -> some View {
+        HStack(spacing: 4) {
+            // Persistent pin badge when pinned & not hovered. While
+            // hovered, the badge is replaced by the (also pinned-state-
+            // aware) toggle button below, so we don't double up.
+            if session.isPinned && !isHovered {
+                Image(systemName: "pin.fill")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(45))
+            }
+
+            if isHovered {
+                // Pin / Unpin
+                Button {
+                    appState.toggleAgentSessionPinned(id: session.id)
+                } label: {
+                    Image(systemName: session.isPinned ? "pin.slash" : "pin")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16, height: 16)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(session.isPinned ? "取消置顶" : "置顶")
+
+                // Archive / Unarchive
+                Button {
+                    appState.toggleAgentSessionArchived(id: session.id)
+                } label: {
+                    Image(systemName: session.isArchived ? "tray.and.arrow.up" : "archivebox")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16, height: 16)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(session.isArchived ? "取消归档" : "归档")
+            }
+        }
+        .frame(minWidth: isHovered ? 40 : 0, alignment: .trailing)
+    }
+
     private var groupedSessions: [(String, [AgentSession])] {
-        let groups = Dictionary(grouping: appState.agentSessions) { session in
+        // Hide empty "New Chat" rows — sessions that never got a user
+        // message just clutter the sidebar with a wall of identical
+        // placeholders (see screenshot). The active session is always kept
+        // visible even when empty, because it's the one the user is about
+        // to type into; hiding it would make the highlight disappear.
+        let activeID = appState.activeAgentSessionID
+        let visibleSessions = appState.agentSessions.filter { session in
+            if session.id == activeID { return true }
+            return session.messages.contains(where: { $0.role == .user })
+        }
+        let groups = Dictionary(grouping: visibleSessions) { session in
             session.workspaceRootPath ?? "_no_workspace_"
         }
+        // Group order rules — fully static, never depends on session
+        // updatedAt or on which folder is currently open. The user
+        // explicitly asked for the workspace list to stop moving around
+        // (even "the active project floats to the top" was too dynamic).
+        //   1. Every named workspace is sorted by its last path component
+        //      via `localizedCaseInsensitiveCompare` — deterministic,
+        //      Finder-like, doesn't depend on full path length.
+        //   2. "No workspace" is pinned to the bottom — it's a catch-all,
+        //      not a real project.
+        // Sessions *inside* a group still sort by updatedAt (most recent
+        // first), so within a folder the chat order still reflects
+        // recency — only the folder ordering is frozen.
         return groups
-            .map { ($0.key, $0.value.sorted { $0.updatedAt > $1.updatedAt }) }
+            .map { ($0.key, $0.value.sorted(by: sessionOrder)) }
             .sorted { lhs, rhs in
-                let l = lhs.1.first?.updatedAt ?? .distantPast
-                let r = rhs.1.first?.updatedAt ?? .distantPast
-                return l > r
+                let lKey = lhs.0
+                let rKey = rhs.0
+                let lIsNoWorkspace = (lKey == "_no_workspace_")
+                let rIsNoWorkspace = (rKey == "_no_workspace_")
+                if lIsNoWorkspace != rIsNoWorkspace { return !lIsNoWorkspace }
+                let lName = workspaceDisplayName(lKey)
+                let rName = workspaceDisplayName(rKey)
+                return lName.localizedCaseInsensitiveCompare(rName) == .orderedAscending
             }
     }
 
     private func workspaceDisplayName(_ key: String) -> String {
         if key == "_no_workspace_" { return "No workspace" }
         return URL(fileURLWithPath: key).lastPathComponent
+    }
+
+    /// Within-group ordering:
+    ///   1. Pinned rows first, most-recently-pinned at the top of the
+    ///      pinned block (`pinnedAt` desc) — re-pinning therefore
+    ///      bubbles a chat back to the very top.
+    ///   2. Non-pinned rows after, by recency (`updatedAt` desc).
+    /// Archived rows still flow through this comparator; `workspaceGroup`
+    /// splits them off into the disclosure section after sorting, so the
+    /// archived disclosure stays in updatedAt-desc order too.
+    private func sessionOrder(_ lhs: AgentSession, _ rhs: AgentSession) -> Bool {
+        switch (lhs.isPinned, rhs.isPinned) {
+        case (true, false): return true
+        case (false, true): return false
+        case (true, true):
+            return (lhs.pinnedAt ?? .distantPast) > (rhs.pinnedAt ?? .distantPast)
+        case (false, false):
+            return lhs.updatedAt > rhs.updatedAt
+        }
     }
 }
 
@@ -373,6 +589,7 @@ private struct AgentChatHeader: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+            .focusable(false)
             .help("Copy title")
 
             Spacer(minLength: 8)
@@ -384,6 +601,7 @@ private struct AgentChatHeader: View {
                     Image(systemName: "plus.bubble")
                 }
                 .buttonStyle(.plain)
+                .focusable(false)
                 .help("New Chat")
 
                 Button {
@@ -392,6 +610,7 @@ private struct AgentChatHeader: View {
                     Image(systemName: "rectangle.split.2x1")
                 }
                 .buttonStyle(.plain)
+                .focusable(false)
                 .help("Switch to Editor Mode")
             }
             .foregroundStyle(.secondary)
@@ -438,7 +657,7 @@ private struct AgentChatTranscript: View {
                     if appState.agentMessages.isEmpty {
                         AgentEmptyState()
                             .frame(maxWidth: .infinity)
-                            .padding(.top, 80)
+                            .padding(.top, 40)
                     } else {
                         ForEach(visibleMessages) { message in
                             if shouldShowMessageBubble(message) {
@@ -558,16 +777,27 @@ private struct AgentModeMessageView: View {
     // immediately tells them apart from assistant prose. Capped at ~78%
     // of the chat column so long pastes still wrap nicely.
     private var userBubble: some View {
-        HStack {
+        // For text-only providers we splice the qwen-vl description right
+        // into the user message content (so the next turn echoes it back
+        // verbatim, and so providers without image support still get the
+        // signal). That made the bubble grow into a wall of AI-generated
+        // bullets — see screenshot. Split it back out at render time: the
+        // user's own prose stays inline, the description collapses into a
+        // disclosure chip.
+        let split = AgentUserContentSplitter.split(message.content)
+        return HStack {
             Spacer(minLength: 40)
             VStack(alignment: .trailing, spacing: 4) {
                 VStack(alignment: .leading, spacing: 8) {
-                    if !message.content.isEmpty {
-                        Text(message.content)
+                    if !split.visible.isEmpty {
+                        Text(split.visible)
                             .font(AgentDesign.bodyFont)
                             .foregroundStyle(.white)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let description = split.description {
+                        AgentImageDescriptionDisclosure(description: description)
                     }
                     if !message.images.isEmpty {
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -689,6 +919,111 @@ private struct AgentStreamingCursor: View {
                     visible.toggle()
                 }
             }
+    }
+}
+
+// MARK: - User content splitter (hide qwen-vl description blocks)
+
+/// Pulls the spliced-in image description block out of a user message so
+/// the bubble can render the user's own prose at full size and tuck the
+/// AI-generated wall of bullets behind a disclosure chip.
+///
+/// The block is recognised by the header line that
+/// `contentByAppendingImageDescription(to:...)` emits — `[Image
+/// description generated by <provider> / <model> for N attached
+/// image(s)]` — and we strip that line plus everything after it. The
+/// raw description (without the marker line) is what gets shown when
+/// the user expands the chip; we don't bother showing the marker again.
+enum AgentUserContentSplitter {
+    struct Split {
+        let visible: String
+        let description: String?
+        let imageCount: Int
+        let provider: String?
+    }
+
+    /// Matches the header emitted by AppState.contentByAppendingImageDescription.
+    /// Capture 1 = provider/model slug, capture 2 = image count.
+    private static let headerPattern: NSRegularExpression? = {
+        try? NSRegularExpression(
+            pattern: #"\[Image description generated by ([^\]]+?) for (\d+) attached image[s]?\]"#,
+            options: []
+        )
+    }()
+
+    static func split(_ content: String) -> Split {
+        guard let regex = headerPattern else {
+            return Split(visible: content, description: nil, imageCount: 0, provider: nil)
+        }
+        let range = NSRange(content.startIndex..<content.endIndex, in: content)
+        guard let match = regex.firstMatch(in: content, options: [], range: range) else {
+            return Split(visible: content, description: nil, imageCount: 0, provider: nil)
+        }
+        guard let headerRange = Range(match.range, in: content),
+              let providerRange = Range(match.range(at: 1), in: content),
+              let countRange = Range(match.range(at: 2), in: content) else {
+            return Split(visible: content, description: nil, imageCount: 0, provider: nil)
+        }
+        let visible = String(content[..<headerRange.lowerBound])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let description = String(content[headerRange.upperBound...])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let provider = String(content[providerRange])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let imageCount = Int(content[countRange]) ?? 0
+        return Split(
+            visible: visible,
+            description: description.isEmpty ? nil : description,
+            imageCount: imageCount,
+            provider: provider
+        )
+    }
+}
+
+/// Collapsed chip + on-demand body for the image description block. Lives
+/// inside the user bubble (white-on-accent), so we tint everything against
+/// the white text color and keep the chip itself tiny so it doesn't fight
+/// the user's actual prose for attention.
+private struct AgentImageDescriptionDisclosure: View {
+    let description: String
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "text.viewfinder")
+                        .font(.system(size: 10, weight: .medium))
+                    Text(isExpanded ? "收起图片描述" : "图片 AI 描述")
+                        .font(.system(size: 11, weight: .medium))
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+                .foregroundStyle(.white.opacity(0.85))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color.white.opacity(0.18))
+                .clipShape(Capsule())
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .help("点击展开 / 收起视觉模型生成的图片描述")
+
+            if isExpanded {
+                Text(description)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(8)
+                    .background(Color.white.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+        }
     }
 }
 
@@ -2366,18 +2701,31 @@ fileprivate final class ComposerNSTextView: NSTextView {
 
     override func paste(_ sender: Any?) {
         let pasteboard = NSPasteboard.general
-        let hasImage = (pasteboard.pasteboardItems ?? []).contains { item in
-            item.data(forType: .png) != nil
-                || item.data(forType: .tiff) != nil
-        }
-        if hasImage {
+        // Use the shared helper instead of probing `.png`/`.tiff`
+        // directly — many sources (Notes, Sketch, Figma, web browser
+        // drag-out, Cmd+Shift+Ctrl+4 screen capture) advertise images
+        // under `public.image` or an NSImage archive, which the
+        // narrow check missed. Result: paste only worked for a
+        // handful of apps. The helper also peeks via
+        // `NSImage.canInit(with:)` to catch every variant AppKit
+        // knows how to decode.
+        if AgentImagePasteboardHelper.pasteboardHasImage(pasteboard) {
             coordinator?.onPasteImage()
-            if pasteboard.string(forType: .string) != nil {
-                super.paste(sender)
+            if let plain = pasteboard.string(forType: .string), !plain.isEmpty {
+                insertText(plain, replacementRange: selectedRange())
             }
             return
         }
-        super.paste(sender)
+        // Non-image paste: force plain-text. The composer is a chat
+        // input, not a rich editor — bringing in foreign fonts /
+        // backgrounds from the source app (browser, terminal, Notes)
+        // makes the bubble look broken and the next-turn payload bloat
+        // with attributes the model can't read anyway.
+        if let plain = pasteboard.string(forType: .string), !plain.isEmpty {
+            insertText(plain, replacementRange: selectedRange())
+            return
+        }
+        pasteAsPlainText(sender)
     }
 }
 

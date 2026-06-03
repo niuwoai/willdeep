@@ -81,8 +81,19 @@ struct AgentComposerImageStrip: View {
 /// Helpers to lift NSPasteboard / drag-and-drop image data into the format
 /// our `AgentImageAttachment` expects. Used by the composer.
 enum AgentImagePasteboardHelper {
-    /// Read images out of the general pasteboard. Returns base64-encoded
-    /// PNG data; an empty array if no image is present.
+    /// Read images out of the general pasteboard. Returns a list of
+    /// (data, mime-type) pairs; empty if there's nothing image-shaped.
+    ///
+    /// We try the explicit types first (`.png`, `.tiff`, file URL) so
+    /// that lossless source data passes through untouched. When none of
+    /// those match — which happens a lot in practice because many apps
+    /// (Notes, Sketch, Figma, web browsers, Cmd+Shift+Ctrl+4 screen
+    /// captures) put the image on the pasteboard under types we don't
+    /// enumerate (`public.image`, `com.apple.icns`, raw `NSImage`
+    /// archive, etc.) — we fall back to `NSImage(pasteboard:)`. That's
+    /// AppKit's "I don't care what flavor, give me an NSImage" entry
+    /// point and is what Apple's own docs recommend for paste handlers.
+    /// The NSImage is then flattened to PNG.
     static func readImages(from pasteboard: NSPasteboard) -> [(data: Data, mimeType: String)] {
         var results: [(Data, String)] = []
         guard let items = pasteboard.pasteboardItems else { return results }
@@ -104,7 +115,39 @@ enum AgentImagePasteboardHelper {
                 results.append((data, mime))
             }
         }
+        if results.isEmpty,
+           let image = NSImage(pasteboard: pasteboard),
+           let png = pngData(from: image) {
+            results.append((png, "image/png"))
+        }
         return results
+    }
+
+    /// Whether the given pasteboard advertises *any* image content we
+    /// can ingest. Used by `ComposerNSTextView.paste(_:)` to decide
+    /// whether to forward the event into the image-attach pipeline.
+    /// Broader than `pasteboardItems.contains { png || tiff }` — covers
+    /// `public.image`, NSImage-archive, and the various screenshot
+    /// flavors that don't expose `.png`/`.tiff` directly.
+    static func pasteboardHasImage(_ pasteboard: NSPasteboard) -> Bool {
+        if NSImage.canInit(with: pasteboard) { return true }
+        guard let items = pasteboard.pasteboardItems else { return false }
+        return items.contains { item in
+            if item.data(forType: .png) != nil { return true }
+            if item.data(forType: .tiff) != nil { return true }
+            if let urlString = item.string(forType: .fileURL),
+               let url = URL(string: urlString),
+               mimeType(forPath: url.path) != nil {
+                return true
+            }
+            return false
+        }
+    }
+
+    private static func pngData(from image: NSImage) -> Data? {
+        guard let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff) else { return nil }
+        return rep.representation(using: .png, properties: [:])
     }
 
     static func mimeType(forPath path: String) -> String? {

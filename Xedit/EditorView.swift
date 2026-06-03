@@ -1011,6 +1011,25 @@ final class VeilWriterTextView: NSTextView {
         return menu
     }
 
+    /// Always paste as plain text so external rich text (HTML / RTF /
+    /// styled NSAttributedString from Notes, browsers, terminals etc.)
+    /// can't drag its own font, paragraph style, or background color
+    /// into the editor — see the screenshot where a pasted command came
+    /// in with a wildly different font size. We pull `.string` off the
+    /// pasteboard ourselves and feed it through `insertText:`, which
+    /// triggers the same undo / textDidChange / syntax-highlight pass
+    /// as typing those characters, so everything downstream behaves
+    /// identically. Fall back to `pasteAsPlainText:` if for some reason
+    /// no string representation is offered.
+    override func paste(_ sender: Any?) {
+        let pasteboard = NSPasteboard.general
+        if let plain = pasteboard.string(forType: .string), !plain.isEmpty {
+            insertText(plain, replacementRange: selectedRange())
+            return
+        }
+        pasteAsPlainText(sender)
+    }
+
     @objc private func chooseSyntaxHighlighting(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? String else { return }
 

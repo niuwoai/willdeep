@@ -345,6 +345,27 @@ struct EditorSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section("Concurrency") {
+                HStack {
+                    Text("Per-provider concurrency")
+                    Spacer()
+                    Text("\(appState.perProviderConcurrencyLimit)")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                Slider(
+                    value: Binding(
+                        get: { Double(appState.perProviderConcurrencyLimit) },
+                        set: { appState.perProviderConcurrencyLimit = Int($0.rounded()) }
+                    ),
+                    in: 1...8,
+                    step: 1
+                )
+                Text("Cap on simultaneous Agent turns per provider. Each provider has its own quota — running 3 DashScope sessions doesn't block OpenAI sessions. When the cap is hit, new dispatches queue (FIFO) and drain as turns finish. Raising the cap immediately promotes queued work; lowering it just stops promoting new ones (running turns are never aborted). Default 3 is conservative — bump up if your provider's rate limit comfortably allows.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .onAppear {

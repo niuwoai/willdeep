@@ -1263,6 +1263,22 @@ private struct WindowChromeConfigurator: NSViewRepresentable {
         }
     }
 
+    /// One-shot bookkeeping so the autosave-name / first-launch resize
+    /// logic only runs the first time we see each NSWindow — `poll()`
+    /// re-enters `configure(_:)` every runloop turn for ~30 ticks and
+    /// we don't want to keep stomping the user's manual resize.
+    private static let frameAutosaveAppliedWindows = NSHashTable<NSWindow>.weakObjects()
+    private static let mainWindowFrameAutosaveName = "VeilWriterMainWindow"
+    /// AppKit refuses to bind the same autosave name to more than one
+    /// window at a time (you get a runtime warning and the second binding
+    /// is silently ignored), so we only attach `setFrameAutosaveName` to
+    /// the very first window we see in this process. Subsequent windows
+    /// (e.g. the URL-bound WindowGroup that opens when the user chooses
+    /// another folder) still get the first-launch 80% resize but skip
+    /// the persistence binding — AppKit cascades them off the first
+    /// window's frame anyway, which is the behaviour users expect.
+    private static var didBindFrameAutosaveName = false
+
     private static func configure(_ window: NSWindow) {
         if window.titleVisibility != .hidden { window.titleVisibility = .hidden }
         if !window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = true }
@@ -1272,6 +1288,7 @@ private struct WindowChromeConfigurator: NSViewRepresentable {
         restoreStandardWindowButtons(in: window)
         window.titlebarSeparatorStyle = .none
         window.contentView?.superview?.hideTitlebarSeparatorViews()
+        applyFrameAutosaveAndDefaultSize(window)
 
         // Hide the 1px divider NavigationSplitView's underlying NSSplitView draws
         // between the sidebar and the editor. There is no SwiftUI API for it, so
@@ -1284,6 +1301,49 @@ private struct WindowChromeConfigurator: NSViewRepresentable {
                 split.needsDisplay = true
             }
             contentView.hideTitlebarSeparatorViews()
+        }
+    }
+
+    /// Persist NSWindow frame across launches (SwiftUI's WindowGroup
+    /// doesn't do this for us when there's no `defaultSize` / no scene
+    /// storage), and on the very first launch — when nothing is yet
+    /// persisted — size the window to ~80% of the current screen and
+    /// center it. Both effects only fire the first time we see a given
+    /// NSWindow; `poll()` keeps re-entering `configure(_:)` and we
+    /// don't want to keep overriding the user's manual resize.
+    private static func applyFrameAutosaveAndDefaultSize(_ window: NSWindow) {
+        if frameAutosaveAppliedWindows.contains(window) { return }
+        frameAutosaveAppliedWindows.add(window)
+
+        let autosaveName = mainWindowFrameAutosaveName
+        let defaultsKey = "NSWindow Frame \(autosaveName)"
+        let hasPersistedFrame = UserDefaults.standard.string(forKey: defaultsKey) != nil
+
+        // First launch (no persisted frame yet): start at 80% of the
+        // active screen, centered. We pick the screen the window is
+        // currently on; if that's nil, fall back to `.main`.
+        if !hasPersistedFrame,
+           let screen = window.screen ?? NSScreen.main {
+            let visible = screen.visibleFrame
+            let targetWidth = visible.width * 0.8
+            let targetHeight = visible.height * 0.8
+            let originX = visible.minX + (visible.width - targetWidth) / 2
+            let originY = visible.minY + (visible.height - targetHeight) / 2
+            let target = NSRect(x: originX, y: originY, width: targetWidth, height: targetHeight)
+            window.setFrame(target, display: true)
+        }
+
+        // Bind the autosave AFTER the optional first-launch resize, so
+        // that initial frame becomes the persisted baseline. On
+        // subsequent launches AppKit reads the saved frame from
+        // UserDefaults and applies it automatically. Only one window
+        // per process can hold the binding — see the note on
+        // `didBindFrameAutosaveName`.
+        if !didBindFrameAutosaveName,
+           window.frameAutosaveName != autosaveName {
+            if window.setFrameAutosaveName(autosaveName) {
+                didBindFrameAutosaveName = true
+            }
         }
     }
 

@@ -179,6 +179,16 @@ struct AgentSession: Identifiable, Codable, Equatable {
     /// outside Goal mode, or when Goal mode is on but the user hasn't
     /// defined a goal yet.
     var currentGoal: AgentGoal?
+    /// When the user pinned this session to the top of its workspace
+    /// group. Nil = not pinned. We store the timestamp (not a bool) so
+    /// that multiple pinned items inside one workspace can be ordered
+    /// "most-recently-pinned first" in the sidebar.
+    var pinnedAt: Date?
+    /// When the user archived this session. Nil = active. Archived
+    /// sessions are hidden from the regular workspace list and
+    /// surfaced under a collapsed "已归档" group at the bottom of each
+    /// workspace.
+    var archivedAt: Date?
 
     init(
         id: UUID = UUID(),
@@ -191,7 +201,9 @@ struct AgentSession: Identifiable, Codable, Equatable {
         didEditFiles: Bool = false,
         interactionMode: AgentInteractionMode = .normal,
         currentPlan: AgentPlan? = nil,
-        currentGoal: AgentGoal? = nil
+        currentGoal: AgentGoal? = nil,
+        pinnedAt: Date? = nil,
+        archivedAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -204,7 +216,12 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.interactionMode = interactionMode
         self.currentPlan = currentPlan
         self.currentGoal = currentGoal
+        self.pinnedAt = pinnedAt
+        self.archivedAt = archivedAt
     }
+
+    var isPinned: Bool { pinnedAt != nil }
+    var isArchived: Bool { archivedAt != nil }
 
     var workspaceName: String {
         guard let path = workspaceRootPath, !path.isEmpty else { return "No workspace" }
@@ -217,6 +234,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case id, title, workspaceRootPath, modelID, createdAt, updatedAt, messages
         case didEditFiles, interactionMode, currentPlan, currentGoal
+        case pinnedAt, archivedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -232,6 +250,8 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.interactionMode = try c.decodeIfPresent(AgentInteractionMode.self, forKey: .interactionMode) ?? .normal
         self.currentPlan = try c.decodeIfPresent(AgentPlan.self, forKey: .currentPlan)
         self.currentGoal = try c.decodeIfPresent(AgentGoal.self, forKey: .currentGoal)
+        self.pinnedAt = try c.decodeIfPresent(Date.self, forKey: .pinnedAt)
+        self.archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
     }
 }
 
