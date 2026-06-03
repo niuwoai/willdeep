@@ -1556,6 +1556,14 @@ final class AppState: ObservableObject {
         let toRemove = agentSessions.filter { session in
             if session.id == activeID { return false }
             if pendingDispatchQueue.contains(where: { $0.runtimeID == session.id }) { return false }
+            if let runtime = agentRuntimes[session.id] {
+                if runtime.isResponding || runtime.requestTask != nil || runtime.toolDecisionWaiter != nil {
+                    return false
+                }
+                if runtime.messages.contains(where: { $0.role == .user }) {
+                    return false
+                }
+            }
             return !session.messages.contains(where: { $0.role == .user })
         }
         guard !toRemove.isEmpty else { return }
@@ -1568,6 +1576,11 @@ final class AppState: ObservableObject {
         // they keep republishing change events into AppState and
         // hold onto in-flight tasks for sessions that no longer exist.
         for id in removedIDs {
+            if let runtime = agentRuntimes[id] {
+                runtime.requestTask?.cancel()
+                runtime.toolDecisionWaiter?.resume(returning: .denied(reason: "Empty session pruned"))
+                runtime.toolDecisionWaiter = nil
+            }
             agentRuntimes.removeValue(forKey: id)
             unsubscribeFromRuntime(id: id)
         }

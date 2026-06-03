@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.49.0-rc7 - 2026-06-03
+
+- **修复空会话清理误删 live runtime 的竞态。** `pruneEmptyAgentSessions()` 现在会同时检查内存里的 runtime 状态：正在响应、有 request task、正在等待 tool 决策，或 runtime 内存里已经出现 user message 的 session 都不会被当成空会话清理，避免刚开始跑的后台 routine / 并发 session 在尚未回写 `agentSessions` 前被新建会话流程误删；被清理的 idle runtime 也会按删除路径取消 task 并恢复 waiter。
+
 ## 1.49.0-rc6 - 2026-06-03
 
 - **加固长期运行时的取消 / 等待路径。** ① active session 卡在 tool approval、destructive confirm 或 `ask_user` 等待时，点击 Stop 现在会先恢复并清空 `toolDecisionWaiter`，再 cancel request task，避免 `CheckedContinuation` 永远悬挂导致 runtime 一直 `isResponding`、provider slot 不释放；② tool 决策返回后如果 Task 已取消，turn loop 立刻退出并走 defer 清场；③ retry 入口补齐 runtime 早退释放 provider slot 的兜底，和普通 dispatch 一致。
