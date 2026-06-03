@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.49.0-rc6 - 2026-06-03
+
+- **加固长期运行时的取消 / 等待路径。** ① active session 卡在 tool approval、destructive confirm 或 `ask_user` 等待时，点击 Stop 现在会先恢复并清空 `toolDecisionWaiter`，再 cancel request task，避免 `CheckedContinuation` 永远悬挂导致 runtime 一直 `isResponding`、provider slot 不释放；② tool 决策返回后如果 Task 已取消，turn loop 立刻退出并走 defer 清场；③ retry 入口补齐 runtime 早退释放 provider slot 的兜底，和普通 dispatch 一致。
+
 ## 1.49.0-rc5 - 2026-06-03
 
 - **修复并发 Routine / Runtime 的几个 rc4 回归。** ① provider slot 已经抢到、但 session 立刻被删除时，Task 早退也会释放 slot，避免同 provider 队列永远卡住；② 空会话清理会跳过仍在 `pendingDispatchQueue` 中的 session，避免 provider 满载时 queued routine 被误删且 `lastRunAt` 已更新后不再补跑；③ 后台 runtime 落盘不再读取 active session 的模型 override，routine 未指定模型时按当前全局 Flash/Pro 路由初始化；④ Routine 编辑器的「立即运行一次」和「保存」使用同一套 name/prompt 非空校验；⑤ `UserNotifications` 走 `@preconcurrency import`，清掉 Routine 通知发送处的 Sendable 警告。

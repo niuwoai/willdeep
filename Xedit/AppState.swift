@@ -1178,6 +1178,8 @@ final class AppState: ObservableObject {
     /// drop them explicitly.
     func stopAgentResponse() {
         guard isAgentResponding else { return }
+        agentToolDecisionWaiter?.resume(returning: .denied(reason: "Response stopped"))
+        agentToolDecisionWaiter = nil
         agentRequestTask?.cancel()
         // The loop's defer clears `isAgentResponding` and triggers
         // `consumeNextQueuedMessageIfNeeded()`.
@@ -2290,6 +2292,7 @@ final class AppState: ObservableObject {
 
                 if risk == .userInput {
                     let decision = await awaitToolDecision(for: runtime, forCallID: recordID)
+                    if Task.isCancelled { return }
                     let answer: String
                     switch decision {
                     case .answered(let typed):
@@ -2339,6 +2342,7 @@ final class AppState: ObservableObject {
 
                 if risk != .read && !isAlwaysAllowed {
                     let decision = await awaitToolDecision(for: runtime, forCallID: recordID)
+                    if Task.isCancelled { return }
                     if case .denied(let reason) = decision {
                         anyDenied = true
                         if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
@@ -2492,7 +2496,11 @@ final class AppState: ObservableObject {
 
         runtime.requestTask?.cancel()
         runtime.requestTask = Task { [weak self, weak runtime] in
-            guard let self, let runtime else { return }
+            guard let self else { return }
+            guard let runtime else {
+                self.releaseProviderSlot(providerID: configuration.providerID)
+                return
+            }
             await self.runAgentLoop(for: runtime, configuration: configuration)
         }
     }
