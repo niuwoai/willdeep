@@ -36,7 +36,7 @@ struct AgentChatHistoryRendererTests {
         #expect(rendered.string.contains("Title"))
         #expect(rendered.string.contains("bold"))
         #expect(rendered.string.contains("code"))
-        #expect(rendered.string.contains("swift  ⧉ Copy"))
+        #expect(rendered.string.contains("swift  ⎘ Copy"))
         #expect(rendered.string.contains("let value = 1"))
         #expect(!rendered.string.contains("# Title"))
         #expect(!rendered.string.contains("**bold**"))
@@ -152,8 +152,31 @@ struct AgentChatHistoryRendererTests {
         #expect(rendered.string.contains("You\nhello"))
         #expect(rendered.string.contains("✦ Assistant\ndone"))
         #expect(!rendered.string.contains("YOU"))
-        #expect(rendered.string.contains("hello\n⧉"))
-        #expect(rendered.string.contains("done\n⧉  ◷ 8.4s  in 1.2k · out 2.3k  ↻"))
+        #expect(rendered.string.contains("hello\n⎘"))
+        #expect(rendered.string.contains("done\n⎘  ◷ 8.4s  in 1.2k · out 2.3k  ↻"))
+    }
+
+    @Test
+    func normalizesHtmlDetailsAndLongRulesForChatMarkdown() {
+        let message = AgentMessage(
+            role: .assistant,
+            content: """
+            修复方法：
+            ----
+
+            <details><summary>该文件是此次合并新引入的：</summary>
+
+            提交 3e05c43 新增。</details>
+            """
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
+
+        #expect(rendered.string.contains("────────────────────────"))
+        #expect(rendered.string.contains("html  ⎘ Copy"))
+        #expect(rendered.string.contains("<details><summary>该文件是此次合并新引入的：</summary>"))
+        #expect(rendered.string.contains("提交 3e05c43 新增。</details>"))
+        #expect(!rendered.string.contains("----"))
     }
 
     @Test

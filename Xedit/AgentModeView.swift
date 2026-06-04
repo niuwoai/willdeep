@@ -1012,8 +1012,7 @@ private struct AgentModeMessageView: View {
         }
     }
 
-    // User messages: right-aligned bubble with accent fill so the eye
-    // immediately tells them apart from assistant prose. Capped at ~78%
+    // User messages: right-aligned, softly framed, and capped at ~78%
     // of the chat column so long pastes still wrap nicely.
     private var userBubble: some View {
         // For text-only providers we splice the qwen-vl description right
@@ -1052,7 +1051,7 @@ private struct AgentModeMessageView: View {
                     // Real text restored.
                     Text(AgentLongTokenBreaker.inject(into: split.visible))
                         .font(AgentDesign.bodyFont)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1068,17 +1067,22 @@ private struct AgentModeMessageView: View {
                         }
                     }
                 }
+                if !message.content.isEmpty {
+                    AgentMessageFooter(message: message, alignment: .trailing)
+                        .padding(.top, 2)
+                }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.top, 10)
+            .padding(.bottom, 14)
             .background(
                 RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                    .fill(Color.accentColor)
+                    .fill(Color.primary.opacity(0.06))
             )
-
-            if !message.content.isEmpty {
-                AgentMessageFooter(message: message, alignment: .trailing)
-            }
+            .overlay(
+                RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
+                    .stroke(Color.primary.opacity(0.05), lineWidth: 1)
+            )
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
     }
@@ -1093,9 +1097,9 @@ private struct AgentModeMessageView: View {
     private var assistantContent: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "sparkles")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 16, height: 18, alignment: .center)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.secondary.opacity(0.78))
+                .frame(width: 18, height: 20, alignment: .center)
                 .padding(.top, 10)
             if !message.content.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
@@ -1104,11 +1108,11 @@ private struct AgentModeMessageView: View {
                         .padding(.vertical, 10)
                         .background(
                             RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.32))
+                                .fill(Color.primary.opacity(0.035))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                                .stroke(Color.primary.opacity(0.04), lineWidth: 1)
+                                .stroke(Color.primary.opacity(0.035), lineWidth: 1)
                         )
                     // Don't show the footer while the stream is still
                     // running — elapsedSeconds isn't stamped until
@@ -1220,7 +1224,8 @@ enum AgentAssistantMarkdownRenderer {
         // runs of >30 chars. Otherwise a message containing e.g. a
         // pnpm-store listing (150-char hash paths, no spaces) freezes
         // SwiftUI Text's line-breaker on the whole chat pane.
-        let safe = AgentLongTokenBreaker.inject(into: content)
+        let normalized = AgentMarkdownNormalizer.normalizedForChatRendering(content)
+        let safe = AgentLongTokenBreaker.inject(into: normalized)
         let blocks = MarkdownPreviewParser.blocks(from: safe)
         var result = AttributedString()
 
@@ -1285,13 +1290,13 @@ enum AgentAssistantMarkdownRenderer {
                     var code = AttributedString(block.text)
                     code.font = .system(.body, design: .monospaced)
                     code.foregroundColor = .primary
-                    code.backgroundColor = Color.primary.opacity(0.06)
+                    code.backgroundColor = Color.primary.opacity(0.035)
                     result += code
                 }
 
             case .divider:
                 appendSeparator()
-                var divider = AttributedString("─────")
+                var divider = AttributedString("────────────────────────")
                 divider.foregroundColor = .secondary
                 result += divider
 
@@ -1333,7 +1338,7 @@ enum AgentAssistantMarkdownRenderer {
             highlighted.addAttribute(.font, value: font, range: fullRange)
         }
         var rendered = AttributedString(highlighted)
-        rendered.backgroundColor = Color.primary.opacity(0.06)
+        rendered.backgroundColor = Color.primary.opacity(0.035)
         return rendered
     }
 
@@ -1605,8 +1610,8 @@ private struct AgentMessageFooter: View {
             if alignment == .trailing { Spacer(minLength: 0) }
 
             Button(action: copyToClipboard) {
-                Image(systemName: didJustCopy ? "checkmark" : "doc.on.doc")
-                    .font(.system(size: 11, weight: .medium))
+                Image(systemName: didJustCopy ? "checkmark" : "square.on.square")
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(didJustCopy ? Color.green : Color.secondary)
                     .contentShape(Rectangle())
             }

@@ -225,7 +225,7 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
 
     private func replaceCopyButton(in range: NSRange, copied: Bool, code: String) {
         guard let textStorage else { return }
-        let font = NSFont.monospacedSystemFont(ofSize: 10, weight: .medium)
+        let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
         let color = copied ? NSColor.systemGreen : NSColor.secondaryLabelColor
         let replacement = AgentChatHistoryCodeCopyChrome.button(
             copied: copied,
@@ -324,7 +324,16 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
             union = union.isNull ? lineRect : union.union(lineRect)
         }
         guard !union.isNull else { return union }
-        var rect = union.insetBy(dx: -12, dy: -8)
+        let verticalInset: CGFloat
+        switch kind {
+        case .user:
+            verticalInset = 13
+        case .toolSummary:
+            verticalInset = 10
+        case .assistant, .system, .tool:
+            verticalInset = 8
+        }
+        var rect = union.insetBy(dx: -12, dy: -verticalInset)
         guard containerWidth > 0 else { return rect.integral }
 
         switch kind {
@@ -337,8 +346,8 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
             rect.origin.x = origin.x + 20
             rect.size.width = max(240, containerWidth - 34)
         case .toolSummary:
-            rect.origin.x = origin.x + 32
-            rect.size.width = max(220, containerWidth - 48)
+            rect.origin.x = origin.x + 12
+            rect.size.width = max(220, containerWidth - 24)
         }
 
         return rect.integral
@@ -365,10 +374,10 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
             guard visibleGlyphRange.length > 0 else { return }
             let rect = codeBlockRect(forGlyphRange: codeGlyphRange, at: origin)
             guard !rect.isNull, !rect.isEmpty else { return }
-            NSColor.quaternaryLabelColor.withAlphaComponent(0.12).setFill()
+            NSColor.quaternaryLabelColor.withAlphaComponent(0.05).setFill()
             let path = NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6)
             path.fill()
-            NSColor.separatorColor.withAlphaComponent(0.32).setStroke()
+            NSColor.separatorColor.withAlphaComponent(0.10).setStroke()
             path.lineWidth = 1
             path.stroke()
         }
@@ -413,21 +422,21 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
     private func bubbleColor(for kind: AgentChatHistoryBubbleKind) -> NSColor {
         switch kind {
         case .user:
-            return NSColor.controlAccentColor.withAlphaComponent(0.88)
+            return NSColor.quaternaryLabelColor.withAlphaComponent(0.18)
         case .assistant:
-            return NSColor.controlBackgroundColor.withAlphaComponent(0.38)
+            return NSColor.quaternaryLabelColor.withAlphaComponent(0.06)
         case .system:
             return NSColor.systemPurple.withAlphaComponent(0.12)
         case .tool:
             return NSColor.textBackgroundColor.withAlphaComponent(0.92)
         case .toolSummary:
-            return NSColor.quaternaryLabelColor.withAlphaComponent(0.12)
+            return NSColor.quaternaryLabelColor.withAlphaComponent(0.10)
         }
     }
 }
 
 private enum AgentChatHistoryCodeCopyChrome {
-    static let idleLabel = "⧉ Copy"
+    static let idleLabel = "⎘ Copy"
     static let copiedLabel = "✓ Done"
     static let linkValue = "agent-chat-history-copy-code"
 
@@ -447,7 +456,7 @@ private enum AgentChatHistoryCodeCopyChrome {
 }
 
 private enum AgentChatHistoryFooterChrome {
-    static let copyIdleLabel = "⧉"
+    static let copyIdleLabel = "⎘"
     static let copyCopiedLabel = "✓"
     static let retryLabel = "↻"
     static let copyLinkValue = "agent-chat-history-copy-message"
@@ -455,7 +464,7 @@ private enum AgentChatHistoryFooterChrome {
 
     static func copyButton(copied: Bool, message: String) -> NSAttributedString {
         let label = copied ? copyCopiedLabel : copyIdleLabel
-        var attributes = baseLinkAttributes(color: copied ? NSColor.systemGreen : NSColor.secondaryLabelColor)
+        var attributes = copyLinkAttributes(color: copied ? NSColor.systemGreen : NSColor.secondaryLabelColor)
         attributes[.agentChatHistoryMessageCopyText] = message
         if !copied {
             attributes[.link] = copyLinkValue
@@ -494,12 +503,97 @@ private enum AgentChatHistoryFooterChrome {
         NSFont.systemFont(ofSize: 10, weight: .medium)
     }
 
+    private static var copyFont: NSFont {
+        NSFont.systemFont(ofSize: 12, weight: .medium)
+    }
+
     private static func baseLinkAttributes(color: NSColor) -> [NSAttributedString.Key: Any] {
         [
             .font: footerFont,
             .foregroundColor: color,
             .underlineStyle: 0,
         ]
+    }
+
+    private static func copyLinkAttributes(color: NSColor) -> [NSAttributedString.Key: Any] {
+        [
+            .font: copyFont,
+            .foregroundColor: color,
+            .underlineStyle: 0,
+        ]
+    }
+}
+
+enum AgentMarkdownNormalizer {
+    static func normalizedForChatRendering(_ source: String) -> String {
+        let lines = source.components(separatedBy: .newlines)
+        var output: [String] = []
+        var index = 0
+        var isInFence = false
+
+        while index < lines.count {
+            let line = lines[index]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("```") {
+                isInFence.toggle()
+                output.append(line)
+                index += 1
+                continue
+            }
+
+            if !isInFence, isDividerLine(trimmed) {
+                output.append("---")
+                index += 1
+                continue
+            }
+
+            if !isInFence, let endMarker = htmlBlockEndMarker(for: trimmed) {
+                output.append("```html")
+                output.append(line)
+                index += 1
+                while index < lines.count {
+                    let next = lines[index]
+                    output.append(next)
+                    if next.range(of: endMarker, options: [.caseInsensitive]) != nil {
+                        index += 1
+                        break
+                    }
+                    index += 1
+                }
+                output.append("```")
+                continue
+            }
+
+            output.append(line)
+            index += 1
+        }
+
+        return output.joined(separator: "\n")
+    }
+
+    private static func isDividerLine(_ line: String) -> Bool {
+        let collapsed = line.replacingOccurrences(of: " ", with: "")
+        guard collapsed.count >= 3, let first = collapsed.first, "-_*".contains(first) else {
+            return false
+        }
+        return collapsed.allSatisfy { $0 == first }
+    }
+
+    private static func htmlBlockEndMarker(for line: String) -> String? {
+        let lower = line.lowercased()
+        let pairs: [(String, String)] = [
+            ("<details", "</details>"),
+            ("<summary", "</summary>"),
+            ("<pre", "</pre>"),
+            ("<table", "</table>"),
+            ("<div", "</div>"),
+            ("<section", "</section>"),
+            ("<article", "</article>"),
+        ]
+        for (prefix, suffix) in pairs where lower.hasPrefix(prefix) {
+            return suffix
+        }
+        return nil
     }
 }
 
@@ -583,7 +677,6 @@ enum AgentChatHistoryRenderer {
         let headerFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
         let bodyColor = NSColor.labelColor
         let secondaryColor = NSColor.secondaryLabelColor
-        let accentColor = NSColor.controlAccentColor
         let codeBackgroundColor = NSColor.controlBackgroundColor
 
         // Cap tool bodies on the visible transcript to keep TextKit's
@@ -634,11 +727,12 @@ enum AgentChatHistoryRenderer {
                 isToolCallOnly: isToolCallOnly,
                 to: result,
                 headerFont: headerFont,
-                accentColor: accentColor,
                 secondaryColor: secondaryColor
             )
 
             // Body.
+            let messageBubbleStart = result.length
+            var hasMessageBubbleContent = false
             let useMono = (message.role == .tool)
             let body: String
             if useMono, message.content.count > toolBodyLimit {
@@ -671,8 +765,9 @@ enum AgentChatHistoryRenderer {
                     to: result,
                     range: NSRange(location: bodyStart, length: result.length - bodyStart),
                     paragraphStyle: bodyParagraphStyle(for: message.role),
-                    foregroundColor: message.role == .user ? .white : nil
+                    foregroundColor: nil
                 )
+                hasMessageBubbleContent = true
             }
 
             // Tool call summary line (when the assistant emitted tool calls).
@@ -705,6 +800,15 @@ enum AgentChatHistoryRenderer {
                     isLatestAssistant: message.id == latestAssistantMessageID,
                     to: result
                 )
+                if hasMessageBubbleContent && message.toolCalls.isEmpty {
+                    applyBubbleChrome(
+                        kind: bubbleKind(for: message.role),
+                        to: result,
+                        range: NSRange(location: messageBubbleStart, length: result.length - messageBubbleStart),
+                        paragraphStyle: bodyParagraphStyle(for: message.role),
+                        foregroundColor: nil
+                    )
+                }
             }
 
             index += 1
@@ -732,7 +836,6 @@ enum AgentChatHistoryRenderer {
         isToolCallOnly: Bool,
         to result: NSMutableAttributedString,
         headerFont: NSFont,
-        accentColor: NSColor,
         secondaryColor: NSColor
     ) {
         let label: String
@@ -750,7 +853,7 @@ enum AgentChatHistoryRenderer {
         case .assistant:
             label = isToolCallOnly ? "Tool calls" : "Assistant"
             avatar = isToolCallOnly ? "TL" : "AI"
-            color = isToolCallOnly ? NSColor.systemGreen : accentColor
+            color = isToolCallOnly ? NSColor.secondaryLabelColor : NSColor.tertiaryLabelColor
         case .tool:
             label = message.toolCallID.map { "Tool output · \($0)" } ?? "Tool output"
             avatar = "OUT"
@@ -797,7 +900,7 @@ enum AgentChatHistoryRenderer {
         NSAttributedString(
             string: "✦",
             attributes: [
-                .font: NSFont.systemFont(ofSize: font.pointSize + 1, weight: .semibold),
+                .font: NSFont.systemFont(ofSize: font.pointSize + 4, weight: .semibold),
                 .foregroundColor: color,
             ]
         )
@@ -845,7 +948,7 @@ enum AgentChatHistoryRenderer {
     private static func headerParagraphStyle(for role: AgentRole) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = role == .user ? .right : .left
-        style.paragraphSpacing = 5
+        style.paragraphSpacing = role == .user ? 10 : 5
         style.lineSpacing = 1
         style.headIndent = role == .user ? 150 : 0
         style.firstLineHeadIndent = style.headIndent
@@ -857,7 +960,7 @@ enum AgentChatHistoryRenderer {
         let style = NSMutableParagraphStyle()
         style.alignment = role == .user ? .right : .left
         style.lineSpacing = 2
-        style.paragraphSpacing = 2
+        style.paragraphSpacing = role == .user ? 6 : 2
         switch role {
         case .user:
             style.headIndent = 160
@@ -875,10 +978,10 @@ enum AgentChatHistoryRenderer {
         let style = NSMutableParagraphStyle()
         style.alignment = .left
         style.lineSpacing = 1
-        style.paragraphSpacing = 2
-        style.headIndent = 22
-        style.firstLineHeadIndent = 22
-        style.tailIndent = -22
+        style.paragraphSpacing = 3
+        style.headIndent = 28
+        style.firstLineHeadIndent = 28
+        style.tailIndent = -28
         return style
     }
 
@@ -965,7 +1068,6 @@ enum AgentChatHistoryRenderer {
 
         guard isExpanded else { return }
 
-        let detailsStart = result.length
         result.append(NSAttributedString(string: "\n", attributes: [.font: monoFont]))
         result.append(NSAttributedString(
             string: toolCallSummary(for: group.calls, argumentLimit: 220),
@@ -977,7 +1079,7 @@ enum AgentChatHistoryRenderer {
         applyBubbleChrome(
             kind: .toolSummary,
             to: result,
-            range: NSRange(location: detailsStart + 1, length: result.length - detailsStart - 1),
+            range: NSRange(location: start, length: result.length - start),
             paragraphStyle: toolSummaryParagraphStyle(),
             foregroundColor: nil
         )
@@ -1263,7 +1365,8 @@ enum AgentChatHistoryRenderer {
         codeBackgroundColor: NSColor,
         isDark: Bool
     ) {
-        let safe = AgentLongTokenBreaker.inject(into: source)
+        let normalized = AgentMarkdownNormalizer.normalizedForChatRendering(source)
+        let safe = AgentLongTokenBreaker.inject(into: normalized)
         let blocks = MarkdownPreviewParser.blocks(from: safe)
         guard !blocks.isEmpty else {
             result.append(inlineMarkdownAttributedString(safe, baseFont: bodyFont, color: bodyColor))
@@ -1357,7 +1460,7 @@ enum AgentChatHistoryRenderer {
                 codeBlockIndex += 1
                 let language = block.info?.trimmingCharacters(in: .whitespacesAndNewlines)
                 let displayLanguage = (language?.isEmpty == false) ? language! : "code"
-                let codeHeaderFont = NSFont.monospacedSystemFont(ofSize: 10, weight: .medium)
+                let codeHeaderFont = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
                 result.append(NSAttributedString(
                     string: "\(displayLanguage)  ",
                     attributes: [
@@ -1397,7 +1500,7 @@ enum AgentChatHistoryRenderer {
             case .divider:
                 appendBlockSeparator()
                 result.append(NSAttributedString(
-                    string: "-----",
+                    string: "────────────────────────",
                     attributes: [
                         .font: bodyFont,
                         .foregroundColor: secondaryColor,

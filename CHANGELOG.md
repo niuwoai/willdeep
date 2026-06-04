@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.52.1-rc26 - 2026-06-04
+
+- **继续打磨 Agent 聊天气泡层级。** 用户消息从紫色强调背景改成浅灰气泡，并把复制 footer 纳入同一个气泡 padding；assistant 星形头像放大并改为灰色系，assistant 输出背景和代码块背景 / 边框进一步调浅。
+- **修正工具调用展开态背景包裹。** 连续 tool call 展开后整组摘要和详情共用浅灰背景与统一 padding，避免详情文字贴边或跑出灰底。
+- **补齐聊天 Markdown 归一化。** Agent 聊天里的 `<details>` / `<summary>` 等 HTML 片段会按 `html` 代码块渲染，连续 `----` / `____` / `****` 会归一为 Markdown 分隔线；复制图标也统一换成更大的 `⎘` / `square.on.square` 样式。
+
 ## 1.52.1-rc25 - 2026-06-04
 
 - **弱化 Agent 聊天 header 的头像视觉。** 历史区用户消息不再显示紫色圆形 `YOU` 头像，只保留右侧灰色 `You` 标识；assistant 历史消息改为轻量 `✦ Assistant` 星形标识，更接近 Gemini 风格。

@@ -1260,8 +1260,8 @@ struct AgentMessageBubble: View {
     private var footer: some View {
         HStack(spacing: 8) {
             Button(action: copyToClipboard) {
-                Image(systemName: didJustCopy ? "checkmark" : "doc.on.doc")
-                    .font(.system(size: 10, weight: .medium))
+                Image(systemName: didJustCopy ? "checkmark" : "square.on.square")
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(didJustCopy ? Color.green : Color.secondary)
             }
             .buttonStyle(.plain)
