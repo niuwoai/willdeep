@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.52.1-rc23 - 2026-06-04
+
+- **压缩 Agent 历史里的连续 tool call。** 连续的 tool-call-only assistant 消息现在默认合并成一条灰色摘要，例如 `▸ 执行了 3 条工具调用 · run_command command: ...`，不再一条工具调用占一个绿色 `TL Tool calls` 块。
+- **支持点击展开 / 收起 tool call 详情。** `AgentChatHistoryNSTextView` 现在持有展开状态，点击摘要行后原地重渲染为 `▾` 展开态，显示每个 tool call 的紧凑详情；再次点击收起。实现仍然保持单个 TextKit history view。
+- **降低 tool call 视觉权重并展示更长参数。** tool-call 摘要与展开详情改用 secondary 灰字和浅灰背景，避免绿色喧宾夺主；`run_command` / `read_file` 等关键参数的截断长度提高，长一些的命令和路径能直接看出来。最新 tool-call SwiftUI 卡片也同步改为默认折叠的灰色摘要，展开后才显示每条调用的参数、输出和错误。
+
+## 1.52.1-rc22 - 2026-06-04
+
+- **恢复 Agent 历史消息底部 footer。** 用户和 assistant 历史消息现在都会在正文下方显示可点击复制图标 `⧉`，点击后复制整条消息内容到剪贴板，并短暂切换为绿色 `✓` 成功反馈后恢复。
+- **恢复 assistant 输出的耗时 / token / 重新生成信息。** assistant 消息 footer 会显示 `◷ 8.4s` 风格耗时，以及 `in 1.2k · out 2.3k` 的输入 / 输出 token 摘要；最新一条 assistant 输出下方额外显示 `↻`，点击后调用现有 `retryLastAgentTurn()` 重新生成。
+- **收紧历史渲染缓存 key。** `AgentChatHistoryRenderer` 的缓存 key 现在纳入 `elapsedSeconds`、`usageTokens`、`promptTokens`、`completionTokens`，避免正文未变化但 footer 统计刚写回时误命中旧 attributed string。
+
+## 1.52.1-rc21 - 2026-06-04
+
+- **修复用户气泡右侧过近 / 文字贴边的问题。** 用户消息的 TextKit 气泡 trailing margin 从 8px 扩到 30px，并同步增大用户 header / body 的尾缩进，让紫色气泡和文字都留出稳定右侧安全距离，不再挤到聊天窗边缘。
+- **给历史代码块补上整块背景和复制交互。** fenced code block 现在会绘制独立的圆角代码区背景，header 显示语言和 `⧉ Copy` copy token；点击后复制代码到剪贴板，并临时切换为绿色 `✓ Done` 成功态后自动恢复。实现仍在单个 `NSTextView` / TextKit layout manager 内完成，避免为历史消息重新创建 per-block SwiftUI view tree。
+
+## 1.52.1-rc20 - 2026-06-04
+
+- **修复 Agent 聊天气泡仍像行级背景的问题。** TextKit 气泡背景现在按整条消息的 attributed range 取完整 glyph 范围绘制，用户消息右侧形成单个固定宽度气泡，assistant / system / tool 输出形成左侧大卡片，避免同一条消息每行一个不同宽度背景。
+- **扩大 Agent 聊天列并补足工具调用信息。** `chatMaxContentWidth` 从 920 提到 1040，减少右侧空白；历史工具摘要从只显示工具名和字节数，改为显示关键参数（如 `command`、`cwd`、`path`、`pattern`、`query`），最近一次 tool-call group 仍保留 SwiftUI 详情卡，可展开看完整参数、输出和错误。
+- **让 assistant 代码块重新具备高亮与可复制基础体验。** 历史 TextKit Markdown 的 fenced code 通过 `SyntaxHighlighter` 按语言 hint 上色；正在流式输出的 assistant 单 `Text(AttributedString)` 路径也接入同一套高亮。历史区保持 `NSTextView.isSelectable = true`，代码内容可直接选中复制，不再为每个历史代码块创建 SwiftUI copy button。
+
+## 1.52.1-rc19 - 2026-06-04
+
+- **改进 Agent 聊天历史的视觉呈现。** 在不恢复 SwiftUI per-message bubble / per-block Markdown view tree 的前提下，`AgentChatHistoryTextView` 改用自定义 TextKit layout manager 给历史消息正文绘制圆角气泡背景，用户消息右对齐，助手 / 系统 / 工具输出左对齐，角色 header 前增加小圆形文字头像（YOU / AI / SYS / OUT / TL），让历史区重新像聊天界面，而不是裸文本日志。
+- **工具调用摘要从纯文本箭头行改为工具事件样式。** 空 assistant + toolCalls 的历史消息现在显示为 `Tool calls` 事件，摘要行使用 `tool  <name>  <size> args` 的紧凑等宽格式，并用单独的 TextKit 气泡颜色区分，避免一屏都是 `ASSISTANT → run_command(...)` 这种排查期临时样式。
+- **保留滚动稳定路线。** 历史区仍然只给 SwiftUI 一个 `NSTextView`；Markdown、头像 token、气泡背景和 tool-call event 都烘在同一份 attributed string / layout manager 里，避免重新引入导致卡死的 `LazyVStack + 多层 SwiftUI bubble + Markdown block ForEach` 组合。
+
 ## 1.52.1-rc18 - 2026-06-04
 
 - **恢复 Agent 聊天历史的 Markdown 渲染。** rc16/rc17 为了排查滚动卡死把历史消息降级成纯文本；现在历史消息仍然只通过一个 `NSTextView` / TextKit attributed string 进入 SwiftUI，但正文会重新按 Markdown blocks 渲染标题、段落、列表、引用、代码块、分隔线、inline code / bold / italic / links，以及 pipe table 的等宽文本 fallback。

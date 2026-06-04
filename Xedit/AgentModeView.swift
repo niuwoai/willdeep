@@ -68,7 +68,7 @@ enum AgentDesign {
     static let inputCornerRadius: CGFloat = 10
 
     // Paddings & sizes.
-    static let chatMaxContentWidth: CGFloat = 720
+    static let chatMaxContentWidth: CGFloat = 1040
     static let messageVerticalSpacing: CGFloat = 18
     static let composerHeight: CGFloat = 124
     static let headerHeight: CGFloat = 42
@@ -677,11 +677,11 @@ private struct AgentChatTranscript: View {
                         // replies), and no amount of bubble-internal
                         // optimization stopped it. TextKit handles
                         // the same content incrementally with no
-                        // freeze regardless of length. We pay for
-                        // it in look-and-feel: no per-message
-                        // bubbles and no per-message copy button.
-                        // Historical messages still render Markdown
-                        // inside the TextKit attributed string.
+                        // freeze regardless of length. Chat chrome
+                        // now comes from TextKit-drawn bubble
+                        // backgrounds and compact role avatars, so
+                        // the history still reads like chat without
+                        // reintroducing per-message SwiftUI views.
                         // Streaming assistant message is still
                         // rendered as a SwiftUI bubble so Markdown
                         // formatting + token-by-token updates +
@@ -698,7 +698,10 @@ private struct AgentChatTranscript: View {
                         let streamingMessageID = currentStreamingMessageID
                         let history = historyMessages(rendered: rendered, streamingID: streamingMessageID)
                         if !history.isEmpty {
-                            AgentChatHistoryTextView(messages: history)
+                            AgentChatHistoryTextView(
+                                messages: history,
+                                onRetryLastTurn: appState.retryLastAgentTurn
+                            )
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                         }
 
@@ -717,10 +720,12 @@ private struct AgentChatTranscript: View {
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                         }
 
-                        // Tool call groups: rendered as their own
-                        // SwiftUI cards (collapsible expand-on-tap).
-                        // Each `AgentToolCallGroup` is one view —
-                        // total stays small even on long sessions.
+                        // Tool call groups: older calls are summarized
+                        // inside the TextKit transcript; keep only the
+                        // most recent group as a SwiftUI card so the
+                        // user can still inspect exact arguments and
+                        // output without reintroducing a long list of
+                        // interactive views into the scroll path.
                         ForEach(toolCallGroupMessageIDs(in: rendered), id: \.self) { messageID in
                             let calls = toolCalls(for: messageID)
                             if !calls.isEmpty {
@@ -880,14 +885,14 @@ private struct AgentChatTranscript: View {
         return rendered.filter { $0.id != streamingID }
     }
 
-    /// Preserve original tool-call order: returns the message ids in
-    /// `rendered` that have non-empty tool calls, in the order they
-    /// appear in the transcript. Used to drive the `ForEach` that
-    /// renders tool-call group cards.
+    /// Show detailed, expandable SwiftUI tool cards only for the most
+    /// recent message with tool calls. Older calls are still visible in
+    /// the TextKit history summary.
     private func toolCallGroupMessageIDs(in rendered: [AgentMessage]) -> [AgentMessage.ID] {
-        rendered.compactMap { message in
-            toolCalls(for: message.id).isEmpty ? nil : message.id
+        guard let latest = rendered.reversed().first(where: { !toolCalls(for: $0.id).isEmpty }) else {
+            return []
         }
+        return [latest.id]
     }
 
     /// Slice the bottom `renderedMessageCap` messages out of the
@@ -1150,6 +1155,7 @@ private struct AgentAssistantMarkdownBody: View {
     /// When true, appends a small blinking cursor at the end of the
     /// rendered body to signal that more tokens are still arriving.
     let isStreaming: Bool
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         // The Text on the bottom is the single-view substitute for
@@ -1157,7 +1163,7 @@ private struct AgentAssistantMarkdownBody: View {
         // is a tiny separate view (one AgentStreamingCursor) — that
         // is fine because it's always either 0 or 1 child, never N.
         VStack(alignment: .leading, spacing: 4) {
-            Text(AgentAssistantMarkdownRenderer.render(content))
+            Text(AgentAssistantMarkdownRenderer.render(content, isDark: colorScheme == .dark))
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
             if isStreaming {
@@ -1169,13 +1175,14 @@ private struct AgentAssistantMarkdownBody: View {
 
 /// Converts a streamed Markdown message into one `AttributedString`
 /// that captures headings, paragraphs, lists, quotes, code blocks
-/// (monospaced + soft background), and dividers. Reused inside the
+/// (syntax highlighted + soft background), and dividers. Reused inside the
 /// chat pane to keep the view-tree-per-message at one node.
 ///
 /// Trade-offs vs the old per-block SwiftUI renderer:
-///  - Code blocks have no copy button, no language pill — just
-///    monospace text with a subtle background and an inline language
-///    hint on the line above.
+///  - Code blocks have no per-block copy button or framed header in
+///    this streaming path; the text remains selectable/copyable and
+///    uses the shared syntax highlighter when the fence language is
+///    known.
 ///  - Tables degrade to `cell │ cell` piped rows.
 ///  - Inline links inherit AttributedString's link styling.
 /// The point of the trade-off is keeping SwiftUI's LazyVStack from
@@ -1186,14 +1193,19 @@ enum AgentAssistantMarkdownRenderer {
     /// the content (hash differs), so we re-render once and cache
     /// the result; subsequent SwiftUI body evaluations during scroll
     /// just hand back the prior AttributedString.
-    private static var cache: [Int: AttributedString] = [:]
-    private static var cacheOrder: [Int] = []
+    private struct RenderCacheKey: Hashable {
+        let contentHash: Int
+        let isDark: Bool
+    }
+
+    private static var cache: [RenderCacheKey: AttributedString] = [:]
+    private static var cacheOrder: [RenderCacheKey] = []
     private static let cacheLimit = 128
 
-    static func render(_ content: String) -> AttributedString {
-        let key = content.hashValue
+    static func render(_ content: String, isDark: Bool) -> AttributedString {
+        let key = RenderCacheKey(contentHash: content.hashValue, isDark: isDark)
         if let hit = cache[key] { return hit }
-        let result = build(from: content)
+        let result = build(from: content, isDark: isDark)
         cache[key] = result
         cacheOrder.append(key)
         if cacheOrder.count > cacheLimit {
@@ -1203,7 +1215,7 @@ enum AgentAssistantMarkdownRenderer {
         return result
     }
 
-    private static func build(from content: String) -> AttributedString {
+    private static func build(from content: String, isDark: Bool) -> AttributedString {
         // Pre-process: inject zero-width breakpoints into unbreakable
         // runs of >30 chars. Otherwise a message containing e.g. a
         // pnpm-store listing (150-char hash paths, no spaces) freezes
@@ -1267,11 +1279,15 @@ enum AgentAssistantMarkdownRenderer {
                     hint.foregroundColor = .secondary
                     result += hint
                 }
-                var code = AttributedString(block.text)
-                code.font = .system(.body, design: .monospaced)
-                code.foregroundColor = .primary
-                code.backgroundColor = Color.primary.opacity(0.06)
-                result += code
+                if let highlighted = highlightedCode(block.text, languageHint: block.info, isDark: isDark) {
+                    result += highlighted
+                } else {
+                    var code = AttributedString(block.text)
+                    code.font = .system(.body, design: .monospaced)
+                    code.foregroundColor = .primary
+                    code.backgroundColor = Color.primary.opacity(0.06)
+                    result += code
+                }
 
             case .divider:
                 appendSeparator()
@@ -1294,6 +1310,31 @@ enum AgentAssistantMarkdownRenderer {
         }
 
         return result
+    }
+
+    private static func highlightedCode(
+        _ text: String,
+        languageHint: String?,
+        isDark: Bool
+    ) -> AttributedString? {
+        guard let language = MarkdownCodeBlockView.language(forHint: languageHint) else {
+            return nil
+        }
+        let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        let theme: EditorTheme = isDark ? .graphite : .paper
+        let highlighted = NSMutableAttributedString(attributedString: SyntaxHighlighter.highlightSync(
+            text,
+            language: language,
+            theme: theme,
+            font: font
+        ))
+        let fullRange = NSRange(location: 0, length: highlighted.length)
+        if fullRange.length > 0 {
+            highlighted.addAttribute(.font, value: font, range: fullRange)
+        }
+        var rendered = AttributedString(highlighted)
+        rendered.backgroundColor = Color.primary.opacity(0.06)
+        return rendered
     }
 
     /// Run inline Markdown (bold/italic/`code`/links) through the
