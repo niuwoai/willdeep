@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.52.1-rc24 - 2026-06-04
+
+- **修复 Agent 历史代码块复制误触系统打开链接的问题。** Code block 的 `⧉ Copy` link 现在由 `AgentChatHistoryNSTextView` 更宽松地拦截并吞掉内部 action link，避免点击复制时 macOS 尝试打开 `agent-chat-history-copy-code` 并弹出 `-50` 错误。
+- **修正历史代码块背景左侧对齐。** TextKit 绘制代码块背景时改为从正文缩进左侧 padding 开始铺满，避免代码最左侧文字跑到灰色背景外面。
+
 ## 1.52.1-rc23 - 2026-06-04
 
 - **压缩 Agent 历史里的连续 tool call。** 连续的 tool-call-only assistant 消息现在默认合并成一条灰色摘要，例如 `▸ 执行了 3 条工具调用 · run_command command: ...`，不再一条工具调用占一个绿色 `TL Tool calls` 块。

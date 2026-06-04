@@ -140,7 +140,7 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
         guard let textStorage,
               charIndex >= 0,
               charIndex < textStorage.length else {
-            return false
+            return isInternalActionLink(link)
         }
 
         var codeButtonRange = NSRange(location: 0, length: 0)
@@ -148,8 +148,7 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             .agentChatHistoryCodeCopyText,
             at: charIndex,
             effectiveRange: &codeButtonRange
-        ) as? String,
-           codeButtonRange.length == AgentChatHistoryCodeCopyChrome.idleLabel.utf16.count {
+        ) as? String {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(code, forType: .string)
             replaceCopyButton(in: codeButtonRange, copied: true, code: code)
@@ -164,8 +163,7 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             .agentChatHistoryMessageCopyText,
             at: charIndex,
             effectiveRange: &footerButtonRange
-        ) as? String,
-           footerButtonRange.length == AgentChatHistoryFooterChrome.copyIdleLabel.utf16.count {
+        ) as? String {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(message, forType: .string)
             replaceFooterCopyButton(in: footerButtonRange, copied: true, message: message)
@@ -191,7 +189,29 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             return true
         }
 
-        return false
+        return isInternalActionLink(link)
+    }
+
+    private func isInternalActionLink(_ link: Any) -> Bool {
+        let value: String?
+        if let string = link as? String {
+            value = string
+        } else if let string = link as? NSString {
+            value = string as String
+        } else if let url = link as? URL {
+            value = url.absoluteString
+        } else if let url = link as? NSURL {
+            value = url.absoluteString
+        } else {
+            value = nil
+        }
+        guard let value else { return false }
+        return [
+            AgentChatHistoryCodeCopyChrome.linkValue,
+            AgentChatHistoryFooterChrome.copyLinkValue,
+            AgentChatHistoryFooterChrome.retryLinkValue,
+            "agent-chat-history-tool-group",
+        ].contains(value)
     }
 
     private func restoreCopyButtonIfNeeded(range: NSRange, code: String) {
@@ -369,8 +389,8 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
         guard !union.isNull else { return union }
         var rect = union.insetBy(dx: -10, dy: -7)
         if containerWidth > 0 {
-            rect.origin.x = origin.x + 48
-            rect.size.width = max(220, containerWidth - 84)
+            rect.origin.x = origin.x + 22
+            rect.size.width = max(220, containerWidth - 56)
         }
         return rect.integral
     }
@@ -409,7 +429,7 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
 private enum AgentChatHistoryCodeCopyChrome {
     static let idleLabel = "⧉ Copy"
     static let copiedLabel = "✓ Done"
-    private static let linkValue = "agent-chat-history-copy-code"
+    static let linkValue = "agent-chat-history-copy-code"
 
     static func button(copied: Bool, code: String, font: NSFont, color: NSColor) -> NSAttributedString {
         let label = copied ? copiedLabel : idleLabel
@@ -430,8 +450,8 @@ private enum AgentChatHistoryFooterChrome {
     static let copyIdleLabel = "⧉"
     static let copyCopiedLabel = "✓"
     static let retryLabel = "↻"
-    private static let copyLinkValue = "agent-chat-history-copy-message"
-    private static let retryLinkValue = "agent-chat-history-retry-last-turn"
+    static let copyLinkValue = "agent-chat-history-copy-message"
+    static let retryLinkValue = "agent-chat-history-retry-last-turn"
 
     static func copyButton(copied: Bool, message: String) -> NSAttributedString {
         let label = copied ? copyCopiedLabel : copyIdleLabel
