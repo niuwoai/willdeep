@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.52.1-rc41 - 2026-06-04
+
+- **修正 rc39 引入的 message hash 缓存撞键回归。** `AgentChatHistoryRenderer` 的 message-level hash 缓存以 (id, content.count, toolCalls.count, elapsedSeconds) 做指纹键，但同 id、内容仅一字之差且长度相同的消息会命中同一条缓存，导致历史视图渲染老内容。回退该缓存层 — Swift `String.hashValue` 本身已经够快，让 render-cache 自己（按全字段 hash 做 key）兜底重渲染。`cacheKeyTracksEditedEarlierContentWithSameLength` 测试现在能通过。
+- **回退 rc38 引入的 AppState deinit cancel 所有 background runtime task。** `MainActor.assumeIsolated` 在 Swift Testing 测试 release 路径上 precondition fail，导致 56 个测试随机崩溃。生产环境下没问题（SwiftUI 在主线程释放 @StateObject），但测试 harness 会让任何 deinit 在非主线程触发。改为依赖 session 显式删除/prune 时清理 — 这条路径本来就覆盖了真实使用场景。
+- **附带的 `XeditTests` 测试隔离调整。** `testShouldAutoCompressTriggersAt75Percent` 加了 `appState.startNewAgentSession()` 显式拉起 runtime，但单个测试仍然在全套跑时 fail（与历史 7 个预存 flaky test 一起 — 它们的根因是 AppState 在 init 中触发的磁盘 IO 让测试间互相污染）。这些 flaky test 不在本轮重构范围内，已 spawn 独立任务追踪。
+
+## 1.52.1-rc40 - 2026-06-04
+
+- **代码体检 - 阶段 2：拆 ContentView.swift（3287 → 1798 行）。** 把视图层职责拆到独立文件：(1) 新增 `ContentViewBackgrounds.swift` — `WorkspaceWindowBackground` / `EditorAreaBackground` / `EditorGlassBackgroundModifier` / `VisualEffectView` / `SidebarResizeHandle` / `CursorModifier` 及 `.editorGlassBackground` / `.cursor` modifier；(2) 新增 `EmptyStateViews.swift` — `EmptyProjectEditorView` / `EmptyWorkspaceView` / `EmptyWorkspaceHero` / `EmptyWorkspaceRecentSection` / `EmptyWorkspaceButtonStyle`；(3) 新增 `MainWindowChrome.swift` — `MainWindowKeyboardShortcutHandler` / `WindowChromeConfigurator` / `ClearDividerSplitView` / `PaletteKeyboardHandler` / `FloatingPanelEscapeKeyHandler` + 私有 NSView extension；(4) 新增 `MarkdownPreview.swift` — `MarkdownPreviewBlock` / `MarkdownPreviewParser` / `HTMLPreviewParser` / `MarkdownPreviewBlockView` / `MarkdownInline` / `MarkdownTableBlockView` / `MarkdownCodeBlockView` / `MarkdownCodeBlockCopyButton`。ContentView 主体收敛回 1798 行，远低于 CLAUDE.md §10 的 3000 硬上限和 2000 软上限。私有访问权限相应放宽到 internal，但仍限制在 module 内不外泄。
+
+## 1.52.1-rc39 - 2026-06-04
+
+- **代码体检 - 第二轮性能/正确性。** 多阶段重构的阶段 1：(1) `awaitToolDecision` 用 `withTaskCancellationHandler` 包装 — task 被取消（session 删/Stop 按钮/AppState 释放）时主动 resume continuation 为 `.denied`，消除工具决策悬挂的最后一类泄漏；(2) `AppState.findMatchRanges` 与 `changedLineNumbers` 加 (内容哈希, 查询/saved-内容) 双键缓存，SwiftUI body 多处读这俩属性时不再每次重扫全文；(3) 聊天历史 avatar 圆头像 NSImage 进 (label, fill) 缓存，长对话不再每次重绘 100+ 张小图；(4) 渲染缓存内每条 message 的全字段哈希加 (id, content.count, toolCalls.count, elapsedSeconds) 指纹快表，流式 append 不再每帧把整段 content 喂给 Hasher。
+
+## 1.52.1-rc38 - 2026-06-04
+
+- **代码体检 - 第一轮机械修复落地。** 由 5 维度并行扫描 + 对抗式验证报告驱动：(1) `.gitignore` 补齐 `.env*`/`*.key`/macOS 杂项等敏感与噪声项；(2) `AppState.swift` 修正陈旧注释（`agentSessionDidEditFiles` 转发的是 `AgentRuntime` 而非 `AgentSession`）；(3) 工具调用 `argumentsJSON` 解析失败不再静默落入空 dict，而是把该 tool call 标 `.failed` 并把原始坏 JSON 通过 tool message 反馈给模型自纠；(4) AppState `deinit` 现在 cancel 所有 background runtime 的 `requestTask` 并 resume 其 `toolDecisionWaiter`，杜绝多会话场景下的 Task / continuation 泄漏；(5) 聊天历史复制按钮的 3s 还原 `asyncAfter` 改成 `DispatchWorkItem`，快速连续点击不再让 label 闪烁错乱；(6) `AgentClient` 所有出站请求新增 `X-App-Version` 与 `User-Agent: Xedit/<version> (macOS)`，后端可按版本分桶诊断；(7) `SyntaxHighlighter` 编译过的 `NSRegularExpression` 进静态缓存，viewport 高亮的 O(N × 规则数) 编译降到 O(规则数) 一次；(8) `AgentMarkdownTableFormatter` 从 `AgentChatHistoryTextView.swift` 抽到独立文件 `AgentMarkdownTableFormatter.swift`，两条聊天渲染路径共用，便于将来加单测。
+
+## 1.52.1-rc37 - 2026-06-04
+
+- **修正聊天里 Markdown 表格的对齐。** Chat 历史（NSTextView）与流式 assistant 消息（SwiftUI `Text`）两条路径之前都是用 `cell │ cell` 直接拼接，中英文/不同长度列各往各的方向漂；现在按显示宽度（CJK/Emoji 计 2 列）补齐列宽，表头下方多了 `─` 分隔线，长短行不再错位。
+
 ## 1.52.1-rc36 - 2026-06-04
 
 - **修正 Agent “审查”入口语义。** Composer 和 worktree 变更卡里的“审查”现在打开本地未提交 diff 预览 sheet，而不是把变更摘要发进聊天；diff 预览支持复制，并尽量包含 untracked 文件内容。

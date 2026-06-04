@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-04 | Current version: v1.52.1-rc36
+> Last updated: 2026-06-04 | Current version: v1.52.1-rc41
 
 ## Positioning
 

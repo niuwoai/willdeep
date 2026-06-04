@@ -247,14 +247,14 @@ final class AppState: ObservableObject {
     /// Active Agent-mode session id. nil means "scratch" — Editor-mode
     /// chat keeps working without forcing a session to exist.
     @Published var activeAgentSessionID: AgentSession.ID?
-    /// Mirrors `AgentSession.didEditFiles` for the active session — flips to
-    /// true the moment the Agent successfully applies a patch in this
+    /// Mirrors `AgentRuntime.didEditFiles` for the active session — flips
+    /// to true the moment the Agent successfully applies a patch in this
     /// session, and stays true until the session is replaced. Used to gate
     /// the worktree-change card so a fresh New Chat never shows it.
-    /// Mirrors `AgentRuntime.didEditFiles` for the active session.
-    /// Pre-rc2 this was `@Published private(set)`; the delegate keeps
-    /// the same surface. Internal write call sites use `appState.agentSessionDidEditFiles = ...`
-    /// which routes to the active runtime.
+    /// Pre-rc2 this was `@Published private(set)` on AppState; the
+    /// delegate keeps the same surface. Internal write call sites use
+    /// `appState.agentSessionDidEditFiles = ...` which routes to the
+    /// active runtime.
     var agentSessionDidEditFiles: Bool {
         get { activeRuntime?.didEditFiles ?? false }
         set { activeRuntime?.didEditFiles = newValue }
@@ -414,6 +414,16 @@ final class AppState: ObservableObject {
         quickOpenRefreshTask?.cancel()
         agentRequestTask?.cancel()
         activeRuntimeSubscription?.cancel()
+        // rc38 attempted to cancel every background runtime's
+        // requestTask here via `MainActor.assumeIsolated { … }`, which
+        // works in production (AppState is held by SwiftUI as a
+        // @StateObject, so dealloc happens on the main thread) but
+        // crashes the Swift Testing harness, where release sites are
+        // sometimes nonisolated and the precondition trips. The
+        // background-runtime task is now cancelled explicitly at the
+        // call sites that retire a session (`deleteAgentSession`,
+        // `pruneEmptyAgentSessions`, etc), not on deinit — see the
+        // commentary on those for the new policy.
         for url in securityScopedAccessURLs {
             url.stopAccessingSecurityScopedResource()
         }
@@ -443,8 +453,32 @@ final class AppState: ObservableObject {
         return tabs.first { $0.id == activeTabID }
     }
 
+    /// Memoization slot for `findMatchRanges`. Pre-rc38 the computed
+    /// property scanned the whole file on every SwiftUI body read, and
+    /// the find bar + editor + status bar all read it once per render,
+    /// burning O(file size) per render on large files. The find bar is
+    /// the bottleneck — a 1 MB file plus a multi-char query was visibly
+    /// laggy. Cache key is (content identity hash, query, fileContent
+    /// count); set to nil any time we know either input may have shifted
+    /// (we DON'T proactively invalidate — the key-based lookup handles
+    /// stale entries naturally on the next access).
+    private struct FindMatchCache {
+        let contentHash: Int
+        let query: String
+        let ranges: [NSRange]
+    }
+    private var findMatchCache: FindMatchCache?
+
     var findMatchRanges: [NSRange] {
-        Self.findRanges(in: fileContent, query: findQuery)
+        let hash = fileContent.hashValue
+        if let cached = findMatchCache,
+           cached.contentHash == hash,
+           cached.query == findQuery {
+            return cached.ranges
+        }
+        let ranges = Self.findRanges(in: fileContent, query: findQuery)
+        findMatchCache = FindMatchCache(contentHash: hash, query: findQuery, ranges: ranges)
+        return ranges
     }
 
     var activeFindRange: NSRange? {
@@ -453,9 +487,29 @@ final class AppState: ObservableObject {
         return ranges[min(activeFindIndex, ranges.count - 1)]
     }
 
+    /// Memoization slot for `changedLineNumbers`. Same reasoning as
+    /// `findMatchCache`: this property is read from the gutter renderer
+    /// + change-bar overlay + tab title dirty-dot, so a typo in a 5K-line
+    /// file triggers three line-diffs per keystroke.
+    private struct ChangedLinesCache {
+        let currentHash: Int
+        let savedHash: Int
+        let lines: Set<Int>
+    }
+    private var changedLinesCache: ChangedLinesCache?
+
     var changedLineNumbers: Set<Int> {
         guard let activeTab else { return [] }
-        return Self.changedLineNumbers(current: activeTab.content, saved: activeTab.savedContent)
+        let currentHash = activeTab.content.hashValue
+        let savedHash = activeTab.savedContent.hashValue
+        if let cached = changedLinesCache,
+           cached.currentHash == currentHash,
+           cached.savedHash == savedHash {
+            return cached.lines
+        }
+        let lines = Self.changedLineNumbers(current: activeTab.content, saved: activeTab.savedContent)
+        changedLinesCache = ChangedLinesCache(currentHash: currentHash, savedHash: savedHash, lines: lines)
+        return lines
     }
 
     var primaryAgentChangedFile: AgentFileChangeSummary? {
@@ -2284,12 +2338,43 @@ final class AppState: ObservableObject {
             // Execute every tool call, gating on the user when necessary.
             var anyDenied = false
             for call in latestToolCalls {
-                let arguments = AgentJSONValue.decode(from: call.argumentsJSON.isEmpty ? "{}" : call.argumentsJSON)
+                // Parse argumentsJSON into a dict for downstream risk/dispatch.
+                // The model occasionally emits malformed JSON (especially on
+                // partial streams or wrong tool schemas). Pre-rc37 we
+                // silently degraded to `[:]`, which meant the tool ran with
+                // zero arguments and produced confusing failures further
+                // downstream. Now: empty body is treated as `{}`; a
+                // structurally-valid object is used as-is; anything else is
+                // surfaced as an explicit `.failed` tool call so the
+                // assistant can see the malformed payload it produced and
+                // re-emit a fixed call.
                 let argsDict: [String: AgentJSONValue]
-                if case .object(let dict) = arguments {
-                    argsDict = dict
-                } else {
+                if call.argumentsJSON.isEmpty {
                     argsDict = [:]
+                } else {
+                    let decoded = AgentJSONValue.decode(from: call.argumentsJSON)
+                    if case .object(let dict) = decoded {
+                        argsDict = dict
+                    } else {
+                        let record = AgentToolCall(
+                            messageID: assistantID,
+                            externalID: call.externalID,
+                            toolName: call.toolName,
+                            arguments: [:],
+                            risk: .read,
+                            status: .failed,
+                            approvalSource: nil
+                        )
+                        var failed = record
+                        failed.errorMessage = "Invalid JSON in tool arguments"
+                        runtime.toolCalls.append(failed)
+                        appendToolMessage(
+                            for: runtime,
+                            toolCallID: call.externalID,
+                            payload: "Tool arguments JSON could not be parsed; re-emit the call with valid JSON. Raw payload: \(call.argumentsJSON.prefix(400))"
+                        )
+                        continue
+                    }
                 }
 
                 let risk = AgentToolRegistry.risk(
@@ -2582,21 +2667,47 @@ final class AppState: ObservableObject {
         ])
     }
 
+    /// Suspend until the user resolves the tool call. Three resume paths:
+    ///   1. The call is already resolved by the time we register
+    ///      (race: user clicked Deny while a prior tool was still running) —
+    ///      resume immediately from the synchronous fast-path.
+    ///   2. UI delivers an .approved / .denied / .answered — `resumeToolDecision`
+    ///      pulls `toolDecisionWaiter` off the runtime and resumes it.
+    ///   3. The enclosing Task is cancelled (session deleted, app shutdown,
+    ///      user hit Stop) — `withTaskCancellationHandler` reaches in and
+    ///      resumes with .denied so the caller unwinds cleanly. Pre-rc38
+    ///      this path leaked: the continuation was stored but never resumed,
+    ///      hanging the tool dispatch loop on the next user action.
     private func awaitToolDecision(for runtime: AgentRuntime, forCallID id: AgentToolCall.ID) async -> AgentToolDecision {
-        await withCheckedContinuation { continuation in
-            // Already resolved before we got to register (e.g. user clicked
-            // Deny while the previous tool was still running) — resume now.
-            if let call = runtime.toolCalls.first(where: { $0.id == id }),
-               call.status != .pendingApproval, call.status != .awaitingConfirm,
-               call.status != .awaitingUserAnswer {
-                if call.status == .denied {
-                    continuation.resume(returning: .denied(reason: call.errorMessage ?? "User denied"))
-                } else {
-                    continuation.resume(returning: .approved)
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if Task.isCancelled {
+                    continuation.resume(returning: .denied(reason: "Cancelled"))
+                    return
                 }
-                return
+                if let call = runtime.toolCalls.first(where: { $0.id == id }),
+                   call.status != .pendingApproval, call.status != .awaitingConfirm,
+                   call.status != .awaitingUserAnswer {
+                    if call.status == .denied {
+                        continuation.resume(returning: .denied(reason: call.errorMessage ?? "User denied"))
+                    } else {
+                        continuation.resume(returning: .approved)
+                    }
+                    return
+                }
+                runtime.toolDecisionWaiter = continuation
             }
-            runtime.toolDecisionWaiter = continuation
+        } onCancel: {
+            // The cancellation handler runs synchronously off the cancelling
+            // task — it's nonisolated, so we hop back to the main actor to
+            // touch the runtime's continuation slot.
+            Task { @MainActor [weak runtime] in
+                guard let runtime else { return }
+                if let waiter = runtime.toolDecisionWaiter {
+                    runtime.toolDecisionWaiter = nil
+                    waiter.resume(returning: .denied(reason: "Cancelled"))
+                }
+            }
         }
     }
 

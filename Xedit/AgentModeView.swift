@@ -1317,13 +1317,16 @@ enum AgentAssistantMarkdownRenderer {
             case .table:
                 appendSeparator()
                 if let headers = block.tableHeaders, let rows = block.tableRows {
-                    let plain = ([headers] + rows)
-                        .map { $0.joined(separator: " │ ") }
-                        .joined(separator: "\n")
-                    var table = AttributedString(plain)
-                    table.font = .system(.body, design: .monospaced)
-                    table.foregroundColor = .primary
-                    result += table
+                    let plain = AgentMarkdownTableFormatter.formatted(
+                        headers: headers,
+                        rows: rows
+                    )
+                    if !plain.isEmpty {
+                        var table = AttributedString(plain)
+                        table.font = .system(.body, design: .monospaced)
+                        table.foregroundColor = .primary
+                        result += table
+                    }
                 }
             }
         }

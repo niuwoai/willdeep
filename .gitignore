@@ -2,3 +2,24 @@
 DerivedData/
 build/
 *.profraw
+
+# Sensitive files — never commit. See CLAUDE.md §8.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+credentials.json
+
+# macOS / Xcode 杂项
+.DS_Store
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+*.swiftpm/
+.swiftpm/
+
+# 日志 / 临时
+*.log
+.tmp/

@@ -79,6 +79,13 @@ final class AgentChatHistoryNSTextView: NSTextView {
     private var expandedToolGroupIDs = Set<String>()
     private var hoveredUserMessageID: UUID?
     private var hoverTrackingArea: NSTrackingArea?
+    /// Pending "restore copy button label" work items, one per outstanding
+    /// click. Rapid repeated clicks on the same (or different) copy
+    /// buttons cancel the prior pending restore — pre-rc38 these
+    /// asyncAfter blocks accumulated, causing the label to flicker
+    /// "Copied"→"Copy"→"Copied" out of order.
+    private var pendingCodeCopyRestore: DispatchWorkItem?
+    private var pendingFooterCopyRestore: DispatchWorkItem?
     var onRetryLastTurn: (() -> Void)?
 
     init() {
@@ -231,9 +238,12 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(code, forType: .string)
             replaceCopyButton(in: codeButtonRange, copied: true, code: code)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            pendingCodeCopyRestore?.cancel()
+            let work = DispatchWorkItem { [weak self] in
                 self?.restoreCopyButtonIfNeeded(range: codeButtonRange, code: code)
             }
+            pendingCodeCopyRestore = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: work)
             return true
         }
 
@@ -246,9 +256,12 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(message, forType: .string)
             replaceFooterCopyButton(in: footerButtonRange, copied: true, message: message)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            pendingFooterCopyRestore?.cancel()
+            let work = DispatchWorkItem { [weak self] in
                 self?.restoreFooterCopyButtonIfNeeded(range: footerButtonRange, message: message)
             }
+            pendingFooterCopyRestore = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: work)
             return true
         }
 
@@ -695,6 +708,11 @@ enum AgentMarkdownNormalizer {
     }
 }
 
+// `AgentMarkdownTableFormatter` lives in its own file
+// (AgentMarkdownTableFormatter.swift) since rc38 — both this renderer
+// and `AgentAssistantMarkdownRenderer` in AgentModeView.swift call it,
+// and pulling it out makes it discoverable + testable.
+
 // MARK: - Renderer
 
 /// Turns a list of `AgentMessage` into a single NSAttributedString
@@ -717,37 +735,49 @@ enum AgentChatHistoryRenderer {
         let isDark: Bool
     }
 
+    /// Full per-message hash used to build the render cache key. We
+    /// tried adding a (id, count, count, count) fingerprint short-cut
+    /// in rc39 to avoid re-hashing big content strings on every render,
+    /// but two assistant messages with the same id and same content
+    /// length (the streaming "# One" → "# Two" edit-in-place case)
+    /// collided and the cache returned the stale render. Swift's
+    /// `String.hashValue` is randomized + already fast, so we just
+    /// hash everything fresh — the cost is dominated by content bytes,
+    /// which the render cache itself (one big NSAttributedString
+    /// keyed by the full hash) prevents us from re-rendering anyway.
+    private static func messageHash(_ m: AgentMessage) -> Int {
+        var hasher = Hasher()
+        hasher.combine(m.id)
+        hasher.combine(m.role.rawValue)
+        hasher.combine(m.content)
+        hasher.combine(m.toolCallID)
+        hasher.combine(m.createdAt)
+        hasher.combine(m.reasoningContent)
+        hasher.combine(m.usageTokens)
+        hasher.combine(m.promptTokens)
+        hasher.combine(m.completionTokens)
+        hasher.combine(m.elapsedSeconds)
+        hasher.combine(m.toolCalls.count)
+        for call in m.toolCalls {
+            hasher.combine(call.externalID)
+            hasher.combine(call.toolName)
+            hasher.combine(call.argumentsJSON)
+        }
+        return hasher.finalize()
+    }
+
     static func render(
         messages: [AgentMessage],
         isDark: Bool,
         expandedToolGroupIDs: Set<String> = [],
         hoveredUserMessageID: UUID? = nil
     ) -> NSAttributedString {
-        // Hash all visible message payloads. The old cheap key
-        // (count + total length + last message) was enough for append-
-        // only streaming, but Markdown rendering makes stale-cache
-        // misses more visible when an older row is edited in place.
         var hasher = Hasher()
         hasher.combine(messages.count)
         hasher.combine(expandedToolGroupIDs.sorted())
         hasher.combine(hoveredUserMessageID)
         for m in messages {
-            hasher.combine(m.id)
-            hasher.combine(m.role.rawValue)
-            hasher.combine(m.content)
-            hasher.combine(m.toolCallID)
-            hasher.combine(m.createdAt)
-            hasher.combine(m.reasoningContent)
-            hasher.combine(m.usageTokens)
-            hasher.combine(m.promptTokens)
-            hasher.combine(m.completionTokens)
-            hasher.combine(m.elapsedSeconds)
-            hasher.combine(m.toolCalls.count)
-            for call in m.toolCalls {
-                hasher.combine(call.externalID)
-                hasher.combine(call.toolName)
-                hasher.combine(call.argumentsJSON)
-            }
+            hasher.combine(messageHash(m))
         }
         let key = CacheKey(countAndHash: hasher.finalize(), isDark: isDark)
         if let hit = cache[key] {
@@ -1047,7 +1077,28 @@ enum AgentChatHistoryRenderer {
         )
     }
 
-    private static func avatarToken(label: String, fill: NSColor) -> NSAttributedString {
+    /// `avatarToken` produced a fresh NSImage on every header — the
+    /// chat history renders all message headers on every cache-miss
+    /// rebuild, so a 100-message transcript allocated 100 small NSImages
+    /// + lockFocus/draw/unlockFocus rounds every time. Avatar labels are
+    /// drawn from a tiny set (\"YOU\", \"S\", \"T\", short role initials),
+    /// so caching by (label, fill identity) eliminates all of it.
+    private struct AvatarCacheKey: Hashable {
+        let label: String
+        let fillDescription: String
+    }
+    private static let avatarCacheLock = NSLock()
+    private static var avatarImageCache: [AvatarCacheKey: NSImage] = [:]
+
+    private static func cachedAvatarImage(label: String, fill: NSColor) -> NSImage {
+        let key = AvatarCacheKey(label: label, fillDescription: String(describing: fill))
+        avatarCacheLock.lock()
+        if let hit = avatarImageCache[key] {
+            avatarCacheLock.unlock()
+            return hit
+        }
+        avatarCacheLock.unlock()
+
         let size = NSSize(width: 22, height: 22)
         let image = NSImage(size: size)
         image.lockFocus()
@@ -1067,6 +1118,15 @@ enum AgentChatHistoryRenderer {
         label.draw(in: labelRect, withAttributes: attrs)
         image.unlockFocus()
 
+        avatarCacheLock.lock()
+        avatarImageCache[key] = image
+        avatarCacheLock.unlock()
+        return image
+    }
+
+    private static func avatarToken(label: String, fill: NSColor) -> NSAttributedString {
+        let image = cachedAvatarImage(label: label, fill: fill)
+        let size = image.size
         let attachment = NSTextAttachment()
         attachment.image = image
         attachment.bounds = NSRect(x: 0, y: -6, width: size.width, height: size.height)
@@ -1720,16 +1780,19 @@ enum AgentChatHistoryRenderer {
             case .table:
                 appendBlockSeparator()
                 if let headers = block.tableHeaders, let rows = block.tableRows {
-                    let table = ([headers] + rows)
-                        .map { $0.joined(separator: " | ") }
-                        .joined(separator: "\n")
-                    result.append(NSAttributedString(
-                        string: table,
-                        attributes: [
-                            .font: monoFont,
-                            .foregroundColor: bodyColor,
-                        ]
-                    ))
+                    let table = AgentMarkdownTableFormatter.formatted(
+                        headers: headers,
+                        rows: rows
+                    )
+                    if !table.isEmpty {
+                        result.append(NSAttributedString(
+                            string: table,
+                            attributes: [
+                                .font: monoFont,
+                                .foregroundColor: bodyColor,
+                            ]
+                        ))
+                    }
                 }
             }
         }

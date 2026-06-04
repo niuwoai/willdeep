@@ -139,6 +139,35 @@ struct HighlightRule {
 
 enum SyntaxHighlighter {
 
+    // MARK: Regex cache
+    //
+    // Pre-rc38 every call to `highlightSync` / `computeSpans` re-compiled
+    // every rule's NSRegularExpression — for a 20-rule grammar over N
+    // visible viewport updates that's O(N × 20) regex compilations. Now we
+    // compile once per unique pattern string and stash them behind a lock
+    // so background threads (viewport recompute) and the main thread
+    // (full re-highlight) can share. Patterns are static literals so the
+    // cache size is bounded by the rule count across all languages.
+
+    private static let regexCacheLock = NSLock()
+    private static var regexCache: [String: NSRegularExpression] = [:]
+
+    static func cachedRegex(pattern: String) -> NSRegularExpression? {
+        regexCacheLock.lock()
+        if let hit = regexCache[pattern] {
+            regexCacheLock.unlock()
+            return hit
+        }
+        regexCacheLock.unlock()
+        guard let compiled = try? NSRegularExpression(pattern: pattern, options: []) else {
+            return nil
+        }
+        regexCacheLock.lock()
+        regexCache[pattern] = compiled
+        regexCacheLock.unlock()
+        return compiled
+    }
+
     // MARK: Language Definitions
 
     private static func keywordPattern(for keywords: [String]) -> String {
@@ -759,7 +788,7 @@ enum SyntaxHighlighter {
         var claimed = IndexSet()
 
         for rule in allRules {
-            guard let regex = try? NSRegularExpression(pattern: rule.pattern, options: []) else { continue }
+            guard let regex = Self.cachedRegex(pattern: rule.pattern) else { continue }
             let matches = regex.matches(in: source, options: [], range: fullRange)
 
             for match in matches {
@@ -815,7 +844,7 @@ enum SyntaxHighlighter {
         var spans: [HighlightSpan] = []
 
         for rule in allRules {
-            guard let regex = try? NSRegularExpression(pattern: rule.pattern, options: []) else { continue }
+            guard let regex = Self.cachedRegex(pattern: rule.pattern) else { continue }
             let matches = regex.matches(in: source, options: [], range: safeRange)
 
             for match in matches {

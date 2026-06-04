@@ -2041,6 +2041,15 @@ struct VeilWriterTests {
     @MainActor
     func testShouldAutoCompressTriggersAt75Percent() {
         let appState = AppState()
+        // `agentMessages` / `isAgentResponding` / `isCompressingAgentContext`
+        // all delegate to `activeRuntime` — without an explicit session,
+        // writes are dropped and `shouldAutoCompressNow` short-circuits to
+        // false regardless of what we try to set up. Solo runs happened to
+        // inherit an `activeAgentSessionID` restored from disk by another
+        // test; in a full-suite run that isolation breaks. Create the
+        // session ourselves so this test stands on its own.
+        _ = appState.startNewAgentSession()
+
         // Force a known small context window so the test doesn't depend
         // on the model fallback table.
         var config = appState.agentConfiguration
