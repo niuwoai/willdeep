@@ -297,13 +297,21 @@ final class AppState: ObservableObject {
     }
     private var editorSettingsSideEffectsWorkItem: DispatchWorkItem?
     private var editorSettingsObserver: AnyCancellable?
-    /// Republishes EVERY runtime's `objectWillChange` through AppState's
-    /// own publisher. Pre-rc4 this only forwarded the active runtime —
-    /// fine for the chat pane (delegated `agent*` props point at active),
-    /// but the sidebar busy dot needs to know when a background runtime
-    /// flips `isResponding` too. One subscription per runtime, indexed by
-    /// session id so we can drop them when sessions are deleted.
-    private var runtimeSubscriptions: [AgentSession.ID: AnyCancellable] = [:]
+    /// Republishes the ACTIVE runtime's `objectWillChange` through
+    /// AppState's own publisher so SwiftUI bindings against the
+    /// delegated `appState.agent*` properties refresh when the active
+    /// runtime mutates.
+    ///
+    /// Critical: only the active runtime forwards. rc4 briefly tried
+    /// forwarding every runtime so the sidebar busy dot could see
+    /// background turns, but that turned every stream delta on any
+    /// background runtime into a global SwiftUI invalidation — chat
+    /// pane scrolling + a live transcript + N sidebar dots animating
+    /// + delta-per-token republish = main thread melts. The sidebar
+    /// dot now observes its runtime directly via `@ObservedObject`
+    /// inside `AgentSessionRowStatusDot`, so background runtime
+    /// changes only repaint that one row.
+    private var activeRuntimeSubscription: AnyCancellable?
 
     // MARK: - Per-provider concurrency (v1.49 rc3)
     //
@@ -404,37 +412,29 @@ final class AppState: ObservableObject {
         gitStatusRefreshTask?.cancel()
         quickOpenRefreshTask?.cancel()
         agentRequestTask?.cancel()
-        for cancellable in runtimeSubscriptions.values { cancellable.cancel() }
+        activeRuntimeSubscription?.cancel()
         for url in securityScopedAccessURLs {
             url.stopAccessingSecurityScopedResource()
         }
     }
 
-    /// Compatibility shim — pre-rc4 callers used to ask AppState to
-    /// re-establish the change-forward link whenever `activeAgentSessionID`
-    /// flipped. With per-runtime subscriptions the active flip is no
-    /// longer special, but we make sure subscriptions exist for the
-    /// active runtime (in case it was created off the lifecycle hooks).
+    /// Re-establish the active runtime's change-forward link. Called
+    /// whenever `activeAgentSessionID` flips so the chat pane (which
+    /// reads `appState.agent*` delegated properties) sees the new
+    /// runtime's mutations. Background runtimes do NOT forward here —
+    /// that would melt the main thread on long streams. UIs that need
+    /// to watch a background runtime (sidebar status dot) observe it
+    /// directly via @ObservedObject.
     private func subscribeToActiveRuntime() {
-        if let runtime = activeRuntime {
-            subscribeToRuntime(runtime)
+        activeRuntimeSubscription?.cancel()
+        guard let runtime = activeRuntime else {
+            activeRuntimeSubscription = nil
+            return
         }
-    }
-
-    /// Add the runtime's `objectWillChange` into AppState's republish
-    /// chain. Idempotent — calling it twice for the same runtime is a
-    /// no-op. Paired with `unsubscribeFromRuntime(id:)` when a session
-    /// is deleted so cancellables don't leak.
-    private func subscribeToRuntime(_ runtime: AgentRuntime) {
-        if runtimeSubscriptions[runtime.id] != nil { return }
-        runtimeSubscriptions[runtime.id] = runtime.objectWillChange
+        activeRuntimeSubscription = runtime.objectWillChange
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
             }
-    }
-
-    private func unsubscribeFromRuntime(id: AgentSession.ID) {
-        runtimeSubscriptions.removeValue(forKey: id)?.cancel()
     }
 
     var activeTab: EditorTab? {
@@ -1485,8 +1485,8 @@ final class AppState: ObservableObject {
         // to land somewhere.
         let newRuntime = AgentRuntime(session: session)
         agentRuntimes[session.id] = newRuntime
-        subscribeToRuntime(newRuntime)
         activeAgentSessionID = session.id
+        subscribeToActiveRuntime()
         // These now go to the freshly-built runtime via delegation.
         agentSessionDidEditFiles = false
         agentInteractionMode = .normal
@@ -1534,6 +1534,7 @@ final class AppState: ObservableObject {
         // show the new session as empty before the runtime appears.
         _ = runtime(for: id)
         activeAgentSessionID = id
+        subscribeToActiveRuntime()
 
         // Re-derive the session model override from the persisted
         // session record. The runtime carries it across the lifetime
@@ -1582,7 +1583,6 @@ final class AppState: ObservableObject {
                 runtime.toolDecisionWaiter = nil
             }
             agentRuntimes.removeValue(forKey: id)
-            unsubscribeFromRuntime(id: id)
         }
     }
 
@@ -1598,7 +1598,6 @@ final class AppState: ObservableObject {
         guard let session = agentSessions.first(where: { $0.id == sessionID }) else { return nil }
         let runtime = AgentRuntime(session: session)
         agentRuntimes[sessionID] = runtime
-        subscribeToRuntime(runtime)
         return runtime
     }
 
@@ -1620,9 +1619,9 @@ final class AppState: ObservableObject {
         AgentSessionStore.delete(id: id)
         agentSessions.removeAll { $0.id == id }
         agentRuntimes.removeValue(forKey: id)
-        unsubscribeFromRuntime(id: id)
         if activeAgentSessionID == id {
             activeAgentSessionID = nil
+            subscribeToActiveRuntime()
         }
     }
 
@@ -1706,7 +1705,8 @@ final class AppState: ObservableObject {
         AgentSessionStore.save(session)
         let runtime = AgentRuntime(session: session)
         agentRuntimes[session.id] = runtime
-        subscribeToRuntime(runtime)
+        // Routine session stays a background runtime — no activeRuntime
+        // forward subscription. Sidebar status dot observes it directly.
         if let modelID = routine.modelID, !modelID.isEmpty {
             runtime.sessionModelOverride = modelID
         }

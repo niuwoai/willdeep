@@ -11,6 +11,7 @@ import AppKit
 struct AgentPanelView: View {
     @EnvironmentObject var appState: AppState
     @FocusState private var inputFocused: Bool
+    private static let bottomScrollID = "agent-panel-transcript-bottom"
 
     var body: some View {
         VStack(spacing: 0) {
@@ -67,7 +68,10 @@ struct AgentPanelView: View {
     private var transcript: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
+                // The panel transcript is small enough to lay out eagerly,
+                // and avoiding LazyVStack keeps scroll-time placement out
+                // of SwiftUI's fragile lazy stack cache.
+                VStack(alignment: .leading, spacing: 10) {
                     if appState.agentMessages.isEmpty {
                         AgentEmptyState()
                             .frame(maxWidth: .infinity)
@@ -105,16 +109,22 @@ struct AgentPanelView: View {
                     if appState.agentSessionDidEditFiles && !appState.agentWorktreeChanges.isEmpty {
                         AgentWorktreeChangeCard()
                     }
+
+                    Color.clear
+                        .frame(height: 1)
+                        .id(Self.bottomScrollID)
                 }
                 .padding(10)
             }
-            .onChange(of: appState.agentMessages) { _, messages in
-                guard let last = messages.last else { return }
-                proxy.scrollTo(last.id, anchor: .bottom)
+            // Watch count, not the array — token-by-token streaming
+            // mutates `messages[i].content`, and observing the whole
+            // array fires `scrollTo` on every token. See the longer
+            // comment in AgentChatTranscript.
+            .onChange(of: appState.agentMessages.count) { _, _ in
+                proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
             }
             .onChange(of: appState.agentToolCalls.count) { _, _ in
-                guard let last = appState.agentToolCalls.last else { return }
-                proxy.scrollTo(toolGroupScrollID(for: last.messageID), anchor: .bottom)
+                proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
             }
         }
     }

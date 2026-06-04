@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		5CA6B0922FC70A00006DFCCC /* VeilWriter.help in Resources */ = {isa = PBXBuildFile; fileRef = 5CA6B0912FC70A00006DFCCC /* VeilWriter.help */; };
+		5CA6B0A22FD0C9E0006DFCCC /* BundledSkills in Resources */ = {isa = PBXBuildFile; fileRef = 5CA6B0A12FD0C9E0006DFCCC /* BundledSkills */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -32,6 +33,7 @@
 		5CA6B0712FC6D8FA006DFCCC /* XeditTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = XeditTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5CA6B07B2FC6D8FA006DFCCC /* XeditUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = XeditUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5CA6B0912FC70A00006DFCCC /* VeilWriter.help */ = {isa = PBXFileReference; lastKnownFileType = wrapper.help; path = VeilWriter.help; sourceTree = "<group>"; };
+		5CA6B0A12FD0C9E0006DFCCC /* BundledSkills */ = {isa = PBXFileReference; lastKnownFileType = folder; path = BundledSkills; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -94,6 +96,7 @@
 			isa = PBXGroup;
 			children = (
 				5CA6B0632FC6D8F9006DFCCC /* Xedit */,
+				5CA6B0A12FD0C9E0006DFCCC /* BundledSkills */,
 				5CA6B0902FC70A00006DFCCC /* Help */,
 				5CA6B0742FC6D8FA006DFCCC /* XeditTests */,
 				5CA6B07E2FC6D8FA006DFCCC /* XeditUITests */,
@@ -239,6 +242,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5CA6B0A22FD0C9E0006DFCCC /* BundledSkills in Resources */,
 				5CA6B0922FC70A00006DFCCC /* VeilWriter.help in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -319,7 +323,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = "1.49.0-rc7";
+				MARKETING_VERSION = "1.52.1-rc17";
 				PRODUCT_BUNDLE_IDENTIFIER = im.some.veilwriter;
 				PRODUCT_NAME = VeilWriter;
 				REGISTER_APP_GROUPS = YES;
@@ -354,7 +358,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = "1.49.0-rc7";
+				MARKETING_VERSION = "1.52.1-rc17";
 				PRODUCT_BUNDLE_IDENTIFIER = im.some.veilwriter;
 				PRODUCT_NAME = VeilWriter;
 				REGISTER_APP_GROUPS = YES;
@@ -496,7 +500,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.4;
-				MARKETING_VERSION = "1.49.0-rc7";
+				MARKETING_VERSION = "1.52.1-rc17";
 				PRODUCT_BUNDLE_IDENTIFIER = im.some.veilwritertests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -517,7 +521,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.4;
-				MARKETING_VERSION = "1.49.0-rc7";
+				MARKETING_VERSION = "1.52.1-rc17";
 				PRODUCT_BUNDLE_IDENTIFIER = im.some.veilwritertests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -536,7 +540,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.49.0-rc7";
+				MARKETING_VERSION = "1.52.1-rc17";
 				PRODUCT_BUNDLE_IDENTIFIER = im.some.veilwriteruitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -555,7 +559,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.49.0-rc7";
+				MARKETING_VERSION = "1.52.1-rc17";
 				PRODUCT_BUNDLE_IDENTIFIER = im.some.veilwriteruitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
