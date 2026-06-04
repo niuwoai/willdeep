@@ -1680,12 +1680,16 @@ struct VeilWriterTests {
 
     // MARK: - Tool call grouping
 
-    private func makeCall(_ name: String, status: AgentToolCallStatus = .succeeded) -> AgentToolCall {
+    private func makeCall(
+        _ name: String,
+        status: AgentToolCallStatus = .succeeded,
+        arguments: [String: AgentJSONValue] = [:]
+    ) -> AgentToolCall {
         AgentToolCall(
             messageID: UUID(),
             externalID: UUID().uuidString,
             toolName: name,
-            arguments: [:],
+            arguments: arguments,
             risk: .read,
             status: status
         )
@@ -1722,6 +1726,27 @@ struct VeilWriterTests {
         #expect(segments[2].kind == .runCommand)
         #expect(segments[2].count == 1)
         #expect(segments[1].kind.groupTitle(2) == "已探索 2 个文件")
+    }
+
+    @Test("AgentToolActivitySummary counts exploration searches and commands")
+    func testToolActivitySummaryCountsTurnActivity() {
+        let calls = [
+            makeCall("read_file", arguments: ["path": .string("README.md")]),
+            makeCall("read_file", arguments: ["path": .string("README.md")]),
+            makeCall("list_directory", arguments: ["path": .string("Xedit")]),
+            makeCall("grep_files", arguments: ["pattern": .string("Agent")]),
+            makeCall("git_status"),
+            makeCall("run_command", arguments: ["command": .string("git diff --stat")])
+        ]
+
+        let summary = AgentToolActivitySummary(calls: calls)
+
+        #expect(summary.exploredPathCount == 2)
+        #expect(summary.searchCount == 1)
+        #expect(summary.gitStatusCount == 1)
+        #expect(summary.commandCount == 1)
+        #expect(summary.explorationText == "已探索 2 个路径 · 1 次搜索 · 1 次 git 状态")
+        #expect(summary.commandText == "已运行 1 条命令")
     }
 
     @Test("AgentToolCallGrouping never merges ask_user even when adjacent")

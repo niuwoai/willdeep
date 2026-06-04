@@ -731,6 +731,7 @@ private struct AgentChatTranscript: View {
                             if !calls.isEmpty {
                                 let segments = AgentToolCallGrouping.group(calls)
                                 VStack(alignment: .leading, spacing: 4) {
+                                    AgentTurnFileActivityCard(calls: calls)
                                     ForEach(segments) { segment in
                                         AgentToolCallGroup(
                                             calls: segment.calls,

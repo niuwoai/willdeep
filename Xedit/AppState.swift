@@ -2152,6 +2152,11 @@ final class AppState: ObservableObject {
         // can be running against different workspaces; the window's
         // current folder is a UI concept, not a session concept.
         let workspaceURL = runtime.workspaceRootPath.map { URL(fileURLWithPath: $0) }
+        let turnBaselineSnapshot = await Self.loadAgentWorktreeSnapshot(for: workspaceURL)
+        let turnBaselineChanges = turnBaselineSnapshot.changes
+        if workspaceURL != nil {
+            runtime.worktreeChanges = turnBaselineChanges
+        }
 
         for _ in 0..<Self.maxAgentToolRounds {
             let assistantMessage = AgentMessage(role: .assistant, content: "")
@@ -2387,7 +2392,11 @@ final class AppState: ObservableObject {
                         runtime.toolCalls[index].result = result
                     }
                     if call.toolName == "run_command" || risk != .read {
-                        refreshGitStatus()
+                        await refreshGitStatusAfterAgentTool(
+                            for: runtime,
+                            workspaceURL: workspaceURL,
+                            baselineFingerprint: turnBaselineSnapshot.fingerprint
+                        )
                     }
                     appendToolMessage(for: runtime, toolCallID: call.externalID, payload: result.payload)
                 } catch {
@@ -2983,22 +2992,87 @@ final class AppState: ObservableObject {
         }
     }
 
-    func openAgentChangedFile(_ relativePath: String) {
-        let base = agentWorktreeChanges.repositoryRoot ?? rootDirectory
-        guard let base else { return }
-
-        let url = base.appendingPathComponent(relativePath).standardizedFileURL
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
-              !isDirectory.boolValue else {
+    private func refreshGitStatusAfterAgentTool(
+        for runtime: AgentRuntime,
+        workspaceURL: URL?,
+        baselineFingerprint: String
+    ) async {
+        guard let workspaceURL else {
+            refreshGitStatus()
             return
         }
 
+        let targetDirectory = workspaceURL.standardizedFileURL
+        let snapshot = await Self.loadAgentWorktreeSnapshot(for: targetDirectory)
+
+        runtime.worktreeChanges = snapshot.changes
+        if !snapshot.changes.isEmpty, snapshot.fingerprint != baselineFingerprint {
+            runtime.didEditFiles = true
+            persistAgentSession(runtime: runtime)
+        }
+
+        if rootDirectory?.standardizedFileURL.path == targetDirectory.path {
+            gitStatus = snapshot.status
+            if activeRuntime === runtime {
+                agentWorktreeChanges = snapshot.changes
+            }
+        }
+    }
+
+    private struct AgentWorktreeSnapshot {
+        var status: GitRepositoryStatus
+        var changes: AgentWorktreeChangeSummary
+        var fingerprint: String
+    }
+
+    nonisolated private static func loadAgentWorktreeSnapshot(for directoryURL: URL?) async -> AgentWorktreeSnapshot {
+        guard let directoryURL else {
+            return AgentWorktreeSnapshot(
+                status: GitRepositoryStatus(),
+                changes: AgentWorktreeChangeSummary(),
+                fingerprint: ""
+            )
+        }
+        let targetDirectory = directoryURL.standardizedFileURL
+        return await Task.detached(priority: .utility) {
+            let status = Self.loadGitStatus(for: targetDirectory)
+            let changes = Self.loadAgentWorktreeChangeSummary(status: status)
+            let fingerprint = Self.agentWorktreeFingerprint(status: status)
+            return AgentWorktreeSnapshot(status: status, changes: changes, fingerprint: fingerprint)
+        }.value
+    }
+
+    nonisolated private static func agentWorktreeFingerprint(status: GitRepositoryStatus) -> String {
+        guard let repositoryRoot = status.repositoryRoot else { return "" }
+        let entries = status.entries
+            .sorted { lhs, rhs in lhs.key.localizedStandardCompare(rhs.key) == .orderedAscending }
+            .map { "\($0.key):\($0.value.rawValue)" }
+            .joined(separator: "\n")
+        let rawDiff = runGit(arguments: ["diff", "--raw", "HEAD", "--"], in: repositoryRoot)
+        return entries + "\n" + rawDiff
+    }
+
+    func openAgentChangedFile(_ relativePath: String) {
+        guard let url = agentChangedFileURL(relativePath) else { return }
         registerRecentFile(url)
         openedFileURL = url
         if appMode == .agent {
             setAppMode(.editor)
         }
+    }
+
+    func agentChangedFileURL(_ relativePath: String) -> URL? {
+        let base = agentWorktreeChanges.repositoryRoot ?? rootDirectory
+        guard let base else { return nil }
+
+        let url = base.appendingPathComponent(relativePath).standardizedFileURL
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              !isDirectory.boolValue else {
+            return nil
+        }
+
+        return url
     }
 
     /// Refresh the Quick Open file list: serve the disk cache immediately (if
