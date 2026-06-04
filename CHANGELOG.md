@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.52.1-rc27 - 2026-06-04
+
+- **修正 Agent 历史代码块和相邻 block 的边距。** TextKit code block 背景与代码内容都向右增加约半个字符的缩进，避免代码区左边框贴住 assistant Markdown 卡片左边界；用户 `You` header 与气泡之间的间距继续加大。
+- **修复 tool call 展开态与用户气泡重叠。** 连续工具调用组前的垂直间距加大，展开后的灰色 tool block 不再压到上一条用户输入 block。
+- **延长复制成功反馈。** 代码区和消息 footer 的复制成功态现在保留 3 秒再恢复，代码区顶部 copy token 字号再放大一号。
+
 ## 1.52.1-rc26 - 2026-06-04
 
 - **继续打磨 Agent 聊天气泡层级。** 用户消息从紫色强调背景改成浅灰气泡，并把复制 footer 纳入同一个气泡 padding；assistant 星形头像放大并改为灰色系，assistant 输出背景和代码块背景 / 边框进一步调浅。

@@ -152,7 +152,7 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(code, forType: .string)
             replaceCopyButton(in: codeButtonRange, copied: true, code: code)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.35) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
                 self?.restoreCopyButtonIfNeeded(range: codeButtonRange, code: code)
             }
             return true
@@ -167,7 +167,7 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(message, forType: .string)
             replaceFooterCopyButton(in: footerButtonRange, copied: true, message: message)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.35) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
                 self?.restoreFooterCopyButtonIfNeeded(range: footerButtonRange, message: message)
             }
             return true
@@ -225,7 +225,7 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
 
     private func replaceCopyButton(in range: NSRange, copied: Bool, code: String) {
         guard let textStorage else { return }
-        let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
+        let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .medium)
         let color = copied ? NSColor.systemGreen : NSColor.secondaryLabelColor
         let replacement = AgentChatHistoryCodeCopyChrome.button(
             copied: copied,
@@ -398,8 +398,8 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
         guard !union.isNull else { return union }
         var rect = union.insetBy(dx: -10, dy: -7)
         if containerWidth > 0 {
-            rect.origin.x = origin.x + 22
-            rect.size.width = max(220, containerWidth - 56)
+            rect.origin.x = origin.x + 30
+            rect.size.width = max(220, containerWidth - 68)
         }
         return rect.integral
     }
@@ -703,7 +703,7 @@ enum AgentChatHistoryRenderer {
                     index += 1
                 }
                 if result.length > 0 {
-                    result.append(NSAttributedString(string: "\n"))
+                    result.append(NSAttributedString(string: "\n\n"))
                 }
                 let group = ToolCallHistoryGroup(messages: groupMessages)
                 appendToolCallGroup(
@@ -948,7 +948,7 @@ enum AgentChatHistoryRenderer {
     private static func headerParagraphStyle(for role: AgentRole) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = role == .user ? .right : .left
-        style.paragraphSpacing = role == .user ? 10 : 5
+        style.paragraphSpacing = role == .user ? 14 : 5
         style.lineSpacing = 1
         style.headIndent = role == .user ? 150 : 0
         style.firstLineHeadIndent = style.headIndent
@@ -970,6 +970,16 @@ enum AgentChatHistoryRenderer {
             style.headIndent = 32
             style.firstLineHeadIndent = 32
             style.tailIndent = -18
+        }
+        return style
+    }
+
+    private static func codeBlockParagraphStyle(from baseStyle: NSParagraphStyle) -> NSParagraphStyle {
+        let style = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        if baseStyle.alignment != .right {
+            style.headIndent = baseStyle.headIndent + 8
+            style.firstLineHeadIndent = baseStyle.firstLineHeadIndent + 8
+            style.tailIndent = baseStyle.tailIndent - 8
         }
         return style
     }
@@ -1026,10 +1036,13 @@ enum AgentChatHistoryRenderer {
         foregroundColor: NSColor?
     ) {
         guard range.length > 0 else { return }
-        attributed.addAttributes([
-            .agentChatHistoryBubbleKind: NSNumber(value: kind.rawValue),
-            .paragraphStyle: paragraphStyle,
-        ], range: range)
+        attributed.addAttribute(.agentChatHistoryBubbleKind, value: NSNumber(value: kind.rawValue), range: range)
+        attributed.addAttribute(.paragraphStyle, value: paragraphStyle, range: range)
+        let codeParagraphStyle = codeBlockParagraphStyle(from: paragraphStyle)
+        attributed.enumerateAttribute(.agentChatHistoryCodeBlockID, in: range, options: []) { value, subrange, _ in
+            guard value != nil else { return }
+            attributed.addAttribute(.paragraphStyle, value: codeParagraphStyle, range: subrange)
+        }
         guard let foregroundColor else { return }
         attributed.enumerateAttributes(in: range, options: []) { attributes, subrange, _ in
             if attributes[.link] == nil {
@@ -1460,7 +1473,7 @@ enum AgentChatHistoryRenderer {
                 codeBlockIndex += 1
                 let language = block.info?.trimmingCharacters(in: .whitespacesAndNewlines)
                 let displayLanguage = (language?.isEmpty == false) ? language! : "code"
-                let codeHeaderFont = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
+                let codeHeaderFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .medium)
                 result.append(NSAttributedString(
                     string: "\(displayLanguage)  ",
                     attributes: [
