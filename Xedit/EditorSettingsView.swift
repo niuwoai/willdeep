@@ -62,6 +62,21 @@ struct EditorSettingsView: View {
                     Label("Agent", systemImage: "sparkles")
                 }
 
+            AgentMemorySettingsView()
+                .tabItem {
+                    Label("Memory", systemImage: "brain.head.profile")
+                }
+
+            AgentSkillSettingsView()
+                .tabItem {
+                    Label("Skills", systemImage: "wand.and.stars")
+                }
+
+            AgentMCPSettingsView()
+                .tabItem {
+                    Label("MCP", systemImage: "globe")
+                }
+
             toolsSettings
                 .tabItem {
                     Label("Tools", systemImage: "terminal")
@@ -283,8 +298,13 @@ struct EditorSettingsView: View {
 
                 agentModelField("Vision Model", text: $imageModelBuffer, models: fetchedImageModels)
 
-                SecureField("API Key", text: $imageAPIKeyBuffer)
-                    .textFieldStyle(.roundedBorder)
+                LabeledContent("API Key") {
+                    RevealableSecretField(
+                        text: $imageAPIKeyBuffer,
+                        placeholder: "sk-...",
+                        onCommit: {}
+                    )
+                }
 
                 Text("Used only when the active Agent provider cannot accept images directly. Multiple attached images are described in one request, then the description is sent to the main model.")
                     .font(.caption)
@@ -856,17 +876,21 @@ struct AgentProviderLibrarySection: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 16) {
                 providerList
-                    .frame(width: 170)
-                Divider()
+                    .frame(width: 200)
                 editorPane
                     .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            Text("Edits to a provider entry save immediately. The active provider (★) drives the next chat turn; switch active by clicking the star.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                Image(systemName: "info.circle")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+                Text("Edits save automatically. The active provider (★) drives the next chat turn — click any star to switch.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .onAppear(perform: ensureSelection)
         .onChange(of: appState.agentProviderLibrary.activeID) { _, _ in
@@ -875,21 +899,31 @@ struct AgentProviderLibrarySection: View {
     }
 
     private var providerList: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 0) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(appState.agentProviderLibrary.entries) { entry in
                         providerRow(entry)
                     }
                 }
+                .padding(.vertical, 4)
+                .padding(.horizontal, 4)
             }
-            .frame(minHeight: 220)
-            HStack(spacing: 4) {
+            .frame(minHeight: 260)
+            .background(Color(nsColor: .controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+            )
+            HStack(spacing: 2) {
                 Button {
                     addEntry()
                 } label: {
                     Image(systemName: "plus")
+                        .frame(width: 22, height: 22)
                 }
+                .buttonStyle(.borderless)
                 .help("Add provider")
 
                 Button {
@@ -899,12 +933,15 @@ struct AgentProviderLibrarySection: View {
                     }
                 } label: {
                     Image(systemName: "minus")
+                        .frame(width: 22, height: 22)
                 }
+                .buttonStyle(.borderless)
                 .disabled(selectedEntryID == nil || appState.agentProviderLibrary.entries.count <= 1)
                 .help("Remove selected provider")
 
                 Spacer(minLength: 0)
             }
+            .padding(.top, 6)
         }
     }
 
@@ -912,33 +949,36 @@ struct AgentProviderLibrarySection: View {
     private func providerRow(_ entry: AgentProviderEntry) -> some View {
         let isSelected = selectedEntryID == entry.id
         let isActive = appState.agentProviderLibrary.activeID == entry.id
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             Button {
                 appState.setActiveProviderLibraryEntry(id: entry.id)
             } label: {
                 Image(systemName: isActive ? "star.fill" : "star")
-                    .font(.system(size: 11))
-                    .foregroundStyle(isActive ? Color.yellow : Color.secondary.opacity(0.5))
+                    .font(.system(size: 12))
+                    .foregroundStyle(isActive ? Color.yellow : Color.secondary.opacity(0.45))
+                    .frame(width: 16, height: 16)
             }
             .buttonStyle(.plain)
             .help(isActive ? "Active provider" : "Make active")
 
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(entry.displayName)
-                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(.primary)
+                    .font(.system(size: 13, weight: isActive ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? Color.white : Color.primary)
                     .lineLimit(1)
                 Text(entry.flashPrimary)
                     .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(isSelected ? Color.white.opacity(0.85) : Color.secondary)
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 4)
-        .background(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isSelected ? Color.accentColor : Color.clear)
+        )
         .contentShape(Rectangle())
         .onTapGesture {
             selectedEntryID = entry.id
@@ -1011,139 +1051,220 @@ private struct AgentProviderEntryEditor: View {
     @State private var proAlternatesText: String = ""
     @State private var routingMode: AgentModelRoutingMode = .auto
 
+    private let labelWidth: CGFloat = 110
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Display name")
-                    .frame(width: 100, alignment: .leading)
-                TextField("e.g. Work OpenAI", text: $displayName, onCommit: commit)
-                    .textFieldStyle(.roundedBorder)
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 14) {
+                connectionGroup
+                modelsGroup
+                routingGroup
+                fetchModelsRow
             }
-            HStack {
-                Text("Preset")
-                    .frame(width: 100, alignment: .leading)
-                Picker("", selection: $providerID) {
-                    ForEach(AgentProviderPreset.all) { p in
-                        Text(p.displayName).tag(p.id)
-                    }
-                }
-                .labelsHidden()
-                .onChange(of: providerID) { _, newID in
-                    // Snap to preset defaults so the user doesn't have
-                    // to retype everything when switching brands.
-                    if let preset = AgentProviderPreset.preset(id: newID), preset.id != AgentProviderPreset.customID {
-                        baseURL = preset.baseURL
-                        if !preset.recognizesModelID(flashPrimary) {
-                            flashPrimary = preset.defaultFlashModel
-                        }
-                        if !preset.recognizesModelID(proPrimary) {
-                            proPrimary = preset.defaultProModel
-                        }
-                        if displayName.isEmpty || AgentProviderPreset.all.map(\.displayName).contains(displayName) {
-                            displayName = preset.displayName
-                        }
-                    }
-                    commit()
-                }
-            }
-            HStack {
-                Text("Base URL")
-                    .frame(width: 100, alignment: .leading)
-                TextField("https://...", text: $baseURL, onCommit: commit)
-                    .textFieldStyle(.roundedBorder)
-            }
-            HStack {
-                Text("API key")
-                    .frame(width: 100, alignment: .leading)
-                SecureField("sk-...", text: $apiKey, onCommit: commit)
-                    .textFieldStyle(.roundedBorder)
-            }
-
-            Divider().padding(.vertical, 2)
-
-            modelGroup(
-                title: "Flash",
-                primaryBinding: $flashPrimary,
-                alternatesBinding: $flashAlternatesText,
-                placeholder: "e.g. gpt-4o-mini\nclaude-haiku-4-5"
-            )
-            modelGroup(
-                title: "Pro",
-                primaryBinding: $proPrimary,
-                alternatesBinding: $proAlternatesText,
-                placeholder: "e.g. gpt-4.1\nclaude-opus-4-7"
-            )
-
-            // Per-entry routing default. Each entry can prefer Auto /
-            // Flash / Pro independently — useful when one provider's
-            // Pro tier is too pricey to be the default but another's
-            // is a no-brainer.
-            HStack {
-                Text("Routing")
-                    .frame(width: 100, alignment: .leading)
-                Picker("", selection: $routingMode) {
-                    ForEach(AgentModelRoutingMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .onChange(of: routingMode) { _, _ in commit() }
-            }
-            Text(routingMode.description)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.leading, 100)
-
-            HStack {
-                Button(isFetchingAgentModels ? "Fetching…" : "Fetch Models") {
-                    onFetch()
-                }
-                .disabled(isFetchingAgentModels)
-                if !agentModelFetchMessage.isEmpty {
-                    Text(agentModelFetchMessage)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-            }
+            .padding(.trailing, 4)
         }
-        .padding(.leading, 4)
         .onAppear(perform: loadFromEntry)
         .onChange(of: entry.id) { _, _ in loadFromEntry() }
     }
 
+    // MARK: - Connection
+
+    private var connectionGroup: some View {
+        GroupBox(label: sectionLabel("Connection", system: "link")) {
+            VStack(alignment: .leading, spacing: 10) {
+                fieldRow("Display name") {
+                    TextField("e.g. Work OpenAI", text: $displayName, onCommit: commit)
+                        .textFieldStyle(.roundedBorder)
+                }
+                fieldRow("Preset") {
+                    Picker("", selection: $providerID) {
+                        ForEach(AgentProviderPreset.all) { p in
+                            Text(p.displayName).tag(p.id)
+                        }
+                    }
+                    .labelsHidden()
+                    .onChange(of: providerID) { _, newID in
+                        // Snap to preset defaults so the user doesn't have
+                        // to retype everything when switching brands.
+                        if let preset = AgentProviderPreset.preset(id: newID), preset.id != AgentProviderPreset.customID {
+                            baseURL = preset.baseURL
+                            if !preset.recognizesModelID(flashPrimary) {
+                                flashPrimary = preset.defaultFlashModel
+                            }
+                            if !preset.recognizesModelID(proPrimary) {
+                                proPrimary = preset.defaultProModel
+                            }
+                            if displayName.isEmpty || AgentProviderPreset.all.map(\.displayName).contains(displayName) {
+                                displayName = preset.displayName
+                            }
+                        }
+                        commit()
+                    }
+                }
+                fieldRow("Base URL") {
+                    TextField("https://...", text: $baseURL, onCommit: commit)
+                        .textFieldStyle(.roundedBorder)
+                }
+                fieldRow("API key") {
+                    RevealableSecretField(
+                        text: $apiKey,
+                        placeholder: "sk-...",
+                        onCommit: commit
+                    )
+                }
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 4)
+        }
+    }
+
+    // MARK: - Models
+
+    private var modelsGroup: some View {
+        GroupBox(label: sectionLabel("Models", system: "cube.box")) {
+            VStack(alignment: .leading, spacing: 12) {
+                modelGroup(
+                    title: "Flash",
+                    primaryBinding: $flashPrimary,
+                    alternatesBinding: $flashAlternatesText
+                )
+                Divider()
+                modelGroup(
+                    title: "Pro",
+                    primaryBinding: $proPrimary,
+                    alternatesBinding: $proAlternatesText
+                )
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 4)
+        }
+    }
+
+    // MARK: - Routing
+
+    private var routingGroup: some View {
+        GroupBox(label: sectionLabel("Routing", system: "arrow.triangle.branch")) {
+            VStack(alignment: .leading, spacing: 8) {
+                fieldRow("Default tier") {
+                    Picker("", selection: $routingMode) {
+                        ForEach(AgentModelRoutingMode.allCases) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .onChange(of: routingMode) { _, _ in commit() }
+                }
+                Text(routingMode.description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, labelWidth + 8)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 4)
+        }
+    }
+
+    // MARK: - Fetch models row
+
+    private var fetchModelsRow: some View {
+        HStack(spacing: 10) {
+            Button {
+                onFetch()
+            } label: {
+                HStack(spacing: 4) {
+                    if isFetchingAgentModels {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 12, height: 12)
+                    } else {
+                        Image(systemName: "arrow.down.circle")
+                    }
+                    Text(isFetchingAgentModels ? "Fetching…" : "Fetch Models")
+                }
+            }
+            .disabled(isFetchingAgentModels)
+            if !agentModelFetchMessage.isEmpty {
+                Text(agentModelFetchMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 4)
+    }
+
+    // MARK: - Helpers
+
     @ViewBuilder
-    private func modelGroup(title: String, primaryBinding: Binding<String>, alternatesBinding: Binding<String>, placeholder: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text("\(title) primary")
-                    .frame(width: 100, alignment: .leading)
+    private func sectionLabel(_ title: String, system: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: system)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.primary)
+        }
+    }
+
+    @ViewBuilder
+    private func fieldRow<Content: View>(
+        _ label: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .frame(width: labelWidth, alignment: .trailing)
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func modelGroup(
+        title: String,
+        primaryBinding: Binding<String>,
+        alternatesBinding: Binding<String>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            fieldRow("\(title) primary") {
                 modelField(text: primaryBinding)
             }
-            HStack(alignment: .top) {
+            HStack(alignment: .top, spacing: 8) {
                 Text("\(title) alternates")
-                    .frame(width: 100, alignment: .leading)
-                VStack(alignment: .leading, spacing: 2) {
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .frame(width: labelWidth, alignment: .trailing)
+                VStack(alignment: .leading, spacing: 4) {
                     TextEditor(text: alternatesBinding)
                         .font(.system(size: 12, design: .monospaced))
-                        .frame(minHeight: 48, maxHeight: 96)
+                        .scrollContentBackground(.hidden)
+                        .padding(4)
+                        .frame(minHeight: 52, maxHeight: 88)
+                        .background(Color(nsColor: .textBackgroundColor))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 4)
-                                .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 5)
+                                .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
                         )
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
                         .onChange(of: alternatesBinding.wrappedValue) { _, _ in commit() }
                     Text("One model id per line — surfaces in the chat picker as one-click switches.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 
     @ViewBuilder
     private func modelField(text: Binding<String>) -> some View {
-        HStack {
+        HStack(spacing: 6) {
             TextField("model-id", text: text, onCommit: commit)
                 .textFieldStyle(.roundedBorder)
             if !fetchedAgentModels.isEmpty {
@@ -1157,6 +1278,7 @@ private struct AgentProviderEntryEditor: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
+                .help("Pick from fetched models")
             }
         }
         .onChange(of: text.wrappedValue) { _, _ in commit() }
@@ -1194,6 +1316,44 @@ private struct AgentProviderEntryEditor: View {
         text.components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
+    }
+}
+
+/// Secret field that toggles between SecureField (dots) and TextField
+/// (revealed) via an eye button. Lets the user verify a pasted API key
+/// without re-typing it. The reveal state lives in the view — never
+/// persisted — so closing Settings re-hides the key by default.
+private struct RevealableSecretField: View {
+    @Binding var text: String
+    let placeholder: String
+    let onCommit: () -> Void
+
+    @State private var isRevealed: Bool = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Group {
+                if isRevealed {
+                    TextField(placeholder, text: $text, onCommit: onCommit)
+                } else {
+                    SecureField(placeholder, text: $text, onCommit: onCommit)
+                }
+            }
+            .textFieldStyle(.roundedBorder)
+            .disableAutocorrection(true)
+
+            Button {
+                isRevealed.toggle()
+            } label: {
+                Image(systemName: isRevealed ? "eye.slash" : "eye")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .help(isRevealed ? "Hide key" : "Show key")
+        }
     }
 }
 

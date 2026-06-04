@@ -11,6 +11,7 @@ import AppKit
 struct AgentPanelView: View {
     @EnvironmentObject var appState: AppState
     @FocusState private var inputFocused: Bool
+    private static let bottomScrollID = "agent-panel-transcript-bottom"
 
     var body: some View {
         VStack(spacing: 0) {
@@ -67,7 +68,10 @@ struct AgentPanelView: View {
     private var transcript: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
+                // The panel transcript is small enough to lay out eagerly,
+                // and avoiding LazyVStack keeps scroll-time placement out
+                // of SwiftUI's fragile lazy stack cache.
+                VStack(alignment: .leading, spacing: 10) {
                     if appState.agentMessages.isEmpty {
                         AgentEmptyState()
                             .frame(maxWidth: .infinity)
@@ -105,16 +109,22 @@ struct AgentPanelView: View {
                     if appState.agentSessionDidEditFiles && !appState.agentWorktreeChanges.isEmpty {
                         AgentWorktreeChangeCard()
                     }
+
+                    Color.clear
+                        .frame(height: 1)
+                        .id(Self.bottomScrollID)
                 }
                 .padding(10)
             }
-            .onChange(of: appState.agentMessages) { _, messages in
-                guard let last = messages.last else { return }
-                proxy.scrollTo(last.id, anchor: .bottom)
+            // Watch count, not the array — token-by-token streaming
+            // mutates `messages[i].content`, and observing the whole
+            // array fires `scrollTo` on every token. See the longer
+            // comment in AgentChatTranscript.
+            .onChange(of: appState.agentMessages.count) { _, _ in
+                proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
             }
             .onChange(of: appState.agentToolCalls.count) { _, _ in
-                guard let last = appState.agentToolCalls.last else { return }
-                proxy.scrollTo(toolGroupScrollID(for: last.messageID), anchor: .bottom)
+                proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
             }
         }
     }
@@ -403,6 +413,7 @@ struct AgentToolCallGroup: View {
     @State private var isExpanded = false
 
     var body: some View {
+        let status = statusSummary
         VStack(alignment: .leading, spacing: detailsVisible ? 5 : 0) {
             Button {
                 if canToggleDetails {
@@ -416,13 +427,15 @@ struct AgentToolCallGroup: View {
                         .frame(width: 14)
                     Text(titleText)
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    Text(statusSummary)
-                        .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
+                    if !status.isEmpty {
+                        Text(status)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
                     Text(previewSummary)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -449,8 +462,8 @@ struct AgentToolCallGroup: View {
             }
         }
         .padding(.horizontal, 7)
-        .padding(.vertical, 4)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.28))
+        .padding(.vertical, 3)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.14))
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .overlay(
             RoundedRectangle(cornerRadius: 6)
@@ -479,7 +492,7 @@ struct AgentToolCallGroup: View {
 
     private var titleText: String {
         if let headline, !headline.isEmpty { return headline }
-        return calls.count == 1 ? "1 tool" : "\(calls.count) tools"
+        return "执行了 \(calls.count) 条工具调用"
     }
 
     private var statusSummary: String {
@@ -491,6 +504,9 @@ struct AgentToolCallGroup: View {
         let denied = calls.filter { $0.status == .denied }.count
         let succeeded = calls.filter { $0.status == .succeeded }.count
         var parts: [String] = []
+        if succeeded == calls.count, waiting == 0, running == 0, failed == 0, denied == 0 {
+            return ""
+        }
         if waiting > 0 { parts.append("\(waiting) waiting") }
         if running > 0 { parts.append("\(running) running") }
         if failed > 0 { parts.append("\(failed) failed") }
@@ -500,7 +516,7 @@ struct AgentToolCallGroup: View {
     }
 
     private var previewSummary: String {
-        let previews = calls.prefix(4).map { call in
+        let previews = calls.prefix(3).map { call in
             var text = call.toolName
             if let summary = call.result?.summary, !summary.isEmpty {
                 text += " \(summary)"
@@ -515,19 +531,25 @@ struct AgentToolCallGroup: View {
 
     private func compactArguments(for call: AgentToolCall) -> String? {
         if call.toolName == "run_command", let command = call.arguments["command"]?.stringValue() {
-            return "command=\(trimmed(command, limit: 34))"
+            let cwd = call.arguments["cwd"]?.stringValue().map { "  cwd: \(trimmed($0, limit: 72))" } ?? ""
+            return "command: \(trimmed(command, limit: 140))\(cwd)"
         }
         if let path = call.arguments["path"]?.stringValue() {
-            return "path=\(trimmed(path, limit: 34))"
+            return "path: \(trimmed(path, limit: 120))"
         }
         if let pattern = call.arguments["pattern"]?.stringValue() {
-            return "pattern=\(trimmed(pattern, limit: 34))"
+            return "pattern: \(trimmed(pattern, limit: 120))"
+        }
+        if let query = call.arguments["query"]?.stringValue() {
+            return "query: \(trimmed(query, limit: 120))"
         }
         return nil
     }
 
     private func trimmed(_ value: String, limit: Int) -> String {
-        let normalized = value.replacingOccurrences(of: "\n", with: " ")
+        let normalized = value
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\t", with: " ")
         guard normalized.count > limit else { return normalized }
         let end = normalized.index(normalized.startIndex, offsetBy: limit)
         return String(normalized[..<end]) + "…"
@@ -548,13 +570,13 @@ struct AgentToolCallGroup: View {
         if calls.contains(where: { $0.status == .failed }) { return .orange }
         if calls.contains(where: { $0.status == .running }) { return .secondary }
         if containsInteractiveCall { return .blue }
-        return .green
+        return .secondary
     }
 
     private var groupBorderColor: Color {
         if containsInteractiveCall { return Color.blue.opacity(0.28) }
         if calls.contains(where: { $0.status == .failed }) { return Color.orange.opacity(0.28) }
-        return Color.primary.opacity(0.06)
+        return Color.primary.opacity(0.04)
     }
 }
 
@@ -887,7 +909,7 @@ struct AgentToolCallCard: View {
         case .pendingApproval, .awaitingConfirm: return .blue
         case .awaitingUserAnswer: return .purple
         case .running: return .secondary
-        case .succeeded: return .green
+        case .succeeded: return .secondary
         case .failed: return .orange
         case .denied: return .secondary
         }
@@ -898,8 +920,7 @@ struct AgentToolCallCard: View {
         case .pendingApproval, .awaitingConfirm: return .blue
         case .awaitingUserAnswer: return .purple
         case .failed: return .orange
-        case .succeeded: return .green
-        case .running, .denied: return .secondary
+        case .running, .succeeded, .denied: return .secondary
         }
     }
 

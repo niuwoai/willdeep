@@ -1,5 +1,143 @@
 # Changelog
 
+## 1.52.1-rc24 - 2026-06-04
+
+- **修复 Agent 历史代码块复制误触系统打开链接的问题。** Code block 的 `⧉ Copy` link 现在由 `AgentChatHistoryNSTextView` 更宽松地拦截并吞掉内部 action link，避免点击复制时 macOS 尝试打开 `agent-chat-history-copy-code` 并弹出 `-50` 错误。
+- **修正历史代码块背景左侧对齐。** TextKit 绘制代码块背景时改为从正文缩进左侧 padding 开始铺满，避免代码最左侧文字跑到灰色背景外面。
+
+## 1.52.1-rc23 - 2026-06-04
+
+- **压缩 Agent 历史里的连续 tool call。** 连续的 tool-call-only assistant 消息现在默认合并成一条灰色摘要，例如 `▸ 执行了 3 条工具调用 · run_command command: ...`，不再一条工具调用占一个绿色 `TL Tool calls` 块。
+- **支持点击展开 / 收起 tool call 详情。** `AgentChatHistoryNSTextView` 现在持有展开状态，点击摘要行后原地重渲染为 `▾` 展开态，显示每个 tool call 的紧凑详情；再次点击收起。实现仍然保持单个 TextKit history view。
+- **降低 tool call 视觉权重并展示更长参数。** tool-call 摘要与展开详情改用 secondary 灰字和浅灰背景，避免绿色喧宾夺主；`run_command` / `read_file` 等关键参数的截断长度提高，长一些的命令和路径能直接看出来。最新 tool-call SwiftUI 卡片也同步改为默认折叠的灰色摘要，展开后才显示每条调用的参数、输出和错误。
+
+## 1.52.1-rc22 - 2026-06-04
+
+- **恢复 Agent 历史消息底部 footer。** 用户和 assistant 历史消息现在都会在正文下方显示可点击复制图标 `⧉`，点击后复制整条消息内容到剪贴板，并短暂切换为绿色 `✓` 成功反馈后恢复。
+- **恢复 assistant 输出的耗时 / token / 重新生成信息。** assistant 消息 footer 会显示 `◷ 8.4s` 风格耗时，以及 `in 1.2k · out 2.3k` 的输入 / 输出 token 摘要；最新一条 assistant 输出下方额外显示 `↻`，点击后调用现有 `retryLastAgentTurn()` 重新生成。
+- **收紧历史渲染缓存 key。** `AgentChatHistoryRenderer` 的缓存 key 现在纳入 `elapsedSeconds`、`usageTokens`、`promptTokens`、`completionTokens`，避免正文未变化但 footer 统计刚写回时误命中旧 attributed string。
+
+## 1.52.1-rc21 - 2026-06-04
+
+- **修复用户气泡右侧过近 / 文字贴边的问题。** 用户消息的 TextKit 气泡 trailing margin 从 8px 扩到 30px，并同步增大用户 header / body 的尾缩进，让紫色气泡和文字都留出稳定右侧安全距离，不再挤到聊天窗边缘。
+- **给历史代码块补上整块背景和复制交互。** fenced code block 现在会绘制独立的圆角代码区背景，header 显示语言和 `⧉ Copy` copy token；点击后复制代码到剪贴板，并临时切换为绿色 `✓ Done` 成功态后自动恢复。实现仍在单个 `NSTextView` / TextKit layout manager 内完成，避免为历史消息重新创建 per-block SwiftUI view tree。
+
+## 1.52.1-rc20 - 2026-06-04
+
+- **修复 Agent 聊天气泡仍像行级背景的问题。** TextKit 气泡背景现在按整条消息的 attributed range 取完整 glyph 范围绘制，用户消息右侧形成单个固定宽度气泡，assistant / system / tool 输出形成左侧大卡片，避免同一条消息每行一个不同宽度背景。
+- **扩大 Agent 聊天列并补足工具调用信息。** `chatMaxContentWidth` 从 920 提到 1040，减少右侧空白；历史工具摘要从只显示工具名和字节数，改为显示关键参数（如 `command`、`cwd`、`path`、`pattern`、`query`），最近一次 tool-call group 仍保留 SwiftUI 详情卡，可展开看完整参数、输出和错误。
+- **让 assistant 代码块重新具备高亮与可复制基础体验。** 历史 TextKit Markdown 的 fenced code 通过 `SyntaxHighlighter` 按语言 hint 上色；正在流式输出的 assistant 单 `Text(AttributedString)` 路径也接入同一套高亮。历史区保持 `NSTextView.isSelectable = true`，代码内容可直接选中复制，不再为每个历史代码块创建 SwiftUI copy button。
+
+## 1.52.1-rc19 - 2026-06-04
+
+- **改进 Agent 聊天历史的视觉呈现。** 在不恢复 SwiftUI per-message bubble / per-block Markdown view tree 的前提下，`AgentChatHistoryTextView` 改用自定义 TextKit layout manager 给历史消息正文绘制圆角气泡背景，用户消息右对齐，助手 / 系统 / 工具输出左对齐，角色 header 前增加小圆形文字头像（YOU / AI / SYS / OUT / TL），让历史区重新像聊天界面，而不是裸文本日志。
+- **工具调用摘要从纯文本箭头行改为工具事件样式。** 空 assistant + toolCalls 的历史消息现在显示为 `Tool calls` 事件，摘要行使用 `tool  <name>  <size> args` 的紧凑等宽格式，并用单独的 TextKit 气泡颜色区分，避免一屏都是 `ASSISTANT → run_command(...)` 这种排查期临时样式。
+- **保留滚动稳定路线。** 历史区仍然只给 SwiftUI 一个 `NSTextView`；Markdown、头像 token、气泡背景和 tool-call event 都烘在同一份 attributed string / layout manager 里，避免重新引入导致卡死的 `LazyVStack + 多层 SwiftUI bubble + Markdown block ForEach` 组合。
+
+## 1.52.1-rc18 - 2026-06-04
+
+- **恢复 Agent 聊天历史的 Markdown 渲染。** rc16/rc17 为了排查滚动卡死把历史消息降级成纯文本；现在历史消息仍然只通过一个 `NSTextView` / TextKit attributed string 进入 SwiftUI，但正文会重新按 Markdown blocks 渲染标题、段落、列表、引用、代码块、分隔线、inline code / bold / italic / links，以及 pipe table 的等宽文本 fallback。
+- **完整 transcript reader 和单条 message reader 复用同一套 TextKit Markdown renderer。** 聊天窗、全文窗口、单条消息窗口的表现保持一致，不再出现聊天窗恢复富文本而 reader 仍是纯文本的割裂。
+- **收紧历史渲染缓存 key。** `AgentChatHistoryRenderer` 的 LRU key 从“消息数量 + 总长度 + 最后一条消息”改为逐条 hash message id、role、content、reasoning、toolCallID 和 tool call 摘要，避免旧消息被就地修改但长度相同导致 Markdown 富文本缓存误命中。
+
+## 1.52.1-rc17 - 2026-06-04
+
+- **修复 Agent mode 滚动聊天内容时仍可能卡死 / 被系统终止的问题。** rc16 已经把历史消息主体改成 `NSTextView`，但外层 transcript 仍包在 SwiftUI `LazyVStack` 里；用户滚动时回溯停在 `SwiftUICore LazyStack.placer`，说明剩下的风险点已经不是消息正文渲染，而是 lazy stack 对混合 SwiftUI / AppKit 动态高度 row 的 placement cache。主 Agent transcript 改为普通 `VStack`，可见消息本来已被 cap 且历史主体只有一个 `NSTextView`，无需 lazy 布局。
+- **滚动锚点改为稳定底部哨兵。** 历史消息折进 `AgentChatHistoryTextView` 后，很多 message id 已经不再作为 SwiftUI row 存在；继续 `scrollTo(last.id)` 会命中不存在或刚被替换的 id。现在 transcript 末尾放一个固定 `bottomScrollID`，消息数 / tool call 数变化时只滚到这个稳定哨兵，避免动态 id 与布局缓存互相打架。
+- **同步处理旁路聊天面。** 右侧 `AgentPanelView` transcript 也从 `LazyVStack` 改为 `VStack`，并同样使用底部哨兵滚动；Agent mode sidebar 的 session 列表也去掉 `LazyVStack`，减少同一页面内的 SwiftUI lazy placement 风险源。简单说：这次把会进 `LazyStack.placer` 的那根线拔了，不再跟 SwiftUI 赌心情。
+- **拆分超长 Agent mode 文件。** `AgentModeView.swift` 已超过 3000 行；将 composer、状态栏、slash / `@` picker、session mode badge 等结构移动到 `AgentModeComposerView.swift`，主视图文件降到 2469 行，后续排查 chat transcript 时不会再在一个 4000+ 行文件里钻洞。
+
+## 1.52.1-rc16 - 2026-06-04
+
+- **真根本修：chat pane 历史消息整体改用 NSTextView 渲染，只保留 streaming 中的 assistant message 走 SwiftUI bubble + markdown。** 经过 15 轮 rc 的二分定位最终确认：SwiftUI 在 macOS 26.x 上对"LazyVStack + per-message bubble chrome（嵌套 HStack/VStack/padding/background/overlay）+ 中等长度 markdown 内容（1.5 KB 含表格、details/summary HTML、emoji heading）"这套组合**任何尝试都修不好**——bisection 排除了 AttributeGraph 依赖图（rc8 已修）、ForEach 嵌套展开（rc9）、unbreakable token（rc10）、message 数 cap（rc14）、单条 message 截断（rc15）、markdown renderer 本身（rc15 step8 用 plain Text 仍然卡）、bubble 内嵌套 frame（rc13）、footer + tool group（rc12 step2/4 二分）。所有方向全失败。
+- **换路线**：新建 `AgentChatHistoryTextView`（`NSViewRepresentable` 包 `NSTextView`），把所有非 streaming 状态的 message（历史 user + 完成的 assistant + tool）一次性烘焙成一份 `NSAttributedString` 灌进 textStorage。TextKit 自己做增量 layout，几千条消息几兆 attributed string 都不卡主线程。`AgentChatTranscript` 把原来的 `ForEach(rendered) { AgentModeMessageView(...) }` 删掉，换成：① 一个 `AgentChatHistoryTextView`（包含所有非 streaming 历史）；② 仅当 `isAgentResponding == true` 时单独渲染那一条正在 streaming 的 assistant message 为完整 SwiftUI bubble（保留 markdown 渲染 + streaming cursor + token by token 更新）；③ tool call group 卡片单独走 `ForEach`，因为它本身就是少量、可折叠、扁平结构，不参与 freeze。turn 一结束，streaming bubble 自动折回 NSTextView 历史。
+- **`AgentChatHistoryRenderer.render` 加 32 项 LRU cache** 按 `(message count, total length, last id+length+toolCalls count)` 弱 hash 命中——SwiftUI 反复 `updateNSView` 期间不重做 attribute string 构建。
+- **`AgentChatHistoryNSTextView`** 内部 `lastContentHash` 二次拦截：attr string 没变就跳过 `textStorage.setAttributedString`，连 TextKit 都不动。`intrinsicContentSize` 用 `usedRect(for: textContainer)` 报一次高度，SwiftUI 外层 measure O(1)。
+- **代价**：① 历史 message 没有 markdown 渲染（表格、code block、bold 都按纯文本显示）；② 历史 message 没有 user/assistant 颜色 bubble，按 role 标签 + 文本流朴素显示；③ 历史 message 没有 copy 按钮、没有 footer、没有 patch proposal 卡（patch proposals 卡片在另外的位置仍然显示）；④ 历史 message 选中范围跨多条 message 时是一段纯文本。**正在 streaming 的 message 体验完全不变**——markdown 渲染、cursor 动画、左对齐 bubble 全保留。turn 完成后 next refresh 时折回 NSTextView。
+- **rc14 的 reader window + rc15 的单条 message reader 保留**：超长 tool 输出 / 单条 message 仍然可以独立窗口打开看完整原文。`messageContentRenderCap` (rc15) 仍在，但现在只对 streaming bubble 这一个 SwiftUI 渲染路径生效（streaming 的 message content 通常远不到 3000 字符所以不触发）。`renderedMessageCap` (rc14) 仍在，cap 50 决定顶部 disclosure 何时显示。
+
+## 1.52.1-rc15 - 2026-06-04
+
+- **真凶定位：单条 message 内容体量，不是 message 数量。** 用户提供关键线索："其实 是 滚动到顶，再拉回来，有一条其实比较新的渲染时，卡住了 …… 有一个 ai 的返回有 19k 的 token"。rc14 限了 50 条 message 但还是卡——说明 50 条里就有"致命组合"。Grep 用户所有 session：tool 24 KB / user 6.5 KB / streaming 中可能有 19 KB 的 assistant。结论：**单条超长 message 进入 layout 流程，SwiftUI 的 bubble chrome（HStack + VStack + padding + background + overlay + frame）配合那块大 Text 就够让单次 layout pass 把主线程耗光**。message 数无关——重要的是有没有任意一条超长。
+- **修法**：`AgentChatTranscript` 新增 `messageContentRenderCap = 3_000`，`truncatedForBubble(_:)` 在 ForEach 里把超长 message 的 content 截到前 3 KB（不动原 message，做个 copy 进 bubble）。bubble 后面紧跟一张 `longMessageTruncationCard`：「此消息在窗口内只显示前 3000 字符 · 还有 N 字符 · 点击查看完整内容」。点击调 `AgentTranscriptReader.openSingleMessage(_:sessionTitle:)` 弹独立 NSWindow（新增 `AgentSingleMessageReaderWindowRegistry` + `AgentSingleMessageReaderWindowController` 跟 rc14 的全 session reader 同模式：NSScrollView + NSTextView + 系统 Cmd+F find bar）。一窗一 message id 去重。
+- **rc14 的 message 数 cap 提到 50**（之前 30 太激进）。两个 cap 互补：单条超长 → 截断 + 单条 reader；总数过多 → 50 条以内可见 + 整 session reader。**对 19 KB 单条 assistant 这种正是 cap 数管不到的情况，单条截断才是真修**。
+- **代价**：长 assistant 回复在 chat pane 里只看前 3 KB（约 60-80 行普通文本），剩下点按钮看；视觉上 chat pane 多一张"已截断"提示卡。对正常 3 KB 以内的 assistant 回复（占绝大多数）零影响。`AgentSingleMessageReaderWindow` 显示完整原文本（无 markdown 渲染、无 bubble），可复制可搜索。
+
+## 1.52.1-rc14 - 2026-06-04
+
+- **真修：chat pane 最多渲染 30 条 message，老历史在独立 AppKit 窗口里看。** 13 个 rc 的二分定位最终结论：SwiftUI 的 `LazyVStack` 在 macOS 上对长 transcript 里"每条 message 含深嵌套 bubble chrome（HStack + VStack + padding + background + overlay + frame）"的 ForEach **不是真的 lazy**——`LazyStack.place` / `LazySubviewPlacements.updateValue` / `ForEachState.forEachItem` 每个 layout pass 都遍历全部 item 算 placement。session 一长，单次 SwiftUI transaction 的 layout 工作量爆炸，主线程烧穿。哪怕把 bubble 内容简化到 placeholder Text、把字符串切分缓存好（rc14 给 `AgentUserContentSplitter` 和 `AgentLongTokenBreaker` 都加了 64/128 项 LRU），只要 ForEach 里那 50+ 条 bubble 还在，LazyStack 的 placement 走一圈就够卡。这条路线挤优化已经到底了——再压缩内部只是把卡死延后。
+- **方案 2 路线**：① chat pane 把 visible 消息切到**最近 30 条**（`AgentChatTranscript.renderedMessageCap`）；② 老消息折叠成顶部一张 disclosure 卡片"此对话前面还有 N 条消息 · 点击在新窗口查看完整历史"；③ 点击调 `AgentTranscriptReader.open(session:)` 弹独立 `NSWindow`——里面是 `NSScrollView` + `NSTextView`（**纯 AppKit，无 SwiftUI 参与**），整段对话烘焙成一份 `NSAttributedString` 一次性灌入 textStorage，TextKit 自己做增量 layout，几千条消息几兆 attributed string 都不卡主线程。tool 消息超 8 KB 截断（典型 git diff 输出）避免阅读窗口本身又重；其他原样。一窗一 session（`AgentTranscriptReaderWindowRegistry` 按 id 去重），关掉自动回收。窗口自带 Cmd+F 系统 find bar（NSTextView 标配）。代价：chat pane 里看不到老消息，要点开独立窗口看；视觉上失去 markdown 渲染（独立窗口里只是 ROLE + 纯文本，按 role 用 accent color 加粗标题区分）。
+- **保留 rc14 step 7 加的 LRU**：`AgentUserContentSplitter.split` 64 项 / `AgentLongTokenBreaker.inject` 128 项，按 content hash 缓存。`split` 和 `inject` 都是 view body 求值期间会跑、返回新 String 实例的纯函数——不缓存会让 SwiftUI 看到 Text 内容"变了"反复 invalidate layout cache，是个真优化。
+- **rc1~rc13 不算白做**：rc8（切 AppState 依赖图 → AG::Subgraph 从 77% 降到 0%）、rc9（折叠 ForEach blocks 成单 Text）、rc10（unbreakable token 零宽空格防御）都修掉了真的次要热点。但根因在 LazyVStack 自身——必须从架构层绕开。
+
+## 1.52.1-rc13 - 2026-06-04
+
+- **真修：移除 user bubble 内部的嵌套 `.frame(maxWidth:)` + Spacer 组合。** 经过 12 个 rc 的二分定位，根因终于锁定。诊断序列：① rc12 step1（message 只占位）→ 不卡 → 根因在 chat pane message 渲染；② rc12 step2（恢复 AgentModeMessageView，tool 仍占位）→ 卡 → 不在 tool；③ rc12 step3（裸 `Text(content)`，去掉 bubble 包装）→ 不卡 → **根因在 bubble 结构包装层，不在内容**。结合最后一份栈底 `LazyHVStack.lengthAndSpacing` 反复跑 + `StackPlacement.flushMinorGroup` + Swift 数组 dealloc，定位到 user bubble 那段 `HStack { Spacer(minLength: 40); VStack(.trailing) { VStack(.leading).frame(maxWidth: chatMaxContentWidth * 0.78); footer } }.frame(maxWidth: chatMaxContentWidth, alignment: .trailing)`——**两个嵌套 .frame(maxWidth:) + HStack Spacer 的组合**是 SwiftUI 已知 layout 病：Spacer 要知道容器宽度才能算自己大小，内层 0.78 frame 需要外层几何，外层 frame 又依赖内层返回值，三方循环依赖在 LazyVStack 反复滚动 measure 时彻底烧穿主线程。改成单层 `VStack(.trailing).frame(maxWidth: .infinity, alignment: .trailing)`——保持右对齐效果，但不再有嵌套 frame，不再有 Spacer 参与 minor-axis 协商。Assistant bubble 的嵌套形态不同（HStack + Image + 单 VStack，无内层 maxWidth frame），暂不动。同时清掉 rc11/rc12 的诊断脚手架（`truncateForRendering`、占位 Text）。`AgentLongTokenBreaker`（rc10）保留——它对 unbreakable token 也是个真防御。
+
+## 1.52.1-rc12 - 2026-06-04
+
+- **二分定位实验：完全跳过 message bubble 渲染。** rc11 把每条 message 内容截到 4 KB 还是卡——明确否定"单条 Text 太大导致 SwiftUI layout 跑死"这个假设。下一刀走二分法：ForEach 里不再实例化 `AgentModeMessageView`，每条 message 只渲染一行 `Text("[role · N chars]")`。Plan/Goal banner、empty state、queued messages、compress divider、error card、patch proposals、worktree change card 全部保留——只剥掉 message bubble 一层。**这是个明确的诊断 rc，不是 ship-worthy 版本。** ① 如果还卡——message bubble 完全不渲染都卡，那根因不在 chat pane 的 message 这条链上，可能在 LazyVStack 本身、sidebar、composer、status bar、或者 AppState 某个 @Published 的隐形依赖；② 如果不卡了——根因确认在 message bubble 内部，下一刀就回头在 bubble 内部继续二分（footer / markdown body / image disclosure / tool call group …）。后续 rc 看结果再定方向。
+
+## 1.52.1-rc11 - 2026-06-04
+
+- **诊断 + 临时保护：超过 4KB 的 message 内容在渲染前截断，渲染层加保险。** rc10 的零宽空格方案没能消除卡死——同款 backtrace（深嵌套 `_PaddingLayout` / `_FlexFrameLayout` / `_ZStackLayout`）再次出现，说明问题不只是 unbreakable token 一种。chat pane 的 message bubble 内部已经有 6+ 层 padding/frame/background 嵌套（HStack icon + VStack alignment + 内层 VStack + padding + background + frame + footer），加上外层 LazyVStack measureEstimates 反复对每条 bubble 算 size——单条 message 内容稍大（rc9 把 N 个 SwiftUI block 折叠成 1 个 Text(AttributedString) 后，这"1 个 Text"就成了重物），就够把这条 layout 链跑死。rc11 在 ForEach 里加 `truncateForRendering(_:)`：任何 content 超过 4096 字符的 message 头部保留 + 尾部替换成 `…[N more characters trimmed for rendering]`，原始 content 仍然在 AgentMessage 上（disk 和 agent loop 看到完整内容）。**这一刀是双重定位**：① 如果之后还卡，说明根因还有别处（可能是 sidebar、composer、或其他 view），我们继续找；② 如果不卡了，说明就是单条 message 的渲染体量问题——后续 rc 把"完整内容"做成弹窗 sheet 或独立窗口让用户能看全。截 4 KB 不影响 agent 上下文（model 看到的是完整 `messages` 数组），只影响 chat pane 显示。
+
+## 1.52.1-rc10 - 2026-06-04
+
+- **真正的真凶找到了：超长 unbreakable token 把 SwiftUI Text 的 line-breaker 拖死。** 用户发来卡死的 session JSON——一条 6517 字符的 user message 里有 3000+ 行 `.pnpm-store/v10/files/<128-char-hash>` 路径，**每行 150+ 字符没有空格、没有连字符**。SwiftUI Text 在 wrap 这种 token 时已知有严重性能问题：line-breaker 找不到任何 break opportunity，会反复在每个字符位置探测尝试换行，整段 layout 反复跑——表现为 LLDB 栈停在 `Layout.sizeThatFits` 嵌套几十层、`___chkstk_darwin` 接近栈溢出、Time Profiler 显示 `LazyStack.measureEstimates` 不断重算。**rc1~rc9 改了很多别的地方（AppState 依赖图、ForEach 嵌套展开、缓存、NSTextView 实验……）确实修掉了次要瓶颈**，但根因在数据层不在渲染层：单条 message 里那段 unbreakable 字符串只要进入 layout 流程，主线程就会被 SwiftUI Text 的 line-breaker 卡住。修法：在 render 前对超过 30 字符的无 break-opportunity 字符串强制每 30 字符插入零宽空格 `\u{200B}`，让 SwiftUI 能 wrap。新增 `AgentLongTokenBreaker.inject(into:)`——walk 字符串，遇到 `naturalBreakers` 重置计数，遇到非 breaker 字符且当前 run >= 30 就插 `\u{200B}`。在 `AgentAssistantMarkdownRenderer.build` 和 user bubble 的 `Text(split.visible)` 之前都过一遍。零宽空格视觉上不可见，对长文本 layout 体感无变化，唯一副作用是 copy 出来可能带零宽字符（部分终端会自动剥）——这个 trade-off 比"app freeze"好太多。
+
+## 1.52.1-rc9 - 2026-06-04
+
+- **第二刀：把 `AgentAssistantMarkdownBody` 从 N 个 SwiftUI view 折叠成 1 个 Text(AttributedString)。** 用户提供了第三份 backtrace（这次定到具体卡死位置），真凶赤裸：栈底 `getCache(swift::TargetTypeContextDescriptor)` → `ForEachState.item(at:offset:) + 1644` → `ForEachState.forEachItem(from:style:do:) + 1644` → 反复进 `LazyStack.measureEstimates`（自递归 2 层）→ `LazyHStackLayout.sizeThatFits` → `LazyVStackLayout.sizeThatFits`。`+1644` 是巨大偏移——表明 SwiftUI 在 ForEach 内部反复运行。chat pane 的 view tree 现状是 **3 层嵌套 ForEach**：① 外层 LazyVStack 里 `ForEach(visibleMessages)`；② 每条 assistant message 内部 `AgentAssistantMarkdownBody` 用 `VStack + ForEach(blocks)` 输出 N 个 `MarkdownPreviewBlockView`；③ tool call 段还有第三层 ForEach。**LazyVStack 在 measure 时必须遍历所有 child item 的尺寸估算**（lazy 只在渲染层 lazy，layout 层不 lazy），导致一条 200-block 的长 message 让 measureEstimates 嵌套展开 ~200 次。修法：把整段 markdown 拼成一份 `AttributedString`，用一个 `Text` 输出。新增 `AgentAssistantMarkdownRenderer.render(_:)`：复用 `MarkdownPreviewParser.blocks` 拆 block，但每个 block 转成 attributed runs（heading→大字号粗体、code→等宽 + 浅背景、list→bullet 前缀、quote→❝ + secondary 色、table→管道行）拼成一份 string，append 间隔用 `\n\n`。128 项 LRU 按 content hash 缓存——流式新 token 进来重 render 一次，后续 SwiftUI body 重算直接命中。**view tree 节点数从 N 降到 1**，LazyVStack 的 measureEstimates 不再嵌套展开 ForEach 树。代价：代码块没有复制按钮、语言 pill、表格 chrome——用户可以在 NSTextView 那种独立窗口里看完整版（rc6 之后规划过的方向），但 chat pane 永远保持响应。`MarkdownPreviewBlockView` 自身没动，editor 模式右侧 Markdown preview 继续用。
+
+## 1.52.1-rc8 - 2026-06-04
+
+- **真·根因修：切断 `AgentModeMessageView` 对 AppState 的依赖。** 用户的 Instruments Time Profiler（首次有数据，不再瞎猜）给出了铁证：19.54 秒采样里 `AG::Subgraph::update` 占 **15.19 秒（77.7%）**、`AG::Graph::UpdateStack::update` 占 **14.85 秒（76%）**——SwiftUI 的 AttributeGraph 系统几乎占满了整个主线程。下面才是 `_ZStackLayout` / `_HStackLayout` 各几秒、`explicitAlignment` 一坨。这不是 layout 慢、不是 markdown 解析慢、不是 syntax highlighter 慢——是 **AttributeGraph 反复 invalidate + 重算整张视图依赖图**。根因找到了：`AgentModeMessageView` `@EnvironmentObject var appState: AppState` 仅仅为了算一个 `isStreamingThisMessage: Bool`（用 `appState.isAgentResponding` + `appState.agentMessages.last`）；这一个引用让 transcript 里**每个可见 message bubble** 都进了 AppState 的依赖图。AppState 任何变化（流式 token 进来时委托属性触发 willChange、sidebar 状态翻转、任何无关 publish）都让 AttributeGraph 重跑所有 message view 的 update——长 chat = 几十个 view × AppState 每秒几十次 invalidate = N×M 体量的图遍历，主线程烧穿。修法：① 把 `isStreamingThisMessage` 改成 `let` prop 而非内部 computed；② 删 `@EnvironmentObject appState`；③ 父级 `AgentChatTranscript` 加 `currentStreamingMessageID` computed，**只算一次**，传给 `ForEach` 里每条 bubble。AppState 变化现在只触发父级一次 body 重算，bubble 只在自己的 message 或那个 Bool 真变化时才重新进图。
+- **rc7 的 `.frame(maxWidth:) + .compositingGroup()` 保留**——它们对长 message 内部 HStack 的对齐反馈链有正向作用，跟根因修是叠加效果而非竞争。
+
+## 1.52.1-rc7 - 2026-06-04
+
+- **第 6 次尝试：在 `AgentChatTranscript` 的 ForEach 里给每条 bubble 加 `.frame(maxWidth:) + .compositingGroup()`。** 用户提供的第二份 LLDB backtrace 比第一份信息量大：栈里塞满了 `_HStackLayout.explicitAlignment` 反复嵌套调用（frame 10-28 多层嵌套），而不仅是普通的 measure。这是一个 SwiftUI 已知性能病——外层 VStack 在算每个子 view 的 alignment 时，会反复钻进子 view 的 HStack 重算，深度嵌套场景下复杂度 O(N²)。一条 200+ 行带代码块的 message 解析出大量 markdown block，每个 block 内部又是 HStack（bullet/数字 + Text），N² 爆炸。`.frame(maxWidth:)` 让每个 row 上来就知道自己的目标宽度，不再跟 sibling 协商；`.compositingGroup()` 在合成层把 bubble 内部当一个黑盒，理论上能切断 alignment 反馈向外溢出。但这条路线本质仍是"SwiftUI 黑魔法试一试"，没有理论保证。如果还卡，下一步直接走"长 message 截断"——超过 N 行只显示头尾、中间放折叠标记、点开弹独立窗口——彻底绕开 SwiftUI 反复 layout 复杂 view tree 的问题。
+
+## 1.52.1-rc6 - 2026-06-04
+
+- **回滚 rc5 的 NSTextView 路线，整体退回 rc3 基线。** 连续两轮（rc4 缓存 + rc5 NSTextView）都没修好滚动卡死，rc5 反而比 rc3 更糟："滚到长 markdown 中间瞬间死"。NSTextView 的 `ensureLayout(for: textContainer)` 对一份几百 KB 的 attributed string 是同步阻塞，每次 SwiftUI 问 `intrinsicContentSize` 就要排版整段；叠加 `widthTracksTextView = true` + autoresizingMask，外层 SwiftUI 反复重 layout 时 TextKit 反复重排所有 line fragments——这条路其实比 SwiftUI 那一坨深嵌套更恶劣。删 `AgentMessageTextView.swift`，`AgentAssistantMarkdownBody` 改回 `ForEach + MarkdownPreviewBlockView` 老路径。下一步：用 Instruments Time Profiler 拿真实热点函数（不再猜），再针对性修一刀。
+
+## 1.52.1-rc5 - 2026-06-04
+
+- **回滚 rc4 的缓存方案，改用 NSTextView 路线渲染长 message。** rc4 给 `MarkdownCodeBlockView` 和 `AgentAssistantMarkdownBody` 加了 LRU 高亮缓存 + Equatable 跳过重建——理论上 measure 期间命中缓存就快，但实测**还是卡**。这条路线打脸了。先把 rc4 那两处缓存改动全回滚（包括 `.equatable()` 调用、两个 static cache 字典、Equatable 声明、init 时 let blocks）回到 rc3 基线，再换路线。
+- **新增 `AgentMessageTextView`：NSViewRepresentable 包 NSTextView，整条 message 一份 NSAttributedString。** 老 SwiftUI 路径是 `MarkdownPreviewParser.blocks` → `ForEach` → `MarkdownPreviewBlockView` 每 block 一个 SwiftUI view；代码块走 `MarkdownCodeBlockView`，嵌套 ScrollView + Text(AttributedString) + padding + background + overlay 一坨。SwiftUI 滚动期间需要反复 measure 每个可见子 view 求 sizeThatFits，深嵌套 layout × 长 markdown × 多条 bubble = 主线程被压死。换成 NSTextView 一锅炖：`AgentMessageAttributedRenderer.render(content:isDark:)` 走一次 `MarkdownPreviewParser.blocks` 把 prose / 引用 / 列表 / 代码块 / 表格全部组装成一份 `NSAttributedString`，代码块用现成 `SyntaxHighlighter.highlightSync` 着色后用 `.backgroundColor` 属性画"代码卡背景"，TextKit 一次性 layout 到 storage 里。SwiftUI 把 `AgentMessageTextView` 当 opaque view，`intrinsicContentSize` 用 `usedRect(for: textContainer)` 报一次高度——measure pass 是 O(1) 字典查 + 一次 ensureLayout，跟内容长度无关。
+- **渲染层加 LRU 缓存 (64 项)**，键 `(content.hashValue, isDark)`：流式 token 进来 content 变化时落空一次重 render，之后所有 `updateNSView` 都命中缓存直接返回上次的 `NSAttributedString`。配合 `AgentMessageNSTextView.setAttributedContent` 内部的 `lastContentHash` 二次拦截，连 `textStorage.setAttributedString` 都不调用——SwiftUI 在 measure 期间触发 `updateNSView` 也不会动 TextKit。
+- **代价**：① 代码块的"语言 pill + 复制按钮"chrome 这一版没了，只在 attributed string 上方加一行小字显示语言名（你点选还是能选中代码复制）；② 表格暂时降级成"`col1 │ col2`"纯文本一行；③ inline link 颜色和样式继承 NSTextView 的 `linkTextAttributes`，会有 underline。后续 polish 时可以补 chrome 回来；优先保性能。MarkdownCodeBlockView / MarkdownPreviewBlockView 仍保留——editor 模式右侧 Markdown preview 还用它们，这一版没变化。
+
+## 1.52.1-rc4 - 2026-06-04
+
+- **真正修好"滚动卡死"：缓存代码块语法高亮 + Markdown 解析结果。** rc2/rc3 沿着错误方向修了两遍，根因今天才定位到：用户说**没在跑 token 的时候光滚动就卡**——和流式、和 runtime 转发、和 onChange 都无关。栈底全停在 `SwiftUI ViewLayoutEngine.sizeThatFits` / `_PaddingLayout` / `_FrameLayout` 不是反复触发，是**单次 layout pass 自然展开**——奉劝任何看到这种栈的人不要急着归因到信号链。`MarkdownCodeBlockView.bodyText` 注释还写着"`runs synchronously per body pass, which is fine because chat code blocks are small`"——这个前提对 chat 早已不成立：Agent 回复经常贴 200+ 行带语法高亮的代码块，SwiftUI 在一次滚动期间为每条可见 message 反复求 `body`（measure → layout → 子节点 measure → …），每次都重跑 `SyntaxHighlighter.highlightSync` 全文。一条几百行的代码块单次高亮就要几十毫秒，× 滚动一帧里多次求值 × 多个可见 bubble = 主线程被完全占满，外部信号 → SIGTERM。
+- **`MarkdownCodeBlockView`：Equatable + 静态 LRU 缓存（32 项，按 text hash + language + theme 分键）。** SwiftUI 在 `body` 求值时进 `cachedHighlight(text:language:isDark:)`，命中直接返回上次结果，没命中才真跑 `SyntaxHighlighter`。第一次新内容解析 1 次，之后所有 measure pass 都是字典查找——O(1)，跟代码长度无关。`Self.equatable` + 调用站 `.equatable()` 双管齐下：让 SwiftUI 在 text/languageHint 没变时连 view struct 都不重建，外层 padding / background / overlay 全部跳过。Light/Dark 主题切换通过 `@Environment(\.colorScheme)` 自然走两套缓存项，主题切换瞬间正确。流式新 token 进来导致 text 变化时，缓存自然失效一次重算，之后归零。
+- **`AgentAssistantMarkdownBody`：Equatable + init 时一次性解析 blocks。** 同款问题在 markdown 解析器上：`blocks` 原本是 computed property，每次 `body` 求值重跑 `MarkdownPreviewParser.blocks(from: content)`。改成 `let blocks`（init 时算一次）+ `Equatable`，配合调用站 `.equatable()`。结果：滚动期间一条 message 的 markdown 解析最多发生一次（创建时），之后所有 measure 都直接用缓存的 block 数组。
+
+## 1.52.1-rc3 - 2026-06-04
+
+- **真正修死锁：transcript 滚动 onChange 监听全数组改成监听 count。** 上一个 rc 的 hotfix 把 sidebar 那条恶化路径（订阅所有 runtime）回滚了，但**没动**根本性的老 bug——`AgentChatTranscript` 和 `AgentPanelView` 里的 `.onChange(of: appState.agentMessages)`。`agentMessages` 是 `[AgentMessage]`，Equatable 比较深入到 `messages[i].content`，**每流入一个 token 数组就算"变了"**——SwiftUI 触发 onChange → `withAnimation(.easeOut(0.15))` + `proxy.scrollTo` → 启动一次 150ms 动画过渡 → SwiftUI 在动画帧反复重算嵌套 layout（栈里看到 `_FrameLayout` / `_PaddingLayout` / `_FlexFrameLayout` / `_ZStackLayout` 6+ 层 sizeThatFits 反复跑）。30 tps × 150ms 动画 × 6 层嵌套 padding/flex/stack = 主线程烧穿。LLDB backtrace 顶层全部停在 `SwiftUI ViewLayoutEngine.sizeThatFits` 里，是这条路径的直接指纹。改成 `.onChange(of: appState.agentMessages.count)`——只在新 message 加入时滚一次，token delta（同 message 内容增长）不再触发 scrollTo + animation。content 自然随着 message bubble 向下生长，体验上没有差别，但每秒少跑 30 次 layout pass。`AgentPanelView` 那条同款问题一并改了。
+
+## 1.52.1-rc2 - 2026-06-04
+
+- **修复滚动 Agent 聊天区导致主线程卡死。** v1.49 rc4 把 `AppState` 改成订阅所有 runtime 的 `objectWillChange` 转发到自己——本意是让 sidebar 状态点能看到背景 runtime 的 `isResponding` 翻转。但代价是：背景 runtime 每流入一个 token、`runtime.messages[i].content += delta` 都触发 `runtime.objectWillChange.send()` → `appState.objectWillChange.send()` → **整棵 SwiftUI 子树标脏重画**。叠加用户滚动 transcript 时 SwiftUI 已经在重算大量 layout，多个 runtime（用户 + 几个 routine 后台跑）×一秒几十个 token×滚动 = 主线程被压死。回滚成只转发 active runtime（恢复 rc2/rc3 性能水位），sidebar 状态点改成两态 view：有 runtime 时走 `ObservedDot`（`@ObservedObject` 直接订阅那个 runtime，SwiftUI 只重画该行），没 runtime 时走 `IdleDot` 静态。这样背景 runtime 状态变化只让对应那一行重画，不再波及整棵树。代码层 net：`AppState.runtimeSubscriptions` 字典退回 `activeRuntimeSubscription: AnyCancellable?` 单实例；三处生命周期 hook 的 `subscribeToRuntime` / `unsubscribeFromRuntime` 调用删掉，`selectAgentSession` 补回原本 rc4 误删的 `subscribeToActiveRuntime()`；`AgentSessionRowStatusDot` 拆成外层 dispatch + `ObservedDot`/`IdleDot` 两个内部 view。
+
+## 1.52.1-rc1 - 2026-06-04
+
+- **Settings → Agent 重新设计 + API key 加“小眼睛”可见性切换。** 输完 401 才发现是 key 错了？现在按下 API key 输入框右侧的 👁 按钮可在“点点点”SecureField 与明文 TextField 之间一键切换，关闭设置后默认重新隐藏，避免肩窥；reveal 状态只在 view 局部 `@State`，不落盘。Provider Editor 整体按苹果 HIG 重排：① 拆成 **Connection / Models / Routing** 三个 GroupBox，每段配 SF Symbol 小图标做章节标题；② 字段统一右对齐的 label（110pt）+ baseline 对齐的 control，告别原本错位的 100pt 文本框；③ 备用模型 TextEditor 改用 `textBackgroundColor` 描边圆角，融入系统配色；④ Fetch Models 按钮配 `arrow.down.circle` 图标，加载中显示 ProgressView；⑤ 左侧 provider 列表升级为带圆角描边的 list 容器，选中行换成 accentColor 实心高亮 + 白字，active provider 行加粗显示；⑥ 增删按钮换成 borderless 紧凑样式。Image Understanding section 的 API Key 同步换上同款 reveal-secret 字段，整页输入凭据再也不用对着空白盲填。
+
+- **新增 Settings → MCP 管理页，并支持 Cursor 风格的 streamable-http MCP server。** MCP server 发现现在统一合并 App 用户配置、Cursor `~/.cursor/mcp.json`、Codex `~/.codex/config.toml` 三类来源；Settings → MCP 参考 Cursor 的 server 列表样式，支持按来源分组、启用/禁用、刷新工具数、新建用户 server、删除用户 server、打开 Cursor `mcp.json`，并在界面和 `list_mcp_servers` 输出中脱敏 `Authorization`、token、secret、password、cookie、key 等敏感 header/env 值。底层 MCP bridge 新增 `streamable-http` transport：通过 HTTP JSON-RPC 完成 `initialize`、`notifications/initialized`、`tools/list`、`tools/call`，支持 `Mcp-Session-Id`、JSON 与 `text/event-stream` 响应；原有 stdio MCP server 继续可用。
+
+## 1.51.0 - 2026-06-03
+
+- **新增 Settings → Skills 技能管理页，并内置 Alma bundled-skills。** 将 `/Applications/Alma.app/Contents/Resources/bundled-skills` 整体复制到 `Xedit/BundledSkills`，保留 `computer-use/playbooks`、`xiaohongshu-cli/scripts/xhs` 等附属文件。技能发现现在统一覆盖三类来源：app 内置技能、用户 `~/.codex/skills`、插件缓存 `~/.codex/plugins/cache`；`list_skills` / `read_skill`、Agent composer 的 `@` 选择器和 Settings 共用同一套目录结果，并会按持久化禁用列表过滤。Settings → Skills 新增自动技能提取开关、最少工具调用数、搜索、刷新、打开用户技能目录、新建用户技能、按 Built-in/User/Plugin 分组查看内容和启停技能。
+
+## 1.50.0 - 2026-06-03
+
+- **新增 Settings → Memory 记忆管理页。** 参考 Alma 的记忆 tab，把 Agent 记忆功能开关、自动检索、查询重写、检索数量、相似度阈值、自动总结、每日睡眠整理、保留策略、工具模型、嵌入模型、统计、手动添加、搜索、编辑、归档、恢复、删除、清空和 JSON 快照导出集中到新的 Settings tab。新增 `AgentMemorySettings` / `AgentMemoryRecord` 本地持久化层，记忆设置和条目写入 UserDefaults；当前维护周期先完成本地 TTL 归档与过期归档清理，LLM 合并预留在 UI 的高级参数区。
+
 ## 1.49.0-rc7 - 2026-06-03
 
 - **修复空会话清理误删 live runtime 的竞态。** `pruneEmptyAgentSessions()` 现在会同时检查内存里的 runtime 状态：正在响应、有 request task、正在等待 tool 决策，或 runtime 内存里已经出现 user message 的 session 都不会被当成空会话清理，避免刚开始跑的后台 routine / 并发 session 在尚未回写 `agentSessions` 前被新建会话流程误删；被清理的 idle runtime 也会按删除路径取消 task 并恢复 waiter。
