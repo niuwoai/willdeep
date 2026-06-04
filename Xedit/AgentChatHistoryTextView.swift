@@ -77,6 +77,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
     private var currentMessages: [AgentMessage] = []
     private var currentIsDark = false
     private var expandedToolGroupIDs = Set<String>()
+    private var hoveredUserMessageID: UUID?
+    private var hoverTrackingArea: NSTrackingArea?
     var onRetryLastTurn: (() -> Void)?
 
     init() {
@@ -110,6 +112,36 @@ final class AgentChatHistoryNSTextView: NSTextView {
         invalidateIntrinsicContentSize()
     }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.acceptsMouseMovedEvents = true
+    }
+
+    override func updateTrackingAreas() {
+        if let hoverTrackingArea {
+            removeTrackingArea(hoverTrackingArea)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.activeInKeyWindow, .inVisibleRect, .mouseMoved, .mouseEnteredAndExited],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        hoverTrackingArea = trackingArea
+        super.updateTrackingAreas()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        updateHoveredUserMessage(at: convert(event.locationInWindow, from: nil))
+        super.mouseMoved(with: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        updateHoveredUserMessage(id: nil)
+        super.mouseExited(with: event)
+    }
+
     /// Swap text storage only when the attributed string actually
     /// changed. SwiftUI calls `updateNSView` on every parent body
     /// pass — without the guard we'd thrash TextKit every frame.
@@ -123,15 +155,62 @@ final class AgentChatHistoryNSTextView: NSTextView {
         let attr = AgentChatHistoryRenderer.render(
             messages: currentMessages,
             isDark: currentIsDark,
-            expandedToolGroupIDs: expandedToolGroupIDs
+            expandedToolGroupIDs: expandedToolGroupIDs,
+            hoveredUserMessageID: hoveredUserMessageID
         )
-        let hash = attr.string.hashValue
+        var hasher = Hasher()
+        hasher.combine(attr.string)
+        hasher.combine(attr.length)
+        hasher.combine(currentIsDark)
+        hasher.combine(expandedToolGroupIDs.sorted())
+        hasher.combine(hoveredUserMessageID)
+        let hash = hasher.finalize()
         if hash == lastContentHash, attr.length == textStorage?.length {
             return
         }
         lastContentHash = hash
         textStorage?.setAttributedString(attr)
         invalidateIntrinsicContentSize()
+    }
+
+    private func updateHoveredUserMessage(at point: NSPoint) {
+        guard let layoutManager, let textContainer, let textStorage, textStorage.length > 0 else {
+            updateHoveredUserMessage(id: nil)
+            return
+        }
+        var containerPoint = point
+        containerPoint.x -= textContainerInset.width
+        containerPoint.y -= textContainerInset.height
+        guard containerPoint.x >= 0, containerPoint.y >= 0 else {
+            updateHoveredUserMessage(id: nil)
+            return
+        }
+        layoutManager.ensureLayout(for: textContainer)
+        let glyphIndex = layoutManager.glyphIndex(for: containerPoint, in: textContainer)
+        guard glyphIndex < layoutManager.numberOfGlyphs else {
+            updateHoveredUserMessage(id: nil)
+            return
+        }
+        let lineFragment = layoutManager.lineFragmentUsedRect(forGlyphAt: glyphIndex, effectiveRange: nil)
+        guard lineFragment.insetBy(dx: -24, dy: -8).contains(containerPoint) else {
+            updateHoveredUserMessage(id: nil)
+            return
+        }
+        let charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+        guard charIndex < textStorage.length,
+              let idString = textStorage.attribute(.agentChatHistoryUserMessageID, at: charIndex, effectiveRange: nil) as? String,
+              let id = UUID(uuidString: idString) else {
+            updateHoveredUserMessage(id: nil)
+            return
+        }
+        updateHoveredUserMessage(id: id)
+    }
+
+    private func updateHoveredUserMessage(id: UUID?) {
+        guard hoveredUserMessageID != id else { return }
+        hoveredUserMessageID = id
+        lastContentHash = nil
+        renderCurrentMessages()
     }
 }
 
@@ -275,6 +354,7 @@ private extension NSAttributedString.Key {
     static let agentChatHistoryMessageCopyText = NSAttributedString.Key("AgentChatHistoryMessageCopyText")
     static let agentChatHistoryRetryLastTurn = NSAttributedString.Key("AgentChatHistoryRetryLastTurn")
     static let agentChatHistoryToolGroupID = NSAttributedString.Key("AgentChatHistoryToolGroupID")
+    static let agentChatHistoryUserMessageID = NSAttributedString.Key("AgentChatHistoryUserMessageID")
 }
 
 private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
@@ -504,7 +584,7 @@ private enum AgentChatHistoryFooterChrome {
     }
 
     private static var copyFont: NSFont {
-        NSFont.systemFont(ofSize: 12, weight: .medium)
+        NSFont.systemFont(ofSize: 13, weight: .medium)
     }
 
     private static func baseLinkAttributes(color: NSColor) -> [NSAttributedString.Key: Any] {
@@ -622,7 +702,8 @@ enum AgentChatHistoryRenderer {
     static func render(
         messages: [AgentMessage],
         isDark: Bool,
-        expandedToolGroupIDs: Set<String> = []
+        expandedToolGroupIDs: Set<String> = [],
+        hoveredUserMessageID: UUID? = nil
     ) -> NSAttributedString {
         // Hash all visible message payloads. The old cheap key
         // (count + total length + last message) was enough for append-
@@ -631,11 +712,13 @@ enum AgentChatHistoryRenderer {
         var hasher = Hasher()
         hasher.combine(messages.count)
         hasher.combine(expandedToolGroupIDs.sorted())
+        hasher.combine(hoveredUserMessageID)
         for m in messages {
             hasher.combine(m.id)
             hasher.combine(m.role.rawValue)
             hasher.combine(m.content)
             hasher.combine(m.toolCallID)
+            hasher.combine(m.createdAt)
             hasher.combine(m.reasoningContent)
             hasher.combine(m.usageTokens)
             hasher.combine(m.promptTokens)
@@ -655,7 +738,8 @@ enum AgentChatHistoryRenderer {
         let result = makeAttributedString(
             messages: messages,
             isDark: isDark,
-            expandedToolGroupIDs: expandedToolGroupIDs
+            expandedToolGroupIDs: expandedToolGroupIDs,
+            hoveredUserMessageID: hoveredUserMessageID
         )
         cache[key] = result
         cacheOrder.append(key)
@@ -669,7 +753,8 @@ enum AgentChatHistoryRenderer {
     private static func makeAttributedString(
         messages: [AgentMessage],
         isDark: Bool,
-        expandedToolGroupIDs: Set<String>
+        expandedToolGroupIDs: Set<String>,
+        hoveredUserMessageID: UUID?
     ) -> NSAttributedString {
         let result = NSMutableAttributedString()
         let bodyFont = NSFont.systemFont(ofSize: NSFont.systemFontSize)
@@ -731,6 +816,7 @@ enum AgentChatHistoryRenderer {
             )
 
             // Body.
+            let isHoveredUserMessage = message.role == .user && message.id == hoveredUserMessageID
             let messageBubbleStart = result.length
             var hasMessageBubbleContent = false
             let useMono = (message.role == .tool)
@@ -760,13 +846,24 @@ enum AgentChatHistoryRenderer {
                         isDark: isDark
                     )
                 }
-                applyBubbleChrome(
-                    kind: bubbleKind(for: message.role),
-                    to: result,
-                    range: NSRange(location: bodyStart, length: result.length - bodyStart),
-                    paragraphStyle: bodyParagraphStyle(for: message.role),
-                    foregroundColor: nil
-                )
+                let bodyRange = NSRange(location: bodyStart, length: result.length - bodyStart)
+                if message.role == .user && !isHoveredUserMessage {
+                    applyBodyChrome(
+                        to: result,
+                        range: bodyRange,
+                        paragraphStyle: bodyParagraphStyle(for: message.role),
+                        userMessageID: message.id
+                    )
+                } else {
+                    applyBubbleChrome(
+                        kind: bubbleKind(for: message.role),
+                        to: result,
+                        range: bodyRange,
+                        paragraphStyle: bodyParagraphStyle(for: message.role),
+                        userMessageID: message.role == .user ? message.id : nil,
+                        foregroundColor: nil
+                    )
+                }
                 hasMessageBubbleContent = true
             }
 
@@ -793,7 +890,7 @@ enum AgentChatHistoryRenderer {
                 )
             }
 
-            if shouldShowFooter(for: message, body: body) {
+            if shouldShowFooter(for: message, body: body, isHoveredUserMessage: isHoveredUserMessage) {
                 result.append(NSAttributedString(string: "\n", attributes: [.font: bodyFont]))
                 appendMessageFooter(
                     for: message,
@@ -806,6 +903,7 @@ enum AgentChatHistoryRenderer {
                         to: result,
                         range: NSRange(location: messageBubbleStart, length: result.length - messageBubbleStart),
                         paragraphStyle: bodyParagraphStyle(for: message.role),
+                        userMessageID: message.role == .user ? message.id : nil,
                         foregroundColor: nil
                     )
                 }
@@ -894,6 +992,13 @@ enum AgentChatHistoryRenderer {
             value: headerParagraphStyle(for: message.role),
             range: NSRange(location: headerStart, length: result.length - headerStart)
         )
+        if message.role == .user {
+            result.addAttribute(
+                .agentChatHistoryUserMessageID,
+                value: message.id.uuidString,
+                range: NSRange(location: headerStart, length: result.length - headerStart)
+            )
+        }
     }
 
     private static func starToken(color: NSColor, font: NSFont) -> NSAttributedString {
@@ -1033,11 +1138,15 @@ enum AgentChatHistoryRenderer {
         to attributed: NSMutableAttributedString,
         range: NSRange,
         paragraphStyle: NSParagraphStyle,
+        userMessageID: UUID? = nil,
         foregroundColor: NSColor?
     ) {
         guard range.length > 0 else { return }
         attributed.addAttribute(.agentChatHistoryBubbleKind, value: NSNumber(value: kind.rawValue), range: range)
         attributed.addAttribute(.paragraphStyle, value: paragraphStyle, range: range)
+        if let userMessageID {
+            attributed.addAttribute(.agentChatHistoryUserMessageID, value: userMessageID.uuidString, range: range)
+        }
         let codeParagraphStyle = codeBlockParagraphStyle(from: paragraphStyle)
         attributed.enumerateAttribute(.agentChatHistoryCodeBlockID, in: range, options: []) { value, subrange, _ in
             guard value != nil else { return }
@@ -1048,6 +1157,24 @@ enum AgentChatHistoryRenderer {
             if attributes[.link] == nil {
                 attributed.addAttribute(.foregroundColor, value: foregroundColor, range: subrange)
             }
+        }
+    }
+
+    private static func applyBodyChrome(
+        to attributed: NSMutableAttributedString,
+        range: NSRange,
+        paragraphStyle: NSParagraphStyle,
+        userMessageID: UUID?
+    ) {
+        guard range.length > 0 else { return }
+        attributed.addAttribute(.paragraphStyle, value: paragraphStyle, range: range)
+        if let userMessageID {
+            attributed.addAttribute(.agentChatHistoryUserMessageID, value: userMessageID.uuidString, range: range)
+        }
+        let codeParagraphStyle = codeBlockParagraphStyle(from: paragraphStyle)
+        attributed.enumerateAttribute(.agentChatHistoryCodeBlockID, in: range, options: []) { value, subrange, _ in
+            guard value != nil else { return }
+            attributed.addAttribute(.paragraphStyle, value: codeParagraphStyle, range: subrange)
         }
     }
 
@@ -1119,9 +1246,15 @@ enum AgentChatHistoryRenderer {
             .joined(separator: "\n")
     }
 
-    private static func shouldShowFooter(for message: AgentMessage, body: String) -> Bool {
+    private static func shouldShowFooter(
+        for message: AgentMessage,
+        body: String,
+        isHoveredUserMessage: Bool
+    ) -> Bool {
         switch message.role {
-        case .user, .assistant:
+        case .user:
+            return isHoveredUserMessage && !body.isEmpty
+        case .assistant:
             return !body.isEmpty
         case .system, .tool:
             return false
@@ -1134,6 +1267,10 @@ enum AgentChatHistoryRenderer {
         to result: NSMutableAttributedString
     ) {
         let start = result.length
+        if message.role == .user {
+            result.append(AgentChatHistoryFooterChrome.label(formatTimestamp(message.createdAt)))
+            result.append(AgentChatHistoryFooterChrome.separator)
+        }
         result.append(AgentChatHistoryFooterChrome.copyButton(copied: false, message: message.content))
 
         if message.role == .assistant {
@@ -1156,6 +1293,12 @@ enum AgentChatHistoryRenderer {
             value: footerParagraphStyle(for: message.role),
             range: NSRange(location: start, length: result.length - start)
         )
+    }
+
+    private static func formatTimestamp(_ date: Date) -> String {
+        let calendar = Calendar.autoupdatingCurrent
+        let dateStyle: DateFormatter.Style = calendar.isDateInToday(date) ? .none : .short
+        return DateFormatter.localizedString(from: date, dateStyle: dateStyle, timeStyle: .short)
     }
 
     private static func tokenSummary(for message: AgentMessage) -> String? {

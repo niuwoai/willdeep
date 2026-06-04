@@ -152,8 +152,31 @@ struct AgentChatHistoryRendererTests {
         #expect(rendered.string.contains("You\nhello"))
         #expect(rendered.string.contains("✦ Assistant\ndone"))
         #expect(!rendered.string.contains("YOU"))
-        #expect(rendered.string.contains("hello\n⎘"))
+        #expect(!rendered.string.contains("hello\n⎘"))
         #expect(rendered.string.contains("done\n⎘  ◷ 8.4s  in 1.2k · out 2.3k  ↻"))
+    }
+
+    @Test
+    func showsUserTimestampAndCopyOnlyForHoveredUserMessage() {
+        let id = UUID()
+        let user = AgentMessage(
+            id: id,
+            role: .user,
+            content: "hello",
+            createdAt: Date(timeIntervalSince1970: 750_000_000)
+        )
+
+        let plain = AgentChatHistoryRenderer.render(messages: [user], isDark: false)
+        #expect(plain.string.contains("You\nhello"))
+        #expect(!plain.string.contains("⎘"))
+
+        let hovered = AgentChatHistoryRenderer.render(
+            messages: [user],
+            isDark: false,
+            hoveredUserMessageID: id
+        )
+        #expect(hovered.string.contains("You\nhello"))
+        #expect(hovered.string.contains("⎘"))
     }
 
     @Test

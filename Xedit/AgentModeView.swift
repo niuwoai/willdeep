@@ -1002,6 +1002,7 @@ private struct AgentChatTranscript: View {
 private struct AgentModeMessageView: View {
     let message: AgentMessage
     let isStreamingThisMessage: Bool
+    @State private var isHoveringUser = false
 
     var body: some View {
         switch message.role {
@@ -1067,8 +1068,8 @@ private struct AgentModeMessageView: View {
                         }
                     }
                 }
-                if !message.content.isEmpty {
-                    AgentMessageFooter(message: message, alignment: .trailing)
+                if !message.content.isEmpty && isHoveringUser {
+                    AgentMessageFooter(message: message, alignment: .trailing, showsUserTimestamp: true)
                         .padding(.top, 2)
                 }
             }
@@ -1077,12 +1078,13 @@ private struct AgentModeMessageView: View {
             .padding(.bottom, 14)
             .background(
                 RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                    .fill(Color.primary.opacity(0.06))
+                    .fill(Color.primary.opacity(isHoveringUser ? 0.06 : 0))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                    .stroke(Color.primary.opacity(0.05), lineWidth: 1)
+                    .stroke(Color.primary.opacity(isHoveringUser ? 0.05 : 0), lineWidth: 1)
             )
+            .onHover { isHoveringUser = $0 }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
     }
@@ -1602,6 +1604,7 @@ private struct AgentMessageFooter: View {
     /// for the right-aligned user bubble so the footer hugs the same
     /// edge as the bubble.
     let alignment: HorizontalAlignment
+    var showsUserTimestamp = false
 
     @State private var didJustCopy = false
 
@@ -1609,9 +1612,15 @@ private struct AgentMessageFooter: View {
         HStack(spacing: 10) {
             if alignment == .trailing { Spacer(minLength: 0) }
 
+            if message.role == .user && showsUserTimestamp {
+                Text(formatTimestamp(message.createdAt))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
             Button(action: copyToClipboard) {
                 Image(systemName: didJustCopy ? "checkmark" : "square.on.square")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(didJustCopy ? Color.green : Color.secondary)
                     .contentShape(Rectangle())
             }
@@ -1661,6 +1670,12 @@ private struct AgentMessageFooter: View {
         let minutes = Int(seconds) / 60
         let remainder = Int(seconds) % 60
         return "\(minutes)m \(remainder)s"
+    }
+
+    private func formatTimestamp(_ date: Date) -> String {
+        let calendar = Calendar.autoupdatingCurrent
+        let dateStyle: DateFormatter.Style = calendar.isDateInToday(date) ? .none : .short
+        return DateFormatter.localizedString(from: date, dateStyle: dateStyle, timeStyle: .short)
     }
 
     private func formatTokens(_ count: Int) -> String {
