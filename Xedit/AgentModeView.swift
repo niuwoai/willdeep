@@ -679,14 +679,15 @@ private struct AgentChatTranscript: View {
                         // the same content incrementally with no
                         // freeze regardless of length. We pay for
                         // it in look-and-feel: no per-message
-                        // bubbles, no markdown rendering on
-                        // historical messages, no per-message copy
-                        // button. Streaming assistant message is
-                        // still rendered as a SwiftUI bubble so
-                        // markdown formatting + token-by-token
-                        // updates + streaming cursor still feel
-                        // live; once the turn ends it folds into
-                        // the NSTextView on the next refresh.
+                        // bubbles and no per-message copy button.
+                        // Historical messages still render Markdown
+                        // inside the TextKit attributed string.
+                        // Streaming assistant message is still
+                        // rendered as a SwiftUI bubble so Markdown
+                        // formatting + token-by-token updates +
+                        // streaming cursor still feel live; once
+                        // the turn ends it folds into the NSTextView
+                        // on the next refresh.
                         let allVisible = visibleMessages
                         let rendered = renderedMessages(from: allVisible)
                         let omitted = allVisible.count - rendered.count

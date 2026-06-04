@@ -16,9 +16,9 @@
 //     `NSAttributedString` once at open time; TextKit handles its
 //     own layout incrementally and doesn't bother the main thread
 //     during scroll.
-//   - Plain-text-with-role-headers format. No markdown rendering, no
-//     bubbles, no per-message chrome. Selectable, copyable, supports
-//     ⌘F find (NSTextView ships with that out of the box).
+//   - Markdown-with-role-headers format. No bubbles, no per-message
+//     chrome. Selectable, copyable, supports ⌘F find (NSTextView ships
+//     with that out of the box).
 //   - One window per session id; reopening the same session re-uses
 //     and brings forward the existing window instead of spawning a
 //     duplicate.
@@ -155,80 +155,15 @@ final class AgentTranscriptReaderWindowController: NSWindowController, NSWindowD
 
     // MARK: - Transcript rendering
 
-    /// Build the full transcript as one NSAttributedString:
-    ///  - Role headers (USER / ASSISTANT / TOOL · id) in bold, accent
-    ///    color, with a small newline gap before each.
-    ///  - Bodies as the raw `content` (no markdown rendering), in the
-    ///    system body font.
-    ///  - Tool messages clipped to a sensible length with an ellipsis
-    ///    note so a 24 KB git-diff dump doesn't make the reader window
-    ///    itself slow.
+    /// Build the full transcript as one NSAttributedString using the
+    /// same TextKit Markdown renderer as the chat-pane history.
     private static func renderTranscript(session: AgentSession) -> NSAttributedString {
-        let result = NSMutableAttributedString()
+        let result = NSMutableAttributedString(attributedString: AgentChatHistoryRenderer.render(
+            messages: session.messages,
+            isDark: false
+        ))
         let bodyFont = NSFont.systemFont(ofSize: NSFont.systemFontSize)
-        let monoFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        let headerFont = NSFont.systemFont(ofSize: 12, weight: .bold)
-        let bodyColor = NSColor.labelColor
         let secondaryColor = NSColor.secondaryLabelColor
-
-        let toolBodyLimit = 8_000
-
-        for message in session.messages {
-            let header: String
-            switch message.role {
-            case .system: header = "SYSTEM"
-            case .user: header = "USER"
-            case .assistant: header = "ASSISTANT"
-            case .tool: header = "TOOL\(message.toolCallID.map { " · \($0)" } ?? "")"
-            }
-
-            if result.length > 0 {
-                result.append(NSAttributedString(string: "\n\n"))
-            }
-
-            result.append(NSAttributedString(
-                string: header,
-                attributes: [
-                    .font: headerFont,
-                    .foregroundColor: NSColor.controlAccentColor,
-                ]
-            ))
-            result.append(NSAttributedString(string: "\n", attributes: [.font: headerFont]))
-
-            let content: String
-            let useMono = (message.role == .tool)
-            if useMono, message.content.count > toolBodyLimit {
-                let head = String(message.content.prefix(toolBodyLimit))
-                let omitted = message.content.count - toolBodyLimit
-                content = head + "\n\n…[truncated \(omitted) characters from this tool output for readability]"
-            } else {
-                content = message.content
-            }
-
-            result.append(NSAttributedString(
-                string: content,
-                attributes: [
-                    .font: useMono ? monoFont : bodyFont,
-                    .foregroundColor: bodyColor,
-                ]
-            ))
-
-            // Tool calls emitted by an assistant message — render as
-            // a compact list under the body.
-            if !message.toolCalls.isEmpty {
-                let summary = message.toolCalls
-                    .map { "→ \($0.toolName)(\($0.argumentsJSON.count) byte args)" }
-                    .joined(separator: "\n")
-                result.append(NSAttributedString(string: "\n", attributes: [.font: bodyFont]))
-                result.append(NSAttributedString(
-                    string: summary,
-                    attributes: [
-                        .font: monoFont,
-                        .foregroundColor: secondaryColor,
-                    ]
-                ))
-            }
-        }
 
         // Add a small footer with overall message count.
         if result.length > 0 {
@@ -365,15 +300,6 @@ final class AgentSingleMessageReaderWindowController: NSWindowController, NSWind
     }
 
     private static func render(message: AgentMessage) -> NSAttributedString {
-        let bodyFont = NSFont.systemFont(ofSize: NSFont.systemFontSize)
-        let monoFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        let useMono = (message.role == .tool)
-        return NSAttributedString(
-            string: message.content,
-            attributes: [
-                .font: useMono ? monoFont : bodyFont,
-                .foregroundColor: NSColor.labelColor,
-            ]
-        )
+        AgentChatHistoryRenderer.render(messages: [message], isDark: false)
     }
 }

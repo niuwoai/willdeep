@@ -9,7 +9,10 @@
 //  HTML details elements) without freezing the main thread — 15 rcs
 //  of bisection ruled out every individual modifier and content
 //  truncation strategy. TextKit handles the same content incrementally
-//  with no freeze regardless of length.
+//  with no freeze regardless of length. Historical messages still
+//  render Markdown, but the renderer bakes the whole history into one
+//  TextKit attributed string instead of asking SwiftUI to build a view
+//  tree per Markdown block.
 //
 //  Streaming behavior: the message that's currently being streamed
 //  (the last assistant message while `isAgentResponding == true`)
@@ -115,7 +118,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
 /// Turns a list of `AgentMessage` into a single NSAttributedString
 /// suitable for the chat-pane history NSTextView. Role headers are
 /// rendered as small bold accent-colored labels; bodies use the
-/// system body font, with tool outputs in monospace. Tool outputs
+/// render Markdown for non-tool bodies, with tool outputs in monospace. Tool outputs
 /// over 8 KB are truncated with a marker line so a 24 KB git-diff
 /// dump doesn't bloat the visible transcript (users can still see
 /// the full body via the per-message reader window).
@@ -133,20 +136,24 @@ enum AgentChatHistoryRenderer {
     }
 
     static func render(messages: [AgentMessage], isDark: Bool) -> NSAttributedString {
-        // Hash on (count, total content length, last message id+length).
-        // Cheaper than hashing every byte of every message but still
-        // disambiguates the common case where messages append.
+        // Hash all visible message payloads. The old cheap key
+        // (count + total length + last message) was enough for append-
+        // only streaming, but Markdown rendering makes stale-cache
+        // misses more visible when an older row is edited in place.
         var hasher = Hasher()
         hasher.combine(messages.count)
-        var totalLength = 0
         for m in messages {
-            totalLength &+= m.content.count
-        }
-        hasher.combine(totalLength)
-        if let last = messages.last {
-            hasher.combine(last.id)
-            hasher.combine(last.content.count)
-            hasher.combine(last.toolCalls.count)
+            hasher.combine(m.id)
+            hasher.combine(m.role.rawValue)
+            hasher.combine(m.content)
+            hasher.combine(m.toolCallID)
+            hasher.combine(m.reasoningContent)
+            hasher.combine(m.toolCalls.count)
+            for call in m.toolCalls {
+                hasher.combine(call.externalID)
+                hasher.combine(call.toolName)
+                hasher.combine(call.argumentsJSON)
+            }
         }
         let key = CacheKey(countAndHash: hasher.finalize(), isDark: isDark)
         if let hit = cache[key] {
@@ -170,6 +177,7 @@ enum AgentChatHistoryRenderer {
         let bodyColor = NSColor.labelColor
         let secondaryColor = NSColor.secondaryLabelColor
         let accentColor = NSColor.controlAccentColor
+        let codeBackgroundColor = NSColor.controlBackgroundColor
 
         // Cap tool bodies on the visible transcript to keep TextKit's
         // layout work bounded. The reader window shows the full body.
@@ -214,13 +222,19 @@ enum AgentChatHistoryRenderer {
             }
 
             if !body.isEmpty {
-                result.append(NSAttributedString(
-                    string: body,
-                    attributes: [
-                        .font: useMono ? monoFont : bodyFont,
-                        .foregroundColor: bodyColor,
-                    ]
-                ))
+                if useMono {
+                    appendPlainBody(body, to: result, font: monoFont, color: bodyColor)
+                } else {
+                    appendMarkdownBody(
+                        body,
+                        to: result,
+                        bodyFont: bodyFont,
+                        monoFont: monoFont,
+                        bodyColor: bodyColor,
+                        secondaryColor: secondaryColor,
+                        codeBackgroundColor: codeBackgroundColor
+                    )
+                }
             }
 
             // Tool call summary line (when the assistant emitted tool calls).
@@ -243,5 +257,215 @@ enum AgentChatHistoryRenderer {
 
         _ = isDark  // currently unused — colors come from the system semantic palette
         return result
+    }
+
+    private static func appendPlainBody(
+        _ body: String,
+        to result: NSMutableAttributedString,
+        font: NSFont,
+        color: NSColor
+    ) {
+        result.append(NSAttributedString(
+            string: body,
+            attributes: [
+                .font: font,
+                .foregroundColor: color,
+            ]
+        ))
+    }
+
+    private static func appendMarkdownBody(
+        _ source: String,
+        to result: NSMutableAttributedString,
+        bodyFont: NSFont,
+        monoFont: NSFont,
+        bodyColor: NSColor,
+        secondaryColor: NSColor,
+        codeBackgroundColor: NSColor
+    ) {
+        let safe = AgentLongTokenBreaker.inject(into: source)
+        let blocks = MarkdownPreviewParser.blocks(from: safe)
+        guard !blocks.isEmpty else {
+            result.append(inlineMarkdownAttributedString(safe, baseFont: bodyFont, color: bodyColor))
+            return
+        }
+
+        var didAppendBlock = false
+        func appendBlockSeparator() {
+            if didAppendBlock {
+                result.append(NSAttributedString(
+                    string: "\n\n",
+                    attributes: [
+                        .font: bodyFont,
+                        .foregroundColor: bodyColor,
+                    ]
+                ))
+            }
+            didAppendBlock = true
+        }
+
+        for block in blocks {
+            switch block.kind {
+            case .heading(let level):
+                appendBlockSeparator()
+                result.append(inlineMarkdownAttributedString(
+                    block.text,
+                    baseFont: headingFont(level: level),
+                    color: bodyColor
+                ))
+
+            case .paragraph:
+                appendBlockSeparator()
+                result.append(inlineMarkdownAttributedString(
+                    block.text,
+                    baseFont: bodyFont,
+                    color: bodyColor
+                ))
+
+            case .quote:
+                appendBlockSeparator()
+                result.append(NSAttributedString(
+                    string: "> ",
+                    attributes: [
+                        .font: bodyFont,
+                        .foregroundColor: secondaryColor,
+                    ]
+                ))
+                result.append(inlineMarkdownAttributedString(
+                    block.text,
+                    baseFont: bodyFont,
+                    color: secondaryColor
+                ))
+
+            case .unorderedList:
+                appendBlockSeparator()
+                let indent = String(repeating: "  ", count: min(block.indent, 4))
+                result.append(NSAttributedString(
+                    string: "\(indent)\(bulletGlyph(for: block.indent)) ",
+                    attributes: [
+                        .font: bodyFont,
+                        .foregroundColor: secondaryColor,
+                    ]
+                ))
+                result.append(inlineMarkdownAttributedString(
+                    block.text,
+                    baseFont: bodyFont,
+                    color: bodyColor
+                ))
+
+            case .orderedList:
+                appendBlockSeparator()
+                let indent = String(repeating: "  ", count: min(block.indent, 4))
+                result.append(NSAttributedString(
+                    string: "\(indent)1. ",
+                    attributes: [
+                        .font: bodyFont,
+                        .foregroundColor: secondaryColor,
+                    ]
+                ))
+                result.append(inlineMarkdownAttributedString(
+                    block.text,
+                    baseFont: bodyFont,
+                    color: bodyColor
+                ))
+
+            case .code:
+                appendBlockSeparator()
+                if let language = block.info?.trimmingCharacters(in: .whitespacesAndNewlines), !language.isEmpty {
+                    result.append(NSAttributedString(
+                        string: "\(language)\n",
+                        attributes: [
+                            .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .medium),
+                            .foregroundColor: secondaryColor,
+                        ]
+                    ))
+                }
+                result.append(NSAttributedString(
+                    string: block.text,
+                    attributes: [
+                        .font: monoFont,
+                        .foregroundColor: bodyColor,
+                        .backgroundColor: codeBackgroundColor,
+                    ]
+                ))
+
+            case .divider:
+                appendBlockSeparator()
+                result.append(NSAttributedString(
+                    string: "-----",
+                    attributes: [
+                        .font: bodyFont,
+                        .foregroundColor: secondaryColor,
+                    ]
+                ))
+
+            case .table:
+                appendBlockSeparator()
+                if let headers = block.tableHeaders, let rows = block.tableRows {
+                    let table = ([headers] + rows)
+                        .map { $0.joined(separator: " | ") }
+                        .joined(separator: "\n")
+                    result.append(NSAttributedString(
+                        string: table,
+                        attributes: [
+                            .font: monoFont,
+                            .foregroundColor: bodyColor,
+                        ]
+                    ))
+                }
+            }
+        }
+    }
+
+    private static func inlineMarkdownAttributedString(
+        _ raw: String,
+        baseFont: NSFont,
+        color: NSColor
+    ) -> NSAttributedString {
+        let parsed = MarkdownInline.attributedString(from: raw)
+        let converted = NSMutableAttributedString(attributedString: NSAttributedString(parsed))
+        applyMissingBaseAttributes(to: converted, baseFont: baseFont, color: color)
+        return converted
+    }
+
+    private static func applyMissingBaseAttributes(
+        to attributed: NSMutableAttributedString,
+        baseFont: NSFont,
+        color: NSColor
+    ) {
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        guard fullRange.length > 0 else { return }
+        attributed.enumerateAttributes(in: fullRange, options: []) { attributes, range, _ in
+            if attributes[.font] == nil {
+                attributed.addAttribute(.font, value: baseFont, range: range)
+            }
+            if attributes[.foregroundColor] == nil, attributes[.link] == nil {
+                attributed.addAttribute(.foregroundColor, value: color, range: range)
+            }
+        }
+    }
+
+    private static func headingFont(level: Int) -> NSFont {
+        switch level {
+        case 1:
+            return NSFont.systemFont(ofSize: 22, weight: .semibold)
+        case 2:
+            return NSFont.systemFont(ofSize: 18, weight: .semibold)
+        case 3:
+            return NSFont.systemFont(ofSize: 16, weight: .semibold)
+        default:
+            return NSFont.systemFont(ofSize: 14, weight: .semibold)
+        }
+    }
+
+    private static func bulletGlyph(for indent: Int) -> String {
+        switch indent {
+        case 0:
+            return "-"
+        case 1:
+            return "*"
+        default:
+            return "+"
+        }
     }
 }

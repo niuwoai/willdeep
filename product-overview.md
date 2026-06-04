@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-04 | Current version: v1.52.1-rc17
+> Last updated: 2026-06-04 | Current version: v1.52.1-rc18
 
 ## Positioning
 
@@ -57,6 +57,7 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Show the full `run_command` command text on approval and destructive-confirmation cards so the exact command is visible before the user allows it.
 - Keep Agent tool-call rows compact by default and collapse consecutive calls into an expandable group so long multi-step runs remain scannable, with arguments, output, and errors available from explicit expand controls.
 - Switch the window into a dedicated Agent mode (Cmd+Shift+A) with a project-grouped session sidebar on the left and a wide chat pane on the right. Sessions persist as JSON under `~/Library/Application Support/VeilWriter/agent-sessions/` and are grouped by workspace.
+- Render Agent chat history, transcript reader windows, and single-message reader windows with lightweight TextKit Markdown for headings, paragraphs, lists, quotes, code blocks, inline formatting, links, dividers, and pipe-table fallback while avoiding SwiftUI per-block transcript layout.
 - Paste, drag-drop, or attach images directly in the Agent composer; staged images appear as removable thumbnails and, for supported multimodal providers, are sent inline as base64 `image_url` content parts in the request body.
 - Configure a separate Image Understanding provider with its own API key; for text-only Agent providers such as DeepSeek, multiple attached images are first described by that image-capable provider, then the generated description is appended to the user message before the main model runs.
 - Send Agent-mode messages with Return, while Shift-Return, Option-Return, and Control-Return remain available for multiline composition.
@@ -102,6 +103,7 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Skip generated dependency/build directories during project-wide scans, and cap Quick Open candidate collection so huge workspaces remain responsive.
 - Keep Git status and Agent network requests bounded with output caps and timeouts so unavailable providers or huge repositories cannot leave the UI waiting indefinitely.
 - Allow longer bounded Agent tool sessions so normal multi-step work can continue, while still pausing after 64 tool rounds to prevent accidental loops.
+- Keep Agent-mode chat scrolling out of SwiftUI lazy-stack placement: historical messages and transcript readers render through a single TextKit attributed string, with Markdown baked into that string instead of building nested SwiftUI Markdown block views.
 - Persist only command-family approvals for Agent `run_command`, and keep destructive commands behind confirmation even if a related safe command was always allowed.
 - Apply completed file loads back on the main thread and target the tab that requested the load.
 - Force the editor view to re-render after tab activation or closure so syntax highlighting remains visible.

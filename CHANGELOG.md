@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.52.1-rc18 - 2026-06-04
+
+- **恢复 Agent 聊天历史的 Markdown 渲染。** rc16/rc17 为了排查滚动卡死把历史消息降级成纯文本；现在历史消息仍然只通过一个 `NSTextView` / TextKit attributed string 进入 SwiftUI，但正文会重新按 Markdown blocks 渲染标题、段落、列表、引用、代码块、分隔线、inline code / bold / italic / links，以及 pipe table 的等宽文本 fallback。
+- **完整 transcript reader 和单条 message reader 复用同一套 TextKit Markdown renderer。** 聊天窗、全文窗口、单条消息窗口的表现保持一致，不再出现聊天窗恢复富文本而 reader 仍是纯文本的割裂。
+- **收紧历史渲染缓存 key。** `AgentChatHistoryRenderer` 的 LRU key 从“消息数量 + 总长度 + 最后一条消息”改为逐条 hash message id、role、content、reasoning、toolCallID 和 tool call 摘要，避免旧消息被就地修改但长度相同导致 Markdown 富文本缓存误命中。
+
 ## 1.52.1-rc17 - 2026-06-04
 
 - **修复 Agent mode 滚动聊天内容时仍可能卡死 / 被系统终止的问题。** rc16 已经把历史消息主体改成 `NSTextView`，但外层 transcript 仍包在 SwiftUI `LazyVStack` 里；用户滚动时回溯停在 `SwiftUICore LazyStack.placer`，说明剩下的风险点已经不是消息正文渲染，而是 lazy stack 对混合 SwiftUI / AppKit 动态高度 row 的 placement cache。主 Agent transcript 改为普通 `VStack`，可见消息本来已被 cap 且历史主体只有一个 `NSTextView`，无需 lazy 布局。
