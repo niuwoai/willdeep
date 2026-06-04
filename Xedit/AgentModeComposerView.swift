@@ -19,13 +19,114 @@ struct AgentChatComposer: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            VStack(spacing: 6) {
+                if !appState.agentWorktreeChanges.isEmpty {
+                    AgentComposerWorktreeSummaryBar()
+                        .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                }
+
                 ComposerCard()
                     .frame(maxWidth: AgentDesign.chatMaxContentWidth)
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 28)
             .padding(.vertical, 14)
+        }
+        .onAppear {
+            appState.refreshActiveAgentWorktreeChanges()
+        }
+        .onChange(of: appState.activeAgentSessionID) { _, _ in
+            appState.refreshActiveAgentWorktreeChanges()
+        }
+        .sheet(item: $appState.agentWorktreeDiffPreview) { preview in
+            AgentWorktreeDiffPreviewSheet(preview: preview)
+        }
+    }
+}
+
+private struct AgentComposerWorktreeSummaryBar: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("\(appState.agentWorktreeChanges.fileCount) 个文件已更改")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            Text("+\(appState.agentWorktreeChanges.totalAddedLines)")
+                .foregroundStyle(.green)
+            Text("-\(appState.agentWorktreeChanges.totalDeletedLines)")
+                .foregroundStyle(.red)
+
+            Spacer(minLength: 8)
+
+            Button {
+                appState.showAgentWorktreeDiff()
+            } label: {
+                Text("审查")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.primary)
+            .help("查看当前未提交 diff")
+        }
+        .font(.system(size: 12, weight: .medium, design: .monospaced))
+        .monospacedDigit()
+        .padding(.horizontal, 12)
+        .frame(height: 24)
+    }
+}
+
+struct AgentWorktreeDiffPreviewSheet: View {
+    let preview: AgentWorktreeDiffPreview
+    @Environment(\.dismiss) private var dismiss
+    @State private var didCopy = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Text(preview.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                Spacer(minLength: 0)
+
+                Button {
+                    copyDiff()
+                } label: {
+                    Label(didCopy ? "已复制" : "复制", systemImage: didCopy ? "checkmark" : "square.on.square")
+                }
+                .buttonStyle(.borderless)
+
+                Button("关闭") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+            }
+            .padding(14)
+
+            Divider()
+
+            ScrollView([.vertical, .horizontal]) {
+                Text(preview.diff)
+                    .font(.system(size: 11, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+            }
+            .background(Color(nsColor: .textBackgroundColor))
+        }
+        .frame(minWidth: 760, minHeight: 520)
+    }
+
+    private func copyDiff() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(preview.diff, forType: .string)
+        didCopy = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            didCopy = false
         }
     }
 }
@@ -1807,4 +1908,3 @@ private struct AgentModePickerPill: View {
         appState.agentInteractionMode == .normal ? Color.secondary.opacity(0.25) : Color.clear
     }
 }
-

@@ -69,6 +69,7 @@ enum AgentDesign {
 
     // Paddings & sizes.
     static let chatMaxContentWidth: CGFloat = 1040
+    static let userMessageMaxWidthRatio: CGFloat = 0.82
     static let messageVerticalSpacing: CGFloat = 18
     static let composerHeight: CGFloat = 124
     static let headerHeight: CGFloat = 42
@@ -1069,9 +1070,11 @@ private struct AgentModeMessageView: View {
                         }
                     }
                 }
-                if !message.content.isEmpty && isHoveringUser {
+                if !message.content.isEmpty {
                     AgentMessageFooter(message: message, alignment: .trailing, showsUserTimestamp: true)
                         .padding(.top, 2)
+                        .opacity(isHoveringUser ? 1 : 0)
+                        .allowsHitTesting(isHoveringUser)
                 }
             }
             .padding(.horizontal, 14)
@@ -1079,12 +1082,13 @@ private struct AgentModeMessageView: View {
             .padding(.bottom, 14)
             .background(
                 RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                    .fill(Color.primary.opacity(isHoveringUser ? 0.06 : 0))
+                    .fill(Color.primary.opacity(isHoveringUser ? 0.035 : 0))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                    .stroke(Color.primary.opacity(isHoveringUser ? 0.05 : 0), lineWidth: 1)
+                    .stroke(Color.primary.opacity(isHoveringUser ? 0.025 : 0), lineWidth: 1)
             )
+            .frame(maxWidth: AgentDesign.chatMaxContentWidth * AgentDesign.userMessageMaxWidthRatio, alignment: .leading)
             .onHover { isHoveringUser = $0 }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
@@ -1280,7 +1284,14 @@ enum AgentAssistantMarkdownRenderer {
                 result += prefix + body
 
             case .code:
+                let hadPreviousContent = !result.characters.isEmpty
                 appendSeparator()
+                if hadPreviousContent {
+                    var spacer = AttributedString("\n")
+                    spacer.font = .system(size: 4)
+                    spacer.foregroundColor = Color.clear
+                    result += spacer
+                }
                 if let langHint = block.info?.trimmingCharacters(in: .whitespaces), !langHint.isEmpty {
                     var hint = AttributedString("\(langHint)\n")
                     hint.font = .system(size: 10, weight: .medium, design: .monospaced)
@@ -1621,7 +1632,7 @@ private struct AgentMessageFooter: View {
 
             Button(action: copyToClipboard) {
                 Image(systemName: didJustCopy ? "checkmark" : "square.on.square")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(footerIconFont)
                     .foregroundStyle(didJustCopy ? Color.green : Color.secondary)
                     .contentShape(Rectangle())
             }
@@ -1630,21 +1641,33 @@ private struct AgentMessageFooter: View {
             .accessibilityLabel("Copy message")
 
             if message.role == .assistant, let elapsed = message.elapsedSeconds, elapsed > 0 {
-                Label(formatElapsed(elapsed), systemImage: "clock")
-                    .labelStyle(.titleAndIcon)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                footerMetric(icon: "clock", text: formatElapsed(elapsed))
             }
 
             if message.role == .assistant, let tokenSummary = tokenSummary {
-                Label(tokenSummary, systemImage: "number")
-                    .labelStyle(.titleAndIcon)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                footerMetric(icon: "number", text: tokenSummary)
             }
 
             if alignment == .leading { Spacer(minLength: 0) }
         }
+    }
+
+    private var footerIconFont: Font {
+        .system(size: 16, weight: .semibold)
+    }
+
+    private var footerTextFont: Font {
+        .system(size: 11, weight: .medium)
+    }
+
+    private func footerMetric(icon: String, text: String) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: icon)
+                .font(footerIconFont)
+            Text(text)
+                .font(footerTextFont)
+        }
+        .foregroundStyle(.secondary)
     }
 
     private var tokenSummary: String? {
@@ -1906,21 +1929,48 @@ private struct AgentStatsDashboard: View {
     }
 
     private var heatmap: some View {
-        let cells = AgentUsageStats.heatmap(for: filteredSessions, weekCount: 12)
-        let maxCount = cells.flatMap { $0 }.map(\.count).max() ?? 0
-        return HStack(spacing: 3) {
-            ForEach(Array(cells.enumerated()), id: \.offset) { _, column in
-                VStack(spacing: 3) {
-                    ForEach(column) { cell in
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(color(for: cell.count, peak: maxCount))
-                            .frame(width: 11, height: 11)
-                            .help("\(cellDateLabel(cell.date)) · \(cell.count) message\(cell.count == 1 ? "" : "s")")
+        GeometryReader { proxy in
+            let cellSize: CGFloat = 11
+            let cellSpacing: CGFloat = 3
+            let weekCount = heatmapWeekCount(
+                for: proxy.size.width,
+                cellSize: cellSize,
+                spacing: cellSpacing
+            )
+            let cells = AgentUsageStats.heatmap(for: filteredSessions, weekCount: weekCount)
+            let maxCount = cells.flatMap { $0 }.map(\.count).max() ?? 0
+
+            HStack(spacing: cellSpacing) {
+                ForEach(Array(cells.enumerated()), id: \.offset) { _, column in
+                    VStack(spacing: cellSpacing) {
+                        ForEach(column) { cell in
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(color(for: cell.count, peak: maxCount))
+                                .frame(width: cellSize, height: cellSize)
+                                .help("\(cellDateLabel(cell.date)) · \(cell.count) message\(cell.count == 1 ? "" : "s")")
+                        }
                     }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: heatmapHeight)
+    }
+
+    private var heatmapHeight: CGFloat {
+        let cellSize: CGFloat = 11
+        let cellSpacing: CGFloat = 3
+        return 7 * cellSize + 6 * cellSpacing
+    }
+
+    private func heatmapWeekCount(for width: CGFloat, cellSize: CGFloat, spacing: CGFloat) -> Int {
+        let minimumWeekCount = 12
+        let availableWidth = max(0, width)
+        let stride = cellSize + spacing
+        guard stride > 0 else { return minimumWeekCount }
+
+        let fittingColumns = Int((availableWidth + spacing) / stride)
+        return max(minimumWeekCount, fittingColumns)
     }
 
     private func color(for count: Int, peak: Int) -> Color {

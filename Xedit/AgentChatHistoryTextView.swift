@@ -347,6 +347,14 @@ private enum AgentChatHistoryBubbleKind: Int {
     case toolSummary
 }
 
+private enum AgentChatHistoryLayoutMetrics {
+    static let userBubbleMaxWidthRatio: CGFloat = 0.82
+    static let userBubbleMinWidth: CGFloat = 260
+    static let userBubbleTrailingMargin: CGFloat = 30
+    static let userBodyHeadIndent: CGFloat = 172
+    static let userBodyTailIndent: CGFloat = -46
+}
+
 private extension NSAttributedString.Key {
     static let agentChatHistoryBubbleKind = NSAttributedString.Key("AgentChatHistoryBubbleKind")
     static let agentChatHistoryCodeBlockID = NSAttributedString.Key("AgentChatHistoryCodeBlockID")
@@ -418,9 +426,11 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
 
         switch kind {
         case .user:
-            let maxWidth = max(260, containerWidth * 0.82)
-            let width = min(max(rect.width, 260), maxWidth)
-            rect.origin.x = origin.x + containerWidth - width - 30
+            let width = max(
+                AgentChatHistoryLayoutMetrics.userBubbleMinWidth,
+                containerWidth * AgentChatHistoryLayoutMetrics.userBubbleMaxWidthRatio
+            )
+            rect.origin.x = origin.x + containerWidth - width - AgentChatHistoryLayoutMetrics.userBubbleTrailingMargin
             rect.size.width = width
         case .assistant, .system, .tool:
             rect.origin.x = origin.x + 20
@@ -502,7 +512,7 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
     private func bubbleColor(for kind: AgentChatHistoryBubbleKind) -> NSColor {
         switch kind {
         case .user:
-            return NSColor.quaternaryLabelColor.withAlphaComponent(0.18)
+            return NSColor.quaternaryLabelColor.withAlphaComponent(0.10)
         case .assistant:
             return NSColor.quaternaryLabelColor.withAlphaComponent(0.06)
         case .system:
@@ -553,7 +563,7 @@ private enum AgentChatHistoryFooterChrome {
     }
 
     static func retryButton() -> NSAttributedString {
-        var attributes = baseLinkAttributes(color: NSColor.secondaryLabelColor)
+        var attributes = iconLinkAttributes(color: NSColor.secondaryLabelColor)
         attributes[.link] = retryLinkValue
         attributes[.agentChatHistoryRetryLastTurn] = NSNumber(value: true)
         return NSAttributedString(string: retryLabel, attributes: attributes)
@@ -579,25 +589,33 @@ private enum AgentChatHistoryFooterChrome {
         )
     }
 
-    static var footerFont: NSFont {
-        NSFont.systemFont(ofSize: 10, weight: .medium)
-    }
-
-    private static var copyFont: NSFont {
-        NSFont.systemFont(ofSize: 13, weight: .medium)
-    }
-
-    private static func baseLinkAttributes(color: NSColor) -> [NSAttributedString.Key: Any] {
-        [
+    static func elapsedLabel(_ text: String) -> NSAttributedString {
+        let result = NSMutableAttributedString(string: "◷", attributes: [
+            .font: iconFont,
+            .foregroundColor: NSColor.secondaryLabelColor,
+        ])
+        result.append(NSAttributedString(string: " \(text)", attributes: [
             .font: footerFont,
-            .foregroundColor: color,
-            .underlineStyle: 0,
-        ]
+            .foregroundColor: NSColor.secondaryLabelColor,
+        ]))
+        return result
+    }
+
+    static var footerFont: NSFont {
+        NSFont.systemFont(ofSize: 11, weight: .medium)
+    }
+
+    private static var iconFont: NSFont {
+        NSFont.systemFont(ofSize: 16, weight: .semibold)
     }
 
     private static func copyLinkAttributes(color: NSColor) -> [NSAttributedString.Key: Any] {
+        iconLinkAttributes(color: color)
+    }
+
+    private static func iconLinkAttributes(color: NSColor) -> [NSAttributedString.Key: Any] {
         [
-            .font: copyFont,
+            .font: iconFont,
             .foregroundColor: color,
             .underlineStyle: 0,
         ]
@@ -890,21 +908,39 @@ enum AgentChatHistoryRenderer {
                 )
             }
 
-            if shouldShowFooter(for: message, body: body, isHoveredUserMessage: isHoveredUserMessage) {
+            if shouldShowFooter(for: message, body: body) {
                 result.append(NSAttributedString(string: "\n", attributes: [.font: bodyFont]))
+                let footerStart = result.length
                 appendMessageFooter(
                     for: message,
                     isLatestAssistant: message.id == latestAssistantMessageID,
+                    isVisible: message.role != .user || isHoveredUserMessage,
                     to: result
                 )
                 if hasMessageBubbleContent && message.toolCalls.isEmpty {
-                    applyBubbleChrome(
-                        kind: bubbleKind(for: message.role),
-                        to: result,
-                        range: NSRange(location: messageBubbleStart, length: result.length - messageBubbleStart),
-                        paragraphStyle: bodyParagraphStyle(for: message.role),
-                        userMessageID: message.role == .user ? message.id : nil,
-                        foregroundColor: nil
+                    let messageRange = NSRange(location: messageBubbleStart, length: result.length - messageBubbleStart)
+                    if message.role == .user && !isHoveredUserMessage {
+                        applyBodyChrome(
+                            to: result,
+                            range: messageRange,
+                            paragraphStyle: bodyParagraphStyle(for: message.role),
+                            userMessageID: message.id
+                        )
+                    } else {
+                        applyBubbleChrome(
+                            kind: bubbleKind(for: message.role),
+                            to: result,
+                            range: messageRange,
+                            paragraphStyle: bodyParagraphStyle(for: message.role),
+                            userMessageID: message.role == .user ? message.id : nil,
+                            foregroundColor: nil
+                        )
+                    }
+                    let footerRange = NSRange(location: footerStart, length: result.length - footerStart)
+                    result.addAttribute(
+                        .paragraphStyle,
+                        value: footerParagraphStyle(for: message.role),
+                        range: footerRange
                     )
                 }
             }
@@ -1063,14 +1099,14 @@ enum AgentChatHistoryRenderer {
 
     private static func bodyParagraphStyle(for role: AgentRole) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
-        style.alignment = role == .user ? .right : .left
+        style.alignment = .left
         style.lineSpacing = 2
         style.paragraphSpacing = role == .user ? 6 : 2
         switch role {
         case .user:
-            style.headIndent = 160
-            style.firstLineHeadIndent = 160
-            style.tailIndent = -46
+            style.headIndent = AgentChatHistoryLayoutMetrics.userBodyHeadIndent
+            style.firstLineHeadIndent = AgentChatHistoryLayoutMetrics.userBodyHeadIndent
+            style.tailIndent = AgentChatHistoryLayoutMetrics.userBodyTailIndent
         case .assistant, .system, .tool:
             style.headIndent = 32
             style.firstLineHeadIndent = 32
@@ -1118,9 +1154,9 @@ enum AgentChatHistoryRenderer {
         style.paragraphSpacing = 0
         switch role {
         case .user:
-            style.headIndent = 160
-            style.firstLineHeadIndent = 160
-            style.tailIndent = -46
+            style.headIndent = AgentChatHistoryLayoutMetrics.userBodyHeadIndent
+            style.firstLineHeadIndent = AgentChatHistoryLayoutMetrics.userBodyHeadIndent
+            style.tailIndent = AgentChatHistoryLayoutMetrics.userBodyTailIndent
         case .assistant:
             style.headIndent = 32
             style.firstLineHeadIndent = 32
@@ -1248,12 +1284,11 @@ enum AgentChatHistoryRenderer {
 
     private static func shouldShowFooter(
         for message: AgentMessage,
-        body: String,
-        isHoveredUserMessage: Bool
+        body: String
     ) -> Bool {
         switch message.role {
         case .user:
-            return isHoveredUserMessage && !body.isEmpty
+            return !body.isEmpty
         case .assistant:
             return !body.isEmpty
         case .system, .tool:
@@ -1264,6 +1299,7 @@ enum AgentChatHistoryRenderer {
     private static func appendMessageFooter(
         for message: AgentMessage,
         isLatestAssistant: Bool,
+        isVisible: Bool = true,
         to result: NSMutableAttributedString
     ) {
         let start = result.length
@@ -1276,7 +1312,7 @@ enum AgentChatHistoryRenderer {
         if message.role == .assistant {
             if let elapsed = message.elapsedSeconds, elapsed > 0 {
                 result.append(AgentChatHistoryFooterChrome.separator)
-                result.append(AgentChatHistoryFooterChrome.label("◷ \(formatElapsed(elapsed))"))
+                result.append(AgentChatHistoryFooterChrome.elapsedLabel(formatElapsed(elapsed)))
             }
             if let summary = tokenSummary(for: message) {
                 result.append(AgentChatHistoryFooterChrome.separator)
@@ -1286,6 +1322,14 @@ enum AgentChatHistoryRenderer {
                 result.append(AgentChatHistoryFooterChrome.separator)
                 result.append(AgentChatHistoryFooterChrome.retryButton())
             }
+        }
+
+        if !isVisible {
+            let footerRange = NSRange(location: start, length: result.length - start)
+            result.removeAttribute(.link, range: footerRange)
+            result.removeAttribute(.agentChatHistoryMessageCopyText, range: footerRange)
+            result.removeAttribute(.agentChatHistoryRetryLastTurn, range: footerRange)
+            result.addAttribute(.foregroundColor, value: NSColor.clear, range: footerRange)
         }
 
         result.addAttribute(
@@ -1610,7 +1654,17 @@ enum AgentChatHistoryRenderer {
                 ))
 
             case .code:
+                let hadPreviousBlock = didAppendBlock
                 appendBlockSeparator()
+                if hadPreviousBlock {
+                    result.append(NSAttributedString(
+                        string: "\n",
+                        attributes: [
+                            .font: NSFont.systemFont(ofSize: 4),
+                            .foregroundColor: bodyColor,
+                        ]
+                    ))
+                }
                 let codeBlockStart = result.length
                 let codeBlockID = codeBlockIndex
                 codeBlockIndex += 1

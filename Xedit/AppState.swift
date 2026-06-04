@@ -208,6 +208,7 @@ final class AppState: ObservableObject {
     /// Model IDs the user has previously fetched in Settings — surfaced in
     /// the Agent-mode model picker as a quick switcher.
     @Published var agentKnownModelIDs: [String] = []
+    @Published var agentWorktreeDiffPreview: AgentWorktreeDiffPreview?
     /// Command families the user has explicitly allowed Agent mode to run
     /// without prompting again, e.g. `git push`.
     @Published var agentAlwaysAllowedCommands: [AgentAlwaysAllowedCommand] = []
@@ -1171,6 +1172,25 @@ final class AppState: ObservableObject {
             isAgentPanelVisible = true
         }
         dispatchAgentMessage(for: runtime, text: prompt, images: [])
+    }
+
+    func showAgentWorktreeDiff() {
+        let changes = agentWorktreeChanges
+        guard !changes.isEmpty else { return }
+
+        let repositoryRoot = changes.repositoryRoot
+            ?? activeRuntime?.workspaceRootPath.map { URL(fileURLWithPath: $0).standardizedFileURL }
+            ?? rootDirectory?.standardizedFileURL
+        guard let repositoryRoot else { return }
+
+        Task { [weak self] in
+            let preview = await Task.detached(priority: .utility) {
+                Self.loadAgentWorktreeDiffPreview(changes: changes, repositoryRoot: repositoryRoot)
+            }.value
+            await MainActor.run {
+                self?.agentWorktreeDiffPreview = preview
+            }
+        }
     }
 
     /// Cancel the in-flight response (if any). Queued messages are kept and
@@ -2992,6 +3012,35 @@ final class AppState: ObservableObject {
         }
     }
 
+    func refreshActiveAgentWorktreeChanges() {
+        guard let runtime = activeRuntime else {
+            agentWorktreeChanges = .init()
+            return
+        }
+        guard let workspaceRootPath = runtime.workspaceRootPath else {
+            runtime.worktreeChanges = .init()
+            return
+        }
+
+        let runtimeID = runtime.id
+        let targetDirectory = URL(fileURLWithPath: workspaceRootPath).standardizedFileURL
+        Task { [weak self] in
+            let snapshot = await Self.loadAgentWorktreeSnapshot(for: targetDirectory)
+            await MainActor.run {
+                guard let self,
+                      let runtime = self.agentRuntimes[runtimeID],
+                      runtime.workspaceRootPath == workspaceRootPath else {
+                    return
+                }
+
+                runtime.worktreeChanges = snapshot.changes
+                if self.rootDirectory?.standardizedFileURL.path == targetDirectory.path {
+                    self.gitStatus = snapshot.status
+                }
+            }
+        }
+    }
+
     private func refreshGitStatusAfterAgentTool(
         for runtime: AgentRuntime,
         workspaceURL: URL?,
@@ -3050,6 +3099,44 @@ final class AppState: ObservableObject {
             .joined(separator: "\n")
         let rawDiff = runGit(arguments: ["diff", "--raw", "HEAD", "--"], in: repositoryRoot)
         return entries + "\n" + rawDiff
+    }
+
+    nonisolated private static func loadAgentWorktreeDiffPreview(
+        changes: AgentWorktreeChangeSummary,
+        repositoryRoot: URL
+    ) -> AgentWorktreeDiffPreview {
+        var sections: [String] = []
+        let trackedDiff = runGit(
+            arguments: ["diff", "--no-ext-diff", "HEAD", "--"],
+            in: repositoryRoot
+        )
+        if !trackedDiff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            sections.append(trackedDiff)
+        }
+
+        for change in changes.files where change.kind == .untracked {
+            let untrackedDiff = runGit(
+                arguments: ["diff", "--no-ext-diff", "--no-index", "--", "/dev/null", change.path],
+                in: repositoryRoot,
+                allowedExitStatuses: [0, 1]
+            )
+            if !untrackedDiff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                sections.append(untrackedDiff)
+            }
+        }
+
+        var diff = sections.joined(separator: "\n")
+        if diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            diff = "当前没有可显示的 diff。"
+        } else if diff.count > maxGitOutputBytes {
+            let end = diff.index(diff.startIndex, offsetBy: maxGitOutputBytes)
+            diff = String(diff[..<end]) + "\n\n... diff output truncated ..."
+        }
+
+        return AgentWorktreeDiffPreview(
+            title: "\(changes.fileCount) 个文件已更改 +\(changes.totalAddedLines) -\(changes.totalDeletedLines)",
+            diff: diff
+        )
     }
 
     func openAgentChangedFile(_ relativePath: String) {
@@ -4470,7 +4557,11 @@ final class AppState: ObservableObject {
     nonisolated private static let maxGitOutputBytes = 512 * 1024
     nonisolated private static let gitCommandTimeout: TimeInterval = 5
 
-    nonisolated private static func runGit(arguments: [String], in repositoryRoot: URL) -> String {
+    nonisolated private static func runGit(
+        arguments: [String],
+        in repositoryRoot: URL,
+        allowedExitStatuses: Set<Int32> = [0]
+    ) -> String {
         let process = Process()
         let stdoutPipe = Pipe()
         let collector = ProcessOutputCollector(limit: maxGitOutputBytes)
@@ -4515,7 +4606,7 @@ final class AppState: ObservableObject {
         collector.append(stdoutPipe.fileHandleForReading.availableData)
 
         guard !runState.didTimeout else { return "" }
-        guard process.terminationStatus == 0 else { return "" }
+        guard allowedExitStatuses.contains(process.terminationStatus) else { return "" }
 
         return collector.stringValue
     }

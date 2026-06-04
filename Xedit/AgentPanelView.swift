@@ -26,6 +26,9 @@ struct AgentPanelView: View {
         .overlay(alignment: .leading) {
             Divider()
         }
+        .sheet(item: $appState.agentWorktreeDiffPreview) { preview in
+            AgentWorktreeDiffPreviewSheet(preview: preview)
+        }
         .onAppear {
             inputFocused = true
         }
@@ -359,14 +362,14 @@ struct AgentWorktreeChangeCard: View {
                 }
                 Spacer(minLength: 0)
                 Button {
-                    appState.reviewAgentWorktreeChanges()
+                    appState.showAgentWorktreeDiff()
                 } label: {
                     Text("审查")
                         .font(.caption)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.primary)
-                .help("让 Agent 审查当前未提交改动")
+                .help("查看当前未提交 diff")
             }
         }
         .padding(10)
@@ -615,7 +618,7 @@ struct AgentWorktreeSummaryPill: View {
 
     var body: some View {
         Button {
-            appState.reviewAgentWorktreeChanges()
+            appState.showAgentWorktreeDiff()
         } label: {
             HStack(spacing: 6) {
                 Text("\(appState.agentWorktreeChanges.fileCount) 个文件已更改")
@@ -636,7 +639,7 @@ struct AgentWorktreeSummaryPill: View {
             )
         }
         .buttonStyle(.plain)
-        .help("点击让 Agent 审查当前未提交改动")
+        .help("查看当前未提交 diff")
     }
 }
 
