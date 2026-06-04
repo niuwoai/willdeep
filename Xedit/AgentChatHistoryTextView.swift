@@ -415,7 +415,7 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
         case .user:
             return NSColor.controlAccentColor.withAlphaComponent(0.88)
         case .assistant:
-            return NSColor.controlBackgroundColor.withAlphaComponent(0.72)
+            return NSColor.controlBackgroundColor.withAlphaComponent(0.38)
         case .system:
             return NSColor.systemPurple.withAlphaComponent(0.12)
         case .tool:
@@ -758,18 +758,48 @@ enum AgentChatHistoryRenderer {
         }
 
         let headerStart = result.length
-        result.append(avatarToken(label: avatar, fill: color))
-        result.append(NSAttributedString(
-            string: " " + label + "\n",
-            attributes: [
-                .font: headerFont,
-                .foregroundColor: isToolCallOnly ? color : secondaryColor,
-            ]
-        ))
+        switch message.role {
+        case .user:
+            result.append(NSAttributedString(
+                string: label + "\n",
+                attributes: [
+                    .font: headerFont,
+                    .foregroundColor: secondaryColor,
+                ]
+            ))
+        case .assistant where !isToolCallOnly:
+            result.append(starToken(color: color, font: headerFont))
+            result.append(NSAttributedString(
+                string: " " + label + "\n",
+                attributes: [
+                    .font: headerFont,
+                    .foregroundColor: secondaryColor,
+                ]
+            ))
+        case .system, .assistant, .tool:
+            result.append(avatarToken(label: avatar, fill: color))
+            result.append(NSAttributedString(
+                string: " " + label + "\n",
+                attributes: [
+                    .font: headerFont,
+                    .foregroundColor: isToolCallOnly ? color : secondaryColor,
+                ]
+            ))
+        }
         result.addAttribute(
             .paragraphStyle,
             value: headerParagraphStyle(for: message.role),
             range: NSRange(location: headerStart, length: result.length - headerStart)
+        )
+    }
+
+    private static func starToken(color: NSColor, font: NSFont) -> NSAttributedString {
+        NSAttributedString(
+            string: "✦",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: font.pointSize + 1, weight: .semibold),
+                .foregroundColor: color,
+            ]
         )
     }
 

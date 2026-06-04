@@ -149,6 +149,9 @@ struct AgentChatHistoryRendererTests {
 
         let rendered = AgentChatHistoryRenderer.render(messages: [user, assistant], isDark: false)
 
+        #expect(rendered.string.contains("You\nhello"))
+        #expect(rendered.string.contains("✦ Assistant\ndone"))
+        #expect(!rendered.string.contains("YOU"))
         #expect(rendered.string.contains("hello\n⧉"))
         #expect(rendered.string.contains("done\n⧉  ◷ 8.4s  in 1.2k · out 2.3k  ↻"))
     }

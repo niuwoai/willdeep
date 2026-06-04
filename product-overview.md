@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-04 | Current version: v1.52.1-rc24
+> Last updated: 2026-06-04 | Current version: v1.52.1-rc25
 
 ## Positioning
 
@@ -57,7 +57,7 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Show the full `run_command` command text on approval and destructive-confirmation cards so the exact command is visible before the user allows it.
 - Keep Agent tool-call rows compact by default and collapse consecutive calls into low-emphasis expandable groups so long multi-step runs remain scannable, with longer command/path previews visible in the gray summary and full arguments, output, and errors available from explicit expand controls.
 - Switch the window into a dedicated Agent mode (Cmd+Shift+A) with a project-grouped session sidebar on the left and a wide chat pane on the right. Sessions persist as JSON under `~/Library/Application Support/VeilWriter/agent-sessions/` and are grouped by workspace.
-- Render Agent chat history, transcript reader windows, and single-message reader windows with lightweight TextKit Markdown for headings, paragraphs, lists, quotes, syntax-highlighted code blocks, inline formatting, links, dividers, and pipe-table fallback while avoiding SwiftUI per-block transcript layout. The in-pane history keeps chat-style visual chrome through TextKit-drawn rounded bubbles, compact role avatars, right-aligned user messages with safe right padding, full-width assistant cards, clickable code-copy controls with success feedback, per-message copy footers, assistant elapsed/input/output token summaries, latest-assistant retry affordance, and collapsed low-emphasis tool-call groups that expand in place to show longer command/path/pattern arguments.
+- Render Agent chat history, transcript reader windows, and single-message reader windows with lightweight TextKit Markdown for headings, paragraphs, lists, quotes, syntax-highlighted code blocks, inline formatting, links, dividers, and pipe-table fallback while avoiding SwiftUI per-block transcript layout. The in-pane history keeps chat-style visual chrome through TextKit-drawn rounded bubbles, right-aligned user messages with safe right padding, lighter full-width assistant cards with a star-style assistant mark, clickable code-copy controls with success feedback, per-message copy footers, assistant elapsed/input/output token summaries, latest-assistant retry affordance, and collapsed low-emphasis tool-call groups that expand in place to show longer command/path/pattern arguments.
 - Paste, drag-drop, or attach images directly in the Agent composer; staged images appear as removable thumbnails and, for supported multimodal providers, are sent inline as base64 `image_url` content parts in the request body.
 - Configure a separate Image Understanding provider with its own API key; for text-only Agent providers such as DeepSeek, multiple attached images are first described by that image-capable provider, then the generated description is appended to the user message before the main model runs.
 - Send Agent-mode messages with Return, while Shift-Return, Option-Return, and Control-Return remain available for multiline composition.

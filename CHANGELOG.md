@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.52.1-rc25 - 2026-06-04
+
+- **弱化 Agent 聊天 header 的头像视觉。** 历史区用户消息不再显示紫色圆形 `YOU` 头像，只保留右侧灰色 `You` 标识；assistant 历史消息改为轻量 `✦ Assistant` 星形标识，更接近 Gemini 风格。
+- **进一步调浅 assistant 输出背景。** 历史 TextKit assistant 气泡和当前流式 assistant SwiftUI 卡片都降低背景透明度，减少灰底压迫感。
+
 ## 1.52.1-rc24 - 2026-06-04
 
 - **修复 Agent 历史代码块复制误触系统打开链接的问题。** Code block 的 `⧉ Copy` link 现在由 `AgentChatHistoryNSTextView` 更宽松地拦截并吞掉内部 action link，避免点击复制时 macOS 尝试打开 `agent-chat-history-copy-code` 并弹出 `-50` 错误。

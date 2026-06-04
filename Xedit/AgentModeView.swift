@@ -1104,11 +1104,11 @@ private struct AgentModeMessageView: View {
                         .padding(.vertical, 10)
                         .background(
                             RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.55))
+                                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.32))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                                .stroke(Color.primary.opacity(0.04), lineWidth: 1)
                         )
                     // Don't show the footer while the stream is still
                     // running — elapsedSeconds isn't stamped until
