@@ -1,5 +1,152 @@
 # Changelog
 
+## 1.52.1-rc45 - 2026-06-05
+
+- **代码体检 - 阶段 4：拆四个还没动的大文件（AgentModeView / AgentTools / AgentModeComposerView / AgentChatHistoryTextView）。** 体检报告 §10 的剩余四个超 2000 / 接近 2000 行的 Swift 文件，本轮按职责拆成独立单元，每个目标文件 < 1500 行；调用面（外部 callsite + Xcode synchronized group 自动发现）一律不动，仅把私有视图 / 私有枚举的访问级别从 `private` 提到默认 `internal` 以便跨文件可见。
+    - **`AgentTools.swift` (2126 → 944 行) → 4 个文件**：
+        - `AgentToolAuthorization.swift` (118 行) — `AgentAlwaysAllowedCommand` 持久化记录 + `AgentCommandAuthorization` 把 `git status` / `yarn run build` / `ls` 等正规化成"总是允许"签名（自带一份保守的无 pipeline tokenizer，与 registry 内更宽松的 read-only classifier 是两份独立 copy）。
+        - `AgentToolRegistry.swift` (458 行) — 工具描述符表 `static let all` + 按 call 的 risk 分级（`run_command` 命中危险 pattern → `.danger`、纯 read-only shell 链 → `.read`），附带分级用的 shell tokenizer / 链拆分 / 可执行白名单（git / sed without -i / find without -exec 等）。这些 helper 与 registry 决策强耦合、无外部消费者，仍保持 private。
+        - `AgentSkillDirectory.swift` (255 行) — `AgentSkillCatalog`（`list_skills` / `read_skill` 工具入口）+ `AgentSkillEntry` 公开记录 + `AgentSkillDirectory` 文件系统枚举（bundled / `~/.codex/skills` / plugin cache 三个根，YAML front-matter 解析 name/description，identifier 归一化 + 去重）。
+        - 删除了一段 `AgentLegacyMCPBridge` 死代码（原文件 line 304 起约 400 行）：runner 早已通过 `AgentMCPBridge` 调用现代版，旧 legacy enum 是 `private` 但无任何引用点，确认为孤儿后直接删除。
+    - **`AgentModeComposerView.swift` (1910 → 986 行) → 3 个文件**：
+        - `AgentComposerAttachments.swift` (112 行) — `AttachButton`（"+" 图片粘贴触发）/ `SendStopButton`（双态箭头/红色停止圆盘）/ `QueueBadge`（橙色沙漏胶囊），三个 composer 行内 button 聚类。
+        - `AgentComposerPickers.swift` (428 行) — `WorkspacePickerPill`（folder dropdown + Finder/复制路径/复制分支 + 已知 workspace 切换 + Choose folder 兜底）/ `ModelPickerPill`（provider library Section 平铺 + 路由默认 + Recently fetched 尾菜单；解决 nested Menu 在 macOS 上 hover 漂移就自动 dismiss 的问题）/ `AgentModePickerPill`（Normal/Plan/Goal 选择 + Goal editor sheet），三个 pill-shape picker。
+        - `ComposerTextInput.swift` (449 行) — `ComposerTextEditor` (NSViewRepresentable) + `Coordinator`（历史 cursor / `@` token 查询派生 / `/` 和 `@` 弹层 binding）+ `ComposerNSTextView` 子类（force-plain-text 粘贴、`AgentImagePasteboardHelper` 图片探测）。
+    - **`AgentChatHistoryTextView.swift` (1883 → 541 行) → 2 个文件**：
+        - `AgentChatHistoryFormatter.swift` (1247 行) — `AgentMarkdownNormalizer`（HTML 块包成 ``` fence、divider 规范化）+ `AgentChatHistoryRenderer` TextKit baker（角色 avatar、bubble chrome 通过 `agentChatHistoryBubbleKind` 属性给 layout manager 读、copy 按钮叠在 fenced code block 上、cache 按 messages-hash × isDark × expanded tool group ids × hovered user message id）。
+        - `AgentChatChromeRenderers.swift` (121 行) — `AgentChatHistoryCodeCopyChrome`（"⎘ Copy" 代码块按钮，code 内容塞在 sidecar 属性里供 NSTextView 的 link 委托读）+ `AgentChatHistoryFooterChrome`（copy/retry 图标按钮 + 耗时 label），两个无状态 NSAttributedString builder。
+        - 主文件保留 `AgentChatHistoryTextView` NSViewRepresentable + `AgentChatHistoryNSTextView` 子类 + `AgentChatHistoryBubbleLayoutManager`（绘制 bubble + code 背景）+ 共享的 `AgentChatHistoryBubbleKind` enum / `AgentChatHistoryLayoutMetrics` / `NSAttributedString.Key` extension（这些从 `private` 提到 internal，formatter 和 chrome 跨文件共享）。
+    - **`AgentModeView.swift` (2585 → 88 行) → 6 个文件**：主文件几乎清空，只保留 `AgentModeView` 主容器 + `AgentDesign` 设计 token enum。
+        - `AgentSessionsSidebar.swift` (504 行) — `AgentSessionsSidebar`（CHATS 标题 + provider 状态 pill + workspace 分组 + 归档分区 + per-row hover 显示 pin/archive 按钮）+ `SidebarActionRow`（icon + 标题 + ⌘N 快捷键提示）。
+        - `AgentChatHeader.swift` (78 行) — `AgentChatHeader`（会话标题 + copy-title + 新会话 + 切回 editor）。
+        - `AgentChatTranscript.swift` (381 行) — `AgentChatTranscript`（plan/goal banner、20-message rendered cap、3000-char per-message cap、TextKit 历史 + 流式 SwiftUI bubble 分流、tool call group 仅渲染最近一组、queued message、错误卡、patch 提案、worktree 变更卡、底部 sentinel；scroll 只观察 count 避免 streaming token diff freeze）。
+        - `AgentMessageView.swift` (870 行) — `AgentModeMessageView`（用户右对齐 hover 出 footer / 助手左对齐 sparkle avatar + markdown 卡，`isStreamingThisMessage` 走 prop 而非 EnvironmentObject 避免 AttributeGraph 全图刷新）+ `AgentAssistantMarkdownBody` + `AgentAssistantMarkdownRenderer`（一条助手消息 = 一个 `Text(AttributedString)`，cache 128 LRU）+ `AgentLongTokenBreaker`（≥30 字符不可断 run 注入 U+200B，cache 128 LRU）+ `AgentStreamingCursor` + `AgentUserContentSplitter`（剥离 qwen-vl 图像描述块，cache 64 LRU）+ `AgentImageDescriptionDisclosure`（白底胶囊）+ `AgentMessageFooter`（copy / 耗时 / 提示+补全 token）+ `QueuedMessageRow` + `AgentChatEmptyState`（与 `AgentPanelView.AgentEmptyState` 重名避让；`AgentPanelView` 里的仍 private，AgentMode 里的迁出来后重命名）。
+        - `AgentStatusIndicators.swift` (305 行) — `AgentStatsDashboard`（Overview/Models × All/30d/7d × 8 stat grid + heatmap 自适应列数 + War-and-Peace fun fact）+ `StatCell` + `PlanStatusPill`（proposed/approved/executing/done/rejected 五色胶囊）。
+        - `AgentPlanGoalCards.swift` (528 行) — `AgentPlanCard` + `AgentPlanRevisionRow`（默认 collapse 的 Replan 按钮 + 一行 note 域）+ `AgentPlanStepRow`（status glyph 循环 + 上下文菜单 edit/insert/restart/remove）+ `AgentPlanStepSimpleSheet`（单字段统一 sheet）+ `AgentGoalCard` + `AgentGoalEditorSheet`。
+    - **公共拆分模式**：每个新文件顶部放 8-30 行 `//` 注释解释职责 / 拆出原因 / 与原文件的协议（NSAttributedString.Key 哪些跨文件共享、`isStreamingThisMessage` 为什么必须是 prop 而非 environment、provider Section 为什么 flat 不 nested 等历史信息）；私有 `private struct` 改 `struct`（internal）只在迁出时；遇到 `AgentEmptyState` 与 `AgentPanelView` 的同名 private 冲突，迁出方 rename 为 `AgentChatEmptyState`。`AgentLegacyMCPBridge` 是孤儿代码已直接删除而非搬迁。
+    - **每一步独立 build**：每抽出一个新文件立刻 `xcodebuild -scheme Xedit build`，rc44 → rc45 期间共 ~14 次 build 全部 SUCCEEDED。`xcodebuild test` 跑了一次：6-7 failure（与 rc44 / rc41 commit 提到的 7-8 个预存 flaky 一致，且都在 `AppState` 测试间磁盘 IO 污染相关名单内），无新增。
+    - **纵向数字汇总**：拆分前 4 个文件 8504 行 / 文件平均 2126；拆分后 4 个主文件 + 15 个抽出文件共 19 个文件 8989 行 / 平均 473，最大文件 1247 行（`AgentChatHistoryFormatter.swift`），所有文件低于 CLAUDE.md §10 的 1500 行任务目标和 2000 行软上限。多出来的 485 行全部是 19 份 file header 注释 + import + Swift access-level 调整，无功能膨胀。
+
+## 1.52.1-rc44 - 2026-06-05
+
+- **代码体检 - 阶段 6：CI 自动化 + 关键模块单测补缺。** 体检报告原文："scripts/ contains only release.sh ... No GitHub Actions, pre-commit hooks, test CI, or regression suite." 本轮落地阶段 6 CI 基建并对体检确认"零测试或测试不足"的 6 个模块补单测，全部 82 个新 case 全过，HEAD 基线 7 个历史 flaky test 未变（与 rc41/rc42 提到的"8 个预存 flaky"吻合）。版本号从 HEAD rc42 直接跳到 rc44，留 rc43 给并行进行中的 i18n worktree。
+    - **`.github/workflows/test.yml`** — `macos-15` runner，`xcodebuild test -only-testing:XeditTests`，xcresult / log / md+json 报告全部上传为 artifact，报告内容追加进 `$GITHUB_STEP_SUMMARY` 让 PR 页直接可读，concurrency group 让同一 ref 的旧 run 自动 cancel，CODE_SIGNING_ALLOWED=NO 跳过签名以便 actions runner 无证书也能跑。
+    - **`Xedit.xcodeproj/xcshareddata/xcschemes/Xedit.xcscheme`** — 仓库历史只有 `xcuserdata/.../xcschemes/xcschememanagement.plist` 标记 shared 但 .xcscheme 文件本身未提交，CI 上 `xcodebuild -scheme Xedit` 找不到 scheme。本轮把 Xedit scheme 写成 shared 文件（含 Xedit / XeditTests / XeditUITests 三个 build entry，TestAction 只勾 XeditTests，UI tests skipped），让 CI 和新克隆机器开箱即用。
+    - **`scripts/run_tests.sh` + `scripts/xcresult_report.rb`** — 本地一键 `xcodebuild test` 包装，自动清旧 xcresult bundle、转发任意 `-only-testing:` 参数、把退出码透传给调用者；ruby 报告器优先用 Xcode 16 的 `xcresulttool get test-results` 新接口，遇到旧版本自动退到 `--legacy` 路径，输出统一 `report.md`（含通过/失败/skip/duration + 失败 case 名列表，CI summary 直接拼）+ `report.json`（机读，供下游自动化）。Ruby 选型符合 CLAUDE.md §9 "尽量用 ruby 而非 python"。
+    - **6 个新测试文件，82 个 `@Test` case**（覆盖体检报告点名的 high / medium 优先级）：
+        - `AgentMarkdownTableFormatterTests.swift` (11 case) — 空表 / 仅 header / 仅 row / 单列 / 短行补空 / CJK+ASCII 对齐 / emoji 双宽 / 全角标点 / ASCII 半宽，锁定 rc37 修过的列宽对齐契约。
+        - `AgentSessionStoreTests.swift` (10 case) — `deriveTitle` 40-char boundary / 多行折行 / whitespace-only fallback / assistant 优先级跳过、`AgentSession` JSON round-trip、损坏 JSON 抛 `DecodingError`（loadAll 的"skip-corrupt"契约）、按 updatedAt 降序、目录路径含 Application Support/VeilWriter。
+        - `ProjectFileListCacheTests.swift` (17 case) — `cacheURL` SHA-256 稳定 + 不同 root 不撞 + 落在 Caches / `<bundleID>` / `projects` 路径下、`differs` mtime/size/membership 三种触发、`CacheFile` Codable round-trip、`scan` 尊重 limit + 跳过 `node_modules` + localizedStandardCompare 排序（`file2` < `file10`）+ 相对路径输出、`ProjectDirectoryExclusions` 命中标准 skip list + 不误伤 `src`/`lib`、`fileURLs` 拼接根路径、`schemaVersion`/`maxCachedProjects` 常量锁定。
+        - `AgentToolsCoreTests.swift` (17 case) — `AgentToolRisk` / `AgentToolCallStatus` / `AgentToolApprovalSource` raw value 稳定（持久化 schema 锁定），`AgentJSONValue.decode` 接 JSON 片段 + 坏 JSON 退回 `.string`、`intValue`/`boolValue`/`stringArrayValue` 类型强转规则（含 "YES"/"NO"/"1"/"0"）、`displaySummary` 80 字符截断 + 整数无小数点，`AgentToolError` 错误文案前缀稳定（模型按串解析），`AgentToolRunner.shellEnvironment` 追加 supplemental PATH + 不重复 + 保留其它环境变量。
+        - `AgentMCPBridgeCoreTests.swift` (17 case) — `AgentMCPServerConfig.init` 修剪空白 / 钳制 startupTimeout 到 1...180 / 默认 id = `source:name` / 显式 id 不被覆盖、`AgentMCPSettings.normalized` 去重排序 disabled ids + 强制 userServer source/id 前缀、`redactedValue` 隐藏 token/secret/password/authorization/cookie/key 类敏感 header + env、`AgentMCPTransport`/`AgentMCPServerSource` raw value 稳定、`parseToolCount` 数 tools 数组长度 + 坏 shape 返回 nil、`prettyJSON` 排序 key + 48k 截断 + 非 JSON 输入兜底。
+        - `AgentClientEncodingTests.swift` (10 case) — `encodeChatRequest` 顶层 shape（model/stream/stream_options.include_usage/messages）+ 无 tools 时不发 `tools`/`tool_choice` + 有 tools 时 `tool_choice=auto`，`providerReadyMessages` 5 个关键路径：plain user→assistant 不动、orphan tool 消息丢弃、partial-tool-call 整轮丢弃避免 provider 400、full-resolved tool turn 按 call 顺序排 reply、text-only provider 上 image 转 notice 文本（含空 content 兜底）。
+    - **`scripts/xcresult_report.rb` UTF-8 强制**：默认 ASCII 环境会把 `xcresulttool` 输出里的中文测试名 / CJK 失败描述 raise `Encoding::InvalidByteSequenceError` 而 crash。设 `Encoding.default_external = UTF_8` 后再用 `force_encoding` + `scrub("?")` 兜底，UTF-8 / 含未编码字节都吞得下。
+    - **不在本轮范围（已知，留 follow-up）**：AgentClient streaming SSE parsing / AgentMCPBridge stdio JSON-RPC + SSE HTTP 是网络/Process 层，单测要 mock URLSession+Process，工作量超过本轮单 rc 边界，已加入 ROADMAP CI 段。HEAD 现存 7 个 flaky test（external file rootDirectory / thinking indicator / writeCurrentFile / markdown preview / 3 个 AgentEntryModelSelection）均与 AppState 测试间磁盘 IO 污染相关，rc41 commit 已 spawn 独立任务追踪，本轮不动。
+
+## 1.52.1-rc42 - 2026-06-05
+
+- **代码体检 - 阶段 3：拆 AppState.swift（4946 → 1364 行）。** AppState 之前是个 136 函数、60 个 @Published、91 个 computed 的全能 hub，远超 CLAUDE.md §10 的 3000 行硬上限。本轮按职责拆成 6 个 `extension AppState` 伴生文件，所有调用面（200+ 处 `appState.foo`）一律不动：
+    - `AppStateAgentLoop.swift` (~1382 行)：`dispatchAgentMessage` / `runAgentLoop` / `awaitToolDecision` / `appendToolMessage` / 工具决策 approve/deny/always-allow/confirm/answer / `setAgentError` / `retryLastAgentTurn` / `stopAgentResponse` / 图像 prep for text-only providers / `clearAgentConversation` / token 估算 + context window / context 压缩 + `collapseOldToolResults` / patch 提案 accept/reject/apply。
+    - `AppStateAgentSessions.swift` (~1052 行)：`sendAgentMessage` 入口 + 附件组装、attach/detach skill/file、provider library 管理（apply/select/upsert/remove）、Plan & Goal 全套（approve/reject/restart/edit/insert/remove/setStep/setGoal/toggleItem + capture）、reviewAgentWorktreeChanges/showAgentWorktreeDiff、session 生命周期（startNewAgentSession/selectAgentSession/pruneEmpty/delete）、Routines (save/delete/toggle/runNow/fireRoutine)、persist、模型选择。
+    - `AppStateFileOperations.swift` (~540 行)：folder/file picker、binary detection、`loadFile`/`saveCurrentFile`/`saveCurrentFileAs`/`writeCurrentFile`、`restoreSessionIfAvailable`/`persistSession`、`setRootDirectory`/`activateSecurityScope`/`bookmarkData`/`terminalTargetURL`/`relativePath`/`promptForName`/`showFileOperationError`。
+    - `AppStateGitStatus.swift` (~488 行)：`GitFileStatusKind` / `GitRepositoryStatus` 值类型、`ProcessOutputCollector` / `TimedProcessState` 线程安全 helper、`loadGitStatus` / `loadAgentWorktreeChangeSummary` / porcelain 解析 + `findGitRepositoryRoot` / `runGit`、`refreshGitStatus` / `refreshActiveAgentWorktreeChanges` / `refreshGitStatusAfterAgentTool` + AgentWorktreeSnapshot / `loadAgentWorktreeDiffPreview`。
+    - `AppStateEditorTextUtilities.swift` (~180 行)：纯 `nonisolated static` 文本工具：`findRanges` / `replacingRanges` / `changedLineNumbers` / `contentForSave` / `trimTrailingWhitespace` / `duplicateLine` / `moveLine` / `textFileURLs` / `quickOpenFileURLs`。
+    - `AppStatePersistenceStores.swift` (~111 行)：`RecentItemsStore` / `EditorSessionSnapshot` / `CompressionSummaryCollector` / `SessionStore` 四个 UserDefaults-backed 助手。
+- **降级了 14 个原 `private` 成员到 `internal` (默认)。** Swift extension 不能加 stored property、不能访问宿主类的 `private`，所以涉及跨文件调用的 `isApplyingTabSnapshot` / `knownModificationDates` / `securityScopedAccessURLs` / `agentToolDecisionWaiter` / `agentRequestTask` / `pendingDispatchQueue` / `inFlightCountByProvider` / `PendingDispatch` / `gitStatusRefreshTask` / `isReconcilingProviderLibrary` / `maxAgentToolRounds` / `agentRoutineScheduler` 等都改成默认可见性；`@Published private(set) var gitStatus / agentSessions / agentRoutines / agentRuntimes / hasExternalFileChanges` 去掉 `private(set)` 以让 extension 中的 set 调用通过；`subscribeToActiveRuntime` / `refreshGitStatusAfterAgentTool` / `applySnapshot` / `bumpEditorRenderRevision` / `bumpEditorHighlightRevision` / `updateActiveTab` / `updateActiveTabAfterURLChange` / `updateWindowTitle` / `loadAgentWorktreeSnapshot` / `loadAgentWorktreeDiffPreview` 等私有方法去掉 `private`。这些仍在 Xedit module 内部，对外 API 表面（已是 internal module）零变化。
+- **`isReconcilingProviderLibrary` 从 provider-library 段（原 840 行）上浮到主类 stored 区**（约 324 行附近，紧跟 `activeRuntimeSubscription`），让 `AppStateAgentSessions.swift` 能在 extension 里读写这个 reentrancy flag。
+- **拆完后的纵向数字：** AppState 4946 → 1364 行（-72%），全部新文件 < 1400 行，远低于 §10 的 2000 行软上限和 3000 行硬上限。Xedit module 总 Swift 行数从 4946（单文件）变成 5117（7 文件），仅 +171 行，纯粹是 7 份 file header / extension 包裹的开销 — 没有逻辑膨胀。
+- **完整跑了 `xcodebuild test -only-testing:XeditTests`，failure 数 7-8 = rc41 基线 8 个预存 flaky，没新增 failure。** 跑了两次确认（第一次 8 fail，第二次 7 fail，差异在已知 flaky 名单内）。`xcodebuild build` 成功；app 启动跑了 15+ 秒无 crash。
+- **文档同步：** `product-overview.md` 顶部 Current version → `v1.52.1-rc42`；"架构概览"段 AppState 描述更新为已拆完；"目录结构"表格新增 6 个伴生文件行，AppState 行数刷新为 1364。
+- **代码体检 - 阶段 7：文档与 release 流程收尾。**
+    - **`product-overview.md`** 进一步补 4 个一级章节：「架构概览」「目录结构」「关键概念」「版本号约定」「国际化（i18n）」「测试与 CI」，并诚实标注 i18n 与 CI 仍未落地，挂 [ROADMAP.md](./ROADMAP.md) 链接。
+    - **新增 [`TESTING.md`](./TESTING.md)**：Xcode `Cmd+U` 与 `xcodebuild test` 两条本地路径、Swift Testing (`@Suite` / `@Test` / `#expect`) 新风格示例、`scripts/run_tests.sh` 模板、`.serialized` 隔离约定、CI 报告位置约定、pre-PR 自检清单。
+    - **新增 [`CONTRIBUTING.md`](./CONTRIBUTING.md)**：Fork-clone / 分支命名 / Commit 风格 / 版本号约定 / Pre-PR 自检 共 5 章节；Commit 风格段按近 30 条 `git log` 统计列出实际前缀分布（`fix(agent):` ×17 等），并给出版本号一致性校验的 inline shell 脚本。
+    - **新增 [`ROADMAP.md`](./ROADMAP.md)**：阶段 1–7 状态表、文件拆分前后行数对比、阶段 4 剩余 >2000 行文件的拆分思路（`AgentModeView` / `AgentTools` / `AgentModeComposerView` / `AgentChatHistoryTextView`）、阶段 5 i18n 落地清单、阶段 6 CI workflow 草稿、已知 flaky test 追踪。
+    - **改进 `scripts/release.sh`**：build 前先跑 `xcodebuild test -only-testing:XeditTests`，失败直接 exit 1 不浪费时间在打包公证上；新增 `--dry-run`（跑测试 + Release build，无签名证书也能验证脚本本身）与 `--skip-tests` 参数；公证 + staple 完成后**交互确认**是否打 `v{版本号}` tag，然后再次确认是否 push origin（破坏性操作不自动执行，符合 CLAUDE.md §5 + 体检报告点名要求）；最终输出 Release 摘要含 DMG 路径 / tag / HEAD / 上次 tag 到 HEAD 的 commit 范围；stdin 非 TTY（CI / pipe）时自动跳过交互留给人工。Step 编号从 7 步扩到 8 步（新增 Step 0「测试」与 Step 8「tag/push 与摘要」）。
+
+## 1.52.1-rc41 - 2026-06-04
+
+- **修正 rc39 引入的 message hash 缓存撞键回归。** `AgentChatHistoryRenderer` 的 message-level hash 缓存以 (id, content.count, toolCalls.count, elapsedSeconds) 做指纹键，但同 id、内容仅一字之差且长度相同的消息会命中同一条缓存，导致历史视图渲染老内容。回退该缓存层 — Swift `String.hashValue` 本身已经够快，让 render-cache 自己（按全字段 hash 做 key）兜底重渲染。`cacheKeyTracksEditedEarlierContentWithSameLength` 测试现在能通过。
+- **回退 rc38 引入的 AppState deinit cancel 所有 background runtime task。** `MainActor.assumeIsolated` 在 Swift Testing 测试 release 路径上 precondition fail，导致 56 个测试随机崩溃。生产环境下没问题（SwiftUI 在主线程释放 @StateObject），但测试 harness 会让任何 deinit 在非主线程触发。改为依赖 session 显式删除/prune 时清理 — 这条路径本来就覆盖了真实使用场景。
+- **附带的 `XeditTests` 测试隔离调整。** `testShouldAutoCompressTriggersAt75Percent` 加了 `appState.startNewAgentSession()` 显式拉起 runtime，但单个测试仍然在全套跑时 fail（与历史 7 个预存 flaky test 一起 — 它们的根因是 AppState 在 init 中触发的磁盘 IO 让测试间互相污染）。这些 flaky test 不在本轮重构范围内，已 spawn 独立任务追踪。
+
+## 1.52.1-rc40 - 2026-06-04
+
+- **代码体检 - 阶段 2：拆 ContentView.swift（3287 → 1798 行）。** 把视图层职责拆到独立文件：(1) 新增 `ContentViewBackgrounds.swift` — `WorkspaceWindowBackground` / `EditorAreaBackground` / `EditorGlassBackgroundModifier` / `VisualEffectView` / `SidebarResizeHandle` / `CursorModifier` 及 `.editorGlassBackground` / `.cursor` modifier；(2) 新增 `EmptyStateViews.swift` — `EmptyProjectEditorView` / `EmptyWorkspaceView` / `EmptyWorkspaceHero` / `EmptyWorkspaceRecentSection` / `EmptyWorkspaceButtonStyle`；(3) 新增 `MainWindowChrome.swift` — `MainWindowKeyboardShortcutHandler` / `WindowChromeConfigurator` / `ClearDividerSplitView` / `PaletteKeyboardHandler` / `FloatingPanelEscapeKeyHandler` + 私有 NSView extension；(4) 新增 `MarkdownPreview.swift` — `MarkdownPreviewBlock` / `MarkdownPreviewParser` / `HTMLPreviewParser` / `MarkdownPreviewBlockView` / `MarkdownInline` / `MarkdownTableBlockView` / `MarkdownCodeBlockView` / `MarkdownCodeBlockCopyButton`。ContentView 主体收敛回 1798 行，远低于 CLAUDE.md §10 的 3000 硬上限和 2000 软上限。私有访问权限相应放宽到 internal，但仍限制在 module 内不外泄。
+
+## 1.52.1-rc39 - 2026-06-04
+
+- **代码体检 - 第二轮性能/正确性。** 多阶段重构的阶段 1：(1) `awaitToolDecision` 用 `withTaskCancellationHandler` 包装 — task 被取消（session 删/Stop 按钮/AppState 释放）时主动 resume continuation 为 `.denied`，消除工具决策悬挂的最后一类泄漏；(2) `AppState.findMatchRanges` 与 `changedLineNumbers` 加 (内容哈希, 查询/saved-内容) 双键缓存，SwiftUI body 多处读这俩属性时不再每次重扫全文；(3) 聊天历史 avatar 圆头像 NSImage 进 (label, fill) 缓存，长对话不再每次重绘 100+ 张小图；(4) 渲染缓存内每条 message 的全字段哈希加 (id, content.count, toolCalls.count, elapsedSeconds) 指纹快表，流式 append 不再每帧把整段 content 喂给 Hasher。
+
+## 1.52.1-rc38 - 2026-06-04
+
+- **代码体检 - 第一轮机械修复落地。** 由 5 维度并行扫描 + 对抗式验证报告驱动：(1) `.gitignore` 补齐 `.env*`/`*.key`/macOS 杂项等敏感与噪声项；(2) `AppState.swift` 修正陈旧注释（`agentSessionDidEditFiles` 转发的是 `AgentRuntime` 而非 `AgentSession`）；(3) 工具调用 `argumentsJSON` 解析失败不再静默落入空 dict，而是把该 tool call 标 `.failed` 并把原始坏 JSON 通过 tool message 反馈给模型自纠；(4) AppState `deinit` 现在 cancel 所有 background runtime 的 `requestTask` 并 resume 其 `toolDecisionWaiter`，杜绝多会话场景下的 Task / continuation 泄漏；(5) 聊天历史复制按钮的 3s 还原 `asyncAfter` 改成 `DispatchWorkItem`，快速连续点击不再让 label 闪烁错乱；(6) `AgentClient` 所有出站请求新增 `X-App-Version` 与 `User-Agent: Xedit/<version> (macOS)`，后端可按版本分桶诊断；(7) `SyntaxHighlighter` 编译过的 `NSRegularExpression` 进静态缓存，viewport 高亮的 O(N × 规则数) 编译降到 O(规则数) 一次；(8) `AgentMarkdownTableFormatter` 从 `AgentChatHistoryTextView.swift` 抽到独立文件 `AgentMarkdownTableFormatter.swift`，两条聊天渲染路径共用，便于将来加单测。
+
+## 1.52.1-rc37 - 2026-06-04
+
+- **修正聊天里 Markdown 表格的对齐。** Chat 历史（NSTextView）与流式 assistant 消息（SwiftUI `Text`）两条路径之前都是用 `cell │ cell` 直接拼接，中英文/不同长度列各往各的方向漂；现在按显示宽度（CJK/Emoji 计 2 列）补齐列宽，表头下方多了 `─` 分隔线，长短行不再错位。
+
+## 1.52.1-rc36 - 2026-06-04
+
+- **修正 Agent “审查”入口语义。** Composer 和 worktree 变更卡里的“审查”现在打开本地未提交 diff 预览 sheet，而不是把变更摘要发进聊天；diff 预览支持复制，并尽量包含 untracked 文件内容。
+
+## 1.52.1-rc35 - 2026-06-04
+
+- **在 Agent 输入区上方显示工作区变更摘要。** Composer 上沿会显示当前 session workspace 的已更改文件数、总增删行数和“审查”入口。
+
+## 1.52.1-rc34 - 2026-06-04
+
+- **让 Agent 初始页活跃度热图横向铺满。** 初始 dashboard 的小方块热图会根据统计卡片可用宽度动态增加周列数，宽屏下不再只挤在左侧。
+
+## 1.52.1-rc33 - 2026-06-04
+
+- **统一 assistant footer 图标尺寸。** 历史和当前消息 footer 里的复制、耗时、token 图标按重新生成图标的字号渲染，避免复制和时间图标显得偏小。
+
+## 1.52.1-rc32 - 2026-06-04
+
+- **放大 assistant 消息 footer。** Agent 历史和当前消息里的复制 / 重新生成图标、耗时和 token 摘要字号提升，图标更容易看清和点击。
+- **进一步减淡用户消息 hover 背景。** 用户输入区域 hover 时仍有边界提示，但灰底透明度更低，减少对正文的视觉压迫。
+
+## 1.52.1-rc31 - 2026-06-04
+
+- **修正用户输入长文本的对齐方式。** Agent 历史里的用户消息正文改为右侧固定宽度消息列内左对齐，避免多行图片描述或长文本每行都贴右排版。
+- **统一用户消息的宽度约束。** TextKit hover 背景按聊天列比例绘制稳定宽度，当前 SwiftUI 用户消息路径也加上同样的最大宽度上限。
+
+## 1.52.1-rc30 - 2026-06-04
+
+- **修正用户消息 hover footer 导致聊天内容跳动的问题。** Agent 历史里的用户消息会预留发送时间 / 复制按钮 footer 高度，默认透明且不可点击，鼠标移入时再显现，避免下方内容被顶动。
+- **同步当前流式消息路径的布局占位。** SwiftUI 备用用户气泡也会常驻透明 footer，占位行为与 TextKit 历史保持一致。
+- **补足 Markdown code block 顶部间距。** TextKit 历史和当前流式 assistant Markdown 渲染都会在代码块上方留出一点细间距，避免代码区贴住上一段内容。
+
+## 1.52.1-rc29 - 2026-06-04
+
+- **增加 Agent 当前 turn 的文件活动摘要。** 最新工具调用块前会显示轻量状态行，汇总本轮已探索路径 / 搜索次数 / 运行命令，并在本轮确实改动 worktree 后显示正在编辑或已编辑的文件。
+- **升级 Agent worktree 变更卡。** Agent 输出结束后如本轮改了项目文件，会显示 Codex 风格的已编辑文件列表、总增删统计和审查入口；文件名和“打开方式”可在 Xedit 新窗口、默认应用或 Finder 中打开。
+- **修正 run_command 改文件后的可观测性。** Agent turn 开始时记录 git 变更基线，工具执行后刷新快照，只有 worktree 相对基线发生变化才标记 session 为已编辑，避免旧的未提交改动误触发卡片。
+
+## 1.52.1-rc28 - 2026-06-04
+
+- **让用户消息气泡进入 hover-only 模式。** Agent 历史里的用户输入默认只显示右对齐文字，不再常驻浅灰背景；鼠标移到该条用户消息上时才显示浅灰 hover 背景。
+- **用户消息 hover 时显示发送时间和复制按钮。** Hover footer 会显示该条消息的发送时间与更接近正文高度的复制图标，复制成功态仍保留 3 秒后恢复。
+- **同步 SwiftUI 备用用户气泡路径。** 当前仍以 TextKit 历史渲染为主，但保留的 SwiftUI 用户消息路径也改为同样的 hover-only 背景、时间和复制显示行为。
+
+## 1.52.1-rc27 - 2026-06-04
+
+- **修正 Agent 历史代码块和相邻 block 的边距。** TextKit code block 背景与代码内容都向右增加约半个字符的缩进，避免代码区左边框贴住 assistant Markdown 卡片左边界；用户 `You` header 与气泡之间的间距继续加大。
+- **修复 tool call 展开态与用户气泡重叠。** 连续工具调用组前的垂直间距加大，展开后的灰色 tool block 不再压到上一条用户输入 block。
+- **延长复制成功反馈。** 代码区和消息 footer 的复制成功态现在保留 3 秒再恢复，代码区顶部 copy token 字号再放大一号。
+
+## 1.52.1-rc26 - 2026-06-04
+
+- **继续打磨 Agent 聊天气泡层级。** 用户消息从紫色强调背景改成浅灰气泡，并把复制 footer 纳入同一个气泡 padding；assistant 星形头像放大并改为灰色系，assistant 输出背景和代码块背景 / 边框进一步调浅。
+- **修正工具调用展开态背景包裹。** 连续 tool call 展开后整组摘要和详情共用浅灰背景与统一 padding，避免详情文字贴边或跑出灰底。
+- **补齐聊天 Markdown 归一化。** Agent 聊天里的 `<details>` / `<summary>` 等 HTML 片段会按 `html` 代码块渲染，连续 `----` / `____` / `****` 会归一为 Markdown 分隔线；复制图标也统一换成更大的 `⎘` / `square.on.square` 样式。
+
+## 1.52.1-rc25 - 2026-06-04
+
+- **弱化 Agent 聊天 header 的头像视觉。** 历史区用户消息不再显示紫色圆形 `YOU` 头像，只保留右侧灰色 `You` 标识；assistant 历史消息改为轻量 `✦ Assistant` 星形标识，更接近 Gemini 风格。
+- **进一步调浅 assistant 输出背景。** 历史 TextKit assistant 气泡和当前流式 assistant SwiftUI 卡片都降低背景透明度，减少灰底压迫感。
+
 ## 1.52.1-rc24 - 2026-06-04
 
 - **修复 Agent 历史代码块复制误触系统打开链接的问题。** Code block 的 `⧉ Copy` link 现在由 `AgentChatHistoryNSTextView` 更宽松地拦截并吞掉内部 action link，避免点击复制时 macOS 尝试打开 `agent-chat-history-copy-code` 并弹出 `-50` 错误。

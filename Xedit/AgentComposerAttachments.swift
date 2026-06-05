@@ -1,0 +1,112 @@
+//
+//  AgentComposerAttachments.swift
+//  VeilWriter
+//
+//  Small composer chrome split out of AgentModeComposerView.swift in
+//  rc42: three buttons sitting around the text editor —
+//   - `AttachButton`: "+" image-paste trigger
+//   - `SendStopButton`: dual-state arrow / red stop disc tied to
+//     `appState.isAgentResponding`. Disabled when both the buffer and
+//     pending-image list are empty.
+//   - `QueueBadge`: orange hourglass pill that shows up while
+//     `appState.agentQueuedMessages` is non-empty, with a menu to clear.
+//
+//  Three pieces, ~85 lines total — they cluster naturally because they
+//  all sit in the same horizontal row in the composer card and share
+//  the AppState binding pattern. Previously `private struct`; now
+//  internal so ComposerCard (still in the main file) can instantiate
+//  them across file boundaries.
+//
+
+import SwiftUI
+
+struct AttachButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "plus.circle")
+                .font(.system(size: 16))
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .help("Attach image")
+    }
+}
+
+struct SendStopButton: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        Button {
+            if appState.isAgentResponding {
+                appState.stopAgentResponse()
+            } else {
+                appState.sendAgentMessage()
+            }
+        } label: {
+            ZStack {
+                // Stopping state used to be a fully-saturated red
+                // circle — visually shouted "danger" out of all
+                // proportion to "click to interrupt streaming". Now
+                // it's a soft red-tinted disc with a red stroke and a
+                // red-foreground glyph: still unmistakably the stop
+                // action, but no longer alarm-bell red.
+                if appState.isAgentResponding {
+                    Circle()
+                        .fill(Color.red.opacity(0.12))
+                        .frame(width: 26, height: 26)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.red.opacity(0.55), lineWidth: 1.2)
+                        )
+                    Image(systemName: "square.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Color.red.opacity(0.85))
+                } else {
+                    Circle()
+                        .fill(canSend ? Color.accentColor : Color.secondary.opacity(0.3))
+                        .frame(width: 26, height: 26)
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!appState.isAgentResponding && !canSend)
+        .help(appState.isAgentResponding ? "Stop" : "Send (↩)")
+    }
+
+    private var canSend: Bool {
+        !appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !appState.agentPendingImages.isEmpty
+    }
+}
+
+struct QueueBadge: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        Menu {
+            Button("Clear Queue", role: .destructive) {
+                appState.clearAgentQueue()
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "hourglass")
+                    .font(.system(size: 9))
+                Text("\(appState.agentQueuedMessages.count) queued")
+                    .font(AgentDesign.captionFont)
+            }
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Color.orange.opacity(0.12))
+            .clipShape(Capsule())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
+}

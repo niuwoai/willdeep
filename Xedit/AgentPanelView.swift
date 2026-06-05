@@ -26,6 +26,9 @@ struct AgentPanelView: View {
         .overlay(alignment: .leading) {
             Divider()
         }
+        .sheet(item: $appState.agentWorktreeDiffPreview) { preview in
+            AgentWorktreeDiffPreviewSheet(preview: preview)
+        }
         .onAppear {
             inputFocused = true
         }
@@ -297,50 +300,298 @@ private struct AgentInlineStatusDivider: View {
 
 struct AgentWorktreeChangeCard: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.openWindow) private var openWindow
+    @State private var showsAllFiles = false
+    private let collapsedFileLimit = 3
 
     var body: some View {
+        let visibleFiles = visibleChanges
         VStack(alignment: .leading, spacing: 10) {
-            if let change = appState.primaryAgentChangedFile {
-                HStack(spacing: 7) {
-                    Image(systemName: "pencil.line")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                    Text("正在编辑")
+            if !visibleFiles.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(visibleFiles.indices, id: \.self) { index in
+                        changedFileRow(visibleFiles[index])
+                        if index < visibleFiles.count - 1 {
+                            Divider()
+                                .padding(.leading, 48)
+                        }
+                    }
+                }
+                .background(Color(nsColor: .textBackgroundColor).opacity(0.72))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                )
+
+                if hiddenFileCount > 0 {
+                    Button {
+                        showsAllFiles.toggle()
+                    } label: {
+                        HStack(spacing: 5) {
+                            Text(showsAllFiles ? "收起文件" : "再显示 \(hiddenFileCount) 个文件")
+                            Image(systemName: showsAllFiles ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 9, weight: .semibold))
+                        }
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    changedFileButton(change)
-                    AgentLineStatsView(change: change)
-                    Spacer(minLength: 0)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
 
             HStack(spacing: 8) {
-                AgentWorktreeSummaryPill()
+                Image(systemName: appState.isAgentResponding ? "pencil.line" : "checkmark.square")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 20, height: 20)
+                    .background(Color.primary.opacity(0.035))
+                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(summaryTitle)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    HStack(spacing: 5) {
+                        Text("+\(appState.agentWorktreeChanges.totalAddedLines)")
+                            .foregroundStyle(.green)
+                        Text("-\(appState.agentWorktreeChanges.totalDeletedLines)")
+                            .foregroundStyle(.red)
+                    }
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                }
                 Spacer(minLength: 0)
                 Button {
-                    appState.reviewAgentWorktreeChanges()
+                    appState.showAgentWorktreeDiff()
                 } label: {
                     Text("审查")
                         .font(.caption)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.primary)
-                .help("让 Agent 审查当前未提交改动")
+                .help("查看当前未提交 diff")
             }
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 8)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.45))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(10)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.34))
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
         )
+    }
+
+    private var visibleChanges: [AgentFileChangeSummary] {
+        if showsAllFiles { return appState.agentWorktreeChanges.files }
+        return Array(appState.agentWorktreeChanges.files.prefix(collapsedFileLimit))
+    }
+
+    private var hiddenFileCount: Int {
+        max(0, appState.agentWorktreeChanges.fileCount - collapsedFileLimit)
+    }
+
+    private var summaryTitle: String {
+        let verb = appState.isAgentResponding ? "正在编辑" : "已编辑"
+        return "\(verb) \(appState.agentWorktreeChanges.fileCount) 个文件"
+    }
+
+    private func changedFileRow(_ change: AgentFileChangeSummary) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: fileIconName(for: change))
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 28, height: 28)
+                .background(Color.primary.opacity(0.035))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+            Button {
+                openInXeditWindow(change)
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(change.path)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(fileMetaText(for: change))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .disabled(appState.agentChangedFileURL(change.path) == nil)
+            .help(change.path)
+
+            AgentLineStatsView(change: change)
+
+            Menu {
+                Button("在 Xedit 新窗口打开") {
+                    openInXeditWindow(change)
+                }
+                .disabled(appState.agentChangedFileURL(change.path) == nil)
+
+                Button("用默认应用打开") {
+                    openInDefaultApp(change)
+                }
+                .disabled(appState.agentChangedFileURL(change.path) == nil)
+
+                Button("在 Finder 中显示") {
+                    revealInFinder(change)
+                }
+                .disabled(appState.agentChangedFileURL(change.path) == nil)
+            } label: {
+                HStack(spacing: 4) {
+                    Text("打开方式")
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .semibold))
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+                .clipShape(Capsule())
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+    }
+
+    private func openInXeditWindow(_ change: AgentFileChangeSummary) {
+        guard let url = appState.agentChangedFileURL(change.path) else { return }
+        appState.registerRecentFile(url)
+        openWindow(value: url)
+    }
+
+    private func openInDefaultApp(_ change: AgentFileChangeSummary) {
+        guard let url = appState.agentChangedFileURL(change.path) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func revealInFinder(_ change: AgentFileChangeSummary) {
+        guard let url = appState.agentChangedFileURL(change.path) else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    private func fileIconName(for change: AgentFileChangeSummary) -> String {
+        switch change.kind {
+        case .added, .untracked:
+            return "doc.badge.plus"
+        case .deleted:
+            return "doc.badge.minus"
+        case .renamed:
+            return "arrow.triangle.2.circlepath"
+        case .modified:
+            return "doc.text"
+        }
+    }
+
+    private func fileMetaText(for change: AgentFileChangeSummary) -> String {
+        let ext = URL(fileURLWithPath: change.path).pathExtension
+        let type = ext.isEmpty ? "文件" : "\(ext.uppercased()) 文件"
+        return "\(type) · \(change.kind.rawValue)"
+    }
+}
+
+struct AgentTurnFileActivityCard: View {
+    @EnvironmentObject var appState: AppState
+    @Environment(\.openWindow) private var openWindow
+    let calls: [AgentToolCall]
+
+    var body: some View {
+        let summary = AgentToolActivitySummary(calls: calls)
+        if summary.hasActivity || shouldShowEditingRow {
+            VStack(alignment: .leading, spacing: 5) {
+                if let explorationText = summary.explorationText {
+                    activityRow(
+                        icon: "doc.text.magnifyingglass",
+                        text: explorationText,
+                        trailing: nil
+                    )
+                }
+                if let commandText = summary.commandText {
+                    activityRow(
+                        icon: "terminal",
+                        text: commandText,
+                        trailing: latestCommandPreview
+                    )
+                }
+                if shouldShowEditingRow, let change = appState.primaryAgentChangedFile {
+                    editingRow(change)
+                }
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 7)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.26))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.primary.opacity(0.045), lineWidth: 1)
+            )
+        }
+    }
+
+    private var shouldShowEditingRow: Bool {
+        appState.agentSessionDidEditFiles && !appState.agentWorktreeChanges.isEmpty
+    }
+
+    private var latestCommandPreview: String? {
+        calls.reversed().compactMap { call -> String? in
+            guard call.toolName == "run_command",
+                  let command = call.arguments["command"]?.stringValue() else {
+                return nil
+            }
+            return trimmed(command, limit: 96)
+        }.first
+    }
+
+    private func activityRow(icon: String, text: String, trailing: String?) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 14)
+            Text(text)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            if let trailing {
+                Text(trailing)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private func editingRow(_ change: AgentFileChangeSummary) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: appState.isAgentResponding ? "pencil.line" : "checkmark.square")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 14)
+            Text(appState.isAgentResponding ? "正在编辑" : "已编辑")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+            changedFileButton(change)
+            AgentLineStatsView(change: change)
+            Spacer(minLength: 0)
+        }
     }
 
     private func changedFileButton(_ change: AgentFileChangeSummary) -> some View {
         Button {
-            appState.openAgentChangedFile(change.path)
+            guard let url = appState.agentChangedFileURL(change.path) else { return }
+            appState.registerRecentFile(url)
+            openWindow(value: url)
         } label: {
             Text(change.fileName)
                 .font(.system(size: 12, weight: .semibold))
@@ -351,6 +602,15 @@ struct AgentWorktreeChangeCard: View {
         .foregroundStyle(Color.accentColor)
         .help(change.path)
     }
+
+    private func trimmed(_ value: String, limit: Int) -> String {
+        let normalized = value
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\t", with: " ")
+        guard normalized.count > limit else { return normalized }
+        let end = normalized.index(normalized.startIndex, offsetBy: limit)
+        return String(normalized[..<end]) + "…"
+    }
 }
 
 struct AgentWorktreeSummaryPill: View {
@@ -358,7 +618,7 @@ struct AgentWorktreeSummaryPill: View {
 
     var body: some View {
         Button {
-            appState.reviewAgentWorktreeChanges()
+            appState.showAgentWorktreeDiff()
         } label: {
             HStack(spacing: 6) {
                 Text("\(appState.agentWorktreeChanges.fileCount) 个文件已更改")
@@ -379,7 +639,7 @@ struct AgentWorktreeSummaryPill: View {
             )
         }
         .buttonStyle(.plain)
-        .help("点击让 Agent 审查当前未提交改动")
+        .help("查看当前未提交 diff")
     }
 }
 
@@ -1260,8 +1520,8 @@ struct AgentMessageBubble: View {
     private var footer: some View {
         HStack(spacing: 8) {
             Button(action: copyToClipboard) {
-                Image(systemName: didJustCopy ? "checkmark" : "doc.on.doc")
-                    .font(.system(size: 10, weight: .medium))
+                Image(systemName: didJustCopy ? "checkmark" : "square.on.square")
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(didJustCopy ? Color.green : Color.secondary)
             }
             .buttonStyle(.plain)

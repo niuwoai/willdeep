@@ -265,7 +265,19 @@ struct AgentClient {
             request.setValue(configuration.apiKey, forHTTPHeaderField: "x-api-key")
             request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         }
+        // Tag every outgoing request with our marketing version so that
+        // the backend (and any reverse-proxy logs we run through) can
+        // bucket reports / repro a bug against a specific client build.
+        // Matches the convention from CLAUDE.md §6 — both sides agree on
+        // a header that carries the same value as `CFBundleShortVersionString`.
+        request.setValue(Self.appVersionHeaderValue, forHTTPHeaderField: "X-App-Version")
+        request.setValue("Xedit/\(Self.appVersionHeaderValue) (macOS)", forHTTPHeaderField: "User-Agent")
     }
+
+    /// Cached at first read; the bundle version cannot change at runtime.
+    private static let appVersionHeaderValue: String = {
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
+    }()
 
     private func chatCompletionsEndpoint(from baseURL: String) throws -> URL {
         try endpoint(from: baseURL, suffix: "chat/completions")

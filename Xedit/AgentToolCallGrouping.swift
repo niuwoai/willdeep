@@ -128,3 +128,65 @@ enum AgentToolCallGrouping {
         return result
     }
 }
+
+struct AgentToolActivitySummary: Equatable {
+    var exploredPathCount: Int
+    var searchCount: Int
+    var gitStatusCount: Int
+    var commandCount: Int
+
+    init(calls: [AgentToolCall]) {
+        var exploredPaths = Set<String>()
+        var searches = 0
+        var gitStatuses = 0
+        var commands = 0
+
+        for call in calls {
+            switch call.toolName {
+            case "read_file", "list_directory":
+                if let path = call.arguments["path"]?.stringValue() {
+                    exploredPaths.insert(path.isEmpty ? "." : path)
+                } else {
+                    exploredPaths.insert(".")
+                }
+            case "grep_files", "search_files":
+                searches += 1
+            case "git_status":
+                gitStatuses += 1
+            case "run_command":
+                commands += 1
+            default:
+                break
+            }
+        }
+
+        exploredPathCount = exploredPaths.count
+        searchCount = searches
+        gitStatusCount = gitStatuses
+        commandCount = commands
+    }
+
+    var hasActivity: Bool {
+        exploredPathCount > 0 || searchCount > 0 || gitStatusCount > 0 || commandCount > 0
+    }
+
+    var explorationText: String? {
+        var parts: [String] = []
+        if exploredPathCount > 0 {
+            parts.append("已探索 \(exploredPathCount) 个路径")
+        }
+        if searchCount > 0 {
+            parts.append("\(searchCount) 次搜索")
+        }
+        if gitStatusCount > 0 {
+            parts.append("\(gitStatusCount) 次 git 状态")
+        }
+        guard !parts.isEmpty else { return nil }
+        return parts.joined(separator: " · ")
+    }
+
+    var commandText: String? {
+        guard commandCount > 0 else { return nil }
+        return "已运行 \(commandCount) 条命令"
+    }
+}

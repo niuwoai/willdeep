@@ -832,6 +832,18 @@ struct AgentWorktreeChangeSummary: Equatable {
     }
 }
 
+struct AgentWorktreeDiffPreview: Identifiable, Equatable {
+    let id: UUID
+    var title: String
+    var diff: String
+
+    nonisolated init(id: UUID = UUID(), title: String, diff: String) {
+        self.id = id
+        self.title = title
+        self.diff = diff
+    }
+}
+
 enum AgentPatchError: LocalizedError {
     case emptyDiff
     case unsupportedDiff

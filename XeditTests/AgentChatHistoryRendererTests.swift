@@ -36,7 +36,7 @@ struct AgentChatHistoryRendererTests {
         #expect(rendered.string.contains("Title"))
         #expect(rendered.string.contains("bold"))
         #expect(rendered.string.contains("code"))
-        #expect(rendered.string.contains("swift  ⧉ Copy"))
+        #expect(rendered.string.contains("swift  ⎘ Copy"))
         #expect(rendered.string.contains("let value = 1"))
         #expect(!rendered.string.contains("# Title"))
         #expect(!rendered.string.contains("**bold**"))
@@ -133,7 +133,7 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
-    func rendersMessageFooterCopyStatsAndRetry() {
+    func rendersMessageFooterCopyStatsAndRetry() throws {
         let user = AgentMessage(
             role: .user,
             content: "hello"
@@ -149,8 +149,141 @@ struct AgentChatHistoryRendererTests {
 
         let rendered = AgentChatHistoryRenderer.render(messages: [user, assistant], isDark: false)
 
-        #expect(rendered.string.contains("hello\n⧉"))
-        #expect(rendered.string.contains("done\n⧉  ◷ 8.4s  in 1.2k · out 2.3k  ↻"))
+        #expect(rendered.string.contains("You\nhello"))
+        #expect(rendered.string.contains("✦ Assistant\ndone"))
+        #expect(!rendered.string.contains("YOU"))
+        #expect(!rendered.string.contains("hello\n⎘"))
+        #expect(rendered.string.contains("done\n⎘  ◷ 8.4s  in 1.2k · out 2.3k  ↻"))
+
+        let assistantCopyRange = (rendered.string as NSString).range(of: "done\n⎘")
+        let assistantCopyLocation = assistantCopyRange.location + "done\n".count
+        let copyFont = try #require(rendered.attribute(
+            .font,
+            at: assistantCopyLocation,
+            effectiveRange: nil
+        ) as? NSFont)
+        #expect(copyFont.pointSize >= 16)
+
+        let elapsedIconRange = (rendered.string as NSString).range(of: "◷")
+        let elapsedIconFont = try #require(rendered.attribute(
+            .font,
+            at: elapsedIconRange.location,
+            effectiveRange: nil
+        ) as? NSFont)
+        #expect(elapsedIconFont.pointSize >= 16)
+
+        let tokenRange = (rendered.string as NSString).range(of: "in 1.2k")
+        let tokenFont = try #require(rendered.attribute(
+            .font,
+            at: tokenRange.location,
+            effectiveRange: nil
+        ) as? NSFont)
+        #expect(tokenFont.pointSize >= 11)
+
+        let retryRange = (rendered.string as NSString).range(of: "↻")
+        let retryFont = try #require(rendered.attribute(
+            .font,
+            at: retryRange.location,
+            effectiveRange: nil
+        ) as? NSFont)
+        #expect(retryFont.pointSize >= 16)
+    }
+
+    @Test
+    func reservesUserFooterSpaceAndRevealsItOnlyOnHover() throws {
+        let id = UUID()
+        let user = AgentMessage(
+            id: id,
+            role: .user,
+            content: "hello",
+            createdAt: Date(timeIntervalSince1970: 750_000_000)
+        )
+
+        let plain = AgentChatHistoryRenderer.render(messages: [user], isDark: false)
+        #expect(plain.string.contains("You\nhello"))
+        #expect(plain.string.contains("⎘"))
+        let hiddenCopyRange = (plain.string as NSString).range(of: "⎘")
+        #expect(hiddenCopyRange.location != NSNotFound)
+        #expect(plain.attribute(.link, at: hiddenCopyRange.location, effectiveRange: nil) == nil)
+        #expect(plain.attribute(
+            NSAttributedString.Key("AgentChatHistoryMessageCopyText"),
+            at: hiddenCopyRange.location,
+            effectiveRange: nil
+        ) == nil)
+        let hiddenColor = try #require(plain.attribute(
+            .foregroundColor,
+            at: hiddenCopyRange.location,
+            effectiveRange: nil
+        ) as? NSColor)
+        #expect(hiddenColor.alphaComponent == 0)
+
+        let hovered = AgentChatHistoryRenderer.render(
+            messages: [user],
+            isDark: false,
+            hoveredUserMessageID: id
+        )
+        #expect(hovered.string.contains("You\nhello"))
+        #expect(hovered.string.contains("⎘"))
+        let visibleCopyRange = (hovered.string as NSString).range(of: "⎘")
+        #expect(visibleCopyRange.location != NSNotFound)
+        #expect(hovered.attribute(.link, at: visibleCopyRange.location, effectiveRange: nil) != nil)
+        #expect(hovered.attribute(
+            NSAttributedString.Key("AgentChatHistoryMessageCopyText"),
+            at: visibleCopyRange.location,
+            effectiveRange: nil
+        ) as? String == "hello")
+        let visibleColor = try #require(hovered.attribute(
+            .foregroundColor,
+            at: visibleCopyRange.location,
+            effectiveRange: nil
+        ) as? NSColor)
+        #expect(visibleColor.alphaComponent > 0)
+    }
+
+    @Test
+    func keepsUserMessageBodyLeftAlignedInsideItsColumn() throws {
+        let user = AgentMessage(
+            role: .user,
+            content: """
+            第一行内容
+            第二行内容也应该从左侧开始
+            """
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(messages: [user], isDark: false)
+        let bodyRange = (rendered.string as NSString).range(of: "第一行内容")
+        let paragraphStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: bodyRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+
+        #expect(paragraphStyle.alignment == .left)
+        #expect(paragraphStyle.headIndent > 0)
+        #expect(paragraphStyle.tailIndent < 0)
+    }
+
+    @Test
+    func normalizesHtmlDetailsAndLongRulesForChatMarkdown() {
+        let message = AgentMessage(
+            role: .assistant,
+            content: """
+            修复方法：
+            ----
+
+            <details><summary>该文件是此次合并新引入的：</summary>
+
+            提交 3e05c43 新增。</details>
+            """
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
+
+        #expect(rendered.string.contains("────────────────────────"))
+        #expect(rendered.string.contains("html  ⎘ Copy"))
+        #expect(rendered.string.contains("<details><summary>该文件是此次合并新引入的：</summary>"))
+        #expect(rendered.string.contains("提交 3e05c43 新增。</details>"))
+        #expect(!rendered.string.contains("----"))
     }
 
     @Test

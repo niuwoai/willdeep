@@ -1,12 +1,107 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-04 | Current version: v1.52.1-rc24
+> Last updated: 2026-06-05 | Current version: v1.52.1-rc45
 
 ## Positioning
 
 VeilWriter is a lightweight macOS editor focused on quick project browsing, fast text loading, simple saving, and syntax-highlighted editing without the weight of a full IDE.
 
 VeilWriter is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
+
+## 架构概览
+
+VeilWriter 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
+
+- **入口** — `XeditApp.swift`：`@main App`，注入唯一 `AppState` `@StateObject` 给整个窗口树。
+- **状态枢纽** — `AppState.swift`：全局 `ObservableObject`，承载工作区根目录、tab 集、find/replace、git 状态、Agent 配置库等"窗口级"状态。rc42 完成体检阶段 3：把原 4946 行的 AppState 用 `extension` 拆成 6 个伴生文件（`AppStateAgentLoop`、`AppStateAgentSessions`、`AppStateFileOperations`、`AppStateGitStatus`、`AppStateEditorTextUtilities`、`AppStatePersistenceStores`），主类瘦身到 ~1364 行，所有伴生文件 < 1400 行；门面 + callsite 不动。**per-session Agent 状态已经在 rc2 抽到 `AgentRuntime`**：22 个原本 `@Published` 在 AppState 上的 Agent 字段（messages / patchProposals / queue / mode / plan / goal …）下沉到 `AgentRuntime`，AppState 上保留同名 get/set delegate 转发到 `activeRuntime`，并把 `activeRuntime.objectWillChange` 通过 `subscribeToActiveRuntime()` republish 到自身的 publisher 上，UI 端无感。
+- **视图层** — `ContentView.swift`（rc40 拆完，1798 行）是主窗口外壳，子视图（背景、空状态、窗口 chrome、Markdown 预览）独立成 `ContentViewBackgrounds.swift` / `EmptyStateViews.swift` / `MainWindowChrome.swift` / `MarkdownPreview.swift`。Agent 面板有两套渲染：`AgentPanelView`（侧边 panel 模式）和 `AgentModeView`（Cmd+Shift+A 进入的全屏 mode），共用 `AgentChatHistoryTextView`（TextKit 历史）和 `AgentModeComposerView`（输入区）。
+- **Agent 运行时** — `AgentRuntime.swift` 一个会话一个实例，独占自身的 messages / requestTask / toolDecisionWaiter / 模式 / 草稿等；多个 runtime 可以并发跑（后台 routine 不会抢占用户的 active session）。`AgentClient.swift` 负责 OpenAI 兼容的流式请求、image 路由、X-App-Version header；`AgentTools.swift` 是内建工具（`search_files` / `grep_files` / `read_file` / `list_directory` / `git_status` / `run_command` / `ask_user` / skill / MCP）。`AgentSessionStore` 负责 JSON 持久化（`~/Library/Application Support/VeilWriter/agent-sessions/`），`AgentRoutineStore` + `AgentRoutineScheduler` 负责定时 routine。
+- **编辑器内核** — `EditorView.swift` 包 `NSTextView`，搭配 `SyntaxHighlighter.swift`（NSRegularExpression 静态缓存，viewport 高亮）/ `ScopeGuideCalculator.swift`（fold + scope guide）。
+
+## 目录结构
+
+源码全部在 `Xedit/` 下，单 module。截至 rc42 的主要 Swift 文件（按行数倒序选）：
+
+| 文件 | 行数 | 职责 |
+| --- | --- | --- |
+| `AppState.swift` | ~1364 | 全局状态枢纽 + 6 个 manager 伴生文件聚合（rc42 拆完） |
+| `AppStateAgentLoop.swift` | ~1382 | `dispatchAgentMessage` / `runAgentLoop` / `awaitToolDecision` / 工具决策处理 / context 压缩 / patch 应用（rc42 拆出） |
+| `AppStateAgentSessions.swift` | ~1052 | sendAgentMessage / sessions/routines 生命周期 / Plan & Goal / provider library 切换 / 附件管理（rc42 拆出） |
+| `AppStateFileOperations.swift` | ~540 | NSOpenPanel / file load/save / session restore / security-scoped bookmark（rc42 拆出） |
+| `AppStateGitStatus.swift` | ~488 | git porcelain 解析 + `loadGitStatus` / `refreshGitStatusAfterAgentTool` / worktree snapshot/diff preview（rc42 拆出） |
+| `AppStateEditorTextUtilities.swift` | ~180 | nonisolated 文本工具：findRanges / changedLineNumbers / 行操作 / 目录枚举（rc42 拆出） |
+| `AppStatePersistenceStores.swift` | ~111 | RecentItemsStore / SessionStore / CompressionSummaryCollector（rc42 拆出） |
+| `AgentModeView.swift` | ~88 | Agent mode 主壳（rc45 拆完） |
+| `AgentMessageView.swift` | ~870 | 消息气泡 / 助手 Markdown 渲染器 / token breaker / footer / queued row / 空状态（rc45 拆出） |
+| `AgentSessionsSidebar.swift` | ~504 | 左侧会话侧栏：CHATS / provider 状态 / workspace 分组 / 归档分区（rc45 拆出） |
+| `AgentChatTranscript.swift` | ~381 | Plan/Goal banner / 历史 + 流式分流 / tool group / 错误卡（rc45 拆出） |
+| `AgentChatHeader.swift` | ~78 | 会话标题 + 复制 + 新会话 + 切回 editor（rc45 拆出） |
+| `AgentStatusIndicators.swift` | ~305 | StatsDashboard / StatCell / PlanStatusPill（rc45 拆出） |
+| `AgentPlanGoalCards.swift` | ~528 | Plan card / 修订行 / 步骤行 / 简单 sheet / Goal card / Goal editor（rc45 拆出） |
+| `AgentTools.swift` | ~944 | 共享类型 / UI 状态 / JSON 辅助 / Tool runner（rc45 拆完） |
+| `AgentToolRegistry.swift` | ~458 | 工具描述符表 + read-only shell 分级 + 安全 path 检查（rc45 拆出） |
+| `AgentSkillDirectory.swift` | ~255 | Codex skill 发现 + `list_skills`/`read_skill` 工具入口（rc45 拆出） |
+| `AgentToolAuthorization.swift` | ~118 | always-allow 签名归一化（rc45 拆出） |
+| `AgentModeComposerView.swift` | ~986 | Composer 主壳 + Worktree banner + status bar + slash/@ 弹层（rc45 拆完） |
+| `ComposerTextInput.swift` | ~449 | NSTextView 桥接 + 历史 cursor + @-token 派生（rc45 拆出） |
+| `AgentComposerPickers.swift` | ~428 | Workspace / Model / Mode 三个 pill picker（rc45 拆出） |
+| `AgentComposerAttachments.swift` | ~112 | AttachButton / SendStopButton / QueueBadge（rc45 拆出） |
+| `AgentChatHistoryTextView.swift` | ~541 | NSViewRepresentable 包装 + NSTextView 子类 + bubble layout manager（rc45 拆完） |
+| `AgentChatHistoryFormatter.swift` | ~1247 | Markdown normalizer + AgentChatHistoryRenderer TextKit baker（rc45 拆出） |
+| `AgentChatChromeRenderers.swift` | ~121 | 代码 copy 按钮 + footer 按钮 NSAttributedString builder（rc45 拆出） |
+| `ContentView.swift` | ~1798 | 主窗口外壳（rc40 拆完） |
+| `EditorView.swift` | ~1692 | NSTextView 包装、滚动、caret/scroll 记忆、folding |
+| `AgentPanelView.swift` | ~1610 | 侧边 panel 形态的 Agent 面板 |
+| `EditorSettingsView.swift` | ~1393 | Settings 主窗口：通用 / 字体 / Agent / Skills / Memory / MCP |
+| `AgentModels.swift` | ~1116 | `AgentSession` / `AgentMessage` / `AgentConfiguration` / `AgentProviderLibrary` 等数据模型 |
+| `SyntaxHighlighter.swift` | ~902 | 多语言正则规则 + 静态 NSRegularExpression 缓存 + viewport 高亮 |
+| `AgentMCPBridge.swift` | ~891 | MCP server 发现（App / Cursor / Codex）+ stdio / streamable-http 调用 |
+| `MarkdownPreview.swift` | ~727 | 编辑器右侧 Markdown / HTML 预览（rc40 抽出） |
+| `AgentClient.swift` | ~672 | OpenAI 兼容流式请求、provider header、image_url 路由、X-App-Version |
+| `AgentRuntime.swift` | — | 每会话一个：messages / requestTask / toolDecisionWaiter / mode/plan/goal |
+| `ContentViewBackgrounds.swift` | ~201 | 主窗口背景、视觉效果、resize handle（rc40 抽出） |
+| `EmptyStateViews.swift` | ~308 | 空工作区 / 空 tab hero + recent（rc40 抽出） |
+| `MainWindowChrome.swift` | ~423 | 键盘快捷键 / 窗口 chrome 配置 / 调色板转发（rc40 抽出） |
+| `AgentMarkdownTableFormatter.swift` | ~111 | CJK 双宽列对齐表格格式化（rc38 抽出，两条渲染路径共用） |
+
+其余文件（`AgentMemoryStore` / `AgentSkillSettingsStore` / `FileTreeView` / `EditorInspector` / `EditorAppearance` / `EditorTab` / `FileSystemNode` / `ProjectFileListCache` / `CommandLineToolInstaller` / `AgentImageViews` / `AgentRoutine*` 等）单一职责、规模可控（<500 行），目前不在重构清单。
+
+CLAUDE.md §10 的软上限是 2000 行，硬上限是 3000 行。rc42 拆完 `AppState.swift`（1364 行）；rc45 拆完 `AgentModeView.swift` / `AgentTools.swift` / `AgentModeComposerView.swift` / `AgentChatHistoryTextView.swift` 共 14 个新文件，全部低于 1500 行任务目标。当前所有 `Xedit/*.swift` 主文件均 ≤ 1798 行（`ContentView.swift`）。
+
+## 关键概念
+
+- **AgentRuntime per session** — 一个 `AgentSession` 配一个 `AgentRuntime`。runtime 内独占 `messages`、`requestTask`（当前流式 Task）、`toolDecisionWaiter`（pending 工具批准的 continuation）、`composerDraft`、`mode/plan/goal`、`turnStartedAt` 等。AppState 通过 `activeSessionID -> activeRuntime` 选中"当前"，但其他 runtime 继续在后台跑。切换会话不会取消正在流式的请求；用户回来时还能看到完整 transcript。
+- **@MainActor isolation** — AppState 本身是 `@MainActor`，所有 `@Published` mutation 必须在主线程发生。runtime 的 hot 字段亦然，但 `AgentClient` 的 URLSession 流式回调跨线程时通过 `Task { @MainActor in ... }` 拥抱主线程。`AppState.deinit` 不能 cancel runtime——rc38 曾尝试 `MainActor.assumeIsolated` 但 Swift Testing 在非主线程 release 触发 precondition fail，rc41 回退；清理走 session 显式删除路径。
+- **Per-provider concurrency cap** — 多 runtime 并发跑时，同一 provider 的活跃请求按 `AgentSettingsStore` 的 `concurrencyLimit`（默认 3，1–8 可调）FIFO 排队；不同 provider 互不阻塞。这样 routine 集中触发也不会冲烂同一家 API 的速率。
+- **find/replace 内容哈希缓存** — `AppState.findMatchRanges` 与 `changedLineNumbers` 用 `(content.hashValue, query/savedContent)` 双键缓存（rc39 落地）。SwiftUI body 多次读这俩属性时不再每次重扫全文。
+- **NSRegularExpression 静态缓存** — `SyntaxHighlighter` 把已编译的 `NSRegularExpression` 按 pattern + options 放进 NSLock 保护的静态字典（rc38 落地）。viewport 高亮的 O(N × 规则数) 编译降到 O(规则数) 一次。
+- **Tool 调用容错** — `argumentsJSON` 解析失败时该 tool call 标 `.failed`，把坏 JSON 通过 tool message 反馈回模型自纠（rc38），而不是悄悄落入空 dict。
+- **Auto-approve 安全判定** — 静态 allowlist（cat/head/tail/ls/git diff/log/status/rg/grep/wc/file …）自动放行；越界命令落 LLM judge，**走 Flash 模型而非当前 turn 的模型**（rc41 修正，避免昂贵模型重复评估）。返回 YES 才自动跑；destructive 模式仍需键入 `confirm`。
+- **Worktree baseline diff** — Agent turn 开始时记录 git 变更基线，结束后对比快照。只有相对基线发生变化才标 session `didEditFiles`，避免旧的未提交改动误触发"已编辑文件"卡片。
+
+## 版本号约定
+
+遵循 CLAUDE.md §5：
+
+- 格式 `MAJOR.MINOR.PATCH-rcN`，例 `1.52.1-rc45`。
+- **bugfix**（含文档、release 流程改进）：只递增 `rcN`。
+- **feature 新增**：可提升 `PATCH` / `MINOR`，rc 归位 `rc1`。
+- 前后端版本号必须一致——这里"后端"指 `AgentClient` 出站请求的 `X-App-Version` header（值从 `Bundle.main.CFBundleShortVersionString` 取，等价 pbxproj `MARKETING_VERSION`）。
+- 8 处需同步更新：`Xedit.xcodeproj/project.pbxproj` 里 6 个 `MARKETING_VERSION` 块（debug / release × 三个 target）。`Help/VeilWriter.help/Contents/Info.plist` 与本文件顶部 `Current version` 一并同步。
+- 每次版本变更必须同步在 `CHANGELOG.md` 顶部写一节、更新本文件头部的 `Current version` 字段。
+- git commit 后建议打 `v{版本号}` tag 并推送 origin（`scripts/release.sh` 公证完成后会交互确认是否打 tag/push）。
+
+## 国际化（i18n）
+
+**当前状态：未落地。** 截至 rc42，源码中 `NSLocalizedString` 与 `String(localized:)` 的命中数为 0；UI 文案直接写死在 SwiftUI 视图中（混合中英文）。
+
+CLAUDE.md §2 要求 React 部分必须走 i18n，但 VeilWriter 是 SwiftUI macOS 应用，不在该条款约束范围内。即便如此，将所有用户可见文案抽到 `Localizable.xcstrings`（Xcode 15+ 的 String Catalog 格式）+ `L10n` enum 强类型访问，仍然列入后续阶段（见 [ROADMAP.md](./ROADMAP.md) 阶段 5）。落地前提是先决定首发语言矩阵（zh-Hans / en 至少）和文案 freeze 时机。
+
+## 测试与 CI
+
+- **本地测试**：详见 [TESTING.md](./TESTING.md)。`XeditTests/` 12 个 Swift Testing（`@Suite` / `@Test`）风格的单测，覆盖 Agent 历史渲染、模型选路、目标 checklist 解析、MCP 服务发现、Memory 存储、Plan 进度、Provider library、Session 持久化、Skill 目录、Markdown 列表嵌套与表格解析。Xcode 跑：`Cmd+U`；命令行跑：`xcodebuild test -project Xedit.xcodeproj -scheme Xedit -destination 'platform=macOS'`。
+- **已知 flaky**：CHANGELOG rc41 提到的 7-8 个测试由 AppState init 中的磁盘 IO 在测试间相互污染引起，已 spawn 独立任务追踪，不在本轮范围。
+- **CI**：**未落地。** 仓库下没有 `.github/workflows/`。后续阶段计划：PR 触发 `xcodebuild test` + lint + 版本号一致性校验。详见 [ROADMAP.md](./ROADMAP.md) 阶段 6。
 
 ## Current Capabilities
 
@@ -55,9 +150,9 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Let the Agent inspect configured MCP servers with `list_mcp_servers`, list one server's MCP tools with `list_mcp_tools`, and call a selected MCP tool with `call_mcp_tool`; server discovery merges App user MCP servers, Cursor `~/.cursor/mcp.json`, and Codex `~/.codex/config.toml`. Both stdio and Cursor-style `streamable-http` MCP transports are supported, with sensitive headers and environment values redacted before display; MCP tool calls still require approval.
 - Automatically run conservatively parsed read-only `run_command` chains, such as workspace-relative or workspace-absolute `cd` prefixes followed by `git diff`, `ls`, `cat`, `rg`, or `grep`, plus workspace-safe `git -C ... diff`; commands that write, redirect, pipe, substitute, or move outside the workspace still require approval or confirmation. Shell commands inherit a supplemental macOS PATH with common Homebrew and local binary directories so tools such as `rg` remain available when VeilWriter is launched from the GUI.
 - Show the full `run_command` command text on approval and destructive-confirmation cards so the exact command is visible before the user allows it.
-- Keep Agent tool-call rows compact by default and collapse consecutive calls into low-emphasis expandable groups so long multi-step runs remain scannable, with longer command/path previews visible in the gray summary and full arguments, output, and errors available from explicit expand controls.
-- Switch the window into a dedicated Agent mode (Cmd+Shift+A) with a project-grouped session sidebar on the left and a wide chat pane on the right. Sessions persist as JSON under `~/Library/Application Support/VeilWriter/agent-sessions/` and are grouped by workspace.
-- Render Agent chat history, transcript reader windows, and single-message reader windows with lightweight TextKit Markdown for headings, paragraphs, lists, quotes, syntax-highlighted code blocks, inline formatting, links, dividers, and pipe-table fallback while avoiding SwiftUI per-block transcript layout. The in-pane history keeps chat-style visual chrome through TextKit-drawn rounded bubbles, compact role avatars, right-aligned user messages with safe right padding, full-width assistant cards, clickable code-copy controls with success feedback, per-message copy footers, assistant elapsed/input/output token summaries, latest-assistant retry affordance, and collapsed low-emphasis tool-call groups that expand in place to show longer command/path/pattern arguments.
+- Keep Agent tool-call rows compact by default and collapse consecutive calls into low-emphasis expandable groups so long multi-step runs remain scannable, with a lightweight current-turn activity summary for explored paths, searches, run commands, and active file edits; longer command/path previews remain visible in the gray summary and full arguments, output, and errors are available from explicit expand controls.
+- Switch the window into a dedicated Agent mode (Cmd+Shift+A) with a project-grouped session sidebar on the left and a wide chat pane on the right. Sessions persist as JSON under `~/Library/Application Support/VeilWriter/agent-sessions/` and are grouped by workspace. The empty-state dashboard summarizes recent usage and stretches its activity heatmap across the available stats card width.
+- Render Agent chat history, transcript reader windows, and single-message reader windows with lightweight TextKit Markdown for headings, paragraphs, lists, quotes, syntax-highlighted code blocks, inline formatting, links, dividers, HTML details-as-code fallback, and pipe-table fallback while avoiding SwiftUI per-block transcript layout. The in-pane history keeps chat-style visual chrome through TextKit-drawn rounded bubbles, right-side hover-only user message columns with left-aligned body text, safe right padding, and pre-reserved low-contrast hover-time timestamp/copy controls, lighter full-width assistant cards with a gray star-style assistant mark, slightly inset syntax-highlighted code blocks with a little top breathing room plus clickable larger code-copy controls and 3-second success feedback, larger per-message copy footers, assistant elapsed/input/output token summaries with matching icon sizing, latest-assistant retry affordance, and collapsed low-emphasis tool-call groups that expand in place to show longer command/path/pattern arguments inside a padded gray group without overlapping adjacent user bubbles.
 - Paste, drag-drop, or attach images directly in the Agent composer; staged images appear as removable thumbnails and, for supported multimodal providers, are sent inline as base64 `image_url` content parts in the request body.
 - Configure a separate Image Understanding provider with its own API key; for text-only Agent providers such as DeepSeek, multiple attached images are first described by that image-capable provider, then the generated description is appended to the user message before the main model runs.
 - Send Agent-mode messages with Return, while Shift-Return, Option-Return, and Control-Return remain available for multiline composition.
@@ -69,7 +164,7 @@ VeilWriter is configured for non-App-Store distribution without App Sandbox so i
 - Show an inline transcript divider while context compression is running so the chat view explains the temporary pause instead of looking idle.
 - Expand Agent provider errors to inspect the method, URL, provider, model, input message summary, redacted request body, HTTP status, and response body for debugging failed requests.
 - Normalize Agent tool-call history before provider requests so stale or incomplete tool messages from older sessions do not cause OpenAI-compatible request errors.
-- See current Agent worktree changes with clickable filenames, per-file added/deleted line counts, total changed files, total line deltas, and a one-click review action for the Agent to inspect uncommitted changes. Modified entries with no real diff or only `+0 -0` line stats are suppressed so the summary does not appear when nothing actually changed.
+- See current Agent worktree changes in a Codex-style edited-files card with clickable filenames, Xedit new-window / default-app / Finder open options, per-file added/deleted line counts, total changed files, total line deltas, and a one-click local diff review sheet with copy support. The Agent composer also mirrors the active session workspace summary above the input area with changed-file count, total `+/-` lines, and the same diff review entry. Modified entries with no real diff or only `+0 -0` line stats are suppressed, and Agent turns compare against a start-of-turn git baseline so old uncommitted changes do not masquerade as files edited by the current run.
 - Define Agent Routines that fire on a schedule (interval / daily HH:MM / weekdays HH:MM / specific weekday HH:MM) and automatically start a brand-new Agent session with the routine's prompt, bound to the routine's workspace and optional model override. Routines are managed from a dedicated section in the Agent-mode sidebar (hover to enable/disable or run immediately; right-click for full menu) and edited in a sheet with name, prompt, workspace picker, model picker, schedule, and enabled switch. A 30s scheduler tick coalesces double-fires, catches up routines whose target time slipped past app sleep, and politely waits if the current chat is mid-turn so a scheduled run never interrupts a live conversation. Optional macOS notifications announce each run when the user has granted permission. Routines persist as JSON under `~/Library/Application Support/VeilWriter/agent-routines/`, one file per routine.
 - Run multiple Agent sessions concurrently — each session owns its own runtime (messages, request task, tool waiter, composer draft, mode/plan/goal) and dispatches its own provider request, so switching away from a streaming session doesn't kill it; the outgoing turn keeps running in the background and the sidebar status dot pulses green while it works (orange when it's paused on a tool decision). Routines spawn background runtimes that don't yank the user's UI — they appear as new rows in the sidebar with their own status indicator. Concurrent dispatches are capped per-provider (default 3, user-tunable 1–8 in Settings → Agent → Concurrency) so a fleet of routines hitting the same provider queues FIFO instead of stomping the rate limit; different providers are isolated, so running 3 DashScope sessions never blocks an OpenAI session.
 - Manage Agent memory from Settings → Memory, including feature enablement, automatic retrieval, query rewriting, retrieval limits, similarity threshold, automatic summaries, daily maintenance timing, transient/archive retention, tool model selection, embedding model selection, statistics, manual memory creation, text search, inline editing, archiving, restoration, deletion, clearing, and JSON snapshot export. Memory settings and records persist locally through UserDefaults; the current maintenance cycle performs local TTL archiving and expired archive cleanup while leaving LLM-assisted merge controls ready for the future retrieval pipeline.
