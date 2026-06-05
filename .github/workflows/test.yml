@@ -1,0 +1,70 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    name: XeditTests (macOS)
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app || sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Print toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          ruby --version
+
+      - name: List schemes
+        run: xcodebuild -project Xedit.xcodeproj -list
+
+      - name: Run XeditTests
+        id: tests
+        run: |
+          set -o pipefail
+          mkdir -p build/ci
+          xcodebuild test \
+            -project Xedit.xcodeproj \
+            -scheme Xedit \
+            -destination 'platform=macOS' \
+            -only-testing:XeditTests \
+            -resultBundlePath build/ci/XeditTests.xcresult \
+            -derivedDataPath build/ci/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            | tee build/ci/xcodebuild.log
+
+      - name: Generate Markdown + JSON report
+        if: always()
+        run: ruby scripts/xcresult_report.rb build/ci/XeditTests.xcresult build/ci/report.md build/ci/report.json
+
+      - name: Append report to job summary
+        if: always()
+        run: cat build/ci/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xedit-test-results
+          path: |
+            build/ci/XeditTests.xcresult
+            build/ci/report.md
+            build/ci/report.json
+            build/ci/xcodebuild.log
+          retention-days: 14
