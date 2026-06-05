@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.52.1-rc45 - 2026-06-05
+
+- **代码体检 - 阶段 4：拆四个还没动的大文件（AgentModeView / AgentTools / AgentModeComposerView / AgentChatHistoryTextView）。** 体检报告 §10 的剩余四个超 2000 / 接近 2000 行的 Swift 文件，本轮按职责拆成独立单元，每个目标文件 < 1500 行；调用面（外部 callsite + Xcode synchronized group 自动发现）一律不动，仅把私有视图 / 私有枚举的访问级别从 `private` 提到默认 `internal` 以便跨文件可见。
+    - **`AgentTools.swift` (2126 → 944 行) → 4 个文件**：
+        - `AgentToolAuthorization.swift` (118 行) — `AgentAlwaysAllowedCommand` 持久化记录 + `AgentCommandAuthorization` 把 `git status` / `yarn run build` / `ls` 等正规化成"总是允许"签名（自带一份保守的无 pipeline tokenizer，与 registry 内更宽松的 read-only classifier 是两份独立 copy）。
+        - `AgentToolRegistry.swift` (458 行) — 工具描述符表 `static let all` + 按 call 的 risk 分级（`run_command` 命中危险 pattern → `.danger`、纯 read-only shell 链 → `.read`），附带分级用的 shell tokenizer / 链拆分 / 可执行白名单（git / sed without -i / find without -exec 等）。这些 helper 与 registry 决策强耦合、无外部消费者，仍保持 private。
+        - `AgentSkillDirectory.swift` (255 行) — `AgentSkillCatalog`（`list_skills` / `read_skill` 工具入口）+ `AgentSkillEntry` 公开记录 + `AgentSkillDirectory` 文件系统枚举（bundled / `~/.codex/skills` / plugin cache 三个根，YAML front-matter 解析 name/description，identifier 归一化 + 去重）。
+        - 删除了一段 `AgentLegacyMCPBridge` 死代码（原文件 line 304 起约 400 行）：runner 早已通过 `AgentMCPBridge` 调用现代版，旧 legacy enum 是 `private` 但无任何引用点，确认为孤儿后直接删除。
+    - **`AgentModeComposerView.swift` (1910 → 986 行) → 3 个文件**：
+        - `AgentComposerAttachments.swift` (112 行) — `AttachButton`（"+" 图片粘贴触发）/ `SendStopButton`（双态箭头/红色停止圆盘）/ `QueueBadge`（橙色沙漏胶囊），三个 composer 行内 button 聚类。
+        - `AgentComposerPickers.swift` (428 行) — `WorkspacePickerPill`（folder dropdown + Finder/复制路径/复制分支 + 已知 workspace 切换 + Choose folder 兜底）/ `ModelPickerPill`（provider library Section 平铺 + 路由默认 + Recently fetched 尾菜单；解决 nested Menu 在 macOS 上 hover 漂移就自动 dismiss 的问题）/ `AgentModePickerPill`（Normal/Plan/Goal 选择 + Goal editor sheet），三个 pill-shape picker。
+        - `ComposerTextInput.swift` (449 行) — `ComposerTextEditor` (NSViewRepresentable) + `Coordinator`（历史 cursor / `@` token 查询派生 / `/` 和 `@` 弹层 binding）+ `ComposerNSTextView` 子类（force-plain-text 粘贴、`AgentImagePasteboardHelper` 图片探测）。
+    - **`AgentChatHistoryTextView.swift` (1883 → 541 行) → 2 个文件**：
+        - `AgentChatHistoryFormatter.swift` (1247 行) — `AgentMarkdownNormalizer`（HTML 块包成 ``` fence、divider 规范化）+ `AgentChatHistoryRenderer` TextKit baker（角色 avatar、bubble chrome 通过 `agentChatHistoryBubbleKind` 属性给 layout manager 读、copy 按钮叠在 fenced code block 上、cache 按 messages-hash × isDark × expanded tool group ids × hovered user message id）。
+        - `AgentChatChromeRenderers.swift` (121 行) — `AgentChatHistoryCodeCopyChrome`（"⎘ Copy" 代码块按钮，code 内容塞在 sidecar 属性里供 NSTextView 的 link 委托读）+ `AgentChatHistoryFooterChrome`（copy/retry 图标按钮 + 耗时 label），两个无状态 NSAttributedString builder。
+        - 主文件保留 `AgentChatHistoryTextView` NSViewRepresentable + `AgentChatHistoryNSTextView` 子类 + `AgentChatHistoryBubbleLayoutManager`（绘制 bubble + code 背景）+ 共享的 `AgentChatHistoryBubbleKind` enum / `AgentChatHistoryLayoutMetrics` / `NSAttributedString.Key` extension（这些从 `private` 提到 internal，formatter 和 chrome 跨文件共享）。
+    - **`AgentModeView.swift` (2585 → 88 行) → 6 个文件**：主文件几乎清空，只保留 `AgentModeView` 主容器 + `AgentDesign` 设计 token enum。
+        - `AgentSessionsSidebar.swift` (504 行) — `AgentSessionsSidebar`（CHATS 标题 + provider 状态 pill + workspace 分组 + 归档分区 + per-row hover 显示 pin/archive 按钮）+ `SidebarActionRow`（icon + 标题 + ⌘N 快捷键提示）。
+        - `AgentChatHeader.swift` (78 行) — `AgentChatHeader`（会话标题 + copy-title + 新会话 + 切回 editor）。
+        - `AgentChatTranscript.swift` (381 行) — `AgentChatTranscript`（plan/goal banner、20-message rendered cap、3000-char per-message cap、TextKit 历史 + 流式 SwiftUI bubble 分流、tool call group 仅渲染最近一组、queued message、错误卡、patch 提案、worktree 变更卡、底部 sentinel；scroll 只观察 count 避免 streaming token diff freeze）。
+        - `AgentMessageView.swift` (870 行) — `AgentModeMessageView`（用户右对齐 hover 出 footer / 助手左对齐 sparkle avatar + markdown 卡，`isStreamingThisMessage` 走 prop 而非 EnvironmentObject 避免 AttributeGraph 全图刷新）+ `AgentAssistantMarkdownBody` + `AgentAssistantMarkdownRenderer`（一条助手消息 = 一个 `Text(AttributedString)`，cache 128 LRU）+ `AgentLongTokenBreaker`（≥30 字符不可断 run 注入 U+200B，cache 128 LRU）+ `AgentStreamingCursor` + `AgentUserContentSplitter`（剥离 qwen-vl 图像描述块，cache 64 LRU）+ `AgentImageDescriptionDisclosure`（白底胶囊）+ `AgentMessageFooter`（copy / 耗时 / 提示+补全 token）+ `QueuedMessageRow` + `AgentChatEmptyState`（与 `AgentPanelView.AgentEmptyState` 重名避让；`AgentPanelView` 里的仍 private，AgentMode 里的迁出来后重命名）。
+        - `AgentStatusIndicators.swift` (305 行) — `AgentStatsDashboard`（Overview/Models × All/30d/7d × 8 stat grid + heatmap 自适应列数 + War-and-Peace fun fact）+ `StatCell` + `PlanStatusPill`（proposed/approved/executing/done/rejected 五色胶囊）。
+        - `AgentPlanGoalCards.swift` (528 行) — `AgentPlanCard` + `AgentPlanRevisionRow`（默认 collapse 的 Replan 按钮 + 一行 note 域）+ `AgentPlanStepRow`（status glyph 循环 + 上下文菜单 edit/insert/restart/remove）+ `AgentPlanStepSimpleSheet`（单字段统一 sheet）+ `AgentGoalCard` + `AgentGoalEditorSheet`。
+    - **公共拆分模式**：每个新文件顶部放 8-30 行 `//` 注释解释职责 / 拆出原因 / 与原文件的协议（NSAttributedString.Key 哪些跨文件共享、`isStreamingThisMessage` 为什么必须是 prop 而非 environment、provider Section 为什么 flat 不 nested 等历史信息）；私有 `private struct` 改 `struct`（internal）只在迁出时；遇到 `AgentEmptyState` 与 `AgentPanelView` 的同名 private 冲突，迁出方 rename 为 `AgentChatEmptyState`。`AgentLegacyMCPBridge` 是孤儿代码已直接删除而非搬迁。
+    - **每一步独立 build**：每抽出一个新文件立刻 `xcodebuild -scheme Xedit build`，rc44 → rc45 期间共 ~14 次 build 全部 SUCCEEDED。`xcodebuild test` 跑了一次：6-7 failure（与 rc44 / rc41 commit 提到的 7-8 个预存 flaky 一致，且都在 `AppState` 测试间磁盘 IO 污染相关名单内），无新增。
+    - **纵向数字汇总**：拆分前 4 个文件 8504 行 / 文件平均 2126；拆分后 4 个主文件 + 15 个抽出文件共 19 个文件 8989 行 / 平均 473，最大文件 1247 行（`AgentChatHistoryFormatter.swift`），所有文件低于 CLAUDE.md §10 的 1500 行任务目标和 2000 行软上限。多出来的 485 行全部是 19 份 file header 注释 + import + Swift access-level 调整，无功能膨胀。
+
 ## 1.52.1-rc44 - 2026-06-05
 
 - **代码体检 - 阶段 6：CI 自动化 + 关键模块单测补缺。** 体检报告原文："scripts/ contains only release.sh ... No GitHub Actions, pre-commit hooks, test CI, or regression suite." 本轮落地阶段 6 CI 基建并对体检确认"零测试或测试不足"的 6 个模块补单测，全部 82 个新 case 全过，HEAD 基线 7 个历史 flaky test 未变（与 rc41/rc42 提到的"8 个预存 flaky"吻合）。版本号从 HEAD rc42 直接跳到 rc44，留 rc43 给并行进行中的 i18n worktree。

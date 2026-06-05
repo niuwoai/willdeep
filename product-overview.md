@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-05 | Current version: v1.52.1-rc42
+> Last updated: 2026-06-05 | Current version: v1.52.1-rc45
 
 ## Positioning
 
@@ -31,10 +31,24 @@ VeilWriter 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。�
 | `AppStateGitStatus.swift` | ~488 | git porcelain 解析 + `loadGitStatus` / `refreshGitStatusAfterAgentTool` / worktree snapshot/diff preview（rc42 拆出） |
 | `AppStateEditorTextUtilities.swift` | ~180 | nonisolated 文本工具：findRanges / changedLineNumbers / 行操作 / 目录枚举（rc42 拆出） |
 | `AppStatePersistenceStores.swift` | ~111 | RecentItemsStore / SessionStore / CompressionSummaryCollector（rc42 拆出） |
-| `AgentModeView.swift` | ~2585 | 全屏 Agent mode 视图：左侧 session 侧栏、右侧聊天 pane、empty dashboard |
-| `AgentTools.swift` | ~2126 | 内建工具实现 + 静态 allowlist + LLM judge 自动批准 |
-| `AgentModeComposerView.swift` | ~1910 | Agent 输入区、image 暂存、`@file/@workspace/@skill` 选择、workspace pill |
-| `AgentChatHistoryTextView.swift` | ~1852 | TextKit 历史渲染：Markdown / 代码块 / 工具组 / hover 气泡 |
+| `AgentModeView.swift` | ~88 | Agent mode 主壳（rc45 拆完） |
+| `AgentMessageView.swift` | ~870 | 消息气泡 / 助手 Markdown 渲染器 / token breaker / footer / queued row / 空状态（rc45 拆出） |
+| `AgentSessionsSidebar.swift` | ~504 | 左侧会话侧栏：CHATS / provider 状态 / workspace 分组 / 归档分区（rc45 拆出） |
+| `AgentChatTranscript.swift` | ~381 | Plan/Goal banner / 历史 + 流式分流 / tool group / 错误卡（rc45 拆出） |
+| `AgentChatHeader.swift` | ~78 | 会话标题 + 复制 + 新会话 + 切回 editor（rc45 拆出） |
+| `AgentStatusIndicators.swift` | ~305 | StatsDashboard / StatCell / PlanStatusPill（rc45 拆出） |
+| `AgentPlanGoalCards.swift` | ~528 | Plan card / 修订行 / 步骤行 / 简单 sheet / Goal card / Goal editor（rc45 拆出） |
+| `AgentTools.swift` | ~944 | 共享类型 / UI 状态 / JSON 辅助 / Tool runner（rc45 拆完） |
+| `AgentToolRegistry.swift` | ~458 | 工具描述符表 + read-only shell 分级 + 安全 path 检查（rc45 拆出） |
+| `AgentSkillDirectory.swift` | ~255 | Codex skill 发现 + `list_skills`/`read_skill` 工具入口（rc45 拆出） |
+| `AgentToolAuthorization.swift` | ~118 | always-allow 签名归一化（rc45 拆出） |
+| `AgentModeComposerView.swift` | ~986 | Composer 主壳 + Worktree banner + status bar + slash/@ 弹层（rc45 拆完） |
+| `ComposerTextInput.swift` | ~449 | NSTextView 桥接 + 历史 cursor + @-token 派生（rc45 拆出） |
+| `AgentComposerPickers.swift` | ~428 | Workspace / Model / Mode 三个 pill picker（rc45 拆出） |
+| `AgentComposerAttachments.swift` | ~112 | AttachButton / SendStopButton / QueueBadge（rc45 拆出） |
+| `AgentChatHistoryTextView.swift` | ~541 | NSViewRepresentable 包装 + NSTextView 子类 + bubble layout manager（rc45 拆完） |
+| `AgentChatHistoryFormatter.swift` | ~1247 | Markdown normalizer + AgentChatHistoryRenderer TextKit baker（rc45 拆出） |
+| `AgentChatChromeRenderers.swift` | ~121 | 代码 copy 按钮 + footer 按钮 NSAttributedString builder（rc45 拆出） |
 | `ContentView.swift` | ~1798 | 主窗口外壳（rc40 拆完） |
 | `EditorView.swift` | ~1692 | NSTextView 包装、滚动、caret/scroll 记忆、folding |
 | `AgentPanelView.swift` | ~1610 | 侧边 panel 形态的 Agent 面板 |
@@ -52,7 +66,7 @@ VeilWriter 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。�
 
 其余文件（`AgentMemoryStore` / `AgentSkillSettingsStore` / `FileTreeView` / `EditorInspector` / `EditorAppearance` / `EditorTab` / `FileSystemNode` / `ProjectFileListCache` / `CommandLineToolInstaller` / `AgentImageViews` / `AgentRoutine*` 等）单一职责、规模可控（<500 行），目前不在重构清单。
 
-CLAUDE.md §10 的软上限是 2000 行，硬上限是 3000 行。`AppState.swift` 已在 rc42 拆完（1364 行）。仍 > 2000 的有 `AgentModeView.swift` / `AgentTools.swift` / `AgentModeComposerView.swift` / `AgentChatHistoryTextView.swift`，列入后续阶段拆分清单（见 [ROADMAP.md](./ROADMAP.md)）。
+CLAUDE.md §10 的软上限是 2000 行，硬上限是 3000 行。rc42 拆完 `AppState.swift`（1364 行）；rc45 拆完 `AgentModeView.swift` / `AgentTools.swift` / `AgentModeComposerView.swift` / `AgentChatHistoryTextView.swift` 共 14 个新文件，全部低于 1500 行任务目标。当前所有 `Xedit/*.swift` 主文件均 ≤ 1798 行（`ContentView.swift`）。
 
 ## 关键概念
 
@@ -69,7 +83,7 @@ CLAUDE.md §10 的软上限是 2000 行，硬上限是 3000 行。`AppState.swif
 
 遵循 CLAUDE.md §5：
 
-- 格式 `MAJOR.MINOR.PATCH-rcN`，例 `1.52.1-rc42`。
+- 格式 `MAJOR.MINOR.PATCH-rcN`，例 `1.52.1-rc45`。
 - **bugfix**（含文档、release 流程改进）：只递增 `rcN`。
 - **feature 新增**：可提升 `PATCH` / `MINOR`，rc 归位 `rc1`。
 - 前后端版本号必须一致——这里"后端"指 `AgentClient` 出站请求的 `X-App-Version` header（值从 `Bundle.main.CFBundleShortVersionString` 取，等价 pbxproj `MARKETING_VERSION`）。
