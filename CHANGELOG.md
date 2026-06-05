@@ -14,6 +14,12 @@
 - **拆完后的纵向数字：** AppState 4946 → 1364 行（-72%），全部新文件 < 1400 行，远低于 §10 的 2000 行软上限和 3000 行硬上限。Xedit module 总 Swift 行数从 4946（单文件）变成 5117（7 文件），仅 +171 行，纯粹是 7 份 file header / extension 包裹的开销 — 没有逻辑膨胀。
 - **完整跑了 `xcodebuild test -only-testing:XeditTests`，failure 数 7-8 = rc41 基线 8 个预存 flaky，没新增 failure。** 跑了两次确认（第一次 8 fail，第二次 7 fail，差异在已知 flaky 名单内）。`xcodebuild build` 成功；app 启动跑了 15+ 秒无 crash。
 - **文档同步：** `product-overview.md` 顶部 Current version → `v1.52.1-rc42`；"架构概览"段 AppState 描述更新为已拆完；"目录结构"表格新增 6 个伴生文件行，AppState 行数刷新为 1364。
+- **代码体检 - 阶段 7：文档与 release 流程收尾。**
+    - **`product-overview.md`** 进一步补 4 个一级章节：「架构概览」「目录结构」「关键概念」「版本号约定」「国际化（i18n）」「测试与 CI」，并诚实标注 i18n 与 CI 仍未落地，挂 [ROADMAP.md](./ROADMAP.md) 链接。
+    - **新增 [`TESTING.md`](./TESTING.md)**：Xcode `Cmd+U` 与 `xcodebuild test` 两条本地路径、Swift Testing (`@Suite` / `@Test` / `#expect`) 新风格示例、`scripts/run_tests.sh` 模板、`.serialized` 隔离约定、CI 报告位置约定、pre-PR 自检清单。
+    - **新增 [`CONTRIBUTING.md`](./CONTRIBUTING.md)**：Fork-clone / 分支命名 / Commit 风格 / 版本号约定 / Pre-PR 自检 共 5 章节；Commit 风格段按近 30 条 `git log` 统计列出实际前缀分布（`fix(agent):` ×17 等），并给出版本号一致性校验的 inline shell 脚本。
+    - **新增 [`ROADMAP.md`](./ROADMAP.md)**：阶段 1–7 状态表、文件拆分前后行数对比、阶段 4 剩余 >2000 行文件的拆分思路（`AgentModeView` / `AgentTools` / `AgentModeComposerView` / `AgentChatHistoryTextView`）、阶段 5 i18n 落地清单、阶段 6 CI workflow 草稿、已知 flaky test 追踪。
+    - **改进 `scripts/release.sh`**：build 前先跑 `xcodebuild test -only-testing:XeditTests`，失败直接 exit 1 不浪费时间在打包公证上；新增 `--dry-run`（跑测试 + Release build，无签名证书也能验证脚本本身）与 `--skip-tests` 参数；公证 + staple 完成后**交互确认**是否打 `v{版本号}` tag，然后再次确认是否 push origin（破坏性操作不自动执行，符合 CLAUDE.md §5 + 体检报告点名要求）；最终输出 Release 摘要含 DMG 路径 / tag / HEAD / 上次 tag 到 HEAD 的 commit 范围；stdin 非 TTY（CI / pipe）时自动跳过交互留给人工。Step 编号从 7 步扩到 8 步（新增 Step 0「测试」与 Step 8「tag/push 与摘要」）。
 
 ## 1.52.1-rc41 - 2026-06-04
 
