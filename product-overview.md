@@ -1,12 +1,93 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-04 | Current version: v1.52.1-rc41
+> Last updated: 2026-06-05 | Current version: v1.52.1-rc42
 
 ## Positioning
 
 VeilWriter is a lightweight macOS editor focused on quick project browsing, fast text loading, simple saving, and syntax-highlighted editing without the weight of a full IDE.
 
 VeilWriter is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
+
+## 架构概览
+
+VeilWriter 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
+
+- **入口** — `XeditApp.swift`：`@main App`，注入唯一 `AppState` `@StateObject` 给整个窗口树。
+- **状态枢纽** — `AppState.swift`：全局 `ObservableObject`，承载工作区根目录、tab 集、find/replace、git 状态、Agent 配置库等"窗口级"状态。rc42 完成体检阶段 3：把原 4946 行的 AppState 用 `extension` 拆成 6 个伴生文件（`AppStateAgentLoop`、`AppStateAgentSessions`、`AppStateFileOperations`、`AppStateGitStatus`、`AppStateEditorTextUtilities`、`AppStatePersistenceStores`），主类瘦身到 ~1364 行，所有伴生文件 < 1400 行；门面 + callsite 不动。**per-session Agent 状态已经在 rc2 抽到 `AgentRuntime`**：22 个原本 `@Published` 在 AppState 上的 Agent 字段（messages / patchProposals / queue / mode / plan / goal …）下沉到 `AgentRuntime`，AppState 上保留同名 get/set delegate 转发到 `activeRuntime`，并把 `activeRuntime.objectWillChange` 通过 `subscribeToActiveRuntime()` republish 到自身的 publisher 上，UI 端无感。
+- **视图层** — `ContentView.swift`（rc40 拆完，1798 行）是主窗口外壳，子视图（背景、空状态、窗口 chrome、Markdown 预览）独立成 `ContentViewBackgrounds.swift` / `EmptyStateViews.swift` / `MainWindowChrome.swift` / `MarkdownPreview.swift`。Agent 面板有两套渲染：`AgentPanelView`（侧边 panel 模式）和 `AgentModeView`（Cmd+Shift+A 进入的全屏 mode），共用 `AgentChatHistoryTextView`（TextKit 历史）和 `AgentModeComposerView`（输入区）。
+- **Agent 运行时** — `AgentRuntime.swift` 一个会话一个实例，独占自身的 messages / requestTask / toolDecisionWaiter / 模式 / 草稿等；多个 runtime 可以并发跑（后台 routine 不会抢占用户的 active session）。`AgentClient.swift` 负责 OpenAI 兼容的流式请求、image 路由、X-App-Version header；`AgentTools.swift` 是内建工具（`search_files` / `grep_files` / `read_file` / `list_directory` / `git_status` / `run_command` / `ask_user` / skill / MCP）。`AgentSessionStore` 负责 JSON 持久化（`~/Library/Application Support/VeilWriter/agent-sessions/`），`AgentRoutineStore` + `AgentRoutineScheduler` 负责定时 routine。
+- **编辑器内核** — `EditorView.swift` 包 `NSTextView`，搭配 `SyntaxHighlighter.swift`（NSRegularExpression 静态缓存，viewport 高亮）/ `ScopeGuideCalculator.swift`（fold + scope guide）。
+
+## 目录结构
+
+源码全部在 `Xedit/` 下，单 module。截至 rc42 的主要 Swift 文件（按行数倒序选）：
+
+| 文件 | 行数 | 职责 |
+| --- | --- | --- |
+| `AppState.swift` | ~1364 | 全局状态枢纽 + 6 个 manager 伴生文件聚合（rc42 拆完） |
+| `AppStateAgentLoop.swift` | ~1382 | `dispatchAgentMessage` / `runAgentLoop` / `awaitToolDecision` / 工具决策处理 / context 压缩 / patch 应用（rc42 拆出） |
+| `AppStateAgentSessions.swift` | ~1052 | sendAgentMessage / sessions/routines 生命周期 / Plan & Goal / provider library 切换 / 附件管理（rc42 拆出） |
+| `AppStateFileOperations.swift` | ~540 | NSOpenPanel / file load/save / session restore / security-scoped bookmark（rc42 拆出） |
+| `AppStateGitStatus.swift` | ~488 | git porcelain 解析 + `loadGitStatus` / `refreshGitStatusAfterAgentTool` / worktree snapshot/diff preview（rc42 拆出） |
+| `AppStateEditorTextUtilities.swift` | ~180 | nonisolated 文本工具：findRanges / changedLineNumbers / 行操作 / 目录枚举（rc42 拆出） |
+| `AppStatePersistenceStores.swift` | ~111 | RecentItemsStore / SessionStore / CompressionSummaryCollector（rc42 拆出） |
+| `AgentModeView.swift` | ~2585 | 全屏 Agent mode 视图：左侧 session 侧栏、右侧聊天 pane、empty dashboard |
+| `AgentTools.swift` | ~2126 | 内建工具实现 + 静态 allowlist + LLM judge 自动批准 |
+| `AgentModeComposerView.swift` | ~1910 | Agent 输入区、image 暂存、`@file/@workspace/@skill` 选择、workspace pill |
+| `AgentChatHistoryTextView.swift` | ~1852 | TextKit 历史渲染：Markdown / 代码块 / 工具组 / hover 气泡 |
+| `ContentView.swift` | ~1798 | 主窗口外壳（rc40 拆完） |
+| `EditorView.swift` | ~1692 | NSTextView 包装、滚动、caret/scroll 记忆、folding |
+| `AgentPanelView.swift` | ~1610 | 侧边 panel 形态的 Agent 面板 |
+| `EditorSettingsView.swift` | ~1393 | Settings 主窗口：通用 / 字体 / Agent / Skills / Memory / MCP |
+| `AgentModels.swift` | ~1116 | `AgentSession` / `AgentMessage` / `AgentConfiguration` / `AgentProviderLibrary` 等数据模型 |
+| `SyntaxHighlighter.swift` | ~902 | 多语言正则规则 + 静态 NSRegularExpression 缓存 + viewport 高亮 |
+| `AgentMCPBridge.swift` | ~891 | MCP server 发现（App / Cursor / Codex）+ stdio / streamable-http 调用 |
+| `MarkdownPreview.swift` | ~727 | 编辑器右侧 Markdown / HTML 预览（rc40 抽出） |
+| `AgentClient.swift` | ~672 | OpenAI 兼容流式请求、provider header、image_url 路由、X-App-Version |
+| `AgentRuntime.swift` | — | 每会话一个：messages / requestTask / toolDecisionWaiter / mode/plan/goal |
+| `ContentViewBackgrounds.swift` | ~201 | 主窗口背景、视觉效果、resize handle（rc40 抽出） |
+| `EmptyStateViews.swift` | ~308 | 空工作区 / 空 tab hero + recent（rc40 抽出） |
+| `MainWindowChrome.swift` | ~423 | 键盘快捷键 / 窗口 chrome 配置 / 调色板转发（rc40 抽出） |
+| `AgentMarkdownTableFormatter.swift` | ~111 | CJK 双宽列对齐表格格式化（rc38 抽出，两条渲染路径共用） |
+
+其余文件（`AgentMemoryStore` / `AgentSkillSettingsStore` / `FileTreeView` / `EditorInspector` / `EditorAppearance` / `EditorTab` / `FileSystemNode` / `ProjectFileListCache` / `CommandLineToolInstaller` / `AgentImageViews` / `AgentRoutine*` 等）单一职责、规模可控（<500 行），目前不在重构清单。
+
+CLAUDE.md §10 的软上限是 2000 行，硬上限是 3000 行。`AppState.swift` 已在 rc42 拆完（1364 行）。仍 > 2000 的有 `AgentModeView.swift` / `AgentTools.swift` / `AgentModeComposerView.swift` / `AgentChatHistoryTextView.swift`，列入后续阶段拆分清单（见 [ROADMAP.md](./ROADMAP.md)）。
+
+## 关键概念
+
+- **AgentRuntime per session** — 一个 `AgentSession` 配一个 `AgentRuntime`。runtime 内独占 `messages`、`requestTask`（当前流式 Task）、`toolDecisionWaiter`（pending 工具批准的 continuation）、`composerDraft`、`mode/plan/goal`、`turnStartedAt` 等。AppState 通过 `activeSessionID -> activeRuntime` 选中"当前"，但其他 runtime 继续在后台跑。切换会话不会取消正在流式的请求；用户回来时还能看到完整 transcript。
+- **@MainActor isolation** — AppState 本身是 `@MainActor`，所有 `@Published` mutation 必须在主线程发生。runtime 的 hot 字段亦然，但 `AgentClient` 的 URLSession 流式回调跨线程时通过 `Task { @MainActor in ... }` 拥抱主线程。`AppState.deinit` 不能 cancel runtime——rc38 曾尝试 `MainActor.assumeIsolated` 但 Swift Testing 在非主线程 release 触发 precondition fail，rc41 回退；清理走 session 显式删除路径。
+- **Per-provider concurrency cap** — 多 runtime 并发跑时，同一 provider 的活跃请求按 `AgentSettingsStore` 的 `concurrencyLimit`（默认 3，1–8 可调）FIFO 排队；不同 provider 互不阻塞。这样 routine 集中触发也不会冲烂同一家 API 的速率。
+- **find/replace 内容哈希缓存** — `AppState.findMatchRanges` 与 `changedLineNumbers` 用 `(content.hashValue, query/savedContent)` 双键缓存（rc39 落地）。SwiftUI body 多次读这俩属性时不再每次重扫全文。
+- **NSRegularExpression 静态缓存** — `SyntaxHighlighter` 把已编译的 `NSRegularExpression` 按 pattern + options 放进 NSLock 保护的静态字典（rc38 落地）。viewport 高亮的 O(N × 规则数) 编译降到 O(规则数) 一次。
+- **Tool 调用容错** — `argumentsJSON` 解析失败时该 tool call 标 `.failed`，把坏 JSON 通过 tool message 反馈回模型自纠（rc38），而不是悄悄落入空 dict。
+- **Auto-approve 安全判定** — 静态 allowlist（cat/head/tail/ls/git diff/log/status/rg/grep/wc/file …）自动放行；越界命令落 LLM judge，**走 Flash 模型而非当前 turn 的模型**（rc41 修正，避免昂贵模型重复评估）。返回 YES 才自动跑；destructive 模式仍需键入 `confirm`。
+- **Worktree baseline diff** — Agent turn 开始时记录 git 变更基线，结束后对比快照。只有相对基线发生变化才标 session `didEditFiles`，避免旧的未提交改动误触发"已编辑文件"卡片。
+
+## 版本号约定
+
+遵循 CLAUDE.md §5：
+
+- 格式 `MAJOR.MINOR.PATCH-rcN`，例 `1.52.1-rc42`。
+- **bugfix**（含文档、release 流程改进）：只递增 `rcN`。
+- **feature 新增**：可提升 `PATCH` / `MINOR`，rc 归位 `rc1`。
+- 前后端版本号必须一致——这里"后端"指 `AgentClient` 出站请求的 `X-App-Version` header（值从 `Bundle.main.CFBundleShortVersionString` 取，等价 pbxproj `MARKETING_VERSION`）。
+- 8 处需同步更新：`Xedit.xcodeproj/project.pbxproj` 里 6 个 `MARKETING_VERSION` 块（debug / release × 三个 target）。`Help/VeilWriter.help/Contents/Info.plist` 与本文件顶部 `Current version` 一并同步。
+- 每次版本变更必须同步在 `CHANGELOG.md` 顶部写一节、更新本文件头部的 `Current version` 字段。
+- git commit 后建议打 `v{版本号}` tag 并推送 origin（`scripts/release.sh` 公证完成后会交互确认是否打 tag/push）。
+
+## 国际化（i18n）
+
+**当前状态：未落地。** 截至 rc42，源码中 `NSLocalizedString` 与 `String(localized:)` 的命中数为 0；UI 文案直接写死在 SwiftUI 视图中（混合中英文）。
+
+CLAUDE.md §2 要求 React 部分必须走 i18n，但 VeilWriter 是 SwiftUI macOS 应用，不在该条款约束范围内。即便如此，将所有用户可见文案抽到 `Localizable.xcstrings`（Xcode 15+ 的 String Catalog 格式）+ `L10n` enum 强类型访问，仍然列入后续阶段（见 [ROADMAP.md](./ROADMAP.md) 阶段 5）。落地前提是先决定首发语言矩阵（zh-Hans / en 至少）和文案 freeze 时机。
+
+## 测试与 CI
+
+- **本地测试**：详见 [TESTING.md](./TESTING.md)。`XeditTests/` 12 个 Swift Testing（`@Suite` / `@Test`）风格的单测，覆盖 Agent 历史渲染、模型选路、目标 checklist 解析、MCP 服务发现、Memory 存储、Plan 进度、Provider library、Session 持久化、Skill 目录、Markdown 列表嵌套与表格解析。Xcode 跑：`Cmd+U`；命令行跑：`xcodebuild test -project Xedit.xcodeproj -scheme Xedit -destination 'platform=macOS'`。
+- **已知 flaky**：CHANGELOG rc41 提到的 7-8 个测试由 AppState init 中的磁盘 IO 在测试间相互污染引起，已 spawn 独立任务追踪，不在本轮范围。
+- **CI**：**未落地。** 仓库下没有 `.github/workflows/`。后续阶段计划：PR 触发 `xcodebuild test` + lint + 版本号一致性校验。详见 [ROADMAP.md](./ROADMAP.md) 阶段 6。
 
 ## Current Capabilities
 
