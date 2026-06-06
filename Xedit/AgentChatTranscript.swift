@@ -126,7 +126,7 @@ struct AgentChatTranscript: View {
                             let calls = toolCalls(for: messageID)
                             if !calls.isEmpty {
                                 let segments = AgentToolCallGrouping.group(calls)
-                                VStack(alignment: .leading, spacing: 4) {
+                                VStack(alignment: .leading, spacing: 6) {
                                     AgentTurnFileActivityCard(calls: calls)
                                     ForEach(segments) { segment in
                                         AgentToolCallGroup(
@@ -137,6 +137,8 @@ struct AgentChatTranscript: View {
                                     }
                                 }
                                 .id(toolGroupScrollID(for: messageID))
+                                .padding(.top, 6)
+                                .padding(.bottom, 2)
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                             }
                         }

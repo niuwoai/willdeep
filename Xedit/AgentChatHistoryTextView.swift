@@ -374,6 +374,7 @@ extension NSAttributedString.Key {
     static let agentChatHistoryCodeCopyText = NSAttributedString.Key("AgentChatHistoryCodeCopyText")
     static let agentChatHistoryMessageCopyText = NSAttributedString.Key("AgentChatHistoryMessageCopyText")
     static let agentChatHistoryRetryLastTurn = NSAttributedString.Key("AgentChatHistoryRetryLastTurn")
+    static let agentChatHistoryTableBlockID = NSAttributedString.Key("AgentChatHistoryTableBlockID")
     static let agentChatHistoryToolGroupID = NSAttributedString.Key("AgentChatHistoryToolGroupID")
     static let agentChatHistoryUserMessageID = NSAttributedString.Key("AgentChatHistoryUserMessageID")
 }
@@ -381,6 +382,7 @@ extension NSAttributedString.Key {
 private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         drawAgentBubbles(forGlyphRange: glyphsToShow, at: origin)
+        drawAgentTables(forGlyphRange: glyphsToShow, at: origin)
         drawAgentCodeBlocks(forGlyphRange: glyphsToShow, at: origin)
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
     }
@@ -409,6 +411,36 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
             guard !rect.isNull, !rect.isEmpty else { return }
             bubbleColor(for: kind).setFill()
             NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8).fill()
+        }
+    }
+
+    private func drawAgentTables(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        guard let textStorage else { return }
+        let characterRange = self.characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
+        let fullStorageRange = NSRange(location: 0, length: textStorage.length)
+        var drawnRanges = Set<String>()
+        textStorage.enumerateAttribute(.agentChatHistoryTableBlockID, in: characterRange, options: []) { value, range, _ in
+            guard range.length > 0, let value = value as? NSNumber else { return }
+            var fullEffectiveRange = NSRange(location: 0, length: 0)
+            _ = textStorage.attribute(
+                .agentChatHistoryTableBlockID,
+                at: range.location,
+                longestEffectiveRange: &fullEffectiveRange,
+                in: fullStorageRange
+            )
+            let drawKey = "\(fullEffectiveRange.location)-\(fullEffectiveRange.length)-\(value.intValue)"
+            guard drawnRanges.insert(drawKey).inserted else { return }
+            let tableGlyphRange = glyphRange(forCharacterRange: fullEffectiveRange, actualCharacterRange: nil)
+            let visibleGlyphRange = NSIntersectionRange(tableGlyphRange, glyphsToShow)
+            guard visibleGlyphRange.length > 0 else { return }
+            let rect = tableBlockRect(forGlyphRange: tableGlyphRange, at: origin)
+            guard !rect.isNull, !rect.isEmpty else { return }
+            NSColor.controlBackgroundColor.withAlphaComponent(0.38).setFill()
+            let path = NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6)
+            path.fill()
+            NSColor.separatorColor.withAlphaComponent(0.14).setStroke()
+            path.lineWidth = 1
+            path.stroke()
         }
     }
 
@@ -486,6 +518,27 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
         }
     }
 
+    private func tableBlockRect(forGlyphRange fullGlyphRange: NSRange, at origin: NSPoint) -> NSRect {
+        var union = NSRect.null
+        var containerWidth: CGFloat = 0
+        enumerateLineFragments(forGlyphRange: fullGlyphRange) { lineFragmentRect, _, textContainer, lineGlyphRange, _ in
+            containerWidth = max(containerWidth, self.usableWidth(for: textContainer, fallback: lineFragmentRect.width))
+            let lineRange = NSIntersectionRange(lineGlyphRange, fullGlyphRange)
+            guard lineRange.length > 0 else { return }
+            var lineRect = self.boundingRect(forGlyphRange: lineRange, in: textContainer)
+            guard !lineRect.isEmpty else { return }
+            lineRect = lineRect.offsetBy(dx: origin.x, dy: origin.y)
+            union = union.isNull ? lineRect : union.union(lineRect)
+        }
+        guard !union.isNull else { return union }
+        var rect = union.insetBy(dx: -10, dy: -6)
+        if containerWidth > 0 {
+            rect.origin.x = origin.x + 30
+            rect.size.width = max(220, containerWidth - 68)
+        }
+        return rect.integral
+    }
+
     private func codeBlockRect(forGlyphRange fullGlyphRange: NSRange, at origin: NSPoint) -> NSRect {
         var union = NSRect.null
         var containerWidth: CGFloat = 0
@@ -537,5 +590,3 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
         }
     }
 }
-
-

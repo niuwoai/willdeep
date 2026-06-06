@@ -674,7 +674,7 @@ struct AgentToolCallGroup: View {
 
     var body: some View {
         let status = statusSummary
-        VStack(alignment: .leading, spacing: detailsVisible ? 5 : 0) {
+        VStack(alignment: .leading, spacing: detailsVisible ? 7 : 0) {
             Button {
                 if canToggleDetails {
                     isExpanded.toggle()
@@ -719,10 +719,13 @@ struct AgentToolCallGroup: View {
                         AgentToolCallCard(call: call)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.horizontal, 7)
-        .padding(.vertical, 3)
+        .padding(.horizontal, 8)
+        .padding(.vertical, detailsVisible ? 6 : 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.14))
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .overlay(
@@ -1108,10 +1111,11 @@ struct AgentToolCallCard: View {
             Text(title)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-            ScrollView(.horizontal) {
+            ScrollView([.horizontal, .vertical]) {
                 Text(text)
                     .font(.system(size: 11, design: .monospaced))
                     .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(5)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

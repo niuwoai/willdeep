@@ -544,7 +544,7 @@ enum AgentChatHistoryRenderer {
     private static func headerParagraphStyle(for role: AgentRole) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = role == .user ? .right : .left
-        style.paragraphSpacing = role == .user ? 14 : 5
+        style.paragraphSpacing = role == .user ? 14 : 9
         style.lineSpacing = 1
         style.headIndent = role == .user ? 150 : 0
         style.firstLineHeadIndent = style.headIndent
@@ -555,8 +555,8 @@ enum AgentChatHistoryRenderer {
     private static func bodyParagraphStyle(for role: AgentRole) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = .left
-        style.lineSpacing = 2
-        style.paragraphSpacing = role == .user ? 6 : 2
+        style.lineSpacing = 1
+        style.paragraphSpacing = role == .user ? 5 : 1
         switch role {
         case .user:
             style.headIndent = AgentChatHistoryLayoutMetrics.userBodyHeadIndent
@@ -577,6 +577,13 @@ enum AgentChatHistoryRenderer {
             style.firstLineHeadIndent = baseStyle.firstLineHeadIndent + 8
             style.tailIndent = baseStyle.tailIndent - 8
         }
+        return style
+    }
+
+    private static func tableBlockParagraphStyle(from baseStyle: NSParagraphStyle) -> NSParagraphStyle {
+        let style = codeBlockParagraphStyle(from: baseStyle).mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        style.lineSpacing = 0
+        style.paragraphSpacing = 3
         return style
     }
 
@@ -643,6 +650,11 @@ enum AgentChatHistoryRenderer {
             guard value != nil else { return }
             attributed.addAttribute(.paragraphStyle, value: codeParagraphStyle, range: subrange)
         }
+        let tableParagraphStyle = tableBlockParagraphStyle(from: paragraphStyle)
+        attributed.enumerateAttribute(.agentChatHistoryTableBlockID, in: range, options: []) { value, subrange, _ in
+            guard value != nil else { return }
+            attributed.addAttribute(.paragraphStyle, value: tableParagraphStyle, range: subrange)
+        }
         guard let foregroundColor else { return }
         attributed.enumerateAttributes(in: range, options: []) { attributes, subrange, _ in
             if attributes[.link] == nil {
@@ -666,6 +678,11 @@ enum AgentChatHistoryRenderer {
         attributed.enumerateAttribute(.agentChatHistoryCodeBlockID, in: range, options: []) { value, subrange, _ in
             guard value != nil else { return }
             attributed.addAttribute(.paragraphStyle, value: codeParagraphStyle, range: subrange)
+        }
+        let tableParagraphStyle = tableBlockParagraphStyle(from: paragraphStyle)
+        attributed.enumerateAttribute(.agentChatHistoryTableBlockID, in: range, options: []) { value, subrange, _ in
+            guard value != nil else { return }
+            attributed.addAttribute(.paragraphStyle, value: tableParagraphStyle, range: subrange)
         }
     }
 
@@ -1030,10 +1047,11 @@ enum AgentChatHistoryRenderer {
 
         var didAppendBlock = false
         var codeBlockIndex = 0
+        var tableBlockIndex = 0
         func appendBlockSeparator() {
             if didAppendBlock {
                 result.append(NSAttributedString(
-                    string: "\n\n",
+                    string: "\n",
                     attributes: [
                         .font: bodyFont,
                         .foregroundColor: bodyColor,
@@ -1180,13 +1198,23 @@ enum AgentChatHistoryRenderer {
                         rows: rows
                     )
                     if !table.isEmpty {
+                        let tableBlockStart = result.length
+                        let tableBlockID = tableBlockIndex
+                        tableBlockIndex += 1
                         result.append(NSAttributedString(
                             string: table,
                             attributes: [
-                                .font: monoFont,
+                                .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
                                 .foregroundColor: bodyColor,
                             ]
                         ))
+                        if role != .user {
+                            result.addAttribute(
+                                .agentChatHistoryTableBlockID,
+                                value: NSNumber(value: tableBlockID),
+                                range: NSRange(location: tableBlockStart, length: result.length - tableBlockStart)
+                            )
+                        }
                     }
                 }
             }

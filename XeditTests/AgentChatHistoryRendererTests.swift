@@ -186,7 +186,45 @@ struct AgentChatHistoryRendererTests {
             at: retryRange.location,
             effectiveRange: nil
         ) as? NSFont)
-        #expect(retryFont.pointSize >= 16)
+        #expect(retryFont.pointSize >= 13)
+        #expect(retryFont.pointSize < copyFont.pointSize)
+    }
+
+    @Test
+    func marksMarkdownTablesForTextKitTableChrome() throws {
+        let message = AgentMessage(
+            role: .assistant,
+            content: """
+            最近提交总结（近 15 条）
+
+            | 时间 | 提交 | 作者 | 说明 |
+            | --- | --- | --- | --- |
+            | 06-04 13:47 | `1633595` | insight68 | 合并 main 分支 |
+            | 06-04 13:33 | `561a2e9` | insight68 | **hermes** 相关 |
+            """
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
+
+        #expect(rendered.string.contains("时间"))
+        #expect(rendered.string.contains("作者"))
+        #expect(rendered.string.contains("─┼─"))
+
+        let tableRange = (rendered.string as NSString).range(of: "时间")
+        #expect(tableRange.location != NSNotFound)
+        let tableID = try #require(rendered.attribute(
+            .agentChatHistoryTableBlockID,
+            at: tableRange.location,
+            effectiveRange: nil
+        ) as? NSNumber)
+        #expect(tableID.intValue == 0)
+
+        let paragraphStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: tableRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(paragraphStyle.lineSpacing == 0)
     }
 
     @Test

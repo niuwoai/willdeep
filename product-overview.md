@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-05 | Current version: v1.52.1-rc45
+> Last updated: 2026-06-07 | Current version: v1.52.1-rc46
 
 ## Positioning
 
@@ -83,7 +83,7 @@ CLAUDE.md §10 的软上限是 2000 行，硬上限是 3000 行。rc42 拆完 `A
 
 遵循 CLAUDE.md §5：
 
-- 格式 `MAJOR.MINOR.PATCH-rcN`，例 `1.52.1-rc45`。
+- 格式 `MAJOR.MINOR.PATCH-rcN`，例 `1.52.1-rc46`。
 - **bugfix**（含文档、release 流程改进）：只递增 `rcN`。
 - **feature 新增**：可提升 `PATCH` / `MINOR`，rc 归位 `rc1`。
 - 前后端版本号必须一致——这里"后端"指 `AgentClient` 出站请求的 `X-App-Version` header（值从 `Bundle.main.CFBundleShortVersionString` 取，等价 pbxproj `MARKETING_VERSION`）。

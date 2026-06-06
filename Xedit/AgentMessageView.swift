@@ -173,7 +173,8 @@ struct AgentModeMessageView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     AgentAssistantMarkdownBody(content: message.content, isStreaming: isStreamingThisMessage)
                         .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
+                        .padding(.top, 14)
+                        .padding(.bottom, 10)
                         .background(
                             RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
                                 .fill(Color.primary.opacity(0.035))
@@ -298,7 +299,7 @@ enum AgentAssistantMarkdownRenderer {
 
         func appendSeparator() {
             if !result.characters.isEmpty {
-                result += AttributedString("\n\n")
+                result += AttributedString("\n")
             }
         }
 

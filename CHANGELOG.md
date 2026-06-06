@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.52.1-rc46 - 2026-06-07
+
+- **修正 Agent 聊天历史的 Markdown 表格观感。** TextKit 历史渲染路径现在会给 GFM 表格打专属 `agentChatHistoryTableBlockID` 属性，并由 layout manager 绘制轻量表格底色和边线；表格文字改为更紧凑的 12pt monospace，避免继续像未渲染的管道文本。
+- **收紧聊天 Markdown 行距并拉开 Assistant 标题与正文。** 历史消息与流式消息的 block 间距从双换行降为单换行，assistant header 下方间距加大，修复正文贴近 `Assistant` 名字的问题。
+- **修正工具执行展开态的布局重叠。** 最新工具组增加上下间距与完整宽度约束，展开详情块支持双向滚动并固定自身高度，避免工具区域压到上一段 AI 输出。
+- **缩小历史 footer 的重新生成图标。** `↻` 单独降到 13pt，复制/耗时图标维持原尺寸；新增测试锁定 retry 图标小于 copy 图标。
+
 ## 1.52.1-rc45 - 2026-06-05
 
 - **代码体检 - 阶段 4：拆四个还没动的大文件（AgentModeView / AgentTools / AgentModeComposerView / AgentChatHistoryTextView）。** 体检报告 §10 的剩余四个超 2000 / 接近 2000 行的 Swift 文件，本轮按职责拆成独立单元，每个目标文件 < 1500 行；调用面（外部 callsite + Xcode synchronized group 自动发现）一律不动，仅把私有视图 / 私有枚举的访问级别从 `private` 提到默认 `internal` 以便跨文件可见。

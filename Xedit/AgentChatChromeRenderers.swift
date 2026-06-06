@@ -61,7 +61,7 @@ enum AgentChatHistoryFooterChrome {
     }
 
     static func retryButton() -> NSAttributedString {
-        var attributes = iconLinkAttributes(color: NSColor.secondaryLabelColor)
+        var attributes = retryLinkAttributes(color: NSColor.secondaryLabelColor)
         attributes[.link] = retryLinkValue
         attributes[.agentChatHistoryRetryLastTurn] = NSNumber(value: true)
         return NSAttributedString(string: retryLabel, attributes: attributes)
@@ -107,6 +107,10 @@ enum AgentChatHistoryFooterChrome {
         NSFont.systemFont(ofSize: 16, weight: .semibold)
     }
 
+    private static var retryIconFont: NSFont {
+        NSFont.systemFont(ofSize: 13, weight: .semibold)
+    }
+
     private static func copyLinkAttributes(color: NSColor) -> [NSAttributedString.Key: Any] {
         iconLinkAttributes(color: color)
     }
@@ -114,6 +118,14 @@ enum AgentChatHistoryFooterChrome {
     private static func iconLinkAttributes(color: NSColor) -> [NSAttributedString.Key: Any] {
         [
             .font: iconFont,
+            .foregroundColor: color,
+            .underlineStyle: 0,
+        ]
+    }
+
+    private static func retryLinkAttributes(color: NSColor) -> [NSAttributedString.Key: Any] {
+        [
+            .font: retryIconFont,
             .foregroundColor: color,
             .underlineStyle: 0,
         ]
