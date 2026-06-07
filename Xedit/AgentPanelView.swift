@@ -735,11 +735,20 @@ struct AgentToolCallGroup: View {
     }
 
     private var detailsVisible: Bool {
-        isExpanded
+        // Interactive states (ask_user / pendingApproval / awaitingConfirm)
+        // need the user's attention NOW — if the group stayed collapsed
+        // the user would have to first hunt down the "执行了 N 条工具调用 ▾"
+        // header and click it to even see the question / approval prompt.
+        // Force-expand whenever any inner call is interactive; respect
+        // `isExpanded` otherwise so non-interactive bundles stay tidy.
+        isExpanded || containsInteractiveCall
     }
 
     private var canToggleDetails: Bool {
-        !calls.isEmpty
+        // While the group has an interactive call we lock it open. The
+        // user can still collapse historic groups (no waiting calls)
+        // freely.
+        !calls.isEmpty && !containsInteractiveCall
     }
 
     private var containsInteractiveCall: Bool {

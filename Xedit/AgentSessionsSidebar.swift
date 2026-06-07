@@ -155,6 +155,22 @@ struct AgentSessionsSidebar: View {
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
                 Spacer(minLength: 0)
+                // 标题行右侧"打开新工作区"入口。和 Composer 下方
+                // WorkspacePickerPill 的 "Choose folder…" 走同一条路：
+                // 选完目录后**立刻**新建一个 Agent 会话并锚到这个
+                // workspace 路径，分组立刻出现在下面的列表里——而不是
+                // 只切了根目录，让用户再手动 New Chat 一次才看到分组。
+                Button {
+                    appState.openFolderAndStartAgentSession()
+                } label: {
+                    Image(systemName: "folder.badge.plus")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16, height: 16)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(L10n.Sidebar.workspaceHeaderOpenTooltip)
             }
             .padding(.horizontal, 14)
             .padding(.bottom, 6)

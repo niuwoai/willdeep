@@ -4490,6 +4490,24 @@
         }
       }
     },
+    "sidebar.workspace-header.open-tooltip" : {
+      "comment" : "tooltip for the + button on the Workspaces section header",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open another folder as a new workspace"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择另一个文件夹作为新工作区打开"
+          }
+        }
+      }
+    },
     "sidebar.workspace-menu.new-chat" : {
       "comment" : "context menu item for workspace group",
       "extractionState" : "manual",

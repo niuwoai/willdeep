@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.54.1-rc4 - 2026-06-08
+
+- **ask_user / 待审批等所有"等用户操作"的工具调用组改为默认展开。** 以前内联 tool-call 卡片为了视觉清爽走 inline collapsed（"▸ 执行了 N 条工具调用 · ask_user … question=…"），但这种折叠对**等待用户输入**的状态特别不友好——用户看到红色 1 waiting 角标，却得先点开标题行才能看到问题正文、选项按钮、输入框，多一步操作还容易让人误以为没事可做。`AgentToolCallGroup.detailsVisible` 现在 `isExpanded || containsInteractiveCall`，凡是当前包含 `pendingApproval` / `awaitingConfirm` / `awaitingUserAnswer` 中任一态的工具调用组直接强制展开；并把 `canToggleDetails` 收紧，互动期间不让用户折叠回去（避免回到原来的盲态）。等所有 interactive 完成后回到普通历史态，照常允许折叠。
+- **侧栏"工作区"段头加打开新工作区入口。** `AgentSessionsSidebar.workspacesSection` 标题行尾新增 `folder.badge.plus` 按钮，点击直接走 `appState.openFolderAndStartAgentSession()`：先弹 NSOpenPanel 选目录，OK 后立刻新建一个锚到该 workspace 路径的 Agent 会话——分组立刻出现在下方列表里，而不是用户切完根目录还要再 New Chat 一次。新增 L10n key `sidebar.workspace-header.open-tooltip`（中文："选择另一个文件夹作为新工作区打开"）。
+- **Composer 下方 WorkspacePickerPill 的 "Choose folder…" 改成自动建工作区会话。** 此前点这个入口只 `appState.openFolder()`——切换根目录、不创建会话，结果新选的目录因为没有锚定会话不会出现在侧栏的工作区分组里，看起来像"换了目录但工作区没变"。现在两个入口（侧栏 + 标题 + 按钮、Composer 下方 pill）都走同一条 `openFolderAndStartAgentSession()`：若用户已经在该目录且已有未归档的活动会话，仅切根目录、不重复造空会话；否则新建一个挂在该 workspace 路径上的会话。
+- 版本号 `1.54.1-rc3` → `1.54.1-rc4`（UX 增强 → 仍按 rc 递增；本轮没改动 X-App-Version 之外的 wire-protocol，未升正式版位）。
+
 ## 1.54.1-rc3 - 2026-06-08
 
 - **修正粘贴 API Key 时带尾随空格/换行导致请求被上游 401 拒绝的高频 bug。** Safari、1Password、Bitwarden、Notion 等地复制 `sk-…` 串时偶发会把一个看不见的 `\n` 或 `0x20` 带进剪贴板，粘进 RevealableSecretField 后 commit 链路（`EditorSettingsView.commit()` → `AgentProviderEntry.init` → `AgentSettingsStore.saveProviderLibrary` → Keychain）一路原样保留，到 `AgentClient.applyAuthenticationHeaders` 输出的就是 `Bearer sk-xxx\n`——OpenAI / DeepSeek / DashScope / Anthropic 全部 reject 401，但用户从 UI 上完全看不出 key "脏"在哪里，反复检查 key 字符还以为是自己输错了。这次双层 trim 兜底：(a) `EditorSettingsView.commit()` 在写回前 `trimmingCharacters(in: .whitespacesAndNewlines)` 一次 apiKey + baseURL，并把 trim 后的值反写回 `@State`，让 UI 立刻显示干净版本；(b) `AgentProviderEntry.init` 自身也对 `apiKey` / `baseURL` 做同样 trim，作为防御性兜底——即便将来别处构造 entry 也不会被脏数据穿透。401 错误提示同步加一句"常见原因是从浏览器/密码管理器复制时带了首尾空格或换行，回到 Settings 把 key 重新粘贴一次（保存时会自动去掉空白）"，避免用户继续怀疑 key 本身。

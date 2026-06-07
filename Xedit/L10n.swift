@@ -345,6 +345,7 @@ enum L10n {
         static let sessionRowUnarchiveTooltip = String(localized: "sidebar.session-row.unarchive-tooltip", defaultValue: "Unarchive")
         static let sessionRowUnpinTooltip = String(localized: "sidebar.session-row.unpin-tooltip", defaultValue: "Unpin")
         static let workspaceHeader = String(localized: "sidebar.workspace-header", defaultValue: "Workspaces")
+        static let workspaceHeaderOpenTooltip = String(localized: "sidebar.workspace-header.open-tooltip", defaultValue: "Open another folder as a new workspace")
         static let workspaceMenuNewChat = String(localized: "sidebar.workspace-menu.new-chat", defaultValue: "New Chat in this Workspace")
         static let workspaceToggleCollapseTooltip = String(localized: "sidebar.workspace-toggle.collapse-tooltip", defaultValue: "Collapse session list")
         static let workspaceToggleExpandTooltip = String(localized: "sidebar.workspace-toggle.expand-tooltip", defaultValue: "Expand session list")

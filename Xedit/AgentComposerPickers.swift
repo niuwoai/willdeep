@@ -131,9 +131,13 @@ struct WorkspacePickerPill: View {
             Divider()
         }
 
-        // Section 3 — Always show the chooser sentinel last.
+        // Section 3 — Always show the chooser sentinel last. Composer
+        // path uses the "and start a new agent session" variant so the
+        // picked folder immediately materialises as its own workspace
+        // group in the sidebar (instead of leaving the user with a
+        // re-rooted window but no session anchored to the new dir).
         Button {
-            appState.openFolder()
+            appState.openFolderAndStartAgentSession()
         } label: {
             Label("Choose folder…", systemImage: "folder.badge.plus")
         }

@@ -39,6 +39,40 @@ extension AppState {
         }
     }
 
+    /// Composer-side entry point: open a folder picker AND, on success,
+    /// immediately spin up a fresh Agent session anchored to that
+    /// workspace path. Use this from the Composer's WorkspacePickerPill
+    /// "Choose folder…" entry and the sidebar's "Workspaces +" button
+    /// so the new directory shows up as its own workspace group right
+    /// away (rather than the user picking a folder and then having to
+    /// manually start a new chat to make the group appear).
+    ///
+    /// If the user already has the picked folder open and an active
+    /// session sits in that workspace, we just switch root without
+    /// creating a duplicate empty session.
+    func openFolderAndStartAgentSession() {
+        let panel = Self.folderOpenPanel()
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            guard let self else { return }
+            let standardized = url.standardizedFileURL
+            // Already rooted here AND already has a non-archived session
+            // in this workspace → switching root would be a no-op and
+            // creating another empty session is annoying noise.
+            let alreadyHere = self.rootDirectory?.standardizedFileURL.path == standardized.path
+            let hasSessionHere = self.agentSessions.contains { session in
+                guard let path = session.workspaceRootPath, !path.isEmpty else { return false }
+                return URL(fileURLWithPath: path).standardizedFileURL.path == standardized.path
+                    && !session.isArchived
+            }
+            if alreadyHere && hasSessionHere {
+                self.openFolderURL(url)
+                return
+            }
+            _ = self.startNewAgentSession(inWorkspaceAt: standardized.path)
+        }
+    }
+
     static func folderOpenPanel() -> NSOpenPanel {
         let panel = NSOpenPanel()
         panel.title = "Choose a Folder"
