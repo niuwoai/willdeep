@@ -49,6 +49,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
 
     @Published var input: String = ""
     @Published var pendingImages: [AgentImageAttachment] = []
+    @Published var pendingTextAttachments: [AgentTextAttachment] = []
     @Published var pendingSkills: [AgentSkillEntry] = []
     @Published var pendingFiles: [AgentFileAttachment] = []
     @Published var pendingIncludeWorkspaceOverview: Bool = false

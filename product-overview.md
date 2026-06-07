@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-07 | Current version: v1.52.1-rc46
+> Last updated: 2026-06-07 | Current version: v1.53.1-rc1
 
 ## Positioning
 
@@ -83,7 +83,7 @@ CLAUDE.md §10 的软上限是 2000 行，硬上限是 3000 行。rc42 拆完 `A
 
 遵循 CLAUDE.md §5：
 
-- 格式 `MAJOR.MINOR.PATCH-rcN`，例 `1.52.1-rc46`。
+- 格式 `MAJOR.MINOR.PATCH` 或 `MAJOR.MINOR.PATCH-rcN`，例 `1.53.0` / `1.52.1-rc46`。
 - **bugfix**（含文档、release 流程改进）：只递增 `rcN`。
 - **feature 新增**：可提升 `PATCH` / `MINOR`，rc 归位 `rc1`。
 - 前后端版本号必须一致——这里"后端"指 `AgentClient` 出站请求的 `X-App-Version` header（值从 `Bundle.main.CFBundleShortVersionString` 取，等价 pbxproj `MARKETING_VERSION`）。
@@ -93,9 +93,9 @@ CLAUDE.md §10 的软上限是 2000 行，硬上限是 3000 行。rc42 拆完 `A
 
 ## 国际化（i18n）
 
-**当前状态：未落地。** 截至 rc42，源码中 `NSLocalizedString` 与 `String(localized:)` 的命中数为 0；UI 文案直接写死在 SwiftUI 视图中（混合中英文）。
+**当前状态：部分落地。** 项目已经引入 `Localizable.xcstrings`（Xcode 15+ String Catalog）和 `L10n` enum 强类型访问，覆盖一部分主窗口、Agent footer、空状态和本轮新增的 pasted-text 附件文案；仍有大量历史 SwiftUI 文案直接写死在视图中（混合中英文）。
 
-CLAUDE.md §2 要求 React 部分必须走 i18n，但 VeilWriter 是 SwiftUI macOS 应用，不在该条款约束范围内。即便如此，将所有用户可见文案抽到 `Localizable.xcstrings`（Xcode 15+ 的 String Catalog 格式）+ `L10n` enum 强类型访问，仍然列入后续阶段（见 [ROADMAP.md](./ROADMAP.md) 阶段 5）。落地前提是先决定首发语言矩阵（zh-Hans / en 至少）和文案 freeze 时机。
+CLAUDE.md §2 要求 React 部分必须走 i18n，但 VeilWriter 是 SwiftUI macOS 应用，不在该条款约束范围内。即便如此，后续仍应继续把所有用户可见文案抽到 String Catalog（见 [ROADMAP.md](./ROADMAP.md) 阶段 5），至少保持 zh-Hans / en 双语。
 
 ## 测试与 CI
 
@@ -150,10 +150,11 @@ CLAUDE.md §2 要求 React 部分必须走 i18n，但 VeilWriter 是 SwiftUI mac
 - Let the Agent inspect configured MCP servers with `list_mcp_servers`, list one server's MCP tools with `list_mcp_tools`, and call a selected MCP tool with `call_mcp_tool`; server discovery merges App user MCP servers, Cursor `~/.cursor/mcp.json`, and Codex `~/.codex/config.toml`. Both stdio and Cursor-style `streamable-http` MCP transports are supported, with sensitive headers and environment values redacted before display; MCP tool calls still require approval.
 - Automatically run conservatively parsed read-only `run_command` chains, such as workspace-relative or workspace-absolute `cd` prefixes followed by `git diff`, `ls`, `cat`, `rg`, or `grep`, plus workspace-safe `git -C ... diff`; commands that write, redirect, pipe, substitute, or move outside the workspace still require approval or confirmation. Shell commands inherit a supplemental macOS PATH with common Homebrew and local binary directories so tools such as `rg` remain available when VeilWriter is launched from the GUI.
 - Show the full `run_command` command text on approval and destructive-confirmation cards so the exact command is visible before the user allows it.
-- Keep Agent tool-call rows compact by default and collapse consecutive calls into low-emphasis expandable groups so long multi-step runs remain scannable, with a lightweight current-turn activity summary for explored paths, searches, run commands, and active file edits; longer command/path previews remain visible in the gray summary and full arguments, output, and errors are available from explicit expand controls.
+- Keep Agent tool-call rows compact and collapsed by default, separated from the preceding assistant output by a dedicated vertical gap, and collapse consecutive calls into low-emphasis expandable groups so long multi-step runs remain scannable. A lightweight current-turn activity summary covers explored paths, searches, run commands, and active file edits; longer command/path previews remain visible in the gray summary and full arguments, output, approval controls, and errors are available only after explicit expand controls.
 - Switch the window into a dedicated Agent mode (Cmd+Shift+A) with a project-grouped session sidebar on the left and a wide chat pane on the right. Sessions persist as JSON under `~/Library/Application Support/VeilWriter/agent-sessions/` and are grouped by workspace. The empty-state dashboard summarizes recent usage and stretches its activity heatmap across the available stats card width.
 - Render Agent chat history, transcript reader windows, and single-message reader windows with lightweight TextKit Markdown for headings, paragraphs, lists, quotes, syntax-highlighted code blocks, inline formatting, links, dividers, HTML details-as-code fallback, and pipe-table fallback while avoiding SwiftUI per-block transcript layout. The in-pane history keeps chat-style visual chrome through TextKit-drawn rounded bubbles, right-side hover-only user message columns with left-aligned body text, safe right padding, and pre-reserved low-contrast hover-time timestamp/copy controls, lighter full-width assistant cards with a gray star-style assistant mark, slightly inset syntax-highlighted code blocks with a little top breathing room plus clickable larger code-copy controls and 3-second success feedback, larger per-message copy footers, assistant elapsed/input/output token summaries with matching icon sizing, latest-assistant retry affordance, and collapsed low-emphasis tool-call groups that expand in place to show longer command/path/pattern arguments inside a padded gray group without overlapping adjacent user bubbles.
 - Paste, drag-drop, or attach images directly in the Agent composer; staged images appear as removable thumbnails and, for supported multimodal providers, are sent inline as base64 `image_url` content parts in the request body.
+- Paste large text blocks into the Agent composer as compact `.txt` attachments instead of expanding them inline in the chat bubble. The visible transcript shows a small filename/size chip, while provider requests, token estimates, queued messages, persistence, and message-copy payloads retain the full pasted text.
 - Configure a separate Image Understanding provider with its own API key; for text-only Agent providers such as DeepSeek, multiple attached images are first described by that image-capable provider, then the generated description is appended to the user message before the main model runs.
 - Send Agent-mode messages with Return, while Shift-Return, Option-Return, and Control-Return remain available for multiline composition.
 - Queue follow-up messages while the agent is responding — additional sends become "Queued" bubbles that auto-fire when the current turn ends. Stop the current response without dropping the queue; Clear Queue removes them explicitly.

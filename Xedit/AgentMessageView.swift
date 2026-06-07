@@ -104,6 +104,9 @@ struct AgentModeMessageView: View {
         // itself, not on its inner padding chrome).
         return VStack(alignment: .trailing, spacing: 4) {
             VStack(alignment: .leading, spacing: 8) {
+                if !message.textAttachments.isEmpty {
+                    AgentTextAttachmentBubbleStrip(attachments: message.textAttachments)
+                }
                 if !split.visible.isEmpty {
                     // Inject zero-width break points into any
                     // unbreakable run >30 chars (see
@@ -131,7 +134,7 @@ struct AgentModeMessageView: View {
                         }
                     }
                 }
-                if !message.content.isEmpty {
+                if !message.content.isEmpty || !message.textAttachments.isEmpty {
                     AgentMessageFooter(message: message, alignment: .trailing, showsUserTimestamp: true)
                         .padding(.top, 2)
                         .opacity(isHoveringUser ? 1 : 0)
@@ -237,6 +240,7 @@ struct AgentAssistantMarkdownBody: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(AgentAssistantMarkdownRenderer.render(content, isDark: colorScheme == .dark))
                 .textSelection(.enabled)
+                .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
             if isStreaming {
                 AgentStreamingCursor()
@@ -299,7 +303,7 @@ enum AgentAssistantMarkdownRenderer {
 
         func appendSeparator() {
             if !result.characters.isEmpty {
-                result += AttributedString("\n")
+                result += AttributedString("\n\n")
             }
         }
 
@@ -776,7 +780,7 @@ struct AgentMessageFooter: View {
     private func copyToClipboard() {
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.setString(message.content, forType: .string)
+        pb.setString(message.copyableContent, forType: .string)
         didJustCopy = true
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_400_000_000)
@@ -786,6 +790,18 @@ struct AgentMessageFooter: View {
 }
 
 // MARK: - Queued message
+
+struct AgentTextAttachmentBubbleStrip: View {
+    let attachments: [AgentTextAttachment]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(attachments) { attachment in
+                AgentTextAttachmentChip(attachment: attachment)
+            }
+        }
+    }
+}
 
 struct QueuedMessageRow: View {
     let message: AgentQueuedMessage
@@ -811,6 +827,10 @@ struct QueuedMessageRow: View {
                     Text("\(message.images.count) image\(message.images.count == 1 ? "" : "s")")
                         .font(AgentDesign.captionFont)
                         .foregroundStyle(.secondary)
+                }
+                if !message.textAttachments.isEmpty {
+                    AgentTextAttachmentBubbleStrip(attachments: message.textAttachments)
+                        .padding(.top, 2)
                 }
             }
         }

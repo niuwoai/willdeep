@@ -38,6 +38,84 @@ struct AgentImageAttachment: Codable, Equatable, Identifiable {
     }
 }
 
+/// Plain text pasted into the composer as a compact `.txt` attachment
+/// instead of being inlined into the visible chat bubble. This keeps
+/// crash logs and other long snippets readable while still sending the
+/// full payload to the model.
+struct AgentTextAttachment: Codable, Equatable, Identifiable {
+    static let pastedTextFilename = "Pasted text.txt"
+    static let largePasteCharacterThreshold = 1_800
+    static let largePasteLineThreshold = 18
+    static let maxPastedTextCharacters = 200_000
+
+    let id: UUID
+    var filename: String
+    var content: String
+    let createdAt: Date
+
+    init(
+        id: UUID = UUID(),
+        filename: String = AgentTextAttachment.pastedTextFilename,
+        content: String,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.filename = filename
+        self.content = content
+        self.createdAt = createdAt
+    }
+
+    var byteCount: Int {
+        content.utf8.count
+    }
+
+    var byteLabel: String {
+        Self.byteLabel(byteCount)
+    }
+
+    var displayName: String {
+        filename.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? Self.pastedTextFilename
+            : filename
+    }
+
+    var modelBlock: String {
+        """
+        ### Attached text: \(displayName)
+
+        ```text
+        \(content)
+        ```
+        """
+    }
+
+    static func shouldCapturePaste(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        if trimmed.count >= largePasteCharacterThreshold { return true }
+        let lineCount = trimmed.components(separatedBy: .newlines).count
+        return lineCount >= largePasteLineThreshold
+    }
+
+    static func sanitizedPastedContent(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > maxPastedTextCharacters else { return trimmed }
+        let end = trimmed.index(trimmed.startIndex, offsetBy: maxPastedTextCharacters)
+        return String(trimmed[..<end])
+    }
+
+    static func byteLabel(_ count: Int) -> String {
+        if count < 1_024 {
+            return "\(count) B"
+        }
+        let kb = Double(count) / 1_024.0
+        if kb < 1_024 {
+            return String(format: "%.1f KB", kb)
+        }
+        return String(format: "%.1f MB", kb / 1_024.0)
+    }
+}
+
 /// Tool call emitted by the assistant in an OpenAI function-calling response.
 /// `argumentsJSON` is the raw JSON text the model produced (it may stream in
 /// fragments and only be valid JSON once complete).
@@ -59,6 +137,10 @@ struct AgentMessage: Identifiable, Codable, Equatable {
     var reasoningContent: String?
     /// User-attached images, only meaningful for `role == .user`.
     var images: [AgentImageAttachment]
+    /// Long pasted text captured as compact `.txt` attachments. The
+    /// visible bubble renders chips, while AgentClient includes the
+    /// full text in the provider payload.
+    var textAttachments: [AgentTextAttachment]
     var toolCalls: [AgentMessageToolCall]
     /// When `role == .tool`, the external id of the assistant tool_call this
     /// message answers.
@@ -89,6 +171,7 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         content: String,
         reasoningContent: String? = nil,
         images: [AgentImageAttachment] = [],
+        textAttachments: [AgentTextAttachment] = [],
         toolCalls: [AgentMessageToolCall] = [],
         toolCallID: String? = nil,
         usageTokens: Int? = nil,
@@ -102,6 +185,7 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         self.content = content
         self.reasoningContent = reasoningContent
         self.images = images
+        self.textAttachments = textAttachments
         self.toolCalls = toolCalls
         self.toolCallID = toolCallID
         self.usageTokens = usageTokens
@@ -114,7 +198,7 @@ struct AgentMessage: Identifiable, Codable, Equatable {
     /// Explicit keys so newer fields can use `decodeIfPresent` without
     /// breaking older session JSON.
     enum CodingKeys: String, CodingKey {
-        case id, role, content, reasoningContent, images, toolCalls, toolCallID
+        case id, role, content, reasoningContent, images, textAttachments, toolCalls, toolCallID
         case usageTokens, promptTokens, completionTokens, elapsedSeconds
         case createdAt
     }
@@ -126,6 +210,7 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         content = try container.decode(String.self, forKey: .content)
         reasoningContent = try container.decodeIfPresent(String.self, forKey: .reasoningContent)
         images = try container.decodeIfPresent([AgentImageAttachment].self, forKey: .images) ?? []
+        textAttachments = try container.decodeIfPresent([AgentTextAttachment].self, forKey: .textAttachments) ?? []
         toolCalls = try container.decodeIfPresent([AgentMessageToolCall].self, forKey: .toolCalls) ?? []
         toolCallID = try container.decodeIfPresent(String.self, forKey: .toolCallID)
         usageTokens = try container.decodeIfPresent(Int.self, forKey: .usageTokens)
@@ -136,17 +221,58 @@ struct AgentMessage: Identifiable, Codable, Equatable {
     }
 }
 
+extension AgentMessage {
+    /// Content as sent to providers. UI renderers use `content` plus
+    /// compact attachment chips; wire encoding appends the full pasted
+    /// text so the model still receives the user's context.
+    nonisolated var modelContent: String {
+        guard !textAttachments.isEmpty else { return content }
+        var blocks: [String] = []
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            blocks.append(content)
+        }
+        blocks.append(contentsOf: textAttachments.map(\.modelBlock))
+        return blocks.joined(separator: "\n\n")
+    }
+
+    /// Clipboard-friendly full text for copy buttons and standalone
+    /// readers: visible text first, then pasted-text attachments.
+    nonisolated var copyableContent: String {
+        guard !textAttachments.isEmpty else { return content }
+        var blocks: [String] = []
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            blocks.append(content)
+        }
+        for attachment in textAttachments {
+            blocks.append("""
+            [\(attachment.displayName)]
+            \(attachment.content)
+            """)
+        }
+        return blocks.joined(separator: "\n\n")
+    }
+}
+
 /// A message the user queued while the agent was busy. Consumed FIFO
 /// once the current response completes (or is stopped).
 struct AgentQueuedMessage: Identifiable, Equatable {
     let id: UUID
     var text: String
     var images: [AgentImageAttachment]
+    var textAttachments: [AgentTextAttachment]
 
-    init(id: UUID = UUID(), text: String, images: [AgentImageAttachment] = []) {
+    init(
+        id: UUID = UUID(),
+        text: String,
+        images: [AgentImageAttachment] = [],
+        textAttachments: [AgentTextAttachment] = []
+    ) {
         self.id = id
         self.text = text
         self.images = images
+        self.textAttachments = textAttachments
     }
 }
 

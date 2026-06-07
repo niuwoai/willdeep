@@ -1,0 +1,5187 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "" : {
+
+    },
+    "-%lld" : {
+
+    },
+    ":" : {
+
+    },
+    "·" : {
+
+    },
+    "@%@" : {
+
+    },
+    "/absolute/path/to/server" : {
+
+    },
+    "%@  %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@  %2$lld"
+          }
+        }
+      }
+    },
+    "%@ alternates" : {
+
+    },
+    "%@, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@"
+          }
+        }
+      }
+    },
+    "%@: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$@"
+          }
+        }
+      }
+    },
+    "%lld" : {
+
+    },
+    "%lld days" : {
+
+    },
+    "%lld image%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld image%2$@"
+          }
+        }
+      }
+    },
+    "%lld of %lld MCP servers enabled" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld MCP servers enabled"
+          }
+        }
+      }
+    },
+    "%lld of %lld skills available" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld skills available"
+          }
+        }
+      }
+    },
+    "%lld pt" : {
+
+    },
+    "%lld queued" : {
+
+    },
+    "%lld shown" : {
+
+    },
+    "%lld tools enabled" : {
+
+    },
+    "%lld 个文件已更改" : {
+
+    },
+    "%lld 分钟" : {
+
+    },
+    "%lld." : {
+
+    },
+    "%lld%%" : {
+
+    },
+    "%llds" : {
+
+    },
+    "+%lld" : {
+
+    },
+    "1." : {
+
+    },
+    "Active provider" : {
+
+    },
+    "Add memory" : {
+
+    },
+    "Add Memory" : {
+
+    },
+    "Add provider" : {
+
+    },
+    "Agent" : {
+
+    },
+    "Agent Always Allow" : {
+
+    },
+    "Agent Providers" : {
+
+    },
+    "agent-text-attachment.pasted-filename" : {
+      "comment" : "Default filename for long text pasted into the Agent composer",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pasted text.txt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已粘贴的文本.txt"
+          }
+        }
+      }
+    },
+    "agent-text-attachment.remove-help" : {
+      "comment" : "Tooltip for removing a pasted text attachment from the composer",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove pasted text"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除已粘贴的文本"
+          }
+        }
+      }
+    },
+    "alert.binary-file.button.ok" : {
+      "comment" : "Alert button for binary file warning",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "好的"
+          }
+        }
+      }
+    },
+    "alert.binary-file.message" : {
+      "comment" : "NSAlert informativeText for binary file",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "appears to be a binary file and cannot be opened in the editor."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "似乎是一个二进制文件，无法在编辑器中打开。"
+          }
+        }
+      }
+    },
+    "alert.binary-file.title" : {
+      "comment" : "NSAlert messageText for binary file detection",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cannot Open Binary File"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法打开二进制文件"
+          }
+        }
+      }
+    },
+    "alert.large-file.button.cancel" : {
+      "comment" : "Alert button to cancel opening large file",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
+    "alert.large-file.button.open-anyway" : {
+      "comment" : "Alert button to open large file",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Anyway"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仍然打开"
+          }
+        }
+      }
+    },
+    "alert.large-file.message" : {
+      "comment" : "NSAlert informativeText for large file",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "is larger than 1 MB and may take time to load or become unresponsive."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大于 1 MB，加载可能需要时间或变得无响应。"
+          }
+        }
+      }
+    },
+    "alert.large-file.title" : {
+      "comment" : "NSAlert messageText for large file confirmation",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Large File"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大文件"
+          }
+        }
+      }
+    },
+    "Allow" : {
+
+    },
+    "Always Allow" : {
+
+    },
+    "Always allow future %@ commands" : {
+
+    },
+    "API Key" : {
+
+    },
+    "Appearance" : {
+
+    },
+    "Apply" : {
+
+    },
+    "Archive memory" : {
+
+    },
+    "Archive retention" : {
+
+    },
+    "Archived memories (%lld)" : {
+
+    },
+    "Archives duplicate or stale transient entries, removes expired archived entries, and records the last maintenance result." : {
+
+    },
+    "Arguments separated by spaces" : {
+
+    },
+    "Ask about this project" : {
+
+    },
+    "Attach image" : {
+
+    },
+    "Auto-approve safe commands" : {
+
+    },
+    "Auto-extract reusable skills from conversations" : {
+
+    },
+    "Auto-retrieve memories" : {
+
+    },
+    "Auto-summarize conversations" : {
+
+    },
+    "Automatic Skill Extraction" : {
+
+    },
+    "Automatically search related memories before each Agent turn and inject the best matches as compact context." : {
+
+    },
+    "Base URL" : {
+
+    },
+    "Broad (0%)" : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Cap on simultaneous Agent turns per provider. Each provider has its own quota — running 3 DashScope sessions doesn't block OpenAI sessions. When the cap is hit, new dispatches queue (FIFO) and drain as turns finish. Raising the cap immediately promotes queued work; lowering it just stops promoting new ones (running turns are never aborted). Default 3 is conservative — bump up if your provider's rate limit comfortably allows." : {
+
+    },
+    "Choose folder…" : {
+
+    },
+    "Choose..." : {
+
+    },
+    "Clear" : {
+
+    },
+    "Clear all" : {
+
+    },
+    "Clear All" : {
+
+    },
+    "Clear Chat" : {
+
+    },
+    "Clear Queue" : {
+
+    },
+    "Close Agent" : {
+
+    },
+    "Collapse" : {
+
+    },
+    "Color Style" : {
+
+    },
+    "Command" : {
+
+    },
+    "Command Line Tool" : {
+
+    },
+    "command-palette.placeholder" : {
+      "comment" : "TextField placeholder for command palette input",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Command Palette"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令面板"
+          }
+        }
+      }
+    },
+    "command.close-tab.shortcut" : {
+      "comment" : "Keyboard shortcut display",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘W"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘W"
+          }
+        }
+      }
+    },
+    "command.close-tab.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close the active tab"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭活跃标签页"
+          }
+        }
+      }
+    },
+    "command.close-tab.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close Tab"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭标签页"
+          }
+        }
+      }
+    },
+    "command.copy-file-path.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy the active file path"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制活跃文件路径"
+          }
+        }
+      }
+    },
+    "command.copy-file-path.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy File Path"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制文件路径"
+          }
+        }
+      }
+    },
+    "command.copy-relative-file-path.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy the active file path relative to the current folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制相对于当前文件夹的活跃文件路径"
+          }
+        }
+      }
+    },
+    "command.copy-relative-file-path.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy Relative File Path"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制相对文件路径"
+          }
+        }
+      }
+    },
+    "command.duplicate-line.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy the current line below"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将当前行复制到下方"
+          }
+        }
+      }
+    },
+    "command.duplicate-line.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplicate Line"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制行"
+          }
+        }
+      }
+    },
+    "command.find.shortcut" : {
+      "comment" : "Keyboard shortcut display",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘F"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘F"
+          }
+        }
+      }
+    },
+    "command.find.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show find and replace"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示查找和替换"
+          }
+        }
+      }
+    },
+    "command.find.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查找"
+          }
+        }
+      }
+    },
+    "command.go-to-line.shortcut" : {
+      "comment" : "Keyboard shortcut display",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘L"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘L"
+          }
+        }
+      }
+    },
+    "command.go-to-line.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jump to a line in the active tab"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳转到活跃标签页中的一行"
+          }
+        }
+      }
+    },
+    "command.go-to-line.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Go to Line"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "转到行"
+          }
+        }
+      }
+    },
+    "command.go-to-symbol.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search symbols in the active tab"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索活跃标签页中的符号"
+          }
+        }
+      }
+    },
+    "command.go-to-symbol.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Go to Symbol"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "转到符号"
+          }
+        }
+      }
+    },
+    "command.move-line-down.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move the current line downward"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向下移动当前行"
+          }
+        }
+      }
+    },
+    "command.move-line-down.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move Line Down"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向下移动行"
+          }
+        }
+      }
+    },
+    "command.move-line-up.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move the current line upward"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向上移动当前行"
+          }
+        }
+      }
+    },
+    "command.move-line-up.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move Line Up"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向上移动行"
+          }
+        }
+      }
+    },
+    "command.next-tab.shortcut" : {
+      "comment" : "Keyboard shortcut display",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘}"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘}"
+          }
+        }
+      }
+    },
+    "command.next-tab.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activate the tab to the right"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "激活右侧的标签页"
+          }
+        }
+      }
+    },
+    "command.next-tab.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next Tab"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一个标签页"
+          }
+        }
+      }
+    },
+    "command.open-containing-folder.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reveal the active file in Finder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Finder 中显示活跃文件"
+          }
+        }
+      }
+    },
+    "command.open-containing-folder.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Containing Folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开包含文件夹"
+          }
+        }
+      }
+    },
+    "command.open-file.shortcut" : {
+      "comment" : "Keyboard shortcut display",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘O"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘O"
+          }
+        }
+      }
+    },
+    "command.open-file.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a file from disk"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从磁盘选择文件"
+          }
+        }
+      }
+    },
+    "command.open-file.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open File"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开文件"
+          }
+        }
+      }
+    },
+    "command.open-folder.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a folder for the sidebar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为边栏选择文件夹"
+          }
+        }
+      }
+    },
+    "command.open-folder.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开文件夹"
+          }
+        }
+      }
+    },
+    "command.open-split-file.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show another text file beside the editor"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在编辑器旁边显示另一个文本文件"
+          }
+        }
+      }
+    },
+    "command.open-split-file.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Split File"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开分割文件"
+          }
+        }
+      }
+    },
+    "command.open-terminal-here.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Terminal at the project or active file location"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在项目或活跃文件位置打开终端"
+          }
+        }
+      }
+    },
+    "command.open-terminal-here.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Terminal Here"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在此打开终端"
+          }
+        }
+      }
+    },
+    "command.previous-tab.shortcut" : {
+      "comment" : "Keyboard shortcut display",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘{"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘{"
+          }
+        }
+      }
+    },
+    "command.previous-tab.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activate the tab to the left"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "激活左侧的标签页"
+          }
+        }
+      }
+    },
+    "command.previous-tab.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Previous Tab"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一个标签页"
+          }
+        }
+      }
+    },
+    "command.quick-open.shortcut" : {
+      "comment" : "Keyboard shortcut display",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘P"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘P"
+          }
+        }
+      }
+    },
+    "command.quick-open.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search files in the current folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索当前文件夹中的文件"
+          }
+        }
+      }
+    },
+    "command.quick-open.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quick Open"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速打开"
+          }
+        }
+      }
+    },
+    "command.refresh-git-status.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh branch and file status markers"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新分支和文件状态标记"
+          }
+        }
+      }
+    },
+    "command.refresh-git-status.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh Git Status"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新 Git 状态"
+          }
+        }
+      }
+    },
+    "command.reopen-closed-tab.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restore the most recently closed tab"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复最近关闭的标签页"
+          }
+        }
+      }
+    },
+    "command.reopen-closed-tab.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reopen Closed Tab"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新打开已关闭的标签页"
+          }
+        }
+      }
+    },
+    "command.save.shortcut" : {
+      "comment" : "Keyboard shortcut display",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘S"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘S"
+          }
+        }
+      }
+    },
+    "command.save.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Write the active file"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "写入活跃文件"
+          }
+        }
+      }
+    },
+    "command.save.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存"
+          }
+        }
+      }
+    },
+    "command.toggle-agent.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show or hide the project agent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示或隐藏项目代理"
+          }
+        }
+      }
+    },
+    "command.toggle-agent.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toggle Agent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换代理"
+          }
+        }
+      }
+    },
+    "command.toggle-focus-mode.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide chrome and keep only the editor"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏 UI 元素，仅保留编辑器"
+          }
+        }
+      }
+    },
+    "command.toggle-focus-mode.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toggle Focus Mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换焦点模式"
+          }
+        }
+      }
+    },
+    "command.toggle-inspector.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show or hide minimap and structure"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示或隐藏小地图和结构"
+          }
+        }
+      }
+    },
+    "command.toggle-inspector.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toggle Inspector"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换检查器"
+          }
+        }
+      }
+    },
+    "command.toggle-preview.subtitle" : {
+      "comment" : "Command palette command subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show or hide Markdown and HTML preview"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示或隐藏 Markdown 和 HTML 预览"
+          }
+        }
+      }
+    },
+    "command.toggle-preview.title" : {
+      "comment" : "Command palette command title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toggle Preview"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换预览"
+          }
+        }
+      }
+    },
+    "Compress" : {
+
+    },
+    "Compressing…" : {
+
+    },
+    "Concurrency" : {
+
+    },
+    "confirm" : {
+
+    },
+    "Context: ~%@ / %@. %@ remaining (estimate)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Context: ~%1$@ / %2$@. %3$@ remaining (estimate)."
+          }
+        }
+      }
+    },
+    "Conversation mode — Plan locks writes until you approve; Goal pins an objective to every reply." : {
+
+    },
+    "Conversations with fewer tool calls are skipped." : {
+
+    },
+    "Copied" : {
+
+    },
+    "Copy" : {
+
+    },
+    "Copy branch name" : {
+
+    },
+    "Copy code" : {
+
+    },
+    "Copy message" : {
+
+    },
+    "Copy path" : {
+
+    },
+    "Copy Path" : {
+
+    },
+    "Copy Relative Path" : {
+
+    },
+    "Create" : {
+
+    },
+    "Cursor mcp.json" : {
+
+    },
+    "Daily sleep cycle" : {
+
+    },
+    "Default View" : {
+
+    },
+    "Delete" : {
+
+    },
+    "Delete memory" : {
+
+    },
+    "Deny" : {
+
+    },
+    "Description" : {
+
+    },
+    "Disabled" : {
+
+    },
+    "e.g. Work OpenAI" : {
+
+    },
+    "Edit goal…" : {
+
+    },
+    "Edit memory" : {
+
+    },
+    "Editor" : {
+
+    },
+    "Editor Background" : {
+
+    },
+    "Editor Surface" : {
+
+    },
+    "editor-status-bar.cursor-position" : {
+      "comment" : "Line and column position indicator",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ln"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "行"
+          }
+        }
+      }
+    },
+    "editor-status-bar.cursor-position.col" : {
+      "comment" : "Column indicator in cursor position",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Col"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "列"
+          }
+        }
+      }
+    },
+    "editor-status-bar.external-changes" : {
+      "comment" : "Status bar indicator for external file changes",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "External changes"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外部更改"
+          }
+        }
+      }
+    },
+    "editor-status-bar.git-branch" : {
+      "comment" : "Git branch indicator",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git"
+          }
+        }
+      }
+    },
+    "editor-status-bar.modified" : {
+      "comment" : "Status bar text for edited file",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modified"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已修改"
+          }
+        }
+      }
+    },
+    "editor-status-bar.plain-text" : {
+      "comment" : "Default language display name",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plain Text"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "纯文本"
+          }
+        }
+      }
+    },
+    "editor-status-bar.reload-button" : {
+      "comment" : "Button to reload file from disk",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reload"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新加载"
+          }
+        }
+      }
+    },
+    "editor-status-bar.saved" : {
+      "comment" : "Status bar text for saved file",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存"
+          }
+        }
+      }
+    },
+    "editor-status-bar.selection" : {
+      "comment" : "Selected characters count",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "chars"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "个字符"
+          }
+        }
+      }
+    },
+    "editor-status-bar.selection.lines" : {
+      "comment" : "Selected lines count",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lines selected"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "行被选中"
+          }
+        }
+      }
+    },
+    "editor-structure.no-structure" : {
+      "comment" : "Message when no structure found in file",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Structure"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无结构"
+          }
+        }
+      }
+    },
+    "editor-tab-bar.close-tab" : {
+      "comment" : "Accessibility label for tab close button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
+          }
+        }
+      }
+    },
+    "Edits save automatically. The active provider (★) drives the next chat turn — click any star to switch." : {
+
+    },
+    "Embedding model" : {
+
+    },
+    "Embedding Model" : {
+
+    },
+    "empty-state.agent-mode" : {
+      "comment" : "Label() button text in EmptyWorkspaceHero, primary call-to-action",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent Mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代理模式"
+          }
+        }
+      }
+    },
+    "empty-state.agent-mode.accessibility-label" : {
+      "comment" : ".accessibilityLabel() for Agent Mode button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter Agent Mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "进入代理模式"
+          }
+        }
+      }
+    },
+    "empty-state.agent-mode.help" : {
+      "comment" : ".help() tooltip for Agent Mode button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter Agent mode (⌘⇧A)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "进入代理模式 (⌘⇧A)"
+          }
+        }
+      }
+    },
+    "empty-state.hero" : {
+      "comment" : "greeting in empty state",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What's up next"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接下来做什么"
+          }
+        }
+      }
+    },
+    "empty-state.no-file-open.subtitle" : {
+      "comment" : "Text() in EmptyProjectEditorView, descriptive subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select a file from the sidebar to start editing."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从侧边栏选择文件开始编辑。"
+          }
+        }
+      }
+    },
+    "empty-state.no-file-open.title" : {
+      "comment" : "Text() in EmptyProjectEditorView, detail-pane empty state title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No File Open"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未打开文件"
+          }
+        }
+      }
+    },
+    "empty-state.no-folder-open.subtitle" : {
+      "comment" : "Text() in EmptyWorkspaceHero, descriptive subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a file or folder to start editing — or jump straight into Agent mode for a workspace-free chat."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择文件或文件夹开始编辑 — 或直接进入代理模式进行无工作区的聊天。"
+          }
+        }
+      }
+    },
+    "empty-state.no-folder-open.title" : {
+      "comment" : "Text() in EmptyWorkspaceHero, workspace-level empty state title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Folder Open"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未打开文件夹"
+          }
+        }
+      }
+    },
+    "empty-state.open-file" : {
+      "comment" : "Label() button text in EmptyProjectEditorView and EmptyWorkspaceHero",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open File"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开文件"
+          }
+        }
+      }
+    },
+    "empty-state.open-file.accessibility-label" : {
+      "comment" : ".accessibilityLabel() for Open File button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open File"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开文件"
+          }
+        }
+      }
+    },
+    "empty-state.open-file.help" : {
+      "comment" : ".help() tooltip for Open File button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open File"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开文件"
+          }
+        }
+      }
+    },
+    "empty-state.open-folder" : {
+      "comment" : "Label() button text in EmptyWorkspaceHero",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开文件夹"
+          }
+        }
+      }
+    },
+    "empty-state.open-folder.accessibility-label" : {
+      "comment" : ".accessibilityLabel() for Open Folder button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开文件夹"
+          }
+        }
+      }
+    },
+    "empty-state.open-folder.help" : {
+      "comment" : ".help() tooltip for Open Folder button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开文件夹"
+          }
+        }
+      }
+    },
+    "empty-state.quick-open" : {
+      "comment" : "Label() button text in EmptyProjectEditorView",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quick Open"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速打开"
+          }
+        }
+      }
+    },
+    "empty-state.quick-open.accessibility-label" : {
+      "comment" : ".accessibilityLabel() for Quick Open button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quick Open"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速打开"
+          }
+        }
+      }
+    },
+    "empty-state.quick-open.help" : {
+      "comment" : ".help() tooltip for Quick Open button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quick Open"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速打开"
+          }
+        }
+      }
+    },
+    "empty-state.recent-files" : {
+      "comment" : "title parameter for EmptyWorkspaceRecentSection (section header)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent Files"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近的文件"
+          }
+        }
+      }
+    },
+    "empty-state.recent-folders" : {
+      "comment" : "title parameter for EmptyWorkspaceRecentSection (section header)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent Folders"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近的文件夹"
+          }
+        }
+      }
+    },
+    "empty-state.subtitle.no-folder" : {
+      "comment" : "subtitle text when no folder opened",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open a folder from the menu to chat about a project."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从菜单打开文件夹以讨论项目。"
+          }
+        }
+      }
+    },
+    "empty-state.subtitle.with-folder" : {
+      "comment" : "subtitle text when folder opened",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste images switch models queue follow-ups."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粘贴图片、切换模型、排队跟进。"
+          }
+        }
+      }
+    },
+    "Enable memory" : {
+
+    },
+    "Ensure Final Newline" : {
+
+    },
+    "enter-agent-mode-button.help" : {
+      "comment" : "Tooltip for enter agent mode button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switch this window into Agent mode (⌘⇧A)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将此窗口切换到代理模式 (⌘⇧A)"
+          }
+        }
+      }
+    },
+    "enter-agent-mode-button.label" : {
+      "comment" : "Button label for entering agent mode",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代理"
+          }
+        }
+      }
+    },
+    "Environment" : {
+
+    },
+    "Expand" : {
+
+    },
+    "Export memory snapshot" : {
+
+    },
+    "Extract durable facts from conversations and save them as candidate memories." : {
+
+    },
+    "Fetch Image Models" : {
+
+    },
+    "Fetch Models" : {
+
+    },
+    "Fetched Models" : {
+
+    },
+    "Fetching Images..." : {
+
+    },
+    "Fetching..." : {
+
+    },
+    "Fetching…" : {
+
+    },
+    "find-replace-bar.close-button" : {
+      "comment" : "Tooltip for close find bar button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close Find"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭查找"
+          }
+        }
+      }
+    },
+    "find-replace-bar.find-placeholder" : {
+      "comment" : "TextField placeholder for find field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查找"
+          }
+        }
+      }
+    },
+    "find-replace-bar.match-count" : {
+      "comment" : "Match counter display",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "of"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "个"
+          }
+        }
+      }
+    },
+    "find-replace-bar.next-match-button" : {
+      "comment" : "Tooltip for next match button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next Match"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一个匹配"
+          }
+        }
+      }
+    },
+    "find-replace-bar.no-matches" : {
+      "comment" : "Message when no matches found in find bar",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No matches"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无匹配项"
+          }
+        }
+      }
+    },
+    "find-replace-bar.previous-match-button" : {
+      "comment" : "Tooltip for previous match button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Previous Match"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一个匹配"
+          }
+        }
+      }
+    },
+    "find-replace-bar.replace-all-button" : {
+      "comment" : "Button to replace all find matches",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部"
+          }
+        }
+      }
+    },
+    "find-replace-bar.replace-button" : {
+      "comment" : "Button to replace current find match",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replace"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "替换"
+          }
+        }
+      }
+    },
+    "find-replace-bar.replace-placeholder" : {
+      "comment" : "TextField placeholder for replace field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replace"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "替换"
+          }
+        }
+      }
+    },
+    "Font" : {
+
+    },
+    "Glass Editor Background" : {
+
+    },
+    "Glass Material" : {
+
+    },
+    "Glass Strength" : {
+
+    },
+    "go-to-line.placeholder" : {
+      "comment" : "TextField placeholder for go to line panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Go to Line"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "转到行"
+          }
+        }
+      }
+    },
+    "goal-card.edit-button.help" : {
+      "comment" : "tooltip for edit button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit goal"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑目标"
+          }
+        }
+      }
+    },
+    "goal-card.header" : {
+      "comment" : "goal card section header",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Goal"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目标"
+          }
+        }
+      }
+    },
+    "goal-editor-sheet.cancel" : {
+      "comment" : "button to cancel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
+    "goal-editor-sheet.checklist-label" : {
+      "comment" : "label above checklist field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Acceptance checklist one per line"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "验收清单（每行一个）"
+          }
+        }
+      }
+    },
+    "goal-editor-sheet.save" : {
+      "comment" : "button to save goal",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存"
+          }
+        }
+      }
+    },
+    "goal-editor-sheet.statement-label" : {
+      "comment" : "label above goal statement field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Goal statement"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目标陈述"
+          }
+        }
+      }
+    },
+    "goal-editor-sheet.statement-placeholder" : {
+      "comment" : "placeholder for goal statement field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What are we trying to accomplish"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我们要达到什么目标"
+          }
+        }
+      }
+    },
+    "goal-editor-sheet.title" : {
+      "comment" : "sheet title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Define Goal"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "定义目标"
+          }
+        }
+      }
+    },
+    "header.copy-title" : {
+      "comment" : "tooltip for copy button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy title"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制标题"
+          }
+        }
+      }
+    },
+    "header.new-chat" : {
+      "comment" : "button tooltip",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New Chat"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新聊天"
+          }
+        }
+      }
+    },
+    "header.switch-to-editor" : {
+      "comment" : "button tooltip",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switch to Editor Mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换到编辑器模式"
+          }
+        }
+      }
+    },
+    "Headers" : {
+
+    },
+    "headers: %@" : {
+
+    },
+    "heatmap-cell.tooltip" : {
+      "comment" : "tooltip on heatmap cell",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Message count on date"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该日期的消息数"
+          }
+        }
+      }
+    },
+    "Hide Diff" : {
+
+    },
+    "Hide key" : {
+
+    },
+    "Hide tool calls" : {
+
+    },
+    "Highlight Current Line" : {
+
+    },
+    "https://..." : {
+
+    },
+    "https://example.com/mcp" : {
+
+    },
+    "Image" : {
+
+    },
+    "Image Mode" : {
+
+    },
+    "Image Opacity" : {
+
+    },
+    "Image Size" : {
+
+    },
+    "Image Understanding" : {
+
+    },
+    "image-description.help" : {
+      "comment" : "tooltip for image description toggle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Click to expand collapse AI-generated image description"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点击展开 / 收起视觉模型生成的图片描述"
+          }
+        }
+      }
+    },
+    "image-description.hide" : {
+      "comment" : "button label to hide image description",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide image description"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收起图片描述"
+          }
+        }
+      }
+    },
+    "image-description.show" : {
+      "comment" : "button label to show image description",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Image AI description"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "图片 AI 描述"
+          }
+        }
+      }
+    },
+    "image-preview.cannot-preview" : {
+      "comment" : "Error message when image cannot be loaded",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cannot Preview Image"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法预览图像"
+          }
+        }
+      }
+    },
+    "image-preview.close-button" : {
+      "comment" : "Button tooltip and accessibility label for closing image preview",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close Preview"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭预览"
+          }
+        }
+      }
+    },
+    "Include archived" : {
+
+    },
+    "Inspected %lld, archived %lld, removed %lld, merged %lld." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Inspected %1$lld, archived %2$lld, removed %3$lld, merged %4$lld."
+          }
+        }
+      }
+    },
+    "Inspector" : {
+
+    },
+    "inspector.hide-button" : {
+      "comment" : "Tooltip for button to hide inspector",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide Inspector"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏检查器"
+          }
+        }
+      }
+    },
+    "inspector.show-button" : {
+      "comment" : "Tooltip for button to show inspector",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Inspector"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示检查器"
+          }
+        }
+      }
+    },
+    "Keystrokes stay local until you press Save (⌘↩). API keys are stored separately in Keychain." : {
+
+    },
+    "Last: %@" : {
+
+    },
+    "Lifetime" : {
+
+    },
+    "Line Height" : {
+
+    },
+    "LLM tokens: %lld input / %lld output" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "LLM tokens: %1$lld input / %2$lld output"
+          }
+        }
+      }
+    },
+    "Logout" : {
+
+    },
+    "Make active" : {
+
+    },
+    "Max retrieved memories" : {
+
+    },
+    "MCP" : {
+
+    },
+    "Memory" : {
+
+    },
+    "Memory Features" : {
+
+    },
+    "Memory List" : {
+
+    },
+    "Memory Maintenance" : {
+
+    },
+    "Memory Retrieval" : {
+
+    },
+    "Memory Summaries" : {
+
+    },
+    "Memory Tool Model" : {
+
+    },
+    "menu.edit.command-palette" : {
+      "comment" : "Button label in Edit menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Command Palette"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令面板"
+          }
+        }
+      }
+    },
+    "menu.edit.duplicate-line" : {
+      "comment" : "Button label in Edit menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplicate Line"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制行"
+          }
+        }
+      }
+    },
+    "menu.edit.find" : {
+      "comment" : "Button label in Edit menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查找"
+          }
+        }
+      }
+    },
+    "menu.edit.find-next" : {
+      "comment" : "Button label in Edit menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find Next"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查找下一个"
+          }
+        }
+      }
+    },
+    "menu.edit.find-previous" : {
+      "comment" : "Button label in Edit menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find Previous"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查找上一个"
+          }
+        }
+      }
+    },
+    "menu.edit.go-to-line" : {
+      "comment" : "Button label in Edit menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Go to Line"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "转到行"
+          }
+        }
+      }
+    },
+    "menu.edit.go-to-symbol" : {
+      "comment" : "Button label in Edit menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Go to Symbol"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "转到符号"
+          }
+        }
+      }
+    },
+    "menu.edit.move-line-down" : {
+      "comment" : "Button label in Edit menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move Line Down"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向下移动行"
+          }
+        }
+      }
+    },
+    "menu.edit.move-line-up" : {
+      "comment" : "Button label in Edit menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move Line Up"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向上移动行"
+          }
+        }
+      }
+    },
+    "menu.edit.quick-open" : {
+      "comment" : "Button label in Edit menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quick Open"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速打开"
+          }
+        }
+      }
+    },
+    "menu.file.new-tab" : {
+      "comment" : "Button label in File menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New Tab"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建标签页"
+          }
+        }
+      }
+    },
+    "menu.file.new-window" : {
+      "comment" : "Button label in File menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New Window…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建窗口…"
+          }
+        }
+      }
+    },
+    "menu.file.open-file" : {
+      "comment" : "Button label in File menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open File…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开文件…"
+          }
+        }
+      }
+    },
+    "menu.file.open-folder" : {
+      "comment" : "Button label in File menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Folder…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开文件夹…"
+          }
+        }
+      }
+    },
+    "menu.file.save" : {
+      "comment" : "Button label in File menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存"
+          }
+        }
+      }
+    },
+    "menu.file.save-as" : {
+      "comment" : "Button label in File menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save As…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "另存为…"
+          }
+        }
+      }
+    },
+    "menu.view.open-containing-folder" : {
+      "comment" : "Button label in View menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Containing Folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开所在文件夹"
+          }
+        }
+      }
+    },
+    "menu.view.open-split-file" : {
+      "comment" : "Button label in View menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Split File…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开分割文件…"
+          }
+        }
+      }
+    },
+    "menu.view.switch-to-agent-mode" : {
+      "comment" : "Button label (conditional) in View menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switch to Agent Mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换到助手模式"
+          }
+        }
+      }
+    },
+    "menu.view.switch-to-editor-mode" : {
+      "comment" : "Button label (conditional) in View menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switch to Editor Mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换到编辑器模式"
+          }
+        }
+      }
+    },
+    "menu.view.toggle-agent" : {
+      "comment" : "Button label in View menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toggle Agent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换助手"
+          }
+        }
+      }
+    },
+    "menu.view.toggle-focus-mode" : {
+      "comment" : "Button label in View menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toggle Focus Mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换专注模式"
+          }
+        }
+      }
+    },
+    "menu.view.toggle-inspector" : {
+      "comment" : "Button label in View menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toggle Inspector"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换检查器"
+          }
+        }
+      }
+    },
+    "menu.view.toggle-preview" : {
+      "comment" : "Button label in View menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toggle Preview"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换预览"
+          }
+        }
+      }
+    },
+    "menu.window.close-tab" : {
+      "comment" : "Button label in Window menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close Tab"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭标签页"
+          }
+        }
+      }
+    },
+    "menu.window.next-tab" : {
+      "comment" : "Button label in Window menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next Tab"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一个标签页"
+          }
+        }
+      }
+    },
+    "menu.window.previous-tab" : {
+      "comment" : "Button label in Window menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Previous Tab"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一个标签页"
+          }
+        }
+      }
+    },
+    "menu.window.reopen-closed-tab" : {
+      "comment" : "Button label in Window menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reopen Closed Tab"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新打开已关闭标签页"
+          }
+        }
+      }
+    },
+    "menu.window.select-tab-index" : {
+      "comment" : "Button label in Window menu (dynamic tab selection)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select Tab %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择标签页 %@"
+          }
+        }
+      }
+    },
+    "message-footer.copied" : {
+      "comment" : "tooltip after copy clicked",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copied"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已复制"
+          }
+        }
+      }
+    },
+    "message-footer.copy" : {
+      "comment" : "tooltip when copy not yet clicked",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy message"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制消息"
+          }
+        }
+      }
+    },
+    "message-footer.copy-accessibility" : {
+      "comment" : "accessibility label for copy button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy message"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制消息"
+          }
+        }
+      }
+    },
+    "Minimum tool calls" : {
+
+    },
+    "model-id" : {
+
+    },
+    "New File" : {
+
+    },
+    "New Folder" : {
+
+    },
+    "New MCP Server" : {
+
+    },
+    "New Skill" : {
+
+    },
+    "New User Skill" : {
+
+    },
+    "No archived memories." : {
+
+    },
+    "No commands are always allowed." : {
+
+    },
+    "No matching commands" : {
+
+    },
+    "No matching skills, files, or shortcuts" : {
+
+    },
+    "No memories match the current filters." : {
+
+    },
+    "No providers configured. Open Settings → Agent." : {
+
+    },
+    "No servers in this group." : {
+
+    },
+    "No skills in this group." : {
+
+    },
+    "No workspace" : {
+
+    },
+    "One header per line, for example: Authorization=Bearer ..." : {
+
+    },
+    "One model id per line — surfaces in the chat picker as one-click switches." : {
+
+    },
+    "One variable per line, for example: HTTPS_PROXY=http://127.0.0.1:7890" : {
+
+    },
+    "Open Folder" : {
+
+    },
+    "Open in Terminal" : {
+
+    },
+    "Other answer (optional)" : {
+
+    },
+    "Per-provider concurrency" : {
+
+    },
+    "Pick a provider on the left, or add one with +" : {
+
+    },
+    "Pick from fetched models" : {
+
+    },
+    "Pick provider + model for this chat. The active provider also drives Auto/Flash/Pro routing." : {
+
+    },
+    "plan-card.approve-button" : {
+      "comment" : "button to approve plan",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Approve"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同意"
+          }
+        }
+      }
+    },
+    "plan-card.header" : {
+      "comment" : "plan card section header",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plan"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "计划"
+          }
+        }
+      }
+    },
+    "plan-card.info-text" : {
+      "comment" : "informational text about plan mode",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plan mode blocks writes until you Approve."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "计划模式会阻止写入，直到您同意。"
+          }
+        }
+      }
+    },
+    "plan-card.mark-complete-button" : {
+      "comment" : "button to mark plan complete",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mark plan complete"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标记计划完成"
+          }
+        }
+      }
+    },
+    "plan-card.reject-button" : {
+      "comment" : "button to reject plan",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reject"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拒绝"
+          }
+        }
+      }
+    },
+    "plan-revision.cancel-button.help" : {
+      "comment" : "tooltip for cancel button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
+    "plan-revision.placeholder" : {
+      "comment" : "placeholder for revision note field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revision note optional e.g. skip step 2 use sed instead"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "修订备注"
+          }
+        }
+      }
+    },
+    "plan-revision.queue-notice" : {
+      "comment" : "notice about queuing",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Note will queue until the current turn finishes."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "备注将排队等待当前轮次完成。"
+          }
+        }
+      }
+    },
+    "plan-revision.replan-button" : {
+      "comment" : "button to expand revision interface",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replan"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新规划"
+          }
+        }
+      }
+    },
+    "plan-revision.replan-tooltip" : {
+      "comment" : "tooltip for replan button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ask the agent to revise the plan optionally with a note"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请求代理修改计划"
+          }
+        }
+      }
+    },
+    "plan-revision.send-button" : {
+      "comment" : "button to send revision",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送"
+          }
+        }
+      }
+    },
+    "plan-status.approved" : {
+      "comment" : "plan status pill label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Approved"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已同意"
+          }
+        }
+      }
+    },
+    "plan-status.done" : {
+      "comment" : "plan status pill label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已完成"
+          }
+        }
+      }
+    },
+    "plan-status.executing" : {
+      "comment" : "plan status pill label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Executing"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "执行中"
+          }
+        }
+      }
+    },
+    "plan-status.proposed" : {
+      "comment" : "plan status pill label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Awaiting Approval"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待同意"
+          }
+        }
+      }
+    },
+    "plan-status.rejected" : {
+      "comment" : "plan status pill label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rejected"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已拒绝"
+          }
+        }
+      }
+    },
+    "plan-step-sheet.cancel" : {
+      "comment" : "button to cancel sheet",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
+    "plan-step-sheet.insert-above.placeholder" : {
+      "comment" : "placeholder text field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New step description"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新步骤说明"
+          }
+        }
+      }
+    },
+    "plan-step-sheet.insert-below.placeholder" : {
+      "comment" : "placeholder text field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New step description"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新步骤说明"
+          }
+        }
+      }
+    },
+    "plan-step-sheet.placeholder" : {
+      "comment" : "placeholder for plan step text field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Step description"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "步骤说明"
+          }
+        }
+      }
+    },
+    "plan-step-sheet.restart.placeholder" : {
+      "comment" : "placeholder text field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optional note for the agent e.g. use sed instead"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代理的可选备注"
+          }
+        }
+      }
+    },
+    "plan-step.cycle-status.help" : {
+      "comment" : "tooltip when step is not interactive",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Approve the plan to track step progress"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同意计划以跟踪步骤进度"
+          }
+        }
+      }
+    },
+    "plan-step.menu.edit" : {
+      "comment" : "context menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit step…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑步骤"
+          }
+        }
+      }
+    },
+    "plan-step.menu.insert-above" : {
+      "comment" : "context menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Insert step above…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在上方插入步骤"
+          }
+        }
+      }
+    },
+    "plan-step.menu.insert-below" : {
+      "comment" : "context menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Insert step below…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在下方插入步骤"
+          }
+        }
+      }
+    },
+    "plan-step.menu.remove" : {
+      "comment" : "destructive context menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove step"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除步骤"
+          }
+        }
+      }
+    },
+    "plan-step.menu.restart" : {
+      "comment" : "context menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restart from this step…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从此步骤重启"
+          }
+        }
+      }
+    },
+    "Preview next cycle" : {
+
+    },
+    "preview-pane.title" : {
+      "comment" : "Title for markdown/HTML preview pane",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preview"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预览"
+          }
+        }
+      }
+    },
+    "Provider" : {
+
+    },
+    "provider-status.help" : {
+      "comment" : "tooltip for provider selector menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active provider driving the next chat turn. Click to switch."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "活跃提供者 驱动下一轮对话。点击切换。"
+          }
+        }
+      }
+    },
+    "queued-message.label" : {
+      "comment" : "label for queued message card",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Queued"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已排队"
+          }
+        }
+      }
+    },
+    "quick-open.no-files" : {
+      "comment" : "Message when no files found",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Files"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无文件"
+          }
+        }
+      }
+    },
+    "quick-open.placeholder" : {
+      "comment" : "TextField placeholder for quick open panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quick Open"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速打开"
+          }
+        }
+      }
+    },
+    "Read-only shell commands in the built-in allowlist (cat, head, tail, ls, find without -delete/-exec, git diff/log/status/show, rg, grep, wc, file, stat, which, pwd, echo, …) run without asking. Commands outside the allowlist are passed to a one-shot LLM judge running on the active provider's **Flash** model (cheap & fast — never Pro), and only YES verdicts auto-run. Destructive patterns (rm, sudo, git push --force, git reset --hard, …) still require typing \"confirm\"." : {
+
+    },
+    "Recently fetched" : {
+
+    },
+    "Refresh" : {
+
+    },
+    "Refresh Tools" : {
+
+    },
+    "Reject" : {
+
+    },
+    "Remove" : {
+
+    },
+    "Remove image" : {
+
+    },
+    "Remove selected provider" : {
+
+    },
+    "Reset search" : {
+
+    },
+    "Restore memory" : {
+
+    },
+    "Reveal in Finder" : {
+
+    },
+    "Revert" : {
+
+    },
+    "Rewrite retrieval query" : {
+
+    },
+    "Routines" : {
+
+    },
+    "Rules apply to command families such as `git push`; dangerous commands still require confirmation." : {
+
+    },
+    "Run" : {
+
+    },
+    "Run daily memory maintenance" : {
+
+    },
+    "Run maintenance cycle" : {
+
+    },
+    "Save" : {
+
+    },
+    "Scope" : {
+
+    },
+    "Search by skill name, description, or path..." : {
+
+    },
+    "Search by text..." : {
+
+    },
+    "Search Memories" : {
+
+    },
+    "Send" : {
+
+    },
+    "Send (↩)" : {
+
+    },
+    "Sending" : {
+
+    },
+    "Server name" : {
+
+    },
+    "Servers available in this workspace." : {
+
+    },
+    "Show Diff" : {
+
+    },
+    "Show in Finder" : {
+
+    },
+    "Show key" : {
+
+    },
+    "Show Line Numbers" : {
+
+    },
+    "Show tool calls" : {
+
+    },
+    "Sidebar" : {
+
+    },
+    "sidebar.archived-sessions.header" : {
+      "comment" : "disclosure button for archived sessions",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archived count"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已归档数"
+          }
+        }
+      }
+    },
+    "sidebar.chats-header" : {
+      "comment" : "section header",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chats"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聊天"
+          }
+        }
+      }
+    },
+    "sidebar.empty-state" : {
+      "comment" : "empty state text when no sessions exist",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sessions you start will appear here."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "您开始的会话将显示在这里。"
+          }
+        }
+      }
+    },
+    "sidebar.new-chat-action" : {
+      "comment" : "button label in primary actions row",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New Chat"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新聊天"
+          }
+        }
+      }
+    },
+    "sidebar.session-list.see-more" : {
+      "comment" : "button label to expand session list",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "See more"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看更多"
+          }
+        }
+      }
+    },
+    "sidebar.session-list.show-less" : {
+      "comment" : "button label to collapse expanded session list",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show less"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收起"
+          }
+        }
+      }
+    },
+    "sidebar.session-menu.archive" : {
+      "comment" : "context menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archive"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "归档"
+          }
+        }
+      }
+    },
+    "sidebar.session-menu.delete" : {
+      "comment" : "destructive context menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete session"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除会话"
+          }
+        }
+      }
+    },
+    "sidebar.session-menu.pin" : {
+      "comment" : "context menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pin"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "置顶"
+          }
+        }
+      }
+    },
+    "sidebar.session-menu.unarchive" : {
+      "comment" : "context menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unarchive"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消归档"
+          }
+        }
+      }
+    },
+    "sidebar.session-menu.unpin" : {
+      "comment" : "context menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unpin"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消置顶"
+          }
+        }
+      }
+    },
+    "sidebar.session-row.archive-tooltip" : {
+      "comment" : ".help() for archive button on hover",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archive"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "归档"
+          }
+        }
+      }
+    },
+    "sidebar.session-row.pin-tooltip" : {
+      "comment" : ".help() for pin button on hover",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pin"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "置顶"
+          }
+        }
+      }
+    },
+    "sidebar.session-row.unarchive-tooltip" : {
+      "comment" : ".help() for unarchive button on hover",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unarchive"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消归档"
+          }
+        }
+      }
+    },
+    "sidebar.session-row.unpin-tooltip" : {
+      "comment" : ".help() for unpin button on hover",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unpin"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消置顶"
+          }
+        }
+      }
+    },
+    "sidebar.workspace-header" : {
+      "comment" : "section header",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workspaces"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区"
+          }
+        }
+      }
+    },
+    "sidebar.workspace-menu.new-chat" : {
+      "comment" : "context menu item for workspace group",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New Chat in this Workspace"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在此工作区创建新聊天"
+          }
+        }
+      }
+    },
+    "sidebar.workspace-toggle.collapse-tooltip" : {
+      "comment" : ".help() for folder collapse button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Collapse session list"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收起会话列表"
+          }
+        }
+      }
+    },
+    "sidebar.workspace-toggle.expand-tooltip" : {
+      "comment" : ".help() for folder expand button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expand session list"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "展开会话列表"
+          }
+        }
+      }
+    },
+    "Similarity and merge parameters" : {
+
+    },
+    "Similarity threshold" : {
+
+    },
+    "Skill name" : {
+
+    },
+    "Skills" : {
+
+    },
+    "Skip" : {
+
+    },
+    "split-editor.default-title" : {
+      "comment" : "Default title for split editor pane when no file is open",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Split"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分割"
+          }
+        }
+      }
+    },
+    "stat-cell.active-days" : {
+      "comment" : "stats grid cell title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active days"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "活跃天数"
+          }
+        }
+      }
+    },
+    "stat-cell.current-streak" : {
+      "comment" : "stats grid cell title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Current streak"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前连续天数"
+          }
+        }
+      }
+    },
+    "stat-cell.favorite-model" : {
+      "comment" : "stats grid cell title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Favorite model"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "常用模型"
+          }
+        }
+      }
+    },
+    "stat-cell.longest-streak" : {
+      "comment" : "stats grid cell title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Longest streak"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最长连续天数"
+          }
+        }
+      }
+    },
+    "stat-cell.messages" : {
+      "comment" : "stats grid cell title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Messages"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "消息"
+          }
+        }
+      }
+    },
+    "stat-cell.peak-hour" : {
+      "comment" : "stats grid cell title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Peak hour"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高峰时段"
+          }
+        }
+      }
+    },
+    "stat-cell.sessions" : {
+      "comment" : "stats grid cell title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sessions"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话"
+          }
+        }
+      }
+    },
+    "stat-cell.tokens" : {
+      "comment" : "stats grid cell title when real usage available",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tokens"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "令牌数"
+          }
+        }
+      }
+    },
+    "stat-cell.tokens-estimated" : {
+      "comment" : "stats grid cell title when estimated",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tokens (est.)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "令牌数（估计）"
+          }
+        }
+      }
+    },
+    "Statistics" : {
+
+    },
+    "stats-dashboard.range.7d" : {
+      "comment" : "date range selector",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7d"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 天"
+          }
+        }
+      }
+    },
+    "stats-dashboard.range.30d" : {
+      "comment" : "date range selector",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "30d"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "30 天"
+          }
+        }
+      }
+    },
+    "stats-dashboard.range.all" : {
+      "comment" : "date range selector",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部"
+          }
+        }
+      }
+    },
+    "stats-dashboard.tabs.models" : {
+      "comment" : "dashboard tab label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Models"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型"
+          }
+        }
+      }
+    },
+    "stats-dashboard.tabs.overview" : {
+      "comment" : "dashboard tab label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Overview"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "概览"
+          }
+        }
+      }
+    },
+    "Stop" : {
+
+    },
+    "Strict (100%)" : {
+
+    },
+    "Summarize older messages to free context budget" : {
+
+    },
+    "Switch workspace" : {
+
+    },
+    "symbol-jump.no-symbols" : {
+      "comment" : "Message when no symbols found",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Symbols"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无符号"
+          }
+        }
+      }
+    },
+    "symbol-jump.placeholder" : {
+      "comment" : "TextField placeholder for symbol jump panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Go to Symbol"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "转到符号"
+          }
+        }
+      }
+    },
+    "symbol-jump.symbol-kind.line" : {
+      "comment" : "Symbol information display",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "line"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "行"
+          }
+        }
+      }
+    },
+    "Text Size" : {
+
+    },
+    "The agent can read files, search, list directories, run commands (with approval), and check Git status." : {
+
+    },
+    "The current local maintenance pass handles retention and archiving. LLM-assisted duplicate merging can be wired into this section once the Agent memory retrieval pipeline starts consuming embeddings." : {
+
+    },
+    "Theme" : {
+
+    },
+    "This is a destructive command. Type \"confirm\" to allow." : {
+
+    },
+    "Timeout" : {
+
+    },
+    "Tool approval" : {
+
+    },
+    "Tool list not refreshed" : {
+
+    },
+    "Tool model" : {
+
+    },
+    "Tools" : {
+
+    },
+    "transcript.message-truncated.help" : {
+      "comment" : "tooltip for message truncation card",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open in standalone window to view full message content"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开独立窗口查看此消息的完整内容"
+          }
+        }
+      }
+    },
+    "transcript.message-truncated.text" : {
+      "comment" : "button label for truncated message",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Message shows first N characters only"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "消息仅显示前N个字符"
+          }
+        }
+      }
+    },
+    "transcript.older-history.help" : {
+      "comment" : "tooltip for older history card",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open in standalone window to view full conversation history"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开独立窗口查看完整对话历史"
+          }
+        }
+      }
+    },
+    "transcript.older-history.text" : {
+      "comment" : "button label for older history card",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "More messages earlier in conversation"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对话前面还有多条消息"
+          }
+        }
+      }
+    },
+    "Transient memory TTL" : {
+
+    },
+    "Transport" : {
+
+    },
+    "Trigger time" : {
+
+    },
+    "Trim Trailing Whitespace" : {
+
+    },
+    "Typography" : {
+
+    },
+    "Use active Agent model" : {
+
+    },
+    "Use route default: %@" : {
+
+    },
+    "Use the tool model to turn conversational wording into a focused semantic search query." : {
+
+    },
+    "Used %lldx" : {
+
+    },
+    "Used for query rewriting and future LLM-assisted memory maintenance. Leave blank to follow the active Agent model." : {
+
+    },
+    "Used for semantic retrieval. Leave the default unless your provider exposes a compatible embedding model." : {
+
+    },
+    "Used only when the active Agent provider cannot accept images directly. Multiple attached images are described in one request, then the description is sent to the main model." : {
+
+    },
+    "v%@" : {
+
+    },
+    "veilwriter" : {
+
+    },
+    "View content" : {
+
+    },
+    "View Order" : {
+
+    },
+    "When enabled, the Agent can use saved preferences, recurring facts, and project notes as personalization context." : {
+
+    },
+    "When enabled, VeilWriter can surface reusable workflows as skill candidates." : {
+
+    },
+    "Workspace" : {
+
+    },
+    "Your answer" : {
+
+    },
+    "不影响调度计划。即使 Routine 被禁用也会运行一次。" : {
+
+    },
+    "不绑定 Workspace" : {
+
+    },
+    "保存" : {
+
+    },
+    "停用" : {
+
+    },
+    "关闭" : {
+
+    },
+    "再显示 %lld 个文件" : {
+
+    },
+    "删除 Routine" : {
+
+    },
+    "取消" : {
+
+    },
+    "启用" : {
+
+    },
+    "周一" : {
+
+    },
+    "周三" : {
+
+    },
+    "周二" : {
+
+    },
+    "周五" : {
+
+    },
+    "周六" : {
+
+    },
+    "周四" : {
+
+    },
+    "周日" : {
+
+    },
+    "在 Finder 中显示" : {
+
+    },
+    "在 Xedit 新窗口打开" : {
+
+    },
+    "复制" : {
+
+    },
+    "如：每日 PR 摘要" : {
+
+    },
+    "审查" : {
+
+    },
+    "工作日（周一至周五）" : {
+
+    },
+    "已复制" : {
+
+    },
+    "已编辑" : {
+
+    },
+    "打开方式" : {
+
+    },
+    "收起文件" : {
+
+    },
+    "收起详情" : {
+
+    },
+    "新建 Routine" : {
+
+    },
+    "星期" : {
+
+    },
+    "查看当前未提交 diff" : {
+
+    },
+    "查看详细错误信息" : {
+
+    },
+    "正在编辑" : {
+
+    },
+    "每" : {
+
+    },
+    "每天" : {
+
+    },
+    "用默认应用打开" : {
+
+    },
+    "立即运行一次" : {
+
+    },
+    "编辑 Routine" : {
+
+    },
+    "编辑…" : {
+
+    },
+    "详情" : {
+
+    },
+    "调度类型" : {
+
+    },
+    "跟随当前 Flash / Pro 路由" : {
+
+    },
+    "还没有 Routine。点击 + 创建一条到点自动运行的提示词。" : {
+
+    },
+    "重新发送上一条消息" : {
+
+    },
+    "重试" : {
+
+    },
+    "隐藏详细错误信息" : {
+
+    }
+  },
+  "version" : "1.0"
+}

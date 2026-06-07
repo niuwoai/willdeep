@@ -79,6 +79,34 @@ struct AgentClientEncodingTests {
         #expect(tools.count == 1)
     }
 
+    /// Long pasted text is stored as a compact attachment in the UI,
+    /// but the provider payload must still include its full body.
+    @Test
+    func encodeChatRequestIncludesPastedTextAttachmentBody() throws {
+        let attachment = AgentTextAttachment(
+            filename: "crash.txt",
+            content: "Exception Type: EXC_BAD_ACCESS\nThread 0 Crashed"
+        )
+        let data = try AgentClient.encodeChatRequest(
+            model: "x",
+            messages: [
+                AgentMessage(
+                    role: .user,
+                    content: "请看这段崩溃日志",
+                    textAttachments: [attachment]
+                )
+            ],
+            tools: []
+        )
+        let dict = try parseJSONObject(data)
+        let messages = dict["messages"] as? [[String: Any]] ?? []
+        let first = messages.first
+        let content = first?["content"] as? String ?? ""
+        #expect(content.contains("请看这段崩溃日志"))
+        #expect(content.contains("### Attached text: crash.txt"))
+        #expect(content.contains("Exception Type: EXC_BAD_ACCESS"))
+    }
+
     // MARK: - providerReadyMessages
 
     /// A pure user → assistant exchange passes through unmodified.
@@ -92,6 +120,16 @@ struct AgentClientEncodingTests {
         #expect(out.count == 2)
         #expect(out[0].role == .user)
         #expect(out[1].role == .assistant)
+    }
+
+    @Test
+    func pastedTextThresholdOnlyCapturesLargeInput() {
+        #expect(AgentTextAttachment.shouldCapturePaste("普通一小段文本") == false)
+        let longText = String(repeating: "a", count: AgentTextAttachment.largePasteCharacterThreshold)
+        #expect(AgentTextAttachment.shouldCapturePaste(longText) == true)
+        let manyLines = Array(repeating: "line", count: AgentTextAttachment.largePasteLineThreshold)
+            .joined(separator: "\n")
+        #expect(AgentTextAttachment.shouldCapturePaste(manyLines) == true)
     }
 
     /// Orphan tool messages (no matching assistant tool_call ancestor)

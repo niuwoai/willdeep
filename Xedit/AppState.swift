@@ -153,6 +153,11 @@ final class AppState: ObservableObject {
         get { activeRuntime?.pendingImages ?? [] }
         set { activeRuntime?.pendingImages = newValue }
     }
+    /// Long pasted text staged in the composer for the next user message.
+    var agentPendingTextAttachments: [AgentTextAttachment] {
+        get { activeRuntime?.pendingTextAttachments ?? [] }
+        set { activeRuntime?.pendingTextAttachments = newValue }
+    }
     /// Skills the user attached via `@skill` for the next send.
     var agentPendingSkills: [AgentSkillEntry] {
         get { activeRuntime?.pendingSkills ?? [] }
@@ -359,6 +364,7 @@ final class AppState: ObservableObject {
         let runtimeID: AgentSession.ID
         let text: String
         let images: [AgentImageAttachment]
+        let textAttachments: [AgentTextAttachment]
         let providerID: String
         let enqueuedAt: Date
     }

@@ -36,10 +36,10 @@ struct EmptyProjectEditorView: View {
                     .foregroundStyle(.secondary)
 
                 VStack(spacing: 6) {
-                    Text("No File Open")
+                    Text(L10n.EmptyState.noFileOpenTitle)
                         .font(.system(size: 22, weight: .semibold))
                         .foregroundStyle(.primary)
-                    Text("Select a file from the sidebar to start editing.")
+                    Text(L10n.EmptyState.noFileOpenSubtitle)
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                 }
@@ -48,20 +48,20 @@ struct EmptyProjectEditorView: View {
                     Button {
                         onQuickOpen()
                     } label: {
-                        Label("Quick Open", systemImage: "doc.text.magnifyingglass")
+                        Label(L10n.EmptyState.quickOpen, systemImage: "doc.text.magnifyingglass")
                     }
                     .buttonStyle(EmptyWorkspaceButtonStyle())
-                    .help("Quick Open")
-                    .accessibilityLabel("Quick Open")
+                    .help(L10n.EmptyState.quickOpenHelp)
+                    .accessibilityLabel(L10n.EmptyState.quickOpenAccessibilityLabel)
 
                     Button {
                         onOpenFile()
                     } label: {
-                        Label("Open File", systemImage: "doc")
+                        Label(L10n.EmptyState.openFile, systemImage: "doc")
                     }
                     .buttonStyle(EmptyWorkspaceButtonStyle())
-                    .help("Open File")
-                    .accessibilityLabel("Open File")
+                    .help(L10n.EmptyState.openFileHelp)
+                    .accessibilityLabel(L10n.EmptyState.openFileAccessibilityLabel)
                 }
                 .labelStyle(.titleAndIcon)
             }
@@ -129,7 +129,7 @@ struct EmptyWorkspaceView: View {
     private var recentFoldersSection: some View {
         if !appState.recentFolders.isEmpty {
             EmptyWorkspaceRecentSection(
-                title: "Recent Folders",
+                title: L10n.EmptyState.recentFolders,
                 urls: Array(appState.recentFolders.prefix(5)),
                 icon: "folder",
                 action: { url in
@@ -145,7 +145,7 @@ struct EmptyWorkspaceView: View {
     private var recentFilesSection: some View {
         if !appState.recentFiles.isEmpty {
             EmptyWorkspaceRecentSection(
-                title: "Recent Files",
+                title: L10n.EmptyState.recentFiles,
                 urls: Array(appState.recentFiles.prefix(5)),
                 icon: "doc",
                 action: { url in
@@ -171,10 +171,10 @@ struct EmptyWorkspaceHero: View {
                 .foregroundStyle(.secondary)
 
             VStack(spacing: 8) {
-                Text("No Folder Open")
+                Text(L10n.EmptyState.noFolderOpenTitle)
                     .font(.system(size: 28, weight: .semibold))
                     .foregroundStyle(.primary)
-                Text("Choose a file or folder to start editing — or jump straight into Agent mode for a workspace-free chat.")
+                Text(L10n.EmptyState.noFolderOpenSubtitle)
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -184,29 +184,29 @@ struct EmptyWorkspaceHero: View {
                 Button {
                     onOpenFile()
                 } label: {
-                    Label("Open File", systemImage: "doc")
+                    Label(L10n.EmptyState.openFile, systemImage: "doc")
                 }
                 .buttonStyle(EmptyWorkspaceButtonStyle())
-                .help("Open File")
-                .accessibilityLabel("Open File")
+                .help(L10n.EmptyState.openFileHelp)
+                .accessibilityLabel(L10n.EmptyState.openFileAccessibilityLabel)
 
                 Button {
                     onOpenFolder()
                 } label: {
-                    Label("Open Folder", systemImage: "folder")
+                    Label(L10n.EmptyState.openFolder, systemImage: "folder")
                 }
                 .buttonStyle(EmptyWorkspaceButtonStyle())
-                .help("Open Folder")
-                .accessibilityLabel("Open Folder")
+                .help(L10n.EmptyState.openFolderHelp)
+                .accessibilityLabel(L10n.EmptyState.openFolderAccessibilityLabel)
 
                 Button {
                     appState.setAppMode(.agent)
                 } label: {
-                    Label("Agent Mode", systemImage: "sparkles")
+                    Label(L10n.EmptyState.agentMode, systemImage: "sparkles")
                 }
                 .buttonStyle(EmptyWorkspaceButtonStyle(tint: .accentColor))
-                .help("Enter Agent mode (⌘⇧A)")
-                .accessibilityLabel("Enter Agent Mode")
+                .help(L10n.EmptyState.agentModeHelp)
+                .accessibilityLabel(L10n.EmptyState.agentModeAccessibilityLabel)
             }
             .labelStyle(.titleAndIcon)
         }

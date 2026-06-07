@@ -81,6 +81,68 @@ struct SendStopButton: View {
     private var canSend: Bool {
         !appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !appState.agentPendingImages.isEmpty
+            || !appState.agentPendingTextAttachments.isEmpty
+    }
+}
+
+struct AgentComposerTextAttachmentStrip: View {
+    let attachments: [AgentTextAttachment]
+    let onRemove: (AgentTextAttachment.ID) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(attachments) { attachment in
+                    AgentTextAttachmentChip(attachment: attachment, allowsRemoval: true) {
+                        onRemove(attachment.id)
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct AgentTextAttachmentChip: View {
+    let attachment: AgentTextAttachment
+    var allowsRemoval: Bool = false
+    var onRemove: (() -> Void)? = nil
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "doc.text")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            Text(attachment.displayName)
+                .font(.system(size: 12, weight: .medium))
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Text(attachment.byteLabel)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            if allowsRemoval, let onRemove {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(L10n.AgentTextAttachment.removeHelp)
+            }
+        }
+        .padding(.horizontal, 9)
+        .frame(height: 28)
+        .background(Color.primary.opacity(0.045))
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+        )
+        .help(attachment.displayName)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 

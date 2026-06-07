@@ -148,7 +148,7 @@ enum AgentUsageStats {
     // MARK: - Internals
 
     private static func estimateTokens(for message: AgentMessage) -> Int {
-        var total = max(0, message.content.count / 4)
+        var total = max(0, message.modelContent.count / 4)
         // Reasoning content costs tokens too even when the provider
         // doesn't split it out.
         if let reasoning = message.reasoningContent {

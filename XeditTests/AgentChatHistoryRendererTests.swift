@@ -224,7 +224,7 @@ struct AgentChatHistoryRendererTests {
             at: tableRange.location,
             effectiveRange: nil
         ) as? NSParagraphStyle)
-        #expect(paragraphStyle.lineSpacing == 0)
+        #expect(paragraphStyle.lineSpacing >= 2)
     }
 
     @Test

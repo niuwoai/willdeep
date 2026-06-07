@@ -24,22 +24,22 @@ struct VeilWriterApp: App {
         .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("New Window…") {
+                Button(L10n.Menu.fileNewWindow) {
                     chooseFolderForNewWindow()
                 }
                 .keyboardShortcut("n", modifiers: .command)
 
-                Button("New Tab") {
+                Button(L10n.Menu.fileNewTab) {
                     appState?.createNewTab()
                 }
                 .keyboardShortcut("t", modifiers: .command)
 
-                Button("Open File…") {
+                Button(L10n.Menu.fileOpenFile) {
                     appState?.openFile()
                 }
                 .keyboardShortcut("O", modifiers: .command)
 
-                Button("Open Folder…") {
+                Button(L10n.Menu.fileOpenFolder) {
                     appState?.openFolder { url in
                         openWindow(value: url)
                     }
@@ -48,72 +48,72 @@ struct VeilWriterApp: App {
             }
 
             CommandGroup(replacing: .saveItem) {
-                Button("Save") {
+                Button(L10n.Menu.fileSave) {
                     appState?.saveCurrentFile()
                 }
                 .keyboardShortcut("S", modifiers: .command)
 
-                Button("Save As…") {
+                Button(L10n.Menu.fileSaveAs) {
                     appState?.saveCurrentFileAs()
                 }
                 .keyboardShortcut("S", modifiers: [.command, .shift])
             }
 
             CommandGroup(after: .textEditing) {
-                Button("Command Palette") {
+                Button(L10n.Menu.editCommandPalette) {
                     appState?.showCommandPalette()
                 }
                 .keyboardShortcut("p", modifiers: [.command, .shift])
 
-                Button("Quick Open") {
+                Button(L10n.Menu.editQuickOpen) {
                     appState?.showQuickOpen()
                 }
                 .keyboardShortcut("p", modifiers: .command)
                 .disabled(appState?.rootDirectory == nil)
 
-                Button("Go to Line") {
+                Button(L10n.Menu.editGoToLine) {
                     appState?.showGoToLine()
                 }
                 .keyboardShortcut("l", modifiers: .command)
                 .disabled(appState?.activeTabID == nil)
 
-                Button("Go to Symbol") {
+                Button(L10n.Menu.editGoToSymbol) {
                     appState?.showSymbolJump()
                 }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
                 .disabled(appState?.activeTabID == nil)
 
-                Button("Find") {
+                Button(L10n.Menu.editFind) {
                     appState?.showFindBar()
                 }
                 .keyboardShortcut("f", modifiers: .command)
                 .disabled(appState?.activeTabID == nil)
 
-                Button("Find Next") {
+                Button(L10n.Menu.editFindNext) {
                     appState?.findNext()
                 }
                 .keyboardShortcut("g", modifiers: .command)
                 .disabled(appState?.findMatchRanges.isEmpty ?? true)
 
-                Button("Find Previous") {
+                Button(L10n.Menu.editFindPrevious) {
                     appState?.findPrevious()
                 }
                 .keyboardShortcut("g", modifiers: [.command, .shift])
                 .disabled(appState?.findMatchRanges.isEmpty ?? true)
 
-                Button("Duplicate Line") {
+                Button(L10n.Menu.editDuplicateLine) {
                     appState?.duplicateCurrentLine()
                 }
                 .keyboardShortcut("d", modifiers: .command)
                 .disabled(appState?.activeTabID == nil)
 
-                Button("Move Line Up") {
+                Button(L10n.Menu.editMoveLineUp) {
                     appState?.moveCurrentLineUp()
                 }
                 .keyboardShortcut(.upArrow, modifiers: .option)
                 .disabled(appState?.activeTabID == nil)
 
-                Button("Move Line Down") {
+                Button(L10n.Menu.editMoveLineDown) {
                     appState?.moveCurrentLineDown()
                 }
                 .keyboardShortcut(.downArrow, modifiers: .option)
@@ -121,72 +121,72 @@ struct VeilWriterApp: App {
             }
 
             CommandGroup(after: .toolbar) {
-                Button("Toggle Focus Mode") {
+                Button(L10n.Menu.viewToggleFocusMode) {
                     appState?.toggleFocusMode()
                 }
                 .keyboardShortcut("z", modifiers: [.command, .shift])
                 .disabled(appState?.activeTabID == nil)
 
-                Button("Toggle Preview") {
+                Button(L10n.Menu.viewTogglePreview) {
                     appState?.togglePreview()
                 }
                 .keyboardShortcut("r", modifiers: [.command, .option])
                 .disabled(appState?.canShowPreview != true)
 
-                Button("Open Split File…") {
+                Button(L10n.Menu.viewOpenSplitFile) {
                     appState?.openSplitFile()
                 }
                 .keyboardShortcut("\\", modifiers: [.command, .option])
 
-                Button("Open Containing Folder") {
+                Button(L10n.Menu.viewOpenContainingFolder) {
                     appState?.openContainingFolder()
                 }
                 .disabled(appState?.openedFileURL == nil)
 
-                Button("Toggle Inspector") {
+                Button(L10n.Menu.viewToggleInspector) {
                     appState?.isInspectorVisible.toggle()
                 }
                 .keyboardShortcut("i", modifiers: [.command, .option])
                 .disabled(appState?.activeTabID == nil)
 
-                Button("Toggle Agent") {
+                Button(L10n.Menu.viewToggleAgent) {
                     appState?.toggleAgentPanel()
                 }
                 .keyboardShortcut("a", modifiers: [.command, .option])
 
-                Button(appState?.appMode == .agent ? "Switch to Editor Mode" : "Switch to Agent Mode") {
+                Button(appState?.appMode == .agent ? L10n.Menu.viewSwitchToEditorMode : L10n.Menu.viewSwitchToAgentMode) {
                     appState?.toggleAppMode()
                 }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
             }
 
             CommandGroup(before: .windowArrangement) {
-                Button("Previous Tab") {
+                Button(L10n.Menu.windowPreviousTab) {
                     appState?.activatePreviousTab()
                 }
                 .keyboardShortcut("[", modifiers: [.command, .shift])
                 .disabled((appState?.tabs.count ?? 0) < 2)
 
-                Button("Next Tab") {
+                Button(L10n.Menu.windowNextTab) {
                     appState?.activateNextTab()
                 }
                 .keyboardShortcut("]", modifiers: [.command, .shift])
                 .disabled((appState?.tabs.count ?? 0) < 2)
 
                 ForEach(1...9, id: \.self) { index in
-                    Button("Select Tab \(index)") {
+                    Button(L10n.Menu.windowSelectTabIndex(String(index))) {
                         appState?.activateTab(atDisplayIndex: index)
                     }
                     .keyboardShortcut(KeyEquivalent(Character("\(index)")), modifiers: .command)
                     .disabled((appState?.tabs.count ?? 0) < index)
                 }
 
-                Button("Reopen Closed Tab") {
+                Button(L10n.Menu.windowReopenClosedTab) {
                     appState?.reopenClosedTab()
                 }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
 
-                Button("Close Tab") {
+                Button(L10n.Menu.windowCloseTab) {
                     appState?.closeActiveTab()
                 }
                 .keyboardShortcut("w", modifiers: .command)

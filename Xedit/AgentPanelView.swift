@@ -674,7 +674,7 @@ struct AgentToolCallGroup: View {
 
     var body: some View {
         let status = statusSummary
-        VStack(alignment: .leading, spacing: detailsVisible ? 7 : 0) {
+        VStack(alignment: .leading, spacing: detailsVisible ? 8 : 0) {
             Button {
                 if canToggleDetails {
                     isExpanded.toggle()
@@ -724,7 +724,7 @@ struct AgentToolCallGroup: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, detailsVisible ? 6 : 4)
+        .padding(.vertical, detailsVisible ? 8 : 5)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.14))
         .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -735,11 +735,11 @@ struct AgentToolCallGroup: View {
     }
 
     private var detailsVisible: Bool {
-        isExpanded || containsInteractiveCall
+        isExpanded
     }
 
     private var canToggleDetails: Bool {
-        !containsInteractiveCall
+        !calls.isEmpty
     }
 
     private var containsInteractiveCall: Bool {
@@ -1489,10 +1489,15 @@ struct AgentMessageBubble: View {
             Text(title)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-            Text(displayContent)
-                .font(.system(size: 13))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if !message.textAttachments.isEmpty {
+                AgentTextAttachmentBubbleStrip(attachments: message.textAttachments)
+            }
+            if !displayContent.isEmpty {
+                Text(displayContent)
+                    .font(.system(size: 13))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             if !message.images.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
@@ -1517,7 +1522,8 @@ struct AgentMessageBubble: View {
         // copy button (timing + tokens are assistant-only).
         switch message.role {
         case .system, .tool: return false
-        case .user, .assistant: return !message.content.isEmpty
+        case .user, .assistant:
+            return !message.content.isEmpty || !message.textAttachments.isEmpty
         }
     }
 
@@ -1569,7 +1575,7 @@ struct AgentMessageBubble: View {
     private func copyToClipboard() {
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.setString(message.content, forType: .string)
+        pb.setString(message.copyableContent, forType: .string)
         didJustCopy = true
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_400_000_000)
@@ -1583,6 +1589,9 @@ struct AgentMessageBubble: View {
                 return "Using tools…"
             }
             if !message.images.isEmpty {
+                return ""
+            }
+            if !message.textAttachments.isEmpty {
                 return ""
             }
             return "…"

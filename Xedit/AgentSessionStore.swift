@@ -101,6 +101,9 @@ enum AgentSessionStore {
             return "New Chat"
         }
         let text = firstUser.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty, let firstAttachment = firstUser.textAttachments.first {
+            return firstAttachment.displayName
+        }
         guard !text.isEmpty else { return "New Chat" }
         let oneLine = text.replacingOccurrences(of: "\n", with: " ")
         if oneLine.count <= 40 { return oneLine }

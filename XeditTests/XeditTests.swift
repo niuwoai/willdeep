@@ -374,7 +374,7 @@ struct VeilWriterTests {
         #expect(state.recentFolders.contains { $0.standardizedFileURL.path == nextDir.standardizedFileURL.path })
     }
 
-    @Test("external file opens inside its parent folder")
+    @Test("external file open does not hijack workspace root")
     @MainActor
     func testExternalFileOpen() throws {
         let tempDir = FileManager.default.temporaryDirectory
@@ -387,9 +387,15 @@ struct VeilWriterTests {
         let state = AppState()
         state.openExternalURL(fileURL)
 
-        #expect(state.rootDirectory?.standardizedFileURL.path == tempDir.standardizedFileURL.path)
-        #expect(state.selectedFolderURL?.standardizedFileURL.path == tempDir.standardizedFileURL.path)
+        // `openExternalURL` intentionally does NOT promote the file's
+        // parent directory to `rootDirectory` for plain-file opens
+        // (AppState.swift:702-707) — loading a huge parent like
+        // ~/Downloads as a FileTree was a fatal-latency footgun. So
+        // the file opens but no workspace root appears.
+        #expect(state.rootDirectory == nil)
+        #expect(state.selectedFolderURL == nil)
         #expect(state.openedFileURL == fileURL)
+        // Temp-folder paths are filtered out of recent items entirely.
         #expect(!state.recentFiles.contains { $0.standardizedFileURL.path == fileURL.standardizedFileURL.path })
         #expect(!state.recentFolders.contains { $0.standardizedFileURL.path == tempDir.standardizedFileURL.path })
     }
@@ -786,6 +792,11 @@ struct VeilWriterTests {
     @Test("agent thinking indicator only shows while waiting for model output")
     func testAgentThinkingIndicatorState() {
         let appState = AppState()
+        // `isAgentResponding` / `agentMessages` / `isCompressingAgentContext`
+        // are delegated to the active runtime; without one every set is a
+        // no-op and the indicator stays false. Production builds a runtime
+        // the first time the user enters Agent mode — mirror that here.
+        appState.startNewAgentSession()
 
         appState.isAgentResponding = true
         appState.agentMessages = [AgentMessage(role: .user, content: "Review this")]
@@ -964,7 +975,11 @@ struct VeilWriterTests {
 
         #expect(result == true)
         #expect(appState.openedFileURL == fileURL)
-        #expect(appState.rootDirectory == fileURL.deletingLastPathComponent())
+        // Save As intentionally does NOT hijack the workspace root
+        // (AppStateFileOperations.swift:354-356). If the user had a
+        // folder open it stays; if not — like here — no FileTree is
+        // promoted for the saved file's parent.
+        #expect(appState.rootDirectory == nil)
         #expect(appState.isEdited == false)
         #expect(appState.suppressURLChangeProcessing == true)
         #expect(try String(contentsOf: fileURL, encoding: .utf8) == "saved through save as")
@@ -1336,7 +1351,10 @@ struct VeilWriterTests {
         #expect(blocks.contains(MarkdownPreviewBlock(kind: .unorderedList, text: "Item")))
         #expect(blocks.contains(MarkdownPreviewBlock(kind: .orderedList, text: "Ordered")))
         #expect(blocks.contains(MarkdownPreviewBlock(kind: .divider, text: "")))
-        #expect(blocks.contains(MarkdownPreviewBlock(kind: .code, text: "let value = 1")))
+        // Fenced code blocks carry the language hint after ``` as
+        // `info`. Equatable on MarkdownPreviewBlock is memberwise so
+        // the expected value must mirror that field.
+        #expect(blocks.contains(MarkdownPreviewBlock(kind: .code, text: "let value = 1", info: "swift")))
     }
 
     @Test("HTML preview parser extracts common blocks")
@@ -2070,9 +2088,15 @@ struct VeilWriterTests {
 
         // Replace with messages that push estimated tokens past 75%.
         appState.agentMessages.removeAll()
-        // 16_000-token window × 0.8 = 12_800 tokens. chars/4 heuristic →
-        // ~51_200 chars total. Spread across 8 user messages.
-        let bigChunk = String(repeating: "a", count: 7_000)
+        let observedWindow = appState.agentContextWindow
+        // Need > 75% of the actual resolved window. We don't pin a
+        // model fallback here because `normalized` reshuffles based
+        // on provider hints — instead aim for whatever the live
+        // `agentContextWindow` reports. estimateTextTokens for an
+        // ascii-only string is ceil(count/4), so spread > 0.8×window×4
+        // chars across 8 messages to clear the threshold with margin.
+        let perMessageChars = max(2_000, (observedWindow * 4 * 80) / (100 * 8))
+        let bigChunk = String(repeating: "a", count: perMessageChars)
         for _ in 0..<8 {
             appState.agentMessages.append(AgentMessage(role: .user, content: bigChunk))
         }

@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.53.1-rc1 - 2026-06-07
+
+- **修正 Assistant 消息里"正文 + 工具调用"两个气泡互相压住的视觉 bug。** TextKit 历史渲染时 `.assistant` 与 `.toolSummary` 两个气泡共享一条相邻基线，原本 8+10pt 的垂直 inset 之和大于自然行距，导致两块圆角矩形在 chat history 里咬在一起。这次把 `.toolSummary` 的 vertical inset 从 10pt 降到 5pt，并在写完正文气泡、写 tool summary 之前插一段 6pt 高的透明换行 spacer，把两段彻底隔开。
+- **Assistant 内联工具调用默认折叠成一行链接。** 以前只有"独立的 tool-call-only assistant 消息"才会走折叠路径，"正文 + tool 调用"是无条件展开渲染完整 summary，一旦命令长（比如 `ssh ... "echo connected && uname ..."`）就会把整段塞满半屏。现在这种内联场景也通过同一个 `appendToolCallGroup` 路径渲染，默认显示 `▸ 执行了 N 条工具调用 · run_command  command: ssh ...`，点击展开/收起；toolGroupID 用 `inline:<message-id>` 命名，跨 re-render 状态稳定。
+- **修好测试套里 10 处历史失败，恢复 259 个测试全绿。**
+    - `AgentEntryModelSelectionTests` 三个 case（switching / pickingRouteDefaultClears / emptyModelClears）：测试 setup 没有先 `startNewAgentSession()`，而 `agentSessionModelOverride` 是委托给 `activeRuntime` 的 computed property，没有 runtime 时 setter 是 no-op，所有断言全部跪。
+    - `external file opens inside its parent folder`：测试还在期望旧行为（打开外部文件时把父目录 promote 成 `rootDirectory`），但产品已经故意改了 —— 否则像 `~/Downloads` 这种大目录会被强制全量扫描，体验灾难。测试断言更新为 nil 并改名为"external file open does not hijack workspace root"。
+    - `agent thinking indicator only shows while waiting for model output`：同上 —— `isAgentResponding` / `agentMessages` 都委托给 `activeRuntime`，setup 缺一个 `startNewAgentSession()`。
+    - `writeCurrentFile can save to a new URL and update current file`：测试期望 Save As 后 `rootDirectory == fileURL.deletingLastPathComponent()`，但产品已经明确 Save As 不再 hijack 工作区根目录（如果用户开了 folder 就保留，否则不 promote）。测试断言改为 nil。
+    - `markdown preview parser extracts common blocks`：测试期望 `MarkdownPreviewBlock(kind: .code, text: "let value = 1")` 在 contains 比较里命中，但产品给 fenced code block 带了 `info: "swift"`，`Equatable` memberwise → 不等。测试断言补上 `info: "swift"`。
+    - `shouldAutoCompressNow flips true once estimated context usage crosses 75%`：除了同样的 no-runtime 问题，还有一个隐藏 trap —— `agentConfiguration` 的 `normalized` 会按 provider preset 校验/重置 model 字符串，固定 `"gpt-3.5-16k"` 在某些 preset 下可能被改写，导致 16k window 假设失效。测试改成动态读 `appState.agentContextWindow` 再按实际窗口 ×80% ×4 字节计算 per-message 字符数，永远超阈值，跟模型 fallback 表脱钩。
+    - 全部都是测试代码 bug，**没有改任何产品代码**，所以版本号停在 rc1 不再 bump。
+
+## 1.53.0 - 2026-06-07
+
+- **新增 Agent 大段文本粘贴附件。** Composer 会把明显较长的剪贴板文本自动收纳为紧凑的 `.txt` 附件条，避免崩溃日志、长报错、配置片段直接撑爆聊天气泡。
+- **保留完整模型上下文与复制内容。** 文本附件在消息模型、排队消息、并发调度队列、provider request 编码和 token 估算中全链路保留；聊天 UI 只显示文件条，模型请求和复制消息仍包含全文。
+- **同步两套聊天渲染路径。** Agent 全屏模式、侧边面板、TextKit 历史渲染器和 queued message 都支持文本附件显示，并新增英文/简中本地化文件名 `Pasted text.txt` / `已粘贴的文本.txt`。
+- **重新设计 Agent Markdown 与 tools 的纵向节奏。** 聊天历史 Markdown 改用统一 spacing token，正文行距恢复到舒展可读、表格不再贴行；流式 assistant 文本同步增加行距和 block 间距。
+- **让 tools 成为默认收起的抽屉。** 最新工具组不再因为审批/确认/提问状态自动展开大块详情，默认只显示一行摘要和状态，用户点击后再展开参数、输出、错误或审批控件；tools 区域与上一段 AI 输出固定保留更大的 top gap。
+
 ## 1.52.1-rc46 - 2026-06-07
 
 - **修正 Agent 聊天历史的 Markdown 表格观感。** TextKit 历史渲染路径现在会给 GFM 表格打专属 `agentChatHistoryTableBlockID` 属性，并由 layout manager 绘制轻量表格底色和边线；表格文字改为更紧凑的 12pt monospace，避免继续像未渲染的管道文本。

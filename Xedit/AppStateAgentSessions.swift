@@ -45,10 +45,16 @@ extension AppState {
 
         let userText = runtime.input.trimmingCharacters(in: .whitespacesAndNewlines)
         let images = runtime.pendingImages
+        let textAttachments = runtime.pendingTextAttachments
         let skills = runtime.pendingSkills
         let files = runtime.pendingFiles
         let includeWorkspaceOverview = runtime.pendingIncludeWorkspaceOverview
-        guard !userText.isEmpty || !images.isEmpty || !skills.isEmpty || !files.isEmpty || includeWorkspaceOverview else { return }
+        guard !userText.isEmpty
+                || !images.isEmpty
+                || !textAttachments.isEmpty
+                || !skills.isEmpty
+                || !files.isEmpty
+                || includeWorkspaceOverview else { return }
 
         // Splice attached context (skills / files / workspace overview) in
         // front of the user's prose under labelled headers so the model
@@ -62,16 +68,19 @@ extension AppState {
 
         runtime.input = ""
         runtime.pendingImages = []
+        runtime.pendingTextAttachments = []
         runtime.pendingSkills = []
         runtime.pendingFiles = []
         runtime.pendingIncludeWorkspaceOverview = false
 
         if runtime.isResponding {
-            runtime.queuedMessages.append(AgentQueuedMessage(text: prompt, images: images))
+            runtime.queuedMessages.append(
+                AgentQueuedMessage(text: prompt, images: images, textAttachments: textAttachments)
+            )
             return
         }
 
-        dispatchAgentMessage(for: runtime, text: prompt, images: images)
+        dispatchAgentMessage(for: runtime, text: prompt, images: images, textAttachments: textAttachments)
     }
 
     /// Fallback used by `sendAgentMessage` when the user typed into the
@@ -209,6 +218,20 @@ extension AppState {
     /// Drop a single staged file by id (which is its standardized path).
     func detachAgentFile(id: String) {
         agentPendingFiles.removeAll { $0.id == id }
+    }
+
+    // MARK: - Pasted text attachment
+
+    func addAgentTextAttachment(content rawContent: String) {
+        let content = AgentTextAttachment.sanitizedPastedContent(rawContent)
+        guard !content.isEmpty else { return }
+        agentPendingTextAttachments.append(
+            AgentTextAttachment(filename: L10n.AgentTextAttachment.pastedFilename, content: content)
+        )
+    }
+
+    func removeAgentTextAttachment(id: AgentTextAttachment.ID) {
+        agentPendingTextAttachments.removeAll { $0.id == id }
     }
 
     /// Toggle whether the workspace overview rides along next send.

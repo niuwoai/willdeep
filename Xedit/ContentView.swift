@@ -377,10 +377,10 @@ struct ContentView: View {
         // --- Binary file detection (c5) ---
         if AppState.isBinaryFile(at: newURL) {
             let alert = NSAlert()
-            alert.messageText = "Cannot Open Binary File"
-            alert.informativeText = "\"\(newURL.lastPathComponent)\" appears to be a binary file and cannot be opened in the editor."
+            alert.messageText = L10n.Alert.binaryFileTitle
+            alert.informativeText = L10n.Alert.binaryFileMessage(newURL.lastPathComponent)
             alert.alertStyle = .warning
-            alert.addButton(withTitle: "OK")
+            alert.addButton(withTitle: L10n.Alert.binaryFileButtonOk)
             alert.runModal()
 
             // Revert selection to the previous URL (or nil).
@@ -393,11 +393,11 @@ struct ContentView: View {
         var allowLargeFile = false
         if AppState.shouldRequireLargeFileConfirmation(at: newURL) {
             let alert = NSAlert()
-            alert.messageText = "Large File"
-            alert.informativeText = "\"\(newURL.lastPathComponent)\" is larger than 1 MB and may take time to load or become unresponsive."
+            alert.messageText = L10n.Alert.largeFileTitle
+            alert.informativeText = L10n.Alert.largeFileMessage(newURL.lastPathComponent)
             alert.alertStyle = .warning
-            alert.addButton(withTitle: "Open Anyway")
-            alert.addButton(withTitle: "Cancel")
+            alert.addButton(withTitle: L10n.Alert.largeFileButtonOpenAnyway)
+            alert.addButton(withTitle: L10n.Alert.largeFileButtonCancel)
             let response = alert.runModal()
             if response == .alertSecondButtonReturn {
                 // Cancel — revert selection.
@@ -437,105 +437,105 @@ private struct CommandPalettePanel: View {
 
     private var commands: [PaletteCommand] {
         [
-            PaletteCommand(title: "Quick Open", subtitle: "Search files in the current folder", icon: "doc.text.magnifyingglass", isEnabled: appState.rootDirectory != nil, keywords: ["file", "folder", "project"], shortcut: "⌘P") {
+            PaletteCommand(title: L10n.Command.quickOpenTitle, subtitle: L10n.Command.quickOpenSubtitle, icon: "doc.text.magnifyingglass", isEnabled: appState.rootDirectory != nil, keywords: ["file", "folder", "project"], shortcut: "⌘P") {
                 appState.hideCommandPalette()
                 appState.showQuickOpen()
             },
-            PaletteCommand(title: "Go to Line", subtitle: "Jump to a line in the active tab", icon: "arrow.down.to.line", isEnabled: appState.activeTabID != nil, keywords: ["line", "jump"], shortcut: "⌘L") {
+            PaletteCommand(title: L10n.Command.goToLineTitle, subtitle: L10n.Command.goToLineSubtitle, icon: "arrow.down.to.line", isEnabled: appState.activeTabID != nil, keywords: ["line", "jump"], shortcut: "⌘L") {
                 appState.hideCommandPalette()
                 appState.showGoToLine()
             },
-            PaletteCommand(title: "Go to Symbol", subtitle: "Search symbols in the active tab", icon: "list.bullet.indent", isEnabled: appState.activeTabID != nil, keywords: ["outline", "method", "function"]) {
+            PaletteCommand(title: L10n.Command.goToSymbolTitle, subtitle: L10n.Command.goToSymbolSubtitle, icon: "list.bullet.indent", isEnabled: appState.activeTabID != nil, keywords: ["outline", "method", "function"]) {
                 appState.hideCommandPalette()
                 appState.showSymbolJump()
             },
-            PaletteCommand(title: "Find", subtitle: "Show find and replace", icon: "magnifyingglass", isEnabled: appState.activeTabID != nil, keywords: ["replace", "search"], shortcut: "⌘F") {
+            PaletteCommand(title: L10n.Command.findTitle, subtitle: L10n.Command.findSubtitle, icon: "magnifyingglass", isEnabled: appState.activeTabID != nil, keywords: ["replace", "search"], shortcut: "⌘F") {
                 appState.hideCommandPalette()
                 appState.showFindBar()
             },
-            PaletteCommand(title: "Toggle Inspector", subtitle: "Show or hide minimap and structure", icon: "sidebar.right", isEnabled: appState.activeTabID != nil, keywords: ["minimap", "outline"]) {
+            PaletteCommand(title: L10n.Command.toggleInspectorTitle, subtitle: L10n.Command.toggleInspectorSubtitle, icon: "sidebar.right", isEnabled: appState.activeTabID != nil, keywords: ["minimap", "outline"]) {
                 appState.hideCommandPalette()
                 appState.isInspectorVisible.toggle()
             },
-            PaletteCommand(title: "Toggle Agent", subtitle: "Show or hide the project agent", icon: "sparkles", isEnabled: true, keywords: ["ai", "chat", "assistant"]) {
+            PaletteCommand(title: L10n.Command.toggleAgentTitle, subtitle: L10n.Command.toggleAgentSubtitle, icon: "sparkles", isEnabled: true, keywords: ["ai", "chat", "assistant"]) {
                 appState.hideCommandPalette()
                 appState.toggleAgentPanel()
             },
-            PaletteCommand(title: "Toggle Focus Mode", subtitle: "Hide chrome and keep only the editor", icon: "viewfinder", isEnabled: appState.activeTabID != nil, keywords: ["zen", "clean"]) {
+            PaletteCommand(title: L10n.Command.toggleFocusModeTitle, subtitle: L10n.Command.toggleFocusModeSubtitle, icon: "viewfinder", isEnabled: appState.activeTabID != nil, keywords: ["zen", "clean"]) {
                 appState.hideCommandPalette()
                 appState.toggleFocusMode()
             },
-            PaletteCommand(title: "Toggle Preview", subtitle: "Show or hide Markdown and HTML preview", icon: "doc.richtext", isEnabled: appState.canShowPreview, keywords: ["markdown", "md", "html"]) {
+            PaletteCommand(title: L10n.Command.togglePreviewTitle, subtitle: L10n.Command.togglePreviewSubtitle, icon: "doc.richtext", isEnabled: appState.canShowPreview, keywords: ["markdown", "md", "html"]) {
                 appState.hideCommandPalette()
                 appState.togglePreview()
             },
-            PaletteCommand(title: "Open Split File", subtitle: "Show another text file beside the editor", icon: "rectangle.split.2x1", isEnabled: true, keywords: ["side", "compare"]) {
+            PaletteCommand(title: L10n.Command.openSplitFileTitle, subtitle: L10n.Command.openSplitFileSubtitle, icon: "rectangle.split.2x1", isEnabled: true, keywords: ["side", "compare"]) {
                 appState.hideCommandPalette()
                 appState.openSplitFile()
             },
-            PaletteCommand(title: "Open Containing Folder", subtitle: "Reveal the active file in Finder", icon: "folder.badge.gearshape", isEnabled: appState.openedFileURL != nil, keywords: ["finder", "reveal"]) {
+            PaletteCommand(title: L10n.Command.openContainingFolderTitle, subtitle: L10n.Command.openContainingFolderSubtitle, icon: "folder.badge.gearshape", isEnabled: appState.openedFileURL != nil, keywords: ["finder", "reveal"]) {
                 appState.hideCommandPalette()
                 appState.openContainingFolder()
             },
-            PaletteCommand(title: "Open File", subtitle: "Choose a file from disk", icon: "doc", isEnabled: true, keywords: ["document"], shortcut: "⌘O") {
+            PaletteCommand(title: L10n.Command.openFileTitle, subtitle: L10n.Command.openFileSubtitle, icon: "doc", isEnabled: true, keywords: ["document"], shortcut: "⌘O") {
                 appState.hideCommandPalette()
                 appState.openFile()
             },
-            PaletteCommand(title: "Open Folder", subtitle: "Choose a folder for the sidebar", icon: "folder", isEnabled: true, keywords: ["project", "workspace"]) {
+            PaletteCommand(title: L10n.Command.openFolderTitle, subtitle: L10n.Command.openFolderSubtitle, icon: "folder", isEnabled: true, keywords: ["project", "workspace"]) {
                 appState.hideCommandPalette()
                 appState.openFolder { url in
                     openWindow(value: url)
                 }
             },
-            PaletteCommand(title: "Open Terminal Here", subtitle: "Open Terminal at the project or active file location", icon: "terminal", isEnabled: appState.rootDirectory != nil || appState.openedFileURL != nil, keywords: ["shell", "cli", "command line"]) {
+            PaletteCommand(title: L10n.Command.openTerminalHereTitle, subtitle: L10n.Command.openTerminalHereSubtitle, icon: "terminal", isEnabled: appState.rootDirectory != nil || appState.openedFileURL != nil, keywords: ["shell", "cli", "command line"]) {
                 appState.hideCommandPalette()
                 appState.openTerminalHere(appState.openedFileURL ?? appState.rootDirectory)
             },
-            PaletteCommand(title: "Copy File Path", subtitle: "Copy the active file path", icon: "doc.on.doc", isEnabled: appState.openedFileURL != nil, keywords: ["absolute", "clipboard"]) {
+            PaletteCommand(title: L10n.Command.copyFilePathTitle, subtitle: L10n.Command.copyFilePathSubtitle, icon: "doc.on.doc", isEnabled: appState.openedFileURL != nil, keywords: ["absolute", "clipboard"]) {
                 appState.hideCommandPalette()
                 if let url = appState.openedFileURL {
                     appState.copyPath(url)
                 }
             },
-            PaletteCommand(title: "Copy Relative File Path", subtitle: "Copy the active file path relative to the current folder", icon: "rectangle.on.rectangle", isEnabled: appState.openedFileURL != nil, keywords: ["relative", "clipboard"]) {
+            PaletteCommand(title: L10n.Command.copyRelativeFilePathTitle, subtitle: L10n.Command.copyRelativeFilePathSubtitle, icon: "rectangle.on.rectangle", isEnabled: appState.openedFileURL != nil, keywords: ["relative", "clipboard"]) {
                 appState.hideCommandPalette()
                 if let url = appState.openedFileURL {
                     appState.copyRelativePath(url)
                 }
             },
-            PaletteCommand(title: "Refresh Git Status", subtitle: "Refresh branch and file status markers", icon: "arrow.clockwise", isEnabled: appState.rootDirectory != nil, keywords: ["source control", "branch", "changes"]) {
+            PaletteCommand(title: L10n.Command.refreshGitStatusTitle, subtitle: L10n.Command.refreshGitStatusSubtitle, icon: "arrow.clockwise", isEnabled: appState.rootDirectory != nil, keywords: ["source control", "branch", "changes"]) {
                 appState.hideCommandPalette()
                 appState.refreshGitStatus()
             },
-            PaletteCommand(title: "Save", subtitle: "Write the active file", icon: "square.and.arrow.down", isEnabled: appState.activeTabID != nil, keywords: ["write"], shortcut: "⌘S") {
+            PaletteCommand(title: L10n.Command.saveTitle, subtitle: L10n.Command.saveSubtitle, icon: "square.and.arrow.down", isEnabled: appState.activeTabID != nil, keywords: ["write"], shortcut: "⌘S") {
                 appState.hideCommandPalette()
                 appState.saveCurrentFile()
             },
-            PaletteCommand(title: "Next Tab", subtitle: "Activate the tab to the right", icon: "chevron.right", isEnabled: appState.tabs.count > 1, keywords: ["tab"], shortcut: "⌘}") {
+            PaletteCommand(title: L10n.Command.nextTabTitle, subtitle: L10n.Command.nextTabSubtitle, icon: "chevron.right", isEnabled: appState.tabs.count > 1, keywords: ["tab"], shortcut: "⌘}") {
                 appState.hideCommandPalette()
                 appState.activateNextTab()
             },
-            PaletteCommand(title: "Previous Tab", subtitle: "Activate the tab to the left", icon: "chevron.left", isEnabled: appState.tabs.count > 1, keywords: ["tab"], shortcut: "⌘{") {
+            PaletteCommand(title: L10n.Command.previousTabTitle, subtitle: L10n.Command.previousTabSubtitle, icon: "chevron.left", isEnabled: appState.tabs.count > 1, keywords: ["tab"], shortcut: "⌘{") {
                 appState.hideCommandPalette()
                 appState.activatePreviousTab()
             },
-            PaletteCommand(title: "Reopen Closed Tab", subtitle: "Restore the most recently closed tab", icon: "arrow.uturn.backward", isEnabled: true, keywords: ["undo", "tab"]) {
+            PaletteCommand(title: L10n.Command.reopenClosedTabTitle, subtitle: L10n.Command.reopenClosedTabSubtitle, icon: "arrow.uturn.backward", isEnabled: true, keywords: ["undo", "tab"]) {
                 appState.hideCommandPalette()
                 appState.reopenClosedTab()
             },
-            PaletteCommand(title: "Duplicate Line", subtitle: "Copy the current line below", icon: "plus.square.on.square", isEnabled: appState.activeTabID != nil, keywords: ["copy", "editor"]) {
+            PaletteCommand(title: L10n.Command.duplicateLineTitle, subtitle: L10n.Command.duplicateLineSubtitle, icon: "plus.square.on.square", isEnabled: appState.activeTabID != nil, keywords: ["copy", "editor"]) {
                 appState.hideCommandPalette()
                 appState.duplicateCurrentLine()
             },
-            PaletteCommand(title: "Move Line Up", subtitle: "Move the current line upward", icon: "arrow.up", isEnabled: appState.activeTabID != nil, keywords: ["editor", "line"]) {
+            PaletteCommand(title: L10n.Command.moveLineUpTitle, subtitle: L10n.Command.moveLineUpSubtitle, icon: "arrow.up", isEnabled: appState.activeTabID != nil, keywords: ["editor", "line"]) {
                 appState.hideCommandPalette()
                 appState.moveCurrentLineUp()
             },
-            PaletteCommand(title: "Move Line Down", subtitle: "Move the current line downward", icon: "arrow.down", isEnabled: appState.activeTabID != nil, keywords: ["editor", "line"]) {
+            PaletteCommand(title: L10n.Command.moveLineDownTitle, subtitle: L10n.Command.moveLineDownSubtitle, icon: "arrow.down", isEnabled: appState.activeTabID != nil, keywords: ["editor", "line"]) {
                 appState.hideCommandPalette()
                 appState.moveCurrentLineDown()
             },
-            PaletteCommand(title: "Close Tab", subtitle: "Close the active tab", icon: "xmark", isEnabled: appState.activeTabID != nil, keywords: ["tab"], shortcut: "⌘W") {
+            PaletteCommand(title: L10n.Command.closeTabTitle, subtitle: L10n.Command.closeTabSubtitle, icon: "xmark", isEnabled: appState.activeTabID != nil, keywords: ["tab"], shortcut: "⌘W") {
                 appState.hideCommandPalette()
                 appState.closeActiveTab()
             },
@@ -564,7 +564,7 @@ private struct CommandPalettePanel: View {
                 }
 
             VStack(spacing: 0) {
-                TextField("Command Palette", text: $appState.commandPaletteQuery)
+                TextField(L10n.CommandPalette.placeholder, text: $appState.commandPaletteQuery)
                     .textFieldStyle(.plain)
                     .font(.system(size: 16))
                     .padding(12)
@@ -831,7 +831,7 @@ private struct SymbolJumpPanel: View {
                 }
 
             VStack(spacing: 0) {
-                TextField("Go to Symbol", text: $appState.symbolJumpQuery)
+                TextField(L10n.SymbolJump.placeholder, text: $appState.symbolJumpQuery)
                     .textFieldStyle(.plain)
                     .font(.system(size: 16))
                     .padding(12)
@@ -846,7 +846,7 @@ private struct SymbolJumpPanel: View {
                     VStack(spacing: 8) {
                         Image(systemName: "list.bullet.indent")
                             .font(.system(size: 22))
-                        Text("No Symbols")
+                        Text(L10n.SymbolJump.noSymbols)
                             .font(.caption)
                     }
                     .foregroundColor(.secondary)
@@ -871,7 +871,7 @@ private struct SymbolJumpPanel: View {
                                                     .font(.system(size: 13, weight: .medium))
                                                     .lineLimit(1)
                                                     .truncationMode(.middle)
-                                                Text("\(item.kind.rawValue) · line \(item.line)")
+                                                Text(L10n.SymbolJump.symbolKindLine(item.kind.rawValue, String(item.line)))
                                                     .font(.caption2)
                                                     .foregroundColor(.secondary)
                                             }
@@ -1055,8 +1055,8 @@ private struct ImagePreviewPane: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .help("Close Preview")
-                .accessibilityLabel("Close Preview")
+                .help(L10n.ImagePreview.closeButton)
+                .accessibilityLabel(L10n.ImagePreview.closeButton)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -1078,7 +1078,7 @@ private struct ImagePreviewPane: View {
                 VStack(spacing: 10) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.system(size: 28))
-                    Text("Cannot Preview Image")
+                    Text(L10n.ImagePreview.cannotPreview)
                         .font(.headline)
                     Text(url.path)
                         .font(.caption)
@@ -1124,7 +1124,7 @@ private struct QuickOpenPanel: View {
                 }
 
             VStack(spacing: 0) {
-                TextField("Quick Open", text: $appState.quickOpenQuery)
+                TextField(L10n.QuickOpen.placeholder, text: $appState.quickOpenQuery)
                     .textFieldStyle(.plain)
                     .font(.system(size: 16))
                     .padding(12)
@@ -1139,7 +1139,7 @@ private struct QuickOpenPanel: View {
                     VStack(spacing: 8) {
                         Image(systemName: "doc.text.magnifyingglass")
                             .font(.system(size: 22))
-                        Text("No Files")
+                        Text(L10n.QuickOpen.noFiles)
                             .font(.caption)
                     }
                     .foregroundColor(.secondary)
@@ -1230,7 +1230,7 @@ private struct GoToLinePanel: View {
                 Image(systemName: "arrow.down.to.line")
                     .foregroundColor(.secondary)
 
-                TextField("Go to Line", text: $appState.goToLineText)
+                TextField(L10n.GoToLine.placeholder, text: $appState.goToLineText)
                     .textFieldStyle(.plain)
                     .focused($lineFieldFocused)
                     .onSubmit {
@@ -1283,24 +1283,24 @@ private struct EditorStatusBar: View {
     var body: some View {
         HStack(spacing: 14) {
             if appState.hasExternalFileChanges {
-                Text("External changes")
+                Text(L10n.EditorStatusBar.externalChanges)
                     .foregroundColor(.orange)
-                Button("Reload") {
+                Button(L10n.EditorStatusBar.reloadButton) {
                     appState.reloadCurrentFileFromDisk()
                 }
                 .buttonStyle(.borderless)
             }
-            Text(appState.isEdited ? "Modified" : "Saved")
+            Text(appState.isEdited ? L10n.EditorStatusBar.modified : L10n.EditorStatusBar.saved)
                 .foregroundColor(appState.isEdited ? .orange : .secondary)
-            Text("Ln \(appState.cursorLine), Col \(appState.cursorColumn)")
+            Text(L10n.EditorStatusBar.cursorPosition(String(appState.cursorLine), String(appState.cursorColumn)))
             if appState.selectedCharacterCount > 0 {
-                Text("\(appState.selectedCharacterCount) chars, \(appState.selectedLineCount) lines selected")
+                Text("\(L10n.EditorStatusBar.selection(String(appState.selectedCharacterCount))), \(L10n.EditorStatusBar.selectionLines(String(appState.selectedLineCount)))")
             }
             Spacer(minLength: 0)
             if let branchName = appState.gitStatus.branchName {
-                Text("Git \(branchName)")
+                Text(L10n.EditorStatusBar.gitBranch(branchName))
             }
-            Text(language?.displayName ?? "Plain Text")
+            Text(language?.displayName ?? L10n.EditorStatusBar.plainText)
             Text(fileSizeText)
             Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")")
         }
@@ -1325,7 +1325,7 @@ private struct SplitEditorPane: View {
             HStack(spacing: 8) {
                 Image(systemName: "rectangle.split.2x1")
                     .foregroundColor(.secondary)
-                Text(appState.splitFileURL?.lastPathComponent ?? "Split")
+                Text(appState.splitFileURL?.lastPathComponent ?? L10n.SplitEditor.defaultTitle)
                     .font(.caption)
                     .lineLimit(1)
                 Spacer(minLength: 0)
@@ -1380,7 +1380,7 @@ private struct PreviewPane: View {
             HStack(spacing: 8) {
                 Image(systemName: "doc.richtext")
                     .foregroundColor(.secondary)
-                Text("Preview")
+                Text(L10n.PreviewPane.title)
                     .font(.caption)
                 Spacer(minLength: 0)
                 Button {
@@ -1439,7 +1439,7 @@ private struct InspectorCollapsedRail: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("Show Inspector")
+        .help(L10n.Inspector.showButton)
         .overlay(alignment: .leading) {
             Divider()
         }
@@ -1478,7 +1478,7 @@ private struct EditorInspectorSidebar: View {
                     Image(systemName: "sidebar.right")
                 }
                 .buttonStyle(.borderless)
-                .help("Hide Inspector")
+                .help(L10n.Inspector.hideButton)
             }
             .padding(8)
 
@@ -1578,7 +1578,7 @@ private struct EditorStructureView: View {
             VStack(spacing: 8) {
                 Image(systemName: "list.bullet.indent")
                     .font(.system(size: 22))
-                Text("No Structure")
+                Text(L10n.EditorStructure.noStructure)
                     .font(.caption)
             }
             .foregroundColor(.secondary)
@@ -1634,13 +1634,13 @@ private struct FindReplaceBar: View {
     private var matchText: String {
         let matches = appState.findMatchRanges
         guard !appState.findQuery.isEmpty else { return "" }
-        guard !matches.isEmpty else { return "No matches" }
-        return "\(min(appState.activeFindIndex + 1, matches.count)) of \(matches.count)"
+        guard !matches.isEmpty else { return L10n.FindReplaceBar.noMatches }
+        return L10n.FindReplaceBar.matchCount(String(min(appState.activeFindIndex + 1, matches.count)), String(matches.count))
     }
 
     var body: some View {
         HStack(spacing: 8) {
-            TextField("Find", text: $appState.findQuery)
+            TextField(L10n.FindReplaceBar.findPlaceholder, text: $appState.findQuery)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 180)
                 .focused($findFieldFocused)
@@ -1652,7 +1652,7 @@ private struct FindReplaceBar: View {
             }
             .buttonStyle(.borderless)
             .disabled(appState.findMatchRanges.isEmpty)
-            .help("Previous Match")
+            .help(L10n.FindReplaceBar.previousMatchButton)
 
             Button {
                 appState.findNext()
@@ -1661,7 +1661,7 @@ private struct FindReplaceBar: View {
             }
             .buttonStyle(.borderless)
             .disabled(appState.findMatchRanges.isEmpty)
-            .help("Next Match")
+            .help(L10n.FindReplaceBar.nextMatchButton)
 
             Text(matchText)
                 .font(.caption)
@@ -1671,7 +1671,7 @@ private struct FindReplaceBar: View {
             Divider()
                 .frame(height: 18)
 
-            TextField("Replace", text: $appState.replaceText)
+            TextField(L10n.FindReplaceBar.replacePlaceholder, text: $appState.replaceText)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 180)
 
@@ -1684,12 +1684,12 @@ private struct FindReplaceBar: View {
             .frame(width: 140)
             .disabled(appState.findReplaceScope == .selectedFolder && appState.selectedFolderURL == nil)
 
-            Button("Replace") {
+            Button(L10n.FindReplaceBar.replaceButton) {
                 appState.replaceCurrentFindMatch()
             }
             .disabled(appState.findMatchRanges.isEmpty)
 
-            Button("All") {
+            Button(L10n.FindReplaceBar.replaceAllButton) {
                 appState.replaceAllFindMatches()
             }
             .disabled(appState.findMatchRanges.isEmpty)
@@ -1702,7 +1702,7 @@ private struct FindReplaceBar: View {
                 Image(systemName: "xmark")
             }
             .buttonStyle(.borderless)
-            .help("Close Find")
+            .help(L10n.FindReplaceBar.closeButton)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -1745,7 +1745,7 @@ private struct EditorTabBar: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundColor(.secondary)
-                        .accessibilityLabel("Close \(tab.title)")
+                        .accessibilityLabel(L10n.EditorTabBar.closeTab(tab.title))
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
@@ -1784,7 +1784,7 @@ private struct EnterAgentModeButton: View {
             HStack(spacing: 4) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 10, weight: .semibold))
-                Text("Agent")
+                Text(L10n.EnterAgentModeButton.label)
                     .font(.system(size: 11, weight: .medium))
             }
             .padding(.horizontal, 8)
@@ -1793,6 +1793,6 @@ private struct EnterAgentModeButton: View {
             .background(Capsule(style: .continuous).fill(Color.accentColor))
         }
         .buttonStyle(.plain)
-        .help("Switch this window into Agent mode (⌘⇧A)")
+        .help(L10n.EnterAgentModeButton.help)
     }
 }

@@ -22,6 +22,7 @@ struct ComposerTextEditor: NSViewRepresentable {
     @Binding var text: String
     let onSubmit: () -> Void
     let onPasteImage: () -> Void
+    let onPasteText: (String) -> Void
     /// Returns the user's prior messages in chronological order. `↑` walks
     /// from the most recent backwards; `↓` walks forward and eventually
     /// restores the draft the user was typing before they started cycling.
@@ -53,6 +54,7 @@ struct ComposerTextEditor: NSViewRepresentable {
             text: $text,
             onSubmit: onSubmit,
             onPasteImage: onPasteImage,
+            onPasteText: onPasteText,
             historyProvider: historyProvider,
             slashMenuVisible: $slashMenuVisible,
             slashMenuSelection: $slashMenuSelection,
@@ -112,6 +114,7 @@ struct ComposerTextEditor: NSViewRepresentable {
         var text: Binding<String>
         let onSubmit: () -> Void
         let onPasteImage: () -> Void
+        let onPasteText: (String) -> Void
         let historyProvider: () -> [String]
         var slashMenuVisible: Binding<Bool>
         var slashMenuSelection: Binding<Int>
@@ -141,6 +144,7 @@ struct ComposerTextEditor: NSViewRepresentable {
             text: Binding<String>,
             onSubmit: @escaping () -> Void,
             onPasteImage: @escaping () -> Void,
+            onPasteText: @escaping (String) -> Void,
             historyProvider: @escaping () -> [String],
             slashMenuVisible: Binding<Bool>,
             slashMenuSelection: Binding<Int>,
@@ -155,6 +159,7 @@ struct ComposerTextEditor: NSViewRepresentable {
             self.text = text
             self.onSubmit = onSubmit
             self.onPasteImage = onPasteImage
+            self.onPasteText = onPasteText
             self.historyProvider = historyProvider
             self.slashMenuVisible = slashMenuVisible
             self.slashMenuSelection = slashMenuSelection
@@ -431,7 +436,11 @@ fileprivate final class ComposerNSTextView: NSTextView {
         if AgentImagePasteboardHelper.pasteboardHasImage(pasteboard) {
             coordinator?.onPasteImage()
             if let plain = pasteboard.string(forType: .string), !plain.isEmpty {
-                insertText(plain, replacementRange: selectedRange())
+                if AgentTextAttachment.shouldCapturePaste(plain) {
+                    coordinator?.onPasteText(plain)
+                } else {
+                    insertText(plain, replacementRange: selectedRange())
+                }
             }
             return
         }
@@ -441,6 +450,10 @@ fileprivate final class ComposerNSTextView: NSTextView {
         // makes the bubble look broken and the next-turn payload bloat
         // with attributes the model can't read anyway.
         if let plain = pasteboard.string(forType: .string), !plain.isEmpty {
+            if AgentTextAttachment.shouldCapturePaste(plain) {
+                coordinator?.onPasteText(plain)
+                return
+            }
             insertText(plain, replacementRange: selectedRange())
             return
         }

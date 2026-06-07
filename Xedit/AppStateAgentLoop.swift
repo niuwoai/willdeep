@@ -32,7 +32,12 @@ import Foundation
 
 extension AppState {
 
-    func dispatchAgentMessage(for runtime: AgentRuntime, text: String, images: [AgentImageAttachment]) {
+    func dispatchAgentMessage(
+        for runtime: AgentRuntime,
+        text: String,
+        images: [AgentImageAttachment],
+        textAttachments: [AgentTextAttachment] = []
+    ) {
         let configuration = configurationForCurrentTurn(for: runtime)
         let providerID = configuration.providerID
 
@@ -46,6 +51,7 @@ extension AppState {
                     runtimeID: runtime.id,
                     text: text,
                     images: images,
+                    textAttachments: textAttachments,
                     providerID: providerID,
                     enqueuedAt: Date()
                 )
@@ -58,7 +64,12 @@ extension AppState {
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
 
-        let userMessage = AgentMessage(role: .user, content: text, images: images)
+        let userMessage = AgentMessage(
+            role: .user,
+            content: text,
+            images: images,
+            textAttachments: textAttachments
+        )
         runtime.messages.append(userMessage)
         let imageDescriptionConfiguration = agentConfiguration.normalized.imageDescription.agentConfiguration
 
@@ -130,7 +141,12 @@ extension AppState {
                 continue
             }
             promotedByProvider.insert(entry.providerID)
-            dispatchAgentMessage(for: runtime, text: entry.text, images: entry.images)
+            dispatchAgentMessage(
+                for: runtime,
+                text: entry.text,
+                images: entry.images,
+                textAttachments: entry.textAttachments
+            )
         }
         pendingDispatchQueue = remaining
     }
@@ -246,7 +262,12 @@ extension AppState {
         guard !runtime.isResponding, !runtime.isCompressingContext else { return }
         guard let next = runtime.queuedMessages.first else { return }
         runtime.queuedMessages.removeFirst()
-        dispatchAgentMessage(for: runtime, text: next.text, images: next.images)
+        dispatchAgentMessage(
+            for: runtime,
+            text: next.text,
+            images: next.images,
+            textAttachments: next.textAttachments
+        )
     }
 
     func clearAgentConversation() {
@@ -256,6 +277,7 @@ extension AppState {
         agentToolCalls.removeAll()
         agentQueuedMessages.removeAll()
         agentPendingImages.removeAll()
+        agentPendingTextAttachments.removeAll()
         agentErrorMessage = nil
         agentErrorDetails = nil
         agentToolDecisionWaiter?.resume(returning: .denied(reason: "Conversation cleared"))
@@ -318,7 +340,7 @@ extension AppState {
         for message in AgentClient.providerReadyMessages(messages) {
             total += 4
             total += estimateTextTokens(message.role.rawValue)
-            total += estimateTextTokens(message.content)
+            total += estimateTextTokens(message.modelContent)
             total += message.images.count * 600
             for call in message.toolCalls {
                 total += 12

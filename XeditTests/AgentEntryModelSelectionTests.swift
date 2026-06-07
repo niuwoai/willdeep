@@ -44,6 +44,12 @@ struct AgentEntryModelSelectionTests {
             activeID: openai.id
         )
         app.applyActiveProviderLibraryEntry()
+        // `agentSessionModelOverride` is delegated to `activeRuntime?.sessionModelOverride`
+        // (AppState.swift:204) — without an active runtime every set is
+        // a no-op and the picker assertions below would all see nil.
+        // Production starts a New Chat on first entry into Agent mode;
+        // tests have to do the same handshake.
+        app.startNewAgentSession()
         return (app, openai, deepseek)
     }
 

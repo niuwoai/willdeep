@@ -118,6 +118,16 @@ enum AgentMarkdownNormalizer {
 /// dump doesn't bloat the visible transcript (users can still see
 /// the full body via the per-message reader window).
 enum AgentChatHistoryRenderer {
+    private enum MarkdownSpacing {
+        static let headerToBody: CGFloat = 10
+        static let bodyLine: CGFloat = 2.5
+        static let assistantParagraph: CGFloat = 4
+        static let userParagraph: CGFloat = 6
+        static let tableLine: CGFloat = 2
+        static let tableParagraph: CGFloat = 5
+        static let toolLine: CGFloat = 1.5
+    }
+
     /// Cache by (messages hash, isDark) so repeated SwiftUI updates
     /// during scroll (which don't change the message list) re-use
     /// the prior render.
@@ -145,6 +155,12 @@ enum AgentChatHistoryRenderer {
         hasher.combine(m.id)
         hasher.combine(m.role.rawValue)
         hasher.combine(m.content)
+        hasher.combine(m.textAttachments.count)
+        for attachment in m.textAttachments {
+            hasher.combine(attachment.id)
+            hasher.combine(attachment.filename)
+            hasher.combine(attachment.content)
+        }
         hasher.combine(m.toolCallID)
         hasher.combine(m.createdAt)
         hasher.combine(m.reasoningContent)
@@ -272,7 +288,39 @@ enum AgentChatHistoryRenderer {
                 body = message.content
             }
 
+            if message.role == .user, !message.textAttachments.isEmpty {
+                let attachmentStart = result.length
+                appendTextAttachments(
+                    message.textAttachments,
+                    to: result,
+                    font: bodyFont,
+                    secondaryColor: secondaryColor
+                )
+                let attachmentRange = NSRange(location: attachmentStart, length: result.length - attachmentStart)
+                if !isHoveredUserMessage {
+                    applyBodyChrome(
+                        to: result,
+                        range: attachmentRange,
+                        paragraphStyle: bodyParagraphStyle(for: message.role),
+                        userMessageID: message.id
+                    )
+                } else {
+                    applyBubbleChrome(
+                        kind: bubbleKind(for: message.role),
+                        to: result,
+                        range: attachmentRange,
+                        paragraphStyle: bodyParagraphStyle(for: message.role),
+                        userMessageID: message.id,
+                        foregroundColor: nil
+                    )
+                }
+                hasMessageBubbleContent = true
+            }
+
             if !body.isEmpty {
+                if hasMessageBubbleContent {
+                    result.append(NSAttributedString(string: "\n", attributes: [.font: bodyFont]))
+                }
                 let bodyStart = result.length
                 if useMono {
                     appendPlainBody(body, to: result, font: monoFont, color: bodyColor)
@@ -310,26 +358,41 @@ enum AgentChatHistoryRenderer {
                 hasMessageBubbleContent = true
             }
 
-            // Tool call summary line (when the assistant emitted tool calls).
+            // Tool call summary (when the assistant emitted tool calls
+            // *alongside* its own prose). Rendered through the same
+            // collapsible header as the standalone tool-call group so
+            // the bubble defaults to a one-line "▸ 执行了 N 条工具调用
+            // · run_command  command: ssh ..." link; clicking flips the
+            // chevron and reveals the full per-call summary below.
             if !message.toolCalls.isEmpty {
-                let summary = toolCallSummary(for: message.toolCalls)
                 if !body.isEmpty {
-                    result.append(NSAttributedString(string: "\n", attributes: [.font: bodyFont]))
+                    // Transparent spacer paragraph between the assistant
+                    // body bubble and the tool summary bubble — without
+                    // it the two .toolSummary / .assistant bubbles share
+                    // a baseline and their vertical insets overlap.
+                    let spacerStyle = NSMutableParagraphStyle()
+                    spacerStyle.alignment = .left
+                    spacerStyle.paragraphSpacing = 0
+                    spacerStyle.lineSpacing = 0
+                    result.append(NSAttributedString(
+                        string: "\n",
+                        attributes: [
+                            .font: NSFont.systemFont(ofSize: 6),
+                            .foregroundColor: NSColor.clear,
+                            .paragraphStyle: spacerStyle,
+                        ]
+                    ))
                 }
-                let summaryStart = result.length
-                result.append(NSAttributedString(
-                    string: summary,
-                    attributes: [
-                        .font: monoFont,
-                        .foregroundColor: secondaryColor,
-                    ]
-                ))
-                applyBubbleChrome(
-                    kind: .toolSummary,
+                let inlineGroup = ToolCallHistoryGroup(
+                    inlineMessageID: message.id,
+                    calls: message.toolCalls
+                )
+                appendToolCallGroup(
+                    inlineGroup,
+                    isExpanded: expandedToolGroupIDs.contains(inlineGroup.id),
                     to: result,
-                    range: NSRange(location: summaryStart, length: result.length - summaryStart),
-                    paragraphStyle: toolSummaryParagraphStyle(),
-                    foregroundColor: nil
+                    monoFont: monoFont,
+                    secondaryColor: secondaryColor
                 )
             }
 
@@ -383,6 +446,15 @@ enum AgentChatHistoryRenderer {
         init(messages: [AgentMessage]) {
             id = messages.map { $0.id.uuidString }.joined(separator: ":")
             calls = messages.flatMap(\.toolCalls)
+        }
+
+        /// Tool calls that came in *alongside* an assistant message's
+        /// prose (not as a separate tool-call-only assistant turn).
+        /// Keyed by the host message id so expand/collapse state is
+        /// stable across re-renders of the same conversation.
+        init(inlineMessageID: UUID, calls: [AgentMessageToolCall]) {
+            id = "inline:" + inlineMessageID.uuidString
+            self.calls = calls
         }
     }
 
@@ -544,7 +616,7 @@ enum AgentChatHistoryRenderer {
     private static func headerParagraphStyle(for role: AgentRole) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = role == .user ? .right : .left
-        style.paragraphSpacing = role == .user ? 14 : 9
+        style.paragraphSpacing = role == .user ? 14 : MarkdownSpacing.headerToBody
         style.lineSpacing = 1
         style.headIndent = role == .user ? 150 : 0
         style.firstLineHeadIndent = style.headIndent
@@ -555,8 +627,8 @@ enum AgentChatHistoryRenderer {
     private static func bodyParagraphStyle(for role: AgentRole) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = .left
-        style.lineSpacing = 1
-        style.paragraphSpacing = role == .user ? 5 : 1
+        style.lineSpacing = MarkdownSpacing.bodyLine
+        style.paragraphSpacing = role == .user ? MarkdownSpacing.userParagraph : MarkdownSpacing.assistantParagraph
         switch role {
         case .user:
             style.headIndent = AgentChatHistoryLayoutMetrics.userBodyHeadIndent
@@ -582,15 +654,15 @@ enum AgentChatHistoryRenderer {
 
     private static func tableBlockParagraphStyle(from baseStyle: NSParagraphStyle) -> NSParagraphStyle {
         let style = codeBlockParagraphStyle(from: baseStyle).mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
-        style.lineSpacing = 0
-        style.paragraphSpacing = 3
+        style.lineSpacing = MarkdownSpacing.tableLine
+        style.paragraphSpacing = MarkdownSpacing.tableParagraph
         return style
     }
 
     private static func toolSummaryParagraphStyle() -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = .left
-        style.lineSpacing = 1
+        style.lineSpacing = MarkdownSpacing.toolLine
         style.paragraphSpacing = 3
         style.headIndent = 28
         style.firstLineHeadIndent = 28
@@ -760,11 +832,32 @@ enum AgentChatHistoryRenderer {
     ) -> Bool {
         switch message.role {
         case .user:
-            return !body.isEmpty
+            return !body.isEmpty || !message.textAttachments.isEmpty
         case .assistant:
             return !body.isEmpty
         case .system, .tool:
             return false
+        }
+    }
+
+    private static func appendTextAttachments(
+        _ attachments: [AgentTextAttachment],
+        to result: NSMutableAttributedString,
+        font: NSFont,
+        secondaryColor: NSColor
+    ) {
+        for (index, attachment) in attachments.enumerated() {
+            if index > 0 {
+                result.append(NSAttributedString(string: "\n", attributes: [.font: font]))
+            }
+            let label = "▣ \(attachment.displayName) · \(attachment.byteLabel)"
+            result.append(NSAttributedString(
+                string: label,
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+                    .foregroundColor: secondaryColor,
+                ]
+            ))
         }
     }
 
@@ -779,7 +872,7 @@ enum AgentChatHistoryRenderer {
             result.append(AgentChatHistoryFooterChrome.label(formatTimestamp(message.createdAt)))
             result.append(AgentChatHistoryFooterChrome.separator)
         }
-        result.append(AgentChatHistoryFooterChrome.copyButton(copied: false, message: message.content))
+        result.append(AgentChatHistoryFooterChrome.copyButton(copied: false, message: message.copyableContent))
 
         if message.role == .assistant {
             if let elapsed = message.elapsedSeconds, elapsed > 0 {

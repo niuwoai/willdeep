@@ -462,7 +462,11 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
         case .user:
             verticalInset = 13
         case .toolSummary:
-            verticalInset = 10
+            // Keep this snug — when a tool summary sits directly under
+            // an assistant body the two bubbles share an edge, and any
+            // padding > the gap between their last/first line baselines
+            // makes the two rounded rects overlap.
+            verticalInset = 5
         case .assistant, .system, .tool:
             verticalInset = 8
         }

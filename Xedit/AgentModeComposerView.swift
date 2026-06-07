@@ -217,6 +217,12 @@ private struct ComposerCard: View {
                 }
             }
 
+            if !appState.agentPendingTextAttachments.isEmpty {
+                AgentComposerTextAttachmentStrip(attachments: appState.agentPendingTextAttachments) { id in
+                    appState.removeAgentTextAttachment(id: id)
+                }
+            }
+
             if !appState.agentPendingSkills.isEmpty {
                 AgentComposerSkillStrip(skills: appState.agentPendingSkills) { identifier in
                     appState.detachAgentSkill(identifier: identifier)
@@ -237,6 +243,7 @@ private struct ComposerCard: View {
                     text: $appState.agentInput,
                     onSubmit: { appState.sendAgentMessage() },
                     onPasteImage: handlePastedImage,
+                    onPasteText: handlePastedText,
                     historyProvider: { appState.agentMessages
                         .filter { $0.role == .user }
                         .map(\.content)
@@ -368,6 +375,10 @@ private struct ComposerCard: View {
         for (data, mime) in AgentImagePasteboardHelper.readImages(from: NSPasteboard.general) {
             ingest(data: data, mimeType: mime)
         }
+    }
+
+    private func handlePastedText(_ text: String) {
+        appState.addAgentTextAttachment(content: text)
     }
 
     private func handleDroppedProviders(_ providers: [NSItemProvider]) {
@@ -983,4 +994,3 @@ struct AgentSessionModeBadges: View {
         }
     }
 }
-

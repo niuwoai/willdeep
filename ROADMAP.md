@@ -1,6 +1,6 @@
 # Roadmap
 
-> 截至 v1.52.1-rc42。本文记录代码体检多阶段重构的进度、文件拆分前后对比、后续 TODO。
+> 截至 v1.52.1-rc43。本文记录代码体检多阶段重构的进度、文件拆分前后对比、后续 TODO。
 
 ## 代码体检完成总结（rc37 → rc42）
 
@@ -12,7 +12,7 @@
 | 2 | 拆 `ContentView.swift` | ✅ | rc40 |
 | 3 | 拆 `AppState.swift`（extension 分文件） | ✅ | rc42 |
 | 4 | 拆其它 >2000 行大文件（AgentModeView 等） | ⏳ TODO | — |
-| 5 | i18n 落地（`Localizable.xcstrings` + L10n） | ⏳ TODO | — |
+| 5 | i18n 落地（`Localizable.xcstrings` + L10n） | 🚧 进行中（首批迁移完成） | rc43 |
 | 6 | CI（PR 触发 xcodebuild test + 版本号校验） | ⏳ TODO | — |
 | 7 | 文档与 release 流程收尾 | ✅ | rc42 |
 
@@ -83,13 +83,21 @@ AppState.swift    4946 → 1364 行   (-3582, -72%)
 
 ### 阶段 5 — i18n 落地
 
-前提：先决定首发语言矩阵（建议 zh-Hans + en），然后：
+**首批已落地（rc43，2026-06-05）：**
 
-1. `Resources/Localizable.xcstrings`（Xcode 15+ String Catalog 格式）建表。
-2. 写一个 `L10n.swift` enum，每个 case 对应一个 string key，body 调 `String(localized:)`。
-3. 把现有写死文案分批迁过去：先 Settings → Agent 主面板 → Editor 菜单 → 错误信息。
-4. 加 lint：禁止 SwiftUI 视图里直接出现 `Text("中文字符")` —— 强制走 `L10n.foo` 或 `L10n.foo(args)`。
-5. 文档：在 `CONTRIBUTING.md` 加一节"i18n 规范"。
+- `Xedit/Localizable.xcstrings`（单文件 String Catalog，en + zh-Hans 双语）已建表，233 个语义化 dot-key（如 `sidebar.chats-header` / `alert.binary-file.title`）。
+- `Xedit/L10n.swift` façade — 34 个命名空间，`static let` / `static func`（插值条目）强类型访问；`defaultValue:` 注入英文兜底，catalog 缺 key 也不会 crash。
+- `pbxproj` `knownRegions` 新增 `zh-Hans`；`developmentRegion` 保持 `en`。
+- 4 个核心文件 **219 处 callsite** 已迁移（87% — 233 中 14 处合理跳过：5 个 enum raw value 编译期常量、8 个键盘快捷键符号、1 个插值合并）：`AgentModeView.swift`（73）/ `ContentView.swift`（88）/ `XeditApp.swift`（29）/ `EmptyStateViews.swift`（18）。
+- `MainWindowChrome.swift` 经审计无面向用户的硬编码字面量，无需改动。
+
+**后续 i18n 收尾计划：**
+
+1. **第二批文件迁移**：`AgentModeComposerView.swift`（~1910 行，输入区 / placeholder / pickers）/ `AgentMCPSettingsView.swift` / `AgentMemorySettingsView.swift` / `AgentRoutineEditorView.swift` / `EditorSettingsView.swift`（Settings 主窗口，~1393 行）/ `AgentSkillSettingsView.swift`。
+2. **stats-dashboard enum raw value 模型改造**：把 `case overview = "Overview"` 拆成 `case overview` + `var displayName: String { L10n.StatsDashboard.tabsOverview }`，然后 callsite 用 `displayName` 而非 `rawValue`。
+3. **lint 防回滚**：写一个 swift-format / swiftlint 规则，PR 阶段禁止 SwiftUI 视图新增 `Text("...")` 字面量，强制走 `L10n.*` 或显式标 `// swiftlint:disable:next ...`。
+4. **`CONTRIBUTING.md` 加 "i18n 规范"段**：dot-key 命名、新增 key 时同步更新 zh / en 两套、何时用 `static let` vs `static func`、插值参数必须 `String(x)` 显式转换。
+5. **第三方语种**（如需）：catalog 文件 +一段 `"fr"` / `"ja"` `localizations` 即可；L10n.swift façade 无须改动（runtime 自动按系统语言匹配）。
 
 ### 阶段 6 — CI
 

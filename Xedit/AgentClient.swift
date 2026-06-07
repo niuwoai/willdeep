@@ -413,12 +413,13 @@ struct AgentClient {
         supportsImages: Bool
     ) -> [String: Any] {
         var dict: [String: Any] = ["role": message.role.rawValue]
+        let content = message.modelContent
 
         if supportsImages, message.role == .user, !message.images.isEmpty {
             // OpenAI multimodal: content is an array of typed parts.
             var parts: [[String: Any]] = []
-            if !message.content.isEmpty {
-                parts.append(["type": "text", "text": message.content])
+            if !content.isEmpty {
+                parts.append(["type": "text", "text": content])
             }
             for image in message.images {
                 parts.append([
@@ -427,8 +428,8 @@ struct AgentClient {
                 ])
             }
             dict["content"] = parts
-        } else if !message.content.isEmpty {
-            dict["content"] = message.content
+        } else if !content.isEmpty {
+            dict["content"] = content
         } else if message.role != .assistant {
             dict["content"] = ""
         }
