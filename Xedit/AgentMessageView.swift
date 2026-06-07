@@ -412,7 +412,22 @@ enum AgentAssistantMarkdownRenderer {
                 result += divider
 
             case .table:
+                // GFM tables render as monospaced `cell │ cell` rows
+                // with a `─┼─` rule under the header — SwiftUI Text
+                // can't host a real Grid in this single-AttributedString
+                // path (rc9 fix: per-block ForEach in LazyVStack
+                // freezes long replies). Wrap the plain layout with a
+                // tinted background and a small spacer above so the
+                // block is visually distinct from surrounding prose,
+                // even while the stream is still in progress.
+                let hadPrevious = !result.characters.isEmpty
                 appendSeparator()
+                if hadPrevious {
+                    var leadSpacer = AttributedString("\n")
+                    leadSpacer.font = .system(size: 4)
+                    leadSpacer.foregroundColor = Color.clear
+                    result += leadSpacer
+                }
                 if let headers = block.tableHeaders, let rows = block.tableRows {
                     let plain = AgentMarkdownTableFormatter.formatted(
                         headers: headers,
@@ -422,6 +437,7 @@ enum AgentAssistantMarkdownRenderer {
                         var table = AttributedString(plain)
                         table.font = .system(size: baseFontSize, design: .monospaced)
                         table.foregroundColor = .primary
+                        table.backgroundColor = Color.primary.opacity(0.035)
                         result += table
                     }
                 }

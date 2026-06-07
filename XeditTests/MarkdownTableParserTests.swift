@@ -79,6 +79,64 @@ struct MarkdownTableParserTests {
     }
 
     @Test
+    func toleratesExtraWhitespaceInAlignmentCells() {
+        // Hand-written tables often pad the alignment row with spaces
+        // for readability: `| --- | --- |`. Must still register.
+        let md = """
+        | h1 | h2 |
+        | --- | --- |
+        | a | b |
+        """
+        let blocks = MarkdownPreviewParser.blocks(from: md)
+        #expect(blocks.count == 1)
+        #expect(blocks[0].kind == .table)
+        #expect(blocks[0].tableHeaders == ["h1", "h2"])
+    }
+
+    @Test
+    func toleratesLongDashAlignmentRow() {
+        // The screenshotted reply had alignment rows like
+        // `|---------|----------|---------|`. Any number of dashes
+        // per cell must work.
+        let md = """
+        | h1 | h2 |
+        |---------|----------|
+        | a | b |
+        """
+        let blocks = MarkdownPreviewParser.blocks(from: md)
+        #expect(blocks.count == 1)
+        #expect(blocks[0].kind == .table)
+    }
+
+    @Test
+    func parsesCJKHeaderTableWithInlineMarkdownCells() {
+        // Mirrors a real assistant reply from the field — CJK headers,
+        // an alignment row with long dashes, and cells that contain
+        // inline-code spans and bold marks. The whole thing must come
+        // out as one .table block, not stay as paragraph noise.
+        let md = """
+        最近提交总结 (近 15 条)
+
+        按从新到旧:
+
+        | 时间    | 提交      | 作者     | 说明                                  |
+        |---------|----------|----------|--------------------------------------|
+        | 06-04 13:47 | `1633595` | insight68 | 合并 main 分支 |
+        | 06-04 13:33 | `561a2e9` | insight68 | **hermes**(Hermes agent 相关) |
+        | 06-03 22:15 | `f779ee2` | rocky | **fix(artifacts):** 修复生成图片卡片的渲染 |
+        """
+
+        let blocks = MarkdownPreviewParser.blocks(from: md)
+        let tables = blocks.filter { $0.kind == .table }
+        #expect(tables.count == 1)
+        let table = tables[0]
+        #expect(table.tableHeaders == ["时间", "提交", "作者", "说明"])
+        #expect(table.tableRows?.count == 3)
+        #expect(table.tableRows?[0] == ["06-04 13:47", "`1633595`", "insight68", "合并 main 分支"])
+        #expect(table.tableRows?[2] == ["06-03 22:15", "`f779ee2`", "rocky", "**fix(artifacts):** 修复生成图片卡片的渲染"])
+    }
+
+    @Test
     func looseFormWithoutOuterPipesWorks() {
         // Models occasionally emit tables without the leading/trailing
         // pipe. Accept those as long as the alignment row is present.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.54.1-rc1 - 2026-06-07
+
+- **改善流式 Markdown 表格观感。** 流式 assistant 气泡只能一次性吐一段 `Text(AttributedString)`（rc9 之前用 per-block `ForEach` in `LazyVStack` 会让长回复直接冻死），所以 GFM 表格在流式状态下只能走 `cell │ cell` + `─┼─` 横线的 mono 排版。本轮补上：表格段加一道淡灰底色（`Color.primary.opacity(0.035)`），同时在表格上方塞一道 4 pt 透明 spacer，让 reader 一眼分清"这是表格、不是普通段落"——和已经在 TextKit 历史渲染走 layout-manager 画表格底框的体验对齐。
+- **加固 GFM 表格 parser 在常见手写变体上的健壮性。** MarkdownPreviewParser 已有的 `isAlignmentRow` 实际可以接受任意 `-` 数量、首尾可选 `:` 以及单元格内空格；本轮新增 3 个针对性测试：一是带 4 列 CJK 表头 + 单元格内嵌 \`inline-code\` 和 `**bold**` 的真实案例（reproduces 用户截图里那段"最近提交总结"表格），二是 `| --- | --- |` 这种 alignment 行带空格的 hand-written 风格，三是 `|---------|----------|` 这种长 dash 风格。三个测试 baseline 全过，证明 parser 已经能正确识别这些变体，问题确实只在于"识别后流式渲染观感不到位"，不在解析本身。
+- 版本号 `1.54.0` → `1.54.1-rc1`（bugfix → 仅 rc 递增）。
+
 ## 1.54.0 - 2026-06-07
 
 - **新增 Agent 聊天基准字号偏好。** Settings → Agent → Appearance 新加一档 Slider，11 – 20 pt（默认 13 pt），实时调整 Agent 聊天面板里所有正文文字 —— 包括 user / assistant 消息正文、流式渲染的 Markdown 段落 / 列表 / 引用 / fenced code block / 表格，以及历史 TextKit 渲染器烤进 NSAttributedString 的 body 段。工具调用摘要（折叠/展开两态）、消息 footer、复制按钮、composer 都保留固定字号，避免整套 chrome 跟着文字一起膨胀。
