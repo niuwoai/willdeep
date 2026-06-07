@@ -27,12 +27,52 @@ enum AgentSettingsStore {
     /// JSON-encoded `AgentProviderLibrary` minus the API keys, which
     /// live in Keychain under the entry's UUID.
     private static let providerLibraryKey = "im.some.veilwriter.agentSettings.providerLibrary.v1"
-    private static let keychainService = "im.some.veilwriter.agent"
+    private static let defaultKeychainService = "im.some.veilwriter.agent"
     private static let keychainAccount = "openai-compatible-api-key"
     private static let imageKeychainAccount = "openai-compatible-image-description-api-key"
     /// Keychain account prefix for per-entry library keys
     /// (full account = `libraryEntryKeychainPrefix + UUID string`).
     private static let libraryEntryKeychainPrefix = "library-entry-"
+
+    /// Test-only override for the Keychain service name. Production code
+    /// never touches this — it stays nil and `keychainService` returns
+    /// `defaultKeychainService`. The unit tests that exercise AppState
+    /// fire its @Published didSets, which transitively call
+    /// `saveAPIKey` and `saveProviderLibrary`; without this override
+    /// those tests would write fixture API keys (e.g. fixtures named
+    /// `test-fixture-deepseek-key`) into the *real* developer-machine
+    /// Keychain under the production service name, and they would
+    /// resurface inside the running Settings UI. Tests should set this
+    /// to a per-run unique string in setUp and call
+    /// `resetTestKeychainOverride()` in tearDown to wipe the rows.
+    nonisolated(unsafe) private static var testKeychainServiceOverride: String?
+
+    private static var keychainService: String {
+        testKeychainServiceOverride ?? defaultKeychainService
+    }
+
+    /// Test-only entry point: redirect all subsequent Keychain reads /
+    /// writes to a sandbox service name. Returns the service name in
+    /// use so tests can clean it up.
+    @discardableResult
+    static func _setTestKeychainServiceOverride(_ service: String?) -> String {
+        testKeychainServiceOverride = service
+        return keychainService
+    }
+
+    /// Test-only entry point: best-effort delete every Generic Password
+    /// row this process wrote under the current (overridden) service.
+    /// Safe to call even when no override is set — it then targets the
+    /// production service, which we never want in tests, so the guard
+    /// below makes that a no-op.
+    static func _wipeTestKeychain() {
+        guard let service = testKeychainServiceOverride else { return }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
 
     /// Recently-fetched model IDs from any provider's `/models` endpoint.
     /// Surfaced in the Agent-mode model picker as a quick switcher.

@@ -957,7 +957,7 @@ extension AppState {
                 let code = provider.statusCode
                 let hint: String
                 switch code {
-                case 401, 403: hint = "鉴权失败，检查 API Key 是否正确、是否过期。"
+                case 401, 403: hint = "鉴权失败，检查 API Key 是否正确、是否过期。常见原因是从浏览器/密码管理器复制时带了首尾空格或换行——回到 Settings → Agent 把 key 重新粘贴一次（保存时会自动去掉空白）。也确认 Base URL 是否与该 Key 对应的服务匹配。"
                 case 404:      hint = "接口路径找不到，检查 Base URL 与模型名是否匹配。"
                 case 408, 504: hint = "上游网关超时。稍等片刻点「重试」即可。"
                 case 429:      hint = "触发限流（QPS / 配额）。等几秒再点「重试」，或换一个更宽松的模型。"

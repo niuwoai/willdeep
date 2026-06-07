@@ -20,6 +20,16 @@
 #   scripts/release.sh --skip-notarize  # 只签名打包，不公证（本地快速验证用）
 #   scripts/release.sh --skip-tests     # 跳过测试（不推荐；只在本机已知测试绿时用）
 #   scripts/release.sh --dry-run        # 演练：跑测试 + xcodebuild 但不签名/不公证/不打 tag
+#   scripts/release.sh --list-backups   # 只列出 build/release-history 下已备份的旧版本，不重新打包
+#
+# 回滚：
+#   每次 release 成功后会把新出炉的 .app + .dmg 拷一份到
+#   build/release-history/<version>/，并写 build/release-history/
+#   latest.txt 标记上一次跑过的版本。需要快速回滚时：
+#     1. ls build/release-history/                # 看可用版本
+#     2. open build/release-history/<旧版本>/*.dmg # 直接拖回 Applications
+#   线上分发的真正 source of truth 是 GitHub Releases，这里的本地备份
+#   只是给开发机一份"还没 push 上去就先回滚"的兜底。
 # =============================================================================
 
 set -euo pipefail
@@ -43,21 +53,55 @@ ARCHIVE_PATH="${BUILD_DIR}/${PRODUCT_NAME}.xcarchive"
 EXPORT_DIR="${BUILD_DIR}/export"
 EXPORT_OPTIONS_PLIST="${BUILD_DIR}/ExportOptions.plist"
 APP_PATH="${EXPORT_DIR}/${PRODUCT_NAME}.app"
+# 历史发布产物归档区（每个版本一个子目录）。`build/release` 会在每次
+# release 开头被 `rm -rf` 清空，所以备份要放在它的同级目录 `build/
+# release-history`，避免被新一轮的清理一并干掉。
+BACKUP_ROOT="${ROOT_DIR}/build/release-history"
 
 # ----- 解析参数 -------------------------------------------------------------
 SKIP_NOTARIZE=0
 SKIP_TESTS=0
 DRY_RUN=0
+LIST_BACKUPS=0
 for arg in "$@"; do
   case "$arg" in
     --skip-notarize) SKIP_NOTARIZE=1 ;;
     --skip-tests)    SKIP_TESTS=1 ;;
     --dry-run)       DRY_RUN=1; SKIP_NOTARIZE=1 ;;
+    --list-backups)  LIST_BACKUPS=1 ;;
     -h|--help)
-      sed -n '2,30p' "$0"; exit 0 ;;
+      sed -n '2,42p' "$0"; exit 0 ;;
     *) echo "未知参数: $arg"; exit 1 ;;
   esac
 done
+
+# --list-backups：列出 build/release-history 下已经备份过的旧版本，按
+# mtime 倒序，方便找回滚目标。不依赖任何 build 上下文，所以放在最前面。
+if [[ $LIST_BACKUPS == 1 ]]; then
+  if [[ ! -d "$BACKUP_ROOT" ]]; then
+    echo "（还没有任何备份。build/release-history 目录不存在。）"
+    exit 0
+  fi
+  echo "可回滚的旧版本（mtime 新 → 旧）:"
+  # 用 stat -f %m + sort 拿到按修改时间排序的列表（macOS 的 stat 没有 GNU 的 --format）。
+  find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d \
+    -exec stat -f '%m %N' {} \; 2>/dev/null \
+    | sort -rn \
+    | while read -r _ path; do
+      version="$(basename "$path")"
+      dmg="$(ls "$path"/*.dmg 2>/dev/null | head -n1)"
+      if [[ -n "$dmg" ]]; then
+        echo "  $version  →  $dmg"
+      else
+        echo "  $version  →  (无 dmg 备份，只有 .app)"
+      fi
+    done
+  if [[ -f "${BACKUP_ROOT}/latest.txt" ]]; then
+    echo ""
+    echo "上一次成功 release: $(cat "${BACKUP_ROOT}/latest.txt")"
+  fi
+  exit 0
+fi
 
 # ----- 读版本号（从 pbxproj 抓 MARKETING_VERSION 的第一个值）---------------
 VERSION="$(grep -m 1 'MARKETING_VERSION' "${ROOT_DIR}/${PROJECT_FILE}/project.pbxproj" \
@@ -258,6 +302,22 @@ if [[ $SKIP_STAPLE == 0 ]]; then
   spctl --assess --type open --context context:primary-signature --verbose "$DMG_PATH" || true
 fi
 
+# ----- Step 7.5: 备份发布产物 ------------------------------------------------
+# 用户提出："部署时备份当前运行的代码，方便快速回滚"。最稳的回滚源是
+# GitHub Releases 上的旧 dmg；但开发机本地保留一份也省得遇到紧急情况
+# 还要联网下载。备份策略：每次跑完一份合法的 release，就把新出炉的
+# .app + .dmg 整体拷一份到 build/release-history/<version>/，同时写一行
+# build/release-history/latest.txt 记录"上一次跑过的版本是 X"。需要
+# 回滚时跑 `scripts/release.sh --list-backups` 查看可用版本。
+echo ""
+echo "[7.5/8] 归档发布产物到 ${BACKUP_ROOT}/${VERSION}/ ..."
+mkdir -p "${BACKUP_ROOT}/${VERSION}"
+# 用 ditto 拷 .app（保留扩展属性与签名结构），cp -p 拷 .dmg（普通文件）。
+ditto "$APP_PATH" "${BACKUP_ROOT}/${VERSION}/${PRODUCT_NAME}.app"
+cp -p "$DMG_PATH" "${BACKUP_ROOT}/${VERSION}/"
+echo "$VERSION" > "${BACKUP_ROOT}/latest.txt"
+echo "  ✅ 已备份 .app + .dmg → ${BACKUP_ROOT}/${VERSION}/"
+
 # ----- Step 8: 交互确认是否打 tag/push --------------------------------------
 # CLAUDE.md §5：bugfix 升 rc，feature 升正式版位。release 完成后建议打 v{版本号} tag。
 # 体检报告点名："不直接自动 push（破坏性操作要确认）"——这里走交互式 prompt。
@@ -302,6 +362,47 @@ elif [[ $TAG_ALREADY == 0 ]]; then
           git -C "$ROOT_DIR" push origin "$CURRENT_BRANCH"
           git -C "$ROOT_DIR" push origin "${RELEASE_TAG}"
           echo "  ✅ 已推送分支 $CURRENT_BRANCH 与 tag ${RELEASE_TAG}"
+
+          # 推送后关注 GitHub Actions。push to main 会触发
+          # .github/workflows/test.yml；要是测试在 CI 上挂了，
+          # 本地哪怕全绿也得知道。用 gh run watch 同步等待最近
+          # 一次 run 的结果；没装 gh 就提示用户去 web 看一下。
+          if command -v gh >/dev/null 2>&1; then
+            echo ""
+            echo "  → 监视 GitHub Actions（最近一次工作流）..."
+            # 给 GitHub 一个抓 push 事件的窗口，否则 gh run list 可能
+            # 还看不到刚触发的那条 run。
+            sleep 5
+            # 拿最近一次 run 的 databaseId；--json id 只能在 CLI 里识别为 databaseId
+            RUN_ID=$(gh run list --branch "$CURRENT_BRANCH" --limit 1 --json databaseId,headSha \
+              --jq ".[] | select(.headSha == \"$(git -C "$ROOT_DIR" rev-parse HEAD)\") | .databaseId" 2>/dev/null || true)
+            if [[ -n "$RUN_ID" ]]; then
+              echo "    Run #${RUN_ID}（commit $(git -C "$ROOT_DIR" rev-parse --short HEAD)）"
+              if gh run watch "$RUN_ID" --exit-status; then
+                echo "  ✅ GitHub Actions 通过"
+              else
+                echo "  ⚠️ GitHub Actions 失败 — 必须看一下："
+                echo "     gh run view $RUN_ID --log-failed"
+                echo "     或网页：$(gh run view "$RUN_ID" --json url --jq .url 2>/dev/null || echo "<gh 取 url 失败>")"
+                # 不直接 exit 1：本地 release 已经成功，备份产物也已生成，
+                # 只是远程 CI 没过。让用户自行决定是否继续后续上传 dmg。
+              fi
+            else
+              echo "  ⚠️ gh run list 没找到 HEAD 对应的 run，可能 push 还没被 GitHub 索引到"
+              echo "     稍后手动看：gh run list --branch $CURRENT_BRANCH --limit 5"
+            fi
+          else
+            echo ""
+            echo "  ⚠️ 没装 gh — 请到浏览器看下 GitHub Actions 是否绿"
+            REPO_URL=$(git -C "$ROOT_DIR" config --get remote.origin.url 2>/dev/null || true)
+            if [[ -n "$REPO_URL" ]]; then
+              # 把 git@github.com:foo/bar.git / https://github.com/foo/bar.git
+              # 都转成 https://github.com/foo/bar/actions
+              ACTIONS_URL=$(echo "$REPO_URL" \
+                | sed -E 's#^git@github\.com:#https://github.com/#; s#\.git$##')/actions
+              echo "     $ACTIONS_URL"
+            fi
+          fi
           ;;
         *)
           echo "  跳过 push（tag 已在本地，需要时手动 git push origin ${RELEASE_TAG}）"

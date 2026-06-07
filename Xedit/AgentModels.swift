@@ -1099,8 +1099,14 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
         self.displayName = (displayName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
                             ? displayName!
                             : AgentProviderPreset.preset(id: providerID)?.displayName ?? providerID)
-        self.baseURL = baseURL
-        self.apiKey = apiKey
+        // Defensive trim: pasted API keys / base URLs frequently bring
+        // surrounding whitespace or a trailing newline along, and a
+        // `Bearer sk-…\n` Authorization header is rejected as HTTP 401
+        // by every OpenAI-compatible upstream. The Settings commit path
+        // also trims, but normalising here means any future construction
+        // site is covered too.
+        self.baseURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         self.flashPrimary = flashPrimary
         self.flashAlternates = AgentProviderEntry.cleanList(flashAlternates, excluding: flashPrimary)
         self.proPrimary = proPrimary

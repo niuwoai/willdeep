@@ -293,15 +293,22 @@ struct EditorSettingsView: View {
                     }
                 }
 
-                TextField("Base URL", text: $imageBaseURLBuffer)
-                    .textFieldStyle(.roundedBorder)
+                LabeledContent("Base URL") {
+                    TextField("", text: $imageBaseURLBuffer)
+                        .textFieldStyle(.roundedBorder)
+                }
 
                 agentModelField("Vision Model", text: $imageModelBuffer, models: fetchedImageModels)
 
                 LabeledContent("API Key") {
+                    // No in-field placeholder: in a grouped Form the
+                    // LabeledContent label on the left already names the
+                    // field, and a trailing "sk-..." inside an empty
+                    // SecureField looks like a stray value sitting next
+                    // to the reveal button.
                     RevealableSecretField(
                         text: $imageAPIKeyBuffer,
-                        placeholder: "sk-...",
+                        placeholder: "",
                         onCommit: {}
                     )
                 }
@@ -469,9 +476,14 @@ struct EditorSettingsView: View {
     }
 
     private func agentModelField(_ title: String, text: Binding<String>, models: [String]) -> some View {
+        // The TextField's first arg doubles as its in-field placeholder.
+        // Passing `title` made the model name (e.g. "Vision Model") show
+        // up *inside* the empty input AND as the LabeledContent label on
+        // the right — visually duplicated. Use an empty placeholder so
+        // only the LabeledContent label remains.
         LabeledContent(title) {
             HStack {
-                TextField(title, text: text)
+                TextField("", text: text)
                     .textFieldStyle(.roundedBorder)
 
                 if !models.isEmpty {
@@ -1130,7 +1142,7 @@ private struct AgentProviderEntryEditor: View {
                 fieldRow("API key") {
                     RevealableSecretField(
                         text: $apiKey,
-                        placeholder: "sk-...",
+                        placeholder: "",
                         onCommit: commit
                     )
                 }
@@ -1319,12 +1331,23 @@ private struct AgentProviderEntryEditor: View {
     }
 
     private func commit() {
+        // Trim secrets / URLs before persisting. Pasting an API key from
+        // a browser or password manager frequently brings a trailing
+        // newline or a leading/trailing space along; the resulting
+        // `Bearer sk-xxx\n` header is rejected by every upstream as
+        // HTTP 401, which on the surface looks identical to a typo'd
+        // key. Trim at commit time so what the user sees in the field
+        // is exactly what we send.
+        let trimmedAPIKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedAPIKey != apiKey { apiKey = trimmedAPIKey }
+        let trimmedBaseURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedBaseURL != baseURL { baseURL = trimmedBaseURL }
         let updated = AgentProviderEntry(
             id: entry.id,
             providerID: providerID,
             displayName: displayName,
-            baseURL: baseURL,
-            apiKey: apiKey,
+            baseURL: trimmedBaseURL,
+            apiKey: trimmedAPIKey,
             flashPrimary: flashPrimary,
             flashAlternates: splitLines(flashAlternatesText),
             proPrimary: proPrimary,

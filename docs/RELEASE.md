@@ -136,3 +136,36 @@ scripts/release.sh --skip-notarize
 1. 立刻发新版（rc + 1）+ 新公证票。
 2. 在下载页 / GitHub Releases 把旧 dmg 删掉，写明"已撤回，请升级到 vX"。
 3. 如果是签名密钥泄露级别的事故，到 Apple Developer 后台 Revoke 该 Developer ID 证书 —— 这会让所有用该证书签过的 app 都失效，慎用。
+
+---
+
+## 六、本地备份与快速回滚
+
+rc3 起 `release.sh` 在每次成功打包后自动把新出炉的 `.app` 与 `.dmg` 整体拷一份到：
+
+```
+build/release-history/<版本号>/
+```
+
+同时把"上一次跑过的版本号"写进 `build/release-history/latest.txt`。这套备份**不会**被下一次 `release.sh` 开头的 `rm -rf build/release` 清掉（它在 `build/release-history` 下，是同级目录）。`build/` 整目录已在 `.gitignore` 里，所以备份不会污染仓库。
+
+```bash
+# 看本地有哪些可回滚的旧版本（按时间倒序）
+scripts/release.sh --list-backups
+
+# 直接装上一个旧版本（开发机）
+open build/release-history/1.54.0/VeilWriter-1.54.0.dmg
+```
+
+线上分发的真正 source of truth 仍然是 **GitHub Releases**。本地这份只是给开发机一份"还没 push 上去就先回滚"的兜底；正式回滚动作要把旧 dmg 重新放回下载页。
+
+---
+
+## 七、监视 GitHub Actions
+
+`push` 到 `main` 会触发 `.github/workflows/test.yml`，在 macos-15 上跑一遍 XeditTests。本地 `release.sh` 在你确认 push 之后会同步盯一下这条 run：
+
+- 装了 `gh` CLI 时，脚本调 `gh run watch --exit-status` 同步等待。失败会打印 `gh run view --log-failed` 提示你看红条。
+- 没装 `gh` 时，脚本把仓库的 `actions/` URL 打到屏幕上让你自己开浏览器看。
+
+如果你看到 `⚠️ GitHub Actions 失败`：本地这次 release 已经成功（dmg 也备份过了），只是远程 CI 没过。先别上传 dmg 到 Releases，把 CI 问题修了再发新 rc。
