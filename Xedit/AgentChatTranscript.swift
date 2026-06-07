@@ -96,6 +96,7 @@ struct AgentChatTranscript: View {
                         if !history.isEmpty {
                             AgentChatHistoryTextView(
                                 messages: history,
+                                baseFontSize: appState.agentChatBaseFontSize,
                                 onRetryLastTurn: appState.retryLastAgentTurn
                             )
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
@@ -110,7 +111,8 @@ struct AgentChatTranscript: View {
                            shouldShowMessageBubble(streamingMessage) {
                             AgentModeMessageView(
                                 message: streamingMessage,
-                                isStreamingThisMessage: true
+                                isStreamingThisMessage: true,
+                                baseFontSize: appState.agentChatBaseFontSize
                             )
                                 .id(streamingMessage.id)
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
@@ -150,7 +152,10 @@ struct AgentChatTranscript: View {
                     }
 
                     ForEach(appState.agentQueuedMessages) { queued in
-                        QueuedMessageRow(message: queued)
+                        QueuedMessageRow(
+                            message: queued,
+                            baseFontSize: appState.agentChatBaseFontSize
+                        )
                     }
 
                     if appState.isCompressingAgentContext {

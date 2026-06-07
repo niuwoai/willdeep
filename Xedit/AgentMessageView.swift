@@ -65,6 +65,11 @@ import SwiftUI
 struct AgentModeMessageView: View {
     let message: AgentMessage
     let isStreamingThisMessage: Bool
+    /// User-chosen Agent chat base font size (pt). Drives the prose
+    /// font in the user bubble and the inline Markdown body for the
+    /// streaming assistant message. Defaults to system body so existing
+    /// callers that don't pass it keep working.
+    var baseFontSize: CGFloat = NSFont.systemFontSize
     @State private var isHoveringUser = false
 
     var body: some View {
@@ -117,7 +122,7 @@ struct AgentModeMessageView: View {
                     // takes the whole chat pane down on scroll.
                     // Real text restored.
                     Text(AgentLongTokenBreaker.inject(into: split.visible))
-                        .font(AgentDesign.bodyFont)
+                        .font(.system(size: baseFontSize))
                         .foregroundStyle(.primary)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
@@ -174,7 +179,11 @@ struct AgentModeMessageView: View {
                 .padding(.top, 10)
             if !message.content.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    AgentAssistantMarkdownBody(content: message.content, isStreaming: isStreamingThisMessage)
+                    AgentAssistantMarkdownBody(
+                        content: message.content,
+                        isStreaming: isStreamingThisMessage,
+                        baseFontSize: baseFontSize
+                    )
                         .padding(.horizontal, 14)
                         .padding(.top, 14)
                         .padding(.bottom, 10)
@@ -230,6 +239,11 @@ struct AgentAssistantMarkdownBody: View {
     /// When true, appends a small blinking cursor at the end of the
     /// rendered body to signal that more tokens are still arriving.
     let isStreaming: Bool
+    /// Base font size (pt) for the rendered Markdown body. Paragraph /
+    /// list / quote / divider / table / code blocks scale from this;
+    /// headings keep their relative hierarchy. Defaults to the system
+    /// body size for callers that don't thread the user preference.
+    var baseFontSize: CGFloat = NSFont.systemFontSize
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -238,7 +252,11 @@ struct AgentAssistantMarkdownBody: View {
         // is a tiny separate view (one AgentStreamingCursor) — that
         // is fine because it's always either 0 or 1 child, never N.
         VStack(alignment: .leading, spacing: 4) {
-            Text(AgentAssistantMarkdownRenderer.render(content, isDark: colorScheme == .dark))
+            Text(AgentAssistantMarkdownRenderer.render(
+                content,
+                isDark: colorScheme == .dark,
+                baseFontSize: baseFontSize
+            ))
                 .textSelection(.enabled)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
@@ -272,16 +290,25 @@ enum AgentAssistantMarkdownRenderer {
     private struct RenderCacheKey: Hashable {
         let contentHash: Int
         let isDark: Bool
+        let baseFontSize: CGFloat
     }
 
     private static var cache: [RenderCacheKey: AttributedString] = [:]
     private static var cacheOrder: [RenderCacheKey] = []
     private static let cacheLimit = 128
 
-    static func render(_ content: String, isDark: Bool) -> AttributedString {
-        let key = RenderCacheKey(contentHash: content.hashValue, isDark: isDark)
+    static func render(
+        _ content: String,
+        isDark: Bool,
+        baseFontSize: CGFloat = NSFont.systemFontSize
+    ) -> AttributedString {
+        let key = RenderCacheKey(
+            contentHash: content.hashValue,
+            isDark: isDark,
+            baseFontSize: baseFontSize
+        )
         if let hit = cache[key] { return hit }
-        let result = build(from: content, isDark: isDark)
+        let result = build(from: content, isDark: isDark, baseFontSize: baseFontSize)
         cache[key] = result
         cacheOrder.append(key)
         if cacheOrder.count > cacheLimit {
@@ -291,7 +318,7 @@ enum AgentAssistantMarkdownRenderer {
         return result
     }
 
-    private static func build(from content: String, isDark: Bool) -> AttributedString {
+    private static func build(from content: String, isDark: Bool, baseFontSize: CGFloat) -> AttributedString {
         // Pre-process: inject zero-width breakpoints into unbreakable
         // runs of >30 chars. Otherwise a message containing e.g. a
         // pnpm-store listing (150-char hash paths, no spaces) freezes
@@ -318,14 +345,14 @@ enum AgentAssistantMarkdownRenderer {
 
             case .paragraph:
                 appendSeparator()
-                var paragraph = inlineRendered(block.text)
+                var paragraph = inlineRendered(block.text, baseFontSize: baseFontSize)
                 paragraph.foregroundColor = .primary
                 result += paragraph
 
             case .quote:
                 appendSeparator()
                 var quote = AttributedString("❝ " + block.text)
-                quote.font = .system(.body)
+                quote.font = .system(size: baseFontSize)
                 quote.foregroundColor = .secondary
                 result += quote
 
@@ -335,7 +362,7 @@ enum AgentAssistantMarkdownRenderer {
                 let indent = String(repeating: "  ", count: block.indent)
                 var prefix = AttributedString("\(indent)\(bullet) ")
                 prefix.foregroundColor = .secondary
-                var body = inlineRendered(block.text)
+                var body = inlineRendered(block.text, baseFontSize: baseFontSize)
                 body.foregroundColor = .primary
                 result += prefix + body
 
@@ -344,7 +371,7 @@ enum AgentAssistantMarkdownRenderer {
                 let indent = String(repeating: "  ", count: block.indent)
                 var prefix = AttributedString("\(indent)1. ")
                 prefix.foregroundColor = .secondary
-                var body = inlineRendered(block.text)
+                var body = inlineRendered(block.text, baseFontSize: baseFontSize)
                 body.foregroundColor = .primary
                 result += prefix + body
 
@@ -363,11 +390,16 @@ enum AgentAssistantMarkdownRenderer {
                     hint.foregroundColor = .secondary
                     result += hint
                 }
-                if let highlighted = highlightedCode(block.text, languageHint: block.info, isDark: isDark) {
+                if let highlighted = highlightedCode(
+                    block.text,
+                    languageHint: block.info,
+                    isDark: isDark,
+                    baseFontSize: baseFontSize
+                ) {
                     result += highlighted
                 } else {
                     var code = AttributedString(block.text)
-                    code.font = .system(.body, design: .monospaced)
+                    code.font = .system(size: baseFontSize, design: .monospaced)
                     code.foregroundColor = .primary
                     code.backgroundColor = Color.primary.opacity(0.035)
                     result += code
@@ -388,7 +420,7 @@ enum AgentAssistantMarkdownRenderer {
                     )
                     if !plain.isEmpty {
                         var table = AttributedString(plain)
-                        table.font = .system(.body, design: .monospaced)
+                        table.font = .system(size: baseFontSize, design: .monospaced)
                         table.foregroundColor = .primary
                         result += table
                     }
@@ -402,12 +434,13 @@ enum AgentAssistantMarkdownRenderer {
     private static func highlightedCode(
         _ text: String,
         languageHint: String?,
-        isDark: Bool
+        isDark: Bool,
+        baseFontSize: CGFloat
     ) -> AttributedString? {
         guard let language = MarkdownCodeBlockView.language(forHint: languageHint) else {
             return nil
         }
-        let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        let font = NSFont.monospacedSystemFont(ofSize: baseFontSize, weight: .regular)
         let theme: EditorTheme = isDark ? .graphite : .paper
         let highlighted = NSMutableAttributedString(attributedString: SyntaxHighlighter.highlightSync(
             text,
@@ -426,9 +459,20 @@ enum AgentAssistantMarkdownRenderer {
 
     /// Run inline Markdown (bold/italic/`code`/links) through the
     /// same parser as the editor preview so styling stays consistent
-    /// across the app.
-    private static func inlineRendered(_ raw: String) -> AttributedString {
-        MarkdownInline.attributedString(from: raw)
+    /// across the app. The base font size flows through so chat-mode
+    /// can scale message body text per user preference.
+    private static func inlineRendered(_ raw: String, baseFontSize: CGFloat) -> AttributedString {
+        var rendered = MarkdownInline.attributedString(from: raw)
+        let runs = rendered.runs
+        for run in runs {
+            // Only stamp a default font on runs that don't already
+            // carry one (MarkdownInline assigns explicit fonts to
+            // bold / italic / inline-code spans — leave those alone).
+            if rendered[run.range].font == nil {
+                rendered[run.range].font = .system(size: baseFontSize)
+            }
+        }
+        return rendered
     }
 
     private static func headingFont(level: Int) -> Font {
@@ -805,6 +849,10 @@ struct AgentTextAttachmentBubbleStrip: View {
 
 struct QueuedMessageRow: View {
     let message: AgentQueuedMessage
+    /// Mirror of the Agent chat base font size so the queued preview
+    /// text reads at the same scale as the user's actual message
+    /// bubble once it's dispatched.
+    var baseFontSize: CGFloat = NSFont.systemFontSize
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -819,7 +867,7 @@ struct QueuedMessageRow: View {
                     .textCase(.uppercase)
                 if !message.text.isEmpty {
                     Text(message.text)
-                        .font(AgentDesign.bodyFont)
+                        .font(.system(size: baseFontSize))
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
                 }

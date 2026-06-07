@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.54.0 - 2026-06-07
+
+- **新增 Agent 聊天基准字号偏好。** Settings → Agent → Appearance 新加一档 Slider，11 – 20 pt（默认 13 pt），实时调整 Agent 聊天面板里所有正文文字 —— 包括 user / assistant 消息正文、流式渲染的 Markdown 段落 / 列表 / 引用 / fenced code block / 表格，以及历史 TextKit 渲染器烤进 NSAttributedString 的 body 段。工具调用摘要（折叠/展开两态）、消息 footer、复制按钮、composer 都保留固定字号，避免整套 chrome 跟着文字一起膨胀。
+- **拉大 Assistant 正文与内联工具摘要之间的视觉缝隙。** rc1 的 6 pt 透明换行 spacer 加到 14 pt，让"AI 说完话 → 开始调工具"的过渡有明显呼吸；同时 `chromeMonoFont` 跟 `monoFont` 拆开，避免 tool summary 字号被用户字号偏好顺手缩放。
+- **AgentChatHistoryRenderer / AgentAssistantMarkdownRenderer 缓存 key 都加上 baseFontSize 维度。** 字号变化会触发独立缓存条目，避免重渲染时拿到旧 size 的版本；clamp 逻辑放在 AgentSettingsStore 单独的 helper 里供 UI / 持久化两侧复用，永远不会出现 UI 写 30、磁盘读 9 的偏差。
+
 ## 1.53.1-rc1 - 2026-06-07
 
 - **修正 Assistant 消息里"正文 + 工具调用"两个气泡互相压住的视觉 bug。** TextKit 历史渲染时 `.assistant` 与 `.toolSummary` 两个气泡共享一条相邻基线，原本 8+10pt 的垂直 inset 之和大于自然行距，导致两块圆角矩形在 chat history 里咬在一起。这次把 `.toolSummary` 的 vertical inset 从 10pt 降到 5pt，并在写完正文气泡、写 tool summary 之前插一段 6pt 高的透明换行 spacer，把两段彻底隔开。

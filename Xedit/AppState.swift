@@ -224,6 +224,22 @@ final class AppState: ObservableObject {
     @Published var autoApproveSafeCommands: Bool = AgentSettingsStore.loadAutoApproveSafeCommands() {
         didSet { AgentSettingsStore.saveAutoApproveSafeCommands(autoApproveSafeCommands) }
     }
+    /// User-tunable base font size (in points) for the Agent chat
+    /// transcript body — applies to user/assistant message prose and
+    /// rendered Markdown blocks. Tool-call summaries, footers, and
+    /// composer chrome keep their fixed AgentDesign sizes. Range and
+    /// default come from AgentSettingsStore so the UI clamp and the
+    /// persisted clamp can't drift.
+    @Published var agentChatBaseFontSize: CGFloat = AgentSettingsStore.loadAgentChatBaseFontSize() {
+        didSet {
+            let clamped = AgentSettingsStore.clampChatBaseFontSize(agentChatBaseFontSize)
+            if clamped != agentChatBaseFontSize {
+                agentChatBaseFontSize = clamped
+                return
+            }
+            AgentSettingsStore.saveAgentChatBaseFontSize(clamped)
+        }
+    }
     /// Persisted Agent-mode chat sessions, newest-updated first.
     @Published var agentSessions: [AgentSession] = []
     /// Persisted Agent routines (scheduled prompts), most-recently-updated

@@ -14,6 +14,16 @@ enum AgentSettingsStore {
     private static let alwaysAllowedCommandsKey = "im.some.veilwriter.agentSettings.alwaysAllowedCommands.v1"
     private static let autoApproveKey = "im.some.veilwriter.agentSettings.autoApproveSafeCommands.v1"
     private static let perProviderConcurrencyKey = "im.some.veilwriter.agentSettings.perProviderConcurrencyLimit.v1"
+    private static let chatBaseFontSizeKey = "im.some.veilwriter.agentSettings.chatBaseFontSize.v1"
+
+    /// Hard bounds for the Agent chat base font slider. The lower
+    /// bound matches the prior caption size so the picker can't shrink
+    /// the body text below an already-secondary element; the upper
+    /// bound leaves headroom without breaking the chat bubble layout
+    /// constants in AgentDesign.
+    static let chatBaseFontSizeMin: CGFloat = 11
+    static let chatBaseFontSizeMax: CGFloat = 20
+    static let chatBaseFontSizeDefault: CGFloat = 13
     /// JSON-encoded `AgentProviderLibrary` minus the API keys, which
     /// live in Keychain under the entry's UUID.
     private static let providerLibraryKey = "im.some.veilwriter.agentSettings.providerLibrary.v1"
@@ -75,6 +85,29 @@ enum AgentSettingsStore {
     static func savePerProviderConcurrencyLimit(_ limit: Int) {
         let clamped = max(1, min(8, limit))
         UserDefaults.standard.set(clamped, forKey: perProviderConcurrencyKey)
+    }
+
+    /// Base font size (in points) for the Agent chat transcript body —
+    /// user/assistant message prose and rendered Markdown blocks.
+    /// Tool-call summaries, footers, headers, and composer chrome stay
+    /// on `AgentDesign`'s fixed sizes by design (Q1=A from the rc2
+    /// scope conversation).
+    static func loadAgentChatBaseFontSize() -> CGFloat {
+        if UserDefaults.standard.object(forKey: chatBaseFontSizeKey) == nil {
+            return chatBaseFontSizeDefault
+        }
+        let stored = UserDefaults.standard.double(forKey: chatBaseFontSizeKey)
+        guard stored > 0 else { return chatBaseFontSizeDefault }
+        return clampChatBaseFontSize(CGFloat(stored))
+    }
+
+    static func saveAgentChatBaseFontSize(_ size: CGFloat) {
+        let clamped = clampChatBaseFontSize(size)
+        UserDefaults.standard.set(Double(clamped), forKey: chatBaseFontSizeKey)
+    }
+
+    static func clampChatBaseFontSize(_ size: CGFloat) -> CGFloat {
+        max(chatBaseFontSizeMin, min(chatBaseFontSizeMax, size))
     }
 
     static func saveAlwaysAllowedCommands(_ commands: [AgentAlwaysAllowedCommand]) {

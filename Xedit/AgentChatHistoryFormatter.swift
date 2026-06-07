@@ -138,6 +138,7 @@ enum AgentChatHistoryRenderer {
     private struct CacheKey: Hashable {
         let countAndHash: Int
         let isDark: Bool
+        let baseFontSize: CGFloat
     }
 
     /// Full per-message hash used to build the render cache key. We
@@ -181,8 +182,10 @@ enum AgentChatHistoryRenderer {
         messages: [AgentMessage],
         isDark: Bool,
         expandedToolGroupIDs: Set<String> = [],
-        hoveredUserMessageID: UUID? = nil
+        hoveredUserMessageID: UUID? = nil,
+        baseFontSize: CGFloat = NSFont.systemFontSize
     ) -> NSAttributedString {
+        let clampedSize = AgentSettingsStore.clampChatBaseFontSize(baseFontSize)
         var hasher = Hasher()
         hasher.combine(messages.count)
         hasher.combine(expandedToolGroupIDs.sorted())
@@ -190,7 +193,11 @@ enum AgentChatHistoryRenderer {
         for m in messages {
             hasher.combine(messageHash(m))
         }
-        let key = CacheKey(countAndHash: hasher.finalize(), isDark: isDark)
+        let key = CacheKey(
+            countAndHash: hasher.finalize(),
+            isDark: isDark,
+            baseFontSize: clampedSize
+        )
         if let hit = cache[key] {
             return hit
         }
@@ -198,7 +205,8 @@ enum AgentChatHistoryRenderer {
             messages: messages,
             isDark: isDark,
             expandedToolGroupIDs: expandedToolGroupIDs,
-            hoveredUserMessageID: hoveredUserMessageID
+            hoveredUserMessageID: hoveredUserMessageID,
+            baseFontSize: clampedSize
         )
         cache[key] = result
         cacheOrder.append(key)
@@ -213,11 +221,18 @@ enum AgentChatHistoryRenderer {
         messages: [AgentMessage],
         isDark: Bool,
         expandedToolGroupIDs: Set<String>,
-        hoveredUserMessageID: UUID?
+        hoveredUserMessageID: UUID?,
+        baseFontSize: CGFloat
     ) -> NSAttributedString {
         let result = NSMutableAttributedString()
-        let bodyFont = NSFont.systemFont(ofSize: NSFont.systemFontSize)
-        let monoFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        // `bodyFont` / `monoFont` follow the user's chat-base size
+        // knob (Q1=A) — they're used for message prose, plain tool
+        // outputs, fenced code blocks, and inline-Markdown spans.
+        // `chromeMonoFont` is the fixed-size mono used for tool-call
+        // group summaries; chrome doesn't grow with body text.
+        let bodyFont = NSFont.systemFont(ofSize: baseFontSize)
+        let monoFont = NSFont.monospacedSystemFont(ofSize: baseFontSize, weight: .regular)
+        let chromeMonoFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         let headerFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
         let bodyColor = NSColor.labelColor
         let secondaryColor = NSColor.secondaryLabelColor
@@ -254,7 +269,7 @@ enum AgentChatHistoryRenderer {
                     group,
                     isExpanded: expandedToolGroupIDs.contains(group.id),
                     to: result,
-                    monoFont: monoFont,
+                    monoFont: chromeMonoFont,
                     secondaryColor: secondaryColor
                 )
                 continue
@@ -367,9 +382,12 @@ enum AgentChatHistoryRenderer {
             if !message.toolCalls.isEmpty {
                 if !body.isEmpty {
                     // Transparent spacer paragraph between the assistant
-                    // body bubble and the tool summary bubble — without
-                    // it the two .toolSummary / .assistant bubbles share
-                    // a baseline and their vertical insets overlap.
+                    // body bubble and the tool summary bubble. Beyond
+                    // resolving the bubble-baseline overlap, this gap
+                    // is also the user-visible "the assistant's prose
+                    // ended, a tool call starts here" separator — 14pt
+                    // gives the two bubbles real breathing room without
+                    // making the conversation feel disjointed.
                     let spacerStyle = NSMutableParagraphStyle()
                     spacerStyle.alignment = .left
                     spacerStyle.paragraphSpacing = 0
@@ -377,7 +395,7 @@ enum AgentChatHistoryRenderer {
                     result.append(NSAttributedString(
                         string: "\n",
                         attributes: [
-                            .font: NSFont.systemFont(ofSize: 6),
+                            .font: NSFont.systemFont(ofSize: 14),
                             .foregroundColor: NSColor.clear,
                             .paragraphStyle: spacerStyle,
                         ]
@@ -391,7 +409,7 @@ enum AgentChatHistoryRenderer {
                     inlineGroup,
                     isExpanded: expandedToolGroupIDs.contains(inlineGroup.id),
                     to: result,
-                    monoFont: monoFont,
+                    monoFont: chromeMonoFont,
                     secondaryColor: secondaryColor
                 )
             }

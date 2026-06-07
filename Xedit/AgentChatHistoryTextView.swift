@@ -30,6 +30,10 @@ import SwiftUI
 /// wrapper out as a regular block view.
 struct AgentChatHistoryTextView: NSViewRepresentable {
     let messages: [AgentMessage]
+    /// User-controlled base size for the transcript body, threaded
+    /// from `AppState.agentChatBaseFontSize`. Tool summaries and
+    /// chrome stay on fixed sizes inside the renderer.
+    let baseFontSize: CGFloat
     let onRetryLastTurn: () -> Void
     @Environment(\.colorScheme) private var colorScheme
 
@@ -38,13 +42,21 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         view.translatesAutoresizingMaskIntoConstraints = false
         view.onRetryLastTurn = onRetryLastTurn
         configure(view)
-        view.applyMessages(messages, isDark: colorScheme == .dark)
+        view.applyMessages(
+            messages,
+            isDark: colorScheme == .dark,
+            baseFontSize: baseFontSize
+        )
         return view
     }
 
     func updateNSView(_ nsView: AgentChatHistoryNSTextView, context: Context) {
         nsView.onRetryLastTurn = onRetryLastTurn
-        nsView.applyMessages(messages, isDark: colorScheme == .dark)
+        nsView.applyMessages(
+            messages,
+            isDark: colorScheme == .dark,
+            baseFontSize: baseFontSize
+        )
     }
 
     private func configure(_ view: AgentChatHistoryNSTextView) {
@@ -76,6 +88,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
     private var lastContentHash: Int?
     private var currentMessages: [AgentMessage] = []
     private var currentIsDark = false
+    private var currentBaseFontSize: CGFloat = NSFont.systemFontSize
     private var expandedToolGroupIDs = Set<String>()
     private var hoveredUserMessageID: UUID?
     private var hoverTrackingArea: NSTrackingArea?
@@ -152,9 +165,14 @@ final class AgentChatHistoryNSTextView: NSTextView {
     /// Swap text storage only when the attributed string actually
     /// changed. SwiftUI calls `updateNSView` on every parent body
     /// pass — without the guard we'd thrash TextKit every frame.
-    func applyMessages(_ messages: [AgentMessage], isDark: Bool) {
+    func applyMessages(
+        _ messages: [AgentMessage],
+        isDark: Bool,
+        baseFontSize: CGFloat = NSFont.systemFontSize
+    ) {
         currentMessages = messages
         currentIsDark = isDark
+        currentBaseFontSize = baseFontSize
         renderCurrentMessages()
     }
 
@@ -163,12 +181,14 @@ final class AgentChatHistoryNSTextView: NSTextView {
             messages: currentMessages,
             isDark: currentIsDark,
             expandedToolGroupIDs: expandedToolGroupIDs,
-            hoveredUserMessageID: hoveredUserMessageID
+            hoveredUserMessageID: hoveredUserMessageID,
+            baseFontSize: currentBaseFontSize
         )
         var hasher = Hasher()
         hasher.combine(attr.string)
         hasher.combine(attr.length)
         hasher.combine(currentIsDark)
+        hasher.combine(currentBaseFontSize)
         hasher.combine(expandedToolGroupIDs.sorted())
         hasher.combine(hoveredUserMessageID)
         let hash = hasher.finalize()

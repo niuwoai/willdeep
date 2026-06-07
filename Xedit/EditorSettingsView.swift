@@ -386,6 +386,28 @@ struct EditorSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section("Appearance") {
+                HStack {
+                    Text("Chat base font size")
+                    Spacer()
+                    Text("\(Int(appState.agentChatBaseFontSize.rounded())) pt")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                Slider(
+                    value: Binding(
+                        get: { Double(appState.agentChatBaseFontSize) },
+                        set: { appState.agentChatBaseFontSize = CGFloat($0.rounded()) }
+                    ),
+                    in: Double(AgentSettingsStore.chatBaseFontSizeMin)
+                        ... Double(AgentSettingsStore.chatBaseFontSizeMax),
+                    step: 1
+                )
+                Text("Base size (pt) for Agent chat message body and rendered Markdown blocks (paragraphs, lists, quotes, fenced code, tables). Tool-call summaries, footers, message headers, and composer chrome keep their fixed sizes — this knob is about reading the conversation, not resizing the whole UI. Default is 13 pt; range \(Int(AgentSettingsStore.chatBaseFontSizeMin)) – \(Int(AgentSettingsStore.chatBaseFontSizeMax)) pt.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .onAppear {
