@@ -345,6 +345,49 @@ struct AgentChatHistoryRendererTests {
             effectiveRange: nil
         ) as? NSParagraphStyle)
         #expect(paragraphStyle.lineSpacing >= 2)
+        // 用户反馈：表格紧贴前后正文一团糟。`tableBlockParagraphStyle`
+        // 必须在该段范围内同时设置 paragraphSpacingBefore（上 margin）
+        // 和 paragraphSpacing（下 margin）。两个 > 0 才算正常生效；
+        // 别的回归会把其中一个意外清零。
+        #expect(paragraphStyle.paragraphSpacingBefore > 0)
+        #expect(paragraphStyle.paragraphSpacing > 0)
+    }
+
+    @Test
+    func headingBlocksGetVerticalAirAboveAndBelow() throws {
+        // 同样的体验问题：`## 段标题` 黏在前一段尾巴上、和正文也没拉开。
+        // 渲染时 heading 范围应当被标 `agentChatHistoryHeadingLevel`，
+        // 且其 paragraphStyle 上下间距都 > 0。
+        let message = AgentMessage(
+            role: .assistant,
+            content: """
+            前置正文一行。
+
+            ## 组织架构与权限
+
+            紧接着的正文，不应该黏在标题屁股上。
+            """
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
+
+        let headingRange = (rendered.string as NSString).range(of: "组织架构与权限")
+        #expect(headingRange.location != NSNotFound)
+
+        let level = try #require(rendered.attribute(
+            .agentChatHistoryHeadingLevel,
+            at: headingRange.location,
+            effectiveRange: nil
+        ) as? NSNumber)
+        #expect(level.intValue == 2)
+
+        let style = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: headingRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(style.paragraphSpacingBefore > 0)
+        #expect(style.paragraphSpacing > 0)
     }
 
     @Test

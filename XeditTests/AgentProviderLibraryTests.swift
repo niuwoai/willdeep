@@ -151,6 +151,84 @@ struct AgentProviderLibraryTests {
         #expect(n.proModel == "deepseek-r1")
     }
 
+    // MARK: - One-shot providerID-vs-baseURL repair (A 方案)
+
+    @Test
+    func repairFixesProviderIDWhenBaseURLPointsElsewhere() {
+        // 还原 bug 现场：entry 的 baseURL 还是 DeepSeek 的，但 providerID
+        // 在某次回灌后被改成了 openai，displayName 也跟着变成 "OpenAI"。
+        // 修复函数应当按 baseURL 反推 preset，把 providerID 改回去，
+        // 同时把通用 displayName 也一起更正（因为它正好是错误 preset
+        // 的默认名）。
+        let damaged = AgentProviderEntry(
+            providerID: "openai",
+            displayName: "OpenAI",
+            baseURL: "https://api.deepseek.com",
+            apiKey: "sk-deepseek",
+            flashPrimary: "deepseek-v4-flash",
+            proPrimary: "deepseek-v4-pro"
+        )
+        let lib = AgentProviderLibrary(entries: [damaged], activeID: damaged.id)
+        let fixed = AgentSettingsStore.repairLibraryProviderMismatch(lib)
+        #expect(fixed.entries.count == 1)
+        #expect(fixed.entries[0].providerID == "deepseek")
+        #expect(fixed.entries[0].displayName == "DeepSeek")
+        // Key sits on the UUID-keyed Keychain row, the repair never
+        // touches it; the in-memory copy should pass through unchanged.
+        #expect(fixed.entries[0].apiKey == "sk-deepseek")
+    }
+
+    @Test
+    func repairLeavesCustomLabelAlone() {
+        // 用户自己起的名（不是任何 preset 的默认显示名）应当被保留 —
+        // 只修 providerID。
+        let damaged = AgentProviderEntry(
+            providerID: "openai",
+            displayName: "Work DeepSeek",
+            baseURL: "https://api.deepseek.com",
+            apiKey: "sk-deepseek",
+            flashPrimary: "deepseek-v4-flash",
+            proPrimary: "deepseek-v4-pro"
+        )
+        let fixed = AgentSettingsStore.repairLibraryProviderMismatch(
+            AgentProviderLibrary(entries: [damaged], activeID: damaged.id)
+        )
+        #expect(fixed.entries[0].providerID == "deepseek")
+        #expect(fixed.entries[0].displayName == "Work DeepSeek")
+    }
+
+    @Test
+    func repairIsNoOpWhenProviderMatchesBaseURL() {
+        let clean = AgentProviderEntry(
+            providerID: "deepseek",
+            baseURL: "https://api.deepseek.com",
+            flashPrimary: "deepseek-v4-flash",
+            proPrimary: "deepseek-v4-pro"
+        )
+        let fixed = AgentSettingsStore.repairLibraryProviderMismatch(
+            AgentProviderLibrary(entries: [clean], activeID: clean.id)
+        )
+        #expect(fixed.entries[0].providerID == "deepseek")
+    }
+
+    @Test
+    func repairSkipsCustomBaseURL() {
+        // 用户改成了一个未被任何 preset 识别的 base URL —— 修复函数无从
+        // 猜测真实归属，必须放任不管。
+        let damaged = AgentProviderEntry(
+            providerID: "openai",
+            displayName: "OpenAI",
+            baseURL: "https://my-self-hosted/v1",
+            flashPrimary: "gpt-4.1-mini",
+            proPrimary: "gpt-4.1"
+        )
+        let fixed = AgentSettingsStore.repairLibraryProviderMismatch(
+            AgentProviderLibrary(entries: [damaged], activeID: damaged.id)
+        )
+        #expect(fixed.entries[0].providerID == "openai")
+        #expect(fixed.entries[0].displayName == "OpenAI")
+    }
+
     @Test
     func normalizedLeavesCustomProviderAlone() {
         // For the custom provider we have no opinion about model names,

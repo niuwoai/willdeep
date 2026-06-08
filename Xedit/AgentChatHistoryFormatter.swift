@@ -124,7 +124,18 @@ enum AgentChatHistoryRenderer {
         static let assistantParagraph: CGFloat = 4
         static let userParagraph: CGFloat = 6
         static let tableLine: CGFloat = 2
-        static let tableParagraph: CGFloat = 5
+        /// Inline table 的"下 margin"——段落结束后到下一块的间距。
+        static let tableParagraph: CGFloat = 10
+        /// 用户反馈：表格紧贴前后正文段落不好读。给表格上下都撑开。
+        /// `paragraphSpacingBefore` 是 macOS NSParagraphStyle 支持的字段，
+        /// 在段落起始处插入额外空间，等价于 CSS 的 margin-top。
+        static let tableParagraphBefore: CGFloat = 10
+        /// 标题块的上下气垫。同一个段落同时设置 before / spacing，让
+        /// `## 段标题` 像正经标题那样和上下文拉开距离，而不是黏在前一
+        /// 行尾巴上。两个值刻意区分：标题"前"的空气比"后"略多一点，
+        /// 视觉上重心向标题倾斜。
+        static let headingParagraphBefore: CGFloat = 12
+        static let headingParagraph: CGFloat = 6
         static let toolLine: CGFloat = 1.5
     }
 
@@ -674,6 +685,18 @@ enum AgentChatHistoryRenderer {
         let style = codeBlockParagraphStyle(from: baseStyle).mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
         style.lineSpacing = MarkdownSpacing.tableLine
         style.paragraphSpacing = MarkdownSpacing.tableParagraph
+        style.paragraphSpacingBefore = MarkdownSpacing.tableParagraphBefore
+        return style
+    }
+
+    /// Paragraph style for inline Markdown headings. Inherits indent /
+    /// alignment from the bubble's body style, then adds vertical air
+    /// above (`paragraphSpacingBefore`) and below (`paragraphSpacing`)
+    /// so `## 段标题` stops looking like a slightly-bigger run-in line.
+    private static func headingParagraphStyle(from baseStyle: NSParagraphStyle) -> NSParagraphStyle {
+        let style = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        style.paragraphSpacingBefore = MarkdownSpacing.headingParagraphBefore
+        style.paragraphSpacing = MarkdownSpacing.headingParagraph
         return style
     }
 
@@ -745,6 +768,11 @@ enum AgentChatHistoryRenderer {
             guard value != nil else { return }
             attributed.addAttribute(.paragraphStyle, value: tableParagraphStyle, range: subrange)
         }
+        let headingStyle = headingParagraphStyle(from: paragraphStyle)
+        attributed.enumerateAttribute(.agentChatHistoryHeadingLevel, in: range, options: []) { value, subrange, _ in
+            guard value != nil else { return }
+            attributed.addAttribute(.paragraphStyle, value: headingStyle, range: subrange)
+        }
         guard let foregroundColor else { return }
         attributed.enumerateAttributes(in: range, options: []) { attributes, subrange, _ in
             if attributes[.link] == nil {
@@ -773,6 +801,11 @@ enum AgentChatHistoryRenderer {
         attributed.enumerateAttribute(.agentChatHistoryTableBlockID, in: range, options: []) { value, subrange, _ in
             guard value != nil else { return }
             attributed.addAttribute(.paragraphStyle, value: tableParagraphStyle, range: subrange)
+        }
+        let headingStyle = headingParagraphStyle(from: paragraphStyle)
+        attributed.enumerateAttribute(.agentChatHistoryHeadingLevel, in: range, options: []) { value, subrange, _ in
+            guard value != nil else { return }
+            attributed.addAttribute(.paragraphStyle, value: headingStyle, range: subrange)
         }
     }
 
@@ -1217,11 +1250,22 @@ enum AgentChatHistoryRenderer {
             switch block.kind {
             case .heading(let level):
                 appendBlockSeparator()
+                let headingStart = result.length
                 result.append(inlineMarkdownAttributedString(
                     block.text,
                     baseFont: headingFont(level: level),
                     color: bodyColor
                 ))
+                // Tag the heading range so `applyBubbleChrome` can
+                // promote its paragraph style to one with extra top /
+                // bottom spacing — see `headingParagraphStyle`.
+                if role != .user {
+                    result.addAttribute(
+                        .agentChatHistoryHeadingLevel,
+                        value: NSNumber(value: level),
+                        range: NSRange(location: headingStart, length: result.length - headingStart)
+                    )
+                }
 
             case .paragraph:
                 appendBlockSeparator()

@@ -217,8 +217,30 @@ enum AgentSettingsStore {
         ).normalized
     }
 
+    /// Legacy entry point — kept for any pre-A-plan callers. Forwards
+    /// to `saveAuxiliaryConfiguration` so the provider-main fields are
+    /// no longer round-tripped through here.
     static func save(_ configuration: AgentConfiguration) {
+        saveAuxiliaryConfiguration(configuration)
+    }
+
+    /// A 方案保留点：只持久化那些不由 `agentProviderLibrary` 接管的辅助
+    /// 字段 —— image-description provider 三件套、image API key、
+    /// titleModel、routingMode（routingMode 同时也存在于 active entry，
+    /// 这里只是一份兼容快照）。
+    ///
+    /// 关键不同：**不再**写入 legacy `keychainAccount`（也就是
+    /// `openai-compatible-api-key`）。该 row 在 A 方案下没有读者，只会
+    /// 在被回灌时反过来把错误的 key 写进 active entry —— 见 bug
+    /// "OpenAI 顶着 DeepSeek 的 key"。
+    static func saveAuxiliaryConfiguration(_ configuration: AgentConfiguration) {
         let normalized = configuration.normalized
+        // We continue to persist a snapshot of the provider-main fields
+        // into UserDefaults so old installs that still call `load()`
+        // before the library migration kicks in (e.g. tests) get a
+        // sensible answer. None of these survive past first launch on
+        // an existing install — the library has already owned them
+        // since Phase B.
         let stored = StoredSettings(
             providerID: normalized.providerID,
             baseURL: normalized.baseURL,
@@ -233,8 +255,29 @@ enum AgentSettingsStore {
         if let data = try? JSONEncoder().encode(stored) {
             UserDefaults.standard.set(data, forKey: defaultsKey)
         }
-        saveAPIKey(normalized.apiKey, account: keychainAccount)
+        // image-description key is its own slot, never overlapped with
+        // a provider library entry — safe to keep writing.
         saveAPIKey(normalized.imageDescription.apiKey, account: imageKeychainAccount)
+    }
+
+    /// Test-only / migration helper: remove the legacy provider-main
+    /// keychain row that A 方案 no longer uses. We call this in the
+    /// `loadProviderLibrary` one-shot repair so a stale key can't get
+    /// re-adopted later.
+    static func deleteLegacyProviderAPIKey() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccount
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+
+    /// One-shot accessor used by the migration: returns the legacy
+    /// provider API key without removing it, so the repair pass can
+    /// hand it to whichever library entry actually deserves it.
+    static func loadLegacyProviderAPIKey() -> String {
+        loadAPIKey(account: keychainAccount)
     }
 
     // MARK: - Provider library
@@ -245,6 +288,14 @@ enum AgentSettingsStore {
     /// or empty, migrate from the legacy single-provider
     /// `AgentConfiguration` so existing users land smoothly on a
     /// library containing exactly their previous setup.
+    ///
+    /// **A 方案一次性修复**：之前 cfg.didSet 会把 legacy 默认值
+    /// `providerID = "openai"` 回灌到 active entry 上，导致 DeepSeek
+    /// 条目变成 OpenAI 但仍保留 DeepSeek 的 baseURL，且 API key 也被
+    /// 错配。这里加载完 library 后做一次推断式修复：当某条 entry 的
+    /// `baseURL` 明显属于一个 preset，而其 `providerID` 是另一个，就
+    /// 按 baseURL 改回正确的 preset + 显示名。修复完会把结果回写一次
+    /// 持久化，且只做一次（依据是 `repairAppliedKey`）。
     static func loadProviderLibrary() -> AgentProviderLibrary {
         if let data = UserDefaults.standard.data(forKey: providerLibraryKey),
            let stored = try? JSONDecoder().decode(StoredLibrary.self, from: data) {
@@ -253,14 +304,63 @@ enum AgentSettingsStore {
                 entry.apiKey = loadAPIKey(account: libraryEntryKeychainAccount(for: entry.id))
                 return entry
             }
-            return AgentProviderLibrary(entries: entries, activeID: stored.activeID)
+            var library = AgentProviderLibrary(entries: entries, activeID: stored.activeID)
+
+            // One-shot repair pass. We don't re-run it on every launch
+            // because once cfg.didSet no longer回灌 library, no new
+            // mis-tags can show up; running it forever would risk
+            // re-mapping a custom entry the user genuinely re-pointed.
+            if !UserDefaults.standard.bool(forKey: repairAppliedKey) {
+                library = repairLibraryProviderMismatch(library)
+                UserDefaults.standard.set(true, forKey: repairAppliedKey)
+                saveProviderLibrary(library)
+                deleteLegacyProviderAPIKey()
+            }
+            return library
         }
         // Migration path — wrap the legacy AgentConfiguration in a
         // single-entry library on first launch after this change.
         let legacy = load()
         let migrated = AgentProviderLibrary.migrate(from: legacy)
         saveProviderLibrary(migrated)
+        // Even on first launch we mark the repair as applied — the
+        // migrated entry was freshly minted from cfg, no mismatch to
+        // chase.
+        UserDefaults.standard.set(true, forKey: repairAppliedKey)
         return migrated
+    }
+
+    /// One-shot key (UserDefaults bool) that marks whether the
+    /// providerID-vs-baseURL repair has run on this install.
+    private static let repairAppliedKey =
+        "im.some.veilwriter.agentSettings.providerLibrary.repairAppliedV1"
+
+    /// Repair logic split out for testing. For each entry whose
+    /// `baseURL` matches a known preset but whose `providerID` doesn't,
+    /// fix the providerID and displayName. If the displayName is the
+    /// generic placeholder for the *wrong* preset (e.g. shows "OpenAI"
+    /// while baseURL is DeepSeek), rename to the correct preset too.
+    /// We never touch `apiKey` here — the key has always lived
+    /// alongside the entry's UUID, not its providerID, so the user's
+    /// real DeepSeek key is already on the right Keychain row even
+    /// after the providerID was corrupted.
+    static func repairLibraryProviderMismatch(_ library: AgentProviderLibrary) -> AgentProviderLibrary {
+        var repaired = library
+        let presetDisplayNames = Set(AgentProviderPreset.all.map(\.displayName))
+        for index in repaired.entries.indices {
+            let entry = repaired.entries[index]
+            guard let bestPreset = AgentProviderPreset.matchingBaseURL(entry.baseURL),
+                  bestPreset.id != AgentProviderPreset.customID,
+                  bestPreset.id != entry.providerID else { continue }
+            repaired.entries[index].providerID = bestPreset.id
+            // Only relabel if the current displayName looks like the
+            // generic preset name of the *wrong* preset — don't clobber
+            // a user-chosen label like "Work DeepSeek".
+            if presetDisplayNames.contains(entry.displayName) {
+                repaired.entries[index].displayName = bestPreset.displayName
+            }
+        }
+        return repaired
     }
 
     static func saveProviderLibrary(_ library: AgentProviderLibrary) {

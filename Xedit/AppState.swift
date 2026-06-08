@@ -76,13 +76,12 @@ final class AppState: ObservableObject {
     @Published var isAgentPanelVisible = false
     @Published var agentConfiguration: AgentConfiguration {
         didSet {
-            AgentSettingsStore.save(agentConfiguration)
-            // Mirror back into the active library entry so the new
-            // Settings UI doesn't drift from the legacy single-cfg
-            // path. We only sync the fields that overlap (provider /
-            // baseURL / api key / flash primary / pro primary); the
-            // alternate lists are library-only and stay untouched.
-            syncActiveLibraryEntryFromConfiguration()
+            // A 方案：library 才是 provider 字段（providerID/baseURL/
+            // apiKey/flash/pro/routing）的唯一真相源。这里只持久化
+            // imageDescription、titleModel 等 library 不覆盖的边角字段，
+            // 并且**不再**回灌 active library entry —— 那个回灌是把
+            // DeepSeek 的 API key 拷贝到 OpenAI 条目这一系列 bug 的根源。
+            AgentSettingsStore.saveAuxiliaryConfiguration(agentConfiguration)
         }
     }
     /// Multi-provider library — the durable source of truth for the
@@ -345,12 +344,8 @@ final class AppState: ObservableObject {
     /// inside `AgentSessionRowStatusDot`, so background runtime
     /// changes only repaint that one row.
     private var activeRuntimeSubscription: AnyCancellable?
-    /// Reentrancy guard for the agentConfiguration / agentProviderLibrary
-    /// didSets that round-trip into each other. rc42 floated this up here
-    /// from its historical spot inside the provider-library section so
-    /// the AppStateAgentSessions split can compile — stored properties
-    /// can't live in an extension.
-    var isReconcilingProviderLibrary = false
+    // A 方案删除了 cfg → library 的回灌方向，此前的 reentrancy 守卫
+    // (`isReconcilingProviderLibrary`) 不再需要。
 
     // MARK: - Per-provider concurrency (v1.49 rc3)
     //
@@ -413,12 +408,25 @@ final class AppState: ObservableObject {
             self.activeTabID = nil
         }
         self.editorSettings = editorSettings.normalized()
-        self.agentConfiguration = AgentSettingsStore.load()
-        // Load the multi-provider library — on first launch after the
-        // Phase B change this auto-migrates the legacy configuration
-        // into a single-entry library, so existing users land with
-        // their previous setup already present in the new UI.
-        self.agentProviderLibrary = AgentSettingsStore.loadProviderLibrary()
+        // A 方案：library 是 provider 真相源。先把它加载出来（其内部会
+        // 做一次性 keychain 错位修复），再用 active entry 覆盖到 cfg 的
+        // 主 provider 字段上；imageDescription / titleModel / routingMode
+        // 这些 library 不接管的字段从 legacy 存储继承。
+        let loadedLibrary = AgentSettingsStore.loadProviderLibrary()
+        var bootstrappedConfig = AgentSettingsStore.load()
+        if let active = loadedLibrary.active {
+            bootstrappedConfig.providerID = active.providerID
+            bootstrappedConfig.baseURL = active.baseURL
+            bootstrappedConfig.apiKey = active.apiKey
+            bootstrappedConfig.flashModel = active.flashPrimary
+            bootstrappedConfig.proModel = active.proPrimary
+            bootstrappedConfig.routingMode = active.routingMode
+            if bootstrappedConfig.model.isEmpty {
+                bootstrappedConfig.model = active.flashPrimary
+            }
+        }
+        self.agentConfiguration = bootstrappedConfig.normalized
+        self.agentProviderLibrary = loadedLibrary
         self.inspectorMode = self.editorSettings.preferredInspectorMode
         self.recentFiles = RecentItemsStore.loadFiles()
         self.recentFolders = RecentItemsStore.loadFolders()

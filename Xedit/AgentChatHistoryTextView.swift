@@ -397,6 +397,11 @@ extension NSAttributedString.Key {
     static let agentChatHistoryTableBlockID = NSAttributedString.Key("AgentChatHistoryTableBlockID")
     static let agentChatHistoryToolGroupID = NSAttributedString.Key("AgentChatHistoryToolGroupID")
     static let agentChatHistoryUserMessageID = NSAttributedString.Key("AgentChatHistoryUserMessageID")
+    /// Markup so the formatter's `applyBubbleChrome` step can swap in a
+    /// heading-specific paragraph style (extra `paragraphSpacingBefore`
+    /// + `paragraphSpacing`). The raw value is the heading level (1-6)
+    /// so future styling can scale spacing per level.
+    static let agentChatHistoryHeadingLevel = NSAttributedString.Key("AgentChatHistoryHeadingLevel")
 }
 
 private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {

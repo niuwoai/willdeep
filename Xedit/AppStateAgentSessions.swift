@@ -245,19 +245,17 @@ extension AppState {
     /// `agentConfiguration` so the existing agent loop (which still
     /// reads from the single configuration) sees the right provider
     /// + key + model the moment the user picks one in Settings.
+    ///
+    /// A 方案：这是 library → cfg 的**唯一**写入方向。cfg.didSet
+    /// 不再回灌 library，所以这里无需 reentrancy 守卫。
     func applyActiveProviderLibraryEntry() {
         guard let entry = agentProviderLibrary.active else { return }
-        isReconcilingProviderLibrary = true
-        defer { isReconcilingProviderLibrary = false }
         var cfg = agentConfiguration
         cfg.providerID = entry.providerID
         cfg.baseURL = entry.baseURL
         cfg.apiKey = entry.apiKey
         cfg.flashModel = entry.flashPrimary
         cfg.proModel = entry.proPrimary
-        // The active entry's routing mode wins — that's the whole
-        // point of having a per-entry override. The user can still
-        // pick a session-only override via the chat-mode picker.
         cfg.routingMode = entry.routingMode
         if cfg.model.isEmpty { cfg.model = entry.flashPrimary }
         agentConfiguration = cfg.normalized
@@ -294,47 +292,11 @@ extension AppState {
         }
     }
 
-    /// Called from `agentConfiguration.didSet` — keeps the active
-    /// library entry's mirrored fields in sync when an older code
-    /// path (e.g. an in-flight Settings save, the model picker)
-    /// writes directly to the configuration.
-    func syncActiveLibraryEntryFromConfiguration() {
-        guard !isReconcilingProviderLibrary else { return }
-        guard var active = agentProviderLibrary.active else {
-            // No library yet — bootstrap one from the configuration
-            // so the new UI has something to show.
-            agentProviderLibrary = AgentProviderLibrary.migrate(from: agentConfiguration)
-            return
-        }
-        var changed = false
-        if active.providerID != agentConfiguration.providerID {
-            active.providerID = agentConfiguration.providerID
-            active.displayName = AgentProviderPreset.preset(id: agentConfiguration.providerID)?.displayName ?? active.displayName
-            changed = true
-        }
-        if active.baseURL != agentConfiguration.baseURL {
-            active.baseURL = agentConfiguration.baseURL
-            changed = true
-        }
-        if active.apiKey != agentConfiguration.apiKey {
-            active.apiKey = agentConfiguration.apiKey
-            changed = true
-        }
-        if active.flashPrimary != agentConfiguration.flashModel {
-            active.flashPrimary = agentConfiguration.flashModel
-            changed = true
-        }
-        if active.proPrimary != agentConfiguration.proModel {
-            active.proPrimary = agentConfiguration.proModel
-            changed = true
-        }
-        if active.routingMode != agentConfiguration.routingMode {
-            active.routingMode = agentConfiguration.routingMode
-            changed = true
-        }
-        guard changed else { return }
-        agentProviderLibrary.upsert(active)
-    }
+    // A 方案：原先的 `syncActiveLibraryEntryFromConfiguration` 已被移除。
+    // 该函数曾从 cfg.didSet 回灌 active entry，把 legacy
+    // `agentConfiguration.providerID = "openai"` 默认值写到 DeepSeek
+    // 条目身上，造成 "OpenAI 顶着 DeepSeek 的 API key" 这类 bug。
+    // 单向流：library → cfg via `applyActiveProviderLibraryEntry`。
 
     // MARK: - Interaction modes (plan / goal)
 

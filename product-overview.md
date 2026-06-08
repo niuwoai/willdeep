@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-08 | Current version: v1.54.1-rc4
+> Last updated: 2026-06-08 | Current version: v1.54.1-rc9
 
 ## Positioning
 
@@ -78,6 +78,7 @@ CLAUDE.md §10 的软上限是 2000 行，硬上限是 3000 行。rc42 拆完 `A
 - **Tool 调用容错** — `argumentsJSON` 解析失败时该 tool call 标 `.failed`，把坏 JSON 通过 tool message 反馈回模型自纠（rc38），而不是悄悄落入空 dict。
 - **Auto-approve 安全判定** — 静态 allowlist（cat/head/tail/ls/git diff/log/status/rg/grep/wc/file …）自动放行；越界命令落 LLM judge，**走 Flash 模型而非当前 turn 的模型**（rc41 修正，避免昂贵模型重复评估）。返回 YES 才自动跑；destructive 模式仍需键入 `confirm`。
 - **Worktree baseline diff** — Agent turn 开始时记录 git 变更基线，结束后对比快照。只有相对基线发生变化才标 session `didEditFiles`，避免旧的未提交改动误触发"已编辑文件"卡片。
+- **Provider 数据流单向（rc8 落地）** — `agentProviderLibrary` 是 provider 主字段（providerID / baseURL / apiKey / flash / pro / routing）的**唯一**真相源，legacy `agentConfiguration` 上的同名字段是**派生态**，只读不写——不允许从 cfg 回灌 library。唯一的同步方向是 `applyActiveProviderLibraryEntry()`（library → cfg）；cfg.didSet 只持久化 `imageDescription` / `titleModel` 这些 library 不接管的字段。这是 rc8 修复 API key 串台 bug 的根本约束——双向同步会让"OpenAI 的默认 providerID"反向污染 DeepSeek 条目。给后续修改者：动 cfg 主 provider 字段时，先确认你不是在重新引入回灌路径；如果新需求需要从某个旧入口改 provider，改的应该是 library entry，再让 `applyActiveProviderLibraryEntry()` 把它投射到 cfg。
 
 ## 版本号约定
 
