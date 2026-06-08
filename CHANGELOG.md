@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.54.1-rc10 - 2026-06-08
+
+- **修 CI：GitHub Actions 从 rc1 一路红到 rc9，根因是 runner image 落后于本仓库的部署目标**。本仓库 `MACOSX_DEPLOYMENT_TARGET = 26.4`（macOS Tahoe），但 [.github/workflows/test.yml](.github/workflows/test.yml) 之前 `runs-on: macos-15` + `xcode-select -s /Applications/Xcode_16.app`——runner 是 macOS 15.7.x + Xcode 16，xcodebuild 还没开始 build 测试就直接报 `Cannot test target "XeditTests" on "My Mac": My Mac's macOS 15.7.x doesn't match XeditTests's macOS 26.4 deployment target.` 退码 70。过去 5 次推送（rc1 / rc3 / rc4 / rc7 / rc9）全部同因失败。
+- **修法**：把 runner 升到 `macos-26`（GitHub Actions 2026-02-26 已 GA，自带 Xcode 26.0.1 / 26.1.1 / 26.2 / 26.3 / 26.4.1[默认] / 26.5，arm64 image manifest 见 [actions/runner-images images/macos/macos-26-arm64-Readme.md](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md)）；`xcode-select` 显式锁 `/Applications/Xcode_26.4.1.app` 以严格匹配部署目标 26.4，回退到 `/Applications/Xcode.app`（runner 上 `Xcode.app` 是 Xcode 26.4 系列的软链）防止 GitHub 后续推默认 Xcode 时本仓库被无声升档。
+- 版本号 `1.54.1-rc9` → `1.54.1-rc10`（CI 配置 bugfix → 仅 rc 递增；不动产品代码、不改 wire protocol、不动功能集）。
+
 ## 1.54.1-rc9 - 2026-06-08
 
 - **修复 Agent 会话 markdown 渲染的两个挤压问题：表格上下没留 margin、`#`-`######` 标题黏在前后正文上**。用户反馈截图里 `主题归纳` 这一段：`## 主题归纳` 紧贴上一行的表格末尾，下方的 `1. 🟢 组织架构与权限` 又紧贴标题；再往下还有一个 markdown table 同样被前后正文挤住。根因是 [AgentChatHistoryFormatter.swift](Xedit/AgentChatHistoryFormatter.swift) 里 heading 和 table 段都被当作普通 body paragraph 走 `bodyParagraphStyle` —— 该 style 的 `paragraphSpacing` 只有 4，且 `paragraphSpacingBefore` 默认是 0。NSTextView 段间气垫不够，视觉上就成了"墙纸黏在一起"。
