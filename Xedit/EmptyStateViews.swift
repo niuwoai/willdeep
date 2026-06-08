@@ -209,6 +209,13 @@ struct EmptyWorkspaceHero: View {
                 .accessibilityLabel(L10n.EmptyState.agentModeAccessibilityLabel)
             }
             .labelStyle(.titleAndIcon)
+
+            if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, !version.isEmpty {
+                Text("v\(version)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 4)
+            }
         }
     }
 }

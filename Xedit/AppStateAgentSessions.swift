@@ -999,6 +999,40 @@ extension AppState {
         _ = AgentSessionStore.save(agentSessions[index])
     }
 
+    /// Rename a session to a user-provided title. Sets `titleIsUserSet`
+    /// so neither the per-persist deriveTitle nor the LLM summarizer
+    /// will overwrite it later. Empty/whitespace-only input is treated
+    /// as "cancel" (no-op) — clearing a session title to "" would just
+    /// confuse the sidebar.
+    func renameAgentSession(id: AgentSession.ID, to newTitle: String) {
+        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
+        agentSessions[index].title = trimmed
+        agentSessions[index].titleIsUserSet = true
+        if let runtime = agentRuntimes[id] {
+            runtime.session.title = trimmed
+            runtime.session.titleIsUserSet = true
+        }
+        _ = AgentSessionStore.save(agentSessions[index])
+    }
+
+    /// Manually request an LLM title summary for a session. Bypasses
+    /// the "only on first assistant turn" gate so the user can refresh
+    /// the title at any point. Clears `titleIsUserSet` so the
+    /// summarizer is allowed to run, then defers to the shared
+    /// summarizer path; the summarizer itself re-sets the flag on
+    /// success.
+    func manuallySummarizeAgentSessionTitle(id: AgentSession.ID) {
+        guard let runtime = agentRuntimes[id] else { return }
+        // Temporarily unlock so the summarizer doesn't bail at rule (1).
+        runtime.session.titleIsUserSet = false
+        if let index = agentSessions.firstIndex(where: { $0.id == id }) {
+            agentSessions[index].titleIsUserSet = false
+        }
+        summarizeAgentSessionTitleIfNeeded(runtime: runtime, force: true)
+    }
+
     /// Write the active session back to disk. No-op if no session is
     /// active (Editor-mode chats aren't persisted). Convenience wrapper
     /// that targets `activeRuntime`; concurrent code paths that need to
@@ -1024,6 +1058,14 @@ extension AppState {
         runtime.persist()
         agentSessions[index] = runtime.session
         agentSessions.sort { $0.updatedAt > $1.updatedAt }
+
+        // After every persist, give the LLM summarizer a chance to
+        // upgrade the auto-derived first-message-prefix title to a
+        // polished one. The method is no-op-cheap on hot paths
+        // (returns immediately when there's no first user→assistant
+        // exchange yet, or the title is already locked, or a request
+        // is in flight), so it's safe to fire unconditionally here.
+        summarizeAgentSessionTitleIfNeeded(runtime: runtime)
     }
 
     func recordFetchedAgentModels(_ ids: [String]) {

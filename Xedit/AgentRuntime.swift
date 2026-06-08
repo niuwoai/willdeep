@@ -130,9 +130,22 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.currentPlan = currentPlan
         session.currentGoal = currentGoal
         session.updatedAt = Date()
-        let derived = AgentSessionStore.deriveTitle(from: messages)
-        if !derived.isEmpty {
-            session.title = derived
+        // Two title sources fight for this slot:
+        //   1. User-set (sidebar rename) — `titleIsUserSet == true`,
+        //      we leave it alone forever.
+        //   2. Auto-derived prefix of first user message — runs on
+        //      every persist as a "first impression" placeholder until
+        //      the LLM summarizer (see AppStateAgentTitleSummarizer)
+        //      replaces it with something nicer. The summarizer also
+        //      clears titleIsUserSet — it stays false because it's
+        //      still an automatic origin, which means a future
+        //      first-user-message change could legitimately re-derive
+        //      (rare, but cheap to allow).
+        if !session.titleIsUserSet {
+            let derived = AgentSessionStore.deriveTitle(from: messages)
+            if !derived.isEmpty {
+                session.title = derived
+            }
         }
         AgentSessionStore.save(session)
     }

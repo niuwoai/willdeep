@@ -38,6 +38,12 @@ struct EditorSettingsView: View {
     @State private var imageBaseURLBuffer: String = ""
     @State private var imageModelBuffer: String = ""
     @State private var imageAPIKeyBuffer: String = ""
+    /// Optional dedicated model name used solely for the
+    /// "summarize this chat into a short title" call. Empty buffer ⇒
+    /// the resolver falls back to the active flash model. See
+    /// AgentConfiguration.titleSummaryModel() and
+    /// AppStateAgentTitleSummarizer.
+    @State private var agentTitleModelBuffer: String = ""
     @State private var agentSaveStatus: String = ""
 
     var body: some View {
@@ -363,6 +369,16 @@ struct EditorSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Conversation Title") {
+                LabeledContent("Title Model") {
+                    TextField("", text: $agentTitleModelBuffer, prompt: Text("(leave empty → use Flash model)"))
+                        .textFieldStyle(.roundedBorder)
+                }
+                Text("A short one-shot completion summarizes each new chat into a ≤12-char title after the first assistant reply. Set a cheap/fast model here (e.g. `deepseek-chat`, `gpt-4o-mini`, `qwen-turbo`) to avoid burning Pro tokens on titling. Empty → falls back to the active provider's Flash model.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Tool approval") {
                 Toggle("Auto-approve safe commands", isOn: Binding(
                     get: { appState.autoApproveSafeCommands },
@@ -441,6 +457,7 @@ struct EditorSettingsView: View {
             || imageBaseURLBuffer != configuration.imageDescription.baseURL
             || imageModelBuffer != configuration.imageDescription.model
             || imageAPIKeyBuffer != configuration.imageDescription.apiKey
+            || agentTitleModelBuffer != configuration.titleModel
     }
 
     private func loadAgentBuffersFromAppState() {
@@ -455,6 +472,7 @@ struct EditorSettingsView: View {
         imageBaseURLBuffer = configuration.imageDescription.baseURL
         imageModelBuffer = configuration.imageDescription.model
         imageAPIKeyBuffer = configuration.imageDescription.apiKey
+        agentTitleModelBuffer = configuration.titleModel
     }
 
     private func commitAgentBuffers() {
@@ -466,6 +484,7 @@ struct EditorSettingsView: View {
             model: imageModelBuffer,
             apiKey: imageAPIKeyBuffer
         )
+        configuration.titleModel = agentTitleModelBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
         appState.agentConfiguration = configuration.normalized
         loadAgentBuffersFromAppState()
         agentSaveStatus = "Saved."

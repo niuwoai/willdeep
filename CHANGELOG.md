@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.54.1-rc7 - 2026-06-08
+
+- **去掉展开工具调用行末"25 B args"这条无脑噪声尾巴，仅在确实"被截断"时才显示"完整参数 X.X KB"提示。** 此前 `AgentChatHistoryFormatter.toolCallSummary` 无论参数是否已经完整显示，都在行尾粘一句 `· N B args`，例如 `tool  read_file  path: deployment.md  · 25 B args`——但 `path: deployment.md` 已经 100% 是这次调用的全部参数了，再告诉用户"参数占 25 字节"是纯噪声（`B` 看起来像 `⌘B` 快捷键、用户的反馈也确实是"这是啥啊看不懂"）；而当参数真被压缩（长 `command:` 被截 `...`、或 dict 里有 > 2 个 key 只渲染了前两个）时这条尾巴反而能传达"还有内容被折叠了"的有用信息。本轮拆开两种情况：(a) 新增 `compactArgumentsWithTruncationFlag(for:limit:)`，并行返回渲染串 + isTruncated 标志——双源判定：渲染串里出现了 `...` 标记 OR 原 JSON dict.count > 2（前者覆盖单值过长被切，后者覆盖 key 过多被丢）；(b) `toolCallSummary` 重写：空参数直接 `tool  toolname` 不带尾巴（彻底解决之前 `{}` 也显示 `· 2 B args` 的 corner case）、未截断直接 `tool  toolname  arg-preview` 不带尾巴、被截断才在末尾接 `· 完整参数 \(byteLabel)`（中文"完整参数"明示 user 这里告诉的是"完整 payload 的大小、而你只看见了一部分"）。
+- **测试加固：4 个新 case 覆盖 4 种 args 形态。** `shortToolArgsHaveNoTruncationTail`：`{"path":"deployment.md"}` 这种短 args 渲染后不含 `B args` / `完整参数` 任一尾巴；`truncatedLongToolArgsShowFullSizeTail`：`{"command":"aaaa…"}` 800 字符长 command 被 trimmedInline 截到 160 字符并加 `...`，渲染串必须既含 `...` 又含 `完整参数`；`dictWithMoreThanTwoKeysShowsFullSizeTail`：`{"path":..., "limit":..., "offset":..., "encoding":...}` 4 key dict 只渲染前 2 个，必须接 `完整参数` 尾巴提示用户"剩下两个 key 被折了"；`emptyArgsRenderJustToolNameWithoutTail`：`argumentsJSON == "{}"` 时只显示 `tool  list_skills`，既不带 `B args` 也不带 `完整参数`。原 `collapsesAndExpandsConsecutiveToolCalls` 测试因为只 contains 子串、不锁定行尾，对老/新行为都过——这次也再跑一遍确认没破。AgentChatHistoryRendererTests 全 14 个测试通过。
+- 版本号 `1.54.1-rc6` → `1.54.1-rc7`（UX bugfix → 仅 rc 递增；改的是渲染层的字符串拼接，没动 wire protocol / session schema / 功能集，不升正式版位）。
+
+## 1.54.1-rc6 - 2026-06-08
+
+- **新增"会话标题自动总结"：首轮 assistant 回复完成后，后台用一个轻量模型把这个对话浓缩成 ≤12 字的短标题，写回侧栏。** 此前侧栏会话名是 `deriveTitle()` 从首条 user 消息截前 40 字（截图里看到的"这些规则里，有服务器部…""检查当前的 cpu 负载，…""帮我连进 ssh root@192…"全是这个套路的产物），既不像名字也容易被 paste 进来的长输入塞满。本轮改造：(a) `AgentSession` 新增 `titleIsUserSet: Bool`（默认 false；用户改名 / LLM 总结成功都置 true，等于一个"标题锁"）；(b) `AgentRuntime.persist()` 里的 deriveTitle 现在被这把锁守门——一旦 true 就不再每 turn 把首条 user 消息塞进 title 字段；(c) 新增 `AppStateAgentTitleSummarizer.swift`，`persistAgentSession` 末尾无条件 fire-and-forget 一次：满足"未锁定 + 没有 in-flight 请求 + 恰好首轮 user→assistant 出现"才真起飞，其余情况都是 ~5ns 的空 guard。Summarizer 用极短中文 system prompt 约束长度 / 语言 / 无引号 / 无 emoji，结果走 `sanitizeAutoTitle()` 做防御性清洗（剥引号、剥"标题:"/"Title:"前缀、剥尾标点、只保留首行、硬截 24 字符兜底模型不守约定）。失败 / 空回复 / 超时静默放弃，原标题保留——绝不删用户已经能看到的会话名。
+- **新增 Settings → Agent → "Conversation Title" 段：可选配独立的 Title Model。** 字段为空时回落到当前 provider 的 flash model（默认行为对绝大多数用户够用）。允许配独立模型主要是为了：(a) 给主对话开的是 Opus/GPT-4 等贵模型时，把"起 12 字标题"这种小活外包给 `deepseek-chat` / `gpt-4o-mini` / `qwen-turbo`；(b) 主 provider 上下文窗口或速度对总结任务过剩。`AgentConfiguration` 加 `titleModel: String` 字段（`Codable` decodeIfPresent，老 settings.json 无缝兼容）+ `titleSummaryModel()` 解析器（trim → 空则 fallback flashModel）。
+- **侧栏会话右键菜单加 "重命名…" + "用 AI 总结标题" 两项。** 之前用户根本无法手动改会话名（contextMenu 只有 Pin/Archive/Delete 三件套）。"重命名…"走 NSAlert + NSTextField accessoryView（SwiftUI `.alert` 没有 macOS pre-14 的 textfield 变体，inline 编辑会让 sidebar 行的 state machine 炸毛，AppKit 反而最直接）；"用 AI 总结标题"绕过"仅首轮触发"那条 gate，让用户随时可以重新总结当前对话的标题（force 路径，仍然走同一个去重锁）。配套 8 个 i18n keys（英文 + 中文）：menu rename / menu summarize-title / alert title / alert message / confirm / cancel。
+- **测试加固。** 新增 8 个测试覆盖：`titleIsUserSet` 默认值、老 JSON 缺字段降级到 false、true 状态 round-trip 通过 encoder/decoder 保持完整、`sanitizeAutoTitle()` 的 7 种典型 LLM 输出（裹双引号、带 "标题：" 前缀、尾点 `。` / `.`、多行只保留首行、空/空白返回 nil、24 字硬截 + `…` 后缀）。全部位于 `AgentSessionStoreTests.swift`，配合既有的 11 个 deriveTitle 测试。本轮全套 271 测试通过。
+- 版本号 `1.54.1-rc5` → `1.54.1-rc6`（功能新增——首次出现"AI 起名"能力——但属于增强既有 Agent 模式而非全新 feature module；按既定规则仍走 rc 递增，等 1.54.1 这条线上的 bugfix + 增强累计够一波再考虑升 1.55.0）。
+
+## 1.54.1-rc5 - 2026-06-08
+
+- **统一术语"代理模式" → "Agent 模式"。** 此前中文本地化里 `empty-state.agent-mode` / `empty-state.agent-mode.accessibility-label` / `empty-state.agent-mode.help` / `empty-state.no-folder-open.subtitle` / `enter-agent-mode-button.help` 五处都译作"代理模式"，但产品语境下 "Agent" 已经是品牌词（侧栏 Agent panel、Settings → Agent、X-Agent-* header 全用 Agent），翻成"代理"显得像"网络代理 / proxy"，跟实际指代的 LLM agent loop 错位。本轮把这五处统一替换成"Agent 模式"（保留半角空格分隔），英文文案不动；`enter-agent-mode-button.label`（短标签"代理"对 "Agent"）暂保留——纯短词场景下"代理"作为按钮文字可读性还可以，后续如要继续统一可单独拆 patch。
+- **空工作区欢迎页底部加版本号小字。** `EmptyWorkspaceHero`（未打开文件夹时的大型 hero CTA：Open File / Open Folder / Agent Mode 三连）末尾追加一行 `v<CFBundleShortVersionString>` 的灰色小字（`.system(size: 11)` + `.tertiary` 前景 + 4 pt 上间距），保持和编辑器底部状态栏右下角的版本号显示口径一致。新用户在没有任何工作区时第一眼就能看到当前版本，遇到反馈/bug 上报时不用先开"关于 VeilWriter"对话框查版本。版本号缺失时整行不渲染（对未来 Bundle 异常做了容错）。
+- 版本号 `1.54.1-rc4` → `1.54.1-rc5`（术语统一 + UX 微调 → 仅 rc 递增；未触及 wire protocol / 功能集，不升正式版位）。
+
 ## 1.54.1-rc4 - 2026-06-08
 
 - **ask_user / 待审批等所有"等用户操作"的工具调用组改为默认展开。** 以前内联 tool-call 卡片为了视觉清爽走 inline collapsed（"▸ 执行了 N 条工具调用 · ask_user … question=…"），但这种折叠对**等待用户输入**的状态特别不友好——用户看到红色 1 waiting 角标，却得先点开标题行才能看到问题正文、选项按钮、输入框，多一步操作还容易让人误以为没事可做。`AgentToolCallGroup.detailsVisible` 现在 `isExpanded || containsInteractiveCall`，凡是当前包含 `pendingApproval` / `awaitingConfirm` / `awaitingUserAnswer` 中任一态的工具调用组直接强制展开；并把 `canToggleDetails` 收紧，互动期间不让用户折叠回去（避免回到原来的盲态）。等所有 interactive 完成后回到普通历史态，照常允许折叠。

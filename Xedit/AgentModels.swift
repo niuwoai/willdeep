@@ -315,6 +315,18 @@ struct AgentSession: Identifiable, Codable, Equatable {
     /// surfaced under a collapsed "已归档" group at the bottom of each
     /// workspace.
     var archivedAt: Date?
+    /// "This title is final — stop auto-deriving from messages."
+    /// Set to true in two cases:
+    ///   1. The user explicitly renamed the session via the sidebar.
+    ///   2. The LLM title summarizer (see
+    ///      AppStateAgentTitleSummarizer) successfully produced a
+    ///      polished title from the first user→assistant exchange.
+    /// In both cases we don't want `AgentRuntime.persist()`'s
+    /// every-turn `deriveTitle(...)` (which falls back to the prefix
+    /// of the first user message) to clobber the good title. False
+    /// means "title is still the placeholder prefix; feel free to
+    /// update on next persist".
+    var titleIsUserSet: Bool
 
     init(
         id: UUID = UUID(),
@@ -329,7 +341,8 @@ struct AgentSession: Identifiable, Codable, Equatable {
         currentPlan: AgentPlan? = nil,
         currentGoal: AgentGoal? = nil,
         pinnedAt: Date? = nil,
-        archivedAt: Date? = nil
+        archivedAt: Date? = nil,
+        titleIsUserSet: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -344,6 +357,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.currentGoal = currentGoal
         self.pinnedAt = pinnedAt
         self.archivedAt = archivedAt
+        self.titleIsUserSet = titleIsUserSet
     }
 
     var isPinned: Bool { pinnedAt != nil }
@@ -360,7 +374,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case id, title, workspaceRootPath, modelID, createdAt, updatedAt, messages
         case didEditFiles, interactionMode, currentPlan, currentGoal
-        case pinnedAt, archivedAt
+        case pinnedAt, archivedAt, titleIsUserSet
     }
 
     init(from decoder: Decoder) throws {
@@ -378,6 +392,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.currentGoal = try c.decodeIfPresent(AgentGoal.self, forKey: .currentGoal)
         self.pinnedAt = try c.decodeIfPresent(Date.self, forKey: .pinnedAt)
         self.archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
+        self.titleIsUserSet = try c.decodeIfPresent(Bool.self, forKey: .titleIsUserSet) ?? false
     }
 }
 
@@ -592,6 +607,12 @@ struct AgentConfiguration: Codable, Equatable {
     var routingMode: AgentModelRoutingMode
     var imageDescription: AgentImageDescriptionConfiguration
     var apiKey: String
+    /// Optional dedicated model for one-shot conversation-title
+    /// summarization. Empty → fall back to `flashModel`. We keep this
+    /// separate so users can wire a cheap/fast model (haiku, 4o-mini,
+    /// deepseek-chat, qwen-turbo …) for the "give this chat a 12-char
+    /// title" task without dragging that model into the main loop.
+    var titleModel: String
 
     static let `default` = AgentConfiguration(
         providerID: AgentProviderPreset.openAIID,
@@ -601,7 +622,8 @@ struct AgentConfiguration: Codable, Equatable {
         proModel: "gpt-4.1",
         routingMode: .auto,
         imageDescription: .default,
-        apiKey: ""
+        apiKey: "",
+        titleModel: ""
     )
 
     init(
@@ -612,7 +634,8 @@ struct AgentConfiguration: Codable, Equatable {
         proModel: String? = nil,
         routingMode: AgentModelRoutingMode = .auto,
         imageDescription: AgentImageDescriptionConfiguration = .default,
-        apiKey: String
+        apiKey: String,
+        titleModel: String = ""
     ) {
         self.providerID = providerID
         self.baseURL = baseURL
@@ -622,6 +645,7 @@ struct AgentConfiguration: Codable, Equatable {
         self.routingMode = routingMode
         self.imageDescription = imageDescription
         self.apiKey = apiKey
+        self.titleModel = titleModel
     }
 
     init(from decoder: Decoder) throws {
@@ -635,6 +659,7 @@ struct AgentConfiguration: Codable, Equatable {
         routingMode = try container.decodeIfPresent(AgentModelRoutingMode.self, forKey: .routingMode) ?? .auto
         imageDescription = try container.decodeIfPresent(AgentImageDescriptionConfiguration.self, forKey: .imageDescription) ?? .default
         apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey) ?? ""
+        titleModel = try container.decodeIfPresent(String.self, forKey: .titleModel) ?? ""
     }
 
     var normalized: AgentConfiguration {
@@ -646,6 +671,7 @@ struct AgentConfiguration: Codable, Equatable {
         result.proModel = result.proModel.trimmingCharacters(in: .whitespacesAndNewlines)
         result.imageDescription = result.imageDescription.normalized
         result.apiKey = result.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        result.titleModel = result.titleModel.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let preset = AgentProviderPreset.preset(id: result.providerID)
         if preset == nil {
@@ -702,6 +728,15 @@ struct AgentConfiguration: Codable, Equatable {
                 return proModel
             }
         }
+    }
+
+    /// Model to use for the one-shot "summarize this chat into a 12-char
+    /// title" call. Returns `titleModel` if explicitly set, otherwise
+    /// falls back to `flashModel` (we never run titling on `proModel` —
+    /// the task is trivial and the price gap is real).
+    func titleSummaryModel() -> String {
+        let trimmed = titleModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? flashModel : trimmed
     }
 
     func resolved(for purpose: AgentModelPurpose) -> AgentConfiguration {

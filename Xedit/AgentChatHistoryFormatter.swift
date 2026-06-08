@@ -835,13 +835,54 @@ enum AgentChatHistoryRenderer {
     private static func toolCallSummary(for toolCalls: [AgentMessageToolCall], argumentLimit: Int = 160) -> String {
         toolCalls
             .map { call in
-                let arguments = compactArguments(for: call, limit: argumentLimit)
+                let (arguments, isTruncated) = compactArgumentsWithTruncationFlag(for: call, limit: argumentLimit)
+                // No args at all → just the tool name; the old "0 B args"
+                // tail was pure noise.
                 if arguments.isEmpty {
-                    return "tool  \(call.toolName)  · \(byteLabel(call.argumentsJSON.count)) args"
+                    return "tool  \(call.toolName)"
                 }
-                return "tool  \(call.toolName)  \(arguments)  · \(byteLabel(call.argumentsJSON.count)) args"
+                // Args fit in `argumentLimit` → no tail. The compact form
+                // (e.g. `path: deployment.md`) already shows everything.
+                if !isTruncated {
+                    return "tool  \(call.toolName)  \(arguments)"
+                }
+                // Truncated → tell the user how much was hidden, in human
+                // form ("共 1.4 KB · 已折叠"), not in "B" units that look
+                // like a typo for ⌘B.
+                return "tool  \(call.toolName)  \(arguments)  · 完整参数 \(byteLabel(call.argumentsJSON.count))"
             }
             .joined(separator: "\n")
+    }
+
+    /// Adapter that wraps `compactArguments` and reports whether the
+    /// returned string had to drop content to fit. Two truncation
+    /// sources: `trimmedInline` slicing a long value with `...`, or
+    /// `compactArguments` itself picking only the first 2 preferred
+    /// keys out of a dict that contains more. We detect the latter by
+    /// comparing rendered key-count to dict.count.
+    private nonisolated static func compactArgumentsWithTruncationFlag(
+        for call: AgentMessageToolCall,
+        limit: Int = 160
+    ) -> (String, Bool) {
+        let rendered = compactArguments(for: call, limit: limit)
+        guard !rendered.isEmpty else { return ("", false) }
+
+        // Source 1: any per-value trimming left a "..." marker behind.
+        if rendered.contains("...") {
+            return (rendered, true)
+        }
+
+        // Source 2: dict had more keys than we rendered. Parse the
+        // JSON; if it's a dict with > 2 keys, compactArguments only
+        // surfaced the first 2 (preferred or alphabetical).
+        if let data = call.argumentsJSON.data(using: .utf8),
+           let object = try? JSONSerialization.jsonObject(with: data),
+           let dict = object as? [String: Any],
+           dict.count > 2 {
+            return (rendered, true)
+        }
+
+        return (rendered, false)
     }
 
     private static func shouldShowFooter(

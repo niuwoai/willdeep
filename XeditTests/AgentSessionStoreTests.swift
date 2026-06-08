@@ -151,6 +151,101 @@ struct AgentSessionStoreTests {
         #expect(path.contains("VeilWriter"))
         #expect(path.hasSuffix("agent-sessions"))
     }
+
+    // MARK: - titleIsUserSet (LLM auto-summarizer guard)
+
+    /// Default for a freshly-constructed session must be `false` so the
+    /// per-persist deriveTitle path can keep working until either the
+    /// user renames or the LLM summarizer locks the title.
+    @Test
+    func newSessionStartsWithTitleNotUserSet() {
+        let session = AgentSession()
+        #expect(session.titleIsUserSet == false)
+    }
+
+    /// Decoded JSON that predates the field must default to `false` so
+    /// pre-rc6 sessions on disk don't start mysteriously refusing to
+    /// retitle.
+    @Test
+    func decodingLegacySessionJSONDefaultsTitleIsUserSetToFalse() throws {
+        let legacy = """
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "title": "old chat",
+          "createdAt": "2026-01-01T00:00:00Z",
+          "updatedAt": "2026-01-01T00:00:00Z",
+          "messages": []
+        }
+        """
+        let data = Data(legacy.utf8)
+        let session = try JSONDecoder.iso8601Decoder.decode(AgentSession.self, from: data)
+        #expect(session.titleIsUserSet == false)
+    }
+
+    /// Once `titleIsUserSet` is true the field round-trips intact —
+    /// without this we'd lose the user's rename on the next app launch.
+    @Test
+    func titleIsUserSetSurvivesEncodeDecodeRoundTrip() throws {
+        var session = AgentSession(title: "Custom Name")
+        session.titleIsUserSet = true
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(session)
+        let decoded = try JSONDecoder.iso8601Decoder.decode(AgentSession.self, from: data)
+        #expect(decoded.titleIsUserSet == true)
+        #expect(decoded.title == "Custom Name")
+    }
+
+    // MARK: - sanitizeAutoTitle (LLM output cleanup)
+
+    /// The model often wraps its output in quotes — strip them.
+    @Test
+    func sanitizeStripsSurroundingDoubleQuotes() {
+        #expect(AppState.sanitizeAutoTitle("\"排查 CPU 负载\"") == "排查 CPU 负载")
+    }
+
+    /// "标题：" / "Title:" prefixes leak through — strip them.
+    @Test
+    func sanitizeStripsLeadingTitlePrefix() {
+        #expect(AppState.sanitizeAutoTitle("标题：配置 SSH") == "配置 SSH")
+        #expect(AppState.sanitizeAutoTitle("Title: Fix login bug") == "Fix login bug")
+    }
+
+    /// Trailing punctuation noise drops away. Useful because Chinese
+    /// titles often pick up an unwanted "。" at the end.
+    @Test
+    func sanitizeDropsTrailingPunctuation() {
+        #expect(AppState.sanitizeAutoTitle("配置 SSH 登录。") == "配置 SSH 登录")
+        #expect(AppState.sanitizeAutoTitle("Fix login bug.") == "Fix login bug")
+    }
+
+    /// Multi-line model output: keep only line 1.
+    @Test
+    func sanitizeKeepsOnlyFirstLine() {
+        let raw = "排查 CPU 负载\n(基于用户描述总结)"
+        #expect(AppState.sanitizeAutoTitle(raw) == "排查 CPU 负载")
+    }
+
+    /// Empty or whitespace-only model output should be rejected so the
+    /// caller leaves the existing title in place.
+    @Test
+    func sanitizeReturnsNilForEmptyInput() {
+        #expect(AppState.sanitizeAutoTitle("") == nil)
+        #expect(AppState.sanitizeAutoTitle("   \n  ") == nil)
+    }
+
+    /// Hard char cap kicks in if the model ignores the prompt. 24 is
+    /// the implementation's defensive ceiling (prompt asks for ≤12).
+    @Test
+    func sanitizeAppliesHardCharCap() {
+        let raw = String(repeating: "字", count: 60)
+        let cleaned = AppState.sanitizeAutoTitle(raw)
+        #expect(cleaned != nil)
+        // 24 chars + "…"
+        #expect(cleaned!.count == 25)
+        #expect(cleaned!.last == "…")
+    }
 }
 
 private extension JSONDecoder {

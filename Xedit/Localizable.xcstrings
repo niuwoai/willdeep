@@ -1783,7 +1783,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "代理模式"
+            "value" : "Agent 模式"
           }
         }
       }
@@ -1801,7 +1801,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "进入代理模式"
+            "value" : "进入 Agent 模式"
           }
         }
       }
@@ -1819,7 +1819,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "进入代理模式 (⌘⇧A)"
+            "value" : "进入 Agent 模式 (⌘⇧A)"
           }
         }
       }
@@ -1891,7 +1891,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选择文件或文件夹开始编辑 — 或直接进入代理模式进行无工作区的聊天。"
+            "value" : "选择文件或文件夹开始编辑 — 或直接进入 Agent 模式进行无工作区的聊天。"
           }
         }
       }
@@ -2167,7 +2167,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "将此窗口切换到代理模式 (⌘⇧A)"
+            "value" : "将此窗口切换到 Agent 模式 (⌘⇧A)"
           }
         }
       }
@@ -4360,6 +4360,114 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "置顶"
+          }
+        }
+      }
+    },
+    "sidebar.session-menu.rename" : {
+      "comment" : "context menu item — open NSAlert to rename the session",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rename…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重命名…"
+          }
+        }
+      }
+    },
+    "sidebar.session-menu.summarize-title" : {
+      "comment" : "context menu item — manually ask the LLM to summarize a title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Summarize with AI"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用 AI 总结标题"
+          }
+        }
+      }
+    },
+    "sidebar.rename-session.alert-title" : {
+      "comment" : "NSAlert.messageText for the rename-session dialog",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rename Session"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重命名会话"
+          }
+        }
+      }
+    },
+    "sidebar.rename-session.alert-message" : {
+      "comment" : "NSAlert.informativeText for the rename-session dialog",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Give this conversation a new name."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "给这个会话起个新名字。"
+          }
+        }
+      }
+    },
+    "sidebar.rename-session.confirm" : {
+      "comment" : "Confirm button in the rename-session alert",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存"
+          }
+        }
+      }
+    },
+    "sidebar.rename-session.cancel" : {
+      "comment" : "Cancel button in the rename-session alert",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
           }
         }
       }

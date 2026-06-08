@@ -258,6 +258,14 @@ final class AppState: ObservableObject {
     /// no scramble to retrofit lifecycle.
     @Published var agentRuntimes: [AgentSession.ID: AgentRuntime] = [:]
 
+    /// Session ids for which an LLM title-summarization request is
+    /// currently in flight. Used as a dedup guard in
+    /// `summarizeAgentSessionTitleIfNeeded` so repeated persists
+    /// inside one turn (every tool result / stream chunk landing)
+    /// don't fan out into multiple parallel title requests against
+    /// the same provider. Not @Published — UI doesn't need to react.
+    var titleSummarizationsInFlight: Set<AgentSession.ID> = []
+
     /// The runtime backing the currently-selected session, or nil if
     /// no session is selected (or its session was deleted underneath
     /// us). Computed so it always reflects `activeAgentSessionID`.

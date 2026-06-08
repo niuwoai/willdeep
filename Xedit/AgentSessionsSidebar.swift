@@ -18,6 +18,7 @@
 //  so the main view can mount them across file boundaries.
 //
 
+import AppKit
 import SwiftUI
 
 struct AgentSessionsSidebar: View {
@@ -362,10 +363,46 @@ struct AgentSessionsSidebar: View {
                 appState.toggleAgentSessionArchived(id: session.id)
             }
             Divider()
+            Button(L10n.Sidebar.sessionMenuRename) {
+                presentRenameAlert(for: session)
+            }
+            Button(L10n.Sidebar.sessionMenuSummarizeTitle) {
+                appState.manuallySummarizeAgentSessionTitle(id: session.id)
+            }
+            .disabled(appState.agentRuntimes[session.id] == nil)
+            Divider()
             Button(L10n.Sidebar.sessionMenuDelete, role: .destructive) {
                 appState.deleteAgentSession(id: session.id)
             }
         }
+    }
+
+    /// Pop a tiny NSAlert with an accessory NSTextField for renaming.
+    /// We use AppKit directly because SwiftUI's `.alert(...)` doesn't
+    /// expose a text-input variant on macOS pre-14 and trying to roll
+    /// one inline in the row View blows up the state machine. The
+    /// alert is modal to the active window, so the user can't keep
+    /// typing into the session list while it's open.
+    private func presentRenameAlert(for session: AgentSession) {
+        let alert = NSAlert()
+        alert.messageText = L10n.Sidebar.renameSessionAlertTitle
+        alert.informativeText = L10n.Sidebar.renameSessionAlertMessage
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: L10n.Sidebar.renameSessionConfirm)
+        alert.addButton(withTitle: L10n.Sidebar.renameSessionCancel)
+
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        input.stringValue = session.title
+        input.placeholderString = session.title
+        input.usesSingleLineMode = true
+        input.cell?.wraps = false
+        input.cell?.isScrollable = true
+        alert.accessoryView = input
+        alert.window.initialFirstResponder = input
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return }
+        appState.renameAgentSession(id: session.id, to: input.stringValue)
     }
 
     /// Trailing icon cluster on each session row — pin & archive

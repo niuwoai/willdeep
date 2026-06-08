@@ -132,6 +132,126 @@ struct AgentChatHistoryRendererTests {
         #expect(expanded.string.contains("tool  read_file  path: /Users/rocky/Sites/Teamify/README.md"))
     }
 
+    /// Short args fit fully in the inline preview → no "完整参数 X B"
+    /// tail. The old behavior unconditionally appended a byte size
+    /// even when the args were already 100% visible above, producing
+    /// the cryptic "25 B args" the user complained about.
+    @Test
+    func shortToolArgsHaveNoTruncationTail() {
+        let id = UUID()
+        let message = AgentMessage(
+            id: id,
+            role: .assistant,
+            content: "",
+            toolCalls: [
+                AgentMessageToolCall(
+                    externalID: "call_short",
+                    toolName: "read_file",
+                    argumentsJSON: #"{"path":"deployment.md"}"#
+                )
+            ]
+        )
+
+        let groupID = "\(id.uuidString)"
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [message],
+            isDark: false,
+            expandedToolGroupIDs: [groupID]
+        )
+        #expect(rendered.string.contains("tool  read_file  path: deployment.md"))
+        #expect(!rendered.string.contains("B args"))
+        #expect(!rendered.string.contains("完整参数"))
+    }
+
+    /// A long single-arg value that has to be sliced with `...` MUST
+    /// surface "完整参数 X.X KB" so the user knows there's hidden
+    /// content. This is the only case where the byte size adds info.
+    @Test
+    func truncatedLongToolArgsShowFullSizeTail() {
+        let id = UUID()
+        let longCommand = String(repeating: "a", count: 800)
+        let message = AgentMessage(
+            id: id,
+            role: .assistant,
+            content: "",
+            toolCalls: [
+                AgentMessageToolCall(
+                    externalID: "call_long",
+                    toolName: "run_command",
+                    argumentsJSON: #"{"command":"\#(longCommand)"}"#
+                )
+            ]
+        )
+
+        let groupID = "\(id.uuidString)"
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [message],
+            isDark: false,
+            expandedToolGroupIDs: [groupID]
+        )
+        #expect(rendered.string.contains("..."))
+        #expect(rendered.string.contains("完整参数"))
+    }
+
+    /// When a dict has > 2 keys we only render the first 2 (preferred
+    /// or alphabetical) — the rest are hidden. Surface the full byte
+    /// size so the user knows there are dropped keys, not just a
+    /// trimmed value.
+    @Test
+    func dictWithMoreThanTwoKeysShowsFullSizeTail() {
+        let id = UUID()
+        let message = AgentMessage(
+            id: id,
+            role: .assistant,
+            content: "",
+            toolCalls: [
+                AgentMessageToolCall(
+                    externalID: "call_dict",
+                    toolName: "read_file",
+                    argumentsJSON: #"{"path":"a.md","limit":10,"offset":0,"encoding":"utf-8"}"#
+                )
+            ]
+        )
+
+        let groupID = "\(id.uuidString)"
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [message],
+            isDark: false,
+            expandedToolGroupIDs: [groupID]
+        )
+        #expect(rendered.string.contains("完整参数"))
+    }
+
+    /// `argumentsJSON == "{}"` means the model called a no-arg tool.
+    /// The old code rendered "tool  toolname  · 2 B args" — pure
+    /// noise. New code drops the tail entirely.
+    @Test
+    func emptyArgsRenderJustToolNameWithoutTail() {
+        let id = UUID()
+        let message = AgentMessage(
+            id: id,
+            role: .assistant,
+            content: "",
+            toolCalls: [
+                AgentMessageToolCall(
+                    externalID: "call_empty",
+                    toolName: "list_skills",
+                    argumentsJSON: "{}"
+                )
+            ]
+        )
+
+        let groupID = "\(id.uuidString)"
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [message],
+            isDark: false,
+            expandedToolGroupIDs: [groupID]
+        )
+        #expect(rendered.string.contains("tool  list_skills"))
+        #expect(!rendered.string.contains("B args"))
+        #expect(!rendered.string.contains("完整参数"))
+    }
+
     @Test
     func rendersMessageFooterCopyStatsAndRetry() throws {
         let user = AgentMessage(
