@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.54.1-rc11 - 2026-06-08
+
+- **修 CI 在 macos-26 上跑通 testSaveCurrentFile**。rc10 把 runner 升到 macos-26 + Xcode 26.4.1 后，部署目标 mismatch 没了，xcodebuild 真的能跑起来了，但新暴露了一个潜在 main-thread bug：`AppState.updateWindowTitle` 内部直接读 `NSApplication.shared.keyWindow` 并改 `window.title` / `window.isDocumentEdited`；测试 `testSaveCurrentFile` 通过 Swift Testing 默认在 cooperative pool 非主线程里同步调 `appState.saveCurrentFile()` → `writeCurrentFile()` → 这里。macOS 15 的 Main Thread Checker 只 warn，macOS 26 把它升为 fatal `NSInternalInconsistencyException: NSWindow geometry should only be modified on the main thread!`，测试进程 SIGABRT、xcodebuild 重启 3 次后判 TEST FAILED。
+- **修法**：[AppState.swift](Xedit/AppState.swift) `updateWindowTitle` 加 `Thread.isMainThread` 判断——主线程上同步生效（保持生产路径行为不变），非主线程 `DispatchQueue.main.async` 派发。窗口标题是 UI 装饰，异步派发对用户没区别。这是最小创伤修复：所有调用方都是 sync 调用 `updateWindowTitle(...)`，给它加 `@MainActor` 会牵连一大片，把判断收进函数内部不打扰外面的调用语义。把闭包绑 `[weak self]` 避免 async 派发时延迟到 self 已释放。
+- 版本号 `1.54.1-rc10` → `1.54.1-rc11`（CI / 主线程隔离 bugfix → 仅 rc 递增；不动产品功能集 / wire protocol）。
+
 ## 1.54.1-rc10 - 2026-06-08
 
 - **修 CI：GitHub Actions 从 rc1 一路红到 rc9，根因是 runner image 落后于本仓库的部署目标**。本仓库 `MACOSX_DEPLOYMENT_TARGET = 26.4`（macOS Tahoe），但 [.github/workflows/test.yml](.github/workflows/test.yml) 之前 `runs-on: macos-15` + `xcode-select -s /Applications/Xcode_16.app`——runner 是 macOS 15.7.x + Xcode 16，xcodebuild 还没开始 build 测试就直接报 `Cannot test target "XeditTests" on "My Mac": My Mac's macOS 15.7.x doesn't match XeditTests's macOS 26.4 deployment target.` 退码 70。过去 5 次推送（rc1 / rc3 / rc4 / rc7 / rc9）全部同因失败。

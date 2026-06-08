@@ -1388,9 +1388,23 @@ final class AppState: ObservableObject {
     }
 
     func updateWindowTitle(url: URL?, isEdited: Bool) {
-        guard let window = NSApplication.shared.keyWindow else { return }
-        window.title = activeTab?.title ?? url?.lastPathComponent ?? ""
-        window.isDocumentEdited = isEdited
+        // 生产路径上调用全部从主线程发起；但 XeditTests 在 cooperative
+        // pool（非主）里 sync 跑 `appState.saveCurrentFile()` → 这里 →
+        // `NSApp.keyWindow` 跨线程。macOS 15 的 Main Thread Checker
+        // 只 warn，macOS 26 把它升为 fatal NSInternalInconsistency
+        // ("NSWindow geometry should only be modified on the main
+        // thread!") 直接终止测试进程，rc10 升完 runner 后 CI 就卡在
+        // 这里。窗口标题只是 UI 装饰，主线程之外的调用 async hop 就行。
+        let applyTitle: () -> Void = { [weak self] in
+            guard let window = NSApplication.shared.keyWindow else { return }
+            window.title = self?.activeTab?.title ?? url?.lastPathComponent ?? ""
+            window.isDocumentEdited = isEdited
+        }
+        if Thread.isMainThread {
+            applyTitle()
+        } else {
+            DispatchQueue.main.async(execute: applyTitle)
+        }
     }
 
 }
