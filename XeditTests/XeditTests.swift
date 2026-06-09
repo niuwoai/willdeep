@@ -2002,11 +2002,19 @@ struct VeilWriterTests {
         defer { try? FileManager.default.removeItem(at: workspace) }
 
         let context = AgentToolContext(rootDirectory: workspace)
+        // Timeout sized for CI: the GitHub Actions macos-26 runner
+        // takes ~5s to spawn ruby + write 200 KB to stdout (this test
+        // failed rc5 at 5.186s against the previous 5s budget). Local
+        // M-series machines finish in ~200ms so this only matters as
+        // headroom. The test's intent ("doesn't hang on a full pipe")
+        // is unchanged — the assertion still requires exit 0 + the
+        // `[truncated]` marker; the timeout is only the upper bound
+        // for "this command actually ran".
         let result = try await AgentToolRunner.run(
             name: "run_command",
             arguments: [
                 "command": .string("/usr/bin/ruby -e 'STDOUT.write(\"x\" * 200000)'"),
-                "timeout_seconds": .number(5)
+                "timeout_seconds": .number(30)
             ],
             context: context
         )

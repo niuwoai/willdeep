@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.56.0-rc6 - 2026-06-09
+
+- **修 rc5 CI 上 `run_command drains large output without hanging` 测试 timeout**。这个测试调 `/usr/bin/ruby -e 'STDOUT.write("x" * 200000)'` 写 200KB stdout 限 5 秒，本地 M 系 macOS 跑 ~200ms 轻松过，但 GitHub Actions macos-26 runner 上 `5.186s` 踩线挂了。测试意图是验证「不卡死」而不是验证「跑得多快」，调到 30 秒 timeout 留充足缓冲，断言（exit 0 + `[truncated]` 标记）一字未改。
+- 跟 multi-provider 改造无关——纯环境敏感性。rc3/rc4 没踩是因为 CI runner 负载波动。
+- 版本号 `1.56.0-rc5` → `1.56.0-rc6`（修测试 timeout → rc 递增，无功能变更）。
+
 ## 1.56.0-rc5 - 2026-06-09
 
 - **Phase E：OpenAI Responses API 原生适配器落地，multi-provider 重构 4 个目标全部接通**。新增 [Xedit/AgentClientOpenAIResponses.swift](Xedit/AgentClientOpenAIResponses.swift)（734 行）：
