@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.54.1-rc15 - 2026-06-09
+
+- **CI：把 actions/checkout 和 actions/upload-artifact 从 @v4 升到 @v5**，消掉 rc14 推送后 runner 上那条「Node.js 20 actions are deprecated」黄字 annotation。GitHub 6/16 之后会把默认 Node 推到 24，9/16 才把 Node 20 真正从 image 里删；现在升一道，避免后面被强推时再回来处理。两个 action 的 v5 主要差异就是 runtime 从 node20 换成 node24，行为兼容；checkout 默认 fetch-depth=1、upload-artifact 仍然支持现有的 path/name 参数，对本仓库无影响。
+- 版本号 `1.54.1-rc14` → `1.54.1-rc15`（纯 CI 配置升级 → 仅 rc 递增；不动产品代码、不改 wire protocol、不动功能集）。
+
 ## 1.54.1-rc14 - 2026-06-09
 
 - **修两个 Agent 文件变更卡片上的视觉/语义 bug**。用户截图：worktree 卡片显示「已编辑 3063 个文件」并列出三个 `__pycache__/*.pyc`；右侧菜单第一项写「在 Xedit 新窗口打开」。两处都不对——产品叫 **VeilWriter**，目录碰巧叫 Xedit；3060 个文件也不可能是 Agent 真的编辑了，明显把整个 worktree 都算上了。
