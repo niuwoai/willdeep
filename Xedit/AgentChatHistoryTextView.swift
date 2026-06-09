@@ -86,6 +86,19 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
 
 final class AgentChatHistoryNSTextView: NSTextView {
     private var lastContentHash: Int?
+    /// Cheap identity fingerprint of the last applyMessages input
+    /// (id + role + content.count + reasoning.count + per-toolCall id /
+    /// name / argumentsJSON.count, plus isDark + baseFontSize). When this
+    /// matches we skip the renderer entirely — the streaming hot path
+    /// (every textDelta re-publishes @Published, SwiftUI re-evaluates
+    /// AgentChatTranscript.body, which rebuilds this view and triggers
+    /// updateNSView → applyMessages, even though the history array's
+    /// contents are unchanged because the streaming assistant message
+    /// is rendered as a separate SwiftUI bubble). Without this early
+    /// exit each token paid O(history total content bytes) just to
+    /// hash the AgentChatHistoryRenderer cache key, pegging a core at
+    /// 95%+ on conversations with multi-KB tool outputs.
+    private var lastInputFingerprint: Int?
     private var currentMessages: [AgentMessage] = []
     private var currentIsDark = false
     private var currentBaseFontSize: CGFloat = NSFont.systemFontSize
@@ -170,10 +183,53 @@ final class AgentChatHistoryNSTextView: NSTextView {
         isDark: Bool,
         baseFontSize: CGFloat = NSFont.systemFontSize
     ) {
+        let fp = Self.inputFingerprint(
+            messages: messages,
+            isDark: isDark,
+            baseFontSize: baseFontSize
+        )
+        if fp == lastInputFingerprint {
+            return
+        }
+        lastInputFingerprint = fp
         currentMessages = messages
         currentIsDark = isDark
         currentBaseFontSize = baseFontSize
         renderCurrentMessages()
+    }
+
+    /// Identity-only digest of the inputs to applyMessages — uses
+    /// `String.count` instead of hashing the actual bytes so we don't
+    /// re-walk multi-KB tool outputs on every streaming token. Safe for
+    /// the history array because streaming assistant messages are
+    /// rendered as a SwiftUI bubble (not here), so the history is
+    /// append-only and never gets in-place content edits at a fixed
+    /// length.
+    private static func inputFingerprint(
+        messages: [AgentMessage],
+        isDark: Bool,
+        baseFontSize: CGFloat
+    ) -> Int {
+        var hasher = Hasher()
+        hasher.combine(isDark)
+        hasher.combine(baseFontSize)
+        hasher.combine(messages.count)
+        for m in messages {
+            hasher.combine(m.id)
+            hasher.combine(m.role.rawValue)
+            hasher.combine(m.content.count)
+            hasher.combine(m.reasoningContent?.count ?? -1)
+            hasher.combine(m.textAttachments.count)
+            hasher.combine(m.toolCallID)
+            hasher.combine(m.usageTokens)
+            hasher.combine(m.toolCalls.count)
+            for tc in m.toolCalls {
+                hasher.combine(tc.externalID)
+                hasher.combine(tc.toolName)
+                hasher.combine(tc.argumentsJSON.count)
+            }
+        }
+        return hasher.finalize()
     }
 
     private func renderCurrentMessages() {

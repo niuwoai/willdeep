@@ -621,6 +621,13 @@ struct AgentConfiguration: Codable, Equatable {
     /// deepseek-chat, qwen-turbo …) for the "give this chat a 12-char
     /// title" task without dragging that model into the main loop.
     var titleModel: String
+    /// When `providerID == custom`, this lets the user pin which
+    /// transport-protocol family the adapter facade dispatches into.
+    /// `nil` (every other preset / older config) falls back to the
+    /// preset's `kind` via `providerKind` below. See
+    /// `AgentProviderEntry.customKindOverride` for the persisted-side
+    /// source of truth.
+    var customKindOverride: AgentProviderKind?
 
     static let `default` = AgentConfiguration(
         providerID: AgentProviderPreset.openAIID,
@@ -643,7 +650,8 @@ struct AgentConfiguration: Codable, Equatable {
         routingMode: AgentModelRoutingMode = .auto,
         imageDescription: AgentImageDescriptionConfiguration = .default,
         apiKey: String,
-        titleModel: String = ""
+        titleModel: String = "",
+        customKindOverride: AgentProviderKind? = nil
     ) {
         self.providerID = providerID
         self.baseURL = baseURL
@@ -654,6 +662,11 @@ struct AgentConfiguration: Codable, Equatable {
         self.imageDescription = imageDescription
         self.apiKey = apiKey
         self.titleModel = titleModel
+        // Override only applies to Custom — guard here too so callers
+        // that forget to filter don't accidentally override a named
+        // preset's kind. Matches the same defensive check in
+        // `AgentProviderEntry.init`.
+        self.customKindOverride = (providerID == AgentProviderPreset.customID) ? customKindOverride : nil
     }
 
     init(from decoder: Decoder) throws {
@@ -668,6 +681,9 @@ struct AgentConfiguration: Codable, Equatable {
         imageDescription = try container.decodeIfPresent(AgentImageDescriptionConfiguration.self, forKey: .imageDescription) ?? .default
         apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey) ?? ""
         titleModel = try container.decodeIfPresent(String.self, forKey: .titleModel) ?? ""
+        // New field — 1.56.1. Older configs have no key → nil → uses preset kind.
+        let override = try container.decodeIfPresent(AgentProviderKind.self, forKey: .customKindOverride)
+        customKindOverride = (providerID == AgentProviderPreset.customID) ? override : nil
     }
 
     var normalized: AgentConfiguration {
@@ -761,13 +777,21 @@ struct AgentConfiguration: Codable, Equatable {
         AgentProviderPreset.preset(id: providerID)?.supportsImageInput ?? true
     }
 
-    /// Transport-protocol family this configuration speaks. Derived (not
-    /// persisted) — looked up from the preset table by `providerID`. The
-    /// Custom preset and any unrecognised ID fall back to `.openAIChat`,
-    /// which matches the historical "everything was OpenAI-compatible"
-    /// behaviour and is safe for pre-existing user libraries.
+    /// Transport-protocol family this configuration speaks. Resolution
+    /// order:
+    ///   1. For the Custom preset, honour `customKindOverride` if set
+    ///      (so a self-hosted Anthropic / Gemini / Responses proxy can
+    ///      pick its dialect from the Settings dropdown).
+    ///   2. Otherwise look up the preset's intrinsic `kind`.
+    ///   3. Unrecognised providerID falls back to `.openAIChat`, which
+    ///      matches the historical "everything was OpenAI-compatible"
+    ///      behaviour and is safe for pre-existing user libraries.
     var providerKind: AgentProviderKind {
-        AgentProviderPreset.preset(id: providerID)?.kind ?? .openAIChat
+        if providerID == AgentProviderPreset.customID,
+           let override = customKindOverride {
+            return override
+        }
+        return AgentProviderPreset.preset(id: providerID)?.kind ?? .openAIChat
     }
 }
 
@@ -1254,6 +1278,13 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
     /// `.auto` for new entries; existing entries that pre-date this
     /// field decode to `.auto` via decodeIfPresent below.
     var routingMode: AgentModelRoutingMode
+    /// Transport-protocol override for the Custom preset. `nil` (the
+    /// default) means "use the preset's kind", which is what every
+    /// non-Custom entry does. Custom users who run a self-hosted
+    /// Anthropic / Gemini / Responses proxy set this to the matching
+    /// kind so the facade dispatches the right adapter. Ignored when
+    /// `providerID` is anything other than `custom`.
+    var customKindOverride: AgentProviderKind?
 
     init(
         id: UUID = UUID(),
@@ -1265,7 +1296,8 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
         flashAlternates: [String] = [],
         proPrimary: String,
         proAlternates: [String] = [],
-        routingMode: AgentModelRoutingMode = .auto
+        routingMode: AgentModelRoutingMode = .auto,
+        customKindOverride: AgentProviderKind? = nil
     ) {
         self.id = id
         self.providerID = providerID
@@ -1285,12 +1317,18 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
         self.proPrimary = proPrimary
         self.proAlternates = AgentProviderEntry.cleanList(proAlternates, excluding: proPrimary)
         self.routingMode = routingMode
+        // Override is only meaningful for the Custom preset; ignore
+        // it on a named preset so switching providerID later doesn't
+        // leave a stale override behind that would override the new
+        // preset's kind too.
+        self.customKindOverride = (providerID == AgentProviderPreset.customID) ? customKindOverride : nil
     }
 
     enum CodingKeys: String, CodingKey {
         case id, providerID, displayName, baseURL, apiKey
         case flashPrimary, flashAlternates, proPrimary, proAlternates
         case routingMode
+        case customKindOverride
     }
 
     init(from decoder: Decoder) throws {
@@ -1307,6 +1345,10 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
         // New field — older library JSON has no routingMode, default to
         // .auto so existing entries keep their previous behaviour.
         self.routingMode = try c.decodeIfPresent(AgentModelRoutingMode.self, forKey: .routingMode) ?? .auto
+        // New field (1.56.1) — only meaningful when providerID == custom.
+        // Older library JSON has no key, defaults to nil (use preset's kind).
+        let override = try c.decodeIfPresent(AgentProviderKind.self, forKey: .customKindOverride)
+        self.customKindOverride = (self.providerID == AgentProviderPreset.customID) ? override : nil
     }
 
     /// All flash candidates with the primary first — convenient for
@@ -1346,7 +1388,8 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
             proModel: pro,
             routingMode: mode,
             imageDescription: imageDescription,
-            apiKey: apiKey
+            apiKey: apiKey,
+            customKindOverride: customKindOverride
         )
     }
 

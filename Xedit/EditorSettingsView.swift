@@ -1092,11 +1092,16 @@ struct AgentProviderLibrarySection: View {
         selectedEntryID = entry.id
     }
 
-    /// Sidebar badge label. Look up the entry's preset to get its
-    /// `kind` — unknown providerIDs (user-edited Custom rows) fall
-    /// back to OpenAI Chat, which matches the facade dispatch and
-    /// won't mislead about transport protocol.
+    /// Sidebar badge label. Mirrors `AgentConfiguration.providerKind`
+    /// resolution so the badge tells the truth about which adapter
+    /// will actually be dispatched: Custom + override → the chosen
+    /// kind; named preset → that preset's intrinsic kind; unknown
+    /// providerID → OpenAI Chat (facade fallback).
     private func kindLabel(for entry: AgentProviderEntry) -> String {
+        if entry.providerID == AgentProviderPreset.customID,
+           let override = entry.customKindOverride {
+            return override.shortLabel
+        }
         let kind = AgentProviderPreset.preset(id: entry.providerID)?.kind ?? .openAIChat
         return kind.shortLabel
     }
@@ -1130,6 +1135,11 @@ private struct AgentProviderEntryEditor: View {
     @State private var proPrimary: String = ""
     @State private var proAlternatesText: String = ""
     @State private var routingMode: AgentModelRoutingMode = .auto
+    /// nil → use the preset's intrinsic kind (every named preset). Only
+    /// meaningful when `providerID == custom`; the Picker is hidden
+    /// otherwise. See `AgentProviderEntry.customKindOverride` for the
+    /// persisted side.
+    @State private var customKindOverride: AgentProviderKind? = nil
 
     private let labelWidth: CGFloat = 110
 
@@ -1178,14 +1188,22 @@ private struct AgentProviderEntryEditor: View {
                                 displayName = preset.displayName
                             }
                         }
+                        if newID != AgentProviderPreset.customID {
+                            // Switching away from Custom invalidates the
+                            // kind override — it would otherwise sit
+                            // dormant in storage and bite later.
+                            customKindOverride = nil
+                        }
                         commit()
                     }
                 }
+                customKindPickerRow
                 protocolHelpCard
                 fieldRow("Base URL") {
-                    TextField("https://...", text: $baseURL, onCommit: commit)
+                    TextField(baseURLPlaceholder, text: $baseURL, onCommit: commit)
                         .textFieldStyle(.roundedBorder)
                 }
+                baseURLStatusRow
                 fieldRow("API key") {
                     RevealableSecretField(
                         text: $apiKey,
@@ -1200,23 +1218,92 @@ private struct AgentProviderEntryEditor: View {
         }
     }
 
+    /// Visible only when the Custom preset is selected. Lets the user
+    /// pick which transport protocol their self-hosted endpoint
+    /// speaks — without this, Custom is permanently locked to
+    /// OpenAI Chat and a self-hosted Anthropic / Gemini / Responses
+    /// proxy is unreachable.
+    @ViewBuilder
+    private var customKindPickerRow: some View {
+        if providerID == AgentProviderPreset.customID {
+            fieldRow("Protocol") {
+                Picker("", selection: $customKindOverride) {
+                    Text("OpenAI Chat（默认）").tag(AgentProviderKind?.none)
+                    Text("OpenAI Chat").tag(AgentProviderKind?.some(.openAIChat))
+                    Text("Anthropic Messages").tag(AgentProviderKind?.some(.anthropicMessages))
+                    Text("Google Gemini").tag(AgentProviderKind?.some(.geminiGenerateContent))
+                    Text("OpenAI Responses").tag(AgentProviderKind?.some(.openAIResponses))
+                }
+                .labelsHidden()
+                .onChange(of: customKindOverride) { _, _ in commit() }
+            }
+        }
+    }
+
+    /// Placeholder for the Base URL field. For named presets, show the
+    /// preset's default URL so the user can tell at a glance "leaving
+    /// this empty would use X". For Custom and the empty-baseURL
+    /// presets (some.im default uses its own value, custom is blank),
+    /// fall back to a generic hint.
+    private var baseURLPlaceholder: String {
+        if let preset = AgentProviderPreset.preset(id: providerID),
+           !preset.baseURL.isEmpty {
+            return preset.baseURL
+        }
+        return "https://..."
+    }
+
+    /// Status pill under the Base URL field: green check when the user
+    /// is on the preset's default URL, yellow note when they've
+    /// customised it. Hidden for the Custom preset (no preset default
+    /// to compare against — every URL is by definition user-chosen).
+    @ViewBuilder
+    private var baseURLStatusRow: some View {
+        if let preset = AgentProviderPreset.preset(id: providerID),
+           preset.id != AgentProviderPreset.customID,
+           !preset.baseURL.isEmpty {
+            let trimmed = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/ \n\t"))
+                .lowercased()
+            let presetTrimmed = preset.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/ \n\t"))
+                .lowercased()
+            let isDefault = trimmed.isEmpty || trimmed == presetTrimmed
+            HStack(spacing: 4) {
+                Image(systemName: isDefault ? "checkmark.circle.fill" : "pencil.circle.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(isDefault ? Color.green : Color.orange)
+                Text(isDefault ? "使用预设地址" : "已自定义")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.leading, labelWidth + 8)
+        }
+    }
+
     /// Tinted card that explains which transport protocol the
-    /// currently picked preset speaks. Hidden when no preset matches
-    /// (e.g. the user is hand-editing into the Custom row); the
-    /// inline notice row below covers the relay-specific call-outs.
+    /// currently picked preset speaks. For Custom with a kind
+    /// override, defers to the override's helpText so the user gets
+    /// the same explanation as if they'd picked a named preset.
     @ViewBuilder
     private var protocolHelpCard: some View {
         if let preset = AgentProviderPreset.preset(id: providerID) {
+            let effectiveKind: AgentProviderKind = {
+                if preset.id == AgentProviderPreset.customID,
+                   let override = customKindOverride {
+                    return override
+                }
+                return preset.kind
+            }()
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
-                    Image(systemName: protocolIcon(for: preset.kind))
+                    Image(systemName: protocolIcon(for: effectiveKind))
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(Color.accentColor)
-                    Text("协议：\(preset.kind.shortLabel)")
+                    Text("协议：\(effectiveKind.shortLabel)")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(Color.accentColor)
                 }
-                Text(preset.kind.helpText)
+                Text(effectiveKind.helpText)
                     .font(.caption)
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1439,6 +1526,7 @@ private struct AgentProviderEntryEditor: View {
         proPrimary = entry.proPrimary
         proAlternatesText = entry.proAlternates.joined(separator: "\n")
         routingMode = entry.routingMode
+        customKindOverride = entry.customKindOverride
     }
 
     private func commit() {
@@ -1463,7 +1551,8 @@ private struct AgentProviderEntryEditor: View {
             flashAlternates: splitLines(flashAlternatesText),
             proPrimary: proPrimary,
             proAlternates: splitLines(proAlternatesText),
-            routingMode: routingMode
+            routingMode: routingMode,
+            customKindOverride: customKindOverride
         )
         onChange(updated)
     }

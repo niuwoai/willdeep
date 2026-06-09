@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.56.1-rc1 - 2026-06-09
+
+### Custom preset 加协议覆写 + Base URL UX 打磨
+
+- **`AgentProviderEntry.customKindOverride` / `AgentConfiguration.customKindOverride`**（[AgentModels.swift](Xedit/AgentModels.swift)）：仅在 `providerID == custom` 时生效，让自建的 Anthropic / Gemini / OpenAI Responses 反代可以从 Settings 下拉里挑协议方言。`nil`（每个具名 preset 的默认）走 preset 的内置 `kind`，未识别 providerID 兜底 `.openAIChat`。`AgentProviderEntry.init` 和 decoder 都加了"非 custom 强制 nil"的防御性 guard，避免切换 preset 后留下幽灵覆写。
+- **Settings UI 协议下拉**（[EditorSettingsView.swift](Xedit/EditorSettingsView.swift) `customKindPickerRow`）：仅 Custom preset 显示。选项：默认（=OpenAI Chat）/ OpenAI Chat / Anthropic Messages / Google Gemini / OpenAI Responses。
+- **Base URL placeholder 智能化**：具名 preset 在 placeholder 里直接显示 preset 的默认 URL，所见即所得"留空会用哪个地址"。Custom 和 empty-default 的 preset 兜底 `https://...`。
+- **Base URL 状态徽章**（`baseURLStatusRow`）：用户填的 URL 是 preset 默认就显示绿色✓"使用预设地址"，自定义了就橙色✏️"已自定义"。Custom preset 隐藏（没有默认可比）。
+
+### 修流式对话烧 CPU：观察到 `VeilWriter` 进程单核 96%、CPU 时间累计 58 分钟。根因定位在 [AgentChatHistoryTextView.applyMessages](Xedit/AgentChatHistoryTextView.swift) → [AgentChatHistoryRenderer.render](Xedit/AgentChatHistoryFormatter.swift) 的热路径：
+
+- 流式 token 路径：[AppStateAgentLoop.swift:668](Xedit/AppStateAgentLoop.swift) 每个 `textDelta` 都 `runtime.messages[index].content += delta` 触发 `@Published` → SwiftUI 全 body 重渲染 → 重建 `AgentChatHistoryTextView(history)` → `updateNSView` → `applyMessages` → `Renderer.render`。
+- `Renderer.render` 第一步是算 cache key，而 `messageHash` 会 hash **每条 message 的整条 content / reasoningContent / 每个 toolCall 的 argumentsJSON** 字面字节。也就是说每个 token 都要把整段 history 全部字节重新 hash 一遍，只为查一次 cache。
+- history 数组里**不包含**正在 streaming 的 assistant message（它走 SwiftUI bubble 路径），所以这些 hash 计算 100% 是白干的——key 永远算出同一个 hit。
+- 当历史有几条 tool 输出（grep / read_file 几十 KB 那种），50 tok/s 流速下就是数 MB/s 的 Swift String hashing 在主线程跑，单核打满到 96%。
+
+修复：在 [AgentChatHistoryTextView.applyMessages](Xedit/AgentChatHistoryTextView.swift) 入口加一层 cheap identity 指纹——`(id, role, content.count, reasoning.count, toolCalls.count, 每个 toolCall 的 externalID/toolName/argumentsJSON.count)`，加上 `isDark` 和 `baseFontSize`。指纹用 `String.count` 而不是字符串字节，是 O(N_messages) 而不是 O(N_messages × content_size)。同指纹直接 return，根本不进 Renderer，砍掉 99% 的 hash 工作。
+
+安全性：history 数组里的 message 都是已经定型的（streaming message 被剔出去走 SwiftUI bubble 了），不会出现 `"# One" → "# Two"` 这种同长度 in-place edit 碰撞（rc39 用 content hash 也是为了规避这个 corner case，但那是 streaming bubble 的事，不影响 history 路径）。
+
 ## 1.56.0 - 2026-06-09
 
 **多 Provider 协议骨架正式发布**：原 673 行的 `AgentClient`（事实上的 OpenAI Chat 适配器）拆成 facade + 4 个原生适配器，覆盖业界 4 大主流 LLM 协议族 + 9 家公开 provider + 4 家常见中转站。本版本经过 rc1~rc6 六轮预发布迭代，4 家适配器、所有 preset、回归测试在 CI 上稳定绿。
