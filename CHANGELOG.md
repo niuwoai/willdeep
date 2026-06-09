@@ -1,5 +1,69 @@
 # Changelog
 
+## 1.56.0 - 2026-06-09
+
+**多 Provider 协议骨架正式发布**：原 673 行的 `AgentClient`（事实上的 OpenAI Chat 适配器）拆成 facade + 4 个原生适配器，覆盖业界 4 大主流 LLM 协议族 + 9 家公开 provider + 4 家常见中转站。本版本经过 rc1~rc6 六轮预发布迭代，4 家适配器、所有 preset、回归测试在 CI 上稳定绿。
+
+### 新增能力
+
+- **4 个原生适配器**（按 commit 顺序）：
+  - **`OpenAIChatAdapter`**（[AgentClientOpenAIChat.swift](Xedit/AgentClientOpenAIChat.swift)，~561 行）：原 `AgentClient` 整段搬运改名。承担所有 OpenAI Chat Completions 兼容方言——OpenAI / DashScope / DeepSeek / Kimi / Moonshot / OpenRouter / SiliconFlow / AnyRouter / some.im / Custom。
+  - **`AnthropicMessagesAdapter`**（[AgentClientAnthropic.swift](Xedit/AgentClientAnthropic.swift)，~757 行）：跑原生 `/v1/messages`。`x-api-key + anthropic-version` 鉴权；`system` 顶层字段；tool 结果作为 `tool_result` 块捆到下条 user；assistant 工具调用变 `content:[tool_use]`；`max_tokens` 必填（默认 4096）；line-pair SSE 解析（`event:` 和 `data:` 行配对路由）；`stop_reason` 映射回 AppState 风（`tool_use→tool_calls` / `end_turn→stop` / `max_tokens→length`）。
+  - **`GeminiAdapter`**（[AgentClientGemini.swift](Xedit/AgentClientGemini.swift)，~814 行）：跑原生 `streamGenerateContent`。模型嵌在 URL 路径（带 `:action` 后缀）；`x-goog-api-key` header 鉴权（key 永不进 URL）；4 角色压到 2 角色（system→`systemInstruction`、assistant→`model`、tool→user 内嵌 `functionResponse`）；用 `name` 配对工具调用（编码维护 `externalID→name` 映射，解码合成 `gemini_fcall_<index>` id）；schema 大写枚举（`STRING/INTEGER/BOOLEAN/OBJECT/ARRAY`）；tools 包一层 `function_declarations`；自带 `JSONValue` enum 处理 free-form `args`。
+  - **`OpenAIResponsesAdapter`**（[AgentClientOpenAIResponses.swift](Xedit/AgentClientOpenAIResponses.swift)，~734 行）：跑原生 `/responses`。`input` 取代 `messages`；`instructions` 顶层；tools 摊平到 `{type:function, name, ...}`；typed input items（`message` / `function_call` / `function_call_output`）；`reasoning.delta` + `reasoning_summary.delta` 路由到既有 reasoningDelta 通道（o-系列推理摘要直通）；`call_id` 跨流稳定与 OpenAI Chat externalID 完全对应。
+
+- **`AgentClient.swift` 改为 facade**（~125 行）：按 `configuration.providerKind` 把 `streamChat / judgeCommandSafety / fetchModels` 三个调用分派到具体适配器。**8 个上层调用点（AppStateAgentLoop / EditorSettingsView / AppStateAgentTitleSummarizer）签名零修改**，零回归风险。
+
+- **协议无关共享工具**（[AgentNetworkSupport.swift](Xedit/AgentNetworkSupport.swift)，~163 行）：HTTP timeouts / User-Agent / endpoint URL 拼接 / 错误体 & URL `?key=` 脱敏 / `X-App-Version` header 标记。
+
+- **`AgentProviderKind` 枚举**（[AgentModels.swift](Xedit/AgentModels.swift)）：`.openAIChat` / `.anthropicMessages` / `.geminiGenerateContent` / `.openAIResponses`。`AgentProviderPreset` 加 `kind` 字段；`AgentConfiguration.providerKind` 派生属性（不持久化，由 providerID 查 preset 表得来）。
+
+### 新增 5 个 preset
+
+- **`openai-responses`**（OpenAI Responses，默认 `o4-mini` flash / `o3` pro，给 o-系列推理模型用）
+- **`gemini`**（Google Gemini，base `https://generativelanguage.googleapis.com`，默认 `gemini-2.5-flash` / `gemini-2.5-pro`）
+- **`openrouter`**（OpenRouter 聚合站，自动附 `HTTP-Referer: https://83d.me` + `X-Title: VeilWriter`，在 OpenRouter 应用榜署名）
+- **`siliconflow`**（硅基流动，国内常用聚合站，便宜 Qwen / DeepSeek / GLM 入口）
+- **`anyrouter`**（AnyRouter 中转，OpenAI/Claude 原版模型 ID）
+- **`some-im`**（作者个人中转站）
+
+### 协议切换
+
+- **`claude` preset 从「OpenAI 形状 body 打 Anthropic 端点」的坏状态切换到原生 `/v1/messages`**。老用户 baseURL 是 `https://api.anthropic.com/v1`，新 preset 默认是 `https://api.anthropic.com`（适配器自拼 `v1/messages` 后缀，让自建反代/企业部署同字段可用）；老 entry 靠适配器内 `stripTrailingV1` 防御不会拼成 `/v1/v1/messages` 404。
+
+### Settings UI 协议徽章 + 帮助卡片骨架
+
+- 左侧 Provider 列表每行加 kind 徽章（`OpenAI Chat` / `Anthropic` / `Gemini` / `OpenAI Responses`），一眼区分协议族。
+- 编辑器 Connection 区在 Preset 下方加协议说明卡片，根据当前 kind 显示该方言的 1-2 行人话解释。
+- Preset 下拉每项后缀 ` · OpenAI Chat` 这类协议名。
+- API Key 字段下方加申请地址提示（OpenAI / Claude / Gemini / OpenRouter / SiliconFlow 都给了具体网址）。
+- OpenRouter / some.im / Gemini 各自一行专属说明。
+- 新增 [AgentProviderL10n.swift](Xedit/AgentProviderL10n.swift)（~95 行）集中放 UI 文案，方便后续接 Localizable.xcstrings。
+
+### 顺手并入的 1.55.0 工作树（原计划单发，合并进本版本）
+
+- **修 i18n 在中文系统下完全失效的根因**：[Xedit.xcodeproj/project.pbxproj:222](Xedit.xcodeproj/project.pbxproj:222) 的 `knownRegions` 里只有 `en` 和 `Base`，没有 `zh-Hans`。结果 `Localizable.xcstrings` 里已经写好的 242 条中文翻译压根不进 bundle，运行时 `String(localized:)` 直接回退到英文 `defaultValue`。修法：把 `zh-Hans` 加进 `knownRegions`。
+- **简化破坏性命令确认 UX**：[AgentPanelView.swift:934](Xedit/AgentPanelView.swift:934) 之前要求用户在文本框里键入 `confirm` 才解锁 Run 按钮——过于繁琐。改成普通的红色「确认执行」按钮 + 「拒绝」按钮，配警告文案。后端 `confirmAgentToolCall(id:typedConfirmation:)` 接口不动，UI 层直接传字面量 `"confirm"`——安全门槛仍在程序层。
+- **Settings 窗 + Agent 工具卡片接入 i18n**：8 个 tab Label、14 个 Section header、6 个 Toggle、4 个 Button 全部走 [L10n.swift](Xedit/L10n.swift) 字典。xcstrings 同步加 54 条 en/zh-Hans 翻译对照。
+
+### 修了 2 个潜伏 bug
+
+- **`AgentChatHistoryRenderer.cache` 并发 race**（rc3 修）：`enum` 上的 `static var Dictionary` 不继承模块默认的 MainActor 隔离（enum 没 self），生产路径都从 SwiftUI MainActor 调没翻车，但 Swift Testing 把 `@Test` 并发跑时两个测试同时 `cache[key]=...` 撞坏字典 storage，下次 lookup 经 Foundation bridge 把 `objectForKey:` 发到 tagged NSNumber 直接 throw NSException。修法：`NSLock` 包 cache 的读 + 写两个 critical section，render 计算本身（pure-functional）放锁外。本质上是 main 上原本就潜伏的 race，rc1 时 test target 编译挂没机会暴露，rc2 修了编译才浮出来。
+- **`run_command drains large output without hanging` 测试 CI timeout**（rc6 修）：5 秒 timeout 在 GitHub Actions macos-26 runner 上踩 5.186s 挂，调到 30 秒。测试意图（"不卡死"）和断言（exit 0 + `[truncated]` 标记）一字未改。
+
+### 待办（留到后续 rc）
+
+- Custom preset 让用户手动切 `kind`（目前固定 `.openAIChat`，自建 Anthropic 兼容反代用户没法选）
+- Base URL placeholder 跟 preset 默认值同步显示
+- "使用预设地址 / 已自定义" 视觉状态指示
+- 真实 API key 端到端回归（每家 provider 至少跑 1 次对话 + 1 次工具调用）
+
+### 版本号
+
+`1.54.1-rc16` → `1.56.0`（跨次版本位 +1，rc 收尾转正）。前后端版本号统一对齐：xcodeproj `MARKETING_VERSION` + Help bundle Info.plist 都改成 `1.56.0`。
+
+---
+
 ## 1.56.0-rc6 - 2026-06-09
 
 - **修 rc5 CI 上 `run_command drains large output without hanging` 测试 timeout**。这个测试调 `/usr/bin/ruby -e 'STDOUT.write("x" * 200000)'` 写 200KB stdout 限 5 秒，本地 M 系 macOS 跑 ~200ms 轻松过，但 GitHub Actions macos-26 runner 上 `5.186s` 踩线挂了。测试意图是验证「不卡死」而不是验证「跑得多快」，调到 30 秒 timeout 留充足缓冲，断言（exit 0 + `[truncated]` 标记）一字未改。
