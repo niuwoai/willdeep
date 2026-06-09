@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.54.1-rc16 - 2026-06-09
+
+- **修 rc15 升错档：actions/upload-artifact@v5 居然还是 node20**。rc15 推上去之后 CI 黄字 annotation 还在，点名 `upload-artifact@v5`。去 GitHub 官方 release 仓库查实：upload-artifact 主线已经到 v7（v6 才是搬到 node24 的那一档，v7 是当前主推），checkout 主线也到了 v6。`@v5` 这道台阶是 node20 的最后一站。
+- **修法**：`checkout@v5` → `@v6`，`upload-artifact@v5` → `@v7`。两个 action 的 v6/v7 都是「runtime 升 node24 + 小幅 API 调整」，对本 workflow 用的最小接口（仓库 clone、上传一个 path）完全兼容。
+- 版本号 `1.54.1-rc15` → `1.54.1-rc16`（CI 配置修正 → 仅 rc 递增；不动产品代码、不改 wire protocol、不动功能集）。
+
 ## 1.54.1-rc15 - 2026-06-09
 
 - **CI：把 actions/checkout 和 actions/upload-artifact 从 @v4 升到 @v5**，消掉 rc14 推送后 runner 上那条「Node.js 20 actions are deprecated」黄字 annotation。GitHub 6/16 之后会把默认 Node 推到 24，9/16 才把 Node 20 真正从 image 里删；现在升一道，避免后面被强推时再回来处理。两个 action 的 v5 主要差异就是 runtime 从 node20 换成 node24，行为兼容；checkout 默认 fetch-depth=1、upload-artifact 仍然支持现有的 path/name 参数，对本仓库无影响。

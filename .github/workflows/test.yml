@@ -24,7 +24,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Select Xcode
         # 优先锁定 Xcode 26.4.1（明确匹配 MACOSX_DEPLOYMENT_TARGET 26.4）；
@@ -67,7 +67,7 @@ jobs:
 
       - name: Upload test artifacts
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: xedit-test-results
           path: |
