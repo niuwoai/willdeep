@@ -856,7 +856,6 @@ struct AgentToolCallCard: View {
     @EnvironmentObject var appState: AppState
     let call: AgentToolCall
     @State private var isExpanded = false
-    @State private var confirmInput = ""
     @State private var answerInput = ""
     @State private var selectedOptions: Set<String> = []
 
@@ -899,7 +898,7 @@ struct AgentToolCallCard: View {
                             .font(.system(size: 10, weight: .semibold))
                     }
                     .buttonStyle(.borderless)
-                    .help(isExpanded ? "Collapse" : "Expand")
+                    .help(isExpanded ? L10n.ToolCard.collapse : L10n.ToolCard.expand)
                 }
             }
             .frame(minHeight: 20)
@@ -907,13 +906,13 @@ struct AgentToolCallCard: View {
 
             if isExpanded {
                 if !argumentsLines.isEmpty {
-                    expandableBlock(title: "Arguments", text: argumentsLines)
+                    expandableBlock(title: L10n.ToolCard.arguments, text: argumentsLines)
                 }
                 if let payload = call.result?.payload, !payload.isEmpty {
-                    expandableBlock(title: "Output", text: payload)
+                    expandableBlock(title: L10n.ToolCard.output, text: payload)
                 }
                 if let errorMessage = call.errorMessage, !errorMessage.isEmpty {
-                    expandableBlock(title: "Error", text: errorMessage)
+                    expandableBlock(title: L10n.ToolCard.error, text: errorMessage)
                 }
             }
 
@@ -921,35 +920,30 @@ struct AgentToolCallCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     approvalCommandBlock
                     HStack {
-                        Button("Allow") { appState.approveAgentToolCall(id: call.id) }
+                        Button(L10n.ToolCard.allow) { appState.approveAgentToolCall(id: call.id) }
                         if let signature = alwaysAllowSignature {
-                            Button("Always Allow") { appState.alwaysAllowAgentToolCall(id: call.id) }
-                                .help("Always allow future \(signature) commands")
+                            Button(L10n.ToolCard.alwaysAllow) { appState.alwaysAllowAgentToolCall(id: call.id) }
+                                .help(L10n.ToolCard.alwaysAllowHelp(signature))
                         }
-                        Button("Deny") { appState.denyAgentToolCall(id: call.id) }
+                        Button(L10n.ToolCard.deny) { appState.denyAgentToolCall(id: call.id) }
                         Spacer(minLength: 0)
                     }
                     .font(.caption)
                 }
             } else if call.status == .awaitingConfirm {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 6) {
                     approvalCommandBlock
-                    Text("This is a destructive command. Type \"confirm\" to allow.")
+                    Text(L10n.ToolCard.destructiveWarning)
                         .font(.caption2)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(.red)
                     HStack {
-                        TextField("confirm", text: $confirmInput)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 12, design: .monospaced))
-                            .frame(maxWidth: 140)
-                        Button("Run") {
-                            _ = appState.confirmAgentToolCall(id: call.id, typedConfirmation: confirmInput)
-                            confirmInput = ""
+                        Button(L10n.ToolCard.confirmRun) {
+                            _ = appState.confirmAgentToolCall(id: call.id, typedConfirmation: "confirm")
                         }
-                        .disabled(confirmInput.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "confirm")
-                        Button("Deny") {
+                        .buttonStyle(.borderedProminent)
+                        .tint(.red)
+                        Button(L10n.ToolCard.deny) {
                             appState.denyAgentToolCall(id: call.id)
-                            confirmInput = ""
                         }
                         Spacer(minLength: 0)
                     }
@@ -973,7 +967,7 @@ struct AgentToolCallCard: View {
     private var approvalCommandBlock: some View {
         if let command = fullCommand {
             VStack(alignment: .leading, spacing: 3) {
-                Text("Command")
+                Text(L10n.ToolCard.command)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 ScrollView([.horizontal, .vertical]) {
@@ -1246,17 +1240,17 @@ struct AgentToolCallCard: View {
 
     private var statusText: String {
         switch call.status {
-        case .pendingApproval: return "Awaiting approval"
-        case .awaitingConfirm: return "Confirm required"
-        case .awaitingUserAnswer: return "Asking you"
-        case .running: return "Running…"
+        case .pendingApproval: return L10n.ToolCard.statusAwaitingApproval
+        case .awaitingConfirm: return L10n.ToolCard.statusConfirmRequired
+        case .awaitingUserAnswer: return L10n.ToolCard.statusAskingYou
+        case .running: return L10n.ToolCard.statusRunning
         case .succeeded:
             if let summary = call.result?.summary, !summary.isEmpty {
                 return summary
             }
-            return "Done"
-        case .failed: return "Failed"
-        case .denied: return "Denied"
+            return L10n.ToolCard.statusDone
+        case .failed: return L10n.ToolCard.statusFailed
+        case .denied: return L10n.ToolCard.statusDenied
         }
     }
 

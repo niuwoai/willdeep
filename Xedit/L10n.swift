@@ -390,6 +390,73 @@ enum L10n {
         }
     }
 
+    enum ToolCard {
+        static let allow = String(localized: "tool-card.allow", defaultValue: "Allow")
+        static let alwaysAllow = String(localized: "tool-card.always-allow", defaultValue: "Always Allow")
+        static func alwaysAllowHelp(_ a1: String) -> String {
+            let template = String(localized: "tool-card.always-allow.help", defaultValue: "Always allow future %@ commands")
+            return String(format: template, a1)
+        }
+        static let deny = String(localized: "tool-card.deny", defaultValue: "Deny")
+        static let confirmRun = String(localized: "tool-card.confirm-run", defaultValue: "Confirm and Run")
+        static let destructiveWarning = String(localized: "tool-card.destructive-warning", defaultValue: "This command is destructive. Confirm before it runs.")
+        static let command = String(localized: "tool-card.command", defaultValue: "Command")
+        static let arguments = String(localized: "tool-card.arguments", defaultValue: "Arguments")
+        static let output = String(localized: "tool-card.output", defaultValue: "Output")
+        static let error = String(localized: "tool-card.error", defaultValue: "Error")
+        static let collapse = String(localized: "tool-card.collapse", defaultValue: "Collapse")
+        static let expand = String(localized: "tool-card.expand", defaultValue: "Expand")
+        static let statusAwaitingApproval = String(localized: "tool-card.status.awaiting-approval", defaultValue: "Awaiting approval")
+        static let statusConfirmRequired = String(localized: "tool-card.status.confirm-required", defaultValue: "Confirm required")
+        static let statusAskingYou = String(localized: "tool-card.status.asking-you", defaultValue: "Asking you")
+        static let statusRunning = String(localized: "tool-card.status.running", defaultValue: "Running…")
+        static let statusDone = String(localized: "tool-card.status.done", defaultValue: "Done")
+        static let statusFailed = String(localized: "tool-card.status.failed", defaultValue: "Failed")
+        static let statusDenied = String(localized: "tool-card.status.denied", defaultValue: "Denied")
+    }
+
+    enum Settings {
+        static let tabTypography = String(localized: "settings.tab.typography", defaultValue: "Typography")
+        static let tabAppearance = String(localized: "settings.tab.appearance", defaultValue: "Appearance")
+        static let tabWorkspace = String(localized: "settings.tab.workspace", defaultValue: "Workspace")
+        static let tabAgent = String(localized: "settings.tab.agent", defaultValue: "Agent")
+        static let tabMemory = String(localized: "settings.tab.memory", defaultValue: "Memory")
+        static let tabSkills = String(localized: "settings.tab.skills", defaultValue: "Skills")
+        static let tabMcp = String(localized: "settings.tab.mcp", defaultValue: "MCP")
+        static let tabTools = String(localized: "settings.tab.tools", defaultValue: "Tools")
+
+        static let sectionTypography = String(localized: "settings.section.typography", defaultValue: "Typography")
+        static let sectionColorStyle = String(localized: "settings.section.color-style", defaultValue: "Color Style")
+        static let sectionEditorBackground = String(localized: "settings.section.editor-background", defaultValue: "Editor Background")
+        static let sectionEditor = String(localized: "settings.section.editor", defaultValue: "Editor")
+        static let sectionSidebar = String(localized: "settings.section.sidebar", defaultValue: "Sidebar")
+        static let sectionInspector = String(localized: "settings.section.inspector", defaultValue: "Inspector")
+        static let sectionSave = String(localized: "settings.section.save", defaultValue: "Save")
+        static let sectionAgentProviders = String(localized: "settings.section.agent-providers", defaultValue: "Agent Providers")
+        static let sectionImageUnderstanding = String(localized: "settings.section.image-understanding", defaultValue: "Image Understanding")
+        static let sectionConversationTitle = String(localized: "settings.section.conversation-title", defaultValue: "Conversation Title")
+        static let sectionToolApproval = String(localized: "settings.section.tool-approval", defaultValue: "Tool approval")
+        static let sectionConcurrency = String(localized: "settings.section.concurrency", defaultValue: "Concurrency")
+        static let sectionAgentAppearance = String(localized: "settings.section.agent-appearance", defaultValue: "Appearance")
+        static let sectionAgentAlwaysAllow = String(localized: "settings.section.agent-always-allow", defaultValue: "Agent Always Allow")
+
+        static let toggleShowLineNumbers = String(localized: "settings.toggle.show-line-numbers", defaultValue: "Show Line Numbers")
+        static let toggleHighlightCurrentLine = String(localized: "settings.toggle.highlight-current-line", defaultValue: "Highlight Current Line")
+        static let toggleGlassEditorBackground = String(localized: "settings.toggle.glass-editor-background", defaultValue: "Glass Editor Background")
+        static let toggleTrimTrailingWhitespace = String(localized: "settings.toggle.trim-trailing-whitespace", defaultValue: "Trim Trailing Whitespace")
+        static let toggleEnsureFinalNewline = String(localized: "settings.toggle.ensure-final-newline", defaultValue: "Ensure Final Newline")
+        static let toggleAutoApproveSafe = String(localized: "settings.toggle.auto-approve-safe", defaultValue: "Auto-approve safe commands")
+
+        static let buttonChoose = String(localized: "settings.button.choose", defaultValue: "Choose…")
+        static let buttonClear = String(localized: "settings.button.clear", defaultValue: "Clear")
+        static let buttonSave = String(localized: "settings.button.save", defaultValue: "Save")
+        static let buttonRevert = String(localized: "settings.button.revert", defaultValue: "Revert")
+
+        static let perProviderConcurrency = String(localized: "settings.per-provider-concurrency", defaultValue: "Per-provider concurrency")
+        static let chatBaseFontSize = String(localized: "settings.chat-base-font-size", defaultValue: "Chat base font size")
+        static let noAlwaysAllowed = String(localized: "settings.no-always-allowed", defaultValue: "No commands are always allowed.")
+    }
+
     enum Transcript {
         static let messageTruncatedHelp = String(localized: "transcript.message-truncated.help", defaultValue: "Open in standalone window to view full message content")
         static func messageTruncatedText(_ a1: String, _ a2: String) -> String {

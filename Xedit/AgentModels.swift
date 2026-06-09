@@ -760,11 +760,43 @@ struct AgentConfiguration: Codable, Equatable {
     var supportsImageInput: Bool {
         AgentProviderPreset.preset(id: providerID)?.supportsImageInput ?? true
     }
+
+    /// Transport-protocol family this configuration speaks. Derived (not
+    /// persisted) — looked up from the preset table by `providerID`. The
+    /// Custom preset and any unrecognised ID fall back to `.openAIChat`,
+    /// which matches the historical "everything was OpenAI-compatible"
+    /// behaviour and is safe for pre-existing user libraries.
+    var providerKind: AgentProviderKind {
+        AgentProviderPreset.preset(id: providerID)?.kind ?? .openAIChat
+    }
+}
+
+/// Transport-protocol family a preset speaks. `providerID` identifies
+/// the vendor / relay station (OpenRouter, SiliconFlow, …); `kind`
+/// identifies *how* we talk to it. Multiple providerIDs share the same
+/// kind (every OpenAI-compatible relay → `.openAIChat`), and the same
+/// vendor can expose more than one kind (OpenAI exposes both Chat
+/// Completions and the newer Responses API).
+enum AgentProviderKind: String, Codable, Equatable {
+    /// Classic `/v1/chat/completions` SSE — OpenAI, DashScope, DeepSeek,
+    /// Kimi, Moonshot, OpenRouter, SiliconFlow, AnyRouter, some.im, and
+    /// the catch-all Custom preset all speak this dialect.
+    case openAIChat
+    /// New `/v1/responses` API — used by o-series reasoning models.
+    case openAIResponses
+    /// Anthropic native `/v1/messages` — `x-api-key` + `anthropic-version`
+    /// headers, a wholly different request/event shape from OpenAI.
+    case anthropicMessages
+    /// Google AI Studio / Vertex `streamGenerateContent` — `?key=...`
+    /// query param auth, function_declarations schema.
+    case geminiGenerateContent
 }
 
 struct AgentProviderPreset: Identifiable, Equatable {
     let id: String
     let displayName: String
+    /// Transport-protocol family. See `AgentProviderKind` doc-comment.
+    let kind: AgentProviderKind
     let baseURL: String
     let defaultFlashModel: String
     let defaultProModel: String
@@ -795,6 +827,7 @@ struct AgentProviderPreset: Identifiable, Equatable {
     init(
         id: String,
         displayName: String,
+        kind: AgentProviderKind = .openAIChat,
         baseURL: String,
         defaultModel: String,
         defaultFlashModel: String? = nil,
@@ -805,6 +838,7 @@ struct AgentProviderPreset: Identifiable, Equatable {
     ) {
         self.id = id
         self.displayName = displayName
+        self.kind = kind
         self.baseURL = baseURL
         self.defaultFlashModel = defaultFlashModel ?? defaultModel
         self.defaultProModel = defaultProModel ?? defaultModel
@@ -877,6 +911,58 @@ struct AgentProviderPreset: Identifiable, Equatable {
             defaultModel: "claude-sonnet-4-5",
             supportsModelFetch: true,
             modelHints: ["claude", "anthropic"]
+        ),
+        // ---- Relay stations (all OpenAI Chat-compatible) ----
+        // OpenRouter aggregates 100+ models behind one API. We default
+        // to a free-tier text model so the user can verify the
+        // connection without spending budget; chat picker shows
+        // alternates from the live /models fetch.
+        AgentProviderPreset(
+            id: "openrouter",
+            displayName: "OpenRouter",
+            baseURL: "https://openrouter.ai/api/v1",
+            defaultModel: "openai/gpt-4o-mini",
+            defaultProModel: "anthropic/claude-sonnet-4.5",
+            supportsModelFetch: true,
+            // Model IDs on OpenRouter are namespaced (`vendor/model`)
+            // and span every major lab — a hint list would either be
+            // misleadingly narrow or pointlessly broad. Empty list →
+            // `recognizesModelID` defaults to true, which is the
+            // right call for an aggregator.
+            modelHints: []
+        ),
+        // SiliconFlow (硅基流动) — a popular Chinese relay with cheap
+        // access to Qwen / DeepSeek / GLM / Yi / etc.
+        AgentProviderPreset(
+            id: "siliconflow",
+            displayName: "SiliconFlow (硅基流动)",
+            baseURL: "https://api.siliconflow.cn/v1",
+            defaultModel: "Qwen/Qwen2.5-7B-Instruct",
+            defaultProModel: "deepseek-ai/DeepSeek-V3",
+            supportsModelFetch: true,
+            modelHints: []
+        ),
+        // AnyRouter — same shape as OpenRouter, different vendor.
+        // Base URL placeholder; user should override if their account
+        // is on a different shard.
+        AgentProviderPreset(
+            id: "anyrouter",
+            displayName: "AnyRouter",
+            baseURL: "https://anyrouter.top/v1",
+            defaultModel: "gpt-4o-mini",
+            defaultProModel: "claude-sonnet-4-5",
+            supportsModelFetch: true,
+            modelHints: []
+        ),
+        // Rocky's personal relay. No public default model — every
+        // account has its own routing config.
+        AgentProviderPreset(
+            id: "some-im",
+            displayName: "some.im (Rocky's relay)",
+            baseURL: "https://some.im/v1",
+            defaultModel: "",
+            supportsModelFetch: true,
+            modelHints: []
         ),
         AgentProviderPreset(
             id: customID,
@@ -1044,6 +1130,11 @@ enum AgentClientError: LocalizedError {
     case invalidBaseURL
     case invalidResponse
     case serverStatus(AgentProviderHTTPError)
+    /// Thrown when `AgentClient` is asked to talk to a provider whose
+    /// transport-protocol family has no adapter wired up yet. Only
+    /// expected during the multi-provider rollout — once Anthropic /
+    /// Gemini / Responses adapters land this should become unreachable.
+    case unsupportedProviderKind(AgentProviderKind)
 
     var errorDescription: String? {
         switch self {
@@ -1055,6 +1146,8 @@ enum AgentClientError: LocalizedError {
             return "The model provider returned an invalid response."
         case .serverStatus(let error):
             return "The model provider returned HTTP \(error.statusCode)."
+        case .unsupportedProviderKind(let kind):
+            return "Support for the \(kind.rawValue) protocol is not enabled in this build yet."
         }
     }
 }

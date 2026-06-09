@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.56.0-rc1 - 2026-06-09
+
+- **多 Provider 协议骨架（Phase A+B）**。原 [AgentClient.swift](Xedit/AgentClient.swift) 把 "OpenAI 兼容协议" 当成了唯一协议，写死在一个 673 行的 struct 里——claude preset 名义上指向 `api.anthropic.com` 但发的是 OpenAI 形状的 body，实际是坏的。重构成 facade + 适配器两层：
+  - 新增 [Xedit/AgentNetworkSupport.swift](Xedit/AgentNetworkSupport.swift)：协议无关共享工具（timeouts / User-Agent / endpoint 拼接 / body 收集 / 请求日志脱敏 / URL `?key=` 脱敏）。
+  - 新增 [Xedit/AgentClientOpenAIChat.swift](Xedit/AgentClientOpenAIChat.swift)：`OpenAIChatAdapter`，原 `AgentClient` 整段搬运 + 改名，逻辑零修改，承担所有 OpenAI Chat 兼容方言（OpenAI / DashScope / DeepSeek / Kimi / Moonshot / 中转站 / Custom）。
+  - 改 [Xedit/AgentClient.swift](Xedit/AgentClient.swift)：缩成 ~100 行 facade，按 `configuration.providerKind` 分派到适配器。8 个上层调用点（AppStateAgentLoop / EditorSettingsView / AppStateAgentTitleSummarizer）签名零修改。
+  - 新增 `enum AgentProviderKind { openAIChat / openAIResponses / anthropicMessages / geminiGenerateContent }` + `AgentProviderPreset.kind` 字段。`AgentConfiguration.providerKind` 是派生属性（不持久化，由 providerID 查 preset 表得来）。
+  - 新增 `AgentClientError.unsupportedProviderKind(_)`，未通的协议族目前返回这个错（落地在后续 Phase C/D/E）。
+- **新增 4 个中转站 preset**：
+  - **OpenRouter**（`https://openrouter.ai/api/v1`）：聚合 100+ 厂商，模型 ID 形如 `vendor/model`。本应用会自动附带 `HTTP-Referer: https://83d.me` + `X-Title: VeilWriter` 两个 header，用于在 OpenRouter 应用榜署名。
+  - **SiliconFlow（硅基流动）**（`https://api.siliconflow.cn/v1`）：国内常用聚合站，便宜的 Qwen / DeepSeek / GLM 入口。
+  - **AnyRouter**（`https://anyrouter.top/v1`）：占位 base URL，用户可改。
+  - **some.im (Rocky's relay)**：作者个人中转站。
+- **Settings UI 协议徽章 + 帮助卡片骨架**：
+  - 左侧 Provider 列表每行加 kind 徽章（`OpenAI Chat` / `Anthropic` / `Gemini` / `OpenAI Responses`），一眼区分协议族。
+  - 编辑器 Connection 区在 Preset 下方加协议说明卡片，根据当前 kind 显示该方言的 1-2 行人话解释。
+  - Preset 下拉每项后缀 ` · OpenAI Chat` 这类协议名。
+  - API Key 字段下方加申请地址提示（OpenAI / Claude / Gemini / OpenRouter / SiliconFlow 都给了具体网址）。
+  - OpenRouter / some.im / Gemini 各自一行专属说明。
+  - 新增 [Xedit/AgentProviderL10n.swift](Xedit/AgentProviderL10n.swift) 集中放 UI 文案，方便后续接 Localizable.xcstrings。
+- **claude preset 暂时不可用**：原 OpenAI Chat 适配器里给 `providerID == "claude"` 加 `x-api-key` 的特殊分支已删除。claude preset 在 Phase A→C 之间的空窗期会因为缺 Anthropic header 而 401——但既然之前就是「OpenAI 形状的 body 打 Anthropic 端点」的坏状态，实际能跑通的用户为零，不破坏任何工作中的功能。Phase C 落地 Anthropic 原生适配器后立刻修复。
+- **顺手捎带的 i18n / UX 改动**（原本计划单独发 `1.55.0`，跟 multi-provider 合并进同一个 commit 一起出 rc1）：
+  - **修 i18n 在中文系统下完全失效的根因**：[Xedit.xcodeproj/project.pbxproj:222](Xedit.xcodeproj/project.pbxproj:222) 的 `knownRegions` 里只有 `en` 和 `Base`，没有 `zh-Hans`。结果 `Localizable.xcstrings` 里已经写好的 242 条中文翻译压根不进 bundle，运行时 `String(localized:)` 直接回退到英文 `defaultValue`。修法：把 `zh-Hans` 加进 `knownRegions`。
+  - **简化破坏性命令确认 UX**。[AgentPanelView.swift:934](Xedit/AgentPanelView.swift:934) 之前要求用户在文本框里键入 `confirm` 才解锁 Run 按钮——过于繁琐。改成普通的红色「确认执行」按钮 + 「拒绝」按钮，配警告文案：「这是破坏性命令，确认后再执行。」后端 `confirmAgentToolCall(id:typedConfirmation:)` 接口不动，UI 层直接传字面量 `"confirm"`——安全门槛仍在程序层，但用户不必每次手动打字。
+  - **Settings 窗 + Agent 工具卡片接入 i18n**。8 个 tab Label、14 个 Section header、6 个 Toggle、4 个 Button 全部走 [L10n.swift](Xedit/L10n.swift) 字典。`xcstrings` 同步加 54 条 en/zh-Hans 翻译对照。
+- 版本号 `1.54.1-rc16` → `1.56.0-rc1`（multi-provider 协议骨架属于新增功能 → 跨次版本位 +1，rc 重置；上述 i18n / UX 改动顺道一起发）。前后端版本号统一对齐：xcodeproj `MARKETING_VERSION` + Help bundle Info.plist 都改成 `1.56.0-rc1`。
+
 ## 1.54.1-rc16 - 2026-06-09
 
 - **修 rc15 升错档：actions/upload-artifact@v5 居然还是 node20**。rc15 推上去之后 CI 黄字 annotation 还在，点名 `upload-artifact@v5`。去 GitHub 官方 release 仓库查实：upload-artifact 主线已经到 v7（v6 才是搬到 node24 的那一档，v7 是当前主推），checkout 主线也到了 v6。`@v5` 这道台阶是 node20 的最后一站。

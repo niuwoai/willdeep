@@ -965,6 +965,8 @@ extension AppState {
                 default:       hint = "查看「Details」里的响应体定位原因。"
                 }
                 return "模型服务返回 HTTP \(code)。\(hint)"
+            case .unsupportedProviderKind(let kind):
+                return "当前 provider 使用的传输协议（\(kind.rawValue)）在这个版本里还没接通。到 Settings → Agent Providers 里换一个支持的 provider，或等下个版本。"
             }
         }
         return error.localizedDescription

@@ -50,42 +50,42 @@ struct EditorSettingsView: View {
         TabView {
             typographySettings
                 .tabItem {
-                    Label("Typography", systemImage: "textformat")
+                    Label(L10n.Settings.tabTypography, systemImage: "textformat")
                 }
 
             appearanceSettings
                 .tabItem {
-                    Label("Appearance", systemImage: "paintpalette")
+                    Label(L10n.Settings.tabAppearance, systemImage: "paintpalette")
                 }
 
             workspaceSettings
                 .tabItem {
-                    Label("Workspace", systemImage: "sidebar.left")
+                    Label(L10n.Settings.tabWorkspace, systemImage: "sidebar.left")
                 }
 
             agentSettings
                 .tabItem {
-                    Label("Agent", systemImage: "sparkles")
+                    Label(L10n.Settings.tabAgent, systemImage: "sparkles")
                 }
 
             AgentMemorySettingsView()
                 .tabItem {
-                    Label("Memory", systemImage: "brain.head.profile")
+                    Label(L10n.Settings.tabMemory, systemImage: "brain.head.profile")
                 }
 
             AgentSkillSettingsView()
                 .tabItem {
-                    Label("Skills", systemImage: "wand.and.stars")
+                    Label(L10n.Settings.tabSkills, systemImage: "wand.and.stars")
                 }
 
             AgentMCPSettingsView()
                 .tabItem {
-                    Label("MCP", systemImage: "globe")
+                    Label(L10n.Settings.tabMcp, systemImage: "globe")
                 }
 
             toolsSettings
                 .tabItem {
-                    Label("Tools", systemImage: "terminal")
+                    Label(L10n.Settings.tabTools, systemImage: "terminal")
                 }
         }
         .padding(20)
@@ -106,7 +106,7 @@ struct EditorSettingsView: View {
 
     private var typographySettings: some View {
         Form {
-            Section("Typography") {
+            Section(L10n.Settings.sectionTypography) {
                 Picker("Font", selection: setting(\.fontID)) {
                     ForEach(EditorFontChoice.allCases) { font in
                         Text(font.displayName).tag(font.id)
@@ -133,7 +133,7 @@ struct EditorSettingsView: View {
 
     private var appearanceSettings: some View {
         Form {
-            Section("Color Style") {
+            Section(L10n.Settings.sectionColorStyle) {
                 Picker("Theme", selection: setting(\.themeID)) {
                     ForEach(EditorTheme.all) { theme in
                         Text(theme.displayName).tag(theme.id)
@@ -154,7 +154,7 @@ struct EditorSettingsView: View {
                 .padding(.vertical, 4)
             }
 
-            Section("Editor Background") {
+            Section(L10n.Settings.sectionEditorBackground) {
                 LabeledContent("Image") {
                     HStack {
                         Text(backgroundImageLabel)
@@ -162,10 +162,10 @@ struct EditorSettingsView: View {
                             .truncationMode(.middle)
                             .foregroundStyle(appState.editorSettings.windowBackgroundImagePath == nil ? .secondary : .primary)
                         Spacer(minLength: 8)
-                        Button("Choose...") {
+                        Button(L10n.Settings.buttonChoose) {
                             chooseBackgroundImage()
                         }
-                        Button("Clear") {
+                        Button(L10n.Settings.buttonClear) {
                             update(\.windowBackgroundImagePath, nil)
                         }
                         .disabled(appState.editorSettings.windowBackgroundImagePath == nil)
@@ -199,10 +199,10 @@ struct EditorSettingsView: View {
                 }
             }
 
-            Section("Editor") {
-                Toggle("Show Line Numbers", isOn: setting(\.showsLineNumbers))
-                Toggle("Highlight Current Line", isOn: setting(\.highlightsCurrentLine))
-                Toggle("Glass Editor Background", isOn: setting(\.editorGlassEnabled))
+            Section(L10n.Settings.sectionEditor) {
+                Toggle(L10n.Settings.toggleShowLineNumbers, isOn: setting(\.showsLineNumbers))
+                Toggle(L10n.Settings.toggleHighlightCurrentLine, isOn: setting(\.highlightsCurrentLine))
+                Toggle(L10n.Settings.toggleGlassEditorBackground, isOn: setting(\.editorGlassEnabled))
 
                 Picker("Glass Material", selection: setting(\.editorGlassMaterial)) {
                     ForEach(EditorGlassMaterial.allCases) { material in
@@ -237,7 +237,7 @@ struct EditorSettingsView: View {
 
     private var workspaceSettings: some View {
         Form {
-            Section("Sidebar") {
+            Section(L10n.Settings.sectionSidebar) {
                 LabeledContent("Text Size") {
                     HStack {
                         Slider(value: setting(\.fileTreeFontSize), in: 10...16, step: 1)
@@ -257,7 +257,7 @@ struct EditorSettingsView: View {
                 }
             }
 
-            Section("Inspector") {
+            Section(L10n.Settings.sectionInspector) {
                 Picker("Default View", selection: setting(\.preferredInspectorMode)) {
                     ForEach(EditorInspectorMode.allCases) { mode in
                         Text(mode.displayName).tag(mode)
@@ -271,9 +271,9 @@ struct EditorSettingsView: View {
                 }
             }
 
-            Section("Save") {
-                Toggle("Trim Trailing Whitespace", isOn: setting(\.trimsTrailingWhitespaceOnSave))
-                Toggle("Ensure Final Newline", isOn: setting(\.ensuresFinalNewlineOnSave))
+            Section(L10n.Settings.sectionSave) {
+                Toggle(L10n.Settings.toggleTrimTrailingWhitespace, isOn: setting(\.trimsTrailingWhitespaceOnSave))
+                Toggle(L10n.Settings.toggleEnsureFinalNewline, isOn: setting(\.ensuresFinalNewlineOnSave))
             }
         }
         .formStyle(.grouped)
@@ -281,7 +281,7 @@ struct EditorSettingsView: View {
 
     private var agentSettings: some View {
         Form {
-            Section("Agent Providers") {
+            Section(L10n.Settings.sectionAgentProviders) {
                 AgentProviderLibrarySection(
                     fetchedAgentModels: $fetchedAgentModels,
                     isFetchingAgentModels: $isFetchingAgentModels,
@@ -292,7 +292,7 @@ struct EditorSettingsView: View {
                 )
             }
 
-            Section("Image Understanding") {
+            Section(L10n.Settings.sectionImageUnderstanding) {
                 Picker("Provider", selection: imageProviderBinding) {
                     ForEach(AgentProviderPreset.all.filter(\.supportsImageInput)) { provider in
                         Text(provider.displayName).tag(provider.id)
@@ -324,13 +324,13 @@ struct EditorSettingsView: View {
                     .foregroundStyle(.secondary)
 
                 HStack {
-                    Button("Save") {
+                    Button(L10n.Settings.buttonSave) {
                         commitAgentBuffers()
                     }
                     .disabled(!agentBuffersDiffer)
                     .keyboardShortcut(.return, modifiers: [.command])
 
-                    Button("Revert") {
+                    Button(L10n.Settings.buttonRevert) {
                         loadAgentBuffersFromAppState()
                         agentSaveStatus = ""
                     }
@@ -369,7 +369,7 @@ struct EditorSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Conversation Title") {
+            Section(L10n.Settings.sectionConversationTitle) {
                 LabeledContent("Title Model") {
                     TextField("", text: $agentTitleModelBuffer, prompt: Text("(leave empty → use Flash model)"))
                         .textFieldStyle(.roundedBorder)
@@ -379,8 +379,8 @@ struct EditorSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Tool approval") {
-                Toggle("Auto-approve safe commands", isOn: Binding(
+            Section(L10n.Settings.sectionToolApproval) {
+                Toggle(L10n.Settings.toggleAutoApproveSafe, isOn: Binding(
                     get: { appState.autoApproveSafeCommands },
                     set: { appState.autoApproveSafeCommands = $0 }
                 ))
@@ -389,9 +389,9 @@ struct EditorSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Concurrency") {
+            Section(L10n.Settings.sectionConcurrency) {
                 HStack {
-                    Text("Per-provider concurrency")
+                    Text(L10n.Settings.perProviderConcurrency)
                     Spacer()
                     Text("\(appState.perProviderConcurrencyLimit)")
                         .monospacedDigit()
@@ -410,9 +410,9 @@ struct EditorSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Appearance") {
+            Section(L10n.Settings.sectionAgentAppearance) {
                 HStack {
-                    Text("Chat base font size")
+                    Text(L10n.Settings.chatBaseFontSize)
                     Spacer()
                     Text("\(Int(appState.agentChatBaseFontSize.rounded())) pt")
                         .monospacedDigit()
@@ -520,9 +520,9 @@ struct EditorSettingsView: View {
 
     private var toolsSettings: some View {
         Form {
-            Section("Agent Always Allow") {
+            Section(L10n.Settings.sectionAgentAlwaysAllow) {
                 if appState.agentAlwaysAllowedCommands.isEmpty {
-                    Text("No commands are always allowed.")
+                    Text(L10n.Settings.noAlwaysAllowed)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
@@ -1015,10 +1015,28 @@ struct AgentProviderLibrarySection: View {
             .help(isActive ? "Active provider" : "Make active")
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(entry.displayName)
-                    .font(.system(size: 13, weight: isActive ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? Color.white : Color.primary)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(entry.displayName)
+                        .font(.system(size: 13, weight: isActive ? .semibold : .regular))
+                        .foregroundStyle(isSelected ? Color.white : Color.primary)
+                        .lineLimit(1)
+                    // Tiny kind badge so the user can tell at a glance
+                    // whether a row is OpenAI Chat / Anthropic / Gemini.
+                    // Falls back to "OpenAI Chat" for unknown
+                    // (custom-edited) provider IDs — matches the
+                    // adapter dispatch in `AgentClient`.
+                    Text(kindLabel(for: entry))
+                        .font(.system(size: 9, weight: .medium))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(
+                            Capsule()
+                                .fill(isSelected
+                                      ? Color.white.opacity(0.18)
+                                      : Color.secondary.opacity(0.12))
+                        )
+                        .foregroundStyle(isSelected ? Color.white : Color.secondary)
+                }
                 Text(entry.flashPrimary)
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(isSelected ? Color.white.opacity(0.85) : Color.secondary)
@@ -1072,6 +1090,15 @@ struct AgentProviderLibrarySection: View {
         )
         appState.upsertProviderLibraryEntry(entry)
         selectedEntryID = entry.id
+    }
+
+    /// Sidebar badge label. Look up the entry's preset to get its
+    /// `kind` — unknown providerIDs (user-edited Custom rows) fall
+    /// back to OpenAI Chat, which matches the facade dispatch and
+    /// won't mislead about transport protocol.
+    private func kindLabel(for entry: AgentProviderEntry) -> String {
+        let kind = AgentProviderPreset.preset(id: entry.providerID)?.kind ?? .openAIChat
+        return kind.shortLabel
     }
 
     private func ensureSelection() {
@@ -1132,7 +1159,7 @@ private struct AgentProviderEntryEditor: View {
                 fieldRow("Preset") {
                     Picker("", selection: $providerID) {
                         ForEach(AgentProviderPreset.all) { p in
-                            Text(p.displayName).tag(p.id)
+                            Text("\(p.displayName) · \(p.kind.shortLabel)").tag(p.id)
                         }
                     }
                     .labelsHidden()
@@ -1154,6 +1181,7 @@ private struct AgentProviderEntryEditor: View {
                         commit()
                     }
                 }
+                protocolHelpCard
                 fieldRow("Base URL") {
                     TextField("https://...", text: $baseURL, onCommit: commit)
                         .textFieldStyle(.roundedBorder)
@@ -1165,9 +1193,73 @@ private struct AgentProviderEntryEditor: View {
                         onCommit: commit
                     )
                 }
+                apiKeyHint
             }
             .padding(.vertical, 6)
             .padding(.horizontal, 4)
+        }
+    }
+
+    /// Tinted card that explains which transport protocol the
+    /// currently picked preset speaks. Hidden when no preset matches
+    /// (e.g. the user is hand-editing into the Custom row); the
+    /// inline notice row below covers the relay-specific call-outs.
+    @ViewBuilder
+    private var protocolHelpCard: some View {
+        if let preset = AgentProviderPreset.preset(id: providerID) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: protocolIcon(for: preset.kind))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                    Text("协议：\(preset.kind.shortLabel)")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+                Text(preset.kind.helpText)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let notice = preset.inlineNotice {
+                    Divider()
+                    Text(notice)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.accentColor.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color.accentColor.opacity(0.25), lineWidth: 1)
+            )
+            .padding(.leading, labelWidth + 8)
+        }
+    }
+
+    @ViewBuilder
+    private var apiKeyHint: some View {
+        if let preset = AgentProviderPreset.preset(id: providerID),
+           !preset.apiKeySourceHint.isEmpty {
+            Text(preset.apiKeySourceHint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.leading, labelWidth + 8)
+        }
+    }
+
+    private func protocolIcon(for kind: AgentProviderKind) -> String {
+        switch kind {
+        case .openAIChat:           return "bubble.left.and.bubble.right"
+        case .openAIResponses:      return "brain"
+        case .anthropicMessages:    return "a.circle"
+        case .geminiGenerateContent: return "sparkles"
         }
     }
 
