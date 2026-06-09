@@ -37,7 +37,18 @@ extension AppState {
         )
     }
 
-    nonisolated static func loadAgentWorktreeChangeSummary(status: GitRepositoryStatus) -> AgentWorktreeChangeSummary {
+    /// Build the summary that drives the "正在编辑 / N 个文件已更改" card.
+    ///
+    /// `restrictTo` is the per-session allow-list of workspace-relative
+    /// paths the Agent has actually written via apply_patch. When non-nil
+    /// we hard-filter the result to that set, so the user's own diffs
+    /// and untracked junk (`__pycache__/*.pyc`, build artifacts, …)
+    /// never get attributed to the Agent. Nil = legacy "whole worktree"
+    /// fallback, used only for the global pre-session refresh path.
+    nonisolated static func loadAgentWorktreeChangeSummary(
+        status: GitRepositoryStatus,
+        restrictTo: Set<String>? = nil
+    ) -> AgentWorktreeChangeSummary {
         guard let repositoryRoot = status.repositoryRoot else {
             return AgentWorktreeChangeSummary()
         }
@@ -47,6 +58,9 @@ extension AppState {
         let files: [AgentFileChangeSummary] = status.entries.compactMap { entry in
             let path = entry.key
             let kind = entry.value
+            if let restrictTo, !restrictTo.contains(path) {
+                return nil
+            }
             let stats = lineStats[path] ?? AgentLineChangeStats(added: nil, deleted: nil)
             let hasNumstatEntry = lineStats[path] != nil
             guard shouldIncludeAgentWorktreeChange(
@@ -339,10 +353,14 @@ extension AppState {
         }
 
         let targetDirectory = rootDirectory.standardizedFileURL
+        let editedPaths = agentEditedRelativePaths
         gitStatusRefreshTask = Task { [weak self] in
             let snapshot = await Task.detached(priority: .utility) {
                 let status = Self.loadGitStatus(for: targetDirectory)
-                let changes = Self.loadAgentWorktreeChangeSummary(status: status)
+                let changes = Self.loadAgentWorktreeChangeSummary(
+                    status: status,
+                    restrictTo: editedPaths
+                )
                 return (status: status, changes: changes)
             }.value
 
@@ -370,8 +388,12 @@ extension AppState {
 
         let runtimeID = runtime.id
         let targetDirectory = URL(fileURLWithPath: workspaceRootPath).standardizedFileURL
+        let editedPaths = runtime.agentEditedPaths
         Task { [weak self] in
-            let snapshot = await Self.loadAgentWorktreeSnapshot(for: targetDirectory)
+            let snapshot = await Self.loadAgentWorktreeSnapshot(
+                for: targetDirectory,
+                restrictTo: editedPaths
+            )
             await MainActor.run {
                 guard let self,
                       let runtime = self.agentRuntimes[runtimeID],
@@ -398,10 +420,17 @@ extension AppState {
         }
 
         let targetDirectory = workspaceURL.standardizedFileURL
-        let snapshot = await Self.loadAgentWorktreeSnapshot(for: targetDirectory)
+        let snapshot = await Self.loadAgentWorktreeSnapshot(
+            for: targetDirectory,
+            restrictTo: runtime.agentEditedPaths
+        )
 
         runtime.worktreeChanges = snapshot.changes
-        if !snapshot.changes.isEmpty, snapshot.fingerprint != baselineFingerprint {
+        // didEditFiles flips on any real worktree movement (including
+        // run_command side effects), keyed off fingerprint — NOT the
+        // filtered card content, otherwise a run_command that touched
+        // unrelated files would never trip it.
+        if snapshot.fingerprint != baselineFingerprint {
             runtime.didEditFiles = true
             persistAgentSession(runtime: runtime)
         }
@@ -420,7 +449,10 @@ extension AppState {
         var fingerprint: String
     }
 
-    nonisolated static func loadAgentWorktreeSnapshot(for directoryURL: URL?) async -> AgentWorktreeSnapshot {
+    nonisolated static func loadAgentWorktreeSnapshot(
+        for directoryURL: URL?,
+        restrictTo: Set<String>? = nil
+    ) async -> AgentWorktreeSnapshot {
         guard let directoryURL else {
             return AgentWorktreeSnapshot(
                 status: GitRepositoryStatus(),
@@ -431,7 +463,7 @@ extension AppState {
         let targetDirectory = directoryURL.standardizedFileURL
         return await Task.detached(priority: .utility) {
             let status = Self.loadGitStatus(for: targetDirectory)
-            let changes = Self.loadAgentWorktreeChangeSummary(status: status)
+            let changes = Self.loadAgentWorktreeChangeSummary(status: status, restrictTo: restrictTo)
             let fingerprint = Self.agentWorktreeFingerprint(status: status)
             return AgentWorktreeSnapshot(status: status, changes: changes, fingerprint: fingerprint)
         }.value

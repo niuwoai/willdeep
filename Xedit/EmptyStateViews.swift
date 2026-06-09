@@ -214,7 +214,7 @@ struct EmptyWorkspaceHero: View {
                 Text("v\(version)")
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
-                    .padding(.top, 4)
+                    .padding(.top, 18)
             }
         }
     }

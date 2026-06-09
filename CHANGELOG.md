@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.54.1-rc14 - 2026-06-09
+
+- **修两个 Agent 文件变更卡片上的视觉/语义 bug**。用户截图：worktree 卡片显示「已编辑 3063 个文件」并列出三个 `__pycache__/*.pyc`；右侧菜单第一项写「在 Xedit 新窗口打开」。两处都不对——产品叫 **VeilWriter**，目录碰巧叫 Xedit；3060 个文件也不可能是 Agent 真的编辑了，明显把整个 worktree 都算上了。
+- **修法 1（文案）**：[AgentPanelView.swift:430](Xedit/AgentPanelView.swift:430) + [Localizable.xcstrings:5252](Xedit/Localizable.xcstrings:5252) 把 `在 Xedit 新窗口打开` 改成 `在新窗口打开`。去品牌化更稳——以后改名/做多语言都不用改第二遍。
+- **修法 2（统计错算）**：根因是 [AppStateGitStatus.loadAgentWorktreeChangeSummary](Xedit/AppStateGitStatus.swift) 直接拿 `git status` 全量 entries 算 fileCount，把用户自己改的、untracked 的 `.pyc` 都算成 Agent 改的。改成只统计 Agent 这次会话真正写过的相对路径：
+  - [AgentRuntime](Xedit/AgentRuntime.swift) 新增 `agentEditedPaths: Set<String>`；
+  - [AgentSession](Xedit/AgentModels.swift) 持久化字段 `agentEditedPaths: [String]`，老 session JSON 无此字段时缺省空（`decodeIfPresent`）；
+  - [AppState](Xedit/AppState.swift) 加 delegate `agentEditedRelativePaths` 转发到 `activeRuntime`，与 `agentSessionDidEditFiles` 同风格；
+  - [applyAgentPatch](Xedit/AppStateAgentLoop.swift) 每次写入成功后把目标 workspace-relative path 插入 set；
+  - `loadAgentWorktreeChangeSummary(status:, restrictTo:)` 加可选白名单；`loadAgentWorktreeSnapshot` 同步加；三个调用点（`refreshGitStatus` / `refreshActiveAgentWorktreeChanges` / `refreshGitStatusAfterAgentTool`）都传 active runtime 的 `agentEditedPaths`。
+- **保留的语义**：`didEditFiles` 仍然按 fingerprint 翻脏（这样 `run_command` 真正改了文件也会标脏），但卡片只显示 `agentEditedPaths` 范围内的文件。`run_command` 改的文件本次先不进卡片——它本来就是用户主动授权过的，且没有可靠方式从命令字符串里推出"改了哪些文件"，等出现具体场景再补。
+- **回归保障**：build 通过；老 session JSON 仍可读（缺省字段走 decodeIfPresent → 空集）；3060 个未跟踪 `.pyc` 不会再混进卡片；fresh New Chat 仍然不显示卡片（`didEditFiles` 没翻 → 卡片整张不渲染）。
+- 版本号 `1.54.1-rc13` → `1.54.1-rc14`（UX bugfix + 统计修复 → 仅 rc 递增；没新增功能、没动 wire protocol、`AgentSession` 仅增加 optional 字段向前兼容）。
+
+## 1.54.1-rc13 - 2026-06-08
+
+- **空状态页（未打开文件夹）版本号离按钮组太近，视觉上「黏」在一起**。截图：`Agent 模式` 紫色按钮下方紧跟着 `v1.54.1-rc12`，留白只有 4pt，看着像按钮组的附加元素而不是页脚 caption。
+- **修法**：[EmptyStateViews.swift](Xedit/EmptyStateViews.swift:217) 把版本号的 `padding(.top, 4)` 提到 `padding(.top, 18)`，叠加外层 VStack `spacing: 22`，按钮组和版本号之间总间距从 ~26pt 提到 ~40pt——按钮组成为视觉一组，版本号下沉成独立页脚带，呼吸感对头。
+- 版本号 `1.54.1-rc12` → `1.54.1-rc13`（UX bugfix → 仅 rc 递增；纯一个数字微调，没动逻辑 / 数据 / wire protocol）。
+
+## 1.54.1-rc12 - 2026-06-08
+
+- **修 Routine "立即运行一次" 按下后 sidebar 看起来什么都没发生的 bug**。用户报告：在「编辑 Routine」对话框里点「立即运行一次」，sidebar 完全没有冒出新会话，像是按钮没接线。但代码路径其实是通的——[AppStateAgentSessions.fireRoutine](Xedit/AppStateAgentSessions.swift) 确实建了一个新 `AgentSession`、`agentSessions.insert` 进了列表、`dispatchAgentMessage` 也发了。
+- **根因**：[AgentSessionsSidebar.groupedSessions](Xedit/AgentSessionsSidebar.swift) 第 464-467 行有一个「藏空壳 New Chat」过滤器——`session.messages.contains(where: { $0.role == .user })` 才显示，否则只有当前 active session 那一条例外保留。普通用户聊天靠 active 例外路径一直可见；但 routine 触发的 session **故意不改 `activeAgentSessionID`**（rc3+ 的设计，避免把用户从当前会话拽走），所以它必须靠 `session.messages` 非空才能现身。问题来了：`dispatchAgentMessage` 73 行 append 的 user message 落在 `runtime.messages` 上，要等 [runAgentLoop](Xedit/AppStateAgentLoop.swift) 的 defer 跑到 600 行 `persistAgentSession` 才会被 `runtime.persist()` 同步到 `session.messages` 并赋值回 `agentSessions[index]`。如果 provider 调用慢（比如 DeepSeek 响应几秒）或者直接卡住/失败（key 失效、网络问题），sidebar 在这段空窗期里**一直**看不到那条新会话，用户视觉感受就是「按钮没反应」。
+- **修法**：[fireRoutine](Xedit/AppStateAgentSessions.swift:932) 在 `dispatchAgentMessage(...)` 后立刻补一次 `persistAgentSession(runtime: runtime)`。dispatchAgentMessage 内部 append user message 是**同步**的（在 spawn Task 之前），所以返回时 `runtime.messages` 末尾已有这条消息，persist 把它落到 `session.messages` → `agentSessions[index]` → sidebar 过滤通过 → 行立刻可见。Provider 并发上限被打满走 PendingDispatch 队列那条分支下 runtime.messages 仍是空——此时 persist 是无副作用的同值赋值，等 drain 触发的二次 dispatch 走正常路径再 append + 下一次 persist 兜底，可接受的小延迟。
+- **为什么不直接在 dispatchAgentMessage 通用路径里加 persist**：那条路径每次普通用户敲消息都会走，会在热路径加一次磁盘写；普通会话靠 activeID 例外路径本来就可见，没必要救。只在 fireRoutine 这条 routine-专属路径里补，影响面最小。
+- **为什么不让 sidebar 过滤识别 routine session**：要给 `AgentSession` 加新字段、改 schema、动持久化兼容，blast radius 太大；而且本质问题是「dispatch 后 session 还没收到 messages」，修 persist 时机比修过滤器更对症。
+- 版本号 `1.54.1-rc11` → `1.54.1-rc12`（UX bugfix → 仅 rc 递增；纯调一次 persist 时机，没改 wire protocol / 数据模型 / 功能集）。
+
 ## 1.54.1-rc11 - 2026-06-08
 
 - **修 CI 在 macos-26 上跑通 testSaveCurrentFile**。rc10 把 runner 升到 macos-26 + Xcode 26.4.1 后，部署目标 mismatch 没了，xcodebuild 真的能跑起来了，但新暴露了一个潜在 main-thread bug：`AppState.updateWindowTitle` 内部直接读 `NSApplication.shared.keyWindow` 并改 `window.title` / `window.isDocumentEdited`；测试 `testSaveCurrentFile` 通过 Swift Testing 默认在 cooperative pool 非主线程里同步调 `appState.saveCurrentFile()` → `writeCurrentFile()` → 这里。macOS 15 的 Main Thread Checker 只 warn，macOS 26 把它升为 fatal `NSInternalInconsistencyException: NSWindow geometry should only be modified on the main thread!`，测试进程 SIGABRT、xcodebuild 重启 3 次后判 TEST FAILED。

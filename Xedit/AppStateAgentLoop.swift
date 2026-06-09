@@ -1331,7 +1331,7 @@ extension AppState {
         let changes = try AgentPatchApplier.parse(diff)
         let root = rootDirectory.standardizedFileURL
         let rootPath = root.path
-        var pendingWrites: [(url: URL, content: String)] = []
+        var pendingWrites: [(url: URL, content: String, relativePath: String)] = []
 
         for change in changes {
             let url = try resolveAgentPatchURL(change.path, root: root, rootPath: rootPath)
@@ -1341,7 +1341,8 @@ extension AppState {
 
             let currentContent = try editableContent(forAgentPatchURL: url)
             let newContent = try AgentPatchApplier.apply(change, to: currentContent)
-            pendingWrites.append((url, newContent))
+            let relativePath = Self.relativeWorkspacePath(for: url, root: root, rootPath: rootPath)
+            pendingWrites.append((url, newContent, relativePath))
         }
 
         for pendingWrite in pendingWrites {
@@ -1354,11 +1355,25 @@ extension AppState {
         // patch never get the card, even if the repo has unrelated diffs.
         if !pendingWrites.isEmpty {
             agentSessionDidEditFiles = true
+            // Record each written path so the card stays scoped to files
+            // Agent actually touched in THIS session — never the user's
+            // own diffs or untracked build artifacts.
+            var edited = agentEditedRelativePaths
+            for write in pendingWrites where !write.relativePath.isEmpty {
+                edited.insert(write.relativePath)
+            }
+            agentEditedRelativePaths = edited
             persistActiveAgentSession()
         }
 
         refreshGitStatus()
         persistSession()
+    }
+
+    nonisolated static func relativeWorkspacePath(for url: URL, root: URL, rootPath: String) -> String {
+        let standardized = url.standardizedFileURL.path
+        guard standardized.hasPrefix(rootPath + "/") else { return "" }
+        return String(standardized.dropFirst(rootPath.count + 1))
     }
 
     func resolveAgentPatchURL(_ path: String, root: URL, rootPath: String) throws -> URL {

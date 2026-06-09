@@ -13,6 +13,9 @@
     "·" : {
 
     },
+    "(leave empty → use Flash model)" : {
+
+    },
     "@%@" : {
 
     },
@@ -119,6 +122,9 @@
 
     },
     "1." : {
+
+    },
+    "A short one-shot completion summarizes each new chat into a ≤12-char title after the first assistant reply. Set a cheap/fast model here (e.g. `deepseek-chat`, `gpt-4o-mini`, `qwen-turbo`) to avoid burning Pro tokens on titling. Empty → falls back to the active provider's Flash model." : {
 
     },
     "Active provider" : {
@@ -1471,6 +1477,9 @@
       }
     },
     "Conversation mode — Plan locks writes until you approve; Goal pins an objective to every reply." : {
+
+    },
+    "Conversation Title" : {
 
     },
     "Conversations with fewer tool calls are skipped." : {
@@ -4274,6 +4283,78 @@
         }
       }
     },
+    "sidebar.rename-session.alert-message" : {
+      "comment" : "NSAlert.informativeText for the rename-session dialog",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Give this conversation a new name."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "给这个会话起个新名字。"
+          }
+        }
+      }
+    },
+    "sidebar.rename-session.alert-title" : {
+      "comment" : "NSAlert.messageText for the rename-session dialog",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rename Session"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重命名会话"
+          }
+        }
+      }
+    },
+    "sidebar.rename-session.cancel" : {
+      "comment" : "Cancel button in the rename-session alert",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
+    "sidebar.rename-session.confirm" : {
+      "comment" : "Confirm button in the rename-session alert",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存"
+          }
+        }
+      }
+    },
     "sidebar.session-list.see-more" : {
       "comment" : "button label to expand session list",
       "extractionState" : "manual",
@@ -4396,78 +4477,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "用 AI 总结标题"
-          }
-        }
-      }
-    },
-    "sidebar.rename-session.alert-title" : {
-      "comment" : "NSAlert.messageText for the rename-session dialog",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rename Session"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "重命名会话"
-          }
-        }
-      }
-    },
-    "sidebar.rename-session.alert-message" : {
-      "comment" : "NSAlert.informativeText for the rename-session dialog",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Give this conversation a new name."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "给这个会话起个新名字。"
-          }
-        }
-      }
-    },
-    "sidebar.rename-session.confirm" : {
-      "comment" : "Confirm button in the rename-session alert",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Save"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存"
-          }
-        }
-      }
-    },
-    "sidebar.rename-session.cancel" : {
-      "comment" : "Cancel button in the rename-session alert",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cancel"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "取消"
           }
         }
       }
@@ -5042,6 +5051,9 @@
     "Timeout" : {
 
     },
+    "Title Model" : {
+
+    },
     "Tool approval" : {
 
     },
@@ -5237,7 +5249,7 @@
     "在 Finder 中显示" : {
 
     },
-    "在 Xedit 新窗口打开" : {
+    "在新窗口打开" : {
 
     },
     "复制" : {

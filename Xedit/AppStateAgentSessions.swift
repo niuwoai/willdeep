@@ -930,6 +930,22 @@ extension AppState {
         // FIFO as slots free. So even a fleet of 10 routines hitting
         // the same provider all at 09:00 won't stomp on each other.
         dispatchAgentMessage(for: runtime, text: prompt, images: [])
+
+        // Sidebar hides sessions whose persisted `session.messages` is
+        // still empty (the "empty New Chat" filter in AgentSessionsSidebar
+        // groupedSessions). For interactive chats the activeID branch
+        // keeps the row visible, but a routine-spawned session is NEVER
+        // active by design (rc3+ keeps the user on whatever they were
+        // reading). The first message only lands on `session.messages`
+        // when runAgentLoop's defer calls persistAgentSession — which is
+        // way after the click, and never if the provider call hangs. So
+        // here, right after the dispatch synchronously appended the user
+        // message to `runtime.messages`, push that state to the session
+        // so the row pops into the sidebar immediately. Provider-queue
+        // path (cap full → PendingDispatch) leaves runtime.messages
+        // empty, which is fine: persist is a no-op-cheap copy in that
+        // case and the drain will re-trigger this path soon.
+        persistAgentSession(runtime: runtime)
         return true
     }
 

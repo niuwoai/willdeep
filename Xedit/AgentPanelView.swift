@@ -427,7 +427,7 @@ struct AgentWorktreeChangeCard: View {
             AgentLineStatsView(change: change)
 
             Menu {
-                Button("在 Xedit 新窗口打开") {
+                Button("在新窗口打开") {
                     openInXeditWindow(change)
                 }
                 .disabled(appState.agentChangedFileURL(change.path) == nil)

@@ -73,6 +73,11 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// Drives the "正在编辑 / N 个文件已更改" worktree card so empty
     /// sessions never light it up.
     @Published var didEditFiles: Bool = false
+    /// Workspace-relative paths the Agent has actually written to in
+    /// this session (via apply_patch). Used to filter the worktree-change
+    /// card so it shows only files Agent touched — never the user's own
+    /// uncommitted edits or untracked junk like `__pycache__/*.pyc`.
+    @Published var agentEditedPaths: Set<String> = []
     /// Live `git status` snapshot for this session's workspace. Each
     /// runtime owns its own — switching from a session in workspace A
     /// to one in workspace B shouldn't briefly show A's changes. The
@@ -113,6 +118,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         // Seed live state from persisted session.
         self.messages = session.messages
         self.didEditFiles = session.didEditFiles
+        self.agentEditedPaths = Set(session.agentEditedPaths)
         self.interactionMode = session.interactionMode
         self.currentPlan = session.currentPlan
         self.currentGoal = session.currentGoal
@@ -126,6 +132,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     func persist() {
         session.messages = messages
         session.didEditFiles = didEditFiles
+        session.agentEditedPaths = agentEditedPaths.sorted()
         session.interactionMode = interactionMode
         session.currentPlan = currentPlan
         session.currentGoal = currentGoal

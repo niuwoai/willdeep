@@ -295,6 +295,10 @@ struct AgentSession: Identifiable, Codable, Equatable {
     /// card appears — empty/new sessions never show it, even when the
     /// underlying repo has unrelated uncommitted changes.
     var didEditFiles: Bool
+    /// Workspace-relative paths the Agent has actually written to in this
+    /// session. The worktree-change card reads from this — anything not
+    /// in here (user's own diffs, untracked `.pyc` etc.) is filtered out.
+    var agentEditedPaths: [String]
     /// Per-session interaction mode. Persisted so re-selecting a session
     /// resumes plan/goal context without the user having to redo setup.
     var interactionMode: AgentInteractionMode
@@ -337,6 +341,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         updatedAt: Date = Date(),
         messages: [AgentMessage] = [],
         didEditFiles: Bool = false,
+        agentEditedPaths: [String] = [],
         interactionMode: AgentInteractionMode = .normal,
         currentPlan: AgentPlan? = nil,
         currentGoal: AgentGoal? = nil,
@@ -352,6 +357,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.updatedAt = updatedAt
         self.messages = messages
         self.didEditFiles = didEditFiles
+        self.agentEditedPaths = agentEditedPaths
         self.interactionMode = interactionMode
         self.currentPlan = currentPlan
         self.currentGoal = currentGoal
@@ -369,11 +375,12 @@ struct AgentSession: Identifiable, Codable, Equatable {
     }
 
     // Custom decoding so older session JSON without the newer fields
-    // (didEditFiles, interactionMode, currentPlan, currentGoal) loads
-    // cleanly — every newer field uses decodeIfPresent with a default.
+    // (didEditFiles, agentEditedPaths, interactionMode, currentPlan,
+    // currentGoal) loads cleanly — every newer field uses
+    // decodeIfPresent with a default.
     enum CodingKeys: String, CodingKey {
         case id, title, workspaceRootPath, modelID, createdAt, updatedAt, messages
-        case didEditFiles, interactionMode, currentPlan, currentGoal
+        case didEditFiles, agentEditedPaths, interactionMode, currentPlan, currentGoal
         case pinnedAt, archivedAt, titleIsUserSet
     }
 
@@ -387,6 +394,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.updatedAt = try c.decode(Date.self, forKey: .updatedAt)
         self.messages = try c.decode([AgentMessage].self, forKey: .messages)
         self.didEditFiles = try c.decodeIfPresent(Bool.self, forKey: .didEditFiles) ?? false
+        self.agentEditedPaths = try c.decodeIfPresent([String].self, forKey: .agentEditedPaths) ?? []
         self.interactionMode = try c.decodeIfPresent(AgentInteractionMode.self, forKey: .interactionMode) ?? .normal
         self.currentPlan = try c.decodeIfPresent(AgentPlan.self, forKey: .currentPlan)
         self.currentGoal = try c.decodeIfPresent(AgentGoal.self, forKey: .currentGoal)

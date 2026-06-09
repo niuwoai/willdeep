@@ -287,6 +287,13 @@ final class AppState: ObservableObject {
         get { activeRuntime?.didEditFiles ?? false }
         set { activeRuntime?.didEditFiles = newValue }
     }
+    /// Workspace-relative paths the Agent has actually written to in the
+    /// active session — used by the worktree-change card to filter out
+    /// the user's own diffs and untracked junk (e.g. `__pycache__/*.pyc`).
+    var agentEditedRelativePaths: Set<String> {
+        get { activeRuntime?.agentEditedPaths ?? [] }
+        set { activeRuntime?.agentEditedPaths = newValue }
+    }
     /// Top-level UI mode. Editor is the classic file editor; agent hides
     /// the editor and shows the conversation-first layout.
     @Published var appMode: AppMode = .editor
