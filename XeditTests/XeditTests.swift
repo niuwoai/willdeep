@@ -1684,6 +1684,71 @@ struct VeilWriterTests {
         #expect(SafeCommand.classify(command: "find . -name '*.log' -exec rm {} ;") == .alwaysDangerous)
     }
 
+    // MARK: - rc3 token-level hardening
+
+    @Test("SafeCommand: token-level rm detection catches pipeline tails")
+    func testSafeCommandTokenLevelRmInPipeline() {
+        // Pre-rc3 the pipeline tail `xargs rm` survived because the
+        // substring needle `"rm "` only matched if `rm` had a trailing
+        // space and was followed by an arg; the lowercased(+" ") trick
+        // worked on segments like `rm -rf` but not on `xargs rm` where
+        // `rm` was at the start of the second tokens slot.
+        #expect(SafeCommand.classify(command: "find . -name '*.tmp' | xargs rm") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "find . -name '*.tmp' | xargs rm -rf") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "find . -print0 | xargs -0 rm -rf") == .alwaysDangerous)
+        // Same shape with `kill` — pre-rc3 needed `"kill "` to match;
+        // `... | kill 1234` slipped through. Token check fixes it.
+        #expect(SafeCommand.classify(command: "ps aux | grep node | awk '{print $2}' | xargs kill -9") == .alwaysDangerous)
+    }
+
+    @Test("SafeCommand: word-boundary kills 'perm'/'armchair' false positives")
+    func testSafeCommandFalsePositivesGone() {
+        // Pre-rc3 substring match on `"rm "` flagged `"perm "` and
+        // anything else containing the literal substring. Token level
+        // matching needs `rm` to be its own token.
+        // (These don't reach .alwaysSafe — they're not in the allowlist —
+        // but they must no longer hit the dangerous path.)
+        #expect(SafeCommand.classify(command: "perm /tmp/foo") != .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "harmless-tool --opt val") != .alwaysDangerous)
+        // Real allowlist word that visually contains "ls" but is its
+        // own token must still be safe.
+        #expect(SafeCommand.classify(command: "ls -la") == .alwaysSafe)
+    }
+
+    @Test("SafeCommand: cp/ln dangerous only when a flag is present")
+    func testSafeCommandCpLnFlagGate() {
+        // Pre-rc3 `"cp -"` substring meant `cp -r` was caught (yes) but
+        // `cp src dst` was correctly NOT marked dangerous. We preserve
+        // that nuance after tokenization.
+        #expect(SafeCommand.classify(command: "cp -r foo bar") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "cp -R foo bar") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "ln -s a b") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "ln -sf a b") == .alwaysDangerous)
+        // Plain forms fall through to needsJudgment (not auto-run).
+        #expect(SafeCommand.classify(command: "cp foo bar") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "ln a b") == .needsJudgment)
+    }
+
+    @Test("SafeCommand: dangerousSubstrings cover token-less shapes")
+    func testSafeCommandDangerousSubstrings() {
+        // Fork bomb — no whitespace, tokenize returns one giant token,
+        // substring scan catches it.
+        #expect(SafeCommand.classify(command: ":(){:|:&};:") == .alwaysDangerous)
+        // dd if= — the `=` glues the dangerous bit into the first token.
+        #expect(SafeCommand.classify(command: "dd if=/dev/zero of=/dev/sda bs=1m") == .alwaysDangerous)
+        // mkfs.* family — `mkfs.ext4`, `mkfs.hfs` etc.
+        #expect(SafeCommand.classify(command: "mkfs.ext4 /dev/sda1") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "mkfs.hfs /dev/disk2") == .alwaysDangerous)
+    }
+
+    @Test("SafeCommand: `su` joins sudo/doas as privilege escalation")
+    func testSafeCommandSuAddedToTokens() {
+        // Added in rc3 alongside sudo/doas — equally dangerous and the
+        // pre-rc3 needle list missed it.
+        #expect(SafeCommand.classify(command: "su - root") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "su -c 'whoami'") == .alwaysDangerous)
+    }
+
     @Test("SafeCommand treats cd/pushd/popd as alwaysSafe")
     func testSafeCommandCdAllowed() {
         // The common "navigate then read" chain the agent emits.

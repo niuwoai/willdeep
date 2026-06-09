@@ -45,6 +45,16 @@ enum SafeCommand {
             }
         }
 
+        // Fork bomb (`:(){:|:&};:`) and similar "spans the whole line"
+        // shapes carry their own `|` / `;` separators inside the
+        // pattern — splitPipeline would shred them into harmless-looking
+        // fragments. Scan dangerousSubstrings against the un-split
+        // command FIRST so those shapes can't sneak through.
+        let lowerTrimmed = trimmed.lowercased()
+        for needle in dangerousSubstrings where lowerTrimmed.contains(needle) {
+            return .alwaysDangerous
+        }
+
         let segments = splitPipeline(trimmed)
         guard !segments.isEmpty else { return .alwaysDangerous }
 
@@ -101,21 +111,57 @@ enum SafeCommand {
         "node", "ruby", "go", "rake"
     ]
 
-    /// Patterns that, anywhere in a segment, mark it as dangerous and
-    /// never auto-approve (already enforced by AgentToolRegistry.risk
-    /// at the .danger tier; duplicated here so callers can rely on this
-    /// classifier alone).
-    static let dangerousNeedles: [String] = [
-        "rm ", "rm\t", "rmdir", "sudo ", "doas ",
-        ":(){:|:&};:",
-        "mkfs", "dd if=", "shutdown", "reboot", "halt", "poweroff",
-        "chmod ", "chown ", "chgrp ",
-        "kill ", "killall", "pkill",
-        "mv ", "cp -", "ln -",
-        "curl ", "wget ",
+    /// Token-level dangerous words. classifySegment walks EVERY token
+    /// in the segment (not just the head) and rejects on any hit. This
+    /// is the rc3 hardening: the pre-rc3 code did substring matching on
+    /// strings like `"rm "` which produced false positives (`"perm "`
+    /// contains `"rm "`) AND false negatives (`"foo|rm"` without space
+    /// after the pipe wasn't recognized as rm in a pipeline). Token
+    /// matching kills both directions.
+    ///
+    /// Pipelines are split upstream by `splitPipeline`, so the second
+    /// half of `find . | xargs rm` is its own segment whose tokens are
+    /// `["xargs", "rm"]` — the `rm` token here triggers .alwaysDangerous,
+    /// closing the `xargs rm` hole the previous needle list missed.
+    static let dangerousTokens: Set<String> = [
+        // file removal — all forms (was: "rm ", "rm\t", "rmdir")
+        "rm", "rmdir",
+        // privilege escalation
+        "sudo", "doas", "su",
+        // filesystem formatting / partition mgmt
+        "mkfs", "shutdown", "reboot", "halt", "poweroff",
+        // permission / ownership change
+        "chmod", "chown", "chgrp",
+        // process signals (kill: now token, no longer requires trailing
+        // space; catches `kill -9 pid` and `... | kill` alike)
+        "kill", "killall", "pkill",
+        // file move (destructive)
+        "mv",
+        // arbitrary network fetch (could exfiltrate; the policy was to
+        // require approval, not auto-run)
+        "curl", "wget",
+        // disk / volume management
         "diskutil", "fdisk", "format",
+        // launchd manipulation
         "launchctl"
     ]
+
+    /// Substring patterns that don't tokenize cleanly — fork bomb has
+    /// no whitespace at all, `dd if=` embeds an `=` inside the first
+    /// "token", `mkfs.` is a prefix that `mkfs.ext4` / `mkfs.hfs` etc.
+    /// share. Kept short on purpose — every entry is a known one-off.
+    static let dangerousSubstrings: [String] = [
+        ":(){:|:&};:",
+        "dd if=",
+        "mkfs."
+    ]
+
+    /// `cp` and `ln` with ANY flag are dangerous (the pre-rc3 needles
+    /// were `"cp -"` / `"ln -"` — substring match for "first arg is a
+    /// flag"). Plain `cp src dst` falls back to .needsJudgment. The
+    /// flagged forms (`cp -r`, `cp -R`, `ln -s`, `ln -f`) are the
+    /// destructive shapes (recursive overwrite, replace symlinks).
+    static let dangerousHeadsWithFlag: Set<String> = ["cp", "ln"]
 
     // MARK: - Internals
 
@@ -172,15 +218,34 @@ enum SafeCommand {
     }
 
     private static func classifySegment(_ segment: String) -> CommandSafety {
-        let lowercased = " " + segment.lowercased() + " "
-        for needle in dangerousNeedles where lowercased.contains(needle) {
+        let lowercased = segment.lowercased()
+        for needle in dangerousSubstrings where lowercased.contains(needle) {
             return .alwaysDangerous
         }
 
         let tokens = tokenize(segment)
         guard let head = tokens.first else { return .alwaysDangerous }
 
+        // Walk every token (not just the head). Catches
+        // `<safe_head> ... rm <args>` and pipeline tails like
+        // `xargs rm`, `find . -print0 | xargs -0 rm`. The pre-rc3 code
+        // only checked substring against the joined segment; this catches
+        // the same shapes more precisely and stops "perm "-style false
+        // positives.
+        let loweredTokens = tokens.map { $0.lowercased() }
+        if loweredTokens.contains(where: { dangerousTokens.contains($0) }) {
+            return .alwaysDangerous
+        }
+
         let firstToken = head.lowercased()
+
+        // `cp -r ...` / `ln -s ...` — head + any `-`-prefixed token.
+        // Plain `cp src dst` falls through to .needsJudgment.
+        if dangerousHeadsWithFlag.contains(firstToken),
+           tokens.dropFirst().contains(where: { $0.hasPrefix("-") }) {
+            return .alwaysDangerous
+        }
+
         if alwaysSafeFirstTokens.contains(firstToken) {
             return .alwaysSafe
         }

@@ -520,11 +520,23 @@ extension AppState {
     ) async -> AgentToolApprovalSource? {
         guard risk == .write else { return nil }
 
-        // 1. User-pinned signatures (Always Allow button) — always honored.
-        //    Covers `run_command` command families and `call_mcp_tool`
-        //    server.tool pairs.
+        // 1. User-pinned signatures (Always Allow button) — honored
+        //    unless the call targets an MCP server the user has marked
+        //    as untrusted. rc3 added the per-server trust flag so the
+        //    user can pin an MCP tool early, then later demote the whole
+        //    server (e.g. after an upstream package update) without
+        //    having to find and unpin every individual tool — every call
+        //    snaps back to the per-call Allow/Deny gate immediately.
         if isAgentToolCallAlwaysAllowed(toolName: toolName, arguments: arguments, risk: risk) {
-            return .alwaysAllowList
+            if toolName == "call_mcp_tool",
+               let server = arguments["server"]?.stringValue(),
+               !AgentMCPSettingsStore.isServerTrusted(name: server) {
+                // Fall through to per-call gate (return nil at the very
+                // bottom, after the run_command-only auto paths which
+                // we don't enter for call_mcp_tool).
+            } else {
+                return .alwaysAllowList
+            }
         }
 
         // The remaining auto paths (SafeCommand allowlist + LLM judge)

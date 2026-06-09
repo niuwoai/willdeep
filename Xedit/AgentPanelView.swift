@@ -1260,7 +1260,12 @@ struct AgentToolCallCard: View {
     @ViewBuilder
     private var askUserBody: some View {
         let question = call.arguments["question"]?.stringValue() ?? ""
-        let options = call.arguments["options"]?.stringArrayValue() ?? []
+        // rc3: option labels are LLM-authored. Defang first so the button
+        // the user clicks shows the same string the model gets back as the
+        // user's answer — and so options can't smuggle control characters
+        // or `<system>` framing through the chat UI.
+        let rawOptions = call.arguments["options"]?.stringArrayValue() ?? []
+        let options = AgentInjectionDefense.sanitizeAskUserOptions(rawOptions)
         let isMultiSelect = call.arguments["multi_select"]?.boolValue() ?? false
 
         VStack(alignment: .leading, spacing: 8) {

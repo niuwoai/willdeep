@@ -156,6 +156,58 @@ enum AgentInjectionDefense {
         }
     }
 
+    // MARK: - ask_user options sanitization
+
+    /// LLM-authored `ask_user.options` strings are echoed back to the
+    /// model whenever the user picks one — and a model can self-inject
+    /// by stuffing `<system>` or instruction-shaped strings into an
+    /// option label. This sanitizer is applied BEFORE rendering so the
+    /// user sees a clean button label, and the submitted answer matches
+    /// what they actually saw (no "user clicked A, model received A+B"
+    /// drift).
+    ///
+    /// Three passes:
+    ///   1. drop control characters (U+0000-U+001F except \t, U+007F-U+009F)
+    ///      and zero-width / line-separator code points the user can't
+    ///      see in a button label;
+    ///   2. neutralize the standard injection markers (so an option
+    ///      label of `<system>X</system>` becomes the visible-but-inert
+    ///      `<​system>X</​system>`);
+    ///   3. trim to `maxLength` characters (default 200) — a legitimate
+    ///      option label fits comfortably, an attacker's prompt-stuffing
+    ///      payload gets truncated with `…` so the user sees something
+    ///      was cut.
+    ///
+    /// Empty / all-whitespace input returns `nil` so callers can drop
+    /// the option entirely rather than render a blank button.
+    static func sanitizeAskUserOption(_ raw: String, maxLength: Int = 200) -> String? {
+        let stripped = String(raw.unicodeScalars.filter { scalar in
+            // Keep printable. Allow \t (U+0009) — common in user-pasted
+            // text. Drop \n / \r / other control chars: an option label
+            // is single-line.
+            if scalar == "\u{0009}" { return true }
+            if scalar.value < 0x20 { return false }                  // C0 controls
+            if (0x7F...0x9F).contains(scalar.value) { return false } // DEL + C1 controls
+            if (0x200B...0x200F).contains(scalar.value) { return false } // ZWSP family
+            if (0x2028...0x2029).contains(scalar.value) { return false } // line / paragraph separators
+            if scalar == "\u{FEFF}" { return false }                 // BOM
+            return true
+        })
+        let neutralized = neutralizeInjectionMarkers(in: stripped)
+        let trimmed = neutralized.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        guard trimmed.count > maxLength else { return trimmed }
+        let cutoff = trimmed.index(trimmed.startIndex, offsetBy: maxLength)
+        return String(trimmed[..<cutoff]) + "…"
+    }
+
+    /// Wrap the array form so callers don't repeat the
+    /// `compactMap(sanitizeAskUserOption)` boilerplate. Preserves order;
+    /// drops empties.
+    static func sanitizeAskUserOptions(_ raw: [String]) -> [String] {
+        raw.compactMap { sanitizeAskUserOption($0) }
+    }
+
     // MARK: - Auto-approve LLM judge
 
     /// System prompt for the one-shot YES/NO judge. The hardened version

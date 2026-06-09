@@ -6414,6 +6414,34 @@
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "已禁用" } }
       }
     },
+    "settings.mcp.trusted-help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Trusted. Pinned tools auto-run." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已信任。钉过的工具仍可自动执行。" } }
+      }
+    },
+    "settings.mcp.untrusted-help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Untrusted. Always-Allow rules ignored — every call gates." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "不信任。Always-Allow 规则失效——每次调用都要确认。" } }
+      }
+    },
+    "settings.mcp.marked-trusted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Marked %@ as trusted." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已恢复 %@ 信任态。" } }
+      }
+    },
+    "settings.mcp.marked-untrusted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Marked %@ as untrusted. Always-Allow rules will be ignored for it." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已将 %@ 标为不信任，对它的 Always-Allow 规则将失效。" } }
+      }
+    },
     "settings.mcp.refresh-tools": {
       "extractionState": "manual",
       "localizations": {

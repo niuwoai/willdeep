@@ -268,11 +268,19 @@ final class AgentJobRegistry: ObservableObject {
 
     /// Tail of the live output buffer. `tailLines == nil` returns all
     /// captured output (still capped at `maxOutputBytes`).
+    ///
+    /// Trailing-newline handling: a normal `echo`/`printf` ends the
+    /// last line with `\n`, which `split(omittingEmptySubsequences:
+    /// false)` would treat as an extra empty segment — and `suffix(N)`
+    /// would then return one fewer real line than the caller asked
+    /// for. Drop a single trailing newline before splitting so the
+    /// tail count matches user intuition.
     func output(id: UUID, tailLines: Int? = nil) -> String {
         guard let proc = processes[id] else { return "" }
         let full = proc.collector.stringValue
         guard let tailLines, tailLines > 0 else { return full }
-        let lines = full.split(separator: "\n", omittingEmptySubsequences: false)
+        let normalized = full.hasSuffix("\n") ? String(full.dropLast()) : full
+        let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false)
         if lines.count <= tailLines { return full }
         return lines.suffix(tailLines).joined(separator: "\n")
     }

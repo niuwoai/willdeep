@@ -130,12 +130,52 @@ struct AgentMCPServerConfig: Identifiable, Codable, Equatable, Sendable {
 struct AgentMCPSettings: Codable, Equatable {
     var disabledServerIDs: [String]
     var userServers: [AgentMCPServerConfig]
+    /// rc3: server IDs the user has marked as "untrusted". A server in
+    /// this set is *still* enabled — list_mcp_tools / call_mcp_tool will
+    /// still reach it — but the auto-approve path treats it like any
+    /// fresh write-tier tool: `Always Allow` pins are ignored, every
+    /// call_mcp_tool to this server falls back to the per-call Allow/
+    /// Deny gate. Use it for servers you imported but don't fully trust
+    /// (third-party packages, experimental personal MCPs). Default is
+    /// empty — all servers trusted unless explicitly demoted.
+    var untrustedServerIDs: [String]
 
-    static let `default` = AgentMCPSettings(disabledServerIDs: [], userServers: [])
+    static let `default` = AgentMCPSettings(
+        disabledServerIDs: [],
+        userServers: [],
+        untrustedServerIDs: []
+    )
+
+    enum CodingKeys: String, CodingKey {
+        case disabledServerIDs
+        case userServers
+        case untrustedServerIDs
+    }
+
+    init(
+        disabledServerIDs: [String],
+        userServers: [AgentMCPServerConfig],
+        untrustedServerIDs: [String] = []
+    ) {
+        self.disabledServerIDs = disabledServerIDs
+        self.userServers = userServers
+        self.untrustedServerIDs = untrustedServerIDs
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.disabledServerIDs = try container.decodeIfPresent([String].self, forKey: .disabledServerIDs) ?? []
+        self.userServers = try container.decodeIfPresent([AgentMCPServerConfig].self, forKey: .userServers) ?? []
+        // decodeIfPresent so settings.json written before rc3 (no key)
+        // decodes cleanly into the default empty set — every existing
+        // server stays trusted.
+        self.untrustedServerIDs = try container.decodeIfPresent([String].self, forKey: .untrustedServerIDs) ?? []
+    }
 
     var normalized: AgentMCPSettings {
         var copy = self
         copy.disabledServerIDs = Array(Set(copy.disabledServerIDs.filter { !$0.isEmpty })).sorted()
+        copy.untrustedServerIDs = Array(Set(copy.untrustedServerIDs.filter { !$0.isEmpty })).sorted()
         copy.userServers = copy.userServers.map {
             var server = $0.normalized
             server.source = .user
@@ -172,6 +212,48 @@ enum AgentMCPSettingsStore {
         }
         settings.disabledServerIDs = Array(disabled)
         save(settings)
+    }
+
+    /// rc3: flip a server between trusted (default) and untrusted.
+    /// Untrusted means the server still runs but its tools no longer
+    /// participate in Always-Allow auto-approval — every call gates.
+    static func setServerTrusted(id: String, trusted: Bool) {
+        var settings = load()
+        var untrusted = Set(settings.untrustedServerIDs)
+        if trusted {
+            untrusted.remove(id)
+        } else {
+            untrusted.insert(id)
+        }
+        settings.untrustedServerIDs = Array(untrusted)
+        save(settings)
+    }
+
+    /// rc3: check whether a given server id is trusted. Cheap; used by
+    /// the auto-approve path inside `autoApprovalSource` to short-circuit
+    /// Always-Allow when the user has demoted the server.
+    static func isServerTrusted(id: String) -> Bool {
+        let settings = load()
+        return !settings.untrustedServerIDs.contains(id)
+    }
+
+    /// rc3: name-keyed version — the MCP wire shape always carries the
+    /// server *name* (not id) into call_mcp_tool, so the auto-approve
+    /// path needs to map name → server config → id before consulting
+    /// trust state. This helper does the lookup with a case-insensitive
+    /// name compare matching the rest of the MCP layer.
+    static func isServerTrusted(name: String) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        let lowered = trimmed.lowercased()
+        // Walk the full directory (user + cursor + codex) so trust
+        // state works regardless of which source the server came from.
+        let all = AgentMCPServerDirectory.list(includeDisabled: true)
+        let untrustedIDs = Set(load().untrustedServerIDs)
+        for server in all where server.name.lowercased() == lowered {
+            if untrustedIDs.contains(server.id) { return false }
+        }
+        return true
     }
 
     static func upsertUserServer(_ server: AgentMCPServerConfig) {

@@ -192,6 +192,26 @@ struct AgentMCPSettingsView: View {
 
             Spacer()
 
+            // rc3: trust shield. Green check = trusted (default);
+            // orange filled = user-marked untrusted, in which case
+            // Always-Allow rules for this server are ignored and
+            // every call_mcp_tool falls back to per-call approval.
+            let isTrusted = !settings.untrustedServerIDs.contains(server.id)
+            Button {
+                let nowTrusted = !isTrusted
+                AgentMCPSettingsStore.setServerTrusted(id: server.id, trusted: nowTrusted)
+                refreshServers()
+                statusMessage = nowTrusted
+                    ? L10n.Settings.MCP.markedTrusted(server.name)
+                    : L10n.Settings.MCP.markedUntrusted(server.name)
+            } label: {
+                Image(systemName: isTrusted ? "checkmark.shield" : "exclamationmark.shield.fill")
+                    .foregroundStyle(isTrusted ? Color.green : Color.orange)
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .buttonStyle(.borderless)
+            .help(isTrusted ? L10n.Settings.MCP.trustedHelp : L10n.Settings.MCP.untrustedHelp)
+
             Toggle("", isOn: Binding(
                 get: { server.isEnabled },
                 set: { enabled in

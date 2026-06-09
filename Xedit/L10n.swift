@@ -600,6 +600,16 @@ enum L10n {
             }
             static let toolListNotRefreshed = String(localized: "settings.mcp.tool-list-not-refreshed", defaultValue: "Tool list not refreshed")
             static let disabled = String(localized: "settings.mcp.disabled", defaultValue: "Disabled")
+            static let trustedHelp = String(localized: "settings.mcp.trusted-help", defaultValue: "Trusted. Pinned tools auto-run.")
+            static let untrustedHelp = String(localized: "settings.mcp.untrusted-help", defaultValue: "Untrusted. Always-Allow rules ignored — every call gates.")
+            static func markedTrusted(_ a1: String) -> String {
+                let template = String(localized: "settings.mcp.marked-trusted", defaultValue: "Marked %@ as trusted.")
+                return String(format: template, a1)
+            }
+            static func markedUntrusted(_ a1: String) -> String {
+                let template = String(localized: "settings.mcp.marked-untrusted", defaultValue: "Marked %@ as untrusted. Always-Allow rules will be ignored for it.")
+                return String(format: template, a1)
+            }
             static let refreshTools = String(localized: "settings.mcp.refresh-tools", defaultValue: "Refresh Tools")
             static let delete = String(localized: "settings.mcp.delete", defaultValue: "Delete")
             static func headersPrefix(_ a1: String) -> String {
