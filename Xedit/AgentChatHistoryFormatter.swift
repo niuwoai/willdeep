@@ -141,7 +141,21 @@ enum AgentChatHistoryRenderer {
 
     /// Cache by (messages hash, isDark) so repeated SwiftUI updates
     /// during scroll (which don't change the message list) re-use
-    /// the prior render.
+    /// the prior render. In production we're called from MainActor
+    /// (SwiftUI re-renders, transcript reader window), but Swift
+    /// Testing parallelizes `@Test` cases across worker threads and
+    /// even though `render` itself is nominally MainActor-isolated
+    /// under the module's default-isolation flag, Swift `enum`s with
+    /// static stored properties don't actually inherit it (no `self`
+    /// = no isolation context). Two concurrent test cases racing
+    /// `cache[key] = …` corrupt the dictionary's storage and the
+    /// next read sends `objectForKey:` to a tagged NSNumber via the
+    /// Foundation bridge, crashing the host app and tripping the
+    /// "** TEST FAILED **" tail even though every individual case
+    /// passed. Wrap every cache touch in a recursive-safe lock so
+    /// that concurrent access serializes without changing the
+    /// observable API for any call site.
+    private static let cacheLock = NSLock()
     private static var cache: [CacheKey: NSAttributedString] = [:]
     private static var cacheOrder: [CacheKey] = []
     private static let cacheLimit = 32
@@ -209,9 +223,18 @@ enum AgentChatHistoryRenderer {
             isDark: isDark,
             baseFontSize: clampedSize
         )
-        if let hit = cache[key] {
-            return hit
-        }
+        // Critical section #1: lookup. Lock has to cover the read
+        // because Swift Dictionary's internal `_Variant.lookup(_:)`
+        // can race against a concurrent insertion mid-resize on the
+        // other goroutine.
+        cacheLock.lock()
+        let hit = cache[key]
+        cacheLock.unlock()
+        if let hit { return hit }
+
+        // Rendering itself is pure-functional from `messages` — no
+        // shared state — so do it outside the lock to keep the
+        // critical section short.
         let result = makeAttributedString(
             messages: messages,
             isDark: isDark,
@@ -219,12 +242,21 @@ enum AgentChatHistoryRenderer {
             hoveredUserMessageID: hoveredUserMessageID,
             baseFontSize: clampedSize
         )
+
+        // Critical section #2: insertion + LRU eviction. If a parallel
+        // call has already stored the same key, our second write is a
+        // harmless overwrite with an identical value; the LRU order
+        // just gains one redundant entry that the next eviction will
+        // sweep. Not worth a separate compare-and-swap path.
+        cacheLock.lock()
         cache[key] = result
         cacheOrder.append(key)
         if cacheOrder.count > cacheLimit {
             let evict = cacheOrder.removeFirst()
             cache.removeValue(forKey: evict)
         }
+        cacheLock.unlock()
+
         return result
     }
 

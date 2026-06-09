@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.56.0-rc3 - 2026-06-09
+
+- **修 rc2 CI 测试失败的并发 race**。rc2 上 CI 显示 `120 tests passed` 但同时 `** TEST FAILED **` 退出码 65，根因是宿主 app 启动期间 crash：
+  ```
+  *** Terminating app due to uncaught exception 'NSInvalidArgumentException',
+      reason: '-[__NSCFNumber objectForKey:]: unrecognized selector sent to instance 0x8000000000000000'
+  ```
+  Stack 指到 [Xedit/AgentChatHistoryFormatter.swift](Xedit/AgentChatHistoryFormatter.swift) 里 `AgentChatHistoryRenderer.render(...)` 的 `cache[key]` 查找。Renderer 是 `enum` + `static var cache: [CacheKey: NSAttributedString]`，**没有 actor 隔离**（enum 的 static stored property 不继承 module 默认的 MainActor 隔离——没有 `self` 就没有隔离上下文）。生产路径全部从 SwiftUI MainActor 上调，所以历史上没翻车；Swift Testing 的 `@Test` 是并发跑的，两个测试同时 `cache[key] = …` 撞坏字典 storage，下一次读时 `_Variant.lookup` 经 Foundation bridge 把 `objectForKey:` 发给一个 tagged-pointer NSNumber，直接 throw NSException。
+  - 修法：加一把 `NSLock` 包 cache 的读 + 写两个 critical section，render 计算本身（pure-functional）放锁外。生产无可观测变化（线上本来就 MainActor 单线程），测试 280 个并发用例稳定通过（rc2 是 120）。
+  - 不在主线范围但本次顺带处理：这是 main 上原本就潜伏的 race，只是 rc1 时 test target 编译挂了没机会暴露，rc2 修了编译才浮出来。
+- **rc2 漏掉的本地 verification**：当时只在本地 `xcodebuild test` 单跑了一次，没像 CI 那样并发触发——这次本地用跟 CI 完全一样的 cmdline `xcodebuild test -only-testing:XeditTests -resultBundlePath...` 复现 + 验证通过才推 rc3。
+- 版本号 `1.56.0-rc2` → `1.56.0-rc3`（修 CI 测试 race → rc 递增；未跨次版本，无功能改动）。
+
 ## 1.56.0-rc2 - 2026-06-09
 
 - **Phase C：Anthropic Messages 原生适配器落地**，`claude` preset 从「OpenAI 形状的 body 打 Anthropic 端点」的坏状态切换到 Anthropic 原生协议。
