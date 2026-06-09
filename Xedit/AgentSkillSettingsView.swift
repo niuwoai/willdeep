@@ -13,7 +13,7 @@ struct AgentSkillSettingsView: View {
     @State private var skills: [AgentSkillEntry] = AgentSkillDirectory.list(includeDisabled: true)
     @State private var searchQuery = ""
     @State private var isCreatingSkill = false
-    @State private var statusMessage = "All changes saved"
+    @State private var statusMessage = L10n.Settings.allChangesSaved
 
     private var filteredSkills: [AgentSkillEntry] {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -32,12 +32,12 @@ struct AgentSkillSettingsView: View {
 
     var body: some View {
         Form {
-            Section("Automatic Skill Extraction") {
+            Section(L10n.Settings.Skill.autoExtractSection) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Auto-extract reusable skills from conversations")
+                        Text(L10n.Settings.Skill.autoExtractTitle)
                             .font(.headline)
-                        Text("When enabled, VeilWriter can surface reusable workflows as skill candidates.")
+                        Text(L10n.Settings.Skill.autoExtractDescription)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -46,7 +46,7 @@ struct AgentSkillSettingsView: View {
                         .labelsHidden()
                 }
 
-                LabeledContent("Minimum tool calls") {
+                LabeledContent(L10n.Settings.Skill.minimumToolCallsLabel) {
                     HStack {
                         Slider(value: doubleSetting(\.minimumToolCallCount), in: 1...50, step: 1)
                         Text("\(settings.minimumToolCallCount)")
@@ -54,14 +54,14 @@ struct AgentSkillSettingsView: View {
                             .frame(width: 36, alignment: .trailing)
                     }
                 }
-                Text("Conversations with fewer tool calls are skipped.")
+                Text(L10n.Settings.Skill.minimumToolCallsHint)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Section {
                 HStack {
-                    Text("\(enabledSkillCount) of \(skills.count) skills available")
+                    Text(L10n.Settings.Skill.availableCount("\(enabledSkillCount)", "\(skills.count)"))
                         .foregroundStyle(.secondary)
 
                     Spacer()
@@ -69,29 +69,29 @@ struct AgentSkillSettingsView: View {
                     Button {
                         refreshSkills()
                     } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                        Label(L10n.Settings.Skill.refresh, systemImage: "arrow.clockwise")
                     }
 
                     Button {
                         openUserSkillsFolder()
                     } label: {
-                        Label("Open Folder", systemImage: "folder")
+                        Label(L10n.Settings.Skill.openFolder, systemImage: "folder")
                     }
 
                     Button {
                         isCreatingSkill = true
                     } label: {
-                        Label("New Skill", systemImage: "plus")
+                        Label(L10n.Settings.Skill.newSkill, systemImage: "plus")
                     }
                 }
 
-                TextField("Search by skill name, description, or path...", text: $searchQuery)
+                TextField(L10n.Settings.Skill.searchPlaceholder, text: $searchQuery)
                     .textFieldStyle(.roundedBorder)
             }
 
-            skillSection(title: "Built-in Skills", source: .bundled, systemImage: "shippingbox")
-            skillSection(title: "User Skills", source: .user, systemImage: "person.crop.square")
-            skillSection(title: "Plugin Skills", source: .plugin, systemImage: "puzzlepiece.extension")
+            skillSection(title: L10n.Settings.Skill.builtInSkills, source: .bundled, systemImage: "shippingbox")
+            skillSection(title: L10n.Settings.Skill.userSkills, source: .user, systemImage: "person.crop.square")
+            skillSection(title: L10n.Settings.Skill.pluginSkills, source: .plugin, systemImage: "puzzlepiece.extension")
         }
         .formStyle(.grouped)
         .safeAreaInset(edge: .bottom) {
@@ -109,7 +109,7 @@ struct AgentSkillSettingsView: View {
             AgentSkillCreationSheet { createdURL in
                 isCreatingSkill = false
                 refreshSkills()
-                statusMessage = "Created \(createdURL.deletingLastPathComponent().lastPathComponent)."
+                statusMessage = L10n.Settings.Skill.createdSkill(createdURL.deletingLastPathComponent().lastPathComponent)
             } onCancel: {
                 isCreatingSkill = false
             }
@@ -120,7 +120,7 @@ struct AgentSkillSettingsView: View {
         let sourceSkills = filteredSkills.filter { $0.source == source }
         return Section {
             if sourceSkills.isEmpty {
-                Text("No skills in this group.")
+                Text(L10n.Settings.Skill.noSkills)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -158,15 +158,15 @@ struct AgentSkillSettingsView: View {
                         AgentSkillSettingsStore.setSkillEnabled(identifier: skill.identifier, enabled: enabled)
                         settings = AgentSkillSettingsStore.load()
                         refreshSkills()
-                        statusMessage = "All changes saved"
+                        statusMessage = L10n.Settings.allChangesSaved
                     }
                 ))
                 .labelsHidden()
             }
 
-            DisclosureGroup("View content") {
+            DisclosureGroup(L10n.Settings.Skill.viewContent) {
                 ScrollView {
-                    Text(AgentSkillDirectory.loadBody(for: skill, maxCharacters: 12_000) ?? "Unable to read skill content.")
+                    Text(AgentSkillDirectory.loadBody(for: skill, maxCharacters: 12_000) ?? L10n.Settings.Skill.unableToRead)
                         .font(.system(size: 11, design: .monospaced))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -187,7 +187,7 @@ struct AgentSkillSettingsView: View {
             settings[keyPath: keyPath] = value
             settings = settings.normalized
             AgentSkillSettingsStore.save(settings)
-            statusMessage = "All changes saved"
+            statusMessage = L10n.Settings.allChangesSaved
         }
     }
 
@@ -198,7 +198,7 @@ struct AgentSkillSettingsView: View {
             settings[keyPath: keyPath] = Int(value.rounded())
             settings = settings.normalized
             AgentSkillSettingsStore.save(settings)
-            statusMessage = "All changes saved"
+            statusMessage = L10n.Settings.allChangesSaved
         }
     }
 
@@ -214,7 +214,7 @@ struct AgentSkillSettingsView: View {
                 withIntermediateDirectories: true
             )
             NSWorkspace.shared.open(AgentSkillDirectory.userSkillsRoot)
-            statusMessage = "Opened user skills folder."
+            statusMessage = L10n.Settings.Skill.openedFolder
         } catch {
             statusMessage = error.localizedDescription
         }
@@ -232,14 +232,14 @@ private struct AgentSkillCreationSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("New User Skill")
+            Text(L10n.Settings.Skill.newUserSkillTitle)
                 .font(.title3)
                 .fontWeight(.semibold)
 
-            TextField("Skill name", text: $name)
+            TextField(L10n.Settings.Skill.skillNamePlaceholder, text: $name)
                 .textFieldStyle(.roundedBorder)
 
-            TextField("Description", text: $description)
+            TextField(L10n.Settings.Skill.descriptionPlaceholder, text: $description)
                 .textFieldStyle(.roundedBorder)
 
             TextEditor(text: $skillBody)
@@ -257,10 +257,10 @@ private struct AgentSkillCreationSheet: View {
 
             HStack {
                 Spacer()
-                Button("Cancel") {
+                Button(L10n.Settings.Skill.cancelButton) {
                     onCancel()
                 }
-                Button("Create") {
+                Button(L10n.Settings.Skill.createButton) {
                     createSkill()
                 }
                 .keyboardShortcut(.return, modifiers: [.command])
@@ -276,7 +276,7 @@ private struct AgentSkillCreationSheet: View {
             let url = try AgentSkillFileManager.createUserSkill(
                 name: name,
                 description: description,
-                body: skillBody.isEmpty ? "Describe when and how the Agent should use this skill." : skillBody
+                body: skillBody.isEmpty ? L10n.Settings.Skill.defaultBody : skillBody
             )
             onCreate(url)
         } catch {

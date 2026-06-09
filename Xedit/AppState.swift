@@ -247,6 +247,12 @@ final class AppState: ObservableObject {
     @Published var agentRoutines: [AgentRoutine] = []
     let agentRoutineScheduler = AgentRoutineScheduler()
 
+    /// Process-wide registry of background `run_command` jobs. Scoped
+    /// by `runtime.id` inside the registry so concurrent sessions can't
+    /// steal each other's jobs or completion notices. See
+    /// `AgentBackgroundJobs.swift` for the lifecycle contract.
+    let agentJobRegistry = AgentJobRegistry()
+
     /// rc1 scaffold for v1.49's concurrent runtimes. One entry per
     /// session that the user has touched this launch. AppState still
     /// owns every `@Published agent*` field for now — rc2 starts
@@ -351,6 +357,11 @@ final class AppState: ObservableObject {
     /// inside `AgentSessionRowStatusDot`, so background runtime
     /// changes only repaint that one row.
     private var activeRuntimeSubscription: AnyCancellable?
+    /// Republishes background job registry changes through AppState so
+    /// any view binding `appState.*` repaints when a job starts /
+    /// finishes / streams output. Views that need finer-grained
+    /// updates can `@ObservedObject` the registry directly.
+    private var jobRegistrySubscription: AnyCancellable?
     // A 方案删除了 cfg → library 的回灌方向，此前的 reentrancy 守卫
     // (`isReconcilingProviderLibrary`) 不再需要。
 
@@ -461,6 +472,10 @@ final class AppState: ObservableObject {
         // No initial subscriptions to set up: runtimes are created
         // lazily as the user opens sessions, and `subscribeToRuntime`
         // runs at every creation site.
+        jobRegistrySubscription = agentJobRegistry.objectWillChange
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
     }
 
     deinit {
@@ -468,6 +483,7 @@ final class AppState: ObservableObject {
         quickOpenRefreshTask?.cancel()
         agentRequestTask?.cancel()
         activeRuntimeSubscription?.cancel()
+        jobRegistrySubscription?.cancel()
         // rc38 attempted to cancel every background runtime's
         // requestTask here via `MainActor.assumeIsolated { … }`, which
         // works in production (AppState is held by SwiftUI as a

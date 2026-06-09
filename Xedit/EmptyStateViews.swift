@@ -64,6 +64,7 @@ struct EmptyProjectEditorView: View {
                     .accessibilityLabel(L10n.EmptyState.openFileAccessibilityLabel)
                 }
                 .labelStyle(.titleAndIcon)
+                .focusEffectDisabled()
             }
             .padding(.horizontal, 40)
             .frame(maxWidth: 520)
@@ -209,12 +210,13 @@ struct EmptyWorkspaceHero: View {
                 .accessibilityLabel(L10n.EmptyState.agentModeAccessibilityLabel)
             }
             .labelStyle(.titleAndIcon)
+            .focusEffectDisabled()
 
             if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, !version.isEmpty {
                 Text("v\(version)")
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
-                    .padding(.top, 18)
+                    .padding(.top, 44)
             }
         }
     }

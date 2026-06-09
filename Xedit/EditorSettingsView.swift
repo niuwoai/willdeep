@@ -107,7 +107,7 @@ struct EditorSettingsView: View {
     private var typographySettings: some View {
         Form {
             Section(L10n.Settings.sectionTypography) {
-                Picker("Font", selection: setting(\.fontID)) {
+                Picker(L10n.Settings.labelFont, selection: setting(\.fontID)) {
                     ForEach(EditorFontChoice.allCases) { font in
                         Text(font.displayName).tag(font.id)
                     }
@@ -134,7 +134,7 @@ struct EditorSettingsView: View {
     private var appearanceSettings: some View {
         Form {
             Section(L10n.Settings.sectionColorStyle) {
-                Picker("Theme", selection: setting(\.themeID)) {
+                Picker(L10n.Settings.labelTheme, selection: setting(\.themeID)) {
                     ForEach(EditorTheme.all) { theme in
                         Text(theme.displayName).tag(theme.id)
                     }
@@ -155,7 +155,7 @@ struct EditorSettingsView: View {
             }
 
             Section(L10n.Settings.sectionEditorBackground) {
-                LabeledContent("Image") {
+                LabeledContent(L10n.Settings.labelImage) {
                     HStack {
                         Text(backgroundImageLabel)
                             .lineLimit(1)
@@ -172,14 +172,14 @@ struct EditorSettingsView: View {
                     }
                 }
 
-                Picker("Image Mode", selection: setting(\.windowBackgroundImageMode)) {
+                Picker(L10n.Settings.labelImageMode, selection: setting(\.windowBackgroundImageMode)) {
                     ForEach(EditorBackgroundImageMode.allCases) { mode in
                         Text(mode.displayName).tag(mode)
                     }
                 }
                 .disabled(appState.editorSettings.windowBackgroundImagePath == nil)
 
-                LabeledContent("Image Size") {
+                LabeledContent(L10n.Settings.labelImageSize) {
                     HStack {
                         Slider(value: setting(\.windowBackgroundImageScale), in: 0.25...3, step: 0.05)
                         Text("\(Int(appState.editorSettings.windowBackgroundImageScale * 100))%")
@@ -189,7 +189,7 @@ struct EditorSettingsView: View {
                 }
                 .disabled(appState.editorSettings.windowBackgroundImagePath == nil)
 
-                LabeledContent("Image Opacity") {
+                LabeledContent(L10n.Settings.labelImageOpacity) {
                     HStack {
                         Slider(value: setting(\.windowBackgroundImageOpacity), in: 0...1, step: 0.05)
                         Text("\(Int(appState.editorSettings.windowBackgroundImageOpacity * 100))%")
@@ -204,14 +204,14 @@ struct EditorSettingsView: View {
                 Toggle(L10n.Settings.toggleHighlightCurrentLine, isOn: setting(\.highlightsCurrentLine))
                 Toggle(L10n.Settings.toggleGlassEditorBackground, isOn: setting(\.editorGlassEnabled))
 
-                Picker("Glass Material", selection: setting(\.editorGlassMaterial)) {
+                Picker(L10n.Settings.labelGlassMaterial, selection: setting(\.editorGlassMaterial)) {
                     ForEach(EditorGlassMaterial.allCases) { material in
                         Text(material.displayName).tag(material)
                     }
                 }
                 .disabled(!appState.editorSettings.editorGlassEnabled)
 
-                LabeledContent("Glass Strength") {
+                LabeledContent(L10n.Settings.labelGlassStrength) {
                     HStack {
                         Slider(value: setting(\.editorGlassOpacity), in: 0...1, step: 0.05)
                         Text("\(Int(appState.editorSettings.editorGlassOpacity * 100))%")
@@ -221,7 +221,7 @@ struct EditorSettingsView: View {
                 }
                 .disabled(!appState.editorSettings.editorGlassEnabled)
 
-                LabeledContent("Editor Surface") {
+                LabeledContent(L10n.Settings.labelEditorSurface) {
                     HStack {
                         Slider(value: setting(\.editorSurfaceOpacity), in: 0.25...1, step: 0.05)
                         Text("\(Int(appState.editorSettings.editorSurfaceOpacity * 100))%")
@@ -238,7 +238,7 @@ struct EditorSettingsView: View {
     private var workspaceSettings: some View {
         Form {
             Section(L10n.Settings.sectionSidebar) {
-                LabeledContent("Text Size") {
+                LabeledContent(L10n.Settings.labelTextSize) {
                     HStack {
                         Slider(value: setting(\.fileTreeFontSize), in: 10...16, step: 1)
                         Text("\(Int(appState.editorSettings.fileTreeFontSize)) pt")
@@ -247,7 +247,7 @@ struct EditorSettingsView: View {
                     }
                 }
 
-                LabeledContent("Line Height") {
+                LabeledContent(L10n.Settings.labelLineHeight) {
                     HStack {
                         Slider(value: setting(\.fileTreeLineHeightMultiple), in: 1.0...2.0, step: 0.05)
                         Text(String(format: "%.2fx", appState.editorSettings.fileTreeLineHeightMultiple))
@@ -258,13 +258,13 @@ struct EditorSettingsView: View {
             }
 
             Section(L10n.Settings.sectionInspector) {
-                Picker("Default View", selection: setting(\.preferredInspectorMode)) {
+                Picker(L10n.Settings.labelDefaultView, selection: setting(\.preferredInspectorMode)) {
                     ForEach(EditorInspectorMode.allCases) { mode in
                         Text(mode.displayName).tag(mode)
                     }
                 }
 
-                Picker("View Order", selection: setting(\.inspectorPanelOrder)) {
+                Picker(L10n.Settings.labelViewOrder, selection: setting(\.inspectorPanelOrder)) {
                     ForEach(EditorInspectorPanelOrder.allCases) { order in
                         Text(order.displayName).tag(order)
                     }
@@ -293,20 +293,20 @@ struct EditorSettingsView: View {
             }
 
             Section(L10n.Settings.sectionImageUnderstanding) {
-                Picker("Provider", selection: imageProviderBinding) {
+                Picker(L10n.Settings.ImageUnderstanding.providerLabel, selection: imageProviderBinding) {
                     ForEach(AgentProviderPreset.all.filter(\.supportsImageInput)) { provider in
                         Text(provider.displayName).tag(provider.id)
                     }
                 }
 
-                LabeledContent("Base URL") {
+                LabeledContent(L10n.Settings.ImageUnderstanding.baseURLLabel) {
                     TextField("", text: $imageBaseURLBuffer)
                         .textFieldStyle(.roundedBorder)
                 }
 
-                agentModelField("Vision Model", text: $imageModelBuffer, models: fetchedImageModels)
+                agentModelField(L10n.Settings.ImageUnderstanding.visionModelLabel, text: $imageModelBuffer, models: fetchedImageModels)
 
-                LabeledContent("API Key") {
+                LabeledContent(L10n.Settings.ImageUnderstanding.apiKeyLabel) {
                     // No in-field placeholder: in a grouped Form the
                     // LabeledContent label on the left already names the
                     // field, and a trailing "sk-..." inside an empty
@@ -319,7 +319,7 @@ struct EditorSettingsView: View {
                     )
                 }
 
-                Text("Used only when the active Agent provider cannot accept images directly. Multiple attached images are described in one request, then the description is sent to the main model.")
+                Text(L10n.Settings.ImageUnderstanding.description)
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -336,12 +336,12 @@ struct EditorSettingsView: View {
                     }
                     .disabled(!agentBuffersDiffer)
 
-                    Button(isFetchingAgentModels ? "Fetching..." : "Fetch Models") {
+                    Button(isFetchingAgentModels ? L10n.Settings.ImageUnderstanding.fetchingModels : L10n.Settings.ImageUnderstanding.fetchModels) {
                         fetchAgentModels()
                     }
                     .disabled(isFetchingAgentModels)
 
-                    Button(isFetchingImageModels ? "Fetching Images..." : "Fetch Image Models") {
+                    Button(isFetchingImageModels ? L10n.Settings.ImageUnderstanding.fetchingImages : L10n.Settings.ImageUnderstanding.fetchImageModels) {
                         fetchImageModels()
                     }
                     .disabled(isFetchingImageModels)
@@ -364,17 +364,17 @@ struct EditorSettingsView: View {
                     }
                 }
 
-                Text("Keystrokes stay local until you press Save (⌘↩). API keys are stored separately in Keychain.")
+                Text(L10n.Settings.AgentBehavior.saveBehaviorNote)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Section(L10n.Settings.sectionConversationTitle) {
-                LabeledContent("Title Model") {
-                    TextField("", text: $agentTitleModelBuffer, prompt: Text("(leave empty → use Flash model)"))
+                LabeledContent(L10n.Settings.AgentBehavior.titleModelLabel) {
+                    TextField("", text: $agentTitleModelBuffer, prompt: Text(L10n.Settings.AgentBehavior.titleModelPlaceholder))
                         .textFieldStyle(.roundedBorder)
                 }
-                Text("A short one-shot completion summarizes each new chat into a ≤12-char title after the first assistant reply. Set a cheap/fast model here (e.g. `deepseek-chat`, `gpt-4o-mini`, `qwen-turbo`) to avoid burning Pro tokens on titling. Empty → falls back to the active provider's Flash model.")
+                Text(L10n.Settings.AgentBehavior.titleModelDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -384,7 +384,7 @@ struct EditorSettingsView: View {
                     get: { appState.autoApproveSafeCommands },
                     set: { appState.autoApproveSafeCommands = $0 }
                 ))
-                Text("Read-only shell commands in the built-in allowlist (cat, head, tail, ls, find without -delete/-exec, git diff/log/status/show, rg, grep, wc, file, stat, which, pwd, echo, …) run without asking. Commands outside the allowlist are passed to a one-shot LLM judge running on the active provider's **Flash** model (cheap & fast — never Pro), and only YES verdicts auto-run. Destructive patterns (rm, sudo, git push --force, git reset --hard, …) still require typing \"confirm\".")
+                Text(L10n.Settings.AgentBehavior.toolApprovalDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -405,7 +405,7 @@ struct EditorSettingsView: View {
                     in: 1...8,
                     step: 1
                 )
-                Text("Cap on simultaneous Agent turns per provider. Each provider has its own quota — running 3 DashScope sessions doesn't block OpenAI sessions. When the cap is hit, new dispatches queue (FIFO) and drain as turns finish. Raising the cap immediately promotes queued work; lowering it just stops promoting new ones (running turns are never aborted). Default 3 is conservative — bump up if your provider's rate limit comfortably allows.")
+                Text(L10n.Settings.AgentBehavior.concurrencyDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -427,7 +427,7 @@ struct EditorSettingsView: View {
                         ... Double(AgentSettingsStore.chatBaseFontSizeMax),
                     step: 1
                 )
-                Text("Base size (pt) for Agent chat message body and rendered Markdown blocks (paragraphs, lists, quotes, fenced code, tables). Tool-call summaries, footers, message headers, and composer chrome keep their fixed sizes — this knob is about reading the conversation, not resizing the whole UI. Default is 13 pt; range \(Int(AgentSettingsStore.chatBaseFontSizeMin)) – \(Int(AgentSettingsStore.chatBaseFontSizeMax)) pt.")
+                Text(L10n.Settings.AgentBehavior.agentAppearanceDescription("\(Int(AgentSettingsStore.chatBaseFontSizeMin))", "\(Int(AgentSettingsStore.chatBaseFontSizeMax))"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -487,10 +487,10 @@ struct EditorSettingsView: View {
         configuration.titleModel = agentTitleModelBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
         appState.agentConfiguration = configuration.normalized
         loadAgentBuffersFromAppState()
-        agentSaveStatus = "Saved."
+        agentSaveStatus = L10n.Settings.savedStatus
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_800_000_000)
-            if agentSaveStatus == "Saved." { agentSaveStatus = "" }
+            if agentSaveStatus == L10n.Settings.savedStatus { agentSaveStatus = "" }
         }
     }
 
@@ -506,7 +506,7 @@ struct EditorSettingsView: View {
                     .textFieldStyle(.roundedBorder)
 
                 if !models.isEmpty {
-                    Picker("Fetched Models", selection: text) {
+                    Picker(L10n.Settings.ImageUnderstanding.fetchedModelsLabel, selection: text) {
                         ForEach(models, id: \.self) { model in
                             Text(model).tag(model)
                         }
@@ -531,24 +531,24 @@ struct EditorSettingsView: View {
                             Label(command.commandSignature, systemImage: "checkmark.shield")
                                 .font(.system(size: 12, design: .monospaced))
                             Spacer()
-                            Button("Remove") {
+                            Button(L10n.Settings.Tools.removeButton) {
                                 appState.removeAgentAlwaysAllowedCommand(id: command.id)
                             }
                         }
                     }
 
-                    Button("Clear All") {
+                    Button(L10n.Settings.Tools.clearAllButton) {
                         appState.clearAgentAlwaysAllowedCommands()
                     }
                     .foregroundStyle(.red)
                 }
 
-                Text("Rules apply to command families such as `git push`; dangerous commands still require confirmation.")
+                Text(L10n.Settings.Tools.alwaysAllowNote)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("Command Line Tool") {
+            Section(L10n.Settings.Tools.cliSection) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("veilwriter")
@@ -578,7 +578,7 @@ struct EditorSettingsView: View {
 
     private var backgroundImageLabel: String {
         guard let path = appState.editorSettings.windowBackgroundImagePath else {
-            return "No image selected"
+            return L10n.Settings.noImageSelected
         }
         return URL(fileURLWithPath: path).lastPathComponent
     }
@@ -586,26 +586,26 @@ struct EditorSettingsView: View {
     private var cliStatusText: String {
         switch cliInstallState {
         case .installed:
-            return "Installed at \(CommandLineToolInstaller.installURL.path)"
+            return L10n.Settings.Tools.installedAt(CommandLineToolInstaller.installURL.path)
         case .needsUpdate:
-            return "A command exists at \(CommandLineToolInstaller.installURL.path) and can be updated."
+            return L10n.Settings.Tools.needsUpdateAt(CommandLineToolInstaller.installURL.path)
         case .notInstalled:
-            return "Install the veilwriter command for Terminal."
+            return L10n.Settings.Tools.notInstalled
         }
     }
 
     private var cliButtonTitle: String {
         if isInstallingCLI {
-            return "Installing..."
+            return L10n.Settings.Tools.installingButton
         }
 
         switch cliInstallState {
         case .installed:
-            return "Reinstall"
+            return L10n.Settings.Tools.reinstallButton
         case .needsUpdate:
-            return "Update"
+            return L10n.Settings.Tools.updateButton
         case .notInstalled:
-            return "Install"
+            return L10n.Settings.Tools.installButton
         }
     }
 
@@ -615,7 +615,7 @@ struct EditorSettingsView: View {
 
     private func installCLI() {
         isInstallingCLI = true
-        cliStatusMessage = "Installing without administrator privileges."
+        cliStatusMessage = L10n.Settings.Tools.installingMessage
 
         Task.detached {
             let result: Result<Void, Error>
@@ -631,7 +631,7 @@ struct EditorSettingsView: View {
                 refreshCLIState()
                 switch result {
                 case .success:
-                    cliStatusMessage = "Installed. Try: veilwriter . Add ~/.local/bin to PATH if needed."
+                    cliStatusMessage = L10n.Settings.Tools.installedMessage
                 case .failure(let error):
                     cliStatusMessage = error.localizedDescription
                 }
@@ -641,7 +641,7 @@ struct EditorSettingsView: View {
 
     private func chooseBackgroundImage() {
         let panel = NSOpenPanel()
-        panel.title = "Choose Editor Background Image"
+        panel.title = L10n.Settings.chooseBackgroundImageTitle
         panel.allowedContentTypes = [.image]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
@@ -717,9 +717,22 @@ struct EditorSettingsView: View {
                 case .success(let models):
                     fetchedAgentModels = models
                     appState.recordFetchedAgentModels(models)
-                    agentModelFetchMessage = models.isEmpty
-                        ? "No models returned."
-                        : "Fetched \(models.count) models for \(entry.displayName)."
+                    if models.isEmpty {
+                        agentModelFetchMessage = "No models returned."
+                    } else {
+                        // Auto-activate this entry: fetching is a strong
+                        // "I want to use this provider" signal. Without
+                        // this the user can fetch DeepSeek models but the
+                        // active ★ stays on another (keyless) provider,
+                        // so the next chat send dies with missingAPIKey
+                        // even though they just proved the key works.
+                        let wasActive = appState.agentProviderLibrary.activeID == entry.id
+                        if !wasActive {
+                            appState.setActiveProviderLibraryEntry(id: entry.id)
+                        }
+                        let suffix = wasActive ? "" : " ★ Activated."
+                        agentModelFetchMessage = "Fetched \(models.count) models for \(entry.displayName).\(suffix)"
+                    }
                 case .failure(let error):
                     fetchedAgentModels = []
                     agentModelFetchMessage = error.localizedDescription
@@ -940,7 +953,7 @@ struct AgentProviderLibrarySection: View {
                 Image(systemName: "info.circle")
                     .foregroundStyle(.secondary)
                     .font(.caption)
-                Text("Edits save automatically. The active provider (★) drives the next chat turn — click any star to switch.")
+                Text(L10n.Settings.Provider.editsAutoSave)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -977,7 +990,7 @@ struct AgentProviderLibrarySection: View {
                         .frame(width: 22, height: 22)
                 }
                 .buttonStyle(.borderless)
-                .help("Add provider")
+                .help(L10n.Settings.Provider.addTooltip)
 
                 Button {
                     if let id = selectedEntryID {
@@ -990,7 +1003,7 @@ struct AgentProviderLibrarySection: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(selectedEntryID == nil || appState.agentProviderLibrary.entries.count <= 1)
-                .help("Remove selected provider")
+                .help(L10n.Settings.Provider.removeTooltip)
 
                 Spacer(minLength: 0)
             }
@@ -1012,7 +1025,7 @@ struct AgentProviderLibrarySection: View {
                     .frame(width: 16, height: 16)
             }
             .buttonStyle(.plain)
-            .help(isActive ? "Active provider" : "Make active")
+            .help(isActive ? L10n.Settings.Provider.activeTooltip : L10n.Settings.Provider.makeActiveTooltip)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
@@ -1070,7 +1083,7 @@ struct AgentProviderLibrarySection: View {
                 }
             )
         } else {
-            Text("Pick a provider on the left, or add one with +")
+            Text(L10n.Settings.Provider.emptySelection)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(8)
@@ -1160,13 +1173,14 @@ private struct AgentProviderEntryEditor: View {
     // MARK: - Connection
 
     private var connectionGroup: some View {
-        GroupBox(label: sectionLabel("Connection", system: "link")) {
+        GroupBox(label: sectionLabel(L10n.Settings.Provider.connectionSection, system: "link")) {
             VStack(alignment: .leading, spacing: 10) {
-                fieldRow("Display name") {
-                    TextField("e.g. Work OpenAI", text: $displayName, onCommit: commit)
+                fieldRow(L10n.Settings.Provider.displayNameLabel) {
+                    TextField(L10n.Settings.Provider.displayNamePlaceholder, text: $displayName, onCommit: commit)
                         .textFieldStyle(.roundedBorder)
+                        .onChange(of: displayName) { _, _ in commit() }
                 }
-                fieldRow("Preset") {
+                fieldRow(L10n.Settings.Provider.presetLabel) {
                     Picker("", selection: $providerID) {
                         ForEach(AgentProviderPreset.all) { p in
                             Text("\(p.displayName) · \(p.kind.shortLabel)").tag(p.id)
@@ -1199,17 +1213,19 @@ private struct AgentProviderEntryEditor: View {
                 }
                 customKindPickerRow
                 protocolHelpCard
-                fieldRow("Base URL") {
+                fieldRow(L10n.Settings.Provider.baseURLLabel) {
                     TextField(baseURLPlaceholder, text: $baseURL, onCommit: commit)
                         .textFieldStyle(.roundedBorder)
+                        .onChange(of: baseURL) { _, _ in commit() }
                 }
                 baseURLStatusRow
-                fieldRow("API key") {
+                fieldRow(L10n.Settings.Provider.apiKeyLabel) {
                     RevealableSecretField(
                         text: $apiKey,
                         placeholder: "",
                         onCommit: commit
                     )
+                    .onChange(of: apiKey) { _, _ in commit() }
                 }
                 apiKeyHint
             }
@@ -1226,9 +1242,9 @@ private struct AgentProviderEntryEditor: View {
     @ViewBuilder
     private var customKindPickerRow: some View {
         if providerID == AgentProviderPreset.customID {
-            fieldRow("Protocol") {
+            fieldRow(L10n.Settings.Provider.protocolLabel) {
                 Picker("", selection: $customKindOverride) {
-                    Text("OpenAI Chat（默认）").tag(AgentProviderKind?.none)
+                    Text(L10n.Settings.Provider.openAIChatDefault).tag(AgentProviderKind?.none)
                     Text("OpenAI Chat").tag(AgentProviderKind?.some(.openAIChat))
                     Text("Anthropic Messages").tag(AgentProviderKind?.some(.anthropicMessages))
                     Text("Google Gemini").tag(AgentProviderKind?.some(.geminiGenerateContent))
@@ -1271,7 +1287,7 @@ private struct AgentProviderEntryEditor: View {
                 Image(systemName: isDefault ? "checkmark.circle.fill" : "pencil.circle.fill")
                     .font(.system(size: 10))
                     .foregroundStyle(isDefault ? Color.green : Color.orange)
-                Text(isDefault ? "使用预设地址" : "已自定义")
+                Text(isDefault ? L10n.Settings.Provider.baseURLDefault : L10n.Settings.Provider.baseURLCustom)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
@@ -1299,7 +1315,7 @@ private struct AgentProviderEntryEditor: View {
                     Image(systemName: protocolIcon(for: effectiveKind))
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(Color.accentColor)
-                    Text("协议：\(effectiveKind.shortLabel)")
+                    Text(L10n.Settings.Provider.protocolLine(effectiveKind.shortLabel))
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(Color.accentColor)
                 }
@@ -1353,7 +1369,7 @@ private struct AgentProviderEntryEditor: View {
     // MARK: - Models
 
     private var modelsGroup: some View {
-        GroupBox(label: sectionLabel("Models", system: "cube.box")) {
+        GroupBox(label: sectionLabel(L10n.Settings.Provider.modelsSection, system: "cube.box")) {
             VStack(alignment: .leading, spacing: 12) {
                 modelGroup(
                     title: "Flash",
@@ -1375,9 +1391,9 @@ private struct AgentProviderEntryEditor: View {
     // MARK: - Routing
 
     private var routingGroup: some View {
-        GroupBox(label: sectionLabel("Routing", system: "arrow.triangle.branch")) {
+        GroupBox(label: sectionLabel(L10n.Settings.Provider.routingSection, system: "arrow.triangle.branch")) {
             VStack(alignment: .leading, spacing: 8) {
-                fieldRow("Default tier") {
+                fieldRow(L10n.Settings.Provider.defaultTierLabel) {
                     Picker("", selection: $routingMode) {
                         ForEach(AgentModelRoutingMode.allCases) { mode in
                             Text(mode.displayName).tag(mode)
@@ -1413,7 +1429,7 @@ private struct AgentProviderEntryEditor: View {
                     } else {
                         Image(systemName: "arrow.down.circle")
                     }
-                    Text(isFetchingAgentModels ? "Fetching…" : "Fetch Models")
+                    Text(isFetchingAgentModels ? L10n.Settings.Provider.fetchingModels : L10n.Settings.Provider.fetchModels)
                 }
             }
             .disabled(isFetchingAgentModels)
@@ -1464,11 +1480,11 @@ private struct AgentProviderEntryEditor: View {
         alternatesBinding: Binding<String>
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            fieldRow("\(title) primary") {
+            fieldRow(L10n.Settings.Provider.primarySuffix(title)) {
                 modelField(text: primaryBinding)
             }
             HStack(alignment: .top, spacing: 8) {
-                Text("\(title) alternates")
+                Text(L10n.Settings.Provider.alternatesSuffix(title))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .frame(width: labelWidth, alignment: .trailing)
@@ -1485,7 +1501,7 @@ private struct AgentProviderEntryEditor: View {
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 5))
                         .onChange(of: alternatesBinding.wrappedValue) { _, _ in commit() }
-                    Text("One model id per line — surfaces in the chat picker as one-click switches.")
+                    Text(L10n.Settings.Provider.alternatesHint)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -1497,7 +1513,7 @@ private struct AgentProviderEntryEditor: View {
     @ViewBuilder
     private func modelField(text: Binding<String>) -> some View {
         HStack(spacing: 6) {
-            TextField("model-id", text: text, onCommit: commit)
+            TextField(L10n.Settings.Provider.modelIDPlaceholder, text: text, onCommit: commit)
                 .textFieldStyle(.roundedBorder)
             if !fetchedAgentModels.isEmpty {
                 Menu {
@@ -1510,7 +1526,7 @@ private struct AgentProviderEntryEditor: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .help("Pick from fetched models")
+                .help(L10n.Settings.Provider.pickFromFetched)
             }
         }
         .onChange(of: text.wrappedValue) { _, _ in commit() }
@@ -1597,7 +1613,7 @@ private struct RevealableSecretField: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
-            .help(isRevealed ? "Hide key" : "Show key")
+            .help(isRevealed ? L10n.Settings.Provider.hideKey : L10n.Settings.Provider.showKey)
         }
     }
 }

@@ -339,6 +339,130 @@
     "When enabled, the Agent can use saved preferences, recurring facts, and project notes as personalization context.": {},
     "Workspace": {},
     "Your answer": {},
+    "agent-jobs.collapse-help": {
+      "comment": "Tooltip on the close button inside the background-jobs drawer",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": { "state": "translated", "value": "Hide background jobs panel" }
+        },
+        "zh-Hans": {
+          "stringUnit": { "state": "translated", "value": "收起后台任务面板" }
+        }
+      }
+    },
+    "agent-jobs.empty": {
+      "comment": "Empty state in the background-jobs drawer",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": { "state": "translated", "value": "No background jobs in this session." }
+        },
+        "zh-Hans": {
+          "stringUnit": { "state": "translated", "value": "本会话暂无后台任务。" }
+        }
+      }
+    },
+    "agent-jobs.kill": {
+      "comment": "Kill button on a running background job",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": { "state": "translated", "value": "Kill job" }
+        },
+        "zh-Hans": {
+          "stringUnit": { "state": "translated", "value": "终止任务" }
+        }
+      }
+    },
+    "agent-jobs.no-output": {
+      "comment": "Shown when a job has not yet produced any captured output",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": { "state": "translated", "value": "(no output captured yet)" }
+        },
+        "zh-Hans": {
+          "stringUnit": { "state": "translated", "value": "（暂无输出）" }
+        }
+      }
+    },
+    "agent-jobs.notification.title": {
+      "comment": "System notification banner title when a background job completes while the app is not active",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": { "state": "translated", "value": "Background job finished" }
+        },
+        "zh-Hans": {
+          "stringUnit": { "state": "translated", "value": "后台任务结束" }
+        }
+      }
+    },
+    "agent-jobs.status.completed": {
+      "comment": "Job status pill — exited successfully",
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "completed" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已完成" } }
+      }
+    },
+    "agent-jobs.status.failed": {
+      "comment": "Job status pill — exited with non-zero",
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "failed" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "失败" } }
+      }
+    },
+    "agent-jobs.status.killed": {
+      "comment": "Job status pill — terminated by user / agent",
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "killed" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已终止" } }
+      }
+    },
+    "agent-jobs.status.launch-failed": {
+      "comment": "Job status pill — Process.run() threw on launch",
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "launch failed" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启动失败" } }
+      }
+    },
+    "agent-jobs.status.running": {
+      "comment": "Job status pill — still alive",
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "running" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "运行中" } }
+      }
+    },
+    "agent-jobs.status.timed-out": {
+      "comment": "Job status pill — hit the optional hard timeout",
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "timed out" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "超时" } }
+      }
+    },
+    "agent-jobs.title": {
+      "comment": "Header of the background-jobs drawer",
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Background Jobs" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "后台任务" } }
+      }
+    },
+    "agent-jobs.toggle-help": {
+      "comment": "Tooltip on the header button that opens the background-jobs drawer",
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Show background jobs panel" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "查看后台任务" } }
+      }
+    },
     "agent-text-attachment.pasted-filename": {
       "comment": "Default filename for long text pasted into the Agent composer",
       "extractionState": "manual",
@@ -5666,7 +5790,1449 @@
     "还没有 Routine。点击 + 创建一条到点自动运行的提示词。": {},
     "重新发送上一条消息": {},
     "重试": {},
-    "隐藏详细错误信息": {}
+    "隐藏详细错误信息": {},
+    "settings.all-changes-saved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "All changes saved" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "所有更改已保存" } }
+      }
+    },
+    "settings.choose-background-image.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Choose Editor Background Image" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择编辑器背景图片" } }
+      }
+    },
+    "settings.label.font": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Font" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "字体" } }
+      }
+    },
+    "settings.label.theme": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Theme" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "主题" } }
+      }
+    },
+    "settings.label.image": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Image" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "图片" } }
+      }
+    },
+    "settings.label.image-mode": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Image Mode" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "图片模式" } }
+      }
+    },
+    "settings.label.image-size": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Image Size" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "图片大小" } }
+      }
+    },
+    "settings.label.image-opacity": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Image Opacity" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "图片透明度" } }
+      }
+    },
+    "settings.label.glass-material": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Glass Material" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "玻璃材质" } }
+      }
+    },
+    "settings.label.glass-strength": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Glass Strength" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "玻璃强度" } }
+      }
+    },
+    "settings.label.editor-surface": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Editor Surface" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "编辑器表面" } }
+      }
+    },
+    "settings.label.text-size": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Text Size" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "文字大小" } }
+      }
+    },
+    "settings.label.line-height": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Line Height" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "行高" } }
+      }
+    },
+    "settings.label.default-view": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Default View" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "默认视图" } }
+      }
+    },
+    "settings.label.view-order": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "View Order" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "视图顺序" } }
+      }
+    },
+    "settings.no-image-selected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No image selected" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "未选择图片" } }
+      }
+    },
+    "settings.saved-status": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Saved." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已保存。" } }
+      }
+    },
+    "settings.image-understanding.provider": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Provider" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "服务商" } }
+      }
+    },
+    "settings.image-understanding.base-url": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Base URL" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "基础地址" } }
+      }
+    },
+    "settings.image-understanding.api-key": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "API Key" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "API Key" } }
+      }
+    },
+    "settings.image-understanding.vision-model": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Vision Model" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "视觉模型" } }
+      }
+    },
+    "settings.image-understanding.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Used only when the active Agent provider cannot accept images directly. Multiple attached images are described in one request, then the description is sent to the main model." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "仅当当前 Agent 服务商无法直接处理图片时启用。多张附件会在一次请求里被描述，然后把描述发给主模型。" } }
+      }
+    },
+    "settings.image-understanding.fetch-models": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Fetch Models" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "获取模型列表" } }
+      }
+    },
+    "settings.image-understanding.fetching-models": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Fetching..." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "获取中…" } }
+      }
+    },
+    "settings.image-understanding.fetch-image-models": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Fetch Image Models" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "获取视觉模型列表" } }
+      }
+    },
+    "settings.image-understanding.fetching-images": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Fetching Images..." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "获取视觉模型中…" } }
+      }
+    },
+    "settings.image-understanding.fetched-models": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Fetched Models" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已获取模型" } }
+      }
+    },
+    "settings.agent-behavior.save-note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Keystrokes stay local until you press Save (⌘↩). API keys are stored separately in Keychain." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "输入仅在按下保存（⌘↩）后才会落盘。API Key 单独保存在 Keychain。" } }
+      }
+    },
+    "settings.agent-behavior.title-model": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Title Model" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "标题模型" } }
+      }
+    },
+    "settings.agent-behavior.title-model-placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "(leave empty → use Flash model)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "（留空 → 使用 Flash 模型）" } }
+      }
+    },
+    "settings.agent-behavior.title-model-description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "A short one-shot completion summarizes each new chat into a ≤12-char title after the first assistant reply. Set a cheap/fast model here (e.g. `deepseek-chat`, `gpt-4o-mini`, `qwen-turbo`) to avoid burning Pro tokens on titling. Empty → falls back to the active provider's Flash model." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "首条助手回复后用一次性短补全把对话压成 ≤12 字标题。在这里指定一个便宜/快的模型（如 `deepseek-chat`、`gpt-4o-mini`、`qwen-turbo`），避免起标题烧 Pro token。留空 → 回退到当前服务商的 Flash 模型。" } }
+      }
+    },
+    "settings.agent-behavior.tool-approval-description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Read-only shell commands in the built-in allowlist (cat, head, tail, ls, find without -delete/-exec, git diff/log/status/show, rg, grep, wc, file, stat, which, pwd, echo, …) run without asking. Commands outside the allowlist are passed to a one-shot LLM judge running on the active provider's **Flash** model (cheap & fast — never Pro), and only YES verdicts auto-run. Destructive patterns (rm, sudo, git push --force, git reset --hard, …) still require typing \"confirm\"." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "内置只读白名单里的 shell 命令（cat、head、tail、ls、不带 -delete/-exec 的 find、git diff/log/status/show、rg、grep、wc、file、stat、which、pwd、echo 等）直接执行不会询问。名单之外的命令交给一次性 LLM 判官，跑在当前服务商的 **Flash** 模型（便宜快速 — 绝不走 Pro），只有 YES 才自动执行。破坏性命令（rm、sudo、git push --force、git reset --hard 等）仍需手动输入 \"confirm\"。" } }
+      }
+    },
+    "settings.agent-behavior.concurrency-description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Cap on simultaneous Agent turns per provider. Each provider has its own quota — running 3 DashScope sessions doesn't block OpenAI sessions. When the cap is hit, new dispatches queue (FIFO) and drain as turns finish. Raising the cap immediately promotes queued work; lowering it just stops promoting new ones (running turns are never aborted). Default 3 is conservative — bump up if your provider's rate limit comfortably allows." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "每个服务商可以同时跑的 Agent 回合数上限。每个服务商有独立配额——同时跑 3 个 DashScope 会话不会挡 OpenAI 会话。达到上限后新请求按先来后到入队，等回合结束再依次释放。调高立刻放行排队中的任务；调低只是不再放新任务（运行中的回合永远不会被中断）。默认 3 比较保守——服务商限流够宽就可以调大。" } }
+      }
+    },
+    "settings.agent-behavior.appearance-description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Base size (pt) for Agent chat message body and rendered Markdown blocks (paragraphs, lists, quotes, fenced code, tables). Tool-call summaries, footers, message headers, and composer chrome keep their fixed sizes — this knob is about reading the conversation, not resizing the whole UI. Default is 13 pt; range %1$@ – %2$@ pt." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "Agent 聊天正文和 Markdown 块（段落、列表、引用、代码块、表格）的基础字号（pt）。工具卡片摘要、底栏、消息头、输入框工具栏会保持固定字号 — 这个旋钮只管「读对话」，不会缩放整个 UI。默认 13 pt；范围 %1$@ – %2$@ pt。" } }
+      }
+    },
+    "settings.tools.always-allow-note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Rules apply to command families such as `git push`; dangerous commands still require confirmation." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "规则按 `git push` 这种命令族粒度匹配；危险命令仍需手动确认。" } }
+      }
+    },
+    "settings.tools.remove": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Remove" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "移除" } }
+      }
+    },
+    "settings.tools.clear-all": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Clear All" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "全部清除" } }
+      }
+    },
+    "settings.tools.cli-section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Command Line Tool" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "命令行工具" } }
+      }
+    },
+    "settings.tools.cli-installed-at": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Installed at %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已安装到 %@" } }
+      }
+    },
+    "settings.tools.cli-needs-update": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "A command exists at %@ and can be updated." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%@ 上已存在旧命令，可以更新。" } }
+      }
+    },
+    "settings.tools.cli-not-installed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Install the veilwriter command for Terminal." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在终端安装 veilwriter 命令。" } }
+      }
+    },
+    "settings.tools.cli-installing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Installing..." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "安装中…" } }
+      }
+    },
+    "settings.tools.cli-reinstall": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Reinstall" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "重新安装" } }
+      }
+    },
+    "settings.tools.cli-update": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Update" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "更新" } }
+      }
+    },
+    "settings.tools.cli-install": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Install" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "安装" } }
+      }
+    },
+    "settings.tools.cli-installing-message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Installing without administrator privileges." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在无管理员权限地安装。" } }
+      }
+    },
+    "settings.tools.cli-installed-message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Installed. Try: veilwriter . Add ~/.local/bin to PATH if needed." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已安装。试试 veilwriter 。如有需要把 ~/.local/bin 加入 PATH。" } }
+      }
+    },
+    "settings.provider.edits-auto-save": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Edits save automatically. The active provider (★) drives the next chat turn — click any star to switch." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "改动自动保存。带 ★ 的服务商驱动下一次对话——点击任意星标切换。" } }
+      }
+    },
+    "settings.provider.add-tooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Add provider" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "添加服务商" } }
+      }
+    },
+    "settings.provider.remove-tooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Remove selected provider" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "移除选中的服务商" } }
+      }
+    },
+    "settings.provider.active-tooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Active provider" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "当前激活" } }
+      }
+    },
+    "settings.provider.make-active-tooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Make active" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "设为当前" } }
+      }
+    },
+    "settings.provider.empty-selection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Pick a provider on the left, or add one with +" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "从左侧选一个服务商，或点 + 添加" } }
+      }
+    },
+    "settings.provider.connection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Connection" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "连接" } }
+      }
+    },
+    "settings.provider.display-name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Display name" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "显示名称" } }
+      }
+    },
+    "settings.provider.display-name-placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "e.g. Work OpenAI" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "例如：工作用 OpenAI" } }
+      }
+    },
+    "settings.provider.preset": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Preset" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "预设" } }
+      }
+    },
+    "settings.provider.protocol": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Protocol" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "协议" } }
+      }
+    },
+    "settings.provider.openai-chat-default": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "OpenAI Chat (default)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "OpenAI Chat（默认）" } }
+      }
+    },
+    "settings.provider.base-url": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Base URL" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "基础地址" } }
+      }
+    },
+    "settings.provider.api-key": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "API key" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "API key" } }
+      }
+    },
+    "settings.provider.base-url-default": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Using preset URL" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "使用预设地址" } }
+      }
+    },
+    "settings.provider.base-url-custom": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Customized" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已自定义" } }
+      }
+    },
+    "settings.provider.protocol-line": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Protocol: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "协议：%@" } }
+      }
+    },
+    "settings.provider.models": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Models" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "模型" } }
+      }
+    },
+    "settings.provider.routing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Routing" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "路由" } }
+      }
+    },
+    "settings.provider.default-tier": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Default tier" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "默认档位" } }
+      }
+    },
+    "settings.provider.fetch-models": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Fetch Models" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "获取模型列表" } }
+      }
+    },
+    "settings.provider.fetching-models": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Fetching…" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "获取中…" } }
+      }
+    },
+    "settings.provider.alternates-hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "One model id per line — surfaces in the chat picker as one-click switches." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "一行一个 model id — 会出现在聊天模型选择器里供一键切换。" } }
+      }
+    },
+    "settings.provider.pick-from-fetched": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Pick from fetched models" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "从已获取的模型里选" } }
+      }
+    },
+    "settings.provider.hide-key": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Hide key" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "隐藏 Key" } }
+      }
+    },
+    "settings.provider.show-key": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Show key" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "显示 Key" } }
+      }
+    },
+    "settings.provider.model-id-placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "model-id" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "model-id" } }
+      }
+    },
+    "settings.provider.primary-suffix": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%@ primary" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%@ 主模型" } }
+      }
+    },
+    "settings.provider.alternates-suffix": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%@ alternates" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%@ 备选" } }
+      }
+    },
+    "settings.mcp.servers-description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Servers available in this workspace." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "当前工作区内可用的服务器。" } }
+      }
+    },
+    "settings.mcp.servers-enabled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%1$@ of %2$@ MCP servers enabled" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已启用 %1$@ / %2$@ 个 MCP 服务器" } }
+      }
+    },
+    "settings.mcp.refresh": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Refresh" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "刷新" } }
+      }
+    },
+    "settings.mcp.cursor-config": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Cursor mcp.json" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "Cursor mcp.json" } }
+      }
+    },
+    "settings.mcp.new-server": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "New MCP Server" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "新建 MCP 服务器" } }
+      }
+    },
+    "settings.mcp.user-servers": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "User MCP Servers" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "用户 MCP 服务器" } }
+      }
+    },
+    "settings.mcp.cursor-servers": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Cursor MCP Servers" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "Cursor MCP 服务器" } }
+      }
+    },
+    "settings.mcp.codex-servers": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Codex MCP Servers" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "Codex MCP 服务器" } }
+      }
+    },
+    "settings.mcp.no-servers": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No servers in this group." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本组暂无服务器。" } }
+      }
+    },
+    "settings.mcp.logout": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Logout" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "注销" } }
+      }
+    },
+    "settings.mcp.tools-enabled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%@ tools enabled" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已启用 %@ 个工具" } }
+      }
+    },
+    "settings.mcp.tool-list-not-refreshed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Tool list not refreshed" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "工具列表未刷新" } }
+      }
+    },
+    "settings.mcp.disabled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Disabled" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已禁用" } }
+      }
+    },
+    "settings.mcp.refresh-tools": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Refresh Tools" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "刷新工具" } }
+      }
+    },
+    "settings.mcp.delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Delete" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "删除" } }
+      }
+    },
+    "settings.mcp.headers-prefix": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "headers: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "headers: %@" } }
+      }
+    },
+    "settings.mcp.last-checked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Last checked: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "最近检查：%@" } }
+      }
+    },
+    "settings.mcp.failed-prefix": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Failed: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "失败：%@" } }
+      }
+    },
+    "settings.mcp.opened-cursor-config": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Opened Cursor mcp.json." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已打开 Cursor mcp.json。" } }
+      }
+    },
+    "settings.mcp.cursor-config-missing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Cursor mcp.json does not exist yet." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "Cursor mcp.json 还不存在。" } }
+      }
+    },
+    "settings.mcp.created-server": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Created %@." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已创建 %@。" } }
+      }
+    },
+    "settings.mcp.deleted-server": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Deleted %@." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已删除 %@。" } }
+      }
+    },
+    "settings.mcp.auth-cleared": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Authorization header cleared for %@." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已清除 %@ 的 Authorization 头。" } }
+      }
+    },
+    "settings.mcp.new-server-title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "New MCP Server" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "新建 MCP 服务器" } }
+      }
+    },
+    "settings.mcp.server-name-placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Server name" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "服务器名称" } }
+      }
+    },
+    "settings.mcp.transport": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Transport" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "传输方式" } }
+      }
+    },
+    "settings.mcp.url-placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "https://example.com/mcp" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "https://example.com/mcp" } }
+      }
+    },
+    "settings.mcp.headers": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Headers" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "请求头" } }
+      }
+    },
+    "settings.mcp.headers-hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "One header per line, for example: Authorization=Bearer ..." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "每行一个请求头，例如：Authorization=Bearer ..." } }
+      }
+    },
+    "settings.mcp.command-path-placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "/absolute/path/to/server" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "/绝对路径/到/server" } }
+      }
+    },
+    "settings.mcp.args-placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Arguments separated by spaces" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "参数用空格分隔" } }
+      }
+    },
+    "settings.mcp.environment": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Environment" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "环境变量" } }
+      }
+    },
+    "settings.mcp.environment-hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "One variable per line, for example: HTTPS_PROXY=http://127.0.0.1:7890" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "每行一个变量，例如：HTTPS_PROXY=http://127.0.0.1:7890" } }
+      }
+    },
+    "settings.mcp.timeout": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Timeout" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "超时" } }
+      }
+    },
+    "settings.mcp.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Cancel" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "取消" } }
+      }
+    },
+    "settings.mcp.create": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Create" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "创建" } }
+      }
+    },
+    "settings.mcp.error-server-name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Server name is required." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "服务器名称必填。" } }
+      }
+    },
+    "settings.mcp.error-valid-url": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "A valid server URL is required." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "必须填写有效的服务器 URL。" } }
+      }
+    },
+    "settings.mcp.error-command-required": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Command is required." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "命令必填。" } }
+      }
+    },
+    "settings.skill.auto-extract-section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Automatic Skill Extraction" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "自动提取技能" } }
+      }
+    },
+    "settings.skill.auto-extract-title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Auto-extract reusable skills from conversations" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "从对话中自动提取可复用技能" } }
+      }
+    },
+    "settings.skill.auto-extract-description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "When enabled, VeilWriter can surface reusable workflows as skill candidates." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启用后，VeilWriter 会把可复用的工作流作为技能候选浮现出来。" } }
+      }
+    },
+    "settings.skill.minimum-tool-calls": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Minimum tool calls" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "最少工具调用数" } }
+      }
+    },
+    "settings.skill.minimum-tool-calls-hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Conversations with fewer tool calls are skipped." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "工具调用少于此值的对话会被跳过。" } }
+      }
+    },
+    "settings.skill.available-count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%1$@ of %2$@ skills available" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "可用技能 %1$@ / %2$@" } }
+      }
+    },
+    "settings.skill.refresh": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Refresh" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "刷新" } }
+      }
+    },
+    "settings.skill.open-folder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Open Folder" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开文件夹" } }
+      }
+    },
+    "settings.skill.new-skill": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "New Skill" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "新建技能" } }
+      }
+    },
+    "settings.skill.search-placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Search by skill name, description, or path..." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "按技能名、描述或路径搜索…" } }
+      }
+    },
+    "settings.skill.built-in": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Built-in Skills" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "内置技能" } }
+      }
+    },
+    "settings.skill.user": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "User Skills" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "用户技能" } }
+      }
+    },
+    "settings.skill.plugin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Plugin Skills" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "插件技能" } }
+      }
+    },
+    "settings.skill.no-skills": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No skills in this group." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本组暂无技能。" } }
+      }
+    },
+    "settings.skill.view-content": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "View content" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "查看内容" } }
+      }
+    },
+    "settings.skill.unable-to-read": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Unable to read skill content." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法读取技能内容。" } }
+      }
+    },
+    "settings.skill.new-user-skill": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "New User Skill" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "新建用户技能" } }
+      }
+    },
+    "settings.skill.name-placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Skill name" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "技能名称" } }
+      }
+    },
+    "settings.skill.description-placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Description" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "描述" } }
+      }
+    },
+    "settings.skill.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Cancel" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "取消" } }
+      }
+    },
+    "settings.skill.create": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Create" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "创建" } }
+      }
+    },
+    "settings.skill.default-body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Describe when and how the Agent should use this skill." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "描述 Agent 何时、以何种方式使用这个技能。" } }
+      }
+    },
+    "settings.skill.opened-folder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Opened user skills folder." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已打开用户技能文件夹。" } }
+      }
+    },
+    "settings.skill.created": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Created %@." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已创建 %@。" } }
+      }
+    },
+    "settings.memory.features-section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Memory Features" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "记忆功能" } }
+      }
+    },
+    "settings.memory.enable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Enable memory" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启用记忆" } }
+      }
+    },
+    "settings.memory.enable-description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "When enabled, the Agent can use saved preferences, recurring facts, and project notes as personalization context." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启用后，Agent 可使用已保存的偏好、复用的事实与项目笔记作为个性化上下文。" } }
+      }
+    },
+    "settings.memory.retrieval-section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Memory Retrieval" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "记忆检索" } }
+      }
+    },
+    "settings.memory.auto-retrieval": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Auto-retrieve memories" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "自动检索记忆" } }
+      }
+    },
+    "settings.memory.auto-retrieval-description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Automatically search related memories before each Agent turn and inject the best matches as compact context." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "每个 Agent 回合前自动搜索相关记忆，并把最匹配的几条作为精简上下文注入。" } }
+      }
+    },
+    "settings.memory.query-rewrite": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Rewrite retrieval query" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "重写检索查询" } }
+      }
+    },
+    "settings.memory.query-rewrite-description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Use the tool model to turn conversational wording into a focused semantic search query." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "用工具模型把口语化表达转成更聚焦的语义搜索查询。" } }
+      }
+    },
+    "settings.memory.max-retrieved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Max retrieved memories" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "单次最多检索条数" } }
+      }
+    },
+    "settings.memory.similarity-threshold": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Similarity threshold" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "相似度阈值" } }
+      }
+    },
+    "settings.memory.similarity-broad": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Broad (0%)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "宽松 (0%)" } }
+      }
+    },
+    "settings.memory.similarity-strict": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Strict (100%)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "严格 (100%)" } }
+      }
+    },
+    "settings.memory.summaries-section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Memory Summaries" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "记忆摘要" } }
+      }
+    },
+    "settings.memory.auto-summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Auto-summarize conversations" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "自动归纳对话" } }
+      }
+    },
+    "settings.memory.auto-summary-description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Extract durable facts from conversations and save them as candidate memories." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "从对话里抽取持久事实，作为候选记忆保存下来。" } }
+      }
+    },
+    "settings.memory.maintenance-section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Memory Maintenance" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "记忆维护" } }
+      }
+    },
+    "settings.memory.daily-maintenance": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Run daily memory maintenance" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "每日运行记忆维护" } }
+      }
+    },
+    "settings.memory.maintenance-description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Archives duplicate or stale transient entries, removes expired archived entries, and records the last maintenance result." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "归档重复或过期的临时条目、清除过期归档，并记录最近一次维护结果。" } }
+      }
+    },
+    "settings.memory.run-maintenance": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Run maintenance cycle" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "立即运行维护" } }
+      }
+    },
+    "settings.memory.preview-maintenance": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Preview next cycle" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "预览下一轮" } }
+      }
+    },
+    "settings.memory.trigger-time": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Trigger time" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "触发时间" } }
+      }
+    },
+    "settings.memory.transient-ttl": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Transient memory TTL" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "临时记忆 TTL" } }
+      }
+    },
+    "settings.memory.archive-retention": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Archive retention" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "归档保留期" } }
+      }
+    },
+    "settings.memory.days-format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%@ days" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%@ 天" } }
+      }
+    },
+    "settings.memory.merge-parameters": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Similarity and merge parameters" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "相似度与合并参数" } }
+      }
+    },
+    "settings.memory.merge-parameters-description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The current local maintenance pass handles retention and archiving. LLM-assisted duplicate merging can be wired into this section once the Agent memory retrieval pipeline starts consuming embeddings." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "当前本地维护只做保留与归档。一旦 Agent 记忆检索链路开始消费 embeddings，可在此接入 LLM 辅助的重复合并。" } }
+      }
+    },
+    "settings.memory.archived-label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Archived memories (%@)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已归档记忆 (%@)" } }
+      }
+    },
+    "settings.memory.no-archived": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No archived memories." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "暂无归档记忆。" } }
+      }
+    },
+    "settings.memory.export-snapshot": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Export memory snapshot" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "导出记忆快照" } }
+      }
+    },
+    "settings.memory.tool-model-section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Memory Tool Model" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "记忆工具模型" } }
+      }
+    },
+    "settings.memory.tool-model": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Tool model" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "工具模型" } }
+      }
+    },
+    "settings.memory.use-active-agent-model": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Use active Agent model" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "使用当前 Agent 模型" } }
+      }
+    },
+    "settings.memory.tool-model-description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Used for query rewriting and future LLM-assisted memory maintenance. Leave blank to follow the active Agent model." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "用于查询重写和未来的 LLM 辅助记忆维护。留空则跟随当前 Agent 模型。" } }
+      }
+    },
+    "settings.memory.embedding-section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Embedding Model" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "Embedding 模型" } }
+      }
+    },
+    "settings.memory.embedding-placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Embedding model" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "Embedding 模型" } }
+      }
+    },
+    "settings.memory.embedding-description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Used for semantic retrieval. Leave the default unless your provider exposes a compatible embedding model." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "用于语义检索。除非你的服务商提供兼容的 embedding 模型，否则保持默认。" } }
+      }
+    },
+    "settings.memory.statistics-section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Statistics" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "统计" } }
+      }
+    },
+    "settings.memory.total-memories": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Total memories" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "记忆总数" } }
+      }
+    },
+    "settings.memory.auto-generated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Auto-generated" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "自动生成" } }
+      }
+    },
+    "settings.memory.manual": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Manual" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "手动" } }
+      }
+    },
+    "settings.memory.add-memory-section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Add Memory" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "添加记忆" } }
+      }
+    },
+    "settings.memory.lifetime": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Lifetime" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "时效" } }
+      }
+    },
+    "settings.memory.add-memory": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Add memory" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "添加记忆" } }
+      }
+    },
+    "settings.memory.search-section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Search Memories" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "搜索记忆" } }
+      }
+    },
+    "settings.memory.search-placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Search by text..." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "按文本搜索…" } }
+      }
+    },
+    "settings.memory.include-archived": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Include archived" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "包含已归档" } }
+      }
+    },
+    "settings.memory.shown-count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%@ shown" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "显示 %@ 条" } }
+      }
+    },
+    "settings.memory.reset-search": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Reset search" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "重置搜索" } }
+      }
+    },
+    "settings.memory.clear-all": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Clear all" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "全部清除" } }
+      }
+    },
+    "settings.memory.no-matching": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No memories match the current filters." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "没有匹配当前筛选的记忆。" } }
+      }
+    },
+    "settings.memory.memory-list-section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Memory List" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "记忆列表" } }
+      }
+    },
+    "settings.memory.daily-sleep-cycle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Daily sleep cycle" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "每日睡眠周期" } }
+      }
+    },
+    "settings.memory.header-summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Archived %1$@ · Next: %2$@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已归档 %1$@ · 下次：%2$@" } }
+      }
+    },
+    "settings.memory.not-scheduled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Not scheduled" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "未排程" } }
+      }
+    },
+    "settings.memory.last-status": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Last: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "上次：%@" } }
+      }
+    },
+    "settings.memory.maintenance-counts": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Inspected %1$@, archived %2$@, removed %3$@, merged %4$@." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "检查 %1$@ 条，归档 %2$@ 条，移除 %3$@ 条，合并 %4$@ 条。" } }
+      }
+    },
+    "settings.memory.tokens-line": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "LLM tokens: %1$@ input / %2$@ output" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "LLM tokens：输入 %1$@ / 输出 %2$@" } }
+      }
+    },
+    "settings.memory.used-x-times": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Used %@x" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已使用 %@ 次" } }
+      }
+    },
+    "settings.memory.archived-tag": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Archived" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已归档" } }
+      }
+    },
+    "settings.memory.edit-tooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Edit memory" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "编辑记忆" } }
+      }
+    },
+    "settings.memory.restore-tooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Restore memory" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "恢复记忆" } }
+      }
+    },
+    "settings.memory.archive-tooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Archive memory" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "归档记忆" } }
+      }
+    },
+    "settings.memory.delete-tooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Delete memory" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "删除记忆" } }
+      }
+    },
+    "settings.memory.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Cancel" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "取消" } }
+      }
+    },
+    "settings.memory.save": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Save" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "保存" } }
+      }
+    },
+    "settings.memory.export-panel-title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Export Memory Snapshot" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "导出记忆快照" } }
+      }
+    },
+    "settings.memory.exported-to": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Exported to %@." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已导出到 %@。" } }
+      }
+    }
   },
   "version": "1.0"
 }

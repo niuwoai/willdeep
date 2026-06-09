@@ -69,6 +69,45 @@ enum AgentToolApprovalNotifier {
         }
     }
 
+    /// Background `run_command` job finished while the user wasn't
+    /// looking. Re-uses the same auth + delivery path as the approval
+    /// notifier — see header comment for rationale.
+    @MainActor
+    static func notifyJobFinished(job: AgentBackgroundJob) {
+        if NSApp.isActive { return }
+        requestAuthorizationIfNeeded()
+
+        let statusWord: String
+        switch job.status {
+        case .completed: statusWord = "exit 0"
+        case .failed: statusWord = "exit \(job.exitCode ?? -1)"
+        case .killed: statusWord = "killed"
+        case .timedOut: statusWord = "timed out"
+        case .launchFailed: statusWord = "launch failed"
+        case .running: return // shouldn't happen — we only fire on finish
+        }
+        let shortCommand = truncated(job.command, limit: 90)
+        let content = UNMutableNotificationContent()
+        content.title = L10n.AgentJobs.notificationTitle
+        content.body = "\(job.displayHandle) (\(statusWord)): \(shortCommand)"
+        content.sound = .default
+
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized
+                || settings.authorizationStatus == .provisional else {
+                return
+            }
+            let identifier = "veilwriter.agent.jobFinished.\(job.id.uuidString)"
+            let request = UNNotificationRequest(
+                identifier: identifier,
+                content: content,
+                trigger: nil
+            )
+            center.add(request, withCompletionHandler: nil)
+        }
+    }
+
     private static func requestAuthorizationIfNeeded() {
         guard !hasRequestedAuthorization else { return }
         hasRequestedAuthorization = true

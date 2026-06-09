@@ -67,11 +67,37 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "run_command",
-            description: "Run a shell command in the workspace root. Requires user approval. Refuses commands that escape the workspace.",
+            description: "Run a shell command in the workspace root. Requires user approval. Refuses commands that escape the workspace. Pass `run_in_background: true` for long-running tasks (dev servers, watchers, big builds, test suites that take minutes) — the call returns immediately with a job handle and you receive a system notification when the job finishes; meanwhile inspect partial output with `get_job_output` or stop it with `kill_job`.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "command", type: .string, description: "Shell command line. Runs through /bin/sh -c.", required: true),
-                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Hard timeout in seconds. Defaults to 20, max 120.", required: false)
+                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Hard timeout in seconds. Foreground default 20s (max 120). Background default unlimited (max 21600 = 6h).", required: false),
+                AgentToolParameter(name: "run_in_background", type: .boolean, description: "When true, do not block on the command. Returns a job handle (job_xxxxxx); the host injects a system message when the job finishes. Use for tasks expected to take more than ~30 seconds. Defaults to false.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "list_jobs",
+            description: "List background shell jobs spawned via `run_command` with `run_in_background: true` in this session, including their status and short handles. Read-only.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "only_alive", type: .boolean, description: "When true, only return jobs whose status is still `running`. Defaults to false.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "get_job_output",
+            description: "Read the captured stdout/stderr buffer for a background job. Pass the short handle (e.g. `job_ab12cd`) or full UUID. Read-only.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "job_id", type: .string, description: "Job handle from `list_jobs` or the `run_command` response (e.g. `job_ab12cd`).", required: true),
+                AgentToolParameter(name: "tail_lines", type: .integer, description: "Only return the last N lines of output. Omit to return the full buffer.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "kill_job",
+            description: "Send SIGTERM (then SIGKILL after 2s) to a background job spawned via `run_command`. Returns immediately; the actual exit notice arrives via the usual completion system message.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "job_id", type: .string, description: "Job handle from `list_jobs` or the `run_command` response (e.g. `job_ab12cd`).", required: true)
             ]
         ),
         AgentToolDescriptor(

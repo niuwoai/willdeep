@@ -624,6 +624,24 @@ extension AppState {
         }
 
         for _ in 0..<Self.maxAgentToolRounds {
+            // Background-job completion notices. Pulled at the top of
+            // each round so the model sees any "job xyz finished"
+            // notification right before it speaks — see
+            // AgentBackgroundJobs.swift for the contract. We persist
+            // these as `.system` messages so all four provider adapters
+            // handle them (OpenAI-Chat accepts inline system; the
+            // Anthropic adapter folds them into the top-level `system`
+            // field; Gemini / Responses do the same coalescing).
+            let pendingCompletions = agentJobRegistry.consumePendingCompletions(forRuntime: runtime.id)
+            for finishedJob in pendingCompletions {
+                runtime.messages.append(
+                    AgentMessage(
+                        role: .system,
+                        content: Self.backgroundJobCompletionNotice(for: finishedJob)
+                    )
+                )
+            }
+
             let assistantMessage = AgentMessage(role: .assistant, content: "")
             runtime.messages.append(assistantMessage)
             let assistantID = assistantMessage.id
@@ -831,7 +849,8 @@ extension AppState {
                         appendToolMessage(
                             for: runtime,
                             toolCallID: call.externalID,
-                            payload: "User skipped the question."
+                            payload: "User skipped the question.",
+                            source: .systemNotice
                         )
                         continue
                     case .approved:
@@ -844,7 +863,12 @@ extension AppState {
                             payload: answer
                         )
                     }
-                    appendToolMessage(for: runtime, toolCallID: call.externalID, payload: answer)
+                    appendToolMessage(
+                        for: runtime,
+                        toolCallID: call.externalID,
+                        payload: answer,
+                        source: .userAnswer
+                    )
                     continue
                 }
 
@@ -860,7 +884,8 @@ extension AppState {
                     appendToolMessage(
                         for: runtime,
                         toolCallID: call.externalID,
-                        payload: "Blocked: Plan mode is active and no plan has been approved yet. Emit a ```plan``` block listing the steps you intend to take, then stop and wait for the user to approve."
+                        payload: "Blocked: Plan mode is active and no plan has been approved yet. Emit a ```plan``` block listing the steps you intend to take, then stop and wait for the user to approve.",
+                        source: .systemNotice
                     )
                     continue
                 }
@@ -877,7 +902,8 @@ extension AppState {
                         appendToolMessage(
                             for: runtime,
                             toolCallID: call.externalID,
-                            payload: "Tool call denied by the user."
+                            payload: "Tool call denied by the user.",
+                            source: .systemNotice
                         )
                         continue
                     }
@@ -887,7 +913,11 @@ extension AppState {
                     }
                 }
 
-                let context = AgentToolContext(rootDirectory: workspaceURL)
+                let context = AgentToolContext(
+                    rootDirectory: workspaceURL,
+                    runtimeID: runtime.id,
+                    jobRegistry: agentJobRegistry
+                )
                 do {
                     let result = try await AgentToolRunner.run(
                         name: call.toolName,
@@ -914,7 +944,8 @@ extension AppState {
                     appendToolMessage(
                         for: runtime,
                         toolCallID: call.externalID,
-                        payload: "Tool error: \(error.localizedDescription)"
+                        payload: "Tool error: \(error.localizedDescription)",
+                        source: .systemNotice
                     )
                 }
             }
@@ -1115,13 +1146,62 @@ extension AppState {
         }
     }
 
-    func appendToolMessage(for runtime: AgentRuntime, toolCallID: String, payload: String) {
+    /// Append a `tool` message to runtime.messages, running it through
+    /// `AgentInjectionDefense` first. Default `source` is `.toolOutput`
+    /// — the conservative case where the payload contains arbitrary
+    /// bytes from the workspace / MCP / shell, any of which could carry
+    /// injection markers. Callers that hand-author the payload string
+    /// (denial notices, plan-mode blocks) should pass `.systemNotice`
+    /// to skip the neutralizer; the `ask_user` reply path should pass
+    /// `.userAnswer` so the content gets wrapped in `<user_answer>` and
+    /// the model can tell a typed reply apart from a tool result.
+    /// Build the `<background-task-notification>` body the agent loop
+    /// pushes into the model when a backgrounded `run_command` job
+    /// finishes. Kept short and unambiguous: the model should react to
+    /// it (summarize, follow up, kick off next steps) or quietly note
+    /// it depending on the originating user intent.
+    nonisolated static func backgroundJobCompletionNotice(for job: AgentBackgroundJob) -> String {
+        let durationText: String = {
+            let total = Int(job.duration.rounded())
+            if total < 60 { return "\(total)s" }
+            let m = total / 60, s = total % 60
+            if m < 60 { return "\(m)m\(s)s" }
+            let h = m / 60, mm = m % 60
+            return "\(h)h\(mm)m"
+        }()
+        let exitText = job.exitCode.map { "exit=\($0)" } ?? "exit=?"
+        let trimmedCommand = job.command.count > 200
+            ? String(job.command.prefix(200)) + "…"
+            : job.command
+        let outputHint = job.outputByteCount > 0
+            ? "\(job.outputByteCount) bytes of output captured — call `get_job_output(job_id: \"\(job.displayHandle)\")` to read."
+            : "no output captured."
+        return """
+        <background-task-notification>
+        Background job \(job.displayHandle) finished while you were not in this turn.
+        Command: \(trimmedCommand)
+        Status: \(job.status.rawValue) (\(exitText)), duration \(durationText).
+        \(outputHint)
+        </background-task-notification>
+        """
+    }
+
+    func appendToolMessage(
+        for runtime: AgentRuntime,
+        toolCallID: String,
+        payload: String,
+        source: AgentInjectionDefense.ToolMessageSource = .toolOutput
+    ) {
+        let sanitized = AgentInjectionDefense.sanitizedToolMessageContent(
+            payload: payload,
+            source: source
+        )
         let limited: String
         let maxPayload = 24_000
-        if payload.count > maxPayload {
-            limited = String(payload.prefix(maxPayload)) + "\n...[tool output truncated]"
+        if sanitized.count > maxPayload {
+            limited = String(sanitized.prefix(maxPayload)) + "\n...[tool output truncated]"
         } else {
-            limited = payload
+            limited = sanitized
         }
         runtime.messages.append(
             AgentMessage(role: .tool, content: limited, toolCallID: toolCallID)

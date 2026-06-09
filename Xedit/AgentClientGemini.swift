@@ -134,17 +134,8 @@ struct GeminiAdapter {
         applyAuthenticationHeaders(to: &request)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let systemPrompt = """
-        You are a strict shell-command safety classifier. \
-        Reply with a single word: YES if the command is read-only and \
-        cannot delete files, modify state outside its process, send \
-        data over the network in a write capacity, or escalate \
-        privileges. Otherwise reply NO. \
-        Treat anything that writes files, mutates VCS state, installs \
-        software, opens network sockets to write, signals processes, \
-        or changes permissions as NO. \
-        Do not explain. Do not add punctuation. Output exactly YES or NO.
-        """
+        let systemPrompt = AgentInjectionDefense.judgeSystemPrompt
+        let userPayload = AgentInjectionDefense.judgeUserPayload(command: command)
 
         let body: [String: Any] = [
             "systemInstruction": [
@@ -153,11 +144,11 @@ struct GeminiAdapter {
             "contents": [
                 [
                     "role": "user",
-                    "parts": [["text": "Command:\n\(command)"]]
+                    "parts": [["text": userPayload]]
                 ]
             ],
             "generationConfig": [
-                "maxOutputTokens": 8,
+                "maxOutputTokens": 16,
                 "temperature": 0
             ]
         ]
@@ -179,8 +170,7 @@ struct GeminiAdapter {
                 .compactMap(\.text)
                 .joined()
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-                .uppercased()
-            return text.hasPrefix("YES")
+            return AgentInjectionDefense.judgeVerdictIsYes(rawText: text)
         } catch {
             return false
         }

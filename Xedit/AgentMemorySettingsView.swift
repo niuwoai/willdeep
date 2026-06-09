@@ -53,25 +53,25 @@ struct AgentMemorySettingsView: View {
 
     var body: some View {
         Form {
-            Section("Memory Features") {
-                Toggle("Enable memory", isOn: setting(\.isMemoryEnabled))
-                Text("When enabled, the Agent can use saved preferences, recurring facts, and project notes as personalization context.")
+            Section(L10n.Settings.Memory.featuresSection) {
+                Toggle(L10n.Settings.Memory.enableToggle, isOn: setting(\.isMemoryEnabled))
+                Text(L10n.Settings.Memory.enableDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("Memory Retrieval") {
-                Toggle("Auto-retrieve memories", isOn: setting(\.autoRetrievalEnabled))
-                Text("Automatically search related memories before each Agent turn and inject the best matches as compact context.")
+            Section(L10n.Settings.Memory.retrievalSection) {
+                Toggle(L10n.Settings.Memory.autoRetrievalToggle, isOn: setting(\.autoRetrievalEnabled))
+                Text(L10n.Settings.Memory.autoRetrievalDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Toggle("Rewrite retrieval query", isOn: setting(\.queryRewriteEnabled))
-                Text("Use the tool model to turn conversational wording into a focused semantic search query.")
+                Toggle(L10n.Settings.Memory.queryRewriteToggle, isOn: setting(\.queryRewriteEnabled))
+                Text(L10n.Settings.Memory.queryRewriteDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                LabeledContent("Max retrieved memories") {
+                LabeledContent(L10n.Settings.Memory.maxRetrievedLabel) {
                     HStack {
                         Slider(value: doubleSetting(\.maxRetrievedMemories), in: 1...20, step: 1)
                         Text("\(memoryState.settings.maxRetrievedMemories)")
@@ -80,7 +80,7 @@ struct AgentMemorySettingsView: View {
                     }
                 }
 
-                LabeledContent("Similarity threshold") {
+                LabeledContent(L10n.Settings.Memory.similarityThresholdLabel) {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
                             Slider(value: setting(\.similarityThreshold), in: 0...1, step: 0.01)
@@ -89,9 +89,9 @@ struct AgentMemorySettingsView: View {
                                 .frame(width: 44, alignment: .trailing)
                         }
                         HStack {
-                            Text("Broad (0%)")
+                            Text(L10n.Settings.Memory.similarityBroad)
                             Spacer()
-                            Text("Strict (100%)")
+                            Text(L10n.Settings.Memory.similarityStrict)
                         }
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -99,17 +99,17 @@ struct AgentMemorySettingsView: View {
                 }
             }
 
-            Section("Memory Summaries") {
-                Toggle("Auto-summarize conversations", isOn: setting(\.autoSummaryEnabled))
-                Text("Extract durable facts from conversations and save them as candidate memories.")
+            Section(L10n.Settings.Memory.summariesSection) {
+                Toggle(L10n.Settings.Memory.autoSummaryToggle, isOn: setting(\.autoSummaryEnabled))
+                Text(L10n.Settings.Memory.autoSummaryDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Section {
                 maintenanceHeader
-                Toggle("Run daily memory maintenance", isOn: setting(\.dailyMaintenanceEnabled))
-                Text("Archives duplicate or stale transient entries, removes expired archived entries, and records the last maintenance result.")
+                Toggle(L10n.Settings.Memory.dailyMaintenanceToggle, isOn: setting(\.dailyMaintenanceEnabled))
+                Text(L10n.Settings.Memory.maintenanceDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -121,41 +121,41 @@ struct AgentMemorySettingsView: View {
                     Button {
                         memoryState.runMaintenance()
                     } label: {
-                        Label("Run maintenance cycle", systemImage: "play")
+                        Label(L10n.Settings.Memory.runMaintenanceButton, systemImage: "play")
                     }
 
                     Button {
                         memoryState.runMaintenance(preview: true)
                     } label: {
-                        Label("Preview next cycle", systemImage: "eye")
+                        Label(L10n.Settings.Memory.previewMaintenanceButton, systemImage: "eye")
                     }
                 }
 
-                DatePicker("Trigger time", selection: maintenanceTimeBinding, displayedComponents: .hourAndMinute)
+                DatePicker(L10n.Settings.Memory.triggerTimeLabel, selection: maintenanceTimeBinding, displayedComponents: .hourAndMinute)
 
                 Stepper(value: setting(\.transientTTLDays), in: 1...3650) {
-                    LabeledContent("Transient memory TTL") {
-                        Text("\(memoryState.settings.transientTTLDays) days")
+                    LabeledContent(L10n.Settings.Memory.transientTTLLabel) {
+                        Text(L10n.Settings.Memory.daysFormat("\(memoryState.settings.transientTTLDays)"))
                             .monospacedDigit()
                     }
                 }
 
                 Stepper(value: setting(\.archiveRetentionDays), in: 1...3650) {
-                    LabeledContent("Archive retention") {
-                        Text("\(memoryState.settings.archiveRetentionDays) days")
+                    LabeledContent(L10n.Settings.Memory.archiveRetentionLabel) {
+                        Text(L10n.Settings.Memory.daysFormat("\(memoryState.settings.archiveRetentionDays)"))
                             .monospacedDigit()
                     }
                 }
 
-                DisclosureGroup("Similarity and merge parameters") {
-                    Text("The current local maintenance pass handles retention and archiving. LLM-assisted duplicate merging can be wired into this section once the Agent memory retrieval pipeline starts consuming embeddings.")
+                DisclosureGroup(L10n.Settings.Memory.mergeParametersLabel) {
+                    Text(L10n.Settings.Memory.mergeParametersDescription)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
-                DisclosureGroup("Archived memories (\(memoryState.archivedMemories.count))") {
+                DisclosureGroup(L10n.Settings.Memory.archivedMemoriesLabel("\(memoryState.archivedMemories.count)")) {
                     if memoryState.archivedMemories.isEmpty {
-                        Text("No archived memories.")
+                        Text(L10n.Settings.Memory.noArchivedMemories)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
@@ -170,7 +170,7 @@ struct AgentMemorySettingsView: View {
                     Button {
                         exportMemorySnapshot()
                     } label: {
-                        Label("Export memory snapshot", systemImage: "square.and.arrow.down")
+                        Label(L10n.Settings.Memory.exportSnapshotButton, systemImage: "square.and.arrow.down")
                     }
                 }
 
@@ -180,38 +180,38 @@ struct AgentMemorySettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             } header: {
-                Label("Memory Maintenance", systemImage: "moon")
+                Label(L10n.Settings.Memory.maintenanceSection, systemImage: "moon")
             }
 
-            Section("Memory Tool Model") {
-                Picker("Tool model", selection: setting(\.toolModelID)) {
-                    Text("Use active Agent model").tag("")
+            Section(L10n.Settings.Memory.toolModelSection) {
+                Picker(L10n.Settings.Memory.toolModelLabel, selection: setting(\.toolModelID)) {
+                    Text(L10n.Settings.Memory.useActiveAgentModel).tag("")
                     ForEach(modelOptions, id: \.self) { model in
                         Text(model).tag(model)
                     }
                 }
-                Text("Used for query rewriting and future LLM-assisted memory maintenance. Leave blank to follow the active Agent model.")
+                Text(L10n.Settings.Memory.toolModelDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("Embedding Model") {
-                TextField("Embedding model", text: setting(\.embeddingModelID))
+            Section(L10n.Settings.Memory.embeddingSection) {
+                TextField(L10n.Settings.Memory.embeddingPlaceholder, text: setting(\.embeddingModelID))
                     .textFieldStyle(.roundedBorder)
-                Text("Used for semantic retrieval. Leave the default unless your provider exposes a compatible embedding model.")
+                Text(L10n.Settings.Memory.embeddingDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("Statistics") {
+            Section(L10n.Settings.Memory.statisticsSection) {
                 HStack(spacing: 12) {
-                    statCard(title: "Total memories", value: memoryState.memories.count)
-                    statCard(title: "Auto-generated", value: autoMemoryCount)
-                    statCard(title: "Manual", value: manualMemoryCount)
+                    statCard(title: L10n.Settings.Memory.totalMemoriesLabel, value: memoryState.memories.count)
+                    statCard(title: L10n.Settings.Memory.autoGeneratedLabel, value: autoMemoryCount)
+                    statCard(title: L10n.Settings.Memory.manualLabel, value: manualMemoryCount)
                 }
             }
 
-            Section("Add Memory") {
+            Section(L10n.Settings.Memory.addMemorySection) {
                 TextEditor(text: $newMemoryContent)
                     .frame(minHeight: 90)
                     .overlay(
@@ -219,7 +219,7 @@ struct AgentMemorySettingsView: View {
                             .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
                     )
 
-                Picker("Lifetime", selection: $newMemoryLifetime) {
+                Picker(L10n.Settings.Memory.lifetimeLabel, selection: $newMemoryLifetime) {
                     ForEach(AgentMemoryLifetime.allCases) { lifetime in
                         Text(lifetime.displayName).tag(lifetime)
                     }
@@ -230,42 +230,42 @@ struct AgentMemorySettingsView: View {
                     newMemoryContent = ""
                     newMemoryLifetime = .longTerm
                 } label: {
-                    Label("Add memory", systemImage: "plus")
+                    Label(L10n.Settings.Memory.addMemoryButton, systemImage: "plus")
                         .frame(maxWidth: .infinity)
                 }
                 .disabled(newMemoryContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
 
-            Section("Search Memories") {
+            Section(L10n.Settings.Memory.searchSection) {
                 HStack {
-                    TextField("Search by text...", text: $searchQuery)
+                    TextField(L10n.Settings.Memory.searchPlaceholder, text: $searchQuery)
                         .textFieldStyle(.roundedBorder)
-                    Toggle("Include archived", isOn: $includeArchived)
+                    Toggle(L10n.Settings.Memory.includeArchivedToggle, isOn: $includeArchived)
                         .toggleStyle(.checkbox)
                 }
             }
 
             Section {
                 HStack {
-                    Text("\(visibleMemories.count) shown")
+                    Text(L10n.Settings.Memory.shownCount("\(visibleMemories.count)"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button {
                         searchQuery = ""
                     } label: {
-                        Label("Reset search", systemImage: "arrow.clockwise")
+                        Label(L10n.Settings.Memory.resetSearchButton, systemImage: "arrow.clockwise")
                     }
                     Button(role: .destructive) {
                         memoryState.clearMemories()
                     } label: {
-                        Label("Clear all", systemImage: "trash")
+                        Label(L10n.Settings.Memory.clearAllButton, systemImage: "trash")
                     }
                     .disabled(memoryState.memories.isEmpty)
                 }
 
                 if visibleMemories.isEmpty {
-                    Text("No memories match the current filters.")
+                    Text(L10n.Settings.Memory.noMemoriesMatching)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
@@ -274,7 +274,7 @@ struct AgentMemorySettingsView: View {
                     }
                 }
             } header: {
-                Text("Memory List")
+                Text(L10n.Settings.Memory.memoryListSection)
             }
         }
         .formStyle(.grouped)
@@ -282,7 +282,7 @@ struct AgentMemorySettingsView: View {
 
     private var maintenanceHeader: some View {
         HStack {
-            Text("Daily sleep cycle")
+            Text(L10n.Settings.Memory.dailySleepCycleTitle)
                 .font(.headline)
             Spacer()
             Text(maintenanceHeaderSummary)
@@ -293,8 +293,8 @@ struct AgentMemorySettingsView: View {
 
     private var maintenanceHeaderSummary: String {
         let archived = memoryState.archivedMemories.count
-        let next = memoryState.settings.nextMaintenanceDate().map(formatDate) ?? "Not scheduled"
-        return "Archived \(archived) · Next: \(next)"
+        let next = memoryState.settings.nextMaintenanceDate().map(formatDate) ?? L10n.Settings.Memory.notScheduled
+        return L10n.Settings.Memory.headerSummary("\(archived)", next)
     }
 
     private var maintenanceTimeBinding: Binding<Date> {
@@ -316,15 +316,20 @@ struct AgentMemorySettingsView: View {
     private func maintenanceRunCard(_ run: AgentMemoryMaintenanceRun) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("Last: \(run.status.rawValue)")
+                Text(L10n.Settings.Memory.lastStatus(run.status.rawValue))
                     .fontWeight(.semibold)
                 Spacer()
                 Text(formatDate(run.ranAt))
                     .foregroundStyle(.secondary)
             }
-            Text("Inspected \(run.inspectedCount), archived \(run.archivedCount), removed \(run.removedExpiredCount), merged \(run.mergedCount).")
+            Text(L10n.Settings.Memory.maintenanceCounts(
+                "\(run.inspectedCount)",
+                "\(run.archivedCount)",
+                "\(run.removedExpiredCount)",
+                "\(run.mergedCount)"
+            ))
                 .foregroundStyle(.secondary)
-            Text("LLM tokens: \(run.inputTokens) input / \(run.outputTokens) output")
+            Text(L10n.Settings.Memory.tokensLine("\(run.inputTokens)", "\(run.outputTokens)"))
                 .foregroundStyle(.secondary)
         }
         .font(.caption)
@@ -368,7 +373,7 @@ struct AgentMemorySettingsView: View {
                     )
 
                 HStack {
-                    Picker("Lifetime", selection: $editingMemoryLifetime) {
+                    Picker(L10n.Settings.Memory.lifetimeLabel, selection: $editingMemoryLifetime) {
                         ForEach(AgentMemoryLifetime.allCases) { lifetime in
                             Text(lifetime.displayName).tag(lifetime)
                         }
@@ -376,10 +381,10 @@ struct AgentMemorySettingsView: View {
                     .frame(width: 180)
 
                     Spacer()
-                    Button("Cancel") {
+                    Button(L10n.Settings.Memory.cancelButton) {
                         stopEditing()
                     }
-                    Button("Save") {
+                    Button(L10n.Settings.Memory.saveButton) {
                         memoryState.updateMemory(
                             id: memory.id,
                             content: editingMemoryContent,
@@ -401,12 +406,12 @@ struct AgentMemorySettingsView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             if memory.accessCount > 0 {
-                                Text("Used \(memory.accessCount)x")
+                                Text(L10n.Settings.Memory.usedXTimes("\(memory.accessCount)"))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                             if memory.isArchived {
-                                tag("Archived")
+                                tag(L10n.Settings.Memory.archivedTag)
                             }
                         }
                     }
@@ -419,7 +424,7 @@ struct AgentMemorySettingsView: View {
                         Image(systemName: "pencil")
                     }
                     .buttonStyle(.borderless)
-                    .help("Edit memory")
+                    .help(L10n.Settings.Memory.editTooltip)
 
                     if memory.isArchived {
                         Button {
@@ -428,7 +433,7 @@ struct AgentMemorySettingsView: View {
                             Image(systemName: "tray.and.arrow.up")
                         }
                         .buttonStyle(.borderless)
-                        .help("Restore memory")
+                        .help(L10n.Settings.Memory.restoreTooltip)
                     } else {
                         Button {
                             memoryState.archiveMemory(id: memory.id)
@@ -436,7 +441,7 @@ struct AgentMemorySettingsView: View {
                             Image(systemName: "archivebox")
                         }
                         .buttonStyle(.borderless)
-                        .help("Archive memory")
+                        .help(L10n.Settings.Memory.archiveTooltip)
                     }
 
                     Button(role: .destructive) {
@@ -445,7 +450,7 @@ struct AgentMemorySettingsView: View {
                         Image(systemName: "trash")
                     }
                     .buttonStyle(.borderless)
-                    .help("Delete memory")
+                    .help(L10n.Settings.Memory.deleteTooltip)
                 }
             }
         }
@@ -482,7 +487,7 @@ struct AgentMemorySettingsView: View {
 
     private func exportMemorySnapshot() {
         let panel = NSSavePanel()
-        panel.title = "Export Memory Snapshot"
+        panel.title = L10n.Settings.Memory.exportPanelTitle
         panel.nameFieldStringValue = "veilwriter-memory-snapshot.json"
         panel.allowedContentTypes = [.json]
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -499,7 +504,7 @@ struct AgentMemorySettingsView: View {
         do {
             let data = try encoder.encode(snapshot)
             try data.write(to: url, options: .atomic)
-            exportStatus = "Exported to \(url.lastPathComponent)."
+            exportStatus = L10n.Settings.Memory.exportedTo(url.lastPathComponent)
         } catch {
             exportStatus = error.localizedDescription
         }

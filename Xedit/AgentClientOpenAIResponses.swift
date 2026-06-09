@@ -140,17 +140,8 @@ struct OpenAIResponsesAdapter {
         applyAuthenticationHeaders(to: &request)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let systemPrompt = """
-        You are a strict shell-command safety classifier. \
-        Reply with a single word: YES if the command is read-only and \
-        cannot delete files, modify state outside its process, send \
-        data over the network in a write capacity, or escalate \
-        privileges. Otherwise reply NO. \
-        Treat anything that writes files, mutates VCS state, installs \
-        software, opens network sockets to write, signals processes, \
-        or changes permissions as NO. \
-        Do not explain. Do not add punctuation. Output exactly YES or NO.
-        """
+        let systemPrompt = AgentInjectionDefense.judgeSystemPrompt
+        let userPayload = AgentInjectionDefense.judgeUserPayload(command: command)
 
         let body: [String: Any] = [
             "model": configuration.model,
@@ -160,11 +151,11 @@ struct OpenAIResponsesAdapter {
                     "type": "message",
                     "role": "user",
                     "content": [
-                        ["type": "input_text", "text": "Command:\n\(command)"]
+                        ["type": "input_text", "text": userPayload]
                     ]
                 ]
             ],
-            "max_output_tokens": 32,
+            "max_output_tokens": 48,
             "stream": false
         ]
         guard let payload = try? JSONSerialization.data(withJSONObject: body, options: []) else {
@@ -186,8 +177,7 @@ struct OpenAIResponsesAdapter {
                 .compactMap(\.text)
                 .joined()
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-                .uppercased()
-            return text.hasPrefix("YES")
+            return AgentInjectionDefense.judgeVerdictIsYes(rawText: text)
         } catch {
             return false
         }

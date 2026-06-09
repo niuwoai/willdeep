@@ -13,9 +13,10 @@ struct AgentMCPSettingsView: View {
     @State private var servers = AgentMCPServerDirectory.list(includeDisabled: true)
     @State private var toolCounts: [String: Int] = [:]
     @State private var serverMessages: [String: String] = [:]
+    @State private var serverMessageIsError: Set<String> = []
     @State private var isRefreshing: Set<String> = []
     @State private var isCreatingServer = false
-    @State private var statusMessage = "All changes saved"
+    @State private var statusMessage = L10n.Settings.allChangesSaved
 
     private var enabledCount: Int {
         servers.filter(\.isEnabled).count
@@ -25,10 +26,10 @@ struct AgentMCPSettingsView: View {
         Form {
             Section {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Servers available in this workspace.")
+                    Text(L10n.Settings.MCP.serversDescription)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("\(enabledCount) of \(servers.count) MCP servers enabled")
+                    Text(L10n.Settings.MCP.serversEnabled("\(enabledCount)", "\(servers.count)"))
                         .font(.headline)
                 }
 
@@ -36,13 +37,13 @@ struct AgentMCPSettingsView: View {
                     Button {
                         refreshServers()
                     } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                        Label(L10n.Settings.MCP.refresh, systemImage: "arrow.clockwise")
                     }
 
                     Button {
                         openCursorConfig()
                     } label: {
-                        Label("Cursor mcp.json", systemImage: "curlybraces")
+                        Label(L10n.Settings.MCP.cursorConfig, systemImage: "curlybraces")
                     }
 
                     Spacer()
@@ -50,14 +51,14 @@ struct AgentMCPSettingsView: View {
                     Button {
                         isCreatingServer = true
                     } label: {
-                        Label("New MCP Server", systemImage: "plus")
+                        Label(L10n.Settings.MCP.newServer, systemImage: "plus")
                     }
                 }
             }
 
-            serverSection(title: "User MCP Servers", source: .user)
-            serverSection(title: "Cursor MCP Servers", source: .cursor)
-            serverSection(title: "Codex MCP Servers", source: .codex)
+            serverSection(title: L10n.Settings.MCP.userServers, source: .user)
+            serverSection(title: L10n.Settings.MCP.cursorServers, source: .cursor)
+            serverSection(title: L10n.Settings.MCP.codexServers, source: .codex)
         }
         .formStyle(.grouped)
         .safeAreaInset(edge: .bottom) {
@@ -76,7 +77,7 @@ struct AgentMCPSettingsView: View {
                 AgentMCPSettingsStore.upsertUserServer(server)
                 isCreatingServer = false
                 refreshServers()
-                statusMessage = "Created \(server.name)."
+                statusMessage = L10n.Settings.MCP.createdServer(server.name)
             } onCancel: {
                 isCreatingServer = false
             }
@@ -87,7 +88,7 @@ struct AgentMCPSettingsView: View {
         let sourceServers = servers.filter { $0.source == source }
         return Section {
             if sourceServers.isEmpty {
-                Text("No servers in this group.")
+                Text(L10n.Settings.MCP.noServers)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -125,10 +126,10 @@ struct AgentMCPSettingsView: View {
                         .foregroundStyle(.secondary)
 
                     if server.source == .user, hasAuthorizationHeader(server) {
-                        Button("Logout") {
+                        Button(L10n.Settings.MCP.logout) {
                             AgentMCPSettingsStore.clearAuthorizationHeader(id: server.id)
                             refreshServers()
-                            statusMessage = "Authorization header cleared for \(server.name)."
+                            statusMessage = L10n.Settings.MCP.authCleared(server.name)
                         }
                         .font(.caption)
                     }
@@ -136,9 +137,9 @@ struct AgentMCPSettingsView: View {
 
                 HStack(spacing: 6) {
                     if let count = toolCounts[server.id] {
-                        Text("\(count) tools enabled")
+                        Text(L10n.Settings.MCP.toolsEnabled("\(count)"))
                     } else {
-                        Text(server.isEnabled ? "Tool list not refreshed" : "Disabled")
+                        Text(server.isEnabled ? L10n.Settings.MCP.toolListNotRefreshed : L10n.Settings.MCP.disabled)
                     }
                     if isRefreshing.contains(server.id) {
                         ProgressView()
@@ -155,7 +156,7 @@ struct AgentMCPSettingsView: View {
                     .truncationMode(.middle)
 
                 if !server.redactedHeaders.isEmpty {
-                    Text("headers: \(redactedHeadersText(server))")
+                    Text(L10n.Settings.MCP.headersPrefix(redactedHeadersText(server)))
                         .font(.caption2.monospaced())
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -164,14 +165,14 @@ struct AgentMCPSettingsView: View {
                 if let message = serverMessages[server.id] {
                     Text(message)
                         .font(.caption)
-                        .foregroundStyle(message.hasPrefix("Failed") ? .red : .secondary)
+                        .foregroundStyle(serverMessageIsError.contains(server.id) ? .red : .secondary)
                 }
 
                 HStack {
                     Button {
                         refreshTools(for: server)
                     } label: {
-                        Label("Refresh Tools", systemImage: "arrow.clockwise")
+                        Label(L10n.Settings.MCP.refreshTools, systemImage: "arrow.clockwise")
                     }
                     .disabled(!server.isEnabled || isRefreshing.contains(server.id))
 
@@ -179,9 +180,9 @@ struct AgentMCPSettingsView: View {
                         Button(role: .destructive) {
                             AgentMCPSettingsStore.deleteUserServer(id: server.id)
                             refreshServers()
-                            statusMessage = "Deleted \(server.name)."
+                            statusMessage = L10n.Settings.MCP.deletedServer(server.name)
                         } label: {
-                            Label("Delete", systemImage: "trash")
+                            Label(L10n.Settings.MCP.delete, systemImage: "trash")
                         }
                     }
                 }
@@ -196,7 +197,7 @@ struct AgentMCPSettingsView: View {
                 set: { enabled in
                     AgentMCPSettingsStore.setServerEnabled(id: server.id, enabled: enabled)
                     refreshServers()
-                    statusMessage = "All changes saved"
+                    statusMessage = L10n.Settings.allChangesSaved
                 }
             ))
             .labelsHidden()
@@ -207,18 +208,21 @@ struct AgentMCPSettingsView: View {
     private func refreshTools(for server: AgentMCPServerConfig) {
         isRefreshing.insert(server.id)
         serverMessages[server.id] = nil
+        serverMessageIsError.remove(server.id)
         Task {
             do {
                 let result = try await AgentMCPBridge.listTools(arguments: ["server": .string(server.name)])
                 let count = AgentMCPBridge.parseToolCount(from: result.payload) ?? 0
                 await MainActor.run {
                     toolCounts[server.id] = count
-                    serverMessages[server.id] = "Last checked: \(Date.now.formatted(date: .omitted, time: .shortened))"
+                    serverMessages[server.id] = L10n.Settings.MCP.lastChecked(Date.now.formatted(date: .omitted, time: .shortened))
+                    serverMessageIsError.remove(server.id)
                     isRefreshing.remove(server.id)
                 }
             } catch {
                 await MainActor.run {
-                    serverMessages[server.id] = "Failed: \(error.localizedDescription)"
+                    serverMessages[server.id] = L10n.Settings.MCP.failedPrefix(error.localizedDescription)
+                    serverMessageIsError.insert(server.id)
                     isRefreshing.remove(server.id)
                 }
             }
@@ -236,10 +240,10 @@ struct AgentMCPSettingsView: View {
         let url = AgentMCPServerDirectory.cursorConfigURL
         if FileManager.default.fileExists(atPath: url.path) {
             NSWorkspace.shared.open(url)
-            statusMessage = "Opened Cursor mcp.json."
+            statusMessage = L10n.Settings.MCP.openedCursorConfig
         } else {
             NSWorkspace.shared.open(url.deletingLastPathComponent())
-            statusMessage = "Cursor mcp.json does not exist yet."
+            statusMessage = L10n.Settings.MCP.cursorConfigMissing
         }
     }
 
@@ -272,14 +276,14 @@ private struct AgentMCPServerCreationSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("New MCP Server")
+            Text(L10n.Settings.MCP.newServerTitle)
                 .font(.title3)
                 .fontWeight(.semibold)
 
-            TextField("Server name", text: $name)
+            TextField(L10n.Settings.MCP.serverNamePlaceholder, text: $name)
                 .textFieldStyle(.roundedBorder)
 
-            Picker("Transport", selection: $transport) {
+            Picker(L10n.Settings.MCP.transportLabel, selection: $transport) {
                 ForEach(AgentMCPTransport.allCases) { transport in
                     Text(transport.displayName).tag(transport)
                 }
@@ -287,37 +291,37 @@ private struct AgentMCPServerCreationSheet: View {
             .pickerStyle(.segmented)
 
             if transport == .streamableHTTP {
-                TextField("https://example.com/mcp", text: $url)
+                TextField(L10n.Settings.MCP.urlPlaceholder, text: $url)
                     .textFieldStyle(.roundedBorder)
 
-                Text("Headers")
+                Text(L10n.Settings.MCP.headersLabel)
                     .font(.headline)
                 TextEditor(text: $headerLines)
                     .font(.system(.body, design: .monospaced))
                     .frame(minHeight: 90)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.2), lineWidth: 1))
-                Text("One header per line, for example: Authorization=Bearer ...")
+                Text(L10n.Settings.MCP.headersHint)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                TextField("/absolute/path/to/server", text: $command)
+                TextField(L10n.Settings.MCP.commandPathPlaceholder, text: $command)
                     .textFieldStyle(.roundedBorder)
 
-                TextField("Arguments separated by spaces", text: $args)
+                TextField(L10n.Settings.MCP.argsPlaceholder, text: $args)
                     .textFieldStyle(.roundedBorder)
 
-                Text("Environment")
+                Text(L10n.Settings.MCP.environmentLabel)
                     .font(.headline)
                 TextEditor(text: $envLines)
                     .font(.system(.body, design: .monospaced))
                     .frame(minHeight: 90)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.2), lineWidth: 1))
-                Text("One variable per line, for example: HTTPS_PROXY=http://127.0.0.1:7890")
+                Text(L10n.Settings.MCP.environmentHint)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            LabeledContent("Timeout") {
+            LabeledContent(L10n.Settings.MCP.timeoutLabel) {
                 HStack {
                     Slider(value: $timeout, in: 1...180, step: 1)
                     Text("\(Int(timeout))s")
@@ -334,10 +338,10 @@ private struct AgentMCPServerCreationSheet: View {
 
             HStack {
                 Spacer()
-                Button("Cancel") {
+                Button(L10n.Settings.MCP.cancelButton) {
                     onCancel()
                 }
-                Button("Create") {
+                Button(L10n.Settings.MCP.createButton) {
                     createServer()
                 }
                 .keyboardShortcut(.return, modifiers: [.command])
@@ -351,14 +355,14 @@ private struct AgentMCPServerCreationSheet: View {
     private func createServer() {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
-            errorMessage = "Server name is required."
+            errorMessage = L10n.Settings.MCP.errorServerNameRequired
             return
         }
 
         switch transport {
         case .streamableHTTP:
             guard URL(string: url.trimmingCharacters(in: .whitespacesAndNewlines)) != nil else {
-                errorMessage = "A valid server URL is required."
+                errorMessage = L10n.Settings.MCP.errorValidURLRequired
                 return
             }
             onCreate(AgentMCPServerConfig(
@@ -372,7 +376,7 @@ private struct AgentMCPServerCreationSheet: View {
         case .stdio:
             let trimmedCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmedCommand.isEmpty else {
-                errorMessage = "Command is required."
+                errorMessage = L10n.Settings.MCP.errorCommandRequired
                 return
             }
             onCreate(AgentMCPServerConfig(

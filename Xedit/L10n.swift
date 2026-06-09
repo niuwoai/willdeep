@@ -415,6 +415,22 @@ enum L10n {
         static let statusDenied = String(localized: "tool-card.status.denied", defaultValue: "Denied")
     }
 
+    enum AgentJobs {
+        static let title = String(localized: "agent-jobs.title", defaultValue: "Background Jobs")
+        static let toggleHelp = String(localized: "agent-jobs.toggle-help", defaultValue: "Show background jobs panel")
+        static let collapseHelp = String(localized: "agent-jobs.collapse-help", defaultValue: "Hide background jobs panel")
+        static let empty = String(localized: "agent-jobs.empty", defaultValue: "No background jobs in this session.")
+        static let kill = String(localized: "agent-jobs.kill", defaultValue: "Kill job")
+        static let noOutput = String(localized: "agent-jobs.no-output", defaultValue: "(no output captured yet)")
+        static let statusRunning = String(localized: "agent-jobs.status.running", defaultValue: "running")
+        static let statusCompleted = String(localized: "agent-jobs.status.completed", defaultValue: "completed")
+        static let statusFailed = String(localized: "agent-jobs.status.failed", defaultValue: "failed")
+        static let statusKilled = String(localized: "agent-jobs.status.killed", defaultValue: "killed")
+        static let statusTimedOut = String(localized: "agent-jobs.status.timed-out", defaultValue: "timed out")
+        static let statusLaunchFailed = String(localized: "agent-jobs.status.launch-failed", defaultValue: "launch failed")
+        static let notificationTitle = String(localized: "agent-jobs.notification.title", defaultValue: "Background job finished")
+    }
+
     enum Settings {
         static let tabTypography = String(localized: "settings.tab.typography", defaultValue: "Typography")
         static let tabAppearance = String(localized: "settings.tab.appearance", defaultValue: "Appearance")
@@ -455,6 +471,310 @@ enum L10n {
         static let perProviderConcurrency = String(localized: "settings.per-provider-concurrency", defaultValue: "Per-provider concurrency")
         static let chatBaseFontSize = String(localized: "settings.chat-base-font-size", defaultValue: "Chat base font size")
         static let noAlwaysAllowed = String(localized: "settings.no-always-allowed", defaultValue: "No commands are always allowed.")
+
+        // MARK: Generic appearance/editor labels reused across tabs.
+        static let labelFont = String(localized: "settings.label.font", defaultValue: "Font")
+        static let labelTheme = String(localized: "settings.label.theme", defaultValue: "Theme")
+        static let labelImage = String(localized: "settings.label.image", defaultValue: "Image")
+        static let labelImageMode = String(localized: "settings.label.image-mode", defaultValue: "Image Mode")
+        static let labelImageSize = String(localized: "settings.label.image-size", defaultValue: "Image Size")
+        static let labelImageOpacity = String(localized: "settings.label.image-opacity", defaultValue: "Image Opacity")
+        static let labelGlassMaterial = String(localized: "settings.label.glass-material", defaultValue: "Glass Material")
+        static let labelGlassStrength = String(localized: "settings.label.glass-strength", defaultValue: "Glass Strength")
+        static let labelEditorSurface = String(localized: "settings.label.editor-surface", defaultValue: "Editor Surface")
+        static let labelTextSize = String(localized: "settings.label.text-size", defaultValue: "Text Size")
+        static let labelLineHeight = String(localized: "settings.label.line-height", defaultValue: "Line Height")
+        static let labelDefaultView = String(localized: "settings.label.default-view", defaultValue: "Default View")
+        static let labelViewOrder = String(localized: "settings.label.view-order", defaultValue: "View Order")
+        static let noImageSelected = String(localized: "settings.no-image-selected", defaultValue: "No image selected")
+        static let chooseBackgroundImageTitle = String(localized: "settings.choose-background-image.title", defaultValue: "Choose Editor Background Image")
+        static let savedStatus = String(localized: "settings.saved-status", defaultValue: "Saved.")
+        static let allChangesSaved = String(localized: "settings.all-changes-saved", defaultValue: "All changes saved")
+
+        enum ImageUnderstanding {
+            static let providerLabel = String(localized: "settings.image-understanding.provider", defaultValue: "Provider")
+            static let baseURLLabel = String(localized: "settings.image-understanding.base-url", defaultValue: "Base URL")
+            static let apiKeyLabel = String(localized: "settings.image-understanding.api-key", defaultValue: "API Key")
+            static let visionModelLabel = String(localized: "settings.image-understanding.vision-model", defaultValue: "Vision Model")
+            static let description = String(localized: "settings.image-understanding.description", defaultValue: "Used only when the active Agent provider cannot accept images directly. Multiple attached images are described in one request, then the description is sent to the main model.")
+            static let fetchModels = String(localized: "settings.image-understanding.fetch-models", defaultValue: "Fetch Models")
+            static let fetchingModels = String(localized: "settings.image-understanding.fetching-models", defaultValue: "Fetching...")
+            static let fetchImageModels = String(localized: "settings.image-understanding.fetch-image-models", defaultValue: "Fetch Image Models")
+            static let fetchingImages = String(localized: "settings.image-understanding.fetching-images", defaultValue: "Fetching Images...")
+            static let fetchedModelsLabel = String(localized: "settings.image-understanding.fetched-models", defaultValue: "Fetched Models")
+        }
+
+        enum AgentBehavior {
+            static let saveBehaviorNote = String(localized: "settings.agent-behavior.save-note", defaultValue: "Keystrokes stay local until you press Save (⌘↩). API keys are stored separately in Keychain.")
+            static let titleModelLabel = String(localized: "settings.agent-behavior.title-model", defaultValue: "Title Model")
+            static let titleModelPlaceholder = String(localized: "settings.agent-behavior.title-model-placeholder", defaultValue: "(leave empty → use Flash model)")
+            static let titleModelDescription = String(localized: "settings.agent-behavior.title-model-description", defaultValue: "A short one-shot completion summarizes each new chat into a ≤12-char title after the first assistant reply. Set a cheap/fast model here (e.g. `deepseek-chat`, `gpt-4o-mini`, `qwen-turbo`) to avoid burning Pro tokens on titling. Empty → falls back to the active provider's Flash model.")
+            static let toolApprovalDescription = String(localized: "settings.agent-behavior.tool-approval-description", defaultValue: "Read-only shell commands in the built-in allowlist (cat, head, tail, ls, find without -delete/-exec, git diff/log/status/show, rg, grep, wc, file, stat, which, pwd, echo, …) run without asking. Commands outside the allowlist are passed to a one-shot LLM judge running on the active provider's **Flash** model (cheap & fast — never Pro), and only YES verdicts auto-run. Destructive patterns (rm, sudo, git push --force, git reset --hard, …) still require typing \"confirm\".")
+            static let concurrencyDescription = String(localized: "settings.agent-behavior.concurrency-description", defaultValue: "Cap on simultaneous Agent turns per provider. Each provider has its own quota — running 3 DashScope sessions doesn't block OpenAI sessions. When the cap is hit, new dispatches queue (FIFO) and drain as turns finish. Raising the cap immediately promotes queued work; lowering it just stops promoting new ones (running turns are never aborted). Default 3 is conservative — bump up if your provider's rate limit comfortably allows.")
+            static func agentAppearanceDescription(_ a1: String, _ a2: String) -> String {
+                let template = String(localized: "settings.agent-behavior.appearance-description", defaultValue: "Base size (pt) for Agent chat message body and rendered Markdown blocks (paragraphs, lists, quotes, fenced code, tables). Tool-call summaries, footers, message headers, and composer chrome keep their fixed sizes — this knob is about reading the conversation, not resizing the whole UI. Default is 13 pt; range %1$@ – %2$@ pt.")
+                return String(format: template, a1, a2)
+            }
+        }
+
+        enum Tools {
+            static let alwaysAllowNote = String(localized: "settings.tools.always-allow-note", defaultValue: "Rules apply to command families such as `git push`; dangerous commands still require confirmation.")
+            static let removeButton = String(localized: "settings.tools.remove", defaultValue: "Remove")
+            static let clearAllButton = String(localized: "settings.tools.clear-all", defaultValue: "Clear All")
+            static let cliSection = String(localized: "settings.tools.cli-section", defaultValue: "Command Line Tool")
+            static func installedAt(_ a1: String) -> String {
+                let template = String(localized: "settings.tools.cli-installed-at", defaultValue: "Installed at %@")
+                return String(format: template, a1)
+            }
+            static func needsUpdateAt(_ a1: String) -> String {
+                let template = String(localized: "settings.tools.cli-needs-update", defaultValue: "A command exists at %@ and can be updated.")
+                return String(format: template, a1)
+            }
+            static let notInstalled = String(localized: "settings.tools.cli-not-installed", defaultValue: "Install the veilwriter command for Terminal.")
+            static let installingButton = String(localized: "settings.tools.cli-installing", defaultValue: "Installing...")
+            static let reinstallButton = String(localized: "settings.tools.cli-reinstall", defaultValue: "Reinstall")
+            static let updateButton = String(localized: "settings.tools.cli-update", defaultValue: "Update")
+            static let installButton = String(localized: "settings.tools.cli-install", defaultValue: "Install")
+            static let installingMessage = String(localized: "settings.tools.cli-installing-message", defaultValue: "Installing without administrator privileges.")
+            static let installedMessage = String(localized: "settings.tools.cli-installed-message", defaultValue: "Installed. Try: veilwriter . Add ~/.local/bin to PATH if needed.")
+        }
+
+        enum Provider {
+            static let editsAutoSave = String(localized: "settings.provider.edits-auto-save", defaultValue: "Edits save automatically. The active provider (★) drives the next chat turn — click any star to switch.")
+            static let addTooltip = String(localized: "settings.provider.add-tooltip", defaultValue: "Add provider")
+            static let removeTooltip = String(localized: "settings.provider.remove-tooltip", defaultValue: "Remove selected provider")
+            static let activeTooltip = String(localized: "settings.provider.active-tooltip", defaultValue: "Active provider")
+            static let makeActiveTooltip = String(localized: "settings.provider.make-active-tooltip", defaultValue: "Make active")
+            static let emptySelection = String(localized: "settings.provider.empty-selection", defaultValue: "Pick a provider on the left, or add one with +")
+            static let connectionSection = String(localized: "settings.provider.connection", defaultValue: "Connection")
+            static let displayNameLabel = String(localized: "settings.provider.display-name", defaultValue: "Display name")
+            static let displayNamePlaceholder = String(localized: "settings.provider.display-name-placeholder", defaultValue: "e.g. Work OpenAI")
+            static let presetLabel = String(localized: "settings.provider.preset", defaultValue: "Preset")
+            static let protocolLabel = String(localized: "settings.provider.protocol", defaultValue: "Protocol")
+            static let openAIChatDefault = String(localized: "settings.provider.openai-chat-default", defaultValue: "OpenAI Chat (default)")
+            static let baseURLLabel = String(localized: "settings.provider.base-url", defaultValue: "Base URL")
+            static let apiKeyLabel = String(localized: "settings.provider.api-key", defaultValue: "API key")
+            static let baseURLDefault = String(localized: "settings.provider.base-url-default", defaultValue: "Using preset URL")
+            static let baseURLCustom = String(localized: "settings.provider.base-url-custom", defaultValue: "Customized")
+            static func protocolLine(_ a1: String) -> String {
+                let template = String(localized: "settings.provider.protocol-line", defaultValue: "Protocol: %@")
+                return String(format: template, a1)
+            }
+            static let modelsSection = String(localized: "settings.provider.models", defaultValue: "Models")
+            static let routingSection = String(localized: "settings.provider.routing", defaultValue: "Routing")
+            static let defaultTierLabel = String(localized: "settings.provider.default-tier", defaultValue: "Default tier")
+            static let fetchModels = String(localized: "settings.provider.fetch-models", defaultValue: "Fetch Models")
+            static let fetchingModels = String(localized: "settings.provider.fetching-models", defaultValue: "Fetching…")
+            static let alternatesHint = String(localized: "settings.provider.alternates-hint", defaultValue: "One model id per line — surfaces in the chat picker as one-click switches.")
+            static let pickFromFetched = String(localized: "settings.provider.pick-from-fetched", defaultValue: "Pick from fetched models")
+            static let hideKey = String(localized: "settings.provider.hide-key", defaultValue: "Hide key")
+            static let showKey = String(localized: "settings.provider.show-key", defaultValue: "Show key")
+            static let modelIDPlaceholder = String(localized: "settings.provider.model-id-placeholder", defaultValue: "model-id")
+            static func primarySuffix(_ a1: String) -> String {
+                let template = String(localized: "settings.provider.primary-suffix", defaultValue: "%@ primary")
+                return String(format: template, a1)
+            }
+            static func alternatesSuffix(_ a1: String) -> String {
+                let template = String(localized: "settings.provider.alternates-suffix", defaultValue: "%@ alternates")
+                return String(format: template, a1)
+            }
+        }
+
+        enum MCP {
+            static let serversDescription = String(localized: "settings.mcp.servers-description", defaultValue: "Servers available in this workspace.")
+            static func serversEnabled(_ a1: String, _ a2: String) -> String {
+                let template = String(localized: "settings.mcp.servers-enabled", defaultValue: "%1$@ of %2$@ MCP servers enabled")
+                return String(format: template, a1, a2)
+            }
+            static let refresh = String(localized: "settings.mcp.refresh", defaultValue: "Refresh")
+            static let cursorConfig = String(localized: "settings.mcp.cursor-config", defaultValue: "Cursor mcp.json")
+            static let newServer = String(localized: "settings.mcp.new-server", defaultValue: "New MCP Server")
+            static let userServers = String(localized: "settings.mcp.user-servers", defaultValue: "User MCP Servers")
+            static let cursorServers = String(localized: "settings.mcp.cursor-servers", defaultValue: "Cursor MCP Servers")
+            static let codexServers = String(localized: "settings.mcp.codex-servers", defaultValue: "Codex MCP Servers")
+            static let noServers = String(localized: "settings.mcp.no-servers", defaultValue: "No servers in this group.")
+            static let logout = String(localized: "settings.mcp.logout", defaultValue: "Logout")
+            static func toolsEnabled(_ a1: String) -> String {
+                let template = String(localized: "settings.mcp.tools-enabled", defaultValue: "%@ tools enabled")
+                return String(format: template, a1)
+            }
+            static let toolListNotRefreshed = String(localized: "settings.mcp.tool-list-not-refreshed", defaultValue: "Tool list not refreshed")
+            static let disabled = String(localized: "settings.mcp.disabled", defaultValue: "Disabled")
+            static let refreshTools = String(localized: "settings.mcp.refresh-tools", defaultValue: "Refresh Tools")
+            static let delete = String(localized: "settings.mcp.delete", defaultValue: "Delete")
+            static func headersPrefix(_ a1: String) -> String {
+                let template = String(localized: "settings.mcp.headers-prefix", defaultValue: "headers: %@")
+                return String(format: template, a1)
+            }
+            static func lastChecked(_ a1: String) -> String {
+                let template = String(localized: "settings.mcp.last-checked", defaultValue: "Last checked: %@")
+                return String(format: template, a1)
+            }
+            static func failedPrefix(_ a1: String) -> String {
+                let template = String(localized: "settings.mcp.failed-prefix", defaultValue: "Failed: %@")
+                return String(format: template, a1)
+            }
+            static let openedCursorConfig = String(localized: "settings.mcp.opened-cursor-config", defaultValue: "Opened Cursor mcp.json.")
+            static let cursorConfigMissing = String(localized: "settings.mcp.cursor-config-missing", defaultValue: "Cursor mcp.json does not exist yet.")
+            static func createdServer(_ a1: String) -> String {
+                let template = String(localized: "settings.mcp.created-server", defaultValue: "Created %@.")
+                return String(format: template, a1)
+            }
+            static func deletedServer(_ a1: String) -> String {
+                let template = String(localized: "settings.mcp.deleted-server", defaultValue: "Deleted %@.")
+                return String(format: template, a1)
+            }
+            static func authCleared(_ a1: String) -> String {
+                let template = String(localized: "settings.mcp.auth-cleared", defaultValue: "Authorization header cleared for %@.")
+                return String(format: template, a1)
+            }
+            static let newServerTitle = String(localized: "settings.mcp.new-server-title", defaultValue: "New MCP Server")
+            static let serverNamePlaceholder = String(localized: "settings.mcp.server-name-placeholder", defaultValue: "Server name")
+            static let transportLabel = String(localized: "settings.mcp.transport", defaultValue: "Transport")
+            static let urlPlaceholder = String(localized: "settings.mcp.url-placeholder", defaultValue: "https://example.com/mcp")
+            static let headersLabel = String(localized: "settings.mcp.headers", defaultValue: "Headers")
+            static let headersHint = String(localized: "settings.mcp.headers-hint", defaultValue: "One header per line, for example: Authorization=Bearer ...")
+            static let commandPathPlaceholder = String(localized: "settings.mcp.command-path-placeholder", defaultValue: "/absolute/path/to/server")
+            static let argsPlaceholder = String(localized: "settings.mcp.args-placeholder", defaultValue: "Arguments separated by spaces")
+            static let environmentLabel = String(localized: "settings.mcp.environment", defaultValue: "Environment")
+            static let environmentHint = String(localized: "settings.mcp.environment-hint", defaultValue: "One variable per line, for example: HTTPS_PROXY=http://127.0.0.1:7890")
+            static let timeoutLabel = String(localized: "settings.mcp.timeout", defaultValue: "Timeout")
+            static let cancelButton = String(localized: "settings.mcp.cancel", defaultValue: "Cancel")
+            static let createButton = String(localized: "settings.mcp.create", defaultValue: "Create")
+            static let errorServerNameRequired = String(localized: "settings.mcp.error-server-name", defaultValue: "Server name is required.")
+            static let errorValidURLRequired = String(localized: "settings.mcp.error-valid-url", defaultValue: "A valid server URL is required.")
+            static let errorCommandRequired = String(localized: "settings.mcp.error-command-required", defaultValue: "Command is required.")
+        }
+
+        enum Skill {
+            static let autoExtractSection = String(localized: "settings.skill.auto-extract-section", defaultValue: "Automatic Skill Extraction")
+            static let autoExtractTitle = String(localized: "settings.skill.auto-extract-title", defaultValue: "Auto-extract reusable skills from conversations")
+            static let autoExtractDescription = String(localized: "settings.skill.auto-extract-description", defaultValue: "When enabled, VeilWriter can surface reusable workflows as skill candidates.")
+            static let minimumToolCallsLabel = String(localized: "settings.skill.minimum-tool-calls", defaultValue: "Minimum tool calls")
+            static let minimumToolCallsHint = String(localized: "settings.skill.minimum-tool-calls-hint", defaultValue: "Conversations with fewer tool calls are skipped.")
+            static func availableCount(_ a1: String, _ a2: String) -> String {
+                let template = String(localized: "settings.skill.available-count", defaultValue: "%1$@ of %2$@ skills available")
+                return String(format: template, a1, a2)
+            }
+            static let refresh = String(localized: "settings.skill.refresh", defaultValue: "Refresh")
+            static let openFolder = String(localized: "settings.skill.open-folder", defaultValue: "Open Folder")
+            static let newSkill = String(localized: "settings.skill.new-skill", defaultValue: "New Skill")
+            static let searchPlaceholder = String(localized: "settings.skill.search-placeholder", defaultValue: "Search by skill name, description, or path...")
+            static let builtInSkills = String(localized: "settings.skill.built-in", defaultValue: "Built-in Skills")
+            static let userSkills = String(localized: "settings.skill.user", defaultValue: "User Skills")
+            static let pluginSkills = String(localized: "settings.skill.plugin", defaultValue: "Plugin Skills")
+            static let noSkills = String(localized: "settings.skill.no-skills", defaultValue: "No skills in this group.")
+            static let viewContent = String(localized: "settings.skill.view-content", defaultValue: "View content")
+            static let unableToRead = String(localized: "settings.skill.unable-to-read", defaultValue: "Unable to read skill content.")
+            static let newUserSkillTitle = String(localized: "settings.skill.new-user-skill", defaultValue: "New User Skill")
+            static let skillNamePlaceholder = String(localized: "settings.skill.name-placeholder", defaultValue: "Skill name")
+            static let descriptionPlaceholder = String(localized: "settings.skill.description-placeholder", defaultValue: "Description")
+            static let cancelButton = String(localized: "settings.skill.cancel", defaultValue: "Cancel")
+            static let createButton = String(localized: "settings.skill.create", defaultValue: "Create")
+            static let defaultBody = String(localized: "settings.skill.default-body", defaultValue: "Describe when and how the Agent should use this skill.")
+            static let openedFolder = String(localized: "settings.skill.opened-folder", defaultValue: "Opened user skills folder.")
+            static func createdSkill(_ a1: String) -> String {
+                let template = String(localized: "settings.skill.created", defaultValue: "Created %@.")
+                return String(format: template, a1)
+            }
+        }
+
+        enum Memory {
+            static let featuresSection = String(localized: "settings.memory.features-section", defaultValue: "Memory Features")
+            static let enableToggle = String(localized: "settings.memory.enable", defaultValue: "Enable memory")
+            static let enableDescription = String(localized: "settings.memory.enable-description", defaultValue: "When enabled, the Agent can use saved preferences, recurring facts, and project notes as personalization context.")
+            static let retrievalSection = String(localized: "settings.memory.retrieval-section", defaultValue: "Memory Retrieval")
+            static let autoRetrievalToggle = String(localized: "settings.memory.auto-retrieval", defaultValue: "Auto-retrieve memories")
+            static let autoRetrievalDescription = String(localized: "settings.memory.auto-retrieval-description", defaultValue: "Automatically search related memories before each Agent turn and inject the best matches as compact context.")
+            static let queryRewriteToggle = String(localized: "settings.memory.query-rewrite", defaultValue: "Rewrite retrieval query")
+            static let queryRewriteDescription = String(localized: "settings.memory.query-rewrite-description", defaultValue: "Use the tool model to turn conversational wording into a focused semantic search query.")
+            static let maxRetrievedLabel = String(localized: "settings.memory.max-retrieved", defaultValue: "Max retrieved memories")
+            static let similarityThresholdLabel = String(localized: "settings.memory.similarity-threshold", defaultValue: "Similarity threshold")
+            static let similarityBroad = String(localized: "settings.memory.similarity-broad", defaultValue: "Broad (0%)")
+            static let similarityStrict = String(localized: "settings.memory.similarity-strict", defaultValue: "Strict (100%)")
+            static let summariesSection = String(localized: "settings.memory.summaries-section", defaultValue: "Memory Summaries")
+            static let autoSummaryToggle = String(localized: "settings.memory.auto-summary", defaultValue: "Auto-summarize conversations")
+            static let autoSummaryDescription = String(localized: "settings.memory.auto-summary-description", defaultValue: "Extract durable facts from conversations and save them as candidate memories.")
+            static let maintenanceSection = String(localized: "settings.memory.maintenance-section", defaultValue: "Memory Maintenance")
+            static let dailyMaintenanceToggle = String(localized: "settings.memory.daily-maintenance", defaultValue: "Run daily memory maintenance")
+            static let maintenanceDescription = String(localized: "settings.memory.maintenance-description", defaultValue: "Archives duplicate or stale transient entries, removes expired archived entries, and records the last maintenance result.")
+            static let runMaintenanceButton = String(localized: "settings.memory.run-maintenance", defaultValue: "Run maintenance cycle")
+            static let previewMaintenanceButton = String(localized: "settings.memory.preview-maintenance", defaultValue: "Preview next cycle")
+            static let triggerTimeLabel = String(localized: "settings.memory.trigger-time", defaultValue: "Trigger time")
+            static let transientTTLLabel = String(localized: "settings.memory.transient-ttl", defaultValue: "Transient memory TTL")
+            static let archiveRetentionLabel = String(localized: "settings.memory.archive-retention", defaultValue: "Archive retention")
+            static func daysFormat(_ a1: String) -> String {
+                let template = String(localized: "settings.memory.days-format", defaultValue: "%@ days")
+                return String(format: template, a1)
+            }
+            static let mergeParametersLabel = String(localized: "settings.memory.merge-parameters", defaultValue: "Similarity and merge parameters")
+            static let mergeParametersDescription = String(localized: "settings.memory.merge-parameters-description", defaultValue: "The current local maintenance pass handles retention and archiving. LLM-assisted duplicate merging can be wired into this section once the Agent memory retrieval pipeline starts consuming embeddings.")
+            static func archivedMemoriesLabel(_ a1: String) -> String {
+                let template = String(localized: "settings.memory.archived-label", defaultValue: "Archived memories (%@)")
+                return String(format: template, a1)
+            }
+            static let noArchivedMemories = String(localized: "settings.memory.no-archived", defaultValue: "No archived memories.")
+            static let exportSnapshotButton = String(localized: "settings.memory.export-snapshot", defaultValue: "Export memory snapshot")
+            static let toolModelSection = String(localized: "settings.memory.tool-model-section", defaultValue: "Memory Tool Model")
+            static let toolModelLabel = String(localized: "settings.memory.tool-model", defaultValue: "Tool model")
+            static let useActiveAgentModel = String(localized: "settings.memory.use-active-agent-model", defaultValue: "Use active Agent model")
+            static let toolModelDescription = String(localized: "settings.memory.tool-model-description", defaultValue: "Used for query rewriting and future LLM-assisted memory maintenance. Leave blank to follow the active Agent model.")
+            static let embeddingSection = String(localized: "settings.memory.embedding-section", defaultValue: "Embedding Model")
+            static let embeddingPlaceholder = String(localized: "settings.memory.embedding-placeholder", defaultValue: "Embedding model")
+            static let embeddingDescription = String(localized: "settings.memory.embedding-description", defaultValue: "Used for semantic retrieval. Leave the default unless your provider exposes a compatible embedding model.")
+            static let statisticsSection = String(localized: "settings.memory.statistics-section", defaultValue: "Statistics")
+            static let totalMemoriesLabel = String(localized: "settings.memory.total-memories", defaultValue: "Total memories")
+            static let autoGeneratedLabel = String(localized: "settings.memory.auto-generated", defaultValue: "Auto-generated")
+            static let manualLabel = String(localized: "settings.memory.manual", defaultValue: "Manual")
+            static let addMemorySection = String(localized: "settings.memory.add-memory-section", defaultValue: "Add Memory")
+            static let lifetimeLabel = String(localized: "settings.memory.lifetime", defaultValue: "Lifetime")
+            static let addMemoryButton = String(localized: "settings.memory.add-memory", defaultValue: "Add memory")
+            static let searchSection = String(localized: "settings.memory.search-section", defaultValue: "Search Memories")
+            static let searchPlaceholder = String(localized: "settings.memory.search-placeholder", defaultValue: "Search by text...")
+            static let includeArchivedToggle = String(localized: "settings.memory.include-archived", defaultValue: "Include archived")
+            static func shownCount(_ a1: String) -> String {
+                let template = String(localized: "settings.memory.shown-count", defaultValue: "%@ shown")
+                return String(format: template, a1)
+            }
+            static let resetSearchButton = String(localized: "settings.memory.reset-search", defaultValue: "Reset search")
+            static let clearAllButton = String(localized: "settings.memory.clear-all", defaultValue: "Clear all")
+            static let noMemoriesMatching = String(localized: "settings.memory.no-matching", defaultValue: "No memories match the current filters.")
+            static let memoryListSection = String(localized: "settings.memory.memory-list-section", defaultValue: "Memory List")
+            static let dailySleepCycleTitle = String(localized: "settings.memory.daily-sleep-cycle", defaultValue: "Daily sleep cycle")
+            static func headerSummary(_ a1: String, _ a2: String) -> String {
+                let template = String(localized: "settings.memory.header-summary", defaultValue: "Archived %1$@ · Next: %2$@")
+                return String(format: template, a1, a2)
+            }
+            static let notScheduled = String(localized: "settings.memory.not-scheduled", defaultValue: "Not scheduled")
+            static func lastStatus(_ a1: String) -> String {
+                let template = String(localized: "settings.memory.last-status", defaultValue: "Last: %@")
+                return String(format: template, a1)
+            }
+            static func maintenanceCounts(_ a1: String, _ a2: String, _ a3: String, _ a4: String) -> String {
+                let template = String(localized: "settings.memory.maintenance-counts", defaultValue: "Inspected %1$@, archived %2$@, removed %3$@, merged %4$@.")
+                return String(format: template, a1, a2, a3, a4)
+            }
+            static func tokensLine(_ a1: String, _ a2: String) -> String {
+                let template = String(localized: "settings.memory.tokens-line", defaultValue: "LLM tokens: %1$@ input / %2$@ output")
+                return String(format: template, a1, a2)
+            }
+            static func usedXTimes(_ a1: String) -> String {
+                let template = String(localized: "settings.memory.used-x-times", defaultValue: "Used %@x")
+                return String(format: template, a1)
+            }
+            static let archivedTag = String(localized: "settings.memory.archived-tag", defaultValue: "Archived")
+            static let editTooltip = String(localized: "settings.memory.edit-tooltip", defaultValue: "Edit memory")
+            static let restoreTooltip = String(localized: "settings.memory.restore-tooltip", defaultValue: "Restore memory")
+            static let archiveTooltip = String(localized: "settings.memory.archive-tooltip", defaultValue: "Archive memory")
+            static let deleteTooltip = String(localized: "settings.memory.delete-tooltip", defaultValue: "Delete memory")
+            static let cancelButton = String(localized: "settings.memory.cancel", defaultValue: "Cancel")
+            static let saveButton = String(localized: "settings.memory.save", defaultValue: "Save")
+            static let exportPanelTitle = String(localized: "settings.memory.export-panel-title", defaultValue: "Export Memory Snapshot")
+            static func exportedTo(_ a1: String) -> String {
+                let template = String(localized: "settings.memory.exported-to", defaultValue: "Exported to %@.")
+                return String(format: template, a1)
+            }
+        }
     }
 
     enum Transcript {

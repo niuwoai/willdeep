@@ -150,26 +150,17 @@ struct OpenAIChatAdapter {
         applyAuthenticationHeaders(to: &request)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let systemPrompt = """
-        You are a strict shell-command safety classifier. \
-        Reply with a single word: YES if the command is read-only and \
-        cannot delete files, modify state outside its process, send \
-        data over the network in a write capacity, or escalate \
-        privileges. Otherwise reply NO. \
-        Treat anything that writes files, mutates VCS state, installs \
-        software, opens network sockets to write, signals processes, \
-        or changes permissions as NO. \
-        Do not explain. Do not add punctuation. Output exactly YES or NO.
-        """
+        let systemPrompt = AgentInjectionDefense.judgeSystemPrompt
+        let userPayload = AgentInjectionDefense.judgeUserPayload(command: command)
 
         let body: [String: Any] = [
             "model": configuration.model,
             "stream": false,
-            "max_tokens": 4,
+            "max_tokens": 16,
             "temperature": 0,
             "messages": [
                 ["role": "system", "content": systemPrompt],
-                ["role": "user", "content": "Command:\n\(command)"]
+                ["role": "user", "content": userPayload]
             ]
         ]
         guard let payload = try? JSONSerialization.data(withJSONObject: body, options: []) else {
@@ -188,8 +179,7 @@ struct OpenAIChatAdapter {
             }
             let answer = choice.message.content
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-                .uppercased()
-            return answer.hasPrefix("YES")
+            return AgentInjectionDefense.judgeVerdictIsYes(rawText: answer)
         } catch {
             return false
         }

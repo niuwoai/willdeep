@@ -60,6 +60,24 @@ struct AgentToolDescriptor: Equatable {
 struct AgentToolContext {
     /// Workspace root. All filesystem tools must refuse paths outside this.
     let rootDirectory: URL?
+    /// Runtime that's executing this tool — used by background-job
+    /// tools to scope jobs to the originating session. Nil in
+    /// non-conversational call paths (tests, ad-hoc skill harness).
+    let runtimeID: UUID?
+    /// Shared background-job registry. Nil in non-app call paths;
+    /// when nil, `run_command` with `run_in_background: true` falls
+    /// back to the foreground path so behavior is still defined.
+    let jobRegistry: AgentJobRegistry?
+
+    init(
+        rootDirectory: URL?,
+        runtimeID: UUID? = nil,
+        jobRegistry: AgentJobRegistry? = nil
+    ) {
+        self.rootDirectory = rootDirectory
+        self.runtimeID = runtimeID
+        self.jobRegistry = jobRegistry
+    }
 }
 
 struct AgentToolResult: Equatable {
@@ -320,6 +338,12 @@ enum AgentToolRunner {
             return try gitStatus(context: context)
         case "run_command":
             return try await runCommand(arguments: arguments, context: context)
+        case "list_jobs":
+            return try await listJobs(arguments: arguments, context: context)
+        case "get_job_output":
+            return try await getJobOutput(arguments: arguments, context: context)
+        case "kill_job":
+            return try await killJob(arguments: arguments, context: context)
         case "list_skills":
             return try AgentSkillCatalog.listSkills(arguments: arguments)
         case "read_skill":
@@ -763,6 +787,41 @@ enum AgentToolRunner {
         let timeoutArg = arguments["timeout_seconds"]?.intValue().map { Double($0) } ?? defaultCommandTimeout
         let timeout = min(max(timeoutArg, 1), maxCommandTimeout)
 
+        // Background path: hand the Process off to the registry, return
+        // immediately with the job handle, let the agent loop pull the
+        // completion event at the top of a later turn.
+        let wantsBackground = arguments["run_in_background"]?.boolValue() ?? false
+        if wantsBackground, let registry = context.jobRegistry, let runtimeID = context.runtimeID {
+            let bgTimeout: Double? = arguments["timeout_seconds"]?.intValue().map { Double(min(max($0, 1), 3600 * 6)) }
+            let job: AgentBackgroundJob
+            do {
+                job = try await MainActor.run {
+                    try registry.start(
+                        command: command,
+                        workingDirectory: root,
+                        runtimeID: runtimeID,
+                        timeoutSeconds: bgTimeout
+                    )
+                }
+            } catch {
+                throw AgentToolError.commandFailed(-1, error.localizedDescription)
+            }
+            let cwd = job.workingDirectoryPath ?? root.path
+            let timeoutLine = bgTimeout.map { "\nTimeout: \(Int($0))s" } ?? ""
+            let payload = """
+            Started background job \(job.displayHandle).
+            Command: \(command)
+            PID: \(job.pid)
+            cwd: \(cwd)\(timeoutLine)
+
+            The job is running. You will receive a `<background-task-notification>` system message at the start of a later turn when it finishes (or fails). Until then, call `get_job_output` to inspect partial output, `list_jobs` to see all alive jobs, or `kill_job` to stop it.
+            """
+            return AgentToolResult(
+                summary: "▶ \(job.displayHandle) started",
+                payload: payload
+            )
+        }
+
         let outcome = await Task.detached(priority: .userInitiated) { () -> CommandOutcome in
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
@@ -851,6 +910,114 @@ enum AgentToolRunner {
         let firstLine = stdout.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? ""
         let summary = "exit 0\(firstLine.isEmpty ? "" : ": " + firstLine.prefix(60))"
         return AgentToolResult(summary: summary, payload: trimmed)
+    }
+
+    // MARK: list_jobs / get_job_output / kill_job
+
+    /// Snapshot of background jobs for the current runtime. Returns a
+    /// stable text format (one job per line) so the model can quote
+    /// handles back into `get_job_output` / `kill_job` without parsing
+    /// JSON.
+    private static func listJobs(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        guard let registry = context.jobRegistry, let runtimeID = context.runtimeID else {
+            return AgentToolResult(summary: "no jobs", payload: "Background job registry not available in this context.")
+        }
+        let onlyAlive = arguments["only_alive"]?.boolValue() ?? false
+        let allJobs = await MainActor.run { registry.jobs(forRuntime: runtimeID) }
+        let filtered = onlyAlive ? allJobs.filter { $0.isAlive } : allJobs
+        guard !filtered.isEmpty else {
+            return AgentToolResult(
+                summary: "no jobs",
+                payload: onlyAlive ? "No alive background jobs." : "No background jobs in this session."
+            )
+        }
+        let lines = filtered.map { describe(job: $0) }
+        let payload = lines.joined(separator: "\n")
+        let aliveCount = filtered.filter { $0.isAlive }.count
+        let summary = "\(filtered.count) job\(filtered.count == 1 ? "" : "s") (\(aliveCount) alive)"
+        return AgentToolResult(summary: summary, payload: payload)
+    }
+
+    private static func getJobOutput(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        guard let registry = context.jobRegistry, let runtimeID = context.runtimeID else {
+            throw AgentToolError.invalidArgument("Background job registry not available.")
+        }
+        guard let handle = arguments["job_id"]?.stringValue(),
+              !handle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw AgentToolError.missingArgument("job_id")
+        }
+        let tailLines = arguments["tail_lines"]?.intValue()
+        let snapshot: (job: AgentBackgroundJob, output: String)? = await MainActor.run {
+            guard let job = registry.job(matchingHandle: handle, runtimeID: runtimeID) else { return nil }
+            return (job, registry.output(id: job.id, tailLines: tailLines))
+        }
+        guard let snapshot else {
+            throw AgentJobError.jobNotFound(handle)
+        }
+        let header = describe(job: snapshot.job)
+        let body = snapshot.output.isEmpty ? "(no output captured yet)" : snapshot.output
+        return AgentToolResult(
+            summary: "\(snapshot.job.displayHandle): \(snapshot.job.status.rawValue)",
+            payload: "\(header)\n--- output ---\n\(body)"
+        )
+    }
+
+    private static func killJob(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        guard let registry = context.jobRegistry, let runtimeID = context.runtimeID else {
+            throw AgentToolError.invalidArgument("Background job registry not available.")
+        }
+        guard let handle = arguments["job_id"]?.stringValue(),
+              !handle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw AgentToolError.missingArgument("job_id")
+        }
+        let result: (job: AgentBackgroundJob, didSignal: Bool)? = await MainActor.run {
+            guard let job = registry.job(matchingHandle: handle, runtimeID: runtimeID) else { return nil }
+            let signaled = registry.kill(id: job.id)
+            return (job, signaled)
+        }
+        guard let result else {
+            throw AgentJobError.jobNotFound(handle)
+        }
+        if result.didSignal {
+            return AgentToolResult(
+                summary: "\(result.job.displayHandle) killed",
+                payload: "Sent SIGTERM to \(result.job.displayHandle) (pid \(result.job.pid)). A completion notice will arrive on the next turn."
+            )
+        } else {
+            return AgentToolResult(
+                summary: "\(result.job.displayHandle) not running",
+                payload: "\(result.job.displayHandle) was already \(result.job.status.rawValue); nothing to kill."
+            )
+        }
+    }
+
+    private static func describe(job: AgentBackgroundJob) -> String {
+        let exit = job.exitCode.map { "exit=\($0)" } ?? "exit=…"
+        let durationText = formatDuration(job.duration)
+        let trimmedCommand = job.command.count > 100
+            ? String(job.command.prefix(100)) + "…"
+            : job.command
+        return "\(job.displayHandle) [\(job.status.rawValue)] \(exit) · \(durationText) · pid=\(job.pid) · \(trimmedCommand)"
+    }
+
+    private static func formatDuration(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds.rounded())
+        if total < 60 { return "\(total)s" }
+        let m = total / 60
+        let s = total % 60
+        if m < 60 { return "\(m)m\(s)s" }
+        let h = m / 60
+        let mm = m % 60
+        return "\(h)h\(mm)m"
     }
 
     // MARK: helpers

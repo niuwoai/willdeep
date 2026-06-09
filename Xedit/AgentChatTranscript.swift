@@ -224,7 +224,10 @@ struct AgentChatTranscript: View {
 
     private var visibleMessages: [AgentMessage] {
         appState.agentMessages.filter { message in
-            message.role != .tool && !isEmptyThinkingPlaceholder(message)
+            // `.system` is reserved for host-injected notices (e.g.
+            // background-task completion); the user reads those via the
+            // right-side jobs drawer, not the transcript.
+            message.role != .tool && message.role != .system && !isEmptyThinkingPlaceholder(message)
         }
     }
 
