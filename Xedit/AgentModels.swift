@@ -907,7 +907,12 @@ struct AgentProviderPreset: Identifiable, Equatable {
         AgentProviderPreset(
             id: "claude",
             displayName: "Claude",
-            baseURL: "https://api.anthropic.com/v1",
+            kind: .anthropicMessages,
+            // Adapter appends `v1/messages` / `v1/models` itself; the
+            // base URL stays at the bare origin so the same field can
+            // host enterprise / proxy deployments that mount Anthropic
+            // under a different prefix.
+            baseURL: "https://api.anthropic.com",
             defaultModel: "claude-sonnet-4-5",
             supportsModelFetch: true,
             modelHints: ["claude", "anthropic"]

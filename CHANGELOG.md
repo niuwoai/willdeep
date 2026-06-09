@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.56.0-rc2 - 2026-06-09
+
+- **Phase C：Anthropic Messages 原生适配器落地**，`claude` preset 从「OpenAI 形状的 body 打 Anthropic 端点」的坏状态切换到 Anthropic 原生协议。
+  - 新增 [Xedit/AgentClientAnthropic.swift](Xedit/AgentClientAnthropic.swift)：`AnthropicMessagesAdapter`，独立翻译 `AgentMessage ↔ /v1/messages` 形状。鉴权用 `x-api-key + anthropic-version: 2023-06-01`（不是 `Authorization: Bearer`）；`system` 走顶层字段；tool 结果作为 `tool_result` 块捆到下一条 user 消息（不是 `role: tool`）；assistant 工具调用变成 `content: [tool_use]`；`max_tokens` 必填（默认 4096）；tools schema 是 `{name, description, input_schema}`（不要 `{type:function,function:{...}}` 包一层）。
+  - **SSE 事件解析**：Anthropic 用「`event: <name>` + `data: <json>` 行对」驱动。适配器持有上一条 `event` 名做下一条 `data` 的路由。已处理 `message_start` / `content_block_start` / `content_block_delta`（含 `text_delta` / `input_json_delta` / `thinking_delta`）/ `content_block_stop` / `message_delta` / `message_stop` / `error`，未识别的事件（含 `ping` keepalive）静默跳过。
+  - **stop_reason 映射**：`tool_use → "tool_calls"` / `end_turn → "stop"` / `max_tokens → "length"`，对齐 AppState 既有的 finish-reason 分支。
+  - **`claude` preset 配置**：`kind: .anthropicMessages`，baseURL 从 `https://api.anthropic.com/v1` 改为 `https://api.anthropic.com`（适配器自己拼 `v1/messages` 后缀，让自建反代/企业部署也能配在同一个字段里）。
+  - **老用户 baseURL 兼容**：早期保存的 entry 还是 `https://api.anthropic.com/v1`，适配器内做了 `stripTrailingV1` 防御，不会拼成 `/v1/v1/messages` 404。
+- **Phase A 回归补漏**：`XeditTests/AgentClientEncodingTests` 调用了 `AgentClient.encodeChatRequest(...)`，rc1 时只 build 了主 scheme 没跑 test target，结果 CI 上测试编译失败。在 facade 上加 forwarding 静态方法转发到 `OpenAIChatAdapter.encodeChatRequest(...)`，保持调用方零修改。本次本地 `xcodebuild test` 跑通。
+- 版本号 `1.56.0-rc1` → `1.56.0-rc2`（在 rc1 骨架基础上加 Anthropic 适配器 + 修 test target 回归 → rc 递增；功能性补完，未跨次版本）。
+
 ## 1.56.0-rc1 - 2026-06-09
 
 - **多 Provider 协议骨架（Phase A+B）**。原 [AgentClient.swift](Xedit/AgentClient.swift) 把 "OpenAI 兼容协议" 当成了唯一协议，写死在一个 673 行的 struct 里——claude preset 名义上指向 `api.anthropic.com` 但发的是 OpenAI 形状的 body，实际是坏的。重构成 facade + 适配器两层：

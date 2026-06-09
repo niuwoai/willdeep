@@ -58,12 +58,14 @@ struct AgentClient {
         case .openAIChat:
             try await OpenAIChatAdapter(configuration: configuration, session: session)
                 .streamChat(messages: messages, tools: tools, onEvent: onEvent)
-        case .openAIResponses, .anthropicMessages, .geminiGenerateContent:
-            // Adapters land in Phase C / D / E. Until then any preset
-            // configured with a non-Chat kind would be unreachable —
-            // currently the preset table only marks Chat kinds, so this
-            // branch is dead code that exists to make the switch
-            // exhaustive and to make the upcoming wiring obvious.
+        case .anthropicMessages:
+            try await AnthropicMessagesAdapter(configuration: configuration, session: session)
+                .streamChat(messages: messages, tools: tools, onEvent: onEvent)
+        case .openAIResponses, .geminiGenerateContent:
+            // Adapters land in Phase D / E. Until then any preset
+            // configured with a non-Chat-non-Anthropic kind is
+            // unreachable; surface as a typed error so AppState can
+            // render its existing banner.
             throw AgentClientError.unsupportedProviderKind(configuration.providerKind)
         }
     }
@@ -73,7 +75,10 @@ struct AgentClient {
         case .openAIChat:
             return await OpenAIChatAdapter(configuration: configuration, session: session)
                 .judgeCommandSafety(command: command)
-        case .openAIResponses, .anthropicMessages, .geminiGenerateContent:
+        case .anthropicMessages:
+            return await AnthropicMessagesAdapter(configuration: configuration, session: session)
+                .judgeCommandSafety(command: command)
+        case .openAIResponses, .geminiGenerateContent:
             // Match the pre-refactor behaviour: any failure path
             // (unsupported provider here counts) falls back to "ask
             // the user" rather than silently auto-running the command.
@@ -86,7 +91,10 @@ struct AgentClient {
         case .openAIChat:
             return try await OpenAIChatAdapter(configuration: configuration, session: session)
                 .fetchModels()
-        case .openAIResponses, .anthropicMessages, .geminiGenerateContent:
+        case .anthropicMessages:
+            return try await AnthropicMessagesAdapter(configuration: configuration, session: session)
+                .fetchModels()
+        case .openAIResponses, .geminiGenerateContent:
             throw AgentClientError.unsupportedProviderKind(configuration.providerKind)
         }
     }
@@ -105,5 +113,26 @@ struct AgentClient {
         supportsImages: Bool = true
     ) -> [AgentMessage] {
         OpenAIChatAdapter.providerReadyMessages(messages, supportsImages: supportsImages)
+    }
+
+    /// OpenAI Chat-shaped request body builder. Only meaningful for
+    /// OpenAI-compatible providers; Anthropic / Gemini / Responses
+    /// build their wire format internally and the test target should
+    /// not be calling this for them. Lives on the facade as a
+    /// back-compat forward so existing `XeditTests/AgentClientEncodingTests`
+    /// (and any other call site that wants to assert OpenAI body
+    /// shape) keeps compiling.
+    nonisolated static func encodeChatRequest(
+        model: String,
+        messages: [AgentMessage],
+        tools: [AgentToolDescriptor],
+        supportsImages: Bool = true
+    ) throws -> Data {
+        try OpenAIChatAdapter.encodeChatRequest(
+            model: model,
+            messages: messages,
+            tools: tools,
+            supportsImages: supportsImages
+        )
     }
 }
