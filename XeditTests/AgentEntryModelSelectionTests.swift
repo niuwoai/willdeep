@@ -108,6 +108,44 @@ struct AgentEntryModelSelectionTests {
         #expect(app.agentSessionModelOverride == nil)
     }
 
+    /// Regression: before 1.57.0-rc6 the `KeychainSandbox` only
+    /// redirected Keychain writes. `saveProviderLibrary` writes the
+    /// JSON-encoded entry skeletons (providerID, baseURL, displayName,
+    /// model lists) to UserDefaults under
+    /// `im.some.veilwriter.agentSettings.providerLibrary.v1`, and that
+    /// key still pointed at `UserDefaults.standard`. Every test run
+    /// planted two fixture entries — "OpenAI / gpt-4.1-mini" and
+    /// "DeepSeek / deepseek-v4-flash" — into the developer's real
+    /// defaults, where they then appeared in the running Settings UI
+    /// with empty API keys, looking exactly like the new build had
+    /// auto-seeded them. This test fails (assertion #2) if the sandbox
+    /// loses its grip on UserDefaults again.
+    @Test
+    func providerLibraryEntriesStayInSandboxedDefaults() {
+        let providerLibraryKey = "im.some.veilwriter.agentSettings.providerLibrary.v1"
+        let snapshotBefore = UserDefaults.standard.data(forKey: providerLibraryKey)
+
+        let sandbox = installKeychainSandbox()
+        _ = makeAppStateWithTwoEntries()
+
+        // (1) The sandboxed suite must actually have received the
+        // entries — otherwise we'd be asserting the wrong thing: a
+        // silently-dropped write would also leave `.standard` untouched
+        // and we'd ship a hollow regression test.
+        let sandboxBlob = UserDefaults(suiteName: sandbox.suiteName)?
+            .data(forKey: providerLibraryKey)
+        #expect(sandboxBlob != nil)
+
+        // (2) The production defaults must NOT have changed during the
+        // test. Equality (not just "still has *some* value") catches
+        // the case where a prior leak left a stale blob in place and a
+        // new test overwrites it with a different one.
+        let snapshotDuring = UserDefaults.standard.data(forKey: providerLibraryKey)
+        #expect(snapshotDuring == snapshotBefore)
+
+        _ = sandbox // hold the RAII handle until both assertions are made
+    }
+
     @Test
     func entryRoutingModeDrivesEffectiveModel() {
         let _sandbox = installKeychainSandbox(); _ = _sandbox
@@ -125,31 +163,50 @@ struct AgentEntryModelSelectionTests {
     }
 }
 
-/// RAII handle that diverts `AgentSettingsStore` Keychain reads/writes
-/// to a per-instance sandbox service name. `deinit` wipes the sandbox
-/// rows and restores the production service name. Tests instantiate
+/// RAII handle that diverts `AgentSettingsStore` Keychain *and*
+/// UserDefaults reads/writes to a per-instance sandbox. `deinit` wipes
+/// both stores and restores the production overrides. Tests instantiate
 /// one at the top of each `@Test` function and let the runtime drop it
 /// at scope end.
 ///
 /// Why this is necessary: `AppState.agentProviderLibrary`'s `@Published`
 /// didSet calls `AgentSettingsStore.saveProviderLibrary`, which is
 /// indistinguishable from a production save — it writes API keys to
-/// Keychain under the production service name. Before this sandbox
-/// existed, every run of these tests planted fixture keys
-/// (`test-fixture-openai-key`, `test-fixture-deepseek-key`) into the
-/// developer's real Keychain, where they then surfaced inside the
-/// running Settings UI alongside the user's real entries.
+/// Keychain *and* writes the JSON-encoded entry skeletons (providerID,
+/// baseURL, displayName, model lists) into UserDefaults. The original
+/// version of this sandbox only sealed the Keychain half; entry
+/// skeletons still landed in `UserDefaults.standard` and the dev's
+/// running app showed fixture providers (an "OpenAI / gpt-4.1-mini" and
+/// a "DeepSeek / deepseek-v4-flash") with empty API keys after every
+/// test run, looking for all the world like the new build auto-seeded
+/// them. The UserDefaults half now goes through `_setTestDefaultsOverride`
+/// into a UUID-suffixed `UserDefaults(suiteName:)`, wiped on deinit.
 @MainActor
 final class KeychainSandbox {
     let service: String
+    let suiteName: String
+    private let sandboxDefaults: UserDefaults
 
     init() {
-        self.service = "im.some.veilwriter.agent.test.\(UUID().uuidString)"
+        let id = UUID().uuidString
+        self.service = "im.some.veilwriter.agent.test.\(id)"
+        self.suiteName = "im.some.veilwriter.agent.test.defaults.\(id)"
+        guard let sandbox = UserDefaults(suiteName: suiteName) else {
+            preconditionFailure("Cannot allocate sandbox UserDefaults suite \(suiteName)")
+        }
+        // Suite is process-local but persistent across test runs on
+        // disk, so clear any stale rows up front before letting the
+        // test write into it.
+        sandbox.removePersistentDomain(forName: suiteName)
+        self.sandboxDefaults = sandbox
         AgentSettingsStore._setTestKeychainServiceOverride(service)
+        AgentSettingsStore._setTestDefaultsOverride(sandbox)
     }
 
     deinit {
         AgentSettingsStore._wipeTestKeychain()
         AgentSettingsStore._setTestKeychainServiceOverride(nil)
+        sandboxDefaults.removePersistentDomain(forName: suiteName)
+        AgentSettingsStore._setTestDefaultsOverride(nil)
     }
 }

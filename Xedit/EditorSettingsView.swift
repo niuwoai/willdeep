@@ -1154,6 +1154,13 @@ private struct AgentProviderEntryEditor: View {
     /// persisted side.
     @State private var customKindOverride: AgentProviderKind? = nil
 
+    // Section expansion. 路由 + 协议帮助卡片默认折叠 —— 多数用户配完一次
+    // 就不再回来调，铺满垂直空间没意义。点击 header 可展开。
+    @State private var isConnectionExpanded: Bool = true
+    @State private var isModelsExpanded: Bool = true
+    @State private var isRoutingExpanded: Bool = false
+    @State private var isProtocolHelpExpanded: Bool = false
+
     private let labelWidth: CGFloat = 110
 
     var body: some View {
@@ -1173,7 +1180,12 @@ private struct AgentProviderEntryEditor: View {
     // MARK: - Connection
 
     private var connectionGroup: some View {
-        GroupBox(label: sectionLabel(L10n.Settings.Provider.connectionSection, system: "link")) {
+        GroupBox(label: collapsibleSectionLabel(
+            L10n.Settings.Provider.connectionSection,
+            system: "link",
+            isExpanded: $isConnectionExpanded
+        )) {
+            if isConnectionExpanded {
             VStack(alignment: .leading, spacing: 10) {
                 fieldRow(L10n.Settings.Provider.displayNameLabel) {
                     TextField(L10n.Settings.Provider.displayNamePlaceholder, text: $displayName, onCommit: commit)
@@ -1231,6 +1243,7 @@ private struct AgentProviderEntryEditor: View {
             }
             .padding(.vertical, 6)
             .padding(.horizontal, 4)
+            }
         }
     }
 
@@ -1311,27 +1324,43 @@ private struct AgentProviderEntryEditor: View {
                 return preset.kind
             }()
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Image(systemName: protocolIcon(for: effectiveKind))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
-                    Text(L10n.Settings.Provider.protocolLine(effectiveKind.shortLabel))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isProtocolHelpExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: protocolIcon(for: effectiveKind))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color.accentColor)
+                        Text(L10n.Settings.Provider.protocolLine(effectiveKind.shortLabel))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color.accentColor)
+                        Spacer(minLength: 8)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(Color.accentColor.opacity(0.7))
+                            .rotationEffect(.degrees(isProtocolHelpExpanded ? 90 : 0))
+                    }
+                    .contentShape(Rectangle())
                 }
-                Text(effectiveKind.helpText)
-                    .font(.caption)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let notice = preset.inlineNotice {
-                    Divider()
-                    Text(notice)
+                .buttonStyle(.plain)
+                if isProtocolHelpExpanded {
+                    Text(effectiveKind.helpText)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)
+                    if let notice = preset.inlineNotice {
+                        Divider()
+                        Text(notice)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
-            .padding(10)
+            .padding(.horizontal, 10)
+            .padding(.vertical, isProtocolHelpExpanded ? 10 : 7)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 6)
@@ -1369,48 +1398,60 @@ private struct AgentProviderEntryEditor: View {
     // MARK: - Models
 
     private var modelsGroup: some View {
-        GroupBox(label: sectionLabel(L10n.Settings.Provider.modelsSection, system: "cube.box")) {
-            VStack(alignment: .leading, spacing: 12) {
-                modelGroup(
-                    title: "Flash",
-                    primaryBinding: $flashPrimary,
-                    alternatesBinding: $flashAlternatesText
-                )
-                Divider()
-                modelGroup(
-                    title: "Pro",
-                    primaryBinding: $proPrimary,
-                    alternatesBinding: $proAlternatesText
-                )
+        GroupBox(label: collapsibleSectionLabel(
+            L10n.Settings.Provider.modelsSection,
+            system: "cube.box",
+            isExpanded: $isModelsExpanded
+        )) {
+            if isModelsExpanded {
+                VStack(alignment: .leading, spacing: 12) {
+                    modelGroup(
+                        title: "Flash",
+                        primaryBinding: $flashPrimary,
+                        alternatesBinding: $flashAlternatesText
+                    )
+                    Divider()
+                    modelGroup(
+                        title: "Pro",
+                        primaryBinding: $proPrimary,
+                        alternatesBinding: $proAlternatesText
+                    )
+                }
+                .padding(.vertical, 6)
+                .padding(.horizontal, 4)
             }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 4)
         }
     }
 
     // MARK: - Routing
 
     private var routingGroup: some View {
-        GroupBox(label: sectionLabel(L10n.Settings.Provider.routingSection, system: "arrow.triangle.branch")) {
-            VStack(alignment: .leading, spacing: 8) {
-                fieldRow(L10n.Settings.Provider.defaultTierLabel) {
-                    Picker("", selection: $routingMode) {
-                        ForEach(AgentModelRoutingMode.allCases) { mode in
-                            Text(mode.displayName).tag(mode)
+        GroupBox(label: collapsibleSectionLabel(
+            L10n.Settings.Provider.routingSection,
+            system: "arrow.triangle.branch",
+            isExpanded: $isRoutingExpanded
+        )) {
+            if isRoutingExpanded {
+                VStack(alignment: .leading, spacing: 8) {
+                    fieldRow(L10n.Settings.Provider.defaultTierLabel) {
+                        Picker("", selection: $routingMode) {
+                            ForEach(AgentModelRoutingMode.allCases) { mode in
+                                Text(mode.displayName).tag(mode)
+                            }
                         }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .onChange(of: routingMode) { _, _ in commit() }
                     }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .onChange(of: routingMode) { _, _ in commit() }
+                    Text(routingMode.description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, labelWidth + 8)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Text(routingMode.description)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, labelWidth + 8)
-                    .fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 4)
             }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 4)
         }
     }
 
@@ -1456,6 +1497,39 @@ private struct AgentProviderEntryEditor: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.primary)
         }
+    }
+
+    /// 把 GroupBox header 做成可点击的折叠开关：右端一枚 chevron，点击
+    /// 整条行切换展开。用 GroupBox 自带的 label slot 装它，外观跟原先的
+    /// 静态 sectionLabel 接近，只是多了一只箭头。
+    @ViewBuilder
+    private func collapsibleSectionLabel(
+        _ title: String,
+        system: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isExpanded.wrappedValue.toggle()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: system)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isExpanded.wrappedValue ? 90 : 0))
+            }
+            .contentShape(Rectangle())
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder

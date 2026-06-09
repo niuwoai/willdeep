@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.57.0-rc6 - 2026-06-10
+
+### Agent 服务商设置：右栏折叠收紧
+
+设置 → Agent 服务商页右侧的编辑区原来三块 GroupBox（连接 / 模型 / 路由）+ 一张大尺寸的协议帮助卡，一屏下来铺到一千多像素，对绝大多数只配一两家平台的用户实在太铺张。本轮全部改成可折叠的：
+
+- 三块 GroupBox 标题行加了 chevron，点击整条 header 即可展开/收起，复用一个新的 `collapsibleSectionLabel` helper（[EditorSettingsView.swift](Xedit/EditorSettingsView.swift)）。
+- 默认状态：**连接**展开（API key 在里面，新人配置必看）、**模型**展开（model id 经常调）、**路由**折叠（一次性偏好，配完不动）。
+- 协议帮助卡片（`protocolHelpCard`）默认也折叠成一行：只显示「🔗 协议：OpenAI Chat ▶」。展开后才出完整的 helpText 和 inlineNotice，折叠时把垂直 padding 也收紧到 7pt。
+- 0.15 秒的 `easeInOut` 动画过渡，跟现有面板风格一致。
+- 折叠状态是 view-local 的 `@State`，没有持久化——切换 entry 或重开 Settings 会回到默认（连接展开、模型展开、路由+协议折叠）。这是有意的：当前 entry 内的临时偏好不污染另一个 entry 的初始观感。
+
+### 设计取舍
+
+- 没有把折叠状态写到 `AgentProviderEntry` 持久化里。理由：折叠是 UI 偏好不是配置语义，跟着 entry 走没有意义；写进 AppStorage 又会增加 KV 噪音。让它跟随每次会话重置，反而保证每次打开都有一致的"重要的在上面"观感。
+- 选择保留 GroupBox 容器外观而不是上 DisclosureGroup——后者的默认样式跟其他 Section 不一致，会出现两套视觉语言。
+
+### 测试 fixture 不再污染 Agent 服务商列表
+
+修一个尴尬已久的 bug：跑过测试套件之后，开发者机器上的 Xedit 启动时会自动多出两条「服务商」—— "OpenAI / gpt-4.1-mini" 和 "DeepSeek / deepseek-v4-flash"，API key 都是空的，看上去像是新版本自动塞进来的，但其实**用户没加过、新版本也没自动加**。
+
+- **根因**：[AgentEntryModelSelectionTests.makeAppStateWithTwoEntries](XeditTests/AgentEntryModelSelectionTests.swift) 测试会 new 出一个 `AgentProviderLibrary(entries: [openai, deepseek], ...)` 当 fixture 赋给 `app.agentProviderLibrary`。这个 `@Published` 的 didSet 触发 [AgentSettingsStore.saveProviderLibrary](Xedit/AgentSettingsStore.swift)，把 entries 写到 **`UserDefaults.standard`**。原来的 `KeychainSandbox` 只 override 了 Keychain service name —— Keychain 那半截 API key 是拦住了（历史上也修过一次同型 bug，留下了 RAII 沙箱），但 UserDefaults 这半截**没人拦**。结果就是：fixture 的 entry 骨架（providerID / baseURL / displayName / 模型列表）大摇大摆躺进开发机真实 defaults，下次启动 `loadProviderLibrary` 一读就读出来。识别证据：`deepseek-v4-flash` 这个型号 DeepSeek 官方根本没有，纯粹是测试编出来糊弄断言用的合成值。
+- **修复**：
+  - [AgentSettingsStore](Xedit/AgentSettingsStore.swift) 新增 `testDefaultsOverride: UserDefaults?` 和 `_setTestDefaultsOverride(_:)`，对应已有的 `testKeychainServiceOverride` 一套对称机制。文件内 18 处 `UserDefaults.standard` 调用全部改走 `defaults` 私有访问器；生产路径 `defaults` 解析为 `.standard`，行为完全等价。
+  - [KeychainSandbox](XeditTests/AgentEntryModelSelectionTests.swift) 升级为「Keychain + UserDefaults」**双沙箱**：init 时创建一个 UUID 后缀的 `UserDefaults(suiteName:)` 临时域并注入 store；deinit 时 `removePersistentDomain` 清掉，并把 override 复位为 `.standard`。
+  - 加回归测试 `providerLibraryEntriesStayInSandboxedDefaults`：在 sandbox 期间往 store 写一轮，断言 (1) 沙箱 suite 确实收到了 entry blob（否则可能是「写入被静默吞掉」的假阴性）、(2) `UserDefaults.standard` 上的 `providerLibrary.v1` key 没有发生任何变化（包括没被新增、也没被改写）。
+- **清理已有污染**：现有受影响的开发机需要手动跑一次（退出 app 后）：
+  ```bash
+  defaults delete im.some.veilwriter "im.some.veilwriter.agentSettings.providerLibrary.v1" 2>/dev/null
+  defaults delete im.some.veilwriter "im.some.veilwriter.agentSettings.providerLibrary.repairAppliedV1" 2>/dev/null
+  ```
+  之后再启动 Xedit，自定义的服务商列表就只剩用户自己加的那条了。
+- 顺手把 Help bundle 的 `CFBundleShortVersionString` 从滞后的 `1.57.0-rc4` 同步到当前 rc 号，跟正式 build 保持一致。
+
 ## 1.57.0-rc5 - 2026-06-10
 
 ### Agent 输出"还活着"呼吸图标

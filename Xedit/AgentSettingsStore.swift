@@ -47,8 +47,30 @@ enum AgentSettingsStore {
     /// `resetTestKeychainOverride()` in tearDown to wipe the rows.
     nonisolated(unsafe) private static var testKeychainServiceOverride: String?
 
+    /// Test-only override for the UserDefaults backing store. Mirrors
+    /// the keychain override above and exists for the same reason: a
+    /// `KeychainSandbox`-only sandbox stopped fixture API keys from
+    /// landing in the real keychain, but the *entry skeletons* (encoded
+    /// JSON containing providerID / baseURL / displayName / model lists)
+    /// still went straight into `defaults` via
+    /// `saveProviderLibrary`. Result: the dev's running app showed two
+    /// fixture providers ("OpenAI / gpt-4.1-mini" and
+    /// "DeepSeek / deepseek-v4-flash") with empty API keys after every
+    /// test run, as if the new version had auto-seeded them. Tests now
+    /// point this at a per-run `UserDefaults(suiteName:)` so non-secret
+    /// fixture data is sandboxed too.
+    nonisolated(unsafe) private static var testDefaultsOverride: UserDefaults?
+
     private static var keychainService: String {
         testKeychainServiceOverride ?? defaultKeychainService
+    }
+
+    /// All non-secret persistence flows through this accessor so a test
+    /// can redirect every read / write into a sandbox suite. Production
+    /// gets `defaults`; tests get whatever
+    /// `_setTestDefaultsOverride` last installed.
+    private static var defaults: UserDefaults {
+        testDefaultsOverride ?? .standard
     }
 
     /// Test-only entry point: redirect all subsequent Keychain reads /
@@ -58,6 +80,15 @@ enum AgentSettingsStore {
     static func _setTestKeychainServiceOverride(_ service: String?) -> String {
         testKeychainServiceOverride = service
         return keychainService
+    }
+
+    /// Test-only entry point: redirect all subsequent UserDefaults
+    /// reads / writes to a sandbox suite. Pass nil to restore
+    /// `defaults`. Cleanup is the caller's job — call
+    /// `removePersistentDomain(forName:)` on the suite name before
+    /// dropping the override.
+    static func _setTestDefaultsOverride(_ defaults: UserDefaults?) {
+        testDefaultsOverride = defaults
     }
 
     /// Test-only entry point: best-effort delete every Generic Password
@@ -77,17 +108,17 @@ enum AgentSettingsStore {
     /// Recently-fetched model IDs from any provider's `/models` endpoint.
     /// Surfaced in the Agent-mode model picker as a quick switcher.
     static func loadKnownModelIDs() -> [String] {
-        (UserDefaults.standard.stringArray(forKey: knownModelsKey) ?? [])
+        (defaults.stringArray(forKey: knownModelsKey) ?? [])
             .filter { !$0.isEmpty }
     }
 
     static func saveKnownModelIDs(_ ids: [String]) {
         let cleaned = Array(Set(ids.filter { !$0.isEmpty })).sorted()
-        UserDefaults.standard.set(cleaned, forKey: knownModelsKey)
+        defaults.set(cleaned, forKey: knownModelsKey)
     }
 
     static func loadAlwaysAllowedCommands() -> [AgentAlwaysAllowedCommand] {
-        guard let data = UserDefaults.standard.data(forKey: alwaysAllowedCommandsKey),
+        guard let data = defaults.data(forKey: alwaysAllowedCommandsKey),
               let decoded = try? JSONDecoder().decode([AgentAlwaysAllowedCommand].self, from: data) else {
             return []
         }
@@ -100,14 +131,14 @@ enum AgentSettingsStore {
     /// allowlist (or the LLM judge) certifies as safe. Defaults to true
     /// on a fresh install; the toggle lives in Settings > Agent.
     static func loadAutoApproveSafeCommands() -> Bool {
-        if UserDefaults.standard.object(forKey: autoApproveKey) == nil {
+        if defaults.object(forKey: autoApproveKey) == nil {
             return true
         }
-        return UserDefaults.standard.bool(forKey: autoApproveKey)
+        return defaults.bool(forKey: autoApproveKey)
     }
 
     static func saveAutoApproveSafeCommands(_ enabled: Bool) {
-        UserDefaults.standard.set(enabled, forKey: autoApproveKey)
+        defaults.set(enabled, forKey: autoApproveKey)
     }
 
     /// Cap on simultaneous in-flight Agent turns per provider. The
@@ -115,16 +146,16 @@ enum AgentSettingsStore {
     /// providers don't share a single quota — see AppState. Defaults
     /// to 3 on fresh installs; user-tunable 1–8.
     static func loadPerProviderConcurrencyLimit() -> Int {
-        if UserDefaults.standard.object(forKey: perProviderConcurrencyKey) == nil {
+        if defaults.object(forKey: perProviderConcurrencyKey) == nil {
             return 3
         }
-        let stored = UserDefaults.standard.integer(forKey: perProviderConcurrencyKey)
+        let stored = defaults.integer(forKey: perProviderConcurrencyKey)
         return max(1, min(8, stored == 0 ? 3 : stored))
     }
 
     static func savePerProviderConcurrencyLimit(_ limit: Int) {
         let clamped = max(1, min(8, limit))
-        UserDefaults.standard.set(clamped, forKey: perProviderConcurrencyKey)
+        defaults.set(clamped, forKey: perProviderConcurrencyKey)
     }
 
     /// Base font size (in points) for the Agent chat transcript body —
@@ -133,17 +164,17 @@ enum AgentSettingsStore {
     /// on `AgentDesign`'s fixed sizes by design (Q1=A from the rc2
     /// scope conversation).
     static func loadAgentChatBaseFontSize() -> CGFloat {
-        if UserDefaults.standard.object(forKey: chatBaseFontSizeKey) == nil {
+        if defaults.object(forKey: chatBaseFontSizeKey) == nil {
             return chatBaseFontSizeDefault
         }
-        let stored = UserDefaults.standard.double(forKey: chatBaseFontSizeKey)
+        let stored = defaults.double(forKey: chatBaseFontSizeKey)
         guard stored > 0 else { return chatBaseFontSizeDefault }
         return clampChatBaseFontSize(CGFloat(stored))
     }
 
     static func saveAgentChatBaseFontSize(_ size: CGFloat) {
         let clamped = clampChatBaseFontSize(size)
-        UserDefaults.standard.set(Double(clamped), forKey: chatBaseFontSizeKey)
+        defaults.set(Double(clamped), forKey: chatBaseFontSizeKey)
     }
 
     static func clampChatBaseFontSize(_ size: CGFloat) -> CGFloat {
@@ -157,7 +188,7 @@ enum AgentSettingsStore {
             .filter { seen.insert($0.commandSignature).inserted }
             .sorted { $0.commandSignature < $1.commandSignature }
         if let data = try? JSONEncoder().encode(cleaned) {
-            UserDefaults.standard.set(data, forKey: alwaysAllowedCommandsKey)
+            defaults.set(data, forKey: alwaysAllowedCommandsKey)
         }
     }
 
@@ -175,7 +206,7 @@ enum AgentSettingsStore {
 
     static func load() -> AgentConfiguration {
         let stored: StoredSettings
-        if let data = UserDefaults.standard.data(forKey: defaultsKey),
+        if let data = defaults.data(forKey: defaultsKey),
            let decoded = try? JSONDecoder().decode(StoredSettings.self, from: data) {
             stored = decoded
         } else {
@@ -253,7 +284,7 @@ enum AgentSettingsStore {
             imageModel: normalized.imageDescription.model
         )
         if let data = try? JSONEncoder().encode(stored) {
-            UserDefaults.standard.set(data, forKey: defaultsKey)
+            defaults.set(data, forKey: defaultsKey)
         }
         // image-description key is its own slot, never overlapped with
         // a provider library entry — safe to keep writing.
@@ -297,7 +328,7 @@ enum AgentSettingsStore {
     /// 按 baseURL 改回正确的 preset + 显示名。修复完会把结果回写一次
     /// 持久化，且只做一次（依据是 `repairAppliedKey`）。
     static func loadProviderLibrary() -> AgentProviderLibrary {
-        if let data = UserDefaults.standard.data(forKey: providerLibraryKey),
+        if let data = defaults.data(forKey: providerLibraryKey),
            let stored = try? JSONDecoder().decode(StoredLibrary.self, from: data) {
             let entries = stored.entries.map { stripped -> AgentProviderEntry in
                 var entry = stripped
@@ -310,9 +341,9 @@ enum AgentSettingsStore {
             // because once cfg.didSet no longer回灌 library, no new
             // mis-tags can show up; running it forever would risk
             // re-mapping a custom entry the user genuinely re-pointed.
-            if !UserDefaults.standard.bool(forKey: repairAppliedKey) {
+            if !defaults.bool(forKey: repairAppliedKey) {
                 library = repairLibraryProviderMismatch(library)
-                UserDefaults.standard.set(true, forKey: repairAppliedKey)
+                defaults.set(true, forKey: repairAppliedKey)
                 saveProviderLibrary(library)
                 deleteLegacyProviderAPIKey()
             }
@@ -326,7 +357,7 @@ enum AgentSettingsStore {
         // Even on first launch we mark the repair as applied — the
         // migrated entry was freshly minted from cfg, no mismatch to
         // chase.
-        UserDefaults.standard.set(true, forKey: repairAppliedKey)
+        defaults.set(true, forKey: repairAppliedKey)
         return migrated
     }
 
@@ -371,7 +402,7 @@ enum AgentSettingsStore {
         }
         let stored = StoredLibrary(entries: stripped, activeID: library.activeID)
         if let data = try? JSONEncoder().encode(stored) {
-            UserDefaults.standard.set(data, forKey: providerLibraryKey)
+            defaults.set(data, forKey: providerLibraryKey)
         }
         // Sync keychain — write each entry's key under its UUID, and
         // delete keychain rows for entries that no longer exist.
