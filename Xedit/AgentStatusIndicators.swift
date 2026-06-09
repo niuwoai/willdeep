@@ -303,3 +303,39 @@ struct PlanStatusPill: View {
         }
     }
 }
+
+// MARK: - Breathing indicator
+
+/// 持续脉动的"还在输出"信号：参考 Claude Code 输出区底部那枚跳动小图标。
+/// 一个 sparkle 在 scale 0.82↔1.18、opacity 0.55↔1.0 之间循环呼吸，
+/// 任何时候只要 agent 还在 turn 里（包括等首 token、流式 tokens、调用工具
+/// 等待返回）就显示；turn 结束 → 视图消失。所以"消失"本身就是"输出停了"
+/// 的语义信号，配合现有的 footer 时间戳和 worktree 卡片读起来很清楚。
+///
+/// 设计取舍：
+///   - 故意只一个 sparkle，避免和 `AgentMessageView` 助手头像上的
+///     sparkles（多角星）撞图；这里要单点纯几何呼吸感。
+///   - `repeatForever(autoreverses: true)` 用 SwiftUI 的隐式动画，
+///     `.onAppear` 触发一次即可；onDisappear 不用清理，view 卸载就停。
+///   - 不显示文案。"正在思考"分割线已经在等首 token 那段时间承担解释职责，
+///     真的开始流式输出后那块分割线会自动让位，呼吸 icon 接力到底。
+struct AgentBreathingIndicator: View {
+    @State private var phase: Bool = false
+
+    var body: some View {
+        Image(systemName: "sparkle")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(Color.accentColor.opacity(phase ? 1.0 : 0.55))
+            .scaleEffect(phase ? 1.18 : 0.82)
+            .frame(width: 22, height: 22)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.top, 6)
+            .padding(.bottom, 2)
+            .accessibilityLabel("Agent 正在输出")
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.05).repeatForever(autoreverses: true)) {
+                    phase.toggle()
+                }
+            }
+    }
+}

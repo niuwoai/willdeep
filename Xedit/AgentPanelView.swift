@@ -110,6 +110,13 @@ struct AgentPanelView: View {
                         AgentThinkingDivider()
                     }
 
+                    // 呼吸图标：只要 turn 还在跑就脉动，turn 结束消失。
+                    // 与 thinking divider 共存：divider 只在等首 token 时
+                    // 出现；这枚 icon 贯穿整个 turn。
+                    if appState.isAgentResponding && !appState.isCompressingAgentContext {
+                        AgentBreathingIndicator()
+                    }
+
                     if appState.isCompressingAgentContext {
                         AgentContextCompressionDivider()
                     }

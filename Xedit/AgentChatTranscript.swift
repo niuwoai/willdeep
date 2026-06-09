@@ -158,6 +158,15 @@ struct AgentChatTranscript: View {
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                     }
 
+                    // 呼吸图标：只要 turn 还在跑（包括等首 token、流式中、
+                    // 工具阻塞），底部就持续脉动；turn 结束消失 = 输出停了。
+                    // 跟 thinking divider 不互斥——前者更像"我们在等首字"的
+                    // 解释，后者是连续的"我还活着"心跳；流式开始后只剩心跳。
+                    if appState.isAgentResponding && !appState.isCompressingAgentContext {
+                        AgentBreathingIndicator()
+                            .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                    }
+
                     ForEach(appState.agentQueuedMessages) { queued in
                         QueuedMessageRow(
                             message: queued,

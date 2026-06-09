@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.57.0-rc5 - 2026-06-10
+
+### Agent 输出"还活着"呼吸图标
+
+参照 Claude Code 输出区底部那枚跳动的小图标，给 transcript 末尾加了一枚**持续呼吸的 sparkle**，作为整轮 turn 的"心跳"信号：
+
+- 新增 [AgentBreathingIndicator](Xedit/AgentStatusIndicators.swift)：一个 SF Symbol `sparkle`，scale 在 0.82↔1.18、opacity 在 0.55↔1.0 之间用 `easeInOut` 1.05 秒一个来回循环呼吸；`repeatForever(autoreverses: true)`，纯隐式动画，view 卸载就自动停，零生命周期负担。
+- 挂载点：[AgentChatTranscript](Xedit/AgentChatTranscript.swift)（agent mode 全屏视图）和 [AgentPanelView](Xedit/AgentPanelView.swift)（侧边 panel）都在底部 sentinel 之上、queued/error/patch 卡之前插入。
+- 显隐条件：`isAgentResponding && !isCompressingAgentContext`——只要 turn 在跑（等首 token、流式 tokens、工具阻塞等待返回都算）就脉动；turn 结束 / 被 stop / 压缩上下文阶段就消失。**消失本身就是"输出停了"的信号**，配合现有的 footer 时间戳读起来很清楚。
+- 跟现有 [AgentThinkingDivider](Xedit/AgentPanelView.swift) 共存而不互斥：thinking divider 只在"等首 token"那段时间出现做文案解释（"正在思考 · 12s"），呼吸 icon 贯穿整个 turn 当心跳。两者职责分明：一个解释、一个心跳。
+- 跟 [AgentStreamingCursor](Xedit/AgentMessageView.swift)（消息末尾那条 7×14 闪烁条）也不打架：cursor 跟着最新 token 走，icon 在 transcript 最底。一个跟着内容、一个稳坐底盘。
+
+### 设计取舍
+
+- 用 `sparkle`（单角星）而不是 `sparkles`（多角星）——后者已经被 [AgentMessageView](Xedit/AgentMessageView.swift) 的助手头像占用，避免两个一样的图标视觉打架。
+- 故意不带文案。"我们在等什么"这类解释职责交给 thinking divider 和 footer，icon 只承担"还在跑"的纯感官信号，越简单越像心电图。
+- 1.05 秒的呼吸节拍调过几轮：0.7 秒太焦虑像在催，1.6 秒太慢像卡死了，1.0 秒附近是"平静的活物"感。
+
 ## 1.57.0-rc4 - 2026-06-10
 
 ### Prompt-injection 防御硬化第二轮（rc2 余下 4 条 follow-up 落地）
