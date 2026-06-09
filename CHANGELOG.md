@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.56.0-rc5 - 2026-06-09
+
+- **Phase E：OpenAI Responses API 原生适配器落地，multi-provider 重构 4 个目标全部接通**。新增 [Xedit/AgentClientOpenAIResponses.swift](Xedit/AgentClientOpenAIResponses.swift)（734 行）：
+  - **endpoint**：`POST {baseURL}/responses`；鉴权和 Chat Completions 一样的 `Authorization: Bearer`，可复用同一个 OpenAI key。
+  - **body 形状**：`input` 取代 `messages`（扁平的 typed-item 列表，不是 role-grouped）；`instructions` 顶层字段携带 system prompt（不再用 `role: system` message）；tools 形状摊平 — `{type: "function", name, description, parameters}`（去掉 Chat Completions 的 `{type, function: {...}}` 外包一层）。
+  - **input items 类型**：`{type: "message", role: "user"|"assistant", content: [...]}` 装文本/图像；`{type: "function_call", call_id, name, arguments}` 装 assistant 的工具调用；`{type: "function_call_output", call_id, output}` 装 tool 角色的回复。call_id 跨流稳定，跟 OpenAI Chat 的 externalID 完全对应，不需要像 Gemini 那样合成 id。
+  - **SSE 事件解析**：跟 Anthropic 一样的 `event: <name>` + `data: <json>` 行对。覆盖 `response.output_text.delta`（文本增量）、`response.output_item.added`（声明新 function_call item）、`response.function_call_arguments.delta`（args JSON 片段）、`response.function_call_arguments.done`（最终 args 权威值，替换累积值防 UTF-8 跨块边界）、`response.reasoning.delta` + `response.reasoning_summary.delta` + `response.reasoning_summary_text.delta`（o-系列推理摘要，全部路由到既有 `.reasoningDelta` 通道）、`response.completed`（终态含 usage + status）、`response.failed` / `response.error`（流中失败）。未识别事件（含 `response.created` / `response.in_progress` 等纯 metadata）静默跳过。
+  - **finish_reason 映射**：`status: completed` 且无 function_call → `stop`；含 function_call → `tool_calls`；`incomplete_details.reason: max_output_tokens` → `length`；`content_filter` → `content_filter`。统一回 AppState 既有分支。
+- 新增 `openai-responses` preset：跟 OpenAI 同 origin（`https://api.openai.com/v1`），default `o4-mini` flash + `o3` pro（o-系列推理模型是 Responses 主用例）。`fetchModels` 复用 `/models` 端点（OpenAI 主线一套，Chat / Responses 共享）。
+- 本地用 CI 完全一致的 cmdline 跑通 280 tests + TEST SUCCEEDED。
+- 版本号 `1.56.0-rc4` → `1.56.0-rc5`（新增 Responses 适配器是 rc 内功能性补完 → rc 递增，不跨次版本）。
+- **multi-provider 协议骨架到此 4 家全通**：OpenAI Chat / Anthropic Messages / Google Gemini / OpenAI Responses 都有原生适配器；`AgentClientError.unsupportedProviderKind` 变成事实上的 dead code（保留作迁移期异常兜底）。`AgentClient` facade 内部 switch 不再有 throw 分支。
+
 ## 1.56.0-rc4 - 2026-06-09
 
 - **Phase D：Gemini generateContent 原生适配器落地**。新增 [Xedit/AgentClientGemini.swift](Xedit/AgentClientGemini.swift)（814 行）。Gemini 是四家协议里最分歧的一家：

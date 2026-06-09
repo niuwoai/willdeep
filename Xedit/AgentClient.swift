@@ -65,11 +65,8 @@ struct AgentClient {
             try await GeminiAdapter(configuration: configuration, session: session)
                 .streamChat(messages: messages, tools: tools, onEvent: onEvent)
         case .openAIResponses:
-            // OpenAI Responses adapter lands in Phase E. Until then any
-            // preset configured with that kind is unreachable; surface
-            // as a typed error so AppState can render its existing
-            // banner.
-            throw AgentClientError.unsupportedProviderKind(configuration.providerKind)
+            try await OpenAIResponsesAdapter(configuration: configuration, session: session)
+                .streamChat(messages: messages, tools: tools, onEvent: onEvent)
         }
     }
 
@@ -85,10 +82,8 @@ struct AgentClient {
             return await GeminiAdapter(configuration: configuration, session: session)
                 .judgeCommandSafety(command: command)
         case .openAIResponses:
-            // Match the pre-refactor behaviour: any failure path
-            // (unsupported provider here counts) falls back to "ask
-            // the user" rather than silently auto-running the command.
-            return false
+            return await OpenAIResponsesAdapter(configuration: configuration, session: session)
+                .judgeCommandSafety(command: command)
         }
     }
 
@@ -104,7 +99,8 @@ struct AgentClient {
             return try await GeminiAdapter(configuration: configuration, session: session)
                 .fetchModels()
         case .openAIResponses:
-            throw AgentClientError.unsupportedProviderKind(configuration.providerKind)
+            return try await OpenAIResponsesAdapter(configuration: configuration, session: session)
+                .fetchModels()
         }
     }
 

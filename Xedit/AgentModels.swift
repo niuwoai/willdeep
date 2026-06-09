@@ -870,6 +870,23 @@ struct AgentProviderPreset: Identifiable, Equatable {
             modelHints: ["gpt-", "o1", "o3", "text-embedding", "davinci"]
         ),
         AgentProviderPreset(
+            id: "openai-responses",
+            displayName: "OpenAI Responses",
+            kind: .openAIResponses,
+            // Same origin as classic OpenAI; the adapter just hits
+            // `/responses` instead of `/chat/completions`. Keep the
+            // `/v1` suffix here — `AgentNetworkSupport.endpoint` will
+            // collapse a duplicate when joining `responses`.
+            baseURL: "https://api.openai.com/v1",
+            // o-series reasoning models are the headline use case
+            // for Responses; the cheaper / smaller `o4-mini` is the
+            // sensible flash default, with `o3` as the pro tier.
+            defaultModel: "o4-mini",
+            defaultProModel: "o3",
+            supportsModelFetch: true,
+            modelHints: ["gpt-", "o1", "o3", "o4"]
+        ),
+        AgentProviderPreset(
             id: "dashscope",
             displayName: "DashScope",
             baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
