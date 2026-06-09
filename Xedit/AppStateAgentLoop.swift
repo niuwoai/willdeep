@@ -29,6 +29,7 @@
 
 import AppKit
 import Foundation
+import UserNotifications
 
 extension AppState {
 
@@ -494,9 +495,7 @@ extension AppState {
     }
 
     func alwaysAllowedCommand(for call: AgentToolCall) -> AgentAlwaysAllowedCommand? {
-        guard call.toolName == "run_command",
-              let command = call.arguments["command"]?.stringValue(),
-              let signature = AgentCommandAuthorization.signature(for: command) else {
+        guard let signature = AgentToolAuthorization.signature(for: call) else {
             return nil
         }
         return AgentAlwaysAllowedCommand(commandSignature: signature)
@@ -504,9 +503,7 @@ extension AppState {
 
     func isAgentToolCallAlwaysAllowed(toolName: String, arguments: [String: AgentJSONValue], risk: AgentToolRisk) -> Bool {
         guard risk == .write,
-              toolName == "run_command",
-              let command = arguments["command"]?.stringValue(),
-              let signature = AgentCommandAuthorization.signature(for: command) else {
+              let signature = AgentToolAuthorization.signature(toolName: toolName, arguments: arguments) else {
             return false
         }
         return agentAlwaysAllowedCommands.contains { $0.commandSignature == signature }
@@ -521,12 +518,20 @@ extension AppState {
         arguments: [String: AgentJSONValue],
         risk: AgentToolRisk
     ) async -> AgentToolApprovalSource? {
-        guard risk == .write, toolName == "run_command" else { return nil }
+        guard risk == .write else { return nil }
 
         // 1. User-pinned signatures (Always Allow button) — always honored.
+        //    Covers `run_command` command families and `call_mcp_tool`
+        //    server.tool pairs.
         if isAgentToolCallAlwaysAllowed(toolName: toolName, arguments: arguments, risk: risk) {
             return .alwaysAllowList
         }
+
+        // The remaining auto paths (SafeCommand allowlist + LLM judge)
+        // are shell-specific — only `run_command` participates. MCP tool
+        // calls always fall through to user approval unless they were
+        // explicitly pinned above.
+        guard toolName == "run_command" else { return nil }
 
         // The remaining auto paths require both a command argument and
         // the user opting in via the master toggle.
@@ -798,6 +803,17 @@ extension AppState {
                 )
                 runtime.toolCalls.append(record)
                 let recordID = record.id
+
+                // rc2: if the user isn't looking at the app when a tool
+                // call needs them (approve / confirm / answer), surface
+                // a system banner so they don't sit on a stalled turn.
+                // No-op when the app is the active foreground app or
+                // when the call auto-ran via .running.
+                AgentToolApprovalNotifier.notifyIfBackgrounded(
+                    toolName: record.toolName,
+                    arguments: record.arguments,
+                    status: initialStatus
+                )
 
                 if risk == .userInput {
                     let decision = await awaitToolDecision(for: runtime, forCallID: recordID)

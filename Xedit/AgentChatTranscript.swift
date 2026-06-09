@@ -139,7 +139,14 @@ struct AgentChatTranscript: View {
                                     }
                                 }
                                 .id(toolGroupScrollID(for: messageID))
-                                .padding(.top, 16)
+                                // rc2: bumped from 16→28 because in the TextKit
+                                // history path the assistant text view has no
+                                // intrinsic bottom inset, so the tool card sat
+                                // visually flush against the footer line
+                                // ("◷ 1m 9s ↑ 13.5k ↓ out 495"). Plus the
+                                // parent VStack's 18pt spacing the visible
+                                // gap is ~46pt — comfortably separated.
+                                .padding(.top, 28)
                                 .padding(.bottom, 6)
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                             }

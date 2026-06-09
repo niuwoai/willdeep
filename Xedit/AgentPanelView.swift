@@ -1153,11 +1153,7 @@ struct AgentToolCallCard: View {
     }
 
     private var alwaysAllowSignature: String? {
-        guard call.toolName == "run_command",
-              let command = call.arguments["command"]?.stringValue() else {
-            return nil
-        }
-        return AgentCommandAuthorization.signature(for: command)
+        AgentToolAuthorization.signature(for: call)
     }
 
     private var iconName: String {

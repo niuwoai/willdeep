@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.56.1-rc2 - 2026-06-09
+
+### 工具卡片三件套：留白、Always Allow 范围、后台通知
+
+聚焦从用户截图里报上来的三个小坑——`call_mcp_tool` 卡片视觉上贴着 AI 消息脚注（"◷ 1m 9s ↑ 13.5k ↓ out 495 ↻"），按钮里只有 Allow/Deny 没有 Always Allow，App 在后台没人提醒。
+
+- **工具组上边距 16 → 28**（[AgentChatTranscript.swift:142](Xedit/AgentChatTranscript.swift)）：在 TextKit history 路径下 assistant message view 没有内置 bottom inset，原来的 16pt 顶 padding 加上 VStack 的 18pt spacing 也只有 ~34pt 视觉间距，工具卡片观感上"压"在脚注上。bump 到 28 后 visible gap 落在 ~46pt，刚好读起来是独立一块。
+- **Always Allow 扩展到 MCP 工具**：原先 [AgentPanelView.alwaysAllowSignature](Xedit/AgentPanelView.swift) 写死 `call.toolName == "run_command"`，所以 `call_mcp_tool` 的卡片只露 Allow / Deny 两颗按钮，每次 MCP 调用都要手动 click 一次。新增 [`AgentToolAuthorization`](Xedit/AgentToolAuthorization.swift) 作为 tool-level 签名入口：`run_command` 仍走老的 `AgentCommandAuthorization`（产生 "git push" / "yarn run build" 这种命令族签名），`call_mcp_tool` 产生 `mcp:<server>:<tool>` 这种 server.tool 对签名（参数有意不进签名——用户钉的是"我信这个 MCP 工具"，不是"恰好这串 query"）。其他写权工具（file_write / file_patch / file_remove）继续 per-call 弹窗，因为它们的爆炸半径完全由 path 决定。[`autoApprovalSource`](Xedit/AppStateAgentLoop.swift) 早返回路径放开 MCP，让钉过的 server.tool 对下次直接 .alwaysAllowList 通过；SafeCommand 静态表 + LLM judge 仍只对 `run_command` 兜底。
+- **后台 / 非前台时通过通知催授权**（新文件 [AgentToolApprovalNotifier.swift](Xedit/AgentToolApprovalNotifier.swift)）：工具调用进入 `pendingApproval / awaitingConfirm / awaitingUserAnswer` 三态时，只要 `NSApp.isActive == false` 就 post 一条 UN banner。Title 区分三态（"Agent 需要授权 / 需要确认 / 在等你回答"），body 是工具的人类可读摘要——`run_command` 显示首段命令、`call_mcp_tool` 显示 `<server>.<tool>`、文件类工具显示 `<toolName> · <path>`。首次需要弹时懒申请 UN 授权（沿用 routine scheduler 的同款 `.alert/.sound` 套路），用户拒了就静默放弃后续 banner，反正卡片本身还在 UI 上。
+
 ## 1.56.1-rc1 - 2026-06-09
 
 ### Custom preset 加协议覆写 + Base URL UX 打磨
