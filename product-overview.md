@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-09 | Current version: v1.56.0-rc3
+> Last updated: 2026-06-09 | Current version: v1.56.0-rc4
 
 ## Positioning
 
@@ -15,7 +15,7 @@ VeilWriter 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。�
 - **入口** — `XeditApp.swift`：`@main App`，注入唯一 `AppState` `@StateObject` 给整个窗口树。
 - **状态枢纽** — `AppState.swift`：全局 `ObservableObject`，承载工作区根目录、tab 集、find/replace、git 状态、Agent 配置库等"窗口级"状态。rc42 完成体检阶段 3：把原 4946 行的 AppState 用 `extension` 拆成 6 个伴生文件（`AppStateAgentLoop`、`AppStateAgentSessions`、`AppStateFileOperations`、`AppStateGitStatus`、`AppStateEditorTextUtilities`、`AppStatePersistenceStores`），主类瘦身到 ~1364 行，所有伴生文件 < 1400 行；门面 + callsite 不动。**per-session Agent 状态已经在 rc2 抽到 `AgentRuntime`**：22 个原本 `@Published` 在 AppState 上的 Agent 字段（messages / patchProposals / queue / mode / plan / goal …）下沉到 `AgentRuntime`，AppState 上保留同名 get/set delegate 转发到 `activeRuntime`，并把 `activeRuntime.objectWillChange` 通过 `subscribeToActiveRuntime()` republish 到自身的 publisher 上，UI 端无感。
 - **视图层** — `ContentView.swift`（rc40 拆完，1798 行）是主窗口外壳，子视图（背景、空状态、窗口 chrome、Markdown 预览）独立成 `ContentViewBackgrounds.swift` / `EmptyStateViews.swift` / `MainWindowChrome.swift` / `MarkdownPreview.swift`。Agent 面板有两套渲染：`AgentPanelView`（侧边 panel 模式）和 `AgentModeView`（Cmd+Shift+A 进入的全屏 mode），共用 `AgentChatHistoryTextView`（TextKit 历史）和 `AgentModeComposerView`（输入区）。
-- **Agent 运行时** — `AgentRuntime.swift` 一个会话一个实例，独占自身的 messages / requestTask / toolDecisionWaiter / 模式 / 草稿等；多个 runtime 可以并发跑（后台 routine 不会抢占用户的 active session）。**`AgentClient.swift` 自 1.56 起是 facade**：根据 `configuration.providerKind` 把调用分派给具体适配器——`OpenAIChatAdapter`（OpenAI / DashScope / DeepSeek / Kimi / Moonshot / OpenRouter / SiliconFlow / AnyRouter / some.im / Custom）和 `AnthropicMessagesAdapter`（claude preset，rc2 起跑原生 /v1/messages）已落地；OpenAI Responses / Gemini generateContent 适配器在 Phase D/E 接通。共享工具（HTTP timeouts、User-Agent、URL 拼接、错误体脱敏）抽到 `AgentNetworkSupport.swift`。UI 文案集中在 `AgentProviderL10n.swift`，每个 `AgentProviderKind` 与 `AgentProviderPreset` 都有 `shortLabel` / `helpText` / `apiKeySourceHint` / `inlineNotice` 工具属性。`AgentTools.swift` 是内建工具（`search_files` / `grep_files` / `read_file` / `list_directory` / `git_status` / `run_command` / `ask_user` / skill / MCP）。`AgentSessionStore` 负责 JSON 持久化（`~/Library/Application Support/VeilWriter/agent-sessions/`），`AgentRoutineStore` + `AgentRoutineScheduler` 负责定时 routine。
+- **Agent 运行时** — `AgentRuntime.swift` 一个会话一个实例，独占自身的 messages / requestTask / toolDecisionWaiter / 模式 / 草稿等；多个 runtime 可以并发跑（后台 routine 不会抢占用户的 active session）。**`AgentClient.swift` 自 1.56 起是 facade**：根据 `configuration.providerKind` 把调用分派给具体适配器——`OpenAIChatAdapter`（OpenAI / DashScope / DeepSeek / Kimi / Moonshot / OpenRouter / SiliconFlow / AnyRouter / some.im / Custom）、`AnthropicMessagesAdapter`（claude preset，rc2 起跑原生 /v1/messages）和 `GeminiAdapter`（gemini preset，rc4 起跑原生 /v1beta/models/{model}:streamGenerateContent）已落地；OpenAI Responses 适配器在 Phase E 接通。共享工具（HTTP timeouts、User-Agent、URL 拼接、错误体脱敏）抽到 `AgentNetworkSupport.swift`。UI 文案集中在 `AgentProviderL10n.swift`，每个 `AgentProviderKind` 与 `AgentProviderPreset` 都有 `shortLabel` / `helpText` / `apiKeySourceHint` / `inlineNotice` 工具属性。`AgentTools.swift` 是内建工具（`search_files` / `grep_files` / `read_file` / `list_directory` / `git_status` / `run_command` / `ask_user` / skill / MCP）。`AgentSessionStore` 负责 JSON 持久化（`~/Library/Application Support/VeilWriter/agent-sessions/`），`AgentRoutineStore` + `AgentRoutineScheduler` 负责定时 routine。
 - **编辑器内核** — `EditorView.swift` 包 `NSTextView`，搭配 `SyntaxHighlighter.swift`（NSRegularExpression 静态缓存，viewport 高亮）/ `ScopeGuideCalculator.swift`（fold + scope guide）。
 
 ## 目录结构
@@ -60,6 +60,7 @@ VeilWriter 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。�
 | `AgentClient.swift` | ~125 | Facade：按 `providerKind` 分派给具体适配器（1.56 重构） |
 | `AgentClientOpenAIChat.swift` | ~561 | OpenAI Chat Completions 方言适配器（1.56 拆出，含 SSE/tools/image_url/usage） |
 | `AgentClientAnthropic.swift` | ~757 | Anthropic Messages 原生适配器：line-pair SSE / system 顶层 / tool_result 块 / image base64 / stop_reason 映射（1.56-rc2 新增） |
+| `AgentClientGemini.swift` | ~814 | Gemini generateContent 原生适配器：模型在 URL 路径 / x-goog-api-key header / functionCall by name + 合成 id / SCHEMA 大写枚举 / JSONValue helper（1.56-rc4 新增） |
 | `AgentNetworkSupport.swift` | ~163 | 协议无关共享工具：timeouts / User-Agent / endpoint 拼接 / 错误体 & URL 脱敏（1.56 拆出） |
 | `AgentProviderL10n.swift` | ~95 | Provider/Kind 的 UI 文案集中：shortLabel / helpText / apiKeySourceHint / inlineNotice（1.56 新增） |
 | `AgentRuntime.swift` | — | 每会话一个：messages / requestTask / toolDecisionWaiter / mode/plan/goal |

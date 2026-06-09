@@ -61,11 +61,14 @@ struct AgentClient {
         case .anthropicMessages:
             try await AnthropicMessagesAdapter(configuration: configuration, session: session)
                 .streamChat(messages: messages, tools: tools, onEvent: onEvent)
-        case .openAIResponses, .geminiGenerateContent:
-            // Adapters land in Phase D / E. Until then any preset
-            // configured with a non-Chat-non-Anthropic kind is
-            // unreachable; surface as a typed error so AppState can
-            // render its existing banner.
+        case .geminiGenerateContent:
+            try await GeminiAdapter(configuration: configuration, session: session)
+                .streamChat(messages: messages, tools: tools, onEvent: onEvent)
+        case .openAIResponses:
+            // OpenAI Responses adapter lands in Phase E. Until then any
+            // preset configured with that kind is unreachable; surface
+            // as a typed error so AppState can render its existing
+            // banner.
             throw AgentClientError.unsupportedProviderKind(configuration.providerKind)
         }
     }
@@ -78,7 +81,10 @@ struct AgentClient {
         case .anthropicMessages:
             return await AnthropicMessagesAdapter(configuration: configuration, session: session)
                 .judgeCommandSafety(command: command)
-        case .openAIResponses, .geminiGenerateContent:
+        case .geminiGenerateContent:
+            return await GeminiAdapter(configuration: configuration, session: session)
+                .judgeCommandSafety(command: command)
+        case .openAIResponses:
             // Match the pre-refactor behaviour: any failure path
             // (unsupported provider here counts) falls back to "ask
             // the user" rather than silently auto-running the command.
@@ -94,7 +100,10 @@ struct AgentClient {
         case .anthropicMessages:
             return try await AnthropicMessagesAdapter(configuration: configuration, session: session)
                 .fetchModels()
-        case .openAIResponses, .geminiGenerateContent:
+        case .geminiGenerateContent:
+            return try await GeminiAdapter(configuration: configuration, session: session)
+                .fetchModels()
+        case .openAIResponses:
             throw AgentClientError.unsupportedProviderKind(configuration.providerKind)
         }
     }

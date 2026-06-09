@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.56.0-rc4 - 2026-06-09
+
+- **Phase D：Gemini generateContent 原生适配器落地**。新增 [Xedit/AgentClientGemini.swift](Xedit/AgentClientGemini.swift)（814 行）。Gemini 是四家协议里最分歧的一家：
+  - **endpoint 形式特殊**：`POST {baseURL}/v1beta/models/{model}:streamGenerateContent?alt=sse`——模型名嵌在 URL 路径里（带 `:action` 后缀），不能直接复用 `AgentNetworkSupport.endpoint(from:suffix:)`，适配器单独用 `URLComponents` 拼。
+  - **鉴权用 header**：`x-goog-api-key: {key}`，绕开 `?key=...` query 参数路线——key 永远不出现在我们记录或上报的 URL 里。
+  - **role 映射**最复杂：我们 4 角色（system / user / assistant / tool）压成 Gemini 2 角色（user / model）。system 升到顶层 `systemInstruction`；assistant 改 role: `model`；tool 角色重写成 user 消息内嵌 `functionResponse` part。
+  - **tool call id 用 name 配对**：Gemini 不用 id 来关联 call / response，用 `name`。编码时维护 `externalID → toolName` 映射把 `tool` 消息的 toolCallID 翻回 name；解码时给 functionCall 合成稳定 id（`gemini_fcall_<index>`），让上层既有的 tool_call 模型不需要特殊路径。
+  - **schema 类型字符串大写**：`STRING` / `INTEGER` / `BOOLEAN` / `OBJECT` / `ARRAY`——不是 OpenAI / Anthropic 的小写 JSON Schema。
+  - **tools 结构**：用 `tools: [{function_declarations: [...]}]` 外面再包一层。
+  - **流式响应**：`alt=sse` 让 Gemini 返 `data: {...}` SSE 行（不是默认的 JSON 数组），每行一个 `GenerateContentResponse` 增量。`finishReason` 映射回 AppState 风：`STOP→stop` / `MAX_TOKENS→length` / `SAFETY|RECITATION→content_filter` / `MALFORMED_FUNCTION_CALL→tool_calls`。
+  - **functionCall.args** 是 free-form JSON object，本地实现了一个最小的 `JSONValue` enum 做 decode→Any 转换，再用 `JSONSerialization` 序列化成 `argumentsJSON` 字符串。`JSONValue.unwrapped` 会把整数值的 Double 重新降级到 Int（避免 `"limit": 120.0` 这种 round-trip 噪音）。
+- 新增 `gemini` preset：base URL `https://generativelanguage.googleapis.com`、kind `.geminiGenerateContent`、default model `gemini-2.5-flash` / pro `gemini-2.5-pro`。`fetchModels` 调 `/v1beta/models`，过滤出 `supportedGenerationMethods` 含 `generateContent` 的项，strip `models/` 前缀。
+- 本地用 CI 完全一致的 cmdline 跑通 280 tests + TEST SUCCEEDED 才推 rc4（参考 rc3 教训）。
+- 版本号 `1.56.0-rc3` → `1.56.0-rc4`（新增 Gemini 适配器是 rc 内功能性补完 → rc 递增，不跨次版本）。
+
 ## 1.56.0-rc3 - 2026-06-09
 
 - **修 rc2 CI 测试失败的并发 race**。rc2 上 CI 显示 `120 tests passed` 但同时 `** TEST FAILED **` 退出码 65，根因是宿主 app 启动期间 crash：

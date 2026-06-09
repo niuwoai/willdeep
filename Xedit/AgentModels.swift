@@ -917,6 +917,21 @@ struct AgentProviderPreset: Identifiable, Equatable {
             supportsModelFetch: true,
             modelHints: ["claude", "anthropic"]
         ),
+        AgentProviderPreset(
+            id: "gemini",
+            displayName: "Google Gemini",
+            kind: .geminiGenerateContent,
+            // Adapter appends `v1beta/models/{model}:streamGenerateContent`
+            // (or `:generateContent` for the non-streaming classifier).
+            // Base URL stays at the bare origin so enterprise / Vertex
+            // proxies that mount Gemini under a custom prefix can reuse
+            // the same field without us hardcoding `v1beta`.
+            baseURL: "https://generativelanguage.googleapis.com",
+            defaultModel: "gemini-2.5-flash",
+            defaultProModel: "gemini-2.5-pro",
+            supportsModelFetch: true,
+            modelHints: ["gemini"]
+        ),
         // ---- Relay stations (all OpenAI Chat-compatible) ----
         // OpenRouter aggregates 100+ models behind one API. We default
         // to a free-tier text model so the user can verify the
