@@ -610,6 +610,14 @@ enum L10n {
                 let template = String(localized: "settings.mcp.marked-untrusted", defaultValue: "Marked %@ as untrusted. Always-Allow rules will be ignored for it.")
                 return String(format: template, a1)
             }
+            static let trustLevelFull = String(localized: "settings.mcp.trust-level-full", defaultValue: "Fully trusted — all calls auto-run")
+            static let trustLevelStandard = String(localized: "settings.mcp.trust-level-standard", defaultValue: "Default — read-style calls auto-run, writes ask")
+            static let trustLevelUntrusted = String(localized: "settings.mcp.trust-level-untrusted", defaultValue: "Untrusted — every call asks")
+            static let trustLevelHelp = String(localized: "settings.mcp.trust-level-help", defaultValue: "Trust level for this server's tool calls")
+            static func markedFullyTrusted(_ a1: String) -> String {
+                let template = String(localized: "settings.mcp.marked-fully-trusted", defaultValue: "Marked %@ as fully trusted. All its calls now auto-run — writes included.")
+                return String(format: template, a1)
+            }
             static let refreshTools = String(localized: "settings.mcp.refresh-tools", defaultValue: "Refresh Tools")
             static let delete = String(localized: "settings.mcp.delete", defaultValue: "Delete")
             static func headersPrefix(_ a1: String) -> String {

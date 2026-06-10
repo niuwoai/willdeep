@@ -315,28 +315,24 @@ struct PlanStatusPill: View {
 /// 设计取舍：
 ///   - 故意只一个 sparkle，避免和 `AgentMessageView` 助手头像上的
 ///     sparkles（多角星）撞图；这里要单点纯几何呼吸感。
-///   - `repeatForever(autoreverses: true)` 用 SwiftUI 的隐式动画，
-///     `.onAppear` 触发一次即可；onDisappear 不用清理，view 卸载就停。
+///   - 动画**必须**用 `symbolEffect(.breathe)` 而不是
+///     `withAnimation(.repeatForever)` 驱动：symbol effect 由渲染
+///     服务器播放，主线程零参与；repeatForever 隐式动画则每帧产生
+///     一次 SwiftUI 图事务，曾联手 App 顶层 @FocusedObject 把空闲
+///     CPU 钉到 98%（1.58.0-rc9 修复，本文件所有脉动同此约束）。
 ///   - 不显示文案。"正在思考"分割线已经在等首 token 那段时间承担解释职责，
 ///     真的开始流式输出后那块分割线会自动让位，呼吸 icon 接力到底。
 struct AgentBreathingIndicator: View {
-    @State private var phase: Bool = false
-
     var body: some View {
         Image(systemName: "sparkle")
             .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(Color.accentColor.opacity(phase ? 1.0 : 0.55))
-            .scaleEffect(phase ? 1.18 : 0.82)
+            .foregroundStyle(Color.accentColor)
+            .symbolEffect(.breathe)
             .frame(width: 22, height: 22)
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.top, 6)
             .padding(.bottom, 2)
             .accessibilityLabel("Agent 正在输出")
-            .onAppear {
-                withAnimation(.easeInOut(duration: 1.05).repeatForever(autoreverses: true)) {
-                    phase.toggle()
-                }
-            }
     }
 }
 
@@ -366,7 +362,6 @@ struct AgentRunningTasksRow: View {
     let count: Int
     var detail: String? = nil
     var onTap: (() -> Void)? = nil
-    @State private var phase: Bool = false
 
     var body: some View {
         Group {
@@ -378,19 +373,16 @@ struct AgentRunningTasksRow: View {
             }
         }
         .accessibilityHint(detail ?? L10n.Transcript.runningTasksHelp)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 1.05).repeatForever(autoreverses: true)) {
-                phase.toggle()
-            }
-        }
     }
 
     private var rowContent: some View {
         HStack(spacing: 7) {
+            // 脉动必须走 symbolEffect（渲染服务器驱动），禁用
+            // withAnimation(.repeatForever) —— 见 AgentBreathingIndicator 注释。
             Image(systemName: "asterisk")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(Color.accentColor.opacity(phase ? 1.0 : 0.5))
-                .scaleEffect(phase ? 1.12 : 0.86)
+                .foregroundStyle(Color.accentColor)
+                .symbolEffect(.breathe)
                 .frame(width: 14, height: 14)
             Text(label)
                 .font(AgentDesign.secondaryFont)

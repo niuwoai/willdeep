@@ -192,25 +192,65 @@ struct AgentMCPSettingsView: View {
 
             Spacer()
 
-            // rc3: trust shield. Green check = trusted (default);
-            // orange filled = user-marked untrusted, in which case
-            // Always-Allow rules for this server are ignored and
-            // every call_mcp_tool falls back to per-call approval.
-            let isTrusted = !settings.untrustedServerIDs.contains(server.id)
-            Button {
-                let nowTrusted = !isTrusted
-                AgentMCPSettingsStore.setServerTrusted(id: server.id, trusted: nowTrusted)
-                refreshServers()
-                statusMessage = nowTrusted
-                    ? L10n.Settings.MCP.markedTrusted(server.name)
-                    : L10n.Settings.MCP.markedUntrusted(server.name)
+            // 1.58: three-tier trust menu. Filled green shield = fully
+            // trusted (every call auto-runs, writes included — for the
+            // user's own MCPs); outline check = standard (read-style
+            // auto, writes gate); orange filled = untrusted (everything
+            // gates, Always-Allow ignored).
+            let trustLevel: AgentMCPServerTrustLevel = settings.untrustedServerIDs.contains(server.id)
+                ? .untrusted
+                : (settings.trustedServerIDs.contains(server.id) ? .fullyTrusted : .standard)
+            Menu {
+                Picker(L10n.Settings.MCP.trustLevelHelp, selection: Binding(
+                    get: { trustLevel },
+                    set: { newLevel in
+                        AgentMCPSettingsStore.setServerTrustLevel(id: server.id, level: newLevel)
+                        refreshServers()
+                        switch newLevel {
+                        case .fullyTrusted:
+                            statusMessage = L10n.Settings.MCP.markedFullyTrusted(server.name)
+                        case .standard:
+                            statusMessage = L10n.Settings.MCP.markedTrusted(server.name)
+                        case .untrusted:
+                            statusMessage = L10n.Settings.MCP.markedUntrusted(server.name)
+                        }
+                    }
+                )) {
+                    Label(L10n.Settings.MCP.trustLevelFull, systemImage: "checkmark.shield.fill")
+                        .tag(AgentMCPServerTrustLevel.fullyTrusted)
+                    Label(L10n.Settings.MCP.trustLevelStandard, systemImage: "checkmark.shield")
+                        .tag(AgentMCPServerTrustLevel.standard)
+                    Label(L10n.Settings.MCP.trustLevelUntrusted, systemImage: "exclamationmark.shield.fill")
+                        .tag(AgentMCPServerTrustLevel.untrusted)
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
             } label: {
-                Image(systemName: isTrusted ? "checkmark.shield" : "exclamationmark.shield.fill")
-                    .foregroundStyle(isTrusted ? Color.green : Color.orange)
-                    .font(.system(size: 13, weight: .medium))
+                switch trustLevel {
+                case .fullyTrusted:
+                    Image(systemName: "checkmark.shield.fill")
+                        .foregroundStyle(Color.green)
+                        .font(.system(size: 13, weight: .medium))
+                case .standard:
+                    Image(systemName: "checkmark.shield")
+                        .foregroundStyle(Color.green)
+                        .font(.system(size: 13, weight: .medium))
+                case .untrusted:
+                    Image(systemName: "exclamationmark.shield.fill")
+                        .foregroundStyle(Color.orange)
+                        .font(.system(size: 13, weight: .medium))
+                }
             }
-            .buttonStyle(.borderless)
-            .help(isTrusted ? L10n.Settings.MCP.trustedHelp : L10n.Settings.MCP.untrustedHelp)
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help({
+                switch trustLevel {
+                case .fullyTrusted: return L10n.Settings.MCP.trustLevelFull
+                case .standard: return L10n.Settings.MCP.trustLevelStandard
+                case .untrusted: return L10n.Settings.MCP.trustLevelUntrusted
+                }
+            }())
 
             Toggle("", isOn: Binding(
                 get: { server.isEnabled },

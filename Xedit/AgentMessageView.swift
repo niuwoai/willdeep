@@ -583,21 +583,18 @@ enum AgentLongTokenBreaker {
     }
 }
 
-/// A 2x14 blinking bar that follows the assistant's last token. Pure
+/// A small blinking bar that follows the assistant's last token. Pure
 /// decoration — disappears the moment `isAgentResponding` goes false.
+/// 闪烁必须走 symbolEffect（渲染服务器驱动），禁用
+/// withAnimation(.repeatForever) —— 那会让 SwiftUI 每帧跑一次图事务，
+/// 见 AgentBreathingIndicator 注释（1.58.0-rc9 CPU 修复）。
 struct AgentStreamingCursor: View {
-    @State private var visible = true
-
     var body: some View {
-        Rectangle()
-            .fill(Color.accentColor.opacity(visible ? 0.85 : 0.15))
+        Image(systemName: "rectangle.portrait.fill")
+            .font(.system(size: 11))
+            .foregroundStyle(Color.accentColor.opacity(0.85))
+            .symbolEffect(.pulse)
             .frame(width: 7, height: 14)
-            .clipShape(RoundedRectangle(cornerRadius: 1))
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
-                    visible.toggle()
-                }
-            }
     }
 }
 

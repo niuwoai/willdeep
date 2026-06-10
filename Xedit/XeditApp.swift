@@ -10,9 +10,6 @@ import AppKit
 
 @main
 struct VeilWriterApp: App {
-    @FocusedObject private var appState: AppState?
-    @Environment(\.openWindow) private var openWindow
-
     var body: some Scene {
         WindowGroup {
             WindowRootView()
@@ -23,6 +20,28 @@ struct VeilWriterApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .commands {
+            VeilWriterCommands()
+        }
+
+        Settings {
+            EditorSettingsView()
+                .environmentObject(AppState())
+        }
+    }
+}
+
+/// 菜单命令独立成 Commands 结构体，@FocusedObject 只能放这里、
+/// 不能放回 App 顶层：@FocusedObject 订阅 AppState.objectWillChange，
+/// 挂在 App 上时每次 publish（流式期间每个 token、动画期间每帧的
+/// focused-value preference 重算）都会重跑 App.body → WindowGroup
+/// 场景重建 → 全窗口布局缓存作废 → transcript 全量 CoreText 重排，
+/// 配合常驻呼吸动画曾把主线程钉死在 98% CPU（1.58.0-rc9 修复）。
+/// 放在 Commands 里，invalidation 只波及菜单树。
+private struct VeilWriterCommands: Commands {
+    @FocusedObject private var appState: AppState?
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
             CommandGroup(replacing: .newItem) {
                 Button(L10n.Menu.fileNewWindow) {
                     chooseFolderForNewWindow()
@@ -192,12 +211,6 @@ struct VeilWriterApp: App {
                 .keyboardShortcut("w", modifiers: .command)
                 .disabled(appState?.activeTabID == nil)
             }
-        }
-
-        Settings {
-            EditorSettingsView()
-                .environmentObject(AppState())
-        }
     }
 
     private func chooseFolderForNewWindow() {

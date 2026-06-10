@@ -132,7 +132,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "call_mcp_tool",
-            description: "Call a tool on a configured MCP server with JSON arguments. Requires user approval because MCP tools may perform writes or network actions.",
+            description: "Call a tool on a configured MCP server with JSON arguments. Read-style calls (get_/list_/search_… tool names, or calls an LLM judge certifies as read-only) auto-run on trusted servers; other calls require user approval because MCP tools may perform writes or network actions.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "server", type: .string, description: "MCP server name from list_mcp_servers.", required: true),

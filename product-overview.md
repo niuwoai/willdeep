@@ -1,6 +1,6 @@
 # VeilWriter Product Overview
 
-> Last updated: 2026-06-10 | Current version: v1.58.0-rc4
+> Last updated: 2026-06-10 | Current version: v1.58.0-rc9
 
 ## Positioning
 
@@ -165,7 +165,7 @@ CLAUDE.md §2 要求 React 部分必须走 i18n，但 VeilWriter 是 SwiftUI mac
 - Configure a separate Image Understanding provider with its own API key; for text-only Agent providers such as DeepSeek, multiple attached images are first described by that image-capable provider, then the generated description is appended to the user message before the main model runs.
 - Send Agent-mode messages with Return, while Shift-Return, Option-Return, and Control-Return remain available for multiline composition.
 - Queue follow-up messages while the agent is responding — additional sends become "Queued" bubbles that auto-fire when the current turn ends. Stop the current response without dropping the queue; Clear Queue removes them explicitly.
-- Show an inline "正在思考" activity divider while the Agent is waiting for the model to start responding or to continue after tool output.
+- Show an inline "正在思考" activity divider while the Agent is waiting for the model to start responding or to continue after tool output. For providers that stream a separate reasoning trace (DashScope qwen3/qwq, DeepSeek-R1, Claude extended thinking), the divider grows a fixed two-line live preview showing the newest tail of the thinking text; the whole area — divider and preview — disappears as soon as the first answer token or tool call arrives.
 - See the estimated context-window utilization in the chat header (≈ remaining tokens / model window) based on the actual next provider request shape, including system context, normalized history, collapsed tool results, images, and tool schemas. Switch the active session to a concrete model override from a picker fed by previously fetched model IDs, while the default path follows the configured Flash/Pro route.
 - Auto-approve safe Agent shell commands: a built-in allowlist runs read-only commands (cat, head, tail, ls, find -name, git diff/log/status, rg, grep, wc, file, …) immediately. Anything else can fall through to an LLM judge (using the current chat model) that returns YES/NO; only a confirmed YES auto-runs. Destructive patterns still require typing `confirm`. Toggle via Settings > Agent > Tool approval > Auto-approve safe commands; user-pinned "Always allow" signatures continue to work alongside.
 - Reclaim context budget without losing state: a Compress button in the status bar (surfaces once usage crosses 50%) summarizes the older transcript into a single assistant message via the configured Flash model. The last few messages stay verbatim. Older `tool` results auto-collapse to a small placeholder in the request payload so long sessions don't blow up the prompt. Once usage crosses 75% the compression also runs automatically between turns — the status bar shows a `Compressing…` spinner and any queued message waits for compression to finish before dispatching.

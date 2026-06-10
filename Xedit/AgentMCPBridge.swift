@@ -127,6 +127,18 @@ struct AgentMCPServerConfig: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
+/// Per-server trust posture, three tiers:
+/// - `fullyTrusted` — user explicitly marked "this is my own MCP";
+///   every call_mcp_tool to it auto-runs, including writes.
+/// - `standard` — the default; read-style calls auto-run (name
+///   heuristic / LLM judge), writes gate on the user.
+/// - `untrusted` — everything gates, Always-Allow pins are ignored.
+enum AgentMCPServerTrustLevel: String, Codable {
+    case fullyTrusted
+    case standard
+    case untrusted
+}
+
 struct AgentMCPSettings: Codable, Equatable {
     var disabledServerIDs: [String]
     var userServers: [AgentMCPServerConfig]
@@ -139,27 +151,36 @@ struct AgentMCPSettings: Codable, Equatable {
     /// (third-party packages, experimental personal MCPs). Default is
     /// empty — all servers trusted unless explicitly demoted.
     var untrustedServerIDs: [String]
+    /// 1.58: server IDs the user promoted to "fully trusted" (their own
+    /// MCPs). Every call auto-runs, writes included. Mutually exclusive
+    /// with `untrustedServerIDs` — `normalized` resolves a conflict in
+    /// favour of untrusted (the safer reading).
+    var trustedServerIDs: [String]
 
     static let `default` = AgentMCPSettings(
         disabledServerIDs: [],
         userServers: [],
-        untrustedServerIDs: []
+        untrustedServerIDs: [],
+        trustedServerIDs: []
     )
 
     enum CodingKeys: String, CodingKey {
         case disabledServerIDs
         case userServers
         case untrustedServerIDs
+        case trustedServerIDs
     }
 
     init(
         disabledServerIDs: [String],
         userServers: [AgentMCPServerConfig],
-        untrustedServerIDs: [String] = []
+        untrustedServerIDs: [String] = [],
+        trustedServerIDs: [String] = []
     ) {
         self.disabledServerIDs = disabledServerIDs
         self.userServers = userServers
         self.untrustedServerIDs = untrustedServerIDs
+        self.trustedServerIDs = trustedServerIDs
     }
 
     init(from decoder: Decoder) throws {
@@ -170,12 +191,17 @@ struct AgentMCPSettings: Codable, Equatable {
         // decodes cleanly into the default empty set — every existing
         // server stays trusted.
         self.untrustedServerIDs = try container.decodeIfPresent([String].self, forKey: .untrustedServerIDs) ?? []
+        self.trustedServerIDs = try container.decodeIfPresent([String].self, forKey: .trustedServerIDs) ?? []
     }
 
     var normalized: AgentMCPSettings {
         var copy = self
         copy.disabledServerIDs = Array(Set(copy.disabledServerIDs.filter { !$0.isEmpty })).sorted()
         copy.untrustedServerIDs = Array(Set(copy.untrustedServerIDs.filter { !$0.isEmpty })).sorted()
+        // A server can't be both fully trusted and untrusted; if some
+        // stale write left it in both sets, untrusted wins.
+        let untrusted = Set(copy.untrustedServerIDs)
+        copy.trustedServerIDs = Array(Set(copy.trustedServerIDs.filter { !$0.isEmpty && !untrusted.contains($0) })).sorted()
         copy.userServers = copy.userServers.map {
             var server = $0.normalized
             server.source = .user
@@ -189,8 +215,21 @@ struct AgentMCPSettings: Codable, Equatable {
 enum AgentMCPSettingsStore {
     private static let settingsKey = "im.some.veilwriter.agentMCPSettings.v1"
 
+    /// Test-only override, mirroring AgentSettingsStore: redirect every
+    /// read / write into a sandbox suite so unit tests can't mutate the
+    /// developer's real MCP trust state.
+    nonisolated(unsafe) private static var testDefaultsOverride: UserDefaults?
+
+    static func _setTestDefaultsOverride(_ defaults: UserDefaults?) {
+        testDefaultsOverride = defaults
+    }
+
+    private static var defaults: UserDefaults {
+        testDefaultsOverride ?? .standard
+    }
+
     static func load() -> AgentMCPSettings {
-        guard let data = UserDefaults.standard.data(forKey: settingsKey),
+        guard let data = defaults.data(forKey: settingsKey),
               let settings = try? JSONDecoder().decode(AgentMCPSettings.self, from: data) else {
             return .default
         }
@@ -199,7 +238,7 @@ enum AgentMCPSettingsStore {
 
     static func save(_ settings: AgentMCPSettings) {
         guard let data = try? JSONEncoder().encode(settings.normalized) else { return }
-        UserDefaults.standard.set(data, forKey: settingsKey)
+        defaults.set(data, forKey: settingsKey)
     }
 
     static func setServerEnabled(id: String, enabled: Bool) {
@@ -218,15 +257,53 @@ enum AgentMCPSettingsStore {
     /// Untrusted means the server still runs but its tools no longer
     /// participate in Always-Allow auto-approval — every call gates.
     static func setServerTrusted(id: String, trusted: Bool) {
+        setServerTrustLevel(id: id, level: trusted ? .standard : .untrusted)
+    }
+
+    /// 1.58: set the full three-tier trust posture for a server. The
+    /// two id sets are kept mutually exclusive here AND re-resolved in
+    /// `normalized` (untrusted wins) in case of stale persisted data.
+    static func setServerTrustLevel(id: String, level: AgentMCPServerTrustLevel) {
         var settings = load()
         var untrusted = Set(settings.untrustedServerIDs)
-        if trusted {
-            untrusted.remove(id)
-        } else {
-            untrusted.insert(id)
+        var trusted = Set(settings.trustedServerIDs)
+        untrusted.remove(id)
+        trusted.remove(id)
+        switch level {
+        case .fullyTrusted: trusted.insert(id)
+        case .standard: break
+        case .untrusted: untrusted.insert(id)
         }
         settings.untrustedServerIDs = Array(untrusted)
+        settings.trustedServerIDs = Array(trusted)
         save(settings)
+    }
+
+    static func trustLevel(id: String) -> AgentMCPServerTrustLevel {
+        let settings = load()
+        if settings.untrustedServerIDs.contains(id) { return .untrusted }
+        if settings.trustedServerIDs.contains(id) { return .fullyTrusted }
+        return .standard
+    }
+
+    /// Name-keyed trust level for the auto-approve path (the MCP wire
+    /// shape carries server *names*). When several configured servers
+    /// share a name, the safest reading wins: any untrusted match →
+    /// untrusted; otherwise fullyTrusted only if a match says so.
+    static func trustLevel(name: String) -> AgentMCPServerTrustLevel {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .standard }
+        let lowered = trimmed.lowercased()
+        let settings = load()
+        let untrustedIDs = Set(settings.untrustedServerIDs)
+        let trustedIDs = Set(settings.trustedServerIDs)
+        var sawFullyTrusted = false
+        for server in AgentMCPServerDirectory.list(includeDisabled: true)
+        where server.name.lowercased() == lowered {
+            if untrustedIDs.contains(server.id) { return .untrusted }
+            if trustedIDs.contains(server.id) { sawFullyTrusted = true }
+        }
+        return sawFullyTrusted ? .fullyTrusted : .standard
     }
 
     /// rc3: check whether a given server id is trusted. Cheap; used by

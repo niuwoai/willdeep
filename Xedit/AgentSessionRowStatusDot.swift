@@ -43,25 +43,16 @@ private struct ObservedDot: View {
     @ObservedObject var runtime: AgentRuntime
     let isActive: Bool
 
-    @State private var pulse = false
-
     var body: some View {
-        Circle()
-            .fill(color)
+        // 脉动必须走 symbolEffect（渲染服务器驱动），禁用
+        // withAnimation(.repeatForever)/.animation(.repeatForever) ——
+        // 那会让 SwiftUI 每帧跑一次图事务，N 个会话行 × 每帧叠加，
+        // 见 AgentBreathingIndicator 注释（1.58.0-rc9 CPU 修复）。
+        Image(systemName: "circle.fill")
+            .font(.system(size: 5))
+            .foregroundStyle(color)
+            .symbolEffect(.breathe, isActive: shouldPulse)
             .frame(width: 5, height: 5)
-            .scaleEffect(shouldPulse && pulse ? 1.6 : 1.0)
-            .animation(
-                shouldPulse
-                    ? .easeInOut(duration: 0.85).repeatForever(autoreverses: true)
-                    : .default,
-                value: pulse
-            )
-            .onAppear {
-                if shouldPulse { pulse = true }
-            }
-            .onChange(of: shouldPulse) { _, newValue in
-                pulse = newValue
-            }
     }
 
     private var shouldPulse: Bool {

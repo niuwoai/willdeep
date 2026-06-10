@@ -295,10 +295,25 @@ extension AppState {
     /// the actual Agent request shape instead of only counting visible chat
     /// bubbles, so system context, tool schemas, collapsed tool history, and
     /// provider-ready message normalization are all represented.
+    ///
+    /// 带 memo：消息条数 / 会话不变时 1 秒内直接回缓存值——这是个给
+    /// 状态栏圆环看的估算值，不需要逐 token 精确；全量重算的成本见
+    /// `agentTokenEstimateCache` 的注释。
     var estimatedAgentTokens: Int {
+        let now = Date()
+        let messageCount = agentMessages.count
+        let sessionID = activeAgentSessionID
+        if let cached = agentTokenEstimateCache,
+           cached.messageCount == messageCount,
+           cached.sessionID == sessionID,
+           now.timeIntervalSince(cached.at) < 1.0 {
+            return cached.value
+        }
         let requestMessages = estimatedAgentRequestMessages
         let tools = AgentToolRegistry.all
-        return Self.estimateAgentTokens(messages: requestMessages, tools: tools)
+        let value = Self.estimateAgentTokens(messages: requestMessages, tools: tools)
+        agentTokenEstimateCache = (messageCount, sessionID, value, now)
+        return value
     }
 
     var activeAgentModelID: String {
@@ -553,18 +568,52 @@ extension AppState {
             if toolName == "call_mcp_tool",
                let server = arguments["server"]?.stringValue(),
                !AgentMCPSettingsStore.isServerTrusted(name: server) {
-                // Fall through to per-call gate (return nil at the very
-                // bottom, after the run_command-only auto paths which
-                // we don't enter for call_mcp_tool).
+                // Untrusted server: fall through. The MCP auto block
+                // below re-checks trust and returns nil, so the call
+                // lands on the per-call gate.
             } else {
                 return .alwaysAllowList
             }
         }
 
+        // MCP tool calls on servers the user has NOT marked untrusted
+        // get the same two-tier auto-approval as shell commands:
+        //   1. read-looking tool names (get_/list_/search_/…) pass the
+        //      static heuristic at zero cost,
+        //   2. everything else goes to the LLM judge with the call
+        //      rendered as a pseudo command line.
+        // Both tiers sit behind the same master toggle as the shell
+        // paths; untrusted servers always fall back to the user.
+        if toolName == "call_mcp_tool" {
+            guard let server = arguments["server"]?.stringValue(),
+                  let tool = arguments["tool"]?.stringValue() else {
+                return nil
+            }
+            switch AgentMCPSettingsStore.trustLevel(name: server) {
+            case .untrusted:
+                return nil
+            case .fullyTrusted:
+                // Explicit per-server promotion ("my own MCP") — like an
+                // Always-Allow pin, it doesn't sit behind the safe-command
+                // master toggle.
+                return .trustedServer
+            case .standard:
+                guard autoApproveSafeCommands else { return nil }
+                if AgentToolAuthorization.mcpToolNameLooksReadOnly(tool) {
+                    return .staticAllowlist
+                }
+                let pseudoCommand = AgentToolAuthorization.mcpJudgePseudoCommand(
+                    server: server,
+                    tool: tool,
+                    argumentsJSON: arguments["arguments_json"]?.stringValue() ?? "{}"
+                )
+                let client = AgentClient(configuration: configurationForSafetyJudge())
+                return await client.judgeCommandSafety(command: pseudoCommand) ? .llmJudge : nil
+            }
+        }
+
         // The remaining auto paths (SafeCommand allowlist + LLM judge)
-        // are shell-specific — only `run_command` participates. MCP tool
-        // calls always fall through to user approval unless they were
-        // explicitly pinned above.
+        // are shell-specific — only `run_command` participates.
         guard toolName == "run_command" else { return nil }
 
         // The remaining auto paths require both a command argument and

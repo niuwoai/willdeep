@@ -1,5 +1,90 @@
 # Changelog
 
+## 1.58.0-rc9 - 2026-06-10
+
+### 修复：空闲时主线程 98% CPU（呼吸动画 + @FocusedObject 全场景重建）
+
+用 `sample` 对运行中的进程抽样定位（5 秒 3641 个主线程样本，3006 个落在 SwiftUI 布局刷新里）。三个因素叠加把主线程钉死：
+
+1. **App 顶层 `@FocusedObject var appState`**（[XeditApp.swift](Xedit/XeditApp.swift)）订阅了整个 `AppState.objectWillChange`，而 `.focusedSceneObject` 偏好值会随每帧动画事务重算 → 根 `App.body` 每帧重跑 → WindowGroup 场景重建 → 全窗口布局缓存（`ViewSizeCache`）作废 → transcript 全量 CoreText 重排。**修复**：菜单命令拆进独立的 `VeilWriterCommands: Commands`，`@FocusedObject` 移到其中——publish 只波及菜单树，不再触碰场景内容。
+2. **常驻 `repeatForever` 隐式动画**提供了每帧驱动源：呼吸 icon（rc5 加入，整个 turn 期间常驻——包括等工具审批的半小时）、运行任务行星号、流式光标、侧栏会话状态点。**修复**：全部换成 `symbolEffect(.breathe)` / `.pulse`（[AgentStatusIndicators.swift](Xedit/AgentStatusIndicators.swift)、[AgentMessageView.swift](Xedit/AgentMessageView.swift)、[AgentSessionRowStatusDot.swift](Xedit/AgentSessionRowStatusDot.swift)）——SF Symbol effect 由渲染服务器播放，主线程零参与。流式光标从 `Rectangle` 改为 `rectangle.portrait.fill` symbol（视觉等价）。
+3. **`estimatedAgentTokens` 每次读取全量重算**（重建完整 system prompt 含磁盘 IO、collapse 工具历史、providerReadyMessages × 2、逐字符扫描全部消息），而状态栏 `ContextRingIndicator`/`CompressButton` 每次 body 求值要读 6+ 次。**修复**：加 memo（[AppStateAgentLoop.swift](Xedit/AppStateAgentLoop.swift)）——消息条数或会话变化立即失效，流式追加中最多每秒重算一次。
+
+防回归约束已写进各处代码注释：脉动/闪烁动画一律 `symbolEffect`，禁用 `withAnimation(.repeatForever)`；`@FocusedObject` 禁止放回 App 顶层。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.58.0-rc9`。
+
+## 1.58.0-rc8 - 2026-06-10
+
+### 侧栏工作区标题行 hover 显示「+」新建会话按钮
+
+会话侧栏的工作区分组头（文件夹图标 + 工作区名）此前只有右键菜单里藏着「在此工作区新建会话」，可发现性差。现在鼠标悬停到标题行时，行尾浮现 `plus.circle` 按钮（[AgentSessionsSidebar.swift](Xedit/AgentSessionsSidebar.swift)），点击即在该 workspace 下开新会话——与会话行 hover 显示 pin/归档按钮同一套"瞄准才出现"交互模式。按钮带独立命中区域与 tooltip；标题排版不受 hover 出现/消失影响（按钮占用的是行尾 Spacer 空间）。右键菜单入口保留。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.58.0-rc8`。
+
+## 1.58.0-rc7 - 2026-06-10
+
+### MCP 三档信任：可把自己的 MCP 标成「完全可信」，所有调用直接放行
+
+rc5 解决了"读类调用不再弹审批"，这一版补上用户自己的 MCP 场景：自己写的 server 连写操作都不需要审批。MCP 管理界面的信任盾牌从两档升级为三档菜单（[AgentMCPSettingsView.swift](Xedit/AgentMCPSettingsView.swift)）：
+
+| 档位 | 图标 | 行为 |
+| --- | --- | --- |
+| **完全可信**（新增） | 实心绿盾 | 该 server 的**所有**调用自动放行，写操作也不弹；transcript 卡片带 TRUSTED 徽章 |
+| 默认 | 空心绿盾 | rc5 行为：读类自动（AUTO / AI OK），写类弹审批 |
+| 不受信 | 橙色叹号盾 | 全部逐次审批，Always Allow 失效 |
+
+实现（[AgentMCPBridge.swift](Xedit/AgentMCPBridge.swift)）：
+
+- `AgentMCPSettings` 新增 `trustedServerIDs`，与 `untrustedServerIDs` 互斥——`normalized` 解决脏数据冲突时**不受信胜出**（更安全的读法）；旧版 settings JSON 无此键照常解码。
+- 新增 `AgentMCPServerTrustLevel`（fullyTrusted / standard / untrusted）+ `setServerTrustLevel` / `trustLevel(id:)` / `trustLevel(name:)`；同名多 server 时任一不受信即不受信。
+- 完全可信的语义对齐 Always Allow pin：是用户显式逐 server 授权，**不受** `autoApproveSafeCommands` 主开关约束。
+- `AgentMCPSettingsStore` 补上与 `AgentSettingsStore` 同款的 `_setTestDefaultsOverride` 测试沙箱，单测不再可能污染开发机的真实信任配置。
+
+回归保护：新增互斥归一化 + 旧 JSON 兼容、完全可信放行写调用 + 降级回人工两组单测（store 走沙箱 UserDefaults suite）。XeditTests 全量 345 项通过。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.58.0-rc7`。
+
+## 1.58.0-rc6 - 2026-06-10
+
+### 「正在思考」分割线下新增两行实时思考预览
+
+此前等待模型响应时只有一条「正在思考 · 7m 10s」分割线，模型在想什么完全是黑盒。现在对会单独流式输出 reasoning 轨迹的服务商（DashScope qwen3/qwq、DeepSeek-R1、Claude extended thinking 等），分割线下方挂一块**固定两行高度**的实时预览，流式滚动显示思考文本的最新尾部：
+
+- `AppState.agentLiveThinkingPreview`（[AppState.swift](Xedit/AppState.swift)）：生命周期与思考指示器完全一致——只在占位 assistant 消息累积 `reasoningContent`、且正文/工具调用尚未到达的窗口内有值。首个正文 token 一到，**分割线连同预览整体消失**，不在 transcript 里留痕。
+- 尾部截断走 `agentThinkingPreviewTail`：换行折叠成空格、只留末尾 160 字符，配合视图层 `truncationMode(.head)` 兜底，窗口再窄也保证看到的是最新内容；`lineLimit(2, reservesSpace: true)` 把高度钉死在两行，流式追加时 transcript 不抖动。
+- 不输出 reasoning 流的服务商（未开 thinking 的 Claude 等）行为不变，分割线保持纯标签样式。
+- 两个 transcript 实现（SwiftUI 路径 + TextKit 路径）共用 `AgentThinkingDivider`（[AgentPanelView.swift](Xedit/AgentPanelView.swift)），一处改动两处生效。
+
+回归保护：新增预览生命周期（无 reasoning → 流式中 → 正文到达 → turn 结束）与尾部截断两组单测。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.58.0-rc6`。
+
+## 1.58.0-rc5 - 2026-06-10
+
+### MCP 调用接入自动通过机制 —— 受信 server 的读类调用不再逐次弹审批
+
+此前静态白名单 + LLM 判官两条自动放行路径只认 `run_command`，MCP 调用除非逐个 Always Allow 否则每次都弹——"自动通过机制"对 MCP 形同虚设，用户点确认点到手酸。现在 `call_mcp_tool` 获得同款两级自动放行（[AppStateAgentLoop.swift](Xedit/AppStateAgentLoop.swift)）：
+
+1. **静态启发（零成本零延迟）**：工具名是 MCP 业界约定的读语义前缀（`get_` / `list_` / `search_` / `read_` / `fetch_` / `query_` 等 16 个前缀 + `ping`/`status` 等独立词）→ 直接放行，badge 显示 AUTO。
+2. **LLM 判官兜底**：其余调用渲染成 `mcp-tool-call server=… tool=… arguments=…` 伪命令行，走现有的注入防御判官管道（fenced-data + `<verdict>` 结构化裁决，Flash 模型，存疑即 NO）→ 判读放行 badge 显示 AI OK，判写回到人工。
+
+**安全边界不动摇**：两级都只对**未被标记为不受信**的 server 生效，且都在 `autoApproveSafeCommands` 主开关之下——开关一关全部回到人工；不受信 server 永远逐次审批。命名欺骗（恶意 server 把破坏性工具叫 `get_xxx`）正是 per-server 信任标记要管的事。
+
+回归保护：新增读语义启发分类、受信 server 读类放行 + 主开关关闭回退两组单测；测试经 `KeychainSandbox` 隔离 UserDefaults 写入。XeditTests 全量 341 项通过。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.58.0-rc5`。
+
 ## 1.58.0-rc4 - 2026-06-10
 
 ### Goal 模式：write 层工具自动放行

@@ -157,6 +157,9 @@ enum AgentToolApprovalSource: String, Equatable, Codable {
     case staticAllowlist
     case llmJudge
     case goalMode
+    /// The user marked this MCP server as fully trusted ("my own MCP")
+    /// in MCP settings — every call to it auto-runs, writes included.
+    case trustedServer
 }
 
 struct AgentToolCall: Identifiable, Equatable {

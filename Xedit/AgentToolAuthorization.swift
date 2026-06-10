@@ -170,4 +170,35 @@ enum AgentToolAuthorization {
     static func signature(for call: AgentToolCall) -> String? {
         signature(toolName: call.toolName, arguments: call.arguments)
     }
+
+    // MARK: - MCP read-only heuristics
+
+    /// Tool-name prefixes that, by near-universal MCP convention, name
+    /// read/query operations. Only consulted for servers the user has
+    /// NOT marked untrusted — a hostile server could name a destructive
+    /// tool `get_pwned`, which is exactly what the per-server trust
+    /// flag is for.
+    private static let mcpReadOnlyToolNamePrefixes = [
+        "get_", "list_", "read_", "search_", "query_", "fetch_",
+        "describe_", "show_", "find_", "count_", "preview_", "lookup_",
+        "check_", "view_", "inspect_", "browse_",
+    ]
+
+    private static let mcpReadOnlyToolNames: Set<String> = [
+        "ping", "status", "info", "version", "health", "whoami", "help",
+    ]
+
+    static func mcpToolNameLooksReadOnly(_ tool: String) -> Bool {
+        let normalized = tool.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return false }
+        if mcpReadOnlyToolNames.contains(normalized) { return true }
+        return mcpReadOnlyToolNamePrefixes.contains { normalized.hasPrefix($0) }
+    }
+
+    /// Render an MCP call as a pseudo command line for the LLM safety
+    /// judge (same fenced-data / verdict-tag pipeline the shell judge
+    /// uses — see AgentInjectionDefense).
+    static func mcpJudgePseudoCommand(server: String, tool: String, argumentsJSON: String) -> String {
+        "mcp-tool-call server=\(server) tool=\(tool) arguments=\(argumentsJSON)"
+    }
 }

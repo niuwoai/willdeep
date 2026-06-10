@@ -855,6 +855,44 @@ struct VeilWriterTests {
         #expect(appState.shouldShowAgentThinkingIndicator == false)
     }
 
+    @MainActor
+    @Test("live thinking preview tracks streaming reasoning and dies with the indicator")
+    func testAgentLiveThinkingPreview() {
+        let appState = AppState()
+        appState.startNewAgentSession()
+        appState.isAgentResponding = true
+        appState.agentMessages = [AgentMessage(role: .user, content: "查一下这个 bug")]
+        // 占位 assistant 还没到 / reasoning 还没流出来 → 无预览
+        #expect(appState.agentLiveThinkingPreview == nil)
+
+        appState.agentMessages.append(
+            AgentMessage(role: .assistant, content: "", reasoningContent: "先读取文件，再分析调用链")
+        )
+        #expect(appState.agentLiveThinkingPreview == "先读取文件，再分析调用链")
+
+        // 首个正文 token 到达 → 指示器整体消失，预览跟着消失
+        appState.agentMessages[1].content = "好的"
+        #expect(appState.agentLiveThinkingPreview == nil)
+
+        // turn 结束后即使 reasoning 还挂在消息上也不再预览
+        appState.agentMessages[1].content = ""
+        appState.isAgentResponding = false
+        #expect(appState.agentLiveThinkingPreview == nil)
+    }
+
+    @Test("thinking preview tail collapses whitespace and keeps the newest characters")
+    func testAgentThinkingPreviewTail() {
+        // 短文本原样返回，只折叠换行
+        #expect(AppState.agentThinkingPreviewTail("第一步\n第二步") == "第一步 第二步")
+
+        // 超长 trace 截尾：保留最新内容，前置省略号
+        let long = (1...100).map { "片段\($0)" }.joined(separator: "\n")
+        let tail = AppState.agentThinkingPreviewTail(long)
+        #expect(tail.hasPrefix("…"))
+        #expect(tail.hasSuffix("片段100"))
+        #expect(tail.count <= 161)
+    }
+
     @Test("command palette matcher supports fuzzy and keyword lookup")
     func testCommandPaletteMatcher() {
         let command = PaletteCommand(
@@ -2399,6 +2437,124 @@ struct VeilWriterTests {
         #expect(descriptor?.parameters.first(where: { $0.name == "prompt" })?.required == true)
         #expect(descriptor?.parameters.contains(where: { $0.name == "run_in_background" }) == true)
         #expect(descriptor?.parameters.contains(where: { $0.name == "model" }) == true)
+    }
+
+    @Test("MCP read-style tool names pass the static heuristic")
+    func testMCPReadOnlyToolNameHeuristic() {
+        #expect(AgentToolAuthorization.mcpToolNameLooksReadOnly("get_issue"))
+        #expect(AgentToolAuthorization.mcpToolNameLooksReadOnly("list_repos"))
+        #expect(AgentToolAuthorization.mcpToolNameLooksReadOnly("search_code"))
+        #expect(AgentToolAuthorization.mcpToolNameLooksReadOnly("Fetch_Page"))
+        #expect(AgentToolAuthorization.mcpToolNameLooksReadOnly("ping"))
+
+        #expect(!AgentToolAuthorization.mcpToolNameLooksReadOnly("create_issue"))
+        #expect(!AgentToolAuthorization.mcpToolNameLooksReadOnly("delete_branch"))
+        #expect(!AgentToolAuthorization.mcpToolNameLooksReadOnly("update_file"))
+        #expect(!AgentToolAuthorization.mcpToolNameLooksReadOnly("getdata"))
+        #expect(!AgentToolAuthorization.mcpToolNameLooksReadOnly(""))
+    }
+
+    @Test("trusted-server MCP calls with read-style names auto-approve")
+    @MainActor
+    func testMCPAutoApprovalForReadStyleTools() async {
+        // autoApproveSafeCommands 的 didSet 会写 UserDefaults——沙箱化,
+        // 防止测试翻转开发机上的真实设置。
+        let sandbox = KeychainSandbox()
+        defer { withExtendedLifetime(sandbox) {} }
+        let appState = AppState()
+        appState.autoApproveSafeCommands = true
+
+        let approved = await appState.autoApprovalSource(
+            toolName: "call_mcp_tool",
+            arguments: [
+                "server": .string("github"),
+                "tool": .string("list_issues"),
+                "arguments_json": .string(#"{"repo":"a/b"}"#),
+            ],
+            risk: .write
+        )
+        #expect(approved == .staticAllowlist)
+
+        // 主开关关掉 → 一切回到人工。
+        appState.autoApproveSafeCommands = false
+        let gated = await appState.autoApprovalSource(
+            toolName: "call_mcp_tool",
+            arguments: [
+                "server": .string("github"),
+                "tool": .string("list_issues"),
+            ],
+            risk: .write
+        )
+        #expect(gated == nil)
+    }
+
+    @Test("MCP settings keep trusted and untrusted sets mutually exclusive")
+    func testMCPTrustSetsAreMutuallyExclusive() throws {
+        // 同一 id 同时出现在两个集合 → normalized 后 untrusted 胜出。
+        let conflicted = AgentMCPSettings(
+            disabledServerIDs: [],
+            userServers: [],
+            untrustedServerIDs: ["user:x"],
+            trustedServerIDs: ["user:x", "user:y"]
+        ).normalized
+        #expect(conflicted.untrustedServerIDs == ["user:x"])
+        #expect(conflicted.trustedServerIDs == ["user:y"])
+
+        // 旧版 settings JSON（无 trustedServerIDs 键）正常解码为空集。
+        let legacyJSON = #"{"disabledServerIDs":[],"userServers":[],"untrustedServerIDs":["user:old"]}"#
+        let decoded = try JSONDecoder().decode(AgentMCPSettings.self, from: Data(legacyJSON.utf8))
+        #expect(decoded.trustedServerIDs.isEmpty)
+        #expect(decoded.untrustedServerIDs == ["user:old"])
+    }
+
+    @Test("MCP fully-trusted servers auto-approve every call")
+    @MainActor
+    func testMCPFullyTrustedServerAutoApproval() async {
+        let suiteName = "im.some.veilwriter.mcp.test.\(UUID().uuidString)"
+        guard let sandbox = UserDefaults(suiteName: suiteName) else {
+            Issue.record("cannot allocate sandbox defaults suite")
+            return
+        }
+        sandbox.removePersistentDomain(forName: suiteName)
+        AgentMCPSettingsStore._setTestDefaultsOverride(sandbox)
+        defer {
+            sandbox.removePersistentDomain(forName: suiteName)
+            AgentMCPSettingsStore._setTestDefaultsOverride(nil)
+        }
+
+        let serverName = "veilwriter-test-own-mcp"
+        AgentMCPSettingsStore.upsertUserServer(AgentMCPServerConfig(
+            name: serverName,
+            source: .user,
+            transport: .stdio,
+            command: "/usr/bin/true"
+        ))
+        AgentMCPSettingsStore.setServerTrustLevel(id: "user:\(serverName)", level: .fullyTrusted)
+        #expect(AgentMCPSettingsStore.trustLevel(name: serverName) == .fullyTrusted)
+
+        // 完全可信:写类工具名也自动放行,且不依赖主开关。
+        let appState = AppState()
+        let approval = await appState.autoApprovalSource(
+            toolName: "call_mcp_tool",
+            arguments: [
+                "server": .string(serverName),
+                "tool": .string("create_record"),
+            ],
+            risk: .write
+        )
+        #expect(approval == .trustedServer)
+
+        // 降回不受信:一切回到人工。
+        AgentMCPSettingsStore.setServerTrustLevel(id: "user:\(serverName)", level: .untrusted)
+        let gated = await appState.autoApprovalSource(
+            toolName: "call_mcp_tool",
+            arguments: [
+                "server": .string(serverName),
+                "tool": .string("list_records"),
+            ],
+            risk: .write
+        )
+        #expect(gated == nil)
     }
 
     @Test("goal mode auto-approves write tools but never danger tier")

@@ -276,6 +276,14 @@ final class AppState: ObservableObject {
     /// the same provider. Not @Published — UI doesn't need to react.
     var titleSummarizationsInFlight: Set<AgentSession.ID> = []
 
+    /// `estimatedAgentTokens`（AppStateAgentLoop.swift）的 memo。该估算
+    /// 要重建完整请求（含 system prompt 的项目规则磁盘读取）并逐字符
+    /// 扫描全部消息，而状态栏的 ContextRingIndicator / CompressButton
+    /// 每次 body 求值会读它 6+ 次——不缓存的话流式期间每个 token 都
+    /// 全量重算（1.58.0-rc9 CPU 修复的一环）。消息条数或会话切换立即
+    /// 失效；同条数下（流式追加中）最多每秒重算一次。Not @Published。
+    var agentTokenEstimateCache: (messageCount: Int, sessionID: AgentSession.ID?, value: Int, at: Date)?
+
     /// The runtime backing the currently-selected session, or nil if
     /// no session is selected (or its session was deleted underneath
     /// us). Computed so it always reflects `activeAgentSessionID`.
@@ -623,6 +631,32 @@ final class AppState: ObservableObject {
         case .system:
             return false
         }
+    }
+
+    /// 「正在思考」分割线下方的两行实时预览：当前流式 assistant 占位
+    /// 消息正在累积的 reasoningContent。生命周期与指示器完全一致——
+    /// 首个正文 token / 工具调用到达后指示器消失，预览随之消失。
+    /// 不单独输出 reasoning 流的服务商（未开 thinking 的 Claude 等）
+    /// 返回 nil，分割线退回纯标签样式。
+    var agentLiveThinkingPreview: String? {
+        guard shouldShowAgentThinkingIndicator,
+              let lastMessage = agentMessages.last,
+              lastMessage.role == .assistant,
+              let reasoning = lastMessage.reasoningContent,
+              !reasoning.isEmpty else { return nil }
+        return reasoning
+    }
+
+    /// 把完整 reasoning 轨迹压成适合两行展示的尾巴：换行折叠成空格、
+    /// 只留末尾 `maxLength` 个字符。截断时前置省略号示意"前面还有"。
+    /// 上限按两行 caption 字号的容量取值，配合视图层的
+    /// `truncationMode(.head)` 兜底——窗口再窄也保证看到的是最新内容。
+    nonisolated static func agentThinkingPreviewTail(_ raw: String, maxLength: Int = 160) -> String {
+        let collapsed = raw
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        guard collapsed.count > maxLength else { return collapsed }
+        return "…" + collapsed.suffix(maxLength)
     }
 
     /// Claude Code 式「✳ N running task」计数：正在执行的前台工具调用

@@ -513,21 +513,39 @@ struct AgentThinkingDivider: View {
     @EnvironmentObject var appState: AppState
 
     var body: some View {
-        // When we have a turn start timestamp, render a live ticker so the
-        // user can see the seconds advance — proof that the request hasn't
-        // silently hung. When we don't (e.g. legacy code paths that don't
-        // stamp the start), fall back to the static label.
-        if let startedAt = appState.agentTurnStartedAt {
-            TimelineView(.periodic(from: startedAt, by: 1)) { context in
-                AgentInlineStatusDivider(
-                    text: "正在思考",
-                    trailing: formatThinkingElapsed(
-                        context.date.timeIntervalSince(startedAt)
+        VStack(spacing: 0) {
+            // When we have a turn start timestamp, render a live ticker so the
+            // user can see the seconds advance — proof that the request hasn't
+            // silently hung. When we don't (e.g. legacy code paths that don't
+            // stamp the start), fall back to the static label.
+            if let startedAt = appState.agentTurnStartedAt {
+                TimelineView(.periodic(from: startedAt, by: 1)) { context in
+                    AgentInlineStatusDivider(
+                        text: "正在思考",
+                        trailing: formatThinkingElapsed(
+                            context.date.timeIntervalSince(startedAt)
+                        )
                     )
-                )
+                }
+            } else {
+                AgentInlineStatusDivider(text: "正在思考")
             }
-        } else {
-            AgentInlineStatusDivider(text: "正在思考")
+
+            // 两行实时预览：reasoning 流到哪里就显示到哪里的尾部。
+            // reservesSpace 把高度钉死在两行 —— 流式追加时整个
+            // transcript 不会跟着抖。思考结束（首个正文 token 到达）
+            // 整个 divider 连预览一起消失，由 shouldShow… 统一控制。
+            if let reasoning = appState.agentLiveThinkingPreview {
+                Text(AppState.agentThinkingPreviewTail(reasoning))
+                    .font(.caption)
+                    .foregroundStyle(.secondary.opacity(0.72))
+                    .lineLimit(2, reservesSpace: true)
+                    .truncationMode(.head)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 2)
+                    .padding(.bottom, 4)
+                    .accessibilityLabel("思考内容实时预览")
+            }
         }
     }
 }
@@ -1521,6 +1539,7 @@ struct AgentToolCallCard: View {
         case .staticAllowlist: return "AUTO"
         case .llmJudge: return "AI OK"
         case .goalMode: return "GOAL"
+        case .trustedServer: return "TRUSTED"
         }
     }
 
@@ -1529,9 +1548,10 @@ struct AgentToolCallCard: View {
         switch source {
         case .user: return nil
         case .alwaysAllowList: return "You pinned this command signature as always-allowed."
-        case .staticAllowlist: return "Matched the built-in safe-command allowlist."
-        case .llmJudge: return "An LLM judge classified this command as read-only / safe."
+        case .staticAllowlist: return "Matched the built-in read-only allowlist (safe shell commands / read-style MCP tools)."
+        case .llmJudge: return "An LLM judge classified this call as read-only / safe."
         case .goalMode: return "Auto-approved because this session is in Goal mode. Danger-tier commands still ask."
+        case .trustedServer: return "You marked this MCP server as fully trusted — all its calls auto-run."
         }
     }
 

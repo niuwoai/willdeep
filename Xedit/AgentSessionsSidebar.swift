@@ -37,6 +37,10 @@ struct AgentSessionsSidebar: View {
     /// pin/archive button visibility — cursor-style "they only show up
     /// when you're aiming at them".
     @State private var hoveredSessionID: AgentSession.ID?
+    /// The workspace group header the mouse is hovering. Drives the
+    /// trailing "+" (new chat in this workspace) button visibility,
+    /// same show-on-aim pattern as the session rows.
+    @State private var hoveredWorkspaceHeader: String?
 
     private let initialRowCount = 5
 
@@ -223,10 +227,30 @@ struct AgentSessionsSidebar: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 0)
+                if hoveredWorkspaceHeader == workspace {
+                    Button {
+                        appState.startNewAgentSession(inWorkspaceAt: hasRealWorkspace ? workspace : nil)
+                    } label: {
+                        Image(systemName: "plus.circle")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 16, height: 16)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(L10n.Sidebar.workspaceMenuNewChat)
+                }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 4)
             .contentShape(Rectangle())
+            .onHover { hovering in
+                if hovering {
+                    hoveredWorkspaceHeader = workspace
+                } else if hoveredWorkspaceHeader == workspace {
+                    hoveredWorkspaceHeader = nil
+                }
+            }
             .contextMenu {
                 Button(L10n.Sidebar.workspaceMenuNewChat) {
                     appState.startNewAgentSession(inWorkspaceAt: hasRealWorkspace ? workspace : nil)
