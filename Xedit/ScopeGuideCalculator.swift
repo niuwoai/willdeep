@@ -57,7 +57,7 @@ enum ScopeGuideCalculator {
             return markdownGuides(in: source)
         case .toml, .ini:
             return sectionGuides(in: source)
-        case .env, .dockerfile:
+        case .env, .dockerfile, .diff:
             return []
         default:
             return braceGuides(in: source, language: language)

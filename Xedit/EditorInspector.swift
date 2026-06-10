@@ -166,6 +166,8 @@ enum EditorOutlineExtractor {
             return regexOutline(source, specs: [
                 OutlineSpec(pattern: "^\\s*([A-Za-z0-9_./%-]+)\\s*:(?!=)", kind: .section),
             ])
+        case .diff:
+            return []
         case .none:
             return []
         }

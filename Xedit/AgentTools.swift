@@ -338,6 +338,8 @@ enum AgentToolRunner {
             return try gitStatus(context: context)
         case "run_command":
             return try await runCommand(arguments: arguments, context: context)
+        case "claude_code":
+            return try await claudeCode(arguments: arguments, context: context)
         case "list_jobs":
             return try await listJobs(arguments: arguments, context: context)
         case "get_job_output":
@@ -910,6 +912,108 @@ enum AgentToolRunner {
         let firstLine = stdout.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? ""
         let summary = "exit 0\(firstLine.isEmpty ? "" : ": " + firstLine.prefix(60))"
         return AgentToolResult(summary: summary, payload: trimmed)
+    }
+
+    // MARK: claude_code
+
+    /// Permission modes we forward to `claude -p`. Deliberately NOT
+    /// including `bypassPermissions` — headless full-bypass from a
+    /// model-initiated tool call is an instruction-injection foot-gun.
+    nonisolated static let claudeCodePermissionModes: Set<String> = ["plan", "acceptEdits", "default"]
+
+    /// Locate the Claude Code CLI. Checks the native-installer location
+    /// (`~/.local/bin`) and the legacy alias first, then every PATH
+    /// entry from the augmented shell environment. Returns an absolute
+    /// path so the composed command doesn't depend on PATH at run time.
+    nonisolated static func claudeCodeExecutablePath(
+        environment: [String: String] = shellEnvironment(),
+        isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
+    ) -> String? {
+        let home = NSHomeDirectory()
+        var candidates = [
+            "\(home)/.local/bin/claude",
+            "\(home)/.claude/local/claude",
+        ]
+        for entry in (environment["PATH"] ?? "").split(separator: ":") {
+            candidates.append("\(entry)/claude")
+        }
+        return candidates.first(where: isExecutable)
+    }
+
+    /// POSIX single-quote escaping: safe to embed arbitrary text
+    /// (including the task prompt) into a `/bin/sh -c` command line.
+    nonisolated static func shellQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    nonisolated static func claudeCodeCommandLine(
+        executable: String,
+        prompt: String,
+        permissionMode: String,
+        model: String?
+    ) -> String {
+        var parts = [
+            shellQuoted(executable),
+            "-p", shellQuoted(prompt),
+            "--output-format", "text",
+            "--permission-mode", permissionMode,
+        ]
+        if let model, !model.isEmpty {
+            parts += ["--model", shellQuoted(model)]
+        }
+        return parts.joined(separator: " ")
+    }
+
+    /// Delegate a task to the Claude Code CLI in headless mode. Thin
+    /// composer over `runCommand`: builds the `claude -p …` command
+    /// line, then rides the exact same foreground/background plumbing
+    /// (job registry, output buffers, kill, completion notifications).
+    private static func claudeCode(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        guard let prompt = arguments["prompt"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !prompt.isEmpty else {
+            throw AgentToolError.missingArgument("prompt")
+        }
+
+        let permissionMode = arguments["permission_mode"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "acceptEdits"
+        guard claudeCodePermissionModes.contains(permissionMode) else {
+            throw AgentToolError.invalidArgument(
+                "permission_mode must be one of: \(claudeCodePermissionModes.sorted().joined(separator: ", "))"
+            )
+        }
+
+        guard let executable = claudeCodeExecutablePath() else {
+            throw AgentToolError.commandFailed(
+                127,
+                "Claude Code CLI not found on this Mac. Install it first (e.g. `npm install -g @anthropic-ai/claude-code` or the native installer from https://claude.com/claude-code), then retry. Tell the user instead of retrying blindly."
+            )
+        }
+
+        let command = claudeCodeCommandLine(
+            executable: executable,
+            prompt: prompt,
+            permissionMode: permissionMode,
+            model: arguments["model"]?.stringValue()
+        )
+
+        // Claude Code tasks routinely run for minutes — default to the
+        // background path so the parent turn isn't pinned to the 120s
+        // foreground ceiling. Callers can still force foreground for
+        // genuinely quick questions.
+        let runInBackground = arguments["run_in_background"]?.boolValue() ?? true
+        var forwarded: [String: AgentJSONValue] = [
+            "command": .string(command),
+            "run_in_background": .bool(runInBackground),
+        ]
+        if let timeout = arguments["timeout_seconds"]?.intValue() {
+            forwarded["timeout_seconds"] = .number(Double(timeout))
+        } else if runInBackground {
+            forwarded["timeout_seconds"] = .number(1800)
+        }
+        return try await runCommand(arguments: forwarded, context: context)
     }
 
     // MARK: list_jobs / get_job_output / kill_job

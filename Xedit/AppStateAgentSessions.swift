@@ -790,6 +790,7 @@ extension AppState {
                 runtime.toolDecisionWaiter?.resume(returning: .denied(reason: "Empty session pruned"))
                 runtime.toolDecisionWaiter = nil
             }
+            agentSubagentRegistry.cancelAll(forParentRuntime: id)
             agentRuntimes.removeValue(forKey: id)
         }
     }
@@ -820,6 +821,9 @@ extension AppState {
             doomed.toolDecisionWaiter?.resume(returning: .denied(reason: "Session deleted"))
             doomed.toolDecisionWaiter = nil
         }
+        // Orphaned background subagents must not keep burning tokens
+        // for a session that no longer exists.
+        agentSubagentRegistry.cancelAll(forParentRuntime: id)
         // Drop any not-yet-started dispatches queued for this session
         // so they don't fire after the session is gone.
         pendingDispatchQueue.removeAll { $0.runtimeID == id }

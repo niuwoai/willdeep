@@ -16,6 +16,8 @@ import Foundation
 enum AgentToolKind: Equatable {
     case runCommand
     case fileExploration
+    case subagent
+    case claudeCode
     case askUser
     case other(String)
 
@@ -27,6 +29,10 @@ enum AgentToolKind: Equatable {
              "grep_files", "search_files",
              "git_status":
             return .fileExploration
+        case "spawn_agent":
+            return .subagent
+        case "claude_code":
+            return .claudeCode
         case "ask_user":
             return .askUser
         default:
@@ -50,6 +56,10 @@ enum AgentToolKind: Equatable {
             return "已运行 \(count) 条命令"
         case .fileExploration:
             return "已探索 \(count) 个文件"
+        case .subagent:
+            return "已派出 \(count) 个子 agent"
+        case .claudeCode:
+            return "已委派 \(count) 个 Claude Code 任务"
         case .other(let name):
             return "已调用 \(count) 次 \(name)"
         case .askUser:
@@ -61,6 +71,8 @@ enum AgentToolKind: Equatable {
         switch self {
         case .runCommand: return "terminal"
         case .fileExploration: return "doc.text.magnifyingglass"
+        case .subagent: return "person.2"
+        case .claudeCode: return "sparkles.rectangle.stack"
         case .askUser: return "bubble.left.and.text.bubble.right"
         case .other: return "wrench.and.screwdriver"
         }

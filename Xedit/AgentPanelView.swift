@@ -110,11 +110,22 @@ struct AgentPanelView: View {
                         AgentThinkingDivider()
                     }
 
-                    // 呼吸图标：只要 turn 还在跑就脉动，turn 结束消失。
-                    // 与 thinking divider 共存：divider 只在等首 token 时
-                    // 出现；这枚 icon 贯穿整个 turn。
-                    if appState.isAgentResponding && !appState.isCompressingAgentContext {
-                        AgentBreathingIndicator()
+                    // 底部活动指示（参照 Claude Code）：有任务在跑就显示
+                    // 「✳ N 个任务运行中」（点击展开右侧 jobs 抽屉），turn
+                    // 结束后只要后台作业还活着就继续显示；没有任务但 turn
+                    // 还在跑则退回纯呼吸 icon。
+                    if !appState.isCompressingAgentContext {
+                        let runningTasks = appState.agentRunningTaskCount
+                        if runningTasks > 0 {
+                            AgentRunningTasksRow(
+                                count: runningTasks,
+                                detail: appState.agentRunningTaskSummary
+                            ) {
+                                isJobsDrawerOpen = true
+                            }
+                        } else if appState.isAgentResponding {
+                            AgentBreathingIndicator()
+                        }
                     }
 
                     if appState.isCompressingAgentContext {
@@ -1085,6 +1096,17 @@ struct AgentToolCallGroup: View {
             let cwd = call.arguments["cwd"]?.stringValue().map { "  cwd: \(trimmed($0, limit: 72))" } ?? ""
             return "command: \(trimmed(command, limit: 140))\(cwd)"
         }
+        if call.toolName == "spawn_agent" {
+            let label = call.arguments["label"]?.stringValue()
+                ?? call.arguments["prompt"]?.stringValue()
+                ?? ""
+            return label.isEmpty ? nil : "task: \(trimmed(label, limit: 120))"
+        }
+        if call.toolName == "claude_code" {
+            let prompt = call.arguments["prompt"]?.stringValue() ?? ""
+            let mode = call.arguments["permission_mode"]?.stringValue().map { "  mode: \($0)" } ?? ""
+            return prompt.isEmpty ? nil : "task: \(trimmed(prompt, limit: 120))\(mode)"
+        }
         if let path = call.arguments["path"]?.stringValue() {
             return "path: \(trimmed(path, limit: 120))"
         }
@@ -1622,7 +1644,14 @@ struct AgentErrorCard: View {
                             Text(section.title)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
-                            ScrollView([.horizontal, .vertical]) {
+                            // Vertical-only scrolling on purpose: with a
+                            // horizontal axis the Text gets an unbounded
+                            // width proposal, and a single 8 KB JSON line
+                            // (tool results stay one-line in pretty print)
+                            // blows the renderer's texture limit — the
+                            // whole section then draws blank. Wrapping
+                            // keeps it readable and renderable.
+                            ScrollView(.vertical) {
                                 Text(section.text)
                                     .font(.system(size: 11, design: .monospaced))
                                     .textSelection(.enabled)

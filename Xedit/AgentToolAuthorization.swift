@@ -156,6 +156,12 @@ enum AgentToolAuthorization {
                 return nil
             }
             return "mcp:\(server.lowercased()):\(tool)"
+        case "claude_code":
+            // Scope always-allow by permission mode: pinning "plan"
+            // (read-only) must not silently authorize "acceptEdits".
+            let mode = arguments["permission_mode"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? "acceptEdits"
+            return "claude_code:\(mode)"
         default:
             return nil
         }

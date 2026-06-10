@@ -690,6 +690,7 @@ struct MarkdownCodeBlockView: View {
         case "c", "h": return .c
         case "cpp", "c++", "cxx", "cc", "hpp", "hxx": return .cpp
         case "cs", "csharp", "c#": return .csharp
+        case "diff", "patch", "udiff": return .diff
         default: return nil
         }
     }

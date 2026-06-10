@@ -141,6 +141,29 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "claude_code",
+            description: "Delegate a complex coding task to the locally installed Claude Code CLI (headless `claude -p`). Unlike spawn_agent, Claude Code CAN edit files, run builds/tests, and work multi-step inside the workspace — use it for self-contained implementation tasks you want done end-to-end. Requires user approval. The prompt must be fully self-contained: Claude Code sees the workspace files but not this conversation. Prefer `permission_mode: \"plan\"` when you only want an implementation plan without any file changes.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "prompt", type: .string, description: "Self-contained task description. Include relevant file paths, acceptance criteria, and constraints — Claude Code cannot ask follow-up questions in headless mode.", required: true),
+                AgentToolParameter(name: "permission_mode", type: .string, description: "One of `plan` (read-only, returns a plan), `acceptEdits` (may create/edit files in the workspace), `default` (permission-needing actions are auto-denied). Defaults to acceptEdits.", required: false),
+                AgentToolParameter(name: "model", type: .string, description: "Optional Claude model alias forwarded as `--model` (e.g. `sonnet`, `opus`, `haiku`).", required: false),
+                AgentToolParameter(name: "run_in_background", type: .boolean, description: "Defaults to true: returns a job handle (job_xxxxxx) and the result arrives as a background-task notification; inspect progress with get_job_output. Set false only for quick questions (120s foreground ceiling).", required: false),
+                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Hard timeout. Background default 1800 (max 21600); foreground capped at 120.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "spawn_agent",
+            description: "Spawn a read-only subagent to work on a self-contained task (codebase exploration, research, summarizing many files) and return its findings. The subagent runs its own tool loop against the same workspace but can only read — search/grep/read/list plus read-only shell commands; it cannot write files, ask the user, or spawn further agents. Use it to keep large exploration out of your own context. The prompt must be self-contained: the subagent does not see this conversation.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "prompt", type: .string, description: "Self-contained task description for the subagent. Include all needed context — it cannot see the parent conversation or ask questions.", required: true),
+                AgentToolParameter(name: "label", type: .string, description: "Short display label for the UI (e.g. `explore-auth-flow`). Defaults to a prompt prefix.", required: false),
+                AgentToolParameter(name: "run_in_background", type: .boolean, description: "When true, return immediately with an agent handle (agent_xxxxxx); the report is injected as a system message when the subagent finishes. Up to 3 subagents may run in parallel per session. Defaults to false (wait for the report inline).", required: false),
+                AgentToolParameter(name: "model", type: .string, description: "Optional model id override for the subagent (same provider). Use a cheaper/faster model for broad exploration.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "ask_user",
             description: "Ask the user a clarifying question and wait for their answer before continuing. Use this whenever a required piece of information is missing or ambiguous; do not guess. Returns the user's answer as the tool result. When the question has a small, well-defined set of valid answers, pass them as `options` so the user can click instead of type.",
             risk: .userInput,

@@ -5743,6 +5743,60 @@
         }
       }
     },
+    "transcript.running-tasks.help": {
+      "comment": "tooltip on the running-tasks status row at the bottom of the transcript",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasks are still running — output resumes when they finish"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "任务仍在运行，结束后输出会继续"
+          }
+        }
+      }
+    },
+    "transcript.running-tasks.many": {
+      "comment": "running-tasks status row label, N > 1; %@ is the count",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ running tasks"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 个任务运行中"
+          }
+        }
+      }
+    },
+    "transcript.running-tasks.one": {
+      "comment": "running-tasks status row label, exactly one task",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 running task"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 个任务运行中"
+          }
+        }
+      }
+    },
     "v%@": {},
     "veilwriter": {},
     "·": {},

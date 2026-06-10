@@ -1087,6 +1087,10 @@ enum AgentChatHistoryRenderer {
             preferredKeys = ["skill", "name", "path"]
         case "list_mcp_tools", "call_mcp_tool":
             preferredKeys = ["server", "tool", "name"]
+        case "spawn_agent":
+            preferredKeys = ["label", "prompt"]
+        case "claude_code":
+            preferredKeys = ["prompt", "permission_mode"]
         default:
             preferredKeys = ["command", "path", "pattern", "query", "question", "url", "name"]
         }
@@ -1239,6 +1243,7 @@ enum AgentChatHistoryRenderer {
         case "c": return .c
         case "cc", "cpp", "cxx", "c++": return .cpp
         case "cs", "csharp", "c#": return .csharp
+        case "diff", "patch", "udiff": return .diff
         default: return nil
         }
     }

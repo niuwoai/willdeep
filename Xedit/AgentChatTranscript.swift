@@ -158,13 +158,23 @@ struct AgentChatTranscript: View {
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                     }
 
-                    // 呼吸图标：只要 turn 还在跑（包括等首 token、流式中、
-                    // 工具阻塞），底部就持续脉动；turn 结束消失 = 输出停了。
-                    // 跟 thinking divider 不互斥——前者更像"我们在等首字"的
-                    // 解释，后者是连续的"我还活着"心跳；流式开始后只剩心跳。
-                    if appState.isAgentResponding && !appState.isCompressingAgentContext {
-                        AgentBreathingIndicator()
-                            .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                    // 底部活动指示，两档（参照 Claude Code）：
+                    //  - 有任务在跑（前台工具阻塞 / 后台作业存活）→
+                    //    「✳ N 个任务运行中」状态行；turn 结束后只要后台
+                    //    作业还活着就继续挂着，解释"输出停了在等任务"。
+                    //  - 否则 turn 还在跑 → 纯呼吸 icon（等首 token / 流式中）。
+                    if !appState.isCompressingAgentContext {
+                        let runningTasks = appState.agentRunningTaskCount
+                        if runningTasks > 0 {
+                            AgentRunningTasksRow(
+                                count: runningTasks,
+                                detail: appState.agentRunningTaskSummary
+                            )
+                                .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+                        } else if appState.isAgentResponding {
+                            AgentBreathingIndicator()
+                                .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                        }
                     }
 
                     ForEach(appState.agentQueuedMessages) { queued in

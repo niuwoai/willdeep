@@ -513,6 +513,41 @@ struct VeilWriterTests {
         }
     }
 
+    @Test("diff highlighting colors added and removed lines")
+    @MainActor
+    func testDiffHighlightingColorsAddedAndRemovedLines() {
+        let theme = EditorTheme.graphite
+        let font = EditorFontChoice.menlo.font(size: 13)
+        let source = """
+        --- a/Settings.swift
+        +++ b/Settings.swift
+        @@ -13,6 +13,7 @@ import Carbon
+         class Settings {
+        +    private var isLoading = true
+        -    let legacy = false
+        """
+
+        let highlighted = SyntaxHighlighter.highlightSync(
+            source,
+            language: .diff,
+            theme: theme,
+            font: font
+        )
+
+        let ns = source as NSString
+        func color(atLineStarting prefix: String) -> NSColor? {
+            let range = ns.range(of: prefix)
+            return highlighted.attribute(.foregroundColor, at: range.location, effectiveRange: nil) as? NSColor
+        }
+
+        #expect(color(atLineStarting: "--- a/") == theme.headerColor)
+        #expect(color(atLineStarting: "+++ b/") == theme.headerColor)
+        #expect(color(atLineStarting: "@@ -13,6") == theme.keywordColor)
+        #expect(color(atLineStarting: "+    private") == theme.diffAddedColor)
+        #expect(color(atLineStarting: "-    let legacy") == theme.diffRemovedColor)
+        #expect(Language.fromExtension(".patch") == .diff)
+    }
+
     @Test("scope guides match Ruby class and method blocks")
     func testScopeGuidesMatchRubyBlocks() {
         let source = """
@@ -2278,6 +2313,43 @@ struct VeilWriterTests {
         #expect(normalized.first?.content == "next")
     }
 
+    @Test("provider-ready messages drop fully-empty assistant messages")
+    func testProviderReadyMessagesDropEmptyAssistantMessages() {
+        let messages = [
+            AgentMessage(role: .user, content: "hi"),
+            // 流式 turn 一无所出后残留的占位消息：无文本、无 tool calls。
+            // 上线会被 OpenAI 兼容服务端以 400 拒绝（content or
+            // tool_calls must be set）。
+            AgentMessage(role: .assistant, content: ""),
+            AgentMessage(role: .user, content: "still there?"),
+            // reasoning-only 也不可表示：没有 content key 也没有 tool_calls。
+            AgentMessage(role: .assistant, content: "", reasoningContent: "thinking..."),
+            AgentMessage(role: .assistant, content: "done")
+        ]
+
+        let normalized = AgentClient.providerReadyMessages(messages)
+
+        #expect(normalized.map(\.role) == [.user, .user, .assistant])
+        #expect(normalized.last?.content == "done")
+    }
+
+    @Test("request summary lists tool calls on empty-content assistant messages")
+    func testRequestSummaryListsToolCalls() {
+        let toolCall = AgentMessageToolCall(
+            externalID: "call_a",
+            toolName: "read_file",
+            argumentsJSON: "{}"
+        )
+        let messages = [
+            AgentMessage(role: .assistant, content: "", toolCalls: [toolCall]),
+            AgentMessage(role: .tool, content: "ok", toolCallID: "call_a")
+        ]
+
+        let summary = AgentNetworkSupport.requestSummary(for: messages)
+
+        #expect(summary.contains("assistant: (empty) [1 tool_call: read_file]"))
+    }
+
     @Test("provider-ready messages omit image parts when provider is text-only")
     func testProviderReadyMessagesOmitImagesForTextOnlyProviders() throws {
         let image = AgentImageAttachment(
@@ -2317,6 +2389,161 @@ struct VeilWriterTests {
         #expect(AgentJSONValue.string("no").boolValue() == false)
         #expect(AgentJSONValue.number(0).boolValue() == false)
         #expect(AgentJSONValue.string("maybe").boolValue() == nil)
+    }
+
+    @Test("spawn_agent tool is registered as read risk with a required prompt")
+    func testSpawnAgentToolRegistration() {
+        let descriptor = AgentToolRegistry.descriptor(for: "spawn_agent")
+        #expect(descriptor != nil)
+        #expect(descriptor?.risk == .read)
+        #expect(descriptor?.parameters.first(where: { $0.name == "prompt" })?.required == true)
+        #expect(descriptor?.parameters.contains(where: { $0.name == "run_in_background" }) == true)
+        #expect(descriptor?.parameters.contains(where: { $0.name == "model" }) == true)
+    }
+
+    @Test("claude_code tool is registered as write risk with safe modes")
+    func testClaudeCodeToolRegistration() {
+        let descriptor = AgentToolRegistry.descriptor(for: "claude_code")
+        #expect(descriptor != nil)
+        #expect(descriptor?.risk == .write)
+        #expect(descriptor?.parameters.first(where: { $0.name == "prompt" })?.required == true)
+        #expect(descriptor?.parameters.contains(where: { $0.name == "permission_mode" }) == true)
+        // bypassPermissions must never be forwardable.
+        #expect(!AgentToolRunner.claudeCodePermissionModes.contains("bypassPermissions"))
+    }
+
+    @Test("claude_code command line quotes the prompt safely")
+    func testClaudeCodeCommandLineComposition() {
+        let command = AgentToolRunner.claudeCodeCommandLine(
+            executable: "/usr/local/bin/claude",
+            prompt: "fix the bug in O'Brien's parser; rm nothing",
+            permissionMode: "acceptEdits",
+            model: "sonnet"
+        )
+        #expect(command.hasPrefix("'/usr/local/bin/claude' -p "))
+        #expect(command.contains("'fix the bug in O'\\''Brien'\\''s parser; rm nothing'"))
+        #expect(command.contains("--output-format text"))
+        #expect(command.contains("--permission-mode acceptEdits"))
+        #expect(command.contains("--model 'sonnet'"))
+
+        let noModel = AgentToolRunner.claudeCodeCommandLine(
+            executable: "/x/claude",
+            prompt: "hi",
+            permissionMode: "plan",
+            model: nil
+        )
+        #expect(!noModel.contains("--model"))
+    }
+
+    @Test("claude_code executable discovery prefers the native install path")
+    func testClaudeCodeExecutableDiscovery() {
+        let home = NSHomeDirectory()
+        let found = AgentToolRunner.claudeCodeExecutablePath(
+            environment: ["PATH": "/usr/local/bin:/opt/homebrew/bin"],
+            isExecutable: { $0 == "/opt/homebrew/bin/claude" || $0 == "\(home)/.local/bin/claude" }
+        )
+        #expect(found == "\(home)/.local/bin/claude")
+
+        let missing = AgentToolRunner.claudeCodeExecutablePath(
+            environment: ["PATH": "/usr/local/bin"],
+            isExecutable: { _ in false }
+        )
+        #expect(missing == nil)
+    }
+
+    @Test("claude_code always-allow signature is scoped by permission mode")
+    func testClaudeCodeAuthorizationSignature() {
+        let planSignature = AgentToolAuthorization.signature(
+            toolName: "claude_code",
+            arguments: ["permission_mode": .string("plan")]
+        )
+        #expect(planSignature == "claude_code:plan")
+
+        let defaultSignature = AgentToolAuthorization.signature(
+            toolName: "claude_code",
+            arguments: [:]
+        )
+        #expect(defaultSignature == "claude_code:acceptEdits")
+    }
+
+    @Test("subagent tool surface is read-only and cannot nest or ask")
+    @MainActor
+    func testSubagentToolSurfaceIsRestricted() {
+        let allowed = AgentSubagentRunner.allowedToolNames
+        #expect(!allowed.contains("spawn_agent"))
+        #expect(!allowed.contains("claude_code"))
+        #expect(!allowed.contains("ask_user"))
+        #expect(!allowed.contains("call_mcp_tool"))
+        #expect(!allowed.contains("kill_job"))
+        #expect(allowed.contains("read_file"))
+        #expect(allowed.contains("grep_files"))
+
+        // Every allowed name must resolve to a registered descriptor —
+        // a typo here would silently shrink the child's tool surface.
+        let descriptors = AgentSubagentRunner.toolDescriptors
+        #expect(Set(descriptors.map(\.name)) == allowed)
+    }
+
+    @Test("subagent report notice carries handle, label and report body")
+    func testSubagentReportNotice() {
+        var run = AgentSubagentRun(
+            id: UUID(),
+            shortID: "ab12cd",
+            label: "explore-auth",
+            prompt: "find the auth flow",
+            parentRuntimeID: UUID(),
+            model: "test-model",
+            startedAt: Date()
+        )
+        run.status = .completed
+        run.finishedAt = run.startedAt.addingTimeInterval(5)
+        run.report = "Auth lives in Auth.swift"
+        run.roundCount = 2
+        run.toolInvocationCount = 3
+
+        let notice = AppState.subagentReportNotice(for: run)
+        #expect(notice.contains("agent_ab12cd"))
+        #expect(notice.contains("explore-auth"))
+        #expect(notice.contains("Auth lives in Auth.swift"))
+        #expect(notice.contains("<subagent-report>"))
+    }
+
+    @Test("background subagent failure is queued as a pending report")
+    @MainActor
+    func testBackgroundSubagentFailureQueuesReport() async throws {
+        let registry = AgentSubagentRegistry()
+        let parentID = UUID()
+        // Empty API key → AgentClient throws immediately, no network.
+        let configuration = AgentConfiguration(
+            providerID: "deepseek",
+            baseURL: "https://api.deepseek.com",
+            model: "deepseek-chat",
+            flashModel: "",
+            proModel: "",
+            routingMode: .pro,
+            apiKey: ""
+        )
+
+        let run = try registry.startBackground(
+            prompt: "do something",
+            label: "doomed",
+            configuration: configuration,
+            workspaceURL: nil,
+            parentRuntimeID: parentID
+        )
+        #expect(run.status == .running)
+
+        // Wait for the child task to fail and queue its report.
+        var reports: [AgentSubagentRun] = []
+        for _ in 0..<200 {
+            reports = registry.consumePendingReports(forParentRuntime: parentID)
+            if !reports.isEmpty { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        #expect(reports.count == 1)
+        #expect(reports.first?.status == .failed)
+        // Consuming is destructive — a second pull must be empty.
+        #expect(registry.consumePendingReports(forParentRuntime: parentID).isEmpty)
     }
 
     @Test("agent context window recognizes modern large-context models")

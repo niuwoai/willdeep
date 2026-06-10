@@ -1,5 +1,142 @@
 # Changelog
 
+## 1.58.0-rc3 - 2026-06-10
+
+### 缓解：tooltip 悬停触发的系统级崩溃（SIGBUS in Swift Observation）
+
+线上 1.57.0-rc9 收到一份崩溃报告：鼠标悬停 → AppKit `NSViewDynamicToolTipManager` → SwiftUI `TooltipBridge` 强制经 `NSHostingView.responderNode` 同步求值视图图 → Observation 框架内部访问列表字典损坏（memmove 源指针指向栈内存，2MB 拷贝读穿 stack guard）→ SIGBUS。**整条崩溃链路全在苹果框架内**（macOS 26.5 / SwiftUI 7.5.3），App 自有代码无一帧在场，且项目用的是 Combine `ObservableObject`、未用 `@Observable` 宏——出事的 registrar 属于 SwiftUI 内部 `ScrollEnvironmentStorage`。两次网络检索均无同签名公开案例，已属系统 bug，App 侧只能降低触发面。
+
+本次缓解：摘除 `AgentRunningTasksRow`（[AgentStatusIndicators.swift](Xedit/AgentStatusIndicators.swift)）上的 `.help()` 动态 tooltip——它是全项目风险最高的一处：挂在 `repeatForever` 永久脉动、流式期间高频重绘的行上，悬停求值与视图图更新撞车的窗口正是该崩溃形态。任务明细改由 `.accessibilityHint` 承载（i18n key 复用 `transcript.running-tasks.help`），鼠标用户在侧边 panel 点击该行展开 jobs 抽屉即可看到同样信息，无功能损失。其余 40+ 处静态 `.help()` 保留。
+
+后续：建议向 Apple Feedback 提交原始崩溃报告；若同签名崩溃再现，下一步是流式期间抑制 transcript 区域的 tooltip。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.58.0-rc3`。
+
+## 1.58.0-rc2 - 2026-06-10
+
+### 新增：claude_code 工具 —— 把写代码的活外包给本机 Claude Code CLI
+
+继 rc1 的只读 `spawn_agent` 之后，补上能"动手"的那一半：模型可调用 `claude_code` 工具，把自包含的实现任务委派给本机安装的 Claude Code（headless `claude -p`）。两套机制互补——内部子 agent 管读和分析（便宜、可并行、上下文隔离），Claude Code 管端到端的写任务（建文件、改代码、跑构建测试）。
+
+**实现是个薄组装层**（[AgentTools.swift](Xedit/AgentTools.swift)）：定位 CLI（先查原生安装位 `~/.local/bin/claude` 和 legacy alias，再扫增补 PATH）→ POSIX 单引号转义拼出 `claude -p '<prompt>' --output-format text --permission-mode <mode>` → 直接走 `runCommand` 现有的前台/后台全套管道。后台作业抽屉、partial output、kill、完成通知零新增代码全部可用。
+
+**权限与安全设计**：
+
+- 工具声明 `.write` 风险，每次调用过审批；Always Allow 签名带权限模式后缀（`claude_code:plan` / `claude_code:acceptEdits`），固定只读 plan 模式不会顺带放行改文件模式（[AgentToolAuthorization.swift](Xedit/AgentToolAuthorization.swift)）。
+- `permission_mode` 白名单只有 `plan` / `acceptEdits` / `default`——**`bypassPermissions` 被硬编码排除**，模型注入指令也无法转发全跳过模式。
+- 默认 `run_in_background: true` + 1800s 超时（Claude Code 任务动辄数分钟，前台 120s 顶不住）；同样不进子 agent 的工具面。
+- CLI 未安装时返回带安装指引的明确错误，提示模型转告用户而不是盲目重试。
+
+UI：transcript 分组卡片显示「已委派 N 个 Claude Code 任务」，参数预览展示任务和权限模式。
+
+回归保护：新增 4 个单测（注册形态与模式白名单、命令行组装与引号转义、CLI 探测注入测试、授权签名按模式区分），XeditTests 全量 338 项通过。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.58.0-rc2`。
+
+## 1.58.0-rc1 - 2026-06-10
+
+### 新增：spawn_agent 子 agent —— Claude Code 式多 agent 协作
+
+模型现在可以调用 `spawn_agent` 工具派出只读子 agent 干活（[AgentSubagents.swift](Xedit/AgentSubagents.swift)）。典型用法：「把这个仓库的认证流程摸清楚」「总结这 30 个文件里的错误处理模式」——大体量探索在子 agent 自己的上下文里完成，父会话只收最终报告，不再被几十条 read_file 结果灌爆。
+
+**两种执行模式**（与 `run_command` 的前台/后台对齐）：
+
+- 同步（默认）：父 turn 等子循环跑完，报告作为 tool result 内联返回。
+- 后台（`run_in_background: true`）：立即返回 `agent_xxxxxx` 句柄，可同时派最多 **3 个**并行；完成后报告经 `AgentSubagentRegistry.pendingReports` 在父循环下一轮开头注入 `<subagent-report>` 系统消息——完全复用后台 shell 作业的回注管道与契约。
+- 可选 `model` 参数给子 agent 换模型（同服务商），探索类任务可以用便宜的 flash 模型。
+
+**安全边界**（设计核心，三条硬线）：
+
+1. 子 agent 只有只读工具面（search/grep/read/list/git_status/skills + `run_command`），且每个 shell 调用过 `AgentToolRegistry.risk` 分级，非 `.read` 一律拒绝——子 agent 没有审批 UI，所以任何需要审批的操作都不允许发生。
+2. 子工具表不含 `spawn_agent`（嵌套封死在一层）、`ask_user`（没人可问）、MCP 与后台作业工具。
+3. 回合上限 12 轮，超限返回已有进展而不是白烧 token;会话删除/清空/裁剪时 `cancelAll` 杀掉所有在跑的子 agent。
+
+**实现脉络**：headless 子循环（`AgentSubagentRunner`）直接复用 `AgentClient` 四协议适配器和 `AgentToolRunner`，不碰 UI/审批/patch 管线；`spawn_agent` 在 `runAgentLoop` 工具分发处拦截（它需要 turn 的 provider 配置和注册表，`AgentToolRunner` 拿不到）；UI 上子 agent 调用按「已派出 N 个子 agent」分组卡片展示。
+
+回归保护：新增 4 个单测（工具注册形态、子工具面限制、报告通知格式、后台失败入队）。
+
+### 新增：Claude Code 式「✳ N 个任务运行中」状态行
+
+编译这类长任务跑起来之后，transcript 看上去就是"输出突然停了"——只有一枚不带任何语义的呼吸 icon，而且 turn 一结束 icon 也消失，后台还在跑的构建完全没有可视信号。参照 Claude Code 的「✳ 1 running task」做法补上这一层：
+
+- **新视图** `AgentRunningTasksRow`（[AgentStatusIndicators.swift](Xedit/AgentStatusIndicators.swift)）：左对齐的脉动星号 + 「N 个任务运行中」，挂在两个 transcript（全屏 Agent mode + 侧边 panel）底部。tooltip 列出每个运行中条目（前台工具名 / `job_xxxxxx · 命令前缀`）。
+- **计数口径**（`AppState.agentRunningTaskCount`）：正在执行的前台工具调用（仅 turn 进行中统计，防止被取消 turn 的 `.running` 残骸钉死）+ 本会话存活的后台作业。
+- **关键行为**：turn 结束后只要后台作业还活着，状态行**继续显示**——这正是 Claude 界面里回复完成后 "1 running task" 依然挂着的行为；此前我们的呼吸 icon 在 turn 结束即消失，后台编译毫无踪迹。
+- 侧边 panel 里点击该行直接展开右侧 jobs 抽屉；无任务但 turn 还在跑时退回原有呼吸 icon，两者同一时刻只显示一个。
+- i18n：`transcript.running-tasks.*` 三条 key，中英双语。
+
+回归保护：新增 `appStateRunningTaskCountCombinesToolsAndJobs` 单测，锁定"前台工具只在 turn 内计数、后台作业跨 turn 计数"的双源口径。XeditTests 全量 334 项通过。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.58.0-rc1`。
+
+## 1.57.0-rc9 - 2026-06-10
+
+### 修复：空 assistant 消息触发服务端 400「content or tool_calls must be set」
+
+一轮流式响应可能"正常结束"却一无所出（服务端打嗝、内容过滤、空 stop）。此前 [AppStateAgentLoop.swift](Xedit/AppStateAgentLoop.swift) 的 `runAgentLoop` 只在**出错/取消**路径上移除每轮开头插入的空 assistant 占位消息，正常收尾路径漏了——这条 `content == ""`、无 tool calls 的消息会永久留在会话历史里。下一次请求把它编码成只有 `{"role":"assistant"}` 的消息（`encodeMessage` 对空 content 的 assistant 不输出 content key），OpenAI 兼容服务端直接 400 拒收，会话从此每发必炸。
+
+三层修复：
+
+- **wire 层兜底**（关键，同时治好已被污染的持久化会话）：`OpenAIChatAdapter.providerReadyMessages` 过滤掉"无文本 + 无 tool calls"的 assistant 消息。四个 provider 适配器（OpenAI Chat / Anthropic / Gemini / Responses）共用这一入口，一处过滤全协议生效。reasoning-only 的空消息同样过滤——只回 `reasoning_content` 不带 content/tool_calls 一样不可上线。
+- **源头止血**：`runAgentLoop` 正常收尾路径补上与出错/取消路径相同的空占位清理（content、toolCalls、reasoning 全空才删）。
+- **调试可读性**：错误详情的 Input Messages 列表此前只显示 content，带 tool calls 的 assistant 消息一律显示成 `assistant: (empty)`，极具误导性。现在追加 `[N tool_calls: 工具名…]` 标注。
+
+### 修复：错误详情 Request Body 面板渲染空白
+
+错误卡片展开后 Request Body 一片空白，看起来像"请求体没发出去"，实际请求体一直有捕获。根因是 [AgentPanelView.swift](Xedit/AgentPanelView.swift) 里该面板用 `ScrollView([.horizontal, .vertical])` 包 SwiftUI `Text`：横向轴给了 Text 无限宽度提案，而 pretty-print JSON 里一条 8 KB 的 tool result 字符串是不折行的一整行，布局宽度直接超出渲染纹理上限，整个 Text 绘制为空白。改为仅垂直滚动让长行换行，既能渲染也更好读。
+
+回归保护：新增 provider-ready 空 assistant 过滤、requestSummary tool_calls 标注两个单测（XeditTests 全量 329 项通过）。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.57.0-rc9`。
+
+## 1.57.0-rc8 - 2026-06-10
+
+### Diff 代码块终于有红绿对照了
+
+Agent 回复里贴出的 ```diff 围栏代码块此前是一坨单色：`+`/`-` 行和正文一个颜色，看补丁全靠肉眼数加减号。根因是 `Language` 枚举里压根没有 diff 这门"语言"，所有 fence 语言映射（聊天历史 `AgentChatHistoryFormatter.codeLanguage`、Markdown 预览 `MarkdownPreview.language(forHint:)`）遇到 `diff`/`patch` 都返回 nil，落进无高亮分支。
+
+本次新增：
+
+- `Language.diff` 新成员，`.diff`/`.patch` 文件扩展名也能识别（[SyntaxHighlighter.swift](Xedit/SyntaxHighlighter.swift)）。
+- `diffRules`：行级规则按优先级排列——git 元信息行（`diff --git`/`index`/mode 变化）走注释色；`+++`/`---` 文件头走 header 色（必须排在增删行之前，否则 `--- a/x` 会被当成删除行染红）；`@@` hunk 头走 keyword 色；`+` 开头整行染绿、`-` 开头整行染红。
+- `EditorTheme.diffAddedColor` / `diffRemovedColor`：主题结构体没有现成红绿槽位，按背景亮度推导深浅两套 GitHub 风格配色（亮底 `#1A7F37`/`#CF222E`，暗底 `#3FB950`/`#F85149`，[EditorAppearance.swift](Xedit/EditorAppearance.swift)）。
+- fence 别名 `diff`/`patch`/`udiff` 在聊天历史和 Markdown 预览两处映射同时接入。
+- `Language` 是多处穷举 switch 的枚举：`EditorOutlineExtractor`、`ScopeGuideCalculator` 各补了 `.diff` 分支（无大纲、无缩进参考线）；编辑器语言菜单自动多出 "Diff" 一项，打开 `.patch` 文件也能高亮。
+
+回归保护：新增单测覆盖 `+`/`-`/`@@`/文件头四类行的颜色断言 + `.patch` 扩展名识别（XeditTests 全量 327 项通过）。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.57.0-rc8`。
+
+## 1.57.0-rc7 - 2026-06-10
+
+### Agent 用户气泡：短消息也能从容点到 copy 图标
+
+Agent 聊天记录里用户消息底部那枚 copy 图标，只在 hover 整条气泡时才显形。问题是：当用户输入很短（比如"hey"），鼠标从那两三个字往右下方的 copy 图标挪过去时，会先穿过气泡内部的"空白过道"——那一刻 hover 命中区不在文字 glyph 上，icon 立刻消失，再也点不到。
+
+根因在 [AgentChatHistoryTextView.swift:259](Xedit/AgentChatHistoryTextView.swift:259) 的 `updateHoveredUserMessage(at:)`：旧逻辑拿 `lineFragmentUsedRect(forGlyphAt:)`（光标所在那一行 glyph 的"使用矩形"）外扩 `(-24, -8)` 当 hover 命中区。对短消息而言，这个矩形只有几十像素宽，而视觉气泡（最少 260pt 宽）+ 右对齐 footer 的 copy 图标却横跨整个 bubble。光标从 body 文字往 copy 图标斜下移动，途中必然出区。
+
+修法是把命中区从「单行文字使用矩形」改成「整条用户消息的 attribute range bounding rect」：
+
+- `AgentChatHistoryFormatter` 已经在 user message 的 header（"You"）、body、footer 三段都打了同一枚 `agentChatHistoryUserMessageID` 属性。
+- 新逻辑在光标处取出该属性的 `longestEffectiveRange`，再用 `boundingRect(forGlyphRange:in:)` 拿到整条消息（含 footer 那行）的 union 矩形，外扩 `(-8, -6)` 做容差。
+- 光标在整条消息纵向覆盖范围内任何位置，都保持 hover 粘着 → footer 不闪、copy 图标稳稳能点。
+
+回归保护：命中区只在 attribute 实际存在时才计算，跨消息边界（不同 UUID）会自然落到外侧 → 不会把 hover 错挂到相邻消息。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.57.0-rc7`。
+
 ## 1.57.0-rc6 - 2026-06-10
 
 ### Agent 服务商设置：右栏折叠收紧

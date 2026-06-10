@@ -96,7 +96,10 @@ enum AgentNetworkSupport {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             let preview = text.isEmpty ? "(empty)" : String(text.prefix(240))
             let imageText = message.images.isEmpty ? "" : " + \(message.images.count) image\(message.images.count == 1 ? "" : "s")"
-            return "\(index + 1). \(message.role.rawValue): \(preview)\(text.count > 240 ? "..." : "")\(imageText)"
+            let toolCallText = message.toolCalls.isEmpty
+                ? ""
+                : " [\(message.toolCalls.count) tool_call\(message.toolCalls.count == 1 ? "" : "s"): \(message.toolCalls.map(\.toolName).joined(separator: ", "))]"
+            return "\(index + 1). \(message.role.rawValue): \(preview)\(text.count > 240 ? "..." : "")\(imageText)\(toolCallText)"
         }.joined(separator: "\n")
     }
 

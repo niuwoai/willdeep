@@ -274,15 +274,38 @@ final class AgentChatHistoryNSTextView: NSTextView {
             updateHoveredUserMessage(id: nil)
             return
         }
-        let lineFragment = layoutManager.lineFragmentUsedRect(forGlyphAt: glyphIndex, effectiveRange: nil)
-        guard lineFragment.insetBy(dx: -24, dy: -8).contains(containerPoint) else {
+        let charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+        guard charIndex < textStorage.length else {
             updateHoveredUserMessage(id: nil)
             return
         }
-        let charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
-        guard charIndex < textStorage.length,
-              let idString = textStorage.attribute(.agentChatHistoryUserMessageID, at: charIndex, effectiveRange: nil) as? String,
-              let id = UUID(uuidString: idString) else {
+        // The formatter stamps `agentChatHistoryUserMessageID` on the
+        // entire user-message range — "You" header, body, and footer all
+        // share the same UUID. Hit-test against the union of every line
+        // in that range, not just the line fragment under the cursor, so
+        // hover stays sticky as the mouse traverses the empty horizontal
+        // space between a short body (left-aligned) and the right-aligned
+        // copy icon in the footer. The old `lineFragmentUsedRect` +
+        // (-24, -8) check failed mid-transit for short messages like
+        // "hey", causing the footer to vanish before the cursor reached
+        // the copy icon.
+        var attributeRange = NSRange(location: 0, length: 0)
+        let fullRange = NSRange(location: 0, length: textStorage.length)
+        guard let idString = textStorage.attribute(
+            .agentChatHistoryUserMessageID,
+            at: charIndex,
+            longestEffectiveRange: &attributeRange,
+            in: fullRange
+        ) as? String,
+              let id = UUID(uuidString: idString),
+              attributeRange.length > 0 else {
+            updateHoveredUserMessage(id: nil)
+            return
+        }
+        let attributeGlyphRange = layoutManager.glyphRange(forCharacterRange: attributeRange, actualCharacterRange: nil)
+        let messageRect = layoutManager.boundingRect(forGlyphRange: attributeGlyphRange, in: textContainer)
+        guard !messageRect.isEmpty,
+              messageRect.insetBy(dx: -8, dy: -6).contains(containerPoint) else {
             updateHoveredUserMessage(id: nil)
             return
         }

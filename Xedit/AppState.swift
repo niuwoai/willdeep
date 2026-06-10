@@ -253,6 +253,11 @@ final class AppState: ObservableObject {
     /// `AgentBackgroundJobs.swift` for the lifecycle contract.
     let agentJobRegistry = AgentJobRegistry()
 
+    /// Process-wide registry of `spawn_agent` subagent runs, scoped by
+    /// parent runtime the same way jobs are. See `AgentSubagents.swift`
+    /// for the lifecycle contract.
+    let agentSubagentRegistry = AgentSubagentRegistry()
+
     /// rc1 scaffold for v1.49's concurrent runtimes. One entry per
     /// session that the user has touched this launch. AppState still
     /// owns every `@Published agent*` field for now — rc2 starts
@@ -618,6 +623,42 @@ final class AppState: ObservableObject {
         case .system:
             return false
         }
+    }
+
+    /// Claude Code 式「✳ N running task」计数：正在执行的前台工具调用
+    /// + 本会话仍存活的后台作业。
+    ///
+    /// 前台工具只在 turn 进行中统计——被取消的 turn 理论上可能留下
+    /// `.running` 残骸，不能让它把状态行永远钉在底部。后台作业则刻意
+    /// **跨 turn 存活**：turn 已结束但编译还在跑时，transcript 底部
+    /// 继续显示"N 个任务运行中"，这正是参照 Claude Code 界面的关键
+    /// 行为（输出停了 ≠ 没事干了）。
+    var agentRunningTaskCount: Int {
+        let runningTools = isAgentResponding
+            ? agentToolCalls.filter { $0.status == .running }.count
+            : 0
+        let aliveJobs = activeAgentSessionID
+            .map { agentJobRegistry.aliveJobs(forRuntime: $0).count } ?? 0
+        return runningTools + aliveJobs
+    }
+
+    /// Tooltip 明细：每行一个运行中条目 — 前台工具显示工具名，后台
+    /// 作业显示 `job_xxxxxx · 命令前缀`。没有任何运行中条目时为 nil。
+    var agentRunningTaskSummary: String? {
+        var lines: [String] = []
+        if isAgentResponding {
+            lines += agentToolCalls
+                .filter { $0.status == .running }
+                .map(\.toolName)
+        }
+        if let runtimeID = activeAgentSessionID {
+            lines += agentJobRegistry.aliveJobs(forRuntime: runtimeID).map { job in
+                let command = job.command.replacingOccurrences(of: "\n", with: " ")
+                let preview = command.count > 60 ? String(command.prefix(60)) + "…" : command
+                return "\(job.displayHandle) · \(preview)"
+            }
+        }
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 
     var canShowPreview: Bool {

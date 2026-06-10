@@ -382,6 +382,24 @@ struct EditorTheme: Identifiable, Equatable {
     }
 }
 
+extension EditorTheme {
+    /// Diff 高亮的新增/删除行颜色。主题结构体里没有专门的
+    /// 红绿槽位，这里按背景亮度推导深浅两套（GitHub 风格）。
+    private var hasDarkBackground: Bool {
+        guard let rgb = backgroundColor.usingColorSpace(.sRGB) else { return false }
+        let luminance = 0.299 * rgb.redComponent + 0.587 * rgb.greenComponent + 0.114 * rgb.blueComponent
+        return luminance < 0.5
+    }
+
+    var diffAddedColor: NSColor {
+        hasDarkBackground ? NSColor(hex: 0x3FB950) : NSColor(hex: 0x1A7F37)
+    }
+
+    var diffRemovedColor: NSColor {
+        hasDarkBackground ? NSColor(hex: 0xF85149) : NSColor(hex: 0xCF222E)
+    }
+}
+
 private extension NSColor {
     convenience init(hex: UInt32) {
         let red = CGFloat((hex >> 16) & 0xFF) / 255.0

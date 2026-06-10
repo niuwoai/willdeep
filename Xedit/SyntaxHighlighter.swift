@@ -38,6 +38,7 @@ enum Language: String, CaseIterable {
     case c
     case cpp
     case csharp
+    case diff
 
     /// Maps a file extension (including the dot) to a language.
     /// Returns `nil` if the extension is not recognized.
@@ -67,6 +68,7 @@ enum Language: String, CaseIterable {
         case ".c", ".h": return .c
         case ".cc", ".cpp", ".cxx", ".hpp", ".hh", ".hxx": return .cpp
         case ".cs": return .csharp
+        case ".diff", ".patch": return .diff
         default:        return nil
         }
     }
@@ -117,6 +119,7 @@ extension Language {
         case .c: return "C"
         case .cpp: return "C++"
         case .csharp: return "C#"
+        case .diff: return "Diff"
         }
     }
 }
@@ -207,6 +210,7 @@ enum SyntaxHighlighter {
         case .c:           return cRules(theme: theme)
         case .cpp:         return cppRules(theme: theme)
         case .csharp:      return csharpRules(theme: theme)
+        case .diff:        return diffRules(theme: theme)
         }
     }
 
@@ -743,6 +747,23 @@ enum SyntaxHighlighter {
             HighlightRule(pattern: "\\b-?(?:0b[01_]+|0x[0-9a-fA-F_]+|(?:\\d[\\d_]*\\.?[\\d_]*|\\.\\d[\\d_]*)(?:[eE][+-]?\\d+)?)[uUlLfFdDmM]*\\b", attributes: [.foregroundColor: theme.numberColor]),
             HighlightRule(pattern: keywordPattern(for: keywords), attributes: [.foregroundColor: theme.keywordColor]),
             HighlightRule(pattern: "\\b[A-Z][A-Za-z0-9_]*\\b", attributes: [.foregroundColor: theme.typeNameColor]),
+        ]
+    }
+
+    // MARK: - Diff Rules
+
+    private static func diffRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            // git 元信息行（diff --git / index / mode 变化等）
+            HighlightRule(pattern: "(?m)^(?:diff --git.*|index [0-9a-f]+\\.\\..*|new file mode.*|deleted file mode.*|old mode.*|new mode.*|similarity index.*|rename (?:from|to).*|Binary files.*)$", attributes: [.foregroundColor: theme.commentColor]),
+            // 文件头 +++/---（必须排在 +/- 行级规则之前，否则会被当成增删行）
+            HighlightRule(pattern: "(?m)^(?:\\+\\+\\+|---) .*$", attributes: [.foregroundColor: theme.headerColor]),
+            // hunk 头 @@ -13,6 +13,7 @@
+            HighlightRule(pattern: "(?m)^@@[^\\n]*$", attributes: [.foregroundColor: theme.keywordColor]),
+            // 新增行（绿）
+            HighlightRule(pattern: "(?m)^\\+[^\\n]*$", attributes: [.foregroundColor: theme.diffAddedColor]),
+            // 删除行（红）
+            HighlightRule(pattern: "(?m)^-[^\\n]*$", attributes: [.foregroundColor: theme.diffRemovedColor]),
         ]
     }
 

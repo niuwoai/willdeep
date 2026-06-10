@@ -447,6 +447,66 @@ struct AgentBackgroundJobsTests {
         _ = await waitUntilFinished(registry: registry, id: job.id)
     }
 
+    // MARK: - Running-task count (transcript status row)
+
+    /// The Claude Code-style「✳ N 个任务运行中」status row reads
+    /// `AppState.agentRunningTaskCount`. Lock in its two-source
+    /// contract: foreground `.running` tool calls count ONLY while
+    /// the turn is live (leftover `.running` records from a dead turn
+    /// must not pin the row forever), while alive background jobs
+    /// count even after the turn ends — that post-turn persistence
+    /// is the whole point of the row.
+    @Test
+    func appStateRunningTaskCountCombinesToolsAndJobs() async throws {
+        let appState = AppState()
+        let session = appState.startNewAgentSession()
+
+        #expect(appState.agentRunningTaskCount == 0)
+        #expect(appState.agentRunningTaskSummary == nil)
+
+        // Foreground tool calls: only `.running` ones count, and only
+        // while the turn is responding.
+        appState.isAgentResponding = true
+        appState.agentToolCalls = [
+            AgentToolCall(
+                messageID: UUID(),
+                externalID: "t1",
+                toolName: "run_command",
+                arguments: [:],
+                risk: .write,
+                status: .running
+            ),
+            AgentToolCall(
+                messageID: UUID(),
+                externalID: "t2",
+                toolName: "read_file",
+                arguments: [:],
+                risk: .read,
+                status: .succeeded
+            )
+        ]
+        #expect(appState.agentRunningTaskCount == 1)
+        #expect(appState.agentRunningTaskSummary == "run_command")
+
+        appState.isAgentResponding = false
+        #expect(appState.agentRunningTaskCount == 0)
+        #expect(appState.agentRunningTaskSummary == nil)
+
+        // Alive background job: counts with no live turn at all.
+        let job = try appState.agentJobRegistry.start(
+            command: "sleep 30",
+            workingDirectory: nil,
+            runtimeID: session.id,
+            timeoutSeconds: nil
+        )
+        #expect(appState.agentRunningTaskCount == 1)
+        #expect(appState.agentRunningTaskSummary?.contains(job.displayHandle) == true)
+
+        _ = appState.agentJobRegistry.kill(id: job.id)
+        _ = await waitUntilFinished(registry: appState.agentJobRegistry, id: job.id)
+        #expect(appState.agentRunningTaskCount == 0)
+    }
+
     // MARK: - Helpers
 
     /// Poll the registry until the job leaves `.running` or the

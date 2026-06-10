@@ -273,6 +273,9 @@ extension AppState {
 
     func clearAgentConversation() {
         agentRequestTask?.cancel()
+        if let runtimeID = activeRuntime?.id {
+            agentSubagentRegistry.cancelAll(forParentRuntime: runtimeID)
+        }
         agentMessages.removeAll()
         agentPatchProposals.removeAll()
         agentToolCalls.removeAll()
@@ -654,6 +657,19 @@ extension AppState {
                 )
             }
 
+            // Background subagent reports ride the same channel as job
+            // completions: queued by AgentSubagentRegistry, surfaced as
+            // a system message at the top of the next round.
+            let finishedSubagents = agentSubagentRegistry.consumePendingReports(forParentRuntime: runtime.id)
+            for finishedRun in finishedSubagents {
+                runtime.messages.append(
+                    AgentMessage(
+                        role: .system,
+                        content: Self.subagentReportNotice(for: finishedRun)
+                    )
+                )
+            }
+
             let assistantMessage = AgentMessage(role: .assistant, content: "")
             runtime.messages.append(assistantMessage)
             let assistantID = assistantMessage.id
@@ -753,6 +769,17 @@ extension AppState {
             // No tool calls → assistant finished talking. Capture patches and return.
             guard !latestToolCalls.isEmpty else {
                 captureAgentPatchProposals(for: runtime, fromMessageID: assistantID)
+                // A stream can end "successfully" having produced nothing
+                // (provider hiccup, content filter, empty stop). Drop the
+                // placeholder like the error/cancel paths do — if it stays
+                // in history, the next request encodes it as a bare
+                // {"role":"assistant"} and the server rejects with 400.
+                if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }),
+                   runtime.messages[index].content.isEmpty,
+                   runtime.messages[index].toolCalls.isEmpty,
+                   (runtime.messages[index].reasoningContent ?? "").isEmpty {
+                    runtime.messages.remove(at: index)
+                }
                 return
             }
 
@@ -923,6 +950,21 @@ extension AppState {
                         runtime.toolCalls[index].status = .running
                         runtime.toolCalls[index].approvalSource = .user
                     }
+                }
+
+                // `spawn_agent` can't run through AgentToolRunner — it
+                // needs the turn's provider configuration plus the
+                // subagent registry, both of which only exist up here.
+                if call.toolName == "spawn_agent" {
+                    await executeSpawnAgentToolCall(
+                        call,
+                        recordID: recordID,
+                        arguments: argsDict,
+                        runtime: runtime,
+                        configuration: configuration,
+                        workspaceURL: workspaceURL
+                    )
+                    continue
                 }
 
                 let context = AgentToolContext(
@@ -1195,6 +1237,132 @@ extension AppState {
         Status: \(job.status.rawValue) (\(exitText)), duration \(durationText).
         \(outputHint)
         </background-task-notification>
+        """
+    }
+
+    /// Execute one `spawn_agent` tool call: synchronous runs await the
+    /// child loop and return its report inline; background runs return
+    /// a handle and deliver via `subagentReportNotice` on a later round.
+    func executeSpawnAgentToolCall(
+        _ call: AgentMessageToolCall,
+        recordID: AgentToolCall.ID,
+        arguments: [String: AgentJSONValue],
+        runtime: AgentRuntime,
+        configuration: AgentConfiguration,
+        workspaceURL: URL?
+    ) async {
+        func finishRecord(status: AgentToolCallStatus, summary: String, payload: String, errorMessage: String? = nil) {
+            if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                runtime.toolCalls[index].status = status
+                runtime.toolCalls[index].errorMessage = errorMessage
+                if status == .succeeded {
+                    runtime.toolCalls[index].result = AgentToolResult(summary: summary, payload: payload)
+                }
+            }
+            appendToolMessage(
+                for: runtime,
+                toolCallID: call.externalID,
+                payload: payload,
+                source: status == .succeeded ? .toolOutput : .systemNotice
+            )
+        }
+
+        let prompt = arguments["prompt"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !prompt.isEmpty else {
+            finishRecord(
+                status: .failed,
+                summary: "missing prompt",
+                payload: "Tool error: \(AgentSubagentError.missingPrompt.localizedDescription)",
+                errorMessage: AgentSubagentError.missingPrompt.localizedDescription
+            )
+            return
+        }
+
+        let label: String = {
+            if let raw = arguments["label"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !raw.isEmpty {
+                return String(raw.prefix(60))
+            }
+            return String(prompt.prefix(40))
+        }()
+        let runInBackground = arguments["run_in_background"]?.boolValue() ?? false
+
+        var childConfiguration = configuration
+        if let modelOverride = arguments["model"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !modelOverride.isEmpty {
+            childConfiguration.model = modelOverride
+        }
+
+        if runInBackground {
+            do {
+                let run = try agentSubagentRegistry.startBackground(
+                    prompt: prompt,
+                    label: label,
+                    configuration: childConfiguration,
+                    workspaceURL: workspaceURL,
+                    parentRuntimeID: runtime.id
+                )
+                finishRecord(
+                    status: .succeeded,
+                    summary: "started \(run.displayHandle)",
+                    payload: "Subagent \(run.displayHandle) (\(label)) started in the background on model \(childConfiguration.model). Its report will arrive as a <subagent-report> system message when it finishes — keep working on other things or end your turn; do not poll."
+                )
+            } catch {
+                finishRecord(
+                    status: .failed,
+                    summary: "spawn failed",
+                    payload: "Tool error: \(error.localizedDescription)",
+                    errorMessage: error.localizedDescription
+                )
+            }
+            return
+        }
+
+        do {
+            let outcome = try await AgentSubagentRunner.run(
+                prompt: prompt,
+                configuration: childConfiguration,
+                workspaceURL: workspaceURL
+            )
+            let stats = "(subagent \(label): \(outcome.roundCount) round\(outcome.roundCount == 1 ? "" : "s"), \(outcome.toolInvocationCount) tool call\(outcome.toolInvocationCount == 1 ? "" : "s")\(outcome.usageTokens > 0 ? ", \(outcome.usageTokens) tokens" : ""))"
+            finishRecord(
+                status: .succeeded,
+                summary: stats,
+                payload: "\(outcome.report)\n\n\(stats)"
+            )
+        } catch is CancellationError {
+            finishRecord(
+                status: .failed,
+                summary: "cancelled",
+                payload: "Subagent cancelled.",
+                errorMessage: "Cancelled"
+            )
+        } catch {
+            finishRecord(
+                status: .failed,
+                summary: "subagent failed",
+                payload: "Tool error: \(error.localizedDescription)",
+                errorMessage: error.localizedDescription
+            )
+        }
+    }
+
+    nonisolated static func subagentReportNotice(for run: AgentSubagentRun) -> String {
+        let durationText: String = {
+            let total = Int(run.duration.rounded())
+            if total < 60 { return "\(total)s" }
+            let m = total / 60, s = total % 60
+            if m < 60 { return "\(m)m\(s)s" }
+            let h = m / 60, mm = m % 60
+            return "\(h)h\(mm)m"
+        }()
+        return """
+        <subagent-report>
+        Subagent \(run.displayHandle) (\(run.label)) finished: \(run.status.rawValue), duration \(durationText), \(run.roundCount) rounds, \(run.toolInvocationCount) tool calls.
+        Report:
+        \(run.report)
+        </subagent-report>
         """
     }
 

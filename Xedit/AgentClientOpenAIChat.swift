@@ -292,6 +292,16 @@ struct OpenAIChatAdapter {
                 continue
             }
 
+            // A fully-empty assistant message (no text, no tool calls) is
+            // not representable on the wire — OpenAI-compatible servers
+            // reject it with HTTP 400 "content or tool_calls must be set".
+            // These appear when a stream terminated without producing
+            // anything and the placeholder stayed in persisted history.
+            if message.role == .assistant, message.toolCalls.isEmpty, message.modelContent.isEmpty {
+                index += 1
+                continue
+            }
+
             if message.role == .assistant, !message.toolCalls.isEmpty {
                 let expectedIDs = message.toolCalls.map(\.externalID).filter { !$0.isEmpty }
                 guard !expectedIDs.isEmpty else {

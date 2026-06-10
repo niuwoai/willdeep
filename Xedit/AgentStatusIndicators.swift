@@ -339,3 +339,73 @@ struct AgentBreathingIndicator: View {
             }
     }
 }
+
+// MARK: - Running tasks row
+
+/// Claude Code 式「✳ 1 running task」状态行：长任务（前台工具阻塞、
+/// 后台编译作业）运行期间，transcript 底部用脉动星号 + 计数文案告诉
+/// 用户"输出停了是因为在等任务，不是卡死了"。
+///
+/// 与 `AgentBreathingIndicator` 的分工：
+///   - 呼吸 icon = "模型还在 turn 里"（等首 token / 流式中），无任务语义；
+///   - 本行 = "有具体任务在跑"，且**turn 结束后只要后台作业还活着就
+///     继续显示**——这是参照 Claude 界面的关键：它的 "1 running task"
+///     在回复完成后依然挂着，直到任务退出。
+///
+/// 两者同一时刻只显示一个（任务行优先），由挂载方的条件分支保证，
+/// 避免底部出现两枚动画互相打架。`onTap` 由 AgentPanelView 注入，
+/// 点击展开右侧 jobs 抽屉；主聊天页暂无抽屉则保持纯展示。
+///
+/// 这一行**禁止挂 `.help()` tooltip**：SwiftUI 动态 tooltip 在悬停时
+/// 经 `NSHostingView.responderNode` 强制同步求值视图图，而本行永久
+/// `repeatForever` 脉动 + 流式期间高频重绘，两者撞车会触发 macOS 26.5
+/// Observation 框架的崩溃（SIGBUS in `_AccessList.addAccess`，
+/// 见 1.58.0-rc3 changelog）。任务明细改由 accessibility hint 承载，
+/// 鼠标用户通过点击展开 jobs 抽屉查看。
+struct AgentRunningTasksRow: View {
+    let count: Int
+    var detail: String? = nil
+    var onTap: (() -> Void)? = nil
+    @State private var phase: Bool = false
+
+    var body: some View {
+        Group {
+            if let onTap {
+                Button(action: onTap) { rowContent }
+                    .buttonStyle(.plain)
+            } else {
+                rowContent
+            }
+        }
+        .accessibilityHint(detail ?? L10n.Transcript.runningTasksHelp)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.05).repeatForever(autoreverses: true)) {
+                phase.toggle()
+            }
+        }
+    }
+
+    private var rowContent: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "asterisk")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Color.accentColor.opacity(phase ? 1.0 : 0.5))
+                .scaleEffect(phase ? 1.12 : 0.86)
+                .frame(width: 14, height: 14)
+            Text(label)
+                .font(AgentDesign.secondaryFont)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 6)
+        .padding(.bottom, 2)
+        .contentShape(Rectangle())
+        .accessibilityLabel(label)
+    }
+
+    private var label: String {
+        count == 1
+            ? L10n.Transcript.runningTaskOne
+            : L10n.Transcript.runningTasksMany(String(count))
+    }
+}
