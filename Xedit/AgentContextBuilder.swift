@@ -79,6 +79,7 @@ enum AgentContextBuilder {
         // block whenever an item's status should change.
         if interactionMode == .goal, let goal = currentGoal, !goal.isEmpty {
             var goalBlock = "=== GOAL MODE — ACTIVE ===\n"
+            goalBlock += "Write-tier tool calls are auto-approved in this mode — work autonomously toward the goal without pausing to ask permission. Danger-tier commands (mass deletion, force push, privilege escalation) still require the user's typed confirmation, so prefer safer alternatives where possible.\n"
             if !goal.statement.isEmpty {
                 goalBlock += "Goal: \(goal.statement)\n"
             }

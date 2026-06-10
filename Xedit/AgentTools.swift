@@ -147,13 +147,16 @@ enum AgentToolDecision {
 /// per-call Allow button and the legacy auto-allow path. `.alwaysAllowList`
 /// means the user previously pinned this command signature. `.staticAllowlist`
 /// means the SafeCommand classifier flagged it as read-only. `.llmJudge`
-/// means the LLM judge classifier approved it. nil = either pure read
+/// means the LLM judge classifier approved it. `.goalMode` means the
+/// session was in Goal mode, which auto-approves write-tier calls
+/// (danger-tier still gates on the user). nil = either pure read
 /// (never gated) or still pending.
 enum AgentToolApprovalSource: String, Equatable, Codable {
     case user
     case alwaysAllowList
     case staticAllowlist
     case llmJudge
+    case goalMode
 }
 
 struct AgentToolCall: Identifiable, Equatable {

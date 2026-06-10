@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.58.0-rc4 - 2026-06-10
+
+### Goal 模式：write 层工具自动放行
+
+Goal 模式的语义是"盯着目标自治跑完"，但此前 write 层工具调用（改文件、跑命令、claude_code 委派）仍然逐个弹审批——用户不守在屏幕前 turn 就卡死，自治名不副实。现在 Goal 模式下 write 层自动放行：
+
+- `autoApprovalSource` 新增 `interactionMode` 参数（[AppStateAgentLoop.swift](Xedit/AppStateAgentLoop.swift)），Goal 模式短路返回新的 `.goalMode` 审批来源；transcript 工具卡显示 **GOAL** 审计徽章 + tooltip，事后可追溯每一次自动放行。
+- **两个刻意保留的闸门**：① danger 层（`rm -rf`、force push、sudo 等）照旧弹 typed confirm——全自动到危险层不是自治是裸奔；② 用户标记为不受信的 MCP server 调用仍逐次审批，信任降级立即生效。
+- 系统提示词的 GOAL MODE 块同步声明此契约：告知模型 write 层免审批、可自治推进，同时建议规避 danger 层操作、优先安全替代方案。
+- Normal / Plan 模式行为完全不变（Plan 模式的 plan-gate 在审批之前已拦截 write 层）。
+
+回归保护：新增单测覆盖 Goal 放行 write、danger 永不自动、normal 模式不受影响三条路径，XeditTests 全量 339 项通过。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.58.0-rc4`。
+
 ## 1.58.0-rc3 - 2026-06-10
 
 ### 缓解：tooltip 悬停触发的系统级崩溃（SIGBUS in Swift Observation）

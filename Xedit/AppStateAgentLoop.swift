@@ -519,9 +519,28 @@ extension AppState {
     func autoApprovalSource(
         toolName: String,
         arguments: [String: AgentJSONValue],
-        risk: AgentToolRisk
+        risk: AgentToolRisk,
+        interactionMode: AgentInteractionMode = .normal
     ) async -> AgentToolApprovalSource? {
         guard risk == .write else { return nil }
+
+        // 0. Goal mode: the whole point is running to the goal without
+        //    babysitting, so write-tier calls auto-approve. Two things
+        //    deliberately stay out of this fast path: danger-tier calls
+        //    never reach this function (risk guard above) and keep their
+        //    explicit Confirm gate, and MCP tools on servers the user
+        //    marked untrusted still fall through to per-call approval.
+        if interactionMode == .goal {
+            if toolName == "call_mcp_tool" {
+                if let server = arguments["server"]?.stringValue(),
+                   AgentMCPSettingsStore.isServerTrusted(name: server) {
+                    return .goalMode
+                }
+                // Untrusted / unidentified server → user decides.
+            } else {
+                return .goalMode
+            }
+        }
 
         // 1. User-pinned signatures (Always Allow button) — honored
         //    unless the call targets an MCP server the user has marked
@@ -834,7 +853,8 @@ extension AppState {
                 let autoApproval = await autoApprovalSource(
                     toolName: call.toolName,
                     arguments: argsDict,
-                    risk: risk
+                    risk: risk,
+                    interactionMode: runtime.interactionMode
                 )
                 let isAlwaysAllowed = autoApproval != nil
                 let initialStatus: AgentToolCallStatus

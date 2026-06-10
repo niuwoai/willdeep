@@ -1520,6 +1520,7 @@ struct AgentToolCallCard: View {
         case .alwaysAllowList: return "ALWAYS"
         case .staticAllowlist: return "AUTO"
         case .llmJudge: return "AI OK"
+        case .goalMode: return "GOAL"
         }
     }
 
@@ -1530,6 +1531,7 @@ struct AgentToolCallCard: View {
         case .alwaysAllowList: return "You pinned this command signature as always-allowed."
         case .staticAllowlist: return "Matched the built-in safe-command allowlist."
         case .llmJudge: return "An LLM judge classified this command as read-only / safe."
+        case .goalMode: return "Auto-approved because this session is in Goal mode. Danger-tier commands still ask."
         }
     }
 

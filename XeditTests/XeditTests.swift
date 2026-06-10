@@ -2401,6 +2401,39 @@ struct VeilWriterTests {
         #expect(descriptor?.parameters.contains(where: { $0.name == "model" }) == true)
     }
 
+    @Test("goal mode auto-approves write tools but never danger tier")
+    @MainActor
+    func testGoalModeAutoApproval() async {
+        let appState = AppState()
+
+        // write 层 + goal 模式 → 自动放行，来源标记为 goalMode。
+        let writeApproval = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("swift build")],
+            risk: .write,
+            interactionMode: .goal
+        )
+        #expect(writeApproval == .goalMode)
+
+        // 危险层永远不进自动放行（goal 模式也一样）。
+        let dangerApproval = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("rm -rf /tmp/x")],
+            risk: .danger,
+            interactionMode: .goal
+        )
+        #expect(dangerApproval == nil)
+
+        // normal 模式不受影响：没有命中其他自动路径时仍等用户。
+        let normalApproval = await appState.autoApprovalSource(
+            toolName: "claude_code",
+            arguments: ["prompt": .string("do x")],
+            risk: .write,
+            interactionMode: .normal
+        )
+        #expect(normalApproval == nil)
+    }
+
     @Test("claude_code tool is registered as write risk with safe modes")
     func testClaudeCodeToolRegistration() {
         let descriptor = AgentToolRegistry.descriptor(for: "claude_code")
