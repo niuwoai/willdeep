@@ -1120,7 +1120,7 @@ struct AgentToolCallGroup: View {
                 ?? ""
             return label.isEmpty ? nil : "task: \(trimmed(label, limit: 120))"
         }
-        if call.toolName == "claude_code" {
+        if ["claude_code", "codex_cli", "cursor_agent"].contains(call.toolName) {
             let prompt = call.arguments["prompt"]?.stringValue() ?? ""
             let mode = call.arguments["permission_mode"]?.stringValue().map { "  mode: \($0)" } ?? ""
             return prompt.isEmpty ? nil : "task: \(trimmed(prompt, limit: 120))\(mode)"

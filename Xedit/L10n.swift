@@ -317,7 +317,11 @@ enum L10n {
     }
 
     enum QueuedMessage {
+        static let editButton = String(localized: "queued-message.edit-button", defaultValue: "Edit queued message")
+        static let editButtonHelp = String(localized: "queued-message.edit-button.help", defaultValue: "Edit this queued message in the composer")
         static let label = String(localized: "queued-message.label", defaultValue: "Queued")
+        static let sendNowButton = String(localized: "queued-message.send-now-button", defaultValue: "Send queued message now")
+        static let sendNowButtonHelp = String(localized: "queued-message.send-now-button.help", defaultValue: "Send this queued message now")
     }
 
     enum QuickOpen {
@@ -440,6 +444,7 @@ enum L10n {
         static let tabSkills = String(localized: "settings.tab.skills", defaultValue: "Skills")
         static let tabMcp = String(localized: "settings.tab.mcp", defaultValue: "MCP")
         static let tabTools = String(localized: "settings.tab.tools", defaultValue: "Tools")
+        static let tabLocalAgents = String(localized: "settings.tab.local-agents", defaultValue: "Local Agents")
 
         static let sectionTypography = String(localized: "settings.section.typography", defaultValue: "Typography")
         static let sectionColorStyle = String(localized: "settings.section.color-style", defaultValue: "Color Style")
@@ -543,6 +548,24 @@ enum L10n {
             static let installButton = String(localized: "settings.tools.cli-install", defaultValue: "Install")
             static let installingMessage = String(localized: "settings.tools.cli-installing-message", defaultValue: "Installing without administrator privileges.")
             static let installedMessage = String(localized: "settings.tools.cli-installed-message", defaultValue: "Installed. Try: veilwriter . Add ~/.local/bin to PATH if needed.")
+        }
+
+        enum LocalAgents {
+            static let discoveredSection = String(localized: "settings.local-agents.discovered-section", defaultValue: "Discovered CLI Agents")
+            static let description = String(localized: "settings.local-agents.description", defaultValue: "Scans common install paths and PATH without launching the tools.")
+            static let refreshButton = String(localized: "settings.local-agents.refresh", defaultValue: "Refresh")
+            static let notFound = String(localized: "settings.local-agents.not-found", defaultValue: "Not found on this Mac")
+            static let integrationSection = String(localized: "settings.local-agents.integration-section", defaultValue: "Xedit Integration")
+            static let integrationDescription = String(localized: "settings.local-agents.integration-description", defaultValue: "Discovery means the CLI exists locally. Direct delegation means the current Agent tool surface can invoke it after user approval.")
+            static let discoveryOnly = String(localized: "settings.local-agents.discovery-only", defaultValue: "Discovered only — not yet exposed as a callable Agent tool.")
+            static func summary(_ a1: String, _ a2: String) -> String {
+                let template = String(localized: "settings.local-agents.summary", defaultValue: "%1$@ of %2$@ known CLI agents found")
+                return String(format: template, a1, a2)
+            }
+            static func directTool(_ a1: String) -> String {
+                let template = String(localized: "settings.local-agents.direct-tool", defaultValue: "Direct delegation available through `%@`.")
+                return String(format: template, a1)
+            }
         }
 
         enum Provider {

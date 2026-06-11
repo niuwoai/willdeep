@@ -2721,12 +2721,130 @@ struct VeilWriterTests {
         #expect(defaultSignature == "claude_code:acceptEdits")
     }
 
+    @Test("codex_cli and cursor_agent tools are registered as write risk")
+    func testExternalAgentToolRegistration() {
+        let codex = AgentToolRegistry.descriptor(for: "codex_cli")
+        #expect(codex != nil)
+        #expect(codex?.risk == .write)
+        #expect(codex?.parameters.first(where: { $0.name == "prompt" })?.required == true)
+        #expect(codex?.parameters.contains(where: { $0.name == "permission_mode" }) == true)
+        #expect(!AgentToolRunner.codexCLIPermissionModes.contains("danger-full-access"))
+
+        let cursor = AgentToolRegistry.descriptor(for: "cursor_agent")
+        #expect(cursor != nil)
+        #expect(cursor?.risk == .write)
+        #expect(cursor?.parameters.first(where: { $0.name == "prompt" })?.required == true)
+        #expect(cursor?.parameters.contains(where: { $0.name == "permission_mode" }) == true)
+        #expect(!AgentToolRunner.cursorAgentPermissionModes.contains("yolo"))
+    }
+
+    @Test("codex_cli command line uses sandboxed non-interactive exec")
+    func testCodexCLICommandLineComposition() {
+        let command = AgentToolRunner.codexCLICommandLine(
+            executable: "/Applications/Codex.app/Contents/Resources/codex",
+            prompt: "fix O'Brien parser",
+            permissionMode: "workspaceWrite",
+            model: "gpt-5",
+            workspacePath: "/tmp/Work Dir"
+        )
+        #expect(command.hasPrefix("'/Applications/Codex.app/Contents/Resources/codex' exec "))
+        #expect(command.contains("--sandbox workspace-write"))
+        #expect(command.contains("--ask-for-approval never"))
+        #expect(command.contains("--cd '/tmp/Work Dir'"))
+        #expect(command.contains("--model 'gpt-5'"))
+        #expect(command.contains("'fix O'\\''Brien parser'"))
+        #expect(!command.contains("dangerously-bypass"))
+
+        let plan = AgentToolRunner.codexCLICommandLine(
+            executable: "/x/codex",
+            prompt: "plan",
+            permissionMode: "plan",
+            model: nil,
+            workspacePath: nil
+        )
+        #expect(plan.contains("--sandbox read-only"))
+        #expect(!plan.contains("--model"))
+    }
+
+    @Test("cursor_agent command line uses print mode and sandbox")
+    func testCursorAgentCommandLineComposition() {
+        let command = AgentToolRunner.cursorAgentCommandLine(
+            executable: "/usr/local/bin/cursor",
+            prompt: "fix O'Brien parser",
+            permissionMode: "plan",
+            model: "sonnet-4",
+            workspacePath: "/tmp/Work Dir"
+        )
+        #expect(command.hasPrefix("'/usr/local/bin/cursor' agent "))
+        #expect(command.contains("--print"))
+        #expect(command.contains("--output-format text"))
+        #expect(command.contains("--sandbox enabled"))
+        #expect(command.contains("--trust"))
+        #expect(command.contains("--mode plan"))
+        #expect(command.contains("--workspace '/tmp/Work Dir'"))
+        #expect(command.contains("--model 'sonnet-4'"))
+        #expect(command.contains("'fix O'\\''Brien parser'"))
+        #expect(!command.contains("--yolo"))
+        #expect(!command.contains("--force"))
+
+        let write = AgentToolRunner.cursorAgentCommandLine(
+            executable: "/x/cursor",
+            prompt: "implement",
+            permissionMode: "default",
+            model: nil,
+            workspacePath: nil
+        )
+        #expect(!write.contains("--mode"))
+        #expect(!write.contains("--model"))
+    }
+
+    @Test("external agent executable discovery and local catalog expose direct tools")
+    func testExternalAgentDiscovery() {
+        let codex = AgentToolRunner.codexCLIExecutablePath(
+            environment: ["PATH": "/usr/local/bin:/opt/homebrew/bin"],
+            isExecutable: { $0 == "/Applications/Codex.app/Contents/Resources/codex" }
+        )
+        #expect(codex == "/Applications/Codex.app/Contents/Resources/codex")
+
+        let cursor = AgentToolRunner.cursorAgentExecutablePath(
+            environment: ["PATH": "/usr/local/bin"],
+            isExecutable: { $0 == "/usr/local/bin/cursor" }
+        )
+        #expect(cursor == "/usr/local/bin/cursor")
+
+        let entries = LocalAgentCLI.catalog
+        #expect(entries.first(where: { $0.id == "codex-cli" })?.integration == .directTool("codex_cli"))
+        #expect(entries.first(where: { $0.id == "cursor-cli" })?.integration == .directTool("cursor_agent"))
+    }
+
+    @Test("external agent always-allow signatures are scoped by permission mode")
+    func testExternalAgentAuthorizationSignatures() {
+        #expect(AgentToolAuthorization.signature(
+            toolName: "codex_cli",
+            arguments: ["permission_mode": .string("plan")]
+        ) == "codex_cli:plan")
+        #expect(AgentToolAuthorization.signature(
+            toolName: "codex_cli",
+            arguments: [:]
+        ) == "codex_cli:workspaceWrite")
+        #expect(AgentToolAuthorization.signature(
+            toolName: "cursor_agent",
+            arguments: ["permission_mode": .string("ask")]
+        ) == "cursor_agent:ask")
+        #expect(AgentToolAuthorization.signature(
+            toolName: "cursor_agent",
+            arguments: [:]
+        ) == "cursor_agent:default")
+    }
+
     @Test("subagent tool surface is read-only and cannot nest or ask")
     @MainActor
     func testSubagentToolSurfaceIsRestricted() {
         let allowed = AgentSubagentRunner.allowedToolNames
         #expect(!allowed.contains("spawn_agent"))
         #expect(!allowed.contains("claude_code"))
+        #expect(!allowed.contains("codex_cli"))
+        #expect(!allowed.contains("cursor_agent"))
         #expect(!allowed.contains("ask_user"))
         #expect(!allowed.contains("call_mcp_tool"))
         #expect(!allowed.contains("kill_job"))

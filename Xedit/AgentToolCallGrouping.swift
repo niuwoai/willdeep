@@ -18,6 +18,8 @@ enum AgentToolKind: Equatable {
     case fileExploration
     case subagent
     case claudeCode
+    case codexCLI
+    case cursorAgent
     case askUser
     case other(String)
 
@@ -33,6 +35,10 @@ enum AgentToolKind: Equatable {
             return .subagent
         case "claude_code":
             return .claudeCode
+        case "codex_cli":
+            return .codexCLI
+        case "cursor_agent":
+            return .cursorAgent
         case "ask_user":
             return .askUser
         default:
@@ -60,6 +66,10 @@ enum AgentToolKind: Equatable {
             return "已派出 \(count) 个子 agent"
         case .claudeCode:
             return "已委派 \(count) 个 Claude Code 任务"
+        case .codexCLI:
+            return "已委派 \(count) 个 Codex CLI 任务"
+        case .cursorAgent:
+            return "已委派 \(count) 个 Cursor Agent 任务"
         case .other(let name):
             return "已调用 \(count) 次 \(name)"
         case .askUser:
@@ -73,6 +83,8 @@ enum AgentToolKind: Equatable {
         case .fileExploration: return "doc.text.magnifyingglass"
         case .subagent: return "person.2"
         case .claudeCode: return "sparkles.rectangle.stack"
+        case .codexCLI: return "terminal.fill"
+        case .cursorAgent: return "cursorarrow.rays"
         case .askUser: return "bubble.left.and.text.bubble.right"
         case .other: return "wrench.and.screwdriver"
         }

@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.58.0-rc17 - 2026-06-11
+
+### Codex / Cursor 委派工具
+
+- Agent 工具面新增 `codex_cli`：通过本机 `codex exec` 非交互运行，支持 `permission_mode=plan` 映射 `read-only` sandbox，默认写入模式映射 `workspace-write`，并固定 `--ask-for-approval never` 让失败回到工具结果而不是卡住外部交互。
+- Agent 工具面新增 `cursor_agent`：通过本机 `cursor agent --print --output-format text` 非交互运行，固定 `--sandbox enabled --trust`，支持 `permission_mode=plan|ask|default`；不暴露 `--force` / `--yolo`。
+- 两个新工具都复用既有 `runCommand` 后台 job 管线、审批、超时、输出查看与 Always-Allow 签名隔离；Settings > Local Agents 里 Codex CLI 和 Cursor CLI 从“仅发现”升级为可直接委派工具。
+- 聊天工具摘要/分组识别 `codex_cli` 与 `cursor_agent`，会显示独立的委派任务行和 prompt/mode 预览。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.58.0-rc17`。
+
+## 1.58.0-rc16 - 2026-06-11
+
+### 本机 CLI Agent 发现
+
+- Settings 新增 `Local Agents` 标签页，扫描常见安装路径与 PATH，列出 Claude Code、Codex CLI、OpenCode、Aider、Gemini CLI、Qwen Code、Cursor CLI、Goose、Amp、Crush 共 10 类本机 CLI agent。
+- 每个条目显示发现路径与 Xedit 接入状态；当前只有 Claude Code 通过 `claude_code` 工具可被 Agent 在用户批准后直接委派调用，其它 CLI 先标记为“仅发现、尚未接入”。
+- 本次扫描不启动任何外部 CLI，仅做可执行文件存在性检查，避免设置页打开时触发外部 agent。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.58.0-rc16`。
+
+## 1.58.0-rc15 - 2026-06-11
+
+### Agent 排队消息可操作
+
+- Agent transcript 底部的排队消息改为编号列表；第 2 条起统一缩进，序号列继续对齐，方便同时观察多条后续任务。
+- 每条排队消息新增编辑与立即发送图标：编辑会把该条消息移回 composer 继续修改；立即发送会把该条提升到队首，当前 turn 正在输出时会先停止当前输出再发送。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.58.0-rc15`。
+
 ## 1.58.0-rc14 - 2026-06-11
 
 ### Agent 工具调用摘要间距优化

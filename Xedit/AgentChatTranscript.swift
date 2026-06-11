@@ -177,10 +177,17 @@ struct AgentChatTranscript: View {
                         }
                     }
 
-                    ForEach(appState.agentQueuedMessages) { queued in
+                    ForEach(Array(appState.agentQueuedMessages.enumerated()), id: \.element.id) { offset, queued in
                         QueuedMessageRow(
+                            index: offset,
                             message: queued,
-                            baseFontSize: appState.agentChatBaseFontSize
+                            baseFontSize: appState.agentChatBaseFontSize,
+                            onEdit: {
+                                appState.editQueuedAgentMessage(id: queued.id)
+                            },
+                            onSendNow: {
+                                appState.sendQueuedAgentMessageNow(id: queued.id)
+                            }
                         )
                     }
 

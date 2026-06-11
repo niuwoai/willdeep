@@ -51,6 +51,7 @@ struct EditorSettingsView: View {
     @State private var braveSearchAPIKeyBuffer: String = ""
     @State private var braveSearchAPIKeySaved: String = ""
     @State private var braveSearchSaveStatus: String = ""
+    @State private var discoveredLocalAgents: [LocalAgentCLI.Discovery] = LocalAgentCLI.discoverAll()
 
     var body: some View {
         TabView {
@@ -72,6 +73,11 @@ struct EditorSettingsView: View {
             agentSettings
                 .tabItem {
                     Label(L10n.Settings.tabAgent, systemImage: "sparkles")
+                }
+
+            localAgentSettings
+                .tabItem {
+                    Label(L10n.Settings.tabLocalAgents, systemImage: "cpu")
                 }
 
             AgentMemorySettingsView()
@@ -107,6 +113,7 @@ struct EditorSettingsView: View {
         .background(SettingsWindowResizableEnforcer())
         .onAppear {
             refreshCLIState()
+            refreshLocalAgentDiscovery()
         }
     }
 
@@ -621,6 +628,81 @@ struct EditorSettingsView: View {
         .formStyle(.grouped)
     }
 
+    private var localAgentSettings: some View {
+        Form {
+            Section(L10n.Settings.LocalAgents.discoveredSection) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(L10n.Settings.LocalAgents.summary(
+                            "\(discoveredLocalAgents.filter(\.isInstalled).count)",
+                            "\(discoveredLocalAgents.count)"
+                        ))
+                        .font(.headline)
+                        Text(L10n.Settings.LocalAgents.description)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Button(L10n.Settings.LocalAgents.refreshButton) {
+                        refreshLocalAgentDiscovery()
+                    }
+                }
+
+                ForEach(discoveredLocalAgents) { discovery in
+                    localAgentRow(discovery)
+                }
+            }
+
+            Section(L10n.Settings.LocalAgents.integrationSection) {
+                Text(L10n.Settings.LocalAgents.integrationDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func localAgentRow(_ discovery: LocalAgentCLI.Discovery) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: discovery.isInstalled ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(discovery.isInstalled ? .green : .secondary)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text(discovery.cli.displayName)
+                        .font(.headline)
+                    Text(discovery.cli.commandName)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(discovery.path ?? L10n.Settings.LocalAgents.notFound)
+                    .font(.caption)
+                    .foregroundStyle(discovery.isInstalled ? .secondary : .tertiary)
+                    .lineLimit(2)
+
+                Text(localAgentIntegrationText(discovery))
+                    .font(.caption)
+                    .foregroundStyle(discovery.cli.integration.isDirectlyCallable ? .green : .secondary)
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func localAgentIntegrationText(_ discovery: LocalAgentCLI.Discovery) -> String {
+        switch discovery.cli.integration {
+        case .directTool(let toolName):
+            return L10n.Settings.LocalAgents.directTool(toolName)
+        case .discoveryOnly:
+            return L10n.Settings.LocalAgents.discoveryOnly
+        }
+    }
+
     private var backgroundImageLabel: String {
         guard let path = appState.editorSettings.windowBackgroundImagePath else {
             return L10n.Settings.noImageSelected
@@ -656,6 +738,10 @@ struct EditorSettingsView: View {
 
     private func refreshCLIState() {
         cliInstallState = CommandLineToolInstaller.installState()
+    }
+
+    private func refreshLocalAgentDiscovery() {
+        discoveredLocalAgents = LocalAgentCLI.discoverAll()
     }
 
     private func installCLI() {

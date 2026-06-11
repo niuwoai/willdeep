@@ -3907,6 +3907,42 @@
         }
       }
     },
+    "queued-message.edit-button": {
+      "comment": "accessibility label for editing a queued message",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit queued message"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑排队消息"
+          }
+        }
+      }
+    },
+    "queued-message.edit-button.help": {
+      "comment": "tooltip for editing a queued message",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit this queued message in the composer"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "把这条排队消息放回输入框编辑"
+          }
+        }
+      }
+    },
     "queued-message.label": {
       "comment": "label for queued message card",
       "extractionState": "manual",
@@ -3921,6 +3957,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "已排队"
+          }
+        }
+      }
+    },
+    "queued-message.send-now-button": {
+      "comment": "accessibility label for sending a queued message immediately",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send queued message now"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "立即发送排队消息"
+          }
+        }
+      }
+    },
+    "queued-message.send-now-button.help": {
+      "comment": "tooltip for sending a queued message immediately",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send this queued message now"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "把这条排队消息提升到队首并立即发送"
           }
         }
       }
@@ -4467,6 +4539,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "工具"
+          }
+        }
+      }
+    },
+    "settings.tab.local-agents": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local Agents"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本机 Agent"
           }
         }
       }
@@ -6223,6 +6312,69 @@
       "localizations": {
         "en": { "stringUnit": { "state": "translated", "value": "Installed. Try: veilwriter . Add ~/.local/bin to PATH if needed." } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "已安装。试试 veilwriter 。如有需要把 ~/.local/bin 加入 PATH。" } }
+      }
+    },
+    "settings.local-agents.discovered-section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Discovered CLI Agents" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已发现的 CLI Agent" } }
+      }
+    },
+    "settings.local-agents.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Scans common install paths and PATH without launching the tools." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "只扫描常见安装路径和 PATH，不启动这些工具。" } }
+      }
+    },
+    "settings.local-agents.refresh": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Refresh" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "刷新" } }
+      }
+    },
+    "settings.local-agents.not-found": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Not found on this Mac" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本机未发现" } }
+      }
+    },
+    "settings.local-agents.integration-section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Xedit Integration" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "Xedit 接入状态" } }
+      }
+    },
+    "settings.local-agents.integration-description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Discovery means the CLI exists locally. Direct delegation means the current Agent tool surface can invoke it after user approval." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "发现只代表本机存在该 CLI；直接委派代表当前 Agent 工具面可在用户批准后调用它。" } }
+      }
+    },
+    "settings.local-agents.discovery-only": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Discovered only — not yet exposed as a callable Agent tool." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "仅发现：尚未暴露为可调用的 Agent 工具。" } }
+      }
+    },
+    "settings.local-agents.summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%1$@ of %2$@ known CLI agents found" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已发现 %1$@ / %2$@ 个已知 CLI agent" } }
+      }
+    },
+    "settings.local-agents.direct-tool": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Direct delegation available through `%@`." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "可通过 `%@` 直接委派调用。" } }
       }
     },
     "settings.provider.edits-auto-save": {

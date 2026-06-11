@@ -162,6 +162,14 @@ enum AgentToolAuthorization {
             let mode = arguments["permission_mode"]?.stringValue()?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? "acceptEdits"
             return "claude_code:\(mode)"
+        case "codex_cli":
+            let mode = arguments["permission_mode"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? "workspaceWrite"
+            return "codex_cli:\(mode)"
+        case "cursor_agent":
+            let mode = arguments["permission_mode"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? "default"
+            return "cursor_agent:\(mode)"
         case "web_fetch":
             // Scope by host: pinning means "I trust this domain", not
             // "exactly this URL". Path/query stay out of the signature.

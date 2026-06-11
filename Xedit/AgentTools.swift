@@ -349,6 +349,10 @@ enum AgentToolRunner {
             return try await runCommand(arguments: arguments, context: context)
         case "claude_code":
             return try await claudeCode(arguments: arguments, context: context)
+        case "codex_cli":
+            return try await codexCLI(arguments: arguments, context: context)
+        case "cursor_agent":
+            return try await cursorAgent(arguments: arguments, context: context)
         case "list_jobs":
             return try await listJobs(arguments: arguments, context: context)
         case "get_job_output":
@@ -1017,6 +1021,194 @@ enum AgentToolRunner {
         // background path so the parent turn isn't pinned to the 120s
         // foreground ceiling. Callers can still force foreground for
         // genuinely quick questions.
+        let runInBackground = arguments["run_in_background"]?.boolValue() ?? true
+        var forwarded: [String: AgentJSONValue] = [
+            "command": .string(command),
+            "run_in_background": .bool(runInBackground),
+        ]
+        if let timeout = arguments["timeout_seconds"]?.intValue() {
+            forwarded["timeout_seconds"] = .number(Double(timeout))
+        } else if runInBackground {
+            forwarded["timeout_seconds"] = .number(1800)
+        }
+        return try await runCommand(arguments: forwarded, context: context)
+    }
+
+    // MARK: codex_cli / cursor_agent
+
+    nonisolated static let codexCLIPermissionModes: Set<String> = ["plan", "workspaceWrite", "default"]
+    nonisolated static let cursorAgentPermissionModes: Set<String> = ["plan", "ask", "default"]
+
+    nonisolated static func codexCLIExecutablePath(
+        environment: [String: String] = shellEnvironment(),
+        isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
+    ) -> String? {
+        executablePath(commandName: "codex", preferredPaths: [
+            "/Applications/Codex.app/Contents/Resources/codex",
+            "\(NSHomeDirectory())/.local/bin/codex",
+        ], environment: environment, isExecutable: isExecutable)
+    }
+
+    nonisolated static func cursorAgentExecutablePath(
+        environment: [String: String] = shellEnvironment(),
+        isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
+    ) -> String? {
+        executablePath(commandName: "cursor", preferredPaths: [
+            "/usr/local/bin/cursor",
+            "/opt/homebrew/bin/cursor",
+        ], environment: environment, isExecutable: isExecutable)
+    }
+
+    nonisolated private static func executablePath(
+        commandName: String,
+        preferredPaths: [String],
+        environment: [String: String],
+        isExecutable: (String) -> Bool
+    ) -> String? {
+        var seen = Set<String>()
+        var candidates: [String] = []
+
+        func append(_ path: String) {
+            guard !seen.contains(path) else { return }
+            seen.insert(path)
+            candidates.append(path)
+        }
+
+        preferredPaths.forEach(append)
+        for entry in (environment["PATH"] ?? "").split(separator: ":").map(String.init) {
+            append("\(entry)/\(commandName)")
+        }
+        return candidates.first(where: isExecutable)
+    }
+
+    nonisolated static func codexCLICommandLine(
+        executable: String,
+        prompt: String,
+        permissionMode: String,
+        model: String?,
+        workspacePath: String?
+    ) -> String {
+        let sandbox = permissionMode == "plan" ? "read-only" : "workspace-write"
+        var parts = [
+            shellQuoted(executable),
+            "exec",
+            "--color", "never",
+            "--skip-git-repo-check",
+            "--sandbox", sandbox,
+            "--ask-for-approval", "never",
+        ]
+        if let workspacePath, !workspacePath.isEmpty {
+            parts += ["--cd", shellQuoted(workspacePath)]
+        }
+        if let model, !model.isEmpty {
+            parts += ["--model", shellQuoted(model)]
+        }
+        parts.append(shellQuoted(prompt))
+        return parts.joined(separator: " ")
+    }
+
+    nonisolated static func cursorAgentCommandLine(
+        executable: String,
+        prompt: String,
+        permissionMode: String,
+        model: String?,
+        workspacePath: String?
+    ) -> String {
+        var parts = [
+            shellQuoted(executable),
+            "agent",
+            "--print",
+            "--output-format", "text",
+            "--sandbox", "enabled",
+            "--trust",
+        ]
+        switch permissionMode {
+        case "plan":
+            parts += ["--mode", "plan"]
+        case "ask":
+            parts += ["--mode", "ask"]
+        default:
+            break
+        }
+        if let workspacePath, !workspacePath.isEmpty {
+            parts += ["--workspace", shellQuoted(workspacePath)]
+        }
+        if let model, !model.isEmpty {
+            parts += ["--model", shellQuoted(model)]
+        }
+        parts.append(shellQuoted(prompt))
+        return parts.joined(separator: " ")
+    }
+
+    private static func codexCLI(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        let prompt = try delegatedAgentPrompt(arguments: arguments)
+        let permissionMode = arguments["permission_mode"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "workspaceWrite"
+        guard codexCLIPermissionModes.contains(permissionMode) else {
+            throw AgentToolError.invalidArgument(
+                "permission_mode must be one of: \(codexCLIPermissionModes.sorted().joined(separator: ", "))"
+            )
+        }
+        guard let executable = codexCLIExecutablePath() else {
+            throw AgentToolError.commandFailed(
+                127,
+                "Codex CLI not found on this Mac. Install Codex CLI or the Codex desktop app, then retry. Tell the user instead of retrying blindly."
+            )
+        }
+        let command = codexCLICommandLine(
+            executable: executable,
+            prompt: prompt,
+            permissionMode: permissionMode,
+            model: arguments["model"]?.stringValue(),
+            workspacePath: context.rootDirectory?.standardizedFileURL.path
+        )
+        return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
+    }
+
+    private static func cursorAgent(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        let prompt = try delegatedAgentPrompt(arguments: arguments)
+        let permissionMode = arguments["permission_mode"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "default"
+        guard cursorAgentPermissionModes.contains(permissionMode) else {
+            throw AgentToolError.invalidArgument(
+                "permission_mode must be one of: \(cursorAgentPermissionModes.sorted().joined(separator: ", "))"
+            )
+        }
+        guard let executable = cursorAgentExecutablePath() else {
+            throw AgentToolError.commandFailed(
+                127,
+                "Cursor Agent CLI not found on this Mac. Install Cursor and its command line launcher first, then retry. Tell the user instead of retrying blindly."
+            )
+        }
+        let command = cursorAgentCommandLine(
+            executable: executable,
+            prompt: prompt,
+            permissionMode: permissionMode,
+            model: arguments["model"]?.stringValue(),
+            workspacePath: context.rootDirectory?.standardizedFileURL.path
+        )
+        return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
+    }
+
+    private static func delegatedAgentPrompt(arguments: [String: AgentJSONValue]) throws -> String {
+        guard let prompt = arguments["prompt"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !prompt.isEmpty else {
+            throw AgentToolError.missingArgument("prompt")
+        }
+        return prompt
+    }
+
+    private static func runDelegatedAgentCommand(
+        _ command: String,
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
         let runInBackground = arguments["run_in_background"]?.boolValue() ?? true
         var forwarded: [String: AgentJSONValue] = [
             "command": .string(command),

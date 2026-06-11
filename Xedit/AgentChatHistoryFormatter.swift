@@ -1110,7 +1110,7 @@ enum AgentChatHistoryRenderer {
             preferredKeys = ["server", "tool", "name"]
         case "spawn_agent":
             preferredKeys = ["label", "prompt"]
-        case "claude_code":
+        case "claude_code", "codex_cli", "cursor_agent":
             preferredKeys = ["prompt", "permission_mode"]
         default:
             preferredKeys = ["command", "path", "pattern", "query", "question", "url", "name"]

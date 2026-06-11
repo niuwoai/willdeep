@@ -630,6 +630,35 @@ extension AppState {
         agentQueuedMessages.removeAll()
     }
 
+    func editQueuedAgentMessage(id: AgentQueuedMessage.ID) {
+        guard let runtime = activeRuntime,
+              let index = runtime.queuedMessages.firstIndex(where: { $0.id == id })
+        else { return }
+
+        let message = runtime.queuedMessages.remove(at: index)
+        runtime.input = message.text
+        runtime.pendingImages = message.images
+        runtime.pendingTextAttachments = message.textAttachments
+        runtime.pendingSkills = []
+        runtime.pendingFiles = []
+        runtime.pendingIncludeWorkspaceOverview = false
+    }
+
+    func sendQueuedAgentMessageNow(id: AgentQueuedMessage.ID) {
+        guard let runtime = activeRuntime,
+              let index = runtime.queuedMessages.firstIndex(where: { $0.id == id })
+        else { return }
+
+        let message = runtime.queuedMessages.remove(at: index)
+        runtime.queuedMessages.insert(message, at: 0)
+
+        if runtime.isResponding {
+            stopAgentResponse()
+        } else {
+            consumeNextQueuedMessageIfNeeded(for: runtime)
+        }
+    }
+
     func addAgentImage(data: Data, mimeType: String) {
         let attachment = AgentImageAttachment(mimeType: mimeType, dataBase64: data.base64EncodedString())
         agentPendingImages.append(attachment)

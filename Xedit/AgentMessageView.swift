@@ -879,23 +879,45 @@ struct AgentTextAttachmentBubbleStrip: View {
 }
 
 struct QueuedMessageRow: View {
+    let index: Int
     let message: AgentQueuedMessage
     /// Mirror of the Agent chat base font size so the queued preview
     /// text reads at the same scale as the user's actual message
     /// bubble once it's dispatched.
     var baseFontSize: CGFloat = NSFont.systemFontSize
+    var onEdit: () -> Void = {}
+    var onSendNow: () -> Void = {}
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "hourglass")
-                .font(.system(size: 11))
+            Text("\(index + 1).")
+                .font(AgentDesign.captionFont.monospacedDigit())
                 .foregroundStyle(.orange)
+                .frame(width: 22, alignment: .trailing)
                 .padding(.top, 2)
             VStack(alignment: .leading, spacing: 3) {
-                Text(L10n.QueuedMessage.label)
-                    .font(AgentDesign.captionFont)
-                    .foregroundStyle(.orange)
-                    .textCase(.uppercase)
+                HStack(alignment: .center, spacing: 6) {
+                    Image(systemName: "hourglass")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
+                    Text(L10n.QueuedMessage.label)
+                        .font(AgentDesign.captionFont)
+                        .foregroundStyle(.orange)
+                        .textCase(.uppercase)
+                    Spacer(minLength: 8)
+                    queuedActionButton(
+                        symbol: "pencil",
+                        accessibilityLabel: L10n.QueuedMessage.editButton,
+                        help: L10n.QueuedMessage.editButtonHelp,
+                        action: onEdit
+                    )
+                    queuedActionButton(
+                        symbol: "paperplane.fill",
+                        accessibilityLabel: L10n.QueuedMessage.sendNowButton,
+                        help: L10n.QueuedMessage.sendNowButtonHelp,
+                        action: onSendNow
+                    )
+                }
                 if !message.text.isEmpty {
                     Text(message.text)
                         .font(.system(size: baseFontSize))
@@ -921,6 +943,25 @@ struct QueuedMessageRow: View {
             RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius)
                 .stroke(Color.orange.opacity(0.25), lineWidth: 1)
         )
+        .padding(.leading, index == 0 ? 0 : 16)
+    }
+
+    private func queuedActionButton(
+        symbol: String,
+        accessibilityLabel: String,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 22, height: 20)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.orange)
+        .contentShape(Rectangle())
+        .accessibilityLabel(accessibilityLabel)
+        .help(help)
     }
 }
 
