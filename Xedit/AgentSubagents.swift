@@ -410,7 +410,7 @@ private actor SubagentTurnCollector {
             turn.toolCalls = calls
         case .finishedTurn:
             break
-        case .usageReported(_, _, let total):
+        case .usageReported(_, _, let total, _, _, _):
             turn.usageTokens = total
         }
     }

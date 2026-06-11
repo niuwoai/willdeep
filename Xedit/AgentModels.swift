@@ -163,6 +163,16 @@ struct AgentMessage: Identifiable, Codable, Equatable {
     var promptTokens: Int?
     /// Completion-side tokens (output) reported by the provider.
     var completionTokens: Int?
+    /// Prompt tokens served from provider-side context/prompt cache.
+    /// Providers name this differently (`cached_tokens`,
+    /// `cache_read_input_tokens`, `prompt_cache_hit_tokens`,
+    /// `cachedContentTokenCount`); the adapters normalize it here.
+    var cachedPromptTokens: Int?
+    /// Prompt tokens written into provider-side cache on this request.
+    var cacheWritePromptTokens: Int?
+    /// Completion tokens spent on hidden reasoning/thinking traces when
+    /// the provider reports them separately.
+    var reasoningTokens: Int?
     /// Wall-clock seconds the assistant streamed for — from first
     /// stream connect to `.finishedTurn`. Only set on assistant
     /// messages once the stream terminates. Used by the message
@@ -183,6 +193,9 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         usageTokens: Int? = nil,
         promptTokens: Int? = nil,
         completionTokens: Int? = nil,
+        cachedPromptTokens: Int? = nil,
+        cacheWritePromptTokens: Int? = nil,
+        reasoningTokens: Int? = nil,
         elapsedSeconds: Double? = nil,
         createdAt: Date = Date()
     ) {
@@ -197,6 +210,9 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         self.usageTokens = usageTokens
         self.promptTokens = promptTokens
         self.completionTokens = completionTokens
+        self.cachedPromptTokens = cachedPromptTokens
+        self.cacheWritePromptTokens = cacheWritePromptTokens
+        self.reasoningTokens = reasoningTokens
         self.elapsedSeconds = elapsedSeconds
         self.createdAt = createdAt
     }
@@ -205,7 +221,9 @@ struct AgentMessage: Identifiable, Codable, Equatable {
     /// breaking older session JSON.
     enum CodingKeys: String, CodingKey {
         case id, role, content, reasoningContent, images, textAttachments, toolCalls, toolCallID
-        case usageTokens, promptTokens, completionTokens, elapsedSeconds
+        case usageTokens, promptTokens, completionTokens
+        case cachedPromptTokens, cacheWritePromptTokens, reasoningTokens
+        case elapsedSeconds
         case createdAt
     }
 
@@ -222,6 +240,9 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         usageTokens = try container.decodeIfPresent(Int.self, forKey: .usageTokens)
         promptTokens = try container.decodeIfPresent(Int.self, forKey: .promptTokens)
         completionTokens = try container.decodeIfPresent(Int.self, forKey: .completionTokens)
+        cachedPromptTokens = try container.decodeIfPresent(Int.self, forKey: .cachedPromptTokens)
+        cacheWritePromptTokens = try container.decodeIfPresent(Int.self, forKey: .cacheWritePromptTokens)
+        reasoningTokens = try container.decodeIfPresent(Int.self, forKey: .reasoningTokens)
         elapsedSeconds = try container.decodeIfPresent(Double.self, forKey: .elapsedSeconds)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
@@ -296,6 +317,10 @@ struct AgentSession: Identifiable, Codable, Equatable {
     /// Model id captured at the time the session was last sent (so changing
     /// the global model later doesn't silently switch what an old chat used).
     var modelID: String?
+    /// Provider snapshot captured alongside `modelID` so usage analytics
+    /// can group historical sessions by the actual configured provider.
+    var providerID: String?
+    var providerDisplayName: String?
     let createdAt: Date
     var updatedAt: Date
     var messages: [AgentMessage]
@@ -350,6 +375,8 @@ struct AgentSession: Identifiable, Codable, Equatable {
         workspaceRootPath: String? = nil,
         workspaceLocation: WorkspaceLocation? = nil,
         modelID: String? = nil,
+        providerID: String? = nil,
+        providerDisplayName: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         messages: [AgentMessage] = [],
@@ -368,6 +395,8 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.workspaceRootPath = workspaceRootPath
         self.workspaceLocation = workspaceLocation ?? workspaceRootPath.map { .local(path: $0) }
         self.modelID = modelID
+        self.providerID = providerID
+        self.providerDisplayName = providerDisplayName
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.messages = messages
@@ -398,7 +427,9 @@ struct AgentSession: Identifiable, Codable, Equatable {
     // currentGoal) loads cleanly — every newer field uses
     // decodeIfPresent with a default.
     enum CodingKeys: String, CodingKey {
-        case id, title, workspaceRootPath, workspaceLocation, modelID, createdAt, updatedAt, messages
+        case id, title, workspaceRootPath, workspaceLocation, modelID
+        case providerID, providerDisplayName
+        case createdAt, updatedAt, messages
         case didEditFiles, agentEditedPaths, interactionMode, approvalMode, currentPlan, currentGoal
         case pinnedAt, archivedAt, titleIsUserSet
     }
@@ -411,6 +442,8 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.workspaceLocation = try c.decodeIfPresent(WorkspaceLocation.self, forKey: .workspaceLocation)
             ?? self.workspaceRootPath.map { .local(path: $0) }
         self.modelID = try c.decodeIfPresent(String.self, forKey: .modelID)
+        self.providerID = try c.decodeIfPresent(String.self, forKey: .providerID)
+        self.providerDisplayName = try c.decodeIfPresent(String.self, forKey: .providerDisplayName)
         self.createdAt = try c.decode(Date.self, forKey: .createdAt)
         self.updatedAt = try c.decode(Date.self, forKey: .updatedAt)
         self.messages = try c.decode([AgentMessage].self, forKey: .messages)

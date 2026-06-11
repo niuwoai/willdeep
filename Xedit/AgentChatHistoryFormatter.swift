@@ -202,6 +202,9 @@ enum AgentChatHistoryRenderer {
         hasher.combine(m.usageTokens)
         hasher.combine(m.promptTokens)
         hasher.combine(m.completionTokens)
+        hasher.combine(m.cachedPromptTokens)
+        hasher.combine(m.cacheWritePromptTokens)
+        hasher.combine(m.reasoningTokens)
         hasher.combine(m.elapsedSeconds)
         hasher.combine(m.toolCalls.count)
         for call in m.toolCalls {

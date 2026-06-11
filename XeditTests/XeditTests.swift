@@ -1798,6 +1798,7 @@ struct WillDeepTests {
 
         // whois 与 dig/host 同族，直接安全。
         #expect(SafeCommand.classify(command: "whois example.com") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "whois example.com 2>&1 | grep -i status") == .alwaysSafe)
     }
 
     @Test("SafeCommand rejects find with -delete or -exec")

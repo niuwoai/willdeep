@@ -43,6 +43,29 @@ struct AgentHeatmapCell: Identifiable, Equatable {
     let count: Int
 }
 
+struct AgentModelUsageRow: Identifiable, Equatable {
+    var id: String { "\(providerID)|\(modelID)" }
+    let providerID: String
+    let providerName: String
+    let modelID: String
+    var sessionCount: Int
+    var messageCount: Int
+    var promptTokens: Int
+    var completionTokens: Int
+    var cachedPromptTokens: Int
+    var cacheWritePromptTokens: Int
+    var reasoningTokens: Int
+    var totalTokens: Int
+    var estimatedTokens: Int
+    var estimatedCostUSD: Double?
+    var hasEstimatedUsage: Bool
+
+    var cacheHitRate: Double {
+        guard promptTokens > 0 else { return 0 }
+        return Double(cachedPromptTokens) / Double(promptTokens)
+    }
+}
+
 enum AgentUsageStats {
     /// Build an overview snapshot for the given sessions. Pure function
     /// — same input always produces the same output, no side effects.
@@ -145,6 +168,60 @@ enum AgentUsageStats {
         return Double(tokenTotal) / 780_000.0
     }
 
+    static func modelUsage(for sessions: [AgentSession]) -> [AgentModelUsageRow] {
+        var rows: [String: AgentModelUsageRow] = [:]
+
+        for session in sessions {
+            let modelID = normalizedModelID(session.modelID)
+            let provider = providerSnapshot(for: session, modelID: modelID)
+            let key = "\(provider.id)|\(modelID)"
+            var row = rows[key] ?? AgentModelUsageRow(
+                providerID: provider.id,
+                providerName: provider.name,
+                modelID: modelID,
+                sessionCount: 0,
+                messageCount: 0,
+                promptTokens: 0,
+                completionTokens: 0,
+                cachedPromptTokens: 0,
+                cacheWritePromptTokens: 0,
+                reasoningTokens: 0,
+                totalTokens: 0,
+                estimatedTokens: 0,
+                estimatedCostUSD: nil,
+                hasEstimatedUsage: false
+            )
+            row.sessionCount += 1
+
+            for message in session.messages where message.role == .assistant {
+                let usage = usageBreakdown(for: message)
+                row.messageCount += 1
+                row.promptTokens += usage.prompt
+                row.completionTokens += usage.completion
+                row.cachedPromptTokens += usage.cachedPrompt
+                row.cacheWritePromptTokens += usage.cacheWritePrompt
+                row.reasoningTokens += usage.reasoning
+                row.totalTokens += usage.total
+                row.estimatedTokens += usage.estimated
+                row.hasEstimatedUsage = row.hasEstimatedUsage || usage.isEstimated
+            }
+
+            row.estimatedCostUSD = estimatedCostUSD(for: row)
+            rows[key] = row
+        }
+
+        return rows.values
+            .filter { $0.messageCount > 0 || $0.totalTokens > 0 }
+            .sorted {
+                let lhs = $0.estimatedCostUSD ?? -1
+                let rhs = $1.estimatedCostUSD ?? -1
+                if lhs != rhs { return lhs > rhs }
+                if $0.totalTokens != $1.totalTokens { return $0.totalTokens > $1.totalTokens }
+                if $0.providerName != $1.providerName { return $0.providerName < $1.providerName }
+                return $0.modelID < $1.modelID
+            }
+    }
+
     // MARK: - Internals
 
     private static func estimateTokens(for message: AgentMessage) -> Int {
@@ -161,6 +238,84 @@ enum AgentUsageStats {
         // Per-image flat budget aligning with AppState.estimatedAgentTokens.
         total += message.images.count * 600
         return total
+    }
+
+    private static func normalizedModelID(_ value: String?) -> String {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? "unknown-model" : trimmed
+    }
+
+    private static func providerSnapshot(for session: AgentSession, modelID: String) -> (id: String, name: String) {
+        if let providerID = session.providerID?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !providerID.isEmpty {
+            let display = session.providerDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (
+                providerID,
+                display?.isEmpty == false
+                    ? display!
+                    : AgentProviderPreset.preset(id: providerID)?.displayName ?? providerID
+            )
+        }
+
+        let inferred = inferProviderID(from: modelID)
+        return (inferred, AgentProviderPreset.preset(id: inferred)?.displayName ?? inferred)
+    }
+
+    private static func inferProviderID(from modelID: String) -> String {
+        let id = modelID.lowercased()
+        if id.contains("deepseek") { return AgentProviderPreset.deepSeekID }
+        if id.contains("claude") || id.contains("anthropic") { return "claude" }
+        if id.contains("gemini") { return "gemini" }
+        if id.contains("qwen") || id.contains("qwq") { return "dashscope" }
+        if id.contains("kimi") { return "kimi" }
+        if id.contains("moonshot") { return "moonshot" }
+        if id.hasPrefix("gpt-") || id.hasPrefix("o1") || id.hasPrefix("o3") || id.hasPrefix("o4") {
+            return AgentProviderPreset.openAIID
+        }
+        return AgentProviderPreset.customID
+    }
+
+    private static func usageBreakdown(for message: AgentMessage) -> (
+        prompt: Int,
+        completion: Int,
+        cachedPrompt: Int,
+        cacheWritePrompt: Int,
+        reasoning: Int,
+        total: Int,
+        estimated: Int,
+        isEstimated: Bool
+    ) {
+        let cached = max(0, message.cachedPromptTokens ?? 0)
+        let cacheWrite = max(0, message.cacheWritePromptTokens ?? 0)
+        let reasoning = max(0, message.reasoningTokens ?? 0)
+
+        if let prompt = message.promptTokens,
+           let completion = message.completionTokens {
+            let total = message.usageTokens ?? (prompt + completion)
+            return (prompt, completion, cached, cacheWrite, reasoning, max(total, prompt + completion), 0, false)
+        }
+
+        if let total = message.usageTokens, total > 0 {
+            let completionEstimate = max(1, message.modelContent.count / 4 + (message.reasoningContent?.count ?? 0) / 4)
+            let completion = min(total, completionEstimate)
+            return (max(0, total - completion), completion, cached, cacheWrite, reasoning, total, total, true)
+        }
+
+        let estimated = estimateTokens(for: message)
+        return (0, estimated, cached, cacheWrite, reasoning, estimated, estimated, true)
+    }
+
+    private static func estimatedCostUSD(for row: AgentModelUsageRow) -> Double? {
+        guard let price = AgentModelPricing.price(providerID: row.providerID, modelID: row.modelID) else {
+            return nil
+        }
+        let cached = min(row.cachedPromptTokens, row.promptTokens)
+        let uncachedPrompt = max(0, row.promptTokens - cached)
+        let inputCost = Double(uncachedPrompt) * price.inputPerMillion / 1_000_000.0
+        let cachedCost = Double(cached) * (price.cachedInputPerMillion ?? price.inputPerMillion) / 1_000_000.0
+        let cacheWriteCost = Double(row.cacheWritePromptTokens) * (price.cacheWritePerMillion ?? price.inputPerMillion) / 1_000_000.0
+        let outputCost = Double(row.completionTokens) * price.outputPerMillion / 1_000_000.0
+        return inputCost + cachedCost + cacheWriteCost + outputCost
     }
 
     private static func computeStreaks(
@@ -197,4 +352,46 @@ enum AgentUsageStats {
 
         return (current, longest)
     }
+}
+
+private struct AgentModelPrice {
+    let providerIDs: Set<String>
+    let modelHints: [String]
+    let inputPerMillion: Double
+    let cachedInputPerMillion: Double?
+    let cacheWritePerMillion: Double?
+    let outputPerMillion: Double
+}
+
+private enum AgentModelPricing {
+    static func price(providerID: String, modelID: String) -> AgentModelPrice? {
+        let provider = providerID.lowercased()
+        let model = modelID.lowercased()
+        return prices.first { price in
+            price.providerIDs.contains(provider)
+                && price.modelHints.contains { model.contains($0) }
+        }
+    }
+
+    private static let prices: [AgentModelPrice] = [
+        AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5.5"], inputPerMillion: 5.0, cachedInputPerMillion: 0.5, cacheWritePerMillion: nil, outputPerMillion: 30.0),
+        AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5.4-mini"], inputPerMillion: 0.75, cachedInputPerMillion: 0.075, cacheWritePerMillion: nil, outputPerMillion: 4.5),
+        AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5.4"], inputPerMillion: 2.5, cachedInputPerMillion: 0.25, cacheWritePerMillion: nil, outputPerMillion: 15.0),
+
+        AgentModelPrice(providerIDs: ["claude"], modelHints: ["claude-fable-5", "claude-mythos-5"], inputPerMillion: 10.0, cachedInputPerMillion: 1.0, cacheWritePerMillion: 12.5, outputPerMillion: 50.0),
+        AgentModelPrice(providerIDs: ["claude"], modelHints: ["claude-opus-4.8", "claude-opus-4.7", "claude-opus-4.6", "claude-opus-4.5"], inputPerMillion: 5.0, cachedInputPerMillion: 0.5, cacheWritePerMillion: 6.25, outputPerMillion: 25.0),
+        AgentModelPrice(providerIDs: ["claude"], modelHints: ["claude-opus-4.1", "claude-opus-4"], inputPerMillion: 15.0, cachedInputPerMillion: 1.5, cacheWritePerMillion: 18.75, outputPerMillion: 75.0),
+        AgentModelPrice(providerIDs: ["claude"], modelHints: ["claude-sonnet-4.6", "claude-sonnet-4.5", "claude-sonnet-4"], inputPerMillion: 3.0, cachedInputPerMillion: 0.3, cacheWritePerMillion: 3.75, outputPerMillion: 15.0),
+        AgentModelPrice(providerIDs: ["claude"], modelHints: ["claude-haiku-4.5"], inputPerMillion: 1.0, cachedInputPerMillion: 0.1, cacheWritePerMillion: 1.25, outputPerMillion: 5.0),
+        AgentModelPrice(providerIDs: ["claude"], modelHints: ["claude-3-5-haiku", "claude-haiku-3.5"], inputPerMillion: 0.8, cachedInputPerMillion: 0.08, cacheWritePerMillion: 1.0, outputPerMillion: 4.0),
+
+        AgentModelPrice(providerIDs: ["gemini"], modelHints: ["gemini-3"], inputPerMillion: 2.0, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 12.0),
+        AgentModelPrice(providerIDs: ["gemini"], modelHints: ["gemini-2.5-pro"], inputPerMillion: 1.25, cachedInputPerMillion: 0.125, cacheWritePerMillion: nil, outputPerMillion: 10.0),
+        AgentModelPrice(providerIDs: ["gemini"], modelHints: ["gemini-2.5-flash-lite"], inputPerMillion: 0.10, cachedInputPerMillion: 0.01, cacheWritePerMillion: nil, outputPerMillion: 0.40),
+        AgentModelPrice(providerIDs: ["gemini"], modelHints: ["gemini-2.5-flash"], inputPerMillion: 0.30, cachedInputPerMillion: 0.03, cacheWritePerMillion: nil, outputPerMillion: 2.50),
+        AgentModelPrice(providerIDs: ["gemini"], modelHints: ["gemini-2.0-flash-lite"], inputPerMillion: 0.10, cachedInputPerMillion: 0.025, cacheWritePerMillion: nil, outputPerMillion: 0.40),
+
+        AgentModelPrice(providerIDs: ["deepseek"], modelHints: ["deepseek-v4-pro"], inputPerMillion: 0.435, cachedInputPerMillion: 0.003625, cacheWritePerMillion: nil, outputPerMillion: 0.87),
+        AgentModelPrice(providerIDs: ["deepseek"], modelHints: ["deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"], inputPerMillion: 0.14, cachedInputPerMillion: 0.0028, cacheWritePerMillion: nil, outputPerMillion: 0.28)
+    ]
 }

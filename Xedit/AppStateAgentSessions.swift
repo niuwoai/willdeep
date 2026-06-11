@@ -1230,6 +1230,10 @@ extension AppState {
         } else if runtime.session.modelID == nil {
             runtime.session.modelID = agentConfiguration.normalized.model(for: .interactive)
         }
+        let activeProvider = agentProviderLibrary.active
+        runtime.session.providerID = activeProvider?.providerID ?? agentConfiguration.normalized.providerID
+        runtime.session.providerDisplayName = activeProvider?.displayName
+            ?? AgentProviderPreset.preset(id: runtime.session.providerID ?? "")?.displayName
         runtime.persist()
         agentSessions[index] = runtime.session
         agentSessions.sort { $0.updatedAt > $1.updatedAt }

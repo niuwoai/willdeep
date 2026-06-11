@@ -348,7 +348,10 @@ struct OpenAIResponsesAdapter {
                         await onEvent(.usageReported(
                             prompt: prompt,
                             completion: completion,
-                            total: total
+                            total: total,
+                            cachedPrompt: usage.input_tokens_details?.cached_tokens ?? 0,
+                            cacheWritePrompt: 0,
+                            reasoning: usage.output_tokens_details?.reasoning_tokens ?? 0
                         ))
                     }
                 }
@@ -679,6 +682,16 @@ private struct ResponseCompletedEvent: Decodable {
         let input_tokens: Int?
         let output_tokens: Int?
         let total_tokens: Int?
+        let input_tokens_details: InputTokensDetails?
+        let output_tokens_details: OutputTokensDetails?
+    }
+
+    struct InputTokensDetails: Decodable {
+        let cached_tokens: Int?
+    }
+
+    struct OutputTokensDetails: Decodable {
+        let reasoning_tokens: Int?
     }
 
     struct Output: Decodable {

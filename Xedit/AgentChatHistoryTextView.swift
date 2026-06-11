@@ -222,6 +222,11 @@ final class AgentChatHistoryNSTextView: NSTextView {
             hasher.combine(m.textAttachments.count)
             hasher.combine(m.toolCallID)
             hasher.combine(m.usageTokens)
+            hasher.combine(m.promptTokens)
+            hasher.combine(m.completionTokens)
+            hasher.combine(m.cachedPromptTokens)
+            hasher.combine(m.cacheWritePromptTokens)
+            hasher.combine(m.reasoningTokens)
             hasher.combine(m.toolCalls.count)
             for tc in m.toolCalls {
                 hasher.combine(tc.externalID)

@@ -918,11 +918,14 @@ extension AppState {
                         case .finishedTurn(let reason):
                             streamBuffer.flushPending()
                             finishReason = reason
-                        case .usageReported(let prompt, let completion, let total):
+                        case .usageReported(let prompt, let completion, let total, let cachedPrompt, let cacheWritePrompt, let reasoning):
                             streamBuffer.flushPending()
                             runtime.messages[index].usageTokens = total
                             runtime.messages[index].promptTokens = prompt > 0 ? prompt : nil
                             runtime.messages[index].completionTokens = completion > 0 ? completion : nil
+                            runtime.messages[index].cachedPromptTokens = cachedPrompt > 0 ? cachedPrompt : nil
+                            runtime.messages[index].cacheWritePromptTokens = cacheWritePrompt > 0 ? cacheWritePrompt : nil
+                            runtime.messages[index].reasoningTokens = reasoning > 0 ? reasoning : nil
                         }
                     }
                 }

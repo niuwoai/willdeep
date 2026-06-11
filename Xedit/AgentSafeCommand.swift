@@ -218,6 +218,15 @@ enum SafeCommand {
                     index = command.index(after: index)
                     continue
                 }
+                // File descriptor redirects like `2>&1` contain `&` but do
+                // not start a background job. Keep them inside the segment so
+                // the harmless-redirection precheck and the following command
+                // classifier see the original shell shape.
+                if ch == "&", current.last == ">" {
+                    current.append(ch)
+                    index = command.index(after: index)
+                    continue
+                }
                 // Background operator `&` (without `&&`) is suspicious —
                 // treat as a segment break so downstream judgment kicks in.
                 if ch == "&" {

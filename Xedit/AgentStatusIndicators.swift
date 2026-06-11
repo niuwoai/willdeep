@@ -34,6 +34,12 @@ struct AgentStatsDashboard: View {
         case overview = "Overview"
         case models = "Models"
         var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .overview: return L10n.StatsDashboard.tabsOverview
+            case .models: return L10n.StatsDashboard.tabsModels
+            }
+        }
     }
 
     enum DashboardRange: String, CaseIterable, Identifiable {
@@ -41,6 +47,13 @@ struct AgentStatsDashboard: View {
         case days30 = "30d"
         case days7 = "7d"
         var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .all: return L10n.StatsDashboard.rangeAll
+            case .days30: return L10n.StatsDashboard.range30d
+            case .days7: return L10n.StatsDashboard.range7d
+            }
+        }
         var days: Int? {
             switch self {
             case .all: return nil
@@ -53,9 +66,13 @@ struct AgentStatsDashboard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             tabBar
-            statsGrid
-            heatmap
-            funFact
+            if selectedTab == .overview {
+                statsGrid
+                heatmap
+                funFact
+            } else {
+                modelUsageList
+            }
         }
         .padding(16)
         .background(
@@ -74,7 +91,7 @@ struct AgentStatsDashboard: View {
             HStack(spacing: 2) {
                 ForEach(DashboardTab.allCases) { tab in
                     Button { selectedTab = tab } label: {
-                        Text(tab.rawValue)
+                        Text(tab.title)
                             .font(.system(size: 12, weight: selectedTab == tab ? .semibold : .regular))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
@@ -94,7 +111,7 @@ struct AgentStatsDashboard: View {
             HStack(spacing: 2) {
                 ForEach(DashboardRange.allCases) { value in
                     Button { range = value } label: {
-                        Text(value.rawValue)
+                        Text(value.title)
                             .font(.system(size: 11, weight: range == value ? .semibold : .regular))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
@@ -108,6 +125,10 @@ struct AgentStatsDashboard: View {
 
     private var overview: AgentUsageOverview {
         AgentUsageStats.overview(for: filteredSessions)
+    }
+
+    private var modelUsageRows: [AgentModelUsageRow] {
+        AgentUsageStats.modelUsage(for: filteredSessions)
     }
 
     private var filteredSessions: [AgentSession] {
@@ -180,6 +201,126 @@ struct AgentStatsDashboard: View {
         return 7 * cellSize + 6 * cellSpacing
     }
 
+    private var modelUsageList: some View {
+        let rows = modelUsageRows
+        return Group {
+            if rows.isEmpty {
+                Text(L10n.ModelUsage.empty)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 112, alignment: .center)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    modelUsageHeader
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(rows) { row in
+                                modelUsageRow(row)
+                            }
+                        }
+                        .padding(.vertical, 1)
+                    }
+                    .frame(maxHeight: 190)
+                    modelUsageFootnote(rows)
+                }
+            }
+        }
+    }
+
+    private var modelUsageHeader: some View {
+        HStack(spacing: 8) {
+            Text(L10n.ModelUsage.headerModel)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(L10n.ModelUsage.headerTokens)
+                .frame(width: 120, alignment: .trailing)
+            Text(L10n.ModelUsage.headerCache)
+                .frame(width: 56, alignment: .trailing)
+            Text(L10n.ModelUsage.headerCost)
+                .frame(width: 72, alignment: .trailing)
+        }
+        .font(.system(size: 10, weight: .medium))
+        .foregroundStyle(.secondary)
+    }
+
+    private func modelUsageRow(_ row: AgentModelUsageRow) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(row.providerName)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.10))
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                    Text(row.modelID)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(row.modelID)
+                }
+                Text(modelUsageSubtitle(row))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text("\(formatTokens(row.promptTokens)) / \(formatTokens(row.completionTokens))")
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(.primary)
+                .frame(width: 120, alignment: .trailing)
+                .help(L10n.ModelUsage.tokensHelp(formatTokens(row.promptTokens), formatTokens(row.completionTokens)))
+
+            Text(formatPercent(row.cacheHitRate))
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(row.cachedPromptTokens > 0 ? .primary : .secondary)
+                .frame(width: 56, alignment: .trailing)
+
+            Text(formatCost(row))
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(row.estimatedCostUSD == nil ? .secondary : .primary)
+                .frame(width: 72, alignment: .trailing)
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
+        .background(Color.secondary.opacity(0.055))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func modelUsageSubtitle(_ row: AgentModelUsageRow) -> String {
+        var parts = [
+            L10n.ModelUsage.sessions(String(row.sessionCount)),
+            L10n.ModelUsage.messages(String(row.messageCount))
+        ]
+        if row.reasoningTokens > 0 {
+            parts.append(L10n.ModelUsage.reasoning(formatTokens(row.reasoningTokens)))
+        }
+        if row.cachedPromptTokens > 0 {
+            parts.append(L10n.ModelUsage.cached(formatTokens(row.cachedPromptTokens)))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func modelUsageFootnote(_ rows: [AgentModelUsageRow]) -> some View {
+        let hasUnknownPrice = rows.contains { $0.estimatedCostUSD == nil }
+        let hasEstimatedUsage = rows.contains(where: \.hasEstimatedUsage)
+        let text: String? = {
+            if hasUnknownPrice && hasEstimatedUsage { return L10n.ModelUsage.footnoteUnknownAndEstimated }
+            if hasUnknownPrice { return L10n.ModelUsage.footnoteUnknownPrice }
+            if hasEstimatedUsage { return L10n.ModelUsage.footnoteEstimatedUsage }
+            return nil
+        }()
+        return Group {
+            if let text {
+                Text(text)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private func heatmapWeekCount(for width: CGFloat, cellSize: CGFloat, spacing: CGFloat) -> Int {
         let minimumWeekCount = 12
         let availableWidth = max(0, width)
@@ -234,6 +375,20 @@ struct AgentStatsDashboard: View {
         if count >= 1_000_000 { return String(format: "%.1fM", Double(count) / 1_000_000) }
         if count >= 1_000 { return "\(count / 1_000)k" }
         return "\(count)"
+    }
+
+    private func formatPercent(_ value: Double) -> String {
+        guard value > 0 else { return "0%" }
+        return String(format: "%.0f%%", min(1, value) * 100)
+    }
+
+    private func formatCost(_ row: AgentModelUsageRow) -> String {
+        guard let cost = row.estimatedCostUSD else { return L10n.ModelUsage.costUnknown }
+        let prefix = row.hasEstimatedUsage ? "≈" : ""
+        if cost < 0.01 {
+            return "\(prefix)$\(String(format: "%.4f", cost))"
+        }
+        return "\(prefix)$\(String(format: "%.2f", cost))"
     }
 
     private func peakHourLabel(_ hour: Int?) -> String {

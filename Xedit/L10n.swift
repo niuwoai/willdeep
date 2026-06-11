@@ -384,6 +384,38 @@ enum L10n {
         static let copyAccessibility = String(localized: "message-footer.copy-accessibility", defaultValue: "Copy message")
     }
 
+    enum ModelUsage {
+        static let cached = { (a1: String) -> String in
+            let template = String(localized: "model-usage.cached", defaultValue: "%@ cached")
+            return String(format: template, a1)
+        }
+        static let costUnknown = String(localized: "model-usage.cost-unknown", defaultValue: "n/a")
+        static let empty = String(localized: "model-usage.empty", defaultValue: "No model usage in this range yet.")
+        static let footnoteEstimatedUsage = String(localized: "model-usage.footnote.estimated-usage", defaultValue: "≈ means token split was estimated from older session data.")
+        static let footnoteUnknownAndEstimated = String(localized: "model-usage.footnote.unknown-and-estimated", defaultValue: "n/a means no built-in price for that model; ≈ means older token data was estimated.")
+        static let footnoteUnknownPrice = String(localized: "model-usage.footnote.unknown-price", defaultValue: "n/a means no built-in price for that model or relay.")
+        static let headerCache = String(localized: "model-usage.header.cache", defaultValue: "Cache")
+        static let headerCost = String(localized: "model-usage.header.cost", defaultValue: "Cost")
+        static let headerModel = String(localized: "model-usage.header.model", defaultValue: "Provider / model")
+        static let headerTokens = String(localized: "model-usage.header.tokens", defaultValue: "In / out")
+        static let messages = { (a1: String) -> String in
+            let template = String(localized: "model-usage.messages", defaultValue: "%@ messages")
+            return String(format: template, a1)
+        }
+        static let reasoning = { (a1: String) -> String in
+            let template = String(localized: "model-usage.reasoning", defaultValue: "%@ reasoning")
+            return String(format: template, a1)
+        }
+        static let sessions = { (a1: String) -> String in
+            let template = String(localized: "model-usage.sessions", defaultValue: "%@ sessions")
+            return String(format: template, a1)
+        }
+        static let tokensHelp = { (a1: String, a2: String) -> String in
+            let template = String(localized: "model-usage.tokens-help", defaultValue: "%@ input tokens, %@ output tokens")
+            return String(format: template, a1, a2)
+        }
+    }
+
     enum PlanCard {
         static let approveButton = String(localized: "plan-card.approve-button", defaultValue: "Approve")
         static let header = String(localized: "plan-card.header", defaultValue: "Plan")

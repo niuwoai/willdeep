@@ -239,6 +239,8 @@ struct AnthropicMessagesAdapter {
         /// up front) so the final `usageReported` can include both
         /// halves once `message_delta` brings output_tokens.
         var promptTokens: Int = 0
+        var cacheReadTokens: Int = 0
+        var cacheWriteTokens: Int = 0
     }
 
     private struct PendingToolCall {
@@ -257,6 +259,8 @@ struct AnthropicMessagesAdapter {
         case "message_start":
             if let event = try? JSONDecoder().decode(MessageStartEvent.self, from: payload) {
                 state.promptTokens = event.message.usage?.input_tokens ?? 0
+                state.cacheReadTokens = event.message.usage?.cache_read_input_tokens ?? 0
+                state.cacheWriteTokens = event.message.usage?.cache_creation_input_tokens ?? 0
             }
 
         case "content_block_start":
@@ -327,13 +331,19 @@ struct AnthropicMessagesAdapter {
                 await onEvent(.finishedTurn(mapped))
             }
             if let usage = event.usage {
+                state.promptTokens = usage.input_tokens ?? state.promptTokens
+                state.cacheReadTokens = usage.cache_read_input_tokens ?? state.cacheReadTokens
+                state.cacheWriteTokens = usage.cache_creation_input_tokens ?? state.cacheWriteTokens
                 let output = usage.output_tokens ?? 0
                 let total = state.promptTokens + output
                 if total > 0 {
                     await onEvent(.usageReported(
                         prompt: state.promptTokens,
                         completion: output,
-                        total: total
+                        total: total,
+                        cachedPrompt: state.cacheReadTokens,
+                        cacheWritePrompt: state.cacheWriteTokens,
+                        reasoning: 0
                     ))
                 }
             }
@@ -667,6 +677,8 @@ private struct MessageStartEvent: Decodable {
     }
     struct UsageMeta: Decodable {
         let input_tokens: Int?
+        let cache_creation_input_tokens: Int?
+        let cache_read_input_tokens: Int?
     }
 }
 
@@ -709,6 +721,9 @@ private struct MessageDeltaEvent: Decodable {
         let stop_sequence: String?
     }
     struct Usage: Decodable {
+        let input_tokens: Int?
+        let cache_creation_input_tokens: Int?
+        let cache_read_input_tokens: Int?
         let output_tokens: Int?
     }
 }

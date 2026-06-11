@@ -319,7 +319,10 @@ struct GeminiAdapter {
                 await onEvent(.usageReported(
                     prompt: prompt,
                     completion: completion,
-                    total: total
+                    total: total,
+                    cachedPrompt: usage.cachedContentTokenCount ?? 0,
+                    cacheWritePrompt: 0,
+                    reasoning: usage.thoughtsTokenCount ?? 0
                 ))
             }
         }
@@ -726,7 +729,9 @@ private struct GenerateContentResponse: Decodable {
 
     struct UsageMetadata: Decodable {
         let promptTokenCount: Int?
+        let cachedContentTokenCount: Int?
         let candidatesTokenCount: Int?
+        let thoughtsTokenCount: Int?
         let totalTokenCount: Int?
     }
 }

@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.60.0-rc14 - 2026-06-11
+
+### Fixed
+
+- 修复 SafeCommand shell 分段器把 `2>&1` / `1>&2` 中的 `&` 误判为后台操作符的问题；`whois ... 2>&1 | grep ...` 这类只读网络查询管道会继续静态自动放行。
+- 补充 fd 重定向管道单测，锁定 GitHub Actions 中失败的 SafeCommand 控制流场景。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc14`。
+
+## 1.60.0-rc13 - 2026-06-11
+
+### Added
+
+- Agent mode 新会话统计卡的 Models tab 改为按 provider + 完整 model id 展示用量，包含会话数、消息数、输入/输出 token、缓存命中率、reasoning token 和费用估算。
+- Agent streaming usage 记录新增缓存命中、缓存写入和 reasoning token 字段；OpenAI Chat/Responses、Anthropic Messages、Gemini、DeepSeek/OpenAI-compatible usage 会尽量解析各自的官方字段。
+- 内置主流模型价格表，覆盖 OpenAI GPT-5.4/5.5、Anthropic Claude 4/5、Gemini 2.5/3、DeepSeek V4 系列；未知模型或中转价格显示未定价而不是臆算。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.60.0-rc13`。
+
 ## 1.60.0-rc12 - 2026-06-11
 
 ### Changed

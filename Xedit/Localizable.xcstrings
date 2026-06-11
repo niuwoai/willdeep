@@ -5356,6 +5356,258 @@
         }
       }
     },
+    "model-usage.cached": {
+      "comment": "model usage subtitle cached token count",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ cached"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 缓存命中"
+          }
+        }
+      }
+    },
+    "model-usage.cost-unknown": {
+      "comment": "model usage cost when no built-in price is available",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "n/a"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未定价"
+          }
+        }
+      }
+    },
+    "model-usage.empty": {
+      "comment": "empty state for model usage tab",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No model usage in this range yet."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这个时间范围内还没有模型用量。"
+          }
+        }
+      }
+    },
+    "model-usage.footnote.estimated-usage": {
+      "comment": "model usage footnote when some token usage is estimated",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "≈ means token split was estimated from older session data."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "≈ 表示部分输入/输出令牌来自旧会话估算。"
+          }
+        }
+      }
+    },
+    "model-usage.footnote.unknown-and-estimated": {
+      "comment": "model usage footnote when some prices are unknown and some token usage is estimated",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "n/a means no built-in price for that model; ≈ means older token data was estimated."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未定价表示内置价格表暂无该模型；≈ 表示旧会话令牌有估算。"
+          }
+        }
+      }
+    },
+    "model-usage.footnote.unknown-price": {
+      "comment": "model usage footnote when some prices are unknown",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "n/a means no built-in price for that model or relay."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未定价表示内置价格表暂无该模型或中转。"
+          }
+        }
+      }
+    },
+    "model-usage.header.cache": {
+      "comment": "model usage table cache column",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cache"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "缓存"
+          }
+        }
+      }
+    },
+    "model-usage.header.cost": {
+      "comment": "model usage table cost column",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cost"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "费用"
+          }
+        }
+      }
+    },
+    "model-usage.header.model": {
+      "comment": "model usage table provider and model column",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Provider / model"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Provider / 模型"
+          }
+        }
+      }
+    },
+    "model-usage.header.tokens": {
+      "comment": "model usage table input/output token column",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In / out"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "输入 / 输出"
+          }
+        }
+      }
+    },
+    "model-usage.messages": {
+      "comment": "model usage subtitle message count",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ messages"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 条消息"
+          }
+        }
+      }
+    },
+    "model-usage.reasoning": {
+      "comment": "model usage subtitle reasoning token count",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ reasoning"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 推理"
+          }
+        }
+      }
+    },
+    "model-usage.sessions": {
+      "comment": "model usage subtitle session count",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ sessions"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 个会话"
+          }
+        }
+      }
+    },
+    "model-usage.tokens-help": {
+      "comment": "tooltip for input/output token counts",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ input tokens, %@ output tokens"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 输入令牌，%@ 输出令牌"
+          }
+        }
+      }
+    },
     "stat-cell.active-days": {
       "comment": "stats grid cell title",
       "extractionState": "manual",

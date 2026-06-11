@@ -126,7 +126,10 @@ struct OpenAIChatAdapter {
                 await onEvent(.usageReported(
                     prompt: usage.prompt_tokens ?? 0,
                     completion: usage.completion_tokens ?? 0,
-                    total: total
+                    total: total,
+                    cachedPrompt: usage.cachedPromptTokens,
+                    cacheWritePrompt: usage.cacheWritePromptTokens,
+                    reasoning: usage.reasoningTokens
                 ))
             }
         }
@@ -533,6 +536,30 @@ private struct ChatCompletionChunk: Decodable {
         let prompt_tokens: Int?
         let completion_tokens: Int?
         let total_tokens: Int?
+        let prompt_cache_hit_tokens: Int?
+        let prompt_cache_miss_tokens: Int?
+        let prompt_tokens_details: PromptTokensDetails?
+        let completion_tokens_details: CompletionTokensDetails?
+
+        var cachedPromptTokens: Int {
+            prompt_tokens_details?.cached_tokens ?? prompt_cache_hit_tokens ?? 0
+        }
+
+        var cacheWritePromptTokens: Int {
+            prompt_cache_miss_tokens ?? 0
+        }
+
+        var reasoningTokens: Int {
+            completion_tokens_details?.reasoning_tokens ?? 0
+        }
+
+        struct PromptTokensDetails: Decodable {
+            let cached_tokens: Int?
+        }
+
+        struct CompletionTokensDetails: Decodable {
+            let reasoning_tokens: Int?
+        }
     }
 }
 

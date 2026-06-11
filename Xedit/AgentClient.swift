@@ -37,7 +37,14 @@ enum AgentClientEvent {
     /// (OpenAI-compatible `usage.total_tokens` / Anthropic `message_delta.usage`
     /// / Gemini `usageMetadata`). Not every provider includes it; absent →
     /// caller falls back to the estimator.
-    case usageReported(prompt: Int, completion: Int, total: Int)
+    case usageReported(
+        prompt: Int,
+        completion: Int,
+        total: Int,
+        cachedPrompt: Int,
+        cacheWritePrompt: Int,
+        reasoning: Int
+    )
 }
 
 struct AgentClient {

@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-11 | Current version: v1.60.0-rc12
+> Last updated: 2026-06-11 | Current version: v1.60.0-rc14
 
 ## Positioning
 
@@ -38,7 +38,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 | `AgentSessionsSidebar.swift` | ~504 | 左侧会话侧栏：CHATS / provider 状态 / workspace 分组 / 归档分区（rc45 拆出） |
 | `AgentChatTranscript.swift` | ~381 | Plan/Goal banner / 历史 + 流式分流 / tool group / 错误卡（rc45 拆出） |
 | `AgentChatHeader.swift` | ~78 | 会话标题 + 复制 + 新会话 + 切回 editor（rc45 拆出） |
-| `AgentStatusIndicators.swift` | ~420 | StatsDashboard / StatCell / PlanStatusPill / 呼吸 icon / RunningTasksRow（rc45 拆出） |
+| `AgentStatusIndicators.swift` | ~558 | StatsDashboard / StatCell / Models 用量列表 / PlanStatusPill / 呼吸 icon / RunningTasksRow（rc45 拆出，rc13 扩展 Models tab） |
 | `AgentPlanGoalCards.swift` | ~528 | Plan card / 修订行 / 步骤行 / 简单 sheet / Goal card / Goal editor（rc45 拆出） |
 | `AgentTools.swift` | ~944 | 共享类型 / UI 状态 / JSON 辅助 / Tool runner（rc45 拆完） |
 | `AgentToolRegistry.swift` | ~458 | 工具描述符表 + read-only shell 分级 + 安全 path 检查（rc45 拆出） |
@@ -55,7 +55,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 | `EditorView.swift` | ~1782 | NSTextView 包装、滚动、caret/scroll 记忆、folding |
 | `AgentPanelView.swift` | ~1977 | 侧边 panel 形态的 Agent 面板 |
 | `EditorSettingsView.swift` | ~1393 | Settings 主窗口：通用 / 字体 / Agent / Skills / Memory / MCP |
-| `AgentModels.swift` | ~1116 | `AgentSession` / `AgentMessage` / `AgentConfiguration` / `AgentProviderLibrary` 等数据模型 |
+| `AgentModels.swift` | ~1567 | `AgentSession` / `AgentMessage` / `AgentConfiguration` / `AgentProviderLibrary` 等数据模型 |
 | `SyntaxHighlighter.swift` | ~902 | 多语言正则规则 + 静态 NSRegularExpression 缓存 + viewport 高亮 |
 | `AgentMCPBridge.swift` | ~891 | MCP server 发现（App / Cursor / Codex）+ stdio / streamable-http 调用 |
 | `MarkdownPreview.swift` | ~727 | 编辑器右侧 Markdown / HTML 预览（rc40 抽出） |
@@ -86,6 +86,8 @@ CLAUDE.md §10 的软上限是 2000 行，硬上限是 3000 行。rc42 拆完 `A
 - **Automations（1.60.0-rc9）** — 旧 Routines UI 对用户改名为“自动化”，侧栏空状态提供“每日简报 / 每周回顾 / 项目监控”模板；创建与编辑弹窗统一使用自动化文案和 String Catalog 本地化。底层 `AgentRoutine` / `agent-routines` JSON 路径保留，避免破坏已有定时任务。
 - **Brand Cleanup（1.60.0-rc10）** — Settings → Local Agents 的接入状态标题不再暴露旧品牌名，统一显示 WillDeep；当前产品文档中面向用户的打开方式描述也同步改为 WillDeep。
 - **App Icon（1.60.0-rc12）** — macOS App icon 使用旧版科技网格作为底部背景，上层叠加深度镜头抽象标识，强调 AI 聚焦、层次感与简洁科技气质；`AppIcon.appiconset` 与 `appicons/` 保持同步。
+- **Agent Models Usage（1.60.0-rc13）** — Agent mode 新会话统计卡的 Models tab 不再复用概要格子，而是按 provider + 完整 model id 聚合会话内用量，显示输入/输出 token、缓存命中率、reasoning token 和估算费用。`AgentMessage` 新增 cached/cache-write/reasoning token 字段，四个 `AgentClient` 适配器会解析各自官方 usage 字段；`AgentSession` 同步记录 provider 快照，旧会话则用模型名前缀做 best-effort 归类。
+- **SafeCommand fd redirection（1.60.0-rc14）** — SafeCommand shell 分段器会保留 `2>&1` / `1>&2` 这类 fd 重定向，不再把其中的 `&` 当作后台操作符；`whois ... 2>&1 | grep ...` 这类只读网络查询管道可以继续走静态自动放行。
 - **@MainActor isolation** — AppState 本身是 `@MainActor`，所有 `@Published` mutation 必须在主线程发生。runtime 的 hot 字段亦然，但 `AgentClient` 的 URLSession 流式回调跨线程时通过 `Task { @MainActor in ... }` 拥抱主线程。`AppState.deinit` 不能 cancel runtime——rc38 曾尝试 `MainActor.assumeIsolated` 但 Swift Testing 在非主线程 release 触发 precondition fail，rc41 回退；清理走 session 显式删除路径。
 - **Per-provider concurrency cap** — 多 runtime 并发跑时，同一 provider 的活跃请求按 `AgentSettingsStore` 的 `concurrencyLimit`（默认 3，1–8 可调）FIFO 排队；不同 provider 互不阻塞。这样自动化集中触发也不会冲烂同一家 API 的速率。
 - **find/replace 内容哈希缓存** — `AppState.findMatchRanges` 与 `changedLineNumbers` 用 `(content.hashValue, query/savedContent)` 双键缓存（rc39 落地）。SwiftUI body 多次读这俩属性时不再每次重扫全文。
