@@ -1,12 +1,6 @@
 # Changelog
 
-## 1.60.0-rc3 - 2026-06-11
-
-### Agent Selection Context
-
-- 编辑器选中文本后的右键菜单新增“添加到对话”和“在侧边 Agent 中提问”，可把当前选区作为 Agent 文本附件加入下一轮对话。
-- 选区附件会记录文件、行号范围和语言信息，打开侧边 Agent 面板后以可移除 chip 展示；即使输入框为空，只要有选区附件也可以发送。
-- “在侧边 Agent 中提问”会打开右侧 Agent 面板、聚焦输入框，并预填一条面向已附加选区的问题提示。
+## 1.60.0-rc4 - 2026-06-11
 
 ### Remote Runtime
 
@@ -22,7 +16,19 @@
 
 ### 版本
 
-- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc3`。
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc4`。
+
+## 1.60.0-rc3 - 2026-06-11
+
+### Agent Selection Context
+
+- 编辑器选中文本后的右键菜单新增“添加到对话”和“在侧边 Agent 中提问”，可把当前选区作为 Agent 文本附件加入下一轮对话。
+- 选区附件会记录文件、行号范围和语言信息，打开侧边 Agent 面板后以可移除 chip 展示；即使输入框为空，只要有选区附件也可以发送。
+- “在侧边 Agent 中提问”会打开右侧 Agent 面板、聚焦输入框，并预填一条面向已附加选区的问题提示。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc3`。
 
 ## 1.60.0-rc2 - 2026-06-11
 
