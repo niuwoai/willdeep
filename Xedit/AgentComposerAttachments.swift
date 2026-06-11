@@ -5,9 +5,9 @@
 //  Small composer chrome split out of AgentModeComposerView.swift in
 //  rc42: three buttons sitting around the text editor —
 //   - `AttachButton`: "+" image-paste trigger
-//   - `SendStopButton`: dual-state arrow / red stop disc tied to
-//     `appState.isAgentResponding`. Disabled when both the buffer and
-//     pending-image list are empty.
+//   - `SendStopButton`: sends normally when idle; while the agent is
+//     busy, the arrow queues the composer text and a separate red stop
+//     disc interrupts the active turn.
 //   - `QueueBadge`: orange hourglass pill that shows up while
 //     `appState.agentQueuedMessages` is non-empty, with a menu to clear.
 //
@@ -38,50 +38,73 @@ struct SendStopButton: View {
     @EnvironmentObject var appState: AppState
 
     var body: some View {
-        Button {
-            if appState.isAgentResponding {
-                appState.stopAgentResponse()
-            } else {
-                appState.sendAgentMessage()
-            }
-        } label: {
-            ZStack {
-                // Stopping state used to be a fully-saturated red
-                // circle — visually shouted "danger" out of all
-                // proportion to "click to interrupt streaming". Now
-                // it's a soft red-tinted disc with a red stroke and a
-                // red-foreground glyph: still unmistakably the stop
-                // action, but no longer alarm-bell red.
-                if appState.isAgentResponding {
+        HStack(spacing: 6) {
+            if appState.isAgentResponding, canSend {
+                Button {
+                    appState.sendAgentMessage()
+                } label: {
                     Circle()
-                        .fill(Color.red.opacity(0.12))
+                        .fill(Color.accentColor)
                         .frame(width: 26, height: 26)
                         .overlay(
-                            Circle()
-                                .stroke(Color.red.opacity(0.55), lineWidth: 1.2)
+                            Image(systemName: "text.line.last.and.arrowtriangle.forward")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(.white)
                         )
-                    Image(systemName: "square.fill")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Color.red.opacity(0.85))
+                }
+                .buttonStyle(.plain)
+                .help(L10n.Composer.queueSendHelp)
+            }
+
+            Button {
+                if appState.isAgentResponding {
+                    appState.stopAgentResponse()
                 } else {
-                    Circle()
-                        .fill(canSend ? Color.accentColor : Color.secondary.opacity(0.3))
-                        .frame(width: 26, height: 26)
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.white)
+                    appState.sendAgentMessage()
+                }
+            } label: {
+                ZStack {
+                    // Stopping state used to be a fully-saturated red
+                    // circle — visually shouted "danger" out of all
+                    // proportion to "click to interrupt streaming". Now
+                    // it's a soft red-tinted disc with a red stroke and a
+                    // red-foreground glyph: still unmistakably the stop
+                    // action, but no longer alarm-bell red.
+                    if appState.isAgentResponding {
+                        Circle()
+                            .fill(Color.red.opacity(0.12))
+                            .frame(width: 26, height: 26)
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.red.opacity(0.55), lineWidth: 1.2)
+                            )
+                        Image(systemName: "square.fill")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Color.red.opacity(0.85))
+                    } else {
+                        Circle()
+                            .fill(canSend ? Color.accentColor : Color.secondary.opacity(0.3))
+                            .frame(width: 26, height: 26)
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
                 }
             }
+            .buttonStyle(.plain)
+            .disabled(!appState.isAgentResponding && !canSend)
+            .help(appState.isAgentResponding ? L10n.Composer.stopHelp : L10n.Composer.sendHelp)
         }
-        .buttonStyle(.plain)
-        .disabled(!appState.isAgentResponding && !canSend)
-        .help(appState.isAgentResponding ? "Stop" : "Send (↩)")
+        .fixedSize()
     }
 
     private var canSend: Bool {
         !appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !appState.agentPendingImages.isEmpty
             || !appState.agentPendingTextAttachments.isEmpty
+            || !appState.agentPendingSkills.isEmpty
+            || !appState.agentPendingFiles.isEmpty
+            || appState.agentPendingIncludeWorkspaceOverview
     }
 }
 

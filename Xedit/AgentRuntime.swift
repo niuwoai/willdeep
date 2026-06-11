@@ -67,6 +67,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     // MARK: - Per-session mode & overrides
 
     @Published var interactionMode: AgentInteractionMode = .normal
+    @Published var approvalMode: AgentApprovalMode = .smart
     @Published var currentPlan: AgentPlan?
     @Published var currentGoal: AgentGoal?
     @Published var sessionModelOverride: String?
@@ -122,6 +123,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.didEditFiles = session.didEditFiles
         self.agentEditedPaths = Set(session.agentEditedPaths)
         self.interactionMode = session.interactionMode
+        self.approvalMode = session.approvalMode
         self.currentPlan = session.currentPlan
         self.currentGoal = session.currentGoal
     }
@@ -157,6 +159,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.didEditFiles = didEditFiles
         session.agentEditedPaths = agentEditedPaths.sorted()
         session.interactionMode = interactionMode
+        session.approvalMode = approvalMode
         session.currentPlan = currentPlan
         session.currentGoal = currentGoal
         session.updatedAt = Date()

@@ -418,6 +418,7 @@ extension AppState {
             language: effectiveLanguage,
             toolsEnabled: true,
             interactionMode: agentInteractionMode,
+            approvalMode: agentApprovalMode,
             currentPlan: agentCurrentPlan,
             currentGoal: agentCurrentGoal
         )
@@ -612,9 +613,14 @@ extension AppState {
         toolName: String,
         arguments: [String: AgentJSONValue],
         risk: AgentToolRisk,
-        interactionMode: AgentInteractionMode = .normal
+        interactionMode: AgentInteractionMode = .normal,
+        approvalMode: AgentApprovalMode = .smart
     ) async -> AgentToolApprovalSource? {
         guard risk == .write else { return nil }
+
+        if approvalMode == .requestEveryTime {
+            return nil
+        }
 
         // 0. Goal mode: the whole point is running to the goal without
         //    babysitting, so write-tier calls auto-approve. Two things
@@ -632,6 +638,11 @@ extension AppState {
             } else {
                 return .goalMode
             }
+        }
+
+        if approvalMode == .workspaceAccess,
+           workspaceAccessCanAutoApprove(toolName: toolName, arguments: arguments) {
+            return .workspaceAccess
         }
 
         // 1. User-pinned signatures (Always Allow button) — honored
@@ -723,6 +734,23 @@ extension AppState {
         return safe ? .llmJudge : nil
     }
 
+    private func workspaceAccessCanAutoApprove(
+        toolName: String,
+        arguments: [String: AgentJSONValue]
+    ) -> Bool {
+        switch toolName {
+        case "run_command", "kill_job", "claude_code", "codex_cli", "cursor_agent", "web_fetch":
+            return true
+        case "call_mcp_tool":
+            guard let server = arguments["server"]?.stringValue() else {
+                return false
+            }
+            return AgentMCPSettingsStore.trustLevel(name: server) == .fullyTrusted
+        default:
+            return false
+        }
+    }
+
     /// Configuration used for the auto-approval safety judge. Always
     /// resolves to the active library entry's **Flash** model — small,
     /// cheap, fast — regardless of what tier the current turn is on.
@@ -761,6 +789,7 @@ extension AppState {
             runtime.turnStartedAt = nil
             runtime.requestTask = nil
             captureAgentPlanFromLatestMessage(for: runtime)
+            captureAgentGoalDefinitionFromLatestMessage(for: runtime)
             captureAgentGoalEvaluationFromLatestMessage(for: runtime)
             persistAgentSession(runtime: runtime)
             maybeAutoCompressContext(for: runtime)
@@ -844,6 +873,7 @@ extension AppState {
                 language: effectiveLanguage,
                 toolsEnabled: true,
                 interactionMode: runtime.interactionMode,
+                approvalMode: runtime.approvalMode,
                 currentPlan: runtime.currentPlan,
                 currentGoal: runtime.currentGoal
             )
@@ -997,7 +1027,8 @@ extension AppState {
                     toolName: call.toolName,
                     arguments: argsDict,
                     risk: risk,
-                    interactionMode: runtime.interactionMode
+                    interactionMode: runtime.interactionMode,
+                    approvalMode: runtime.approvalMode
                 )
                 let isAlwaysAllowed = autoApproval != nil
                 let initialStatus: AgentToolCallStatus

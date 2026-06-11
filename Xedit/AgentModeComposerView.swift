@@ -299,6 +299,8 @@ private struct ComposerCard: View {
                 WorkspacePickerPill()
                 ModelPickerPill()
                 AgentModePickerPill()
+                AgentApprovalModePickerPill()
+                AgentPluginPickerPill()
                 Spacer(minLength: 0)
                 if !appState.agentQueuedMessages.isEmpty {
                     QueueBadge()

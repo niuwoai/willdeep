@@ -20,6 +20,7 @@ enum AgentContextBuilder {
         language: Language?,
         toolsEnabled: Bool = false,
         interactionMode: AgentInteractionMode = .normal,
+        approvalMode: AgentApprovalMode = .smart,
         currentPlan: AgentPlan? = nil,
         currentGoal: AgentGoal? = nil
     ) -> String {
@@ -74,10 +75,26 @@ enum AgentContextBuilder {
             }
         }
 
-        // Goal mode: pin the objective + checklist to every turn, and
-        // ask the agent to self-evaluate via a fenced `goal-check`
-        // block whenever an item's status should change.
-        if interactionMode == .goal, let goal = currentGoal, !goal.isEmpty {
+        // Goal mode: first collect/confirm a goal conversationally, then
+        // pin the objective + checklist to every turn and ask the agent
+        // to self-evaluate via a fenced `goal-check` block whenever an
+        // item's status should change.
+        if interactionMode == .goal, currentGoal == nil || currentGoal?.isEmpty == true {
+            sections.append("""
+            === GOAL MODE — SETUP ===
+            The user turned on Goal mode. Do not show them a form. Collect the goal through normal conversation.
+            If the latest user request already gives enough information, briefly restate the goal and emit exactly one fenced block tagged `goal`:
+
+            ```goal
+            Goal: <one sentence>
+            Acceptance:
+            - <observable completion item>
+            - <observable completion item>
+            ```
+
+            If the goal or acceptance criteria are still unclear, ask one concise question instead of guessing. Do not run write-tier tools until the goal is defined.
+            """)
+        } else if interactionMode == .goal, let goal = currentGoal, !goal.isEmpty {
             var goalBlock = "=== GOAL MODE — ACTIVE ===\n"
             goalBlock += "Write-tier tool calls are auto-approved in this mode — work autonomously toward the goal without pausing to ask permission. Danger-tier commands (mass deletion, force push, privilege escalation) still require the user's typed confirmation, so prefer safer alternatives where possible.\n"
             if !goal.statement.isEmpty {
@@ -109,6 +126,7 @@ enum AgentContextBuilder {
         if toolsEnabled {
             sections.append("""
             Tools:
+            - Current approval mode: \(approvalMode.displayName). \(approvalMode.systemPromptDescription)
             - You can call tools to look around the workspace before answering: search_files, grep_files, read_file, list_directory, git_status, run_command.
             - You can discover Codex skills with list_skills and read a selected skill's SKILL.md with read_skill. Use skills when the user's task matches a specialized workflow.
             - You can inspect configured MCP servers with list_mcp_servers, inspect a server's tools with list_mcp_tools, and call a configured MCP tool with call_mcp_tool. MCP tool calls may require approval.
@@ -358,6 +376,62 @@ enum AgentPlanParser {
 }
 
 // MARK: - Goal checklist evaluation parser
+
+/// Parses the agent-emitted ```goal fenced block during conversational
+/// Goal setup. The block keeps the surface intentionally simple so the
+/// model can produce it after asking any needed clarifying questions.
+enum AgentGoalParser {
+    static func extract(from content: String) -> AgentGoal? {
+        guard let body = AgentPlanParser.fencedBody(in: content, tag: "goal") else { return nil }
+        var statement = ""
+        var items: [String] = []
+        var inAcceptance = false
+
+        for raw in body.components(separatedBy: .newlines) {
+            let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty else { continue }
+            let lower = line.lowercased()
+            if lower.hasPrefix("goal:") {
+                statement = String(line.dropFirst("goal:".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                inAcceptance = false
+                continue
+            }
+            if lower == "acceptance:" || lower == "acceptance criteria:" || lower == "checklist:" {
+                inAcceptance = true
+                continue
+            }
+            if inAcceptance, let item = parseChecklistItem(line) {
+                items.append(item)
+            } else if statement.isEmpty {
+                statement = line
+            }
+        }
+
+        let checklist = items
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .map { AgentGoal.Item(text: $0) }
+        let trimmedStatement = statement.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedStatement.isEmpty || !checklist.isEmpty else { return nil }
+        return AgentGoal(statement: trimmedStatement, checklist: checklist)
+    }
+
+    private static func parseChecklistItem(_ line: String) -> String? {
+        var text = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("- [ ] ") || text.hasPrefix("- [x] ") || text.hasPrefix("- [X] ") {
+            text = String(text.dropFirst(6))
+        } else if text.hasPrefix("- ") || text.hasPrefix("* ") {
+            text = String(text.dropFirst(2))
+        } else if let (_, after) = AgentPlanParser.leadingNumber(in: text) {
+            text = String(text[after...])
+                .drop { $0 == "." || $0 == ")" || $0 == "-" || $0 == " " || $0 == "\t" }
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+            return nil
+        }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text
+    }
+}
 
 /// Parses the agent-emitted ```goal-check fenced block and applies its
 /// done/undone flips to a goal's checklist. Mirrors AgentPlanParser's

@@ -194,6 +194,9 @@ struct AgentChatTranscript: View {
                             },
                             onSendNow: {
                                 appState.sendQueuedAgentMessageNow(id: queued.id)
+                            },
+                            onRemove: {
+                                appState.removeQueuedAgentMessage(id: queued.id)
                             }
                         )
                     }

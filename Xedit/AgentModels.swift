@@ -311,6 +311,9 @@ struct AgentSession: Identifiable, Codable, Equatable {
     /// Per-session interaction mode. Persisted so re-selecting a session
     /// resumes plan/goal context without the user having to redo setup.
     var interactionMode: AgentInteractionMode
+    /// Per-session tool approval behavior. Defaults to smart approval
+    /// for backwards compatibility with existing sessions.
+    var approvalMode: AgentApprovalMode
     /// Plan-mode state (proposed → approved → done). Nil outside Plan
     /// mode, or when Plan mode is on but no plan has been drafted yet.
     var currentPlan: AgentPlan?
@@ -353,6 +356,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         didEditFiles: Bool = false,
         agentEditedPaths: [String] = [],
         interactionMode: AgentInteractionMode = .normal,
+        approvalMode: AgentApprovalMode = .smart,
         currentPlan: AgentPlan? = nil,
         currentGoal: AgentGoal? = nil,
         pinnedAt: Date? = nil,
@@ -370,6 +374,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.didEditFiles = didEditFiles
         self.agentEditedPaths = agentEditedPaths
         self.interactionMode = interactionMode
+        self.approvalMode = approvalMode
         self.currentPlan = currentPlan
         self.currentGoal = currentGoal
         self.pinnedAt = pinnedAt
@@ -389,12 +394,12 @@ struct AgentSession: Identifiable, Codable, Equatable {
     }
 
     // Custom decoding so older session JSON without the newer fields
-    // (didEditFiles, agentEditedPaths, interactionMode, currentPlan,
+    // (didEditFiles, agentEditedPaths, interactionMode, approvalMode, currentPlan,
     // currentGoal) loads cleanly — every newer field uses
     // decodeIfPresent with a default.
     enum CodingKeys: String, CodingKey {
         case id, title, workspaceRootPath, workspaceLocation, modelID, createdAt, updatedAt, messages
-        case didEditFiles, agentEditedPaths, interactionMode, currentPlan, currentGoal
+        case didEditFiles, agentEditedPaths, interactionMode, approvalMode, currentPlan, currentGoal
         case pinnedAt, archivedAt, titleIsUserSet
     }
 
@@ -412,6 +417,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.didEditFiles = try c.decodeIfPresent(Bool.self, forKey: .didEditFiles) ?? false
         self.agentEditedPaths = try c.decodeIfPresent([String].self, forKey: .agentEditedPaths) ?? []
         self.interactionMode = try c.decodeIfPresent(AgentInteractionMode.self, forKey: .interactionMode) ?? .normal
+        self.approvalMode = try c.decodeIfPresent(AgentApprovalMode.self, forKey: .approvalMode) ?? .smart
         self.currentPlan = try c.decodeIfPresent(AgentPlan.self, forKey: .currentPlan)
         self.currentGoal = try c.decodeIfPresent(AgentGoal.self, forKey: .currentGoal)
         self.pinnedAt = try c.decodeIfPresent(Date.self, forKey: .pinnedAt)
@@ -445,6 +451,53 @@ enum AgentInteractionMode: String, Codable, CaseIterable, Identifiable {
         case .normal: return "bubble.left.and.bubble.right"
         case .plan: return "list.number"
         case .goal: return "target"
+        }
+    }
+}
+
+/// Per-session approval posture exposed from the Agent composer. It
+/// influences only write-tier auto-approval; read tools still run
+/// automatically, danger-tier tools still require typed confirmation,
+/// and Plan mode keeps its own plan-approval gate.
+enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable {
+    case requestEveryTime
+    case smart
+    case workspaceAccess
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .requestEveryTime: return L10n.ApprovalMode.requestEveryTime
+        case .smart: return L10n.ApprovalMode.smart
+        case .workspaceAccess: return L10n.ApprovalMode.workspaceAccess
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .requestEveryTime: return L10n.ApprovalMode.requestEveryTimeSummary
+        case .smart: return L10n.ApprovalMode.smartSummary
+        case .workspaceAccess: return L10n.ApprovalMode.workspaceAccessSummary
+        }
+    }
+
+    var systemPromptDescription: String {
+        switch self {
+        case .requestEveryTime:
+            return "Ask before every write-tier tool call. Read-only tools may run automatically. Danger-tier tools still require typed confirmation."
+        case .smart:
+            return "Use WillDeep's smart approval policy: read-only tools run automatically; pinned, trusted, or conservatively classified safe calls may auto-run; other write-tier calls ask the user."
+        case .workspaceAccess:
+            return "Allow write-tier workspace actions and shell/delegated agent work inside the current workspace to auto-run. Danger-tier tools, Plan gate, and untrusted MCP calls still require user approval."
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .requestEveryTime: return "hand.raised"
+        case .smart: return "checkmark.shield"
+        case .workspaceAccess: return "shield.lefthalf.filled"
         }
     }
 }

@@ -383,6 +383,16 @@ extension AppState {
         persistActiveAgentSession()
     }
 
+    /// Update the active session's tool approval posture. This is
+    /// intentionally session-scoped so a cautious remote-runtime chat
+    /// can require every approval while a local scratch chat stays
+    /// frictionless.
+    func setAgentApprovalMode(_ mode: AgentApprovalMode) {
+        guard agentApprovalMode != mode else { return }
+        agentApprovalMode = mode
+        persistActiveAgentSession()
+    }
+
     /// User clicks Approve on the proposed plan — flips it to approved
     /// so the next turn's system prompt unlocks write tools.
     func approveAgentPlan() {
@@ -475,6 +485,18 @@ extension AppState {
     func captureAgentGoalEvaluationFromLatestMessage() {
         guard let runtime = activeRuntime else { return }
         captureAgentGoalEvaluationFromLatestMessage(for: runtime)
+    }
+
+    func captureAgentGoalDefinitionFromLatestMessage(for runtime: AgentRuntime) {
+        guard runtime.interactionMode == .goal,
+              runtime.currentGoal == nil || runtime.currentGoal?.isEmpty == true else { return }
+        guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }),
+              let parsed = AgentGoalParser.extract(from: last.content),
+              !parsed.isEmpty else {
+            return
+        }
+        runtime.currentGoal = parsed
+        persistAgentSession(runtime: runtime)
     }
 
     func captureAgentGoalEvaluationFromLatestMessage(for runtime: AgentRuntime) {
@@ -690,16 +712,28 @@ extension AppState {
     /// the next one is dispatched automatically. Use `clearAgentQueue` to
     /// drop them explicitly.
     func stopAgentResponse() {
-        guard isAgentResponding else { return }
-        agentToolDecisionWaiter?.resume(returning: .denied(reason: "Response stopped"))
-        agentToolDecisionWaiter = nil
-        agentRequestTask?.cancel()
+        guard let runtime = activeRuntime, runtime.isResponding else { return }
+        closeAwaitingUserAnswer(for: runtime, reason: "Response stopped")
+        runtime.requestTask?.cancel()
         // The loop's defer clears `isAgentResponding` and triggers
         // `consumeNextQueuedMessageIfNeeded()`.
     }
 
+    private func closeAwaitingUserAnswer(for runtime: AgentRuntime, reason: String) {
+        for index in runtime.toolCalls.indices where runtime.toolCalls[index].status == .awaitingUserAnswer {
+            runtime.toolCalls[index].status = .denied
+            runtime.toolCalls[index].errorMessage = reason
+        }
+        runtime.toolDecisionWaiter?.resume(returning: .denied(reason: reason))
+        runtime.toolDecisionWaiter = nil
+    }
+
     func clearAgentQueue() {
         agentQueuedMessages.removeAll()
+    }
+
+    func removeQueuedAgentMessage(id: AgentQueuedMessage.ID) {
+        agentQueuedMessages.removeAll { $0.id == id }
     }
 
     func editQueuedAgentMessage(id: AgentQueuedMessage.ID) {
@@ -725,7 +759,8 @@ extension AppState {
         runtime.queuedMessages.insert(message, at: 0)
 
         if runtime.isResponding {
-            stopAgentResponse()
+            closeAwaitingUserAnswer(for: runtime, reason: "Sending queued message")
+            runtime.requestTask?.cancel()
         } else {
             consumeNextQueuedMessageIfNeeded(for: runtime)
         }
@@ -800,6 +835,7 @@ extension AppState {
         // These now go to the freshly-built runtime via delegation.
         agentSessionDidEditFiles = false
         agentInteractionMode = .normal
+        agentApprovalMode = .smart
         agentCurrentPlan = nil
         agentCurrentGoal = nil
         AgentSessionStore.save(session)
@@ -872,6 +908,7 @@ extension AppState {
         subscribeToActiveRuntime()
         agentSessionDidEditFiles = false
         agentInteractionMode = .normal
+        agentApprovalMode = .smart
         agentCurrentPlan = nil
         agentCurrentGoal = nil
         AgentSessionStore.save(session)

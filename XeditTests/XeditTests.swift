@@ -2656,6 +2656,67 @@ struct WillDeepTests {
         #expect(normalApproval == nil)
     }
 
+    @Test("approval mode controls write-tier auto approval")
+    @MainActor
+    func testApprovalModeControlsWriteTierAutoApproval() async {
+        let sandbox = KeychainSandbox()
+        defer { withExtendedLifetime(sandbox) {} }
+        let appState = AppState()
+        appState.autoApproveSafeCommands = true
+
+        let askEveryTime = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("ls")],
+            risk: .write,
+            approvalMode: .requestEveryTime
+        )
+        #expect(askEveryTime == nil)
+
+        let smart = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("ls")],
+            risk: .write,
+            approvalMode: .smart
+        )
+        #expect(smart == .staticAllowlist)
+
+        let workspace = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("swift test")],
+            risk: .write,
+            approvalMode: .workspaceAccess
+        )
+        #expect(workspace == .workspaceAccess)
+
+        let untrustedMCP = await appState.autoApprovalSource(
+            toolName: "call_mcp_tool",
+            arguments: [
+                "server": .string("third-party"),
+                "tool": .string("create_issue"),
+            ],
+            risk: .write,
+            approvalMode: .workspaceAccess
+        )
+        #expect(untrustedMCP == nil)
+    }
+
+    @Test("legacy agent session JSON defaults to smart approval")
+    func testLegacyAgentSessionDefaultsToSmartApproval() throws {
+        let json = """
+        {
+          "id": "00000000-0000-0000-0000-000000000123",
+          "title": "Legacy",
+          "createdAt": "2026-06-11T00:00:00Z",
+          "updatedAt": "2026-06-11T00:00:00Z",
+          "messages": []
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let session = try decoder.decode(AgentSession.self, from: Data(json.utf8))
+        #expect(session.approvalMode == .smart)
+    }
+
     @Test("claude_code tool is registered as write risk with safe modes")
     func testClaudeCodeToolRegistration() {
         let descriptor = AgentToolRegistry.descriptor(for: "claude_code")
