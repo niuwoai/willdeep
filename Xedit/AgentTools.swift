@@ -1,6 +1,6 @@
 //
 //  AgentTools.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Built-in tools exposed to the project agent: search, read, list,
 //  run command, and git status. Each tool declares a risk tier so the

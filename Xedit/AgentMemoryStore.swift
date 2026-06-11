@@ -1,6 +1,6 @@
 //
 //  AgentMemoryStore.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Local persistence for Agent memory settings and user-managed memories.
 //
@@ -163,8 +163,8 @@ enum AgentMemoryLifetime: String, CaseIterable, Codable, Identifiable {
 }
 
 enum AgentMemorySettingsStore {
-    private static let settingsKey = "im.some.veilwriter.agentMemory.settings.v1"
-    private static let recordsKey = "im.some.veilwriter.agentMemory.records.v1"
+    private static let settingsKey = "com.willdeep.agentMemory.settings.v1"
+    private static let recordsKey = "com.willdeep.agentMemory.records.v1"
 
     static func loadSettings() -> AgentMemorySettings {
         guard let data = UserDefaults.standard.data(forKey: settingsKey),

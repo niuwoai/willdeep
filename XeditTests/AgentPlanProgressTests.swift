@@ -1,6 +1,6 @@
 //
 //  AgentPlanProgressTests.swift
-//  VeilWriterTests
+//  WillDeepTests
 //
 //  Covers AgentPlanParser.extract step→Step conversion plus
 //  applyProgress(to:from:) — the model-driven progress reporting that
@@ -9,7 +9,7 @@
 
 import Testing
 import Foundation
-@testable import VeilWriter
+@testable import WillDeep
 
 @Suite
 struct AgentPlanProgressTests {

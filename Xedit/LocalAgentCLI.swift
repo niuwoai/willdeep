@@ -1,6 +1,6 @@
 //
 //  LocalAgentCLI.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Lightweight discovery catalog for local coding-agent CLIs shown in
 //  Settings. Discovery only checks executable paths; it never launches

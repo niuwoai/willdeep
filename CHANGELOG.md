@@ -1,5 +1,65 @@
 # Changelog
 
+## 1.59.0-rc4 - 2026-06-11
+
+### Agent Streaming 性能
+
+- Agent 流式输出改为 50ms 批量发布文本 / reasoning delta，不再每个 token 都触发一次 `@Published messages` 更新，降低 SwiftUI 主线程布局压力。
+- 工具调用、usage、finish、取消和错误路径都会强制 flush 缓冲区，避免节流导致末尾 token 或 reasoning 内容丢失。
+- 当前 streaming assistant bubble 接入已有的 3000 字符渲染上限；超长回复继续保留“查看完整内容”入口，避免单条长消息把 SwiftUI 文本排版拖满 CPU。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.59.0-rc4`。
+
+## 1.59.0-rc3 - 2026-06-11
+
+### Agent DeepSeek 会话模型兜底
+
+- 切换到 DeepSeek 服务商时，如果当前会话还残留旧的 `gpt-*` session override，会自动清空并回到 DeepSeek 的 Flash / Pro 路由默认值。
+- 设置会话模型 override 时会校验当前服务商是否识别该模型；DeepSeek 激活时不再接受 OpenAI / GPT 模型作为实际请求模型。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.59.0-rc3`。
+
+## 1.59.0-rc2 - 2026-06-11
+
+### Agent DeepSeek 默认模型修正
+
+- 新安装 / 空配置的 Agent 主服务商默认改为 DeepSeek，Flash / Pro 分别使用 `deepseek-v4-flash` 与 `deepseek-v4-pro`，不再从 OpenAI 默认模型起步。
+- Settings → Agent 新增服务商时默认创建 DeepSeek 条目，避免新条目继续带出 OpenAI / GPT 模型。
+- Agent 输入框模型选择器的 "Recently fetched" 候选按当前激活服务商过滤；激活 DeepSeek 时不会再把历史抓取过的 `gpt-*` 模型混入备选列表。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.59.0-rc2`。
+
+## 1.59.0-rc1 - 2026-06-11
+
+### WillDeep 品牌与域名迁移
+
+- 项目对外品牌从 VeilWriter 改为 **WillDeep**，官方域名标识切换为 `willdeep.com` / `https://willdeep.com`。
+- macOS app 产物、Bundle 展示名、Help Book、发布脚本、README、TESTING、帮助页面和产品概览同步使用 WillDeep。
+- 命令行工具主入口从 `veilwriter` 切换为 `willdeep`，安装路径同步为 `~/.local/bin/willdeep`。
+- 运行时网络标识同步为 `User-Agent: WillDeep/{version} (macOS)`，并继续通过 `X-App-Version` 暴露版本号；OpenRouter 署名 header 改为 `HTTP-Referer: https://willdeep.com` 与 `X-Title: WillDeep`。
+- App、测试 target、UserDefaults、Keychain、通知、缓存与 MCP clientInfo 的标识统一到 `com.willdeep.*` / `WillDeep`。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.59.0-rc1`。
+
+## 1.58.0-rc18 - 2026-06-11
+
+### Agent copy 图标修正
+
+- 当前消息 footer 的 copy 按钮从偏长的 `rectangle.on.rectangle` 换回紧凑的 `square.on.square`，字号和命中框收小，视觉更接近系统标准复制图标。
+- 历史 transcript / 代码块 copy 按钮不再用 `"▭▭"` 字符加负字距硬凑，改为 SF Symbol `square.on.square` 图片附件，避免出现被拉长的双矩形。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.58.0-rc18`。
+
 ## 1.58.0-rc17 - 2026-06-11
 
 ### Codex / Cursor 委派工具

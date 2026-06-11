@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "5CA6B0602FC6D8F9006DFCCC"
-               BuildableName = "VeilWriter.app"
+               BuildableName = "WillDeep.app"
                BlueprintName = "Xedit"
                ReferencedContainer = "container:Xedit.xcodeproj">
             </BuildableReference>
@@ -93,7 +93,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "5CA6B0602FC6D8F9006DFCCC"
-            BuildableName = "VeilWriter.app"
+            BuildableName = "WillDeep.app"
             BlueprintName = "Xedit"
             ReferencedContainer = "container:Xedit.xcodeproj">
          </BuildableReference>
@@ -110,7 +110,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "5CA6B0602FC6D8F9006DFCCC"
-            BuildableName = "VeilWriter.app"
+            BuildableName = "WillDeep.app"
             BlueprintName = "Xedit"
             ReferencedContainer = "container:Xedit.xcodeproj">
          </BuildableReference>

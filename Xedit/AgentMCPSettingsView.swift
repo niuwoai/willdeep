@@ -1,6 +1,6 @@
 //
 //  AgentMCPSettingsView.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Settings tab for MCP servers.
 //

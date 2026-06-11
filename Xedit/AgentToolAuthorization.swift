@@ -1,6 +1,6 @@
 //
 //  AgentToolAuthorization.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Always-allow signature derivation for tool calls. Three pieces:
 //   - `AgentAlwaysAllowedCommand`: the persisted "remember this command"

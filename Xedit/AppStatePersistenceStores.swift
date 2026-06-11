@@ -1,6 +1,6 @@
 //
 //  AppStatePersistenceStores.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Extracted from AppState.swift in v1.52.1-rc42 as part of the stage-3
 //  code-health pass. Houses the three private UserDefaults-backed stores
@@ -14,8 +14,8 @@
 import Foundation
 
 enum RecentItemsStore {
-    private static let filesKey = "im.some.veilwriter.recentFiles.v1"
-    private static let foldersKey = "im.some.veilwriter.recentFolders.v1"
+    private static let filesKey = "com.willdeep.recentFiles.v1"
+    private static let foldersKey = "com.willdeep.recentFolders.v1"
     private static let limit = 8
 
     static func loadFiles() -> [URL] {
@@ -97,7 +97,7 @@ actor CompressionSummaryCollector {
 }
 
 enum SessionStore {
-    private static let key = "im.some.veilwriter.session.v1"
+    private static let key = "com.willdeep.session.v1"
 
     static func load() -> EditorSessionSnapshot? {
         guard let data = UserDefaults.standard.data(forKey: key) else { return nil }

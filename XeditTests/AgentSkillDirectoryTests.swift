@@ -1,13 +1,13 @@
 //
 //  AgentSkillDirectoryTests.swift
-//  VeilWriterTests
+//  WillDeepTests
 //
 //  Covers built-in skill discovery and enable/disable filtering.
 //
 
 import Testing
 import Foundation
-@testable import VeilWriter
+@testable import WillDeep
 
 @Suite(.serialized)
 struct AgentSkillDirectoryTests {

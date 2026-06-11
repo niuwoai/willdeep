@@ -1,6 +1,6 @@
 //
 //  AgentImageViews.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Shared SwiftUI views for rendering Agent image attachments (composer
 //  thumbnails with a remove affordance, plus the read-only thumbnails

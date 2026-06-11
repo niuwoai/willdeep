@@ -1,13 +1,13 @@
 //
 //  AgentMCPServerDirectoryTests.swift
-//  VeilWriterTests
+//  WillDeepTests
 //
 //  Covers MCP server discovery and streamable HTTP configuration parsing.
 //
 
 import Testing
 import Foundation
-@testable import VeilWriter
+@testable import WillDeep
 
 @Suite(.serialized)
 struct AgentMCPServerDirectoryTests {

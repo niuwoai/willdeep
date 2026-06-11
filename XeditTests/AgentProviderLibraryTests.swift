@@ -1,6 +1,6 @@
 //
 //  AgentProviderLibraryTests.swift
-//  VeilWriterTests
+//  WillDeepTests
 //
 //  Covers the multi-provider library data layer + the
 //  AgentConfiguration normalization bug fix that drops stale model
@@ -9,7 +9,7 @@
 
 import Testing
 import Foundation
-@testable import VeilWriter
+@testable import WillDeep
 
 @Suite
 struct AgentProviderLibraryTests {

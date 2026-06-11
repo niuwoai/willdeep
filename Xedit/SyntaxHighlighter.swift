@@ -1,6 +1,6 @@
 //
 //  SyntaxHighlighter.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Regex-based multi-language syntax highlighting engine.
 //  Produces NSAttributedString with color attributes for

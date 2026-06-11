@@ -1,6 +1,6 @@
 //
 //  AgentSessionPersistenceTests.swift
-//  VeilWriterTests
+//  WillDeepTests
 //
 //  Covers JSON round-tripping for AgentSession's newer fields
 //  (interactionMode / currentPlan / currentGoal) plus the decodeIfPresent
@@ -9,7 +9,7 @@
 
 import Testing
 import Foundation
-@testable import VeilWriter
+@testable import WillDeep
 
 @Suite
 struct AgentSessionPersistenceTests {

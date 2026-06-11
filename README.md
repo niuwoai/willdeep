@@ -1,19 +1,21 @@
 <div align="center">
 
-<img src="appicons/icon_256x256.png" width="128" height="128" alt="VeilWriter" />
+<img src="appicons/icon_256x256.png" width="128" height="128" alt="WillDeep" />
 
-# VeilWriter
+# WillDeep
 
 **A native macOS editor that opens fast, stays out of your way, and ships an agent that actually edits your code.**
 
 [![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.52.1--rc43-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.59.0--rc4-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *No Electron. No 800MB Helper processes. No "loading workspace…" spinner that eats your afternoon.*
 
-**English** · [简体中文](#veilwriter-中文版)
+[willdeep.com](https://willdeep.com)
+
+**English** · [简体中文](#willdeep-中文版)
 
 </div>
 
@@ -25,7 +27,7 @@ Because the ones you have are lying to you.
 
 VS Code says it's a text editor and then forks five Node processes to render a tab. Cursor wraps that with another layer of JS and asks $20/month. Xcode launches in geological time. `vim` is wonderful and your coworkers don't read your config. Sublime is alive on a respirator.
 
-**VeilWriter is what happens when you write a real macOS app for the 90% of editing you actually do, and bolt a real coding agent onto it for the 10% you don't want to.**
+**WillDeep is what happens when you write a real macOS app for the 90% of editing you actually do, and bolt a real coding agent onto it for the 10% you don't want to.**
 
 - Native AppKit + SwiftUI. The whole app is smaller than one VS Code extension.
 - Opens a file in **the time it takes to release the mouse button**. No "indexing workspace."
@@ -46,7 +48,7 @@ If you've ever wished `nano` had a sidebar, syntax highlighting, tabs, an LLM, a
 - 25+ languages with real grammars: Swift, Ruby, PHP, Java, JS/TS, Go, Python, Rust, C / C++ / C#, SQL, YAML, TOML, Dockerfile, Makefile, shell, and the rest.
 
 ### A file tree that loads when you tell it to
-Most editors slam through your folder the moment you double-click a `.txt`. VeilWriter doesn't. **Opening a file opens *the file*** — the sidebar only appears when you explicitly choose **Open Folder…** (⇧⌘O). No more locking up because you opened something inside `~/Downloads`.
+Most editors slam through your folder the moment you double-click a `.txt`. WillDeep doesn't. **Opening a file opens *the file*** — the sidebar only appears when you explicitly choose **Open Folder…** (⇧⌘O). No more locking up because you opened something inside `~/Downloads`.
 
 ### Agent mode that earns its keep
 Hit **⌘⇧A** and the window flips into a dedicated chat surface — project-grouped session sidebar, wide transcript, your editor still one keystroke away.
@@ -61,9 +63,9 @@ Hit **⌘⇧A** and the window flips into a dedicated chat surface — project-g
 - **Queued sends.** Type the next message while the current turn is still streaming. Stop the response without dropping the queue.
 
 ### The little things
-- `veilwriter` CLI installable from Settings into `~/.local/bin`. `veilwriter foo.go` opens the file. `veilwriter .` opens the folder.
+- `willdeep` CLI installable from Settings into `~/.local/bin`. `willdeep foo.go` opens the file. `willdeep .` opens the folder.
 - Native Finder integration. Open With… just works. Drop a folder on the Dock, get a new window.
-- Sessions persist as readable JSON under `~/Library/Application Support/VeilWriter/`. Grep your own chat history.
+- Sessions persist as readable JSON under `~/Library/Application Support/WillDeep/`. Grep your own chat history.
 - Cross-session Quick Open cache, keyed by SHA-256 of project root, capped at 50 projects. **Cmd+P** is instant on re-open.
 - Multi-window, multi-tab, Cmd+1..9 to switch, Cmd+Shift+T to reopen.
 - Choose a custom editor background image with opacity if that's your thing. (It's our thing.)
@@ -75,20 +77,20 @@ Hit **⌘⇧A** and the window flips into a dedicated chat surface — project-g
 ### Build from source
 
 ```bash
-git clone https://github.com/xurenlu/veilwriter.git
-cd veilwriter
+git clone https://github.com/xurenlu/willdeep.git
+cd willdeep
 open Xedit.xcodeproj
 # ⌘R
 ```
 
-Requires Xcode and macOS 14+. The app builds as **VeilWriter.app**.
+Requires Xcode and macOS 14+. The app builds as **WillDeep.app**. The public product domain is [willdeep.com](https://willdeep.com).
 
 ### Use it
 
 1. Open the app.
 2. **⌘O** for a file, **⇧⌘O** for a folder.
 3. **⌘⇧A** to flip into Agent mode. Settings → Agent to drop in an API key.
-4. Settings → Command Line Tool → **Install** if you want `veilwriter` on your `$PATH`.
+4. Settings → Command Line Tool → **Install** if you want `willdeep` on your `$PATH`.
 
 ---
 
@@ -130,7 +132,7 @@ Requires Xcode and macOS 14+. The app builds as **VeilWriter.app**.
 
 ## Status
 
-VeilWriter is in active `1.43.x` development. The editor surface is solid for daily use; the agent stack is the area moving fastest. See [CHANGELOG.md](CHANGELOG.md) for what each release changed and [product-overview.md](product-overview.md) for the full capability matrix and open questions.
+WillDeep is in active `1.59.x` development. The editor surface is solid for daily use; the agent stack is the area moving fastest. See [CHANGELOG.md](CHANGELOG.md) for what each release changed and [product-overview.md](product-overview.md) for the full capability matrix and open questions.
 
 We ship a release candidate the moment a fix lands. Tags follow `vMAJOR.MINOR.PATCH-rcN`.
 
@@ -149,7 +151,7 @@ When you open a PR, please:
 
 ## License
 
-VeilWriter is licensed under the [Apache License 2.0](LICENSE). You are free to use, modify, and redistribute the code — including for commercial purposes — provided you comply with the terms in the license file (notably attribution and the patent grant clauses).
+WillDeep is licensed under the [Apache License 2.0](LICENSE). You are free to use, modify, and redistribute the code — including for commercial purposes — provided you comply with the terms in the license file (notably attribution and the patent grant clauses).
 
 ---
 
@@ -164,24 +166,26 @@ VeilWriter is licensed under the [Apache License 2.0](LICENSE). You are free to 
 ---
 ---
 
-<a id="veilwriter-中文版"></a>
+<a id="willdeep-中文版"></a>
 
 <div align="center">
 
-<img src="appicons/icon_256x256.png" width="128" height="128" alt="VeilWriter" />
+<img src="appicons/icon_256x256.png" width="128" height="128" alt="WillDeep" />
 
-# VeilWriter（中文版）
+# WillDeep（中文版）
 
 **一个打开就能用的 macOS 原生编辑器，自带一个真的会改代码的 Agent。**
 
 [![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.52.1--rc43-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.59.0--rc4-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *不靠 Electron。没有 800MB 的 Helper 子进程。没有那种让你怀疑人生的 "loading workspace…"。*
 
-[English](#veilwriter) · **简体中文**
+[willdeep.com](https://willdeep.com)
+
+[English](#willdeep) · **简体中文**
 
 </div>
 
@@ -193,7 +197,7 @@ VeilWriter is licensed under the [Apache License 2.0](LICENSE). You are free to 
 
 VS Code 嘴上说自己是文本编辑器，结果开五个 Node 进程来画一个 tab。Cursor 在它外面再裹一层 JS，然后每个月收你 20 美元。Xcode 启动慢到地质纪元。`vim` 当然好用，但同事看你的 dotfile 像看天书。Sublime 还活着，但靠呼吸机。
 
-**VeilWriter 是这样一个东西：把 90% 你日常真的在用的编辑功能，老老实实写成一个原生 macOS 应用；剩下那 10% 你嫌烦的部分，挂一个真能跑工具、真能写补丁的 Agent。**
+**WillDeep 是这样一个东西：把 90% 你日常真的在用的编辑功能，老老实实写成一个原生 macOS 应用；剩下那 10% 你嫌烦的部分，挂一个真能跑工具、真能写补丁的 Agent。**
 
 - 纯原生 AppKit + SwiftUI。整个 App 比一个 VS Code 插件还小。
 - 打开文件耗时 **= 你松开鼠标的瞬间**。没有 "正在索引工作区"。
@@ -214,7 +218,7 @@ VS Code 嘴上说自己是文本编辑器，结果开五个 Node 进程来画一
 - 25 种以上语言的真高亮：Swift、Ruby、PHP、Java、JS/TS、Go、Python、Rust、C / C++ / C#、SQL、YAML、TOML、Dockerfile、Makefile、shell……
 
 ### 一个"你让它出现它才出现"的文件树
-大部分编辑器只要你双击一个 `.txt`，就立刻把它所在的目录整个吞下去扫一遍。VeilWriter 不会。**打开文件就只是打开文件**。只有你显式点 **Open Folder…**（⇧⌘O）的时候，左边的文件树才会出来。再也不会因为你点开 `~/Downloads` 里的一个文件，整个 App 卡住几秒钟。
+大部分编辑器只要你双击一个 `.txt`，就立刻把它所在的目录整个吞下去扫一遍。WillDeep 不会。**打开文件就只是打开文件**。只有你显式点 **Open Folder…**（⇧⌘O）的时候，左边的文件树才会出来。再也不会因为你点开 `~/Downloads` 里的一个文件，整个 App 卡住几秒钟。
 
 ### 一个值得养着的 Agent 模式
 按 **⌘⇧A**，整个窗口翻到 Agent 模式 —— 左边是按项目分组的会话侧栏，右边是宽敞的对话区，回到编辑器只需一个快捷键。
@@ -229,9 +233,9 @@ VS Code 嘴上说自己是文本编辑器，结果开五个 Node 进程来画一
 - **消息可排队。** Agent 还在出字你就能继续打下一条，自动排队按顺序发。Stop 不会清掉队列，Clear Queue 才会。
 
 ### 一些细节
-- Settings 里可以一键把 `veilwriter` CLI 装到 `~/.local/bin`。`veilwriter foo.go` 打开文件，`veilwriter .` 打开当前目录。
+- Settings 里可以一键把 `willdeep` CLI 装到 `~/.local/bin`。`willdeep foo.go` 打开文件，`willdeep .` 打开当前目录。
 - 跟 Finder 集成得很好。Open With… 就能选它。把文件夹拖到 Dock 上，开一个新窗口。
-- 会话以人类可读的 JSON 存在 `~/Library/Application Support/VeilWriter/`。想 grep 你自己的聊天记录？随便。
+- 会话以人类可读的 JSON 存在 `~/Library/Application Support/WillDeep/`。想 grep 你自己的聊天记录？随便。
 - Quick Open 列表跨会话缓存，按项目根路径的 SHA-256 做 key，最多缓存 50 个项目。重新打开项目时 **Cmd+P 立即可用**。
 - 多窗口、多 tab、Cmd+1..9 切换、Cmd+Shift+T 恢复。
 - 想给编辑器加个自定义背景图（带透明度调节）？可以。我们也加了。
@@ -243,20 +247,20 @@ VS Code 嘴上说自己是文本编辑器，结果开五个 Node 进程来画一
 ### 从源码编译
 
 ```bash
-git clone https://github.com/xurenlu/veilwriter.git
-cd veilwriter
+git clone https://github.com/xurenlu/willdeep.git
+cd willdeep
 open Xedit.xcodeproj
 # ⌘R
 ```
 
-需要 Xcode 和 macOS 14+。产物叫 **VeilWriter.app**。
+需要 Xcode 和 macOS 14+。产物叫 **WillDeep.app**。公开产品域名是 [willdeep.com](https://willdeep.com)。
 
 ### 用起来
 
 1. 打开 App。
 2. **⌘O** 开文件，**⇧⌘O** 开文件夹。
 3. **⌘⇧A** 切到 Agent 模式。Settings → Agent 填上你的 API Key。
-4. 想要 `veilwriter` 命令行的话，Settings → Command Line Tool → **Install**。
+4. 想要 `willdeep` 命令行的话，Settings → Command Line Tool → **Install**。
 
 ---
 
@@ -298,7 +302,7 @@ open Xedit.xcodeproj
 
 ## 项目状态
 
-VeilWriter 当前在 `1.43.x` 上活跃迭代。编辑器主体已经很稳，可以日常用；Agent 部分是改动最频繁的地方。每次发布的具体变化看 [CHANGELOG.md](CHANGELOG.md)，完整的能力矩阵和未决问题看 [product-overview.md](product-overview.md)。
+WillDeep 当前在 `1.59.x` 上活跃迭代。编辑器主体已经很稳，可以日常用；Agent 部分是改动最频繁的地方。每次发布的具体变化看 [CHANGELOG.md](CHANGELOG.md)，完整的能力矩阵和未决问题看 [product-overview.md](product-overview.md)。
 
 只要一个 fix 落地我们就发一个 release candidate。Tag 格式：`vMAJOR.MINOR.PATCH-rcN`。
 
@@ -317,7 +321,7 @@ VeilWriter 当前在 `1.43.x` 上活跃迭代。编辑器主体已经很稳，�
 
 ## License
 
-VeilWriter 采用 [Apache License 2.0](LICENSE) 许可。你可以自由使用、修改、再分发本项目（包括商用），前提是遵守许可证条款（保留版权声明、专利授权条款等）。
+WillDeep 采用 [Apache License 2.0](LICENSE) 许可。你可以自由使用、修改、再分发本项目（包括商用），前提是遵守许可证条款（保留版权声明、专利授权条款等）。
 
 ---
 

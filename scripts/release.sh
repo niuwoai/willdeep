@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# release.sh — VeilWriter (Xedit) Developer ID 打包 + 公证 + DMG 一键脚本
+# release.sh — WillDeep (Xedit) Developer ID 打包 + 公证 + DMG 一键脚本
 #
 # 流程：
 #   1. xcodebuild archive（Release + Developer ID 签名）
@@ -38,12 +38,12 @@ set -euo pipefail
 SCHEME="Xedit"                                          # xcodebuild scheme
 CONFIGURATION="Release"
 PROJECT_FILE="Xedit.xcodeproj"
-PRODUCT_NAME="VeilWriter"                               # 最终 .app / .dmg 文件名
-BUNDLE_ID="im.some.veilwriter"
+PRODUCT_NAME="WillDeep"                               # 最终 .app / .dmg 文件名
+BUNDLE_ID="com.willdeep.app"
 TEAM_ID="ZH2S7D6PL6"                                    # Developer Team ID
 SIGNING_IDENTITY="Developer ID Application: Beijing Alibaba information Technology Co., Ltd. (ZH2S7D6PL6)"
-NOTARY_PROFILE="veilwriter-notary"                      # store-credentials 时取的名字
-DMG_VOLUME_NAME="VeilWriter"
+NOTARY_PROFILE="willdeep-notary"                      # store-credentials 时取的名字
+DMG_VOLUME_NAME="WillDeep"
 TEST_BUNDLE="XeditTests"                                # 跑哪个测试 target；UI 测试单独，不在这里跑
 
 # ----- 路径 ----------------------------------------------------------------

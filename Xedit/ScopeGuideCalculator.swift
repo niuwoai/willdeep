@@ -1,6 +1,6 @@
 //
 //  ScopeGuideCalculator.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Lightweight block extraction for editor folding.
 //

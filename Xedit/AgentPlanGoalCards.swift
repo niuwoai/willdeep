@@ -1,6 +1,6 @@
 //
 //  AgentPlanGoalCards.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Pinned-above-transcript cards for Plan and Goal modes, split out of
 //  AgentModeView.swift in rc42.

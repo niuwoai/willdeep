@@ -1,6 +1,6 @@
 //
 //  AgentSubagents.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Claude Code-style subagents: the model calls `spawn_agent` with a
 //  task prompt, and a headless child agent loop runs against the same

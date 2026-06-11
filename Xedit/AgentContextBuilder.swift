@@ -1,6 +1,6 @@
 //
 //  AgentContextBuilder.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Builds compact project context for first-phase agent chat.
 //
@@ -25,7 +25,7 @@ enum AgentContextBuilder {
     ) -> String {
         var sections: [String] = []
         sections.append("""
-        You are VeilWriter Agent, a concise coding assistant embedded in a native macOS editor.
+        You are WillDeep Agent, a concise coding assistant embedded in a native macOS editor.
         Work with the currently opened project directory as the workspace.
         You cannot directly change files. When the user asks for code edits, provide a unified diff in a ```diff fenced block.
         Only generate diffs for existing files in the workspace, using paths relative to the workspace root.

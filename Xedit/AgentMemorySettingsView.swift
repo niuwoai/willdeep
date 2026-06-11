@@ -1,6 +1,6 @@
 //
 //  AgentMemorySettingsView.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Settings tab for local Agent memory configuration and management.
 //
@@ -488,7 +488,7 @@ struct AgentMemorySettingsView: View {
     private func exportMemorySnapshot() {
         let panel = NSSavePanel()
         panel.title = L10n.Settings.Memory.exportPanelTitle
-        panel.nameFieldStringValue = "veilwriter-memory-snapshot.json"
+        panel.nameFieldStringValue = "willdeep-memory-snapshot.json"
         panel.allowedContentTypes = [.json]
         guard panel.runModal() == .OK, let url = panel.url else { return }
 

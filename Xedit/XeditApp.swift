@@ -1,6 +1,6 @@
 //
 //  XeditApp.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Created by rocky on 2026/5/27.
 //
@@ -9,7 +9,7 @@ import SwiftUI
 import AppKit
 
 @main
-struct VeilWriterApp: App {
+struct WillDeepApp: App {
     var body: some Scene {
         WindowGroup {
             WindowRootView()
@@ -20,7 +20,7 @@ struct VeilWriterApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .commands {
-            VeilWriterCommands()
+            WillDeepCommands()
         }
 
         Settings {
@@ -37,7 +37,7 @@ struct VeilWriterApp: App {
 /// 场景重建 → 全窗口布局缓存作废 → transcript 全量 CoreText 重排，
 /// 配合常驻呼吸动画曾把主线程钉死在 98% CPU（1.58.0-rc9 修复）。
 /// 放在 Commands 里，invalidation 只波及菜单树。
-private struct VeilWriterCommands: Commands {
+private struct WillDeepCommands: Commands {
     @FocusedObject private var appState: AppState?
     @Environment(\.openWindow) private var openWindow
 

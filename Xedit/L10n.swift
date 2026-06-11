@@ -541,13 +541,13 @@ enum L10n {
                 let template = String(localized: "settings.tools.cli-needs-update", defaultValue: "A command exists at %@ and can be updated.")
                 return String(format: template, a1)
             }
-            static let notInstalled = String(localized: "settings.tools.cli-not-installed", defaultValue: "Install the veilwriter command for Terminal.")
+            static let notInstalled = String(localized: "settings.tools.cli-not-installed", defaultValue: "Install the willdeep command for Terminal.")
             static let installingButton = String(localized: "settings.tools.cli-installing", defaultValue: "Installing...")
             static let reinstallButton = String(localized: "settings.tools.cli-reinstall", defaultValue: "Reinstall")
             static let updateButton = String(localized: "settings.tools.cli-update", defaultValue: "Update")
             static let installButton = String(localized: "settings.tools.cli-install", defaultValue: "Install")
             static let installingMessage = String(localized: "settings.tools.cli-installing-message", defaultValue: "Installing without administrator privileges.")
-            static let installedMessage = String(localized: "settings.tools.cli-installed-message", defaultValue: "Installed. Try: veilwriter . Add ~/.local/bin to PATH if needed.")
+            static let installedMessage = String(localized: "settings.tools.cli-installed-message", defaultValue: "Installed. Try: willdeep . Add ~/.local/bin to PATH if needed.")
         }
 
         enum LocalAgents {
@@ -555,7 +555,7 @@ enum L10n {
             static let description = String(localized: "settings.local-agents.description", defaultValue: "Scans common install paths and PATH without launching the tools.")
             static let refreshButton = String(localized: "settings.local-agents.refresh", defaultValue: "Refresh")
             static let notFound = String(localized: "settings.local-agents.not-found", defaultValue: "Not found on this Mac")
-            static let integrationSection = String(localized: "settings.local-agents.integration-section", defaultValue: "Xedit Integration")
+            static let integrationSection = String(localized: "settings.local-agents.integration-section", defaultValue: "WillDeep Integration")
             static let integrationDescription = String(localized: "settings.local-agents.integration-description", defaultValue: "Discovery means the CLI exists locally. Direct delegation means the current Agent tool surface can invoke it after user approval.")
             static let discoveryOnly = String(localized: "settings.local-agents.discovery-only", defaultValue: "Discovered only — not yet exposed as a callable Agent tool.")
             static func summary(_ a1: String, _ a2: String) -> String {
@@ -696,7 +696,7 @@ enum L10n {
         enum Skill {
             static let autoExtractSection = String(localized: "settings.skill.auto-extract-section", defaultValue: "Automatic Skill Extraction")
             static let autoExtractTitle = String(localized: "settings.skill.auto-extract-title", defaultValue: "Auto-extract reusable skills from conversations")
-            static let autoExtractDescription = String(localized: "settings.skill.auto-extract-description", defaultValue: "When enabled, VeilWriter can surface reusable workflows as skill candidates.")
+            static let autoExtractDescription = String(localized: "settings.skill.auto-extract-description", defaultValue: "When enabled, WillDeep can surface reusable workflows as skill candidates.")
             static let minimumToolCallsLabel = String(localized: "settings.skill.minimum-tool-calls", defaultValue: "Minimum tool calls")
             static let minimumToolCallsHint = String(localized: "settings.skill.minimum-tool-calls-hint", defaultValue: "Conversations with fewer tool calls are skipped.")
             static func availableCount(_ a1: String, _ a2: String) -> String {

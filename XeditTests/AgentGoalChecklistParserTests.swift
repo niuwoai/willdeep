@@ -1,6 +1,6 @@
 //
 //  AgentGoalChecklistParserTests.swift
-//  VeilWriterTests
+//  WillDeepTests
 //
 //  Covers AgentGoalChecklistParser.applyEvaluation — the agent's
 //  self-evaluation block that flips checklist done/undone state.
@@ -8,7 +8,7 @@
 
 import Testing
 import Foundation
-@testable import VeilWriter
+@testable import WillDeep
 
 @Suite
 struct AgentGoalChecklistParserTests {

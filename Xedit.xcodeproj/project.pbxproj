@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		5CA6B0922FC70A00006DFCCC /* VeilWriter.help in Resources */ = {isa = PBXBuildFile; fileRef = 5CA6B0912FC70A00006DFCCC /* VeilWriter.help */; };
+		5CA6B0922FC70A00006DFCCC /* WillDeep.help in Resources */ = {isa = PBXBuildFile; fileRef = 5CA6B0912FC70A00006DFCCC /* WillDeep.help */; };
 		5CA6B0A22FD0C9E0006DFCCC /* BundledSkills in Resources */ = {isa = PBXBuildFile; fileRef = 5CA6B0A12FD0C9E0006DFCCC /* BundledSkills */; };
 /* End PBXBuildFile section */
 
@@ -29,10 +29,10 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		5CA6B0612FC6D8F9006DFCCC /* VeilWriter.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VeilWriter.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5CA6B0612FC6D8F9006DFCCC /* WillDeep.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WillDeep.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5CA6B0712FC6D8FA006DFCCC /* XeditTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = XeditTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5CA6B07B2FC6D8FA006DFCCC /* XeditUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = XeditUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		5CA6B0912FC70A00006DFCCC /* VeilWriter.help */ = {isa = PBXFileReference; lastKnownFileType = wrapper.help; path = VeilWriter.help; sourceTree = "<group>"; };
+		5CA6B0912FC70A00006DFCCC /* WillDeep.help */ = {isa = PBXFileReference; lastKnownFileType = wrapper.help; path = WillDeep.help; sourceTree = "<group>"; };
 		5CA6B0A12FD0C9E0006DFCCC /* BundledSkills */ = {isa = PBXFileReference; lastKnownFileType = folder; path = BundledSkills; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -107,7 +107,7 @@
 		5CA6B0622FC6D8F9006DFCCC /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				5CA6B0612FC6D8F9006DFCCC /* VeilWriter.app */,
+				5CA6B0612FC6D8F9006DFCCC /* WillDeep.app */,
 				5CA6B0712FC6D8FA006DFCCC /* XeditTests.xctest */,
 				5CA6B07B2FC6D8FA006DFCCC /* XeditUITests.xctest */,
 			);
@@ -117,7 +117,7 @@
 		5CA6B0902FC70A00006DFCCC /* Help */ = {
 			isa = PBXGroup;
 			children = (
-				5CA6B0912FC70A00006DFCCC /* VeilWriter.help */,
+				5CA6B0912FC70A00006DFCCC /* WillDeep.help */,
 			);
 			path = Help;
 			sourceTree = "<group>";
@@ -143,8 +143,8 @@
 			name = Xedit;
 			packageProductDependencies = (
 			);
-			productName = VeilWriter;
-			productReference = 5CA6B0612FC6D8F9006DFCCC /* VeilWriter.app */;
+			productName = WillDeep;
+			productReference = 5CA6B0612FC6D8F9006DFCCC /* WillDeep.app */;
 			productType = "com.apple.product-type.application";
 		};
 		5CA6B0702FC6D8FA006DFCCC /* XeditTests */ = {
@@ -244,7 +244,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5CA6B0A22FD0C9E0006DFCCC /* BundledSkills in Resources */,
-				5CA6B0922FC70A00006DFCCC /* VeilWriter.help in Resources */,
+				5CA6B0922FC70A00006DFCCC /* WillDeep.help in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -317,16 +317,16 @@
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Xedit/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = VeilWriter;
-				INFOPLIST_KEY_CFBundleName = VeilWriter;
+				INFOPLIST_KEY_CFBundleDisplayName = WillDeep;
+				INFOPLIST_KEY_CFBundleName = WillDeep;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = "1.58.0-rc17";
-				PRODUCT_BUNDLE_IDENTIFIER = im.some.veilwriter;
-				PRODUCT_NAME = VeilWriter;
+				MARKETING_VERSION = "1.59.0-rc4";
+				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
+				PRODUCT_NAME = WillDeep;
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -352,16 +352,16 @@
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Xedit/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = VeilWriter;
-				INFOPLIST_KEY_CFBundleName = VeilWriter;
+				INFOPLIST_KEY_CFBundleDisplayName = WillDeep;
+				INFOPLIST_KEY_CFBundleName = WillDeep;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = "1.58.0-rc17";
-				PRODUCT_BUNDLE_IDENTIFIER = im.some.veilwriter;
-				PRODUCT_NAME = VeilWriter;
+				MARKETING_VERSION = "1.59.0-rc4";
+				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
+				PRODUCT_NAME = WillDeep;
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -501,15 +501,15 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.4;
-				MARKETING_VERSION = "1.58.0-rc17";
-				PRODUCT_BUNDLE_IDENTIFIER = im.some.veilwritertests;
+				MARKETING_VERSION = "1.59.0-rc4";
+				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VeilWriter.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/VeilWriter";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WillDeep.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/WillDeep";
 			};
 			name = Debug;
 		};
@@ -522,15 +522,15 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.4;
-				MARKETING_VERSION = "1.58.0-rc17";
-				PRODUCT_BUNDLE_IDENTIFIER = im.some.veilwritertests;
+				MARKETING_VERSION = "1.59.0-rc4";
+				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VeilWriter.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/VeilWriter";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WillDeep.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/WillDeep";
 			};
 			name = Release;
 		};
@@ -541,8 +541,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.58.0-rc17";
-				PRODUCT_BUNDLE_IDENTIFIER = im.some.veilwriteruitests;
+				MARKETING_VERSION = "1.59.0-rc4";
+				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -560,8 +560,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.58.0-rc17";
-				PRODUCT_BUNDLE_IDENTIFIER = im.some.veilwriteruitests;
+				MARKETING_VERSION = "1.59.0-rc4";
+				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;

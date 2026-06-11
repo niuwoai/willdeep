@@ -1,6 +1,6 @@
 //
 //  MarkdownListNestingTests.swift
-//  VeilWriterTests
+//  WillDeepTests
 //
 //  Covers MarkdownPreviewParser's nested-list indentation handling.
 //  2-space indent = one nesting level; 4 spaces = two; tabs count as 4.
@@ -8,7 +8,7 @@
 
 import Testing
 import Foundation
-@testable import VeilWriter
+@testable import WillDeep
 
 @Suite
 struct MarkdownListNestingTests {

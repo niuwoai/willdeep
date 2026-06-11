@@ -335,7 +335,7 @@
     "Used only when the active Agent provider cannot accept images directly. Multiple attached images are described in one request, then the description is sent to the main model.": {},
     "View Order": {},
     "View content": {},
-    "When enabled, VeilWriter can surface reusable workflows as skill candidates.": {},
+    "When enabled, WillDeep can surface reusable workflows as skill candidates.": {},
     "When enabled, the Agent can use saved preferences, recurring facts, and project notes as personalization context.": {},
     "Workspace": {},
     "Your answer": {},
@@ -5938,7 +5938,7 @@
       }
     },
     "v%@": {},
-    "veilwriter": {},
+    "willdeep": {},
     "·": {},
     "不影响调度计划。即使 Routine 被禁用也会运行一次。": {},
     "不绑定 Workspace": {},
@@ -6268,8 +6268,8 @@
     "settings.tools.cli-not-installed": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Install the veilwriter command for Terminal." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在终端安装 veilwriter 命令。" } }
+        "en": { "stringUnit": { "state": "translated", "value": "Install the willdeep command for Terminal." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在终端安装 willdeep 命令。" } }
       }
     },
     "settings.tools.cli-installing": {
@@ -6310,8 +6310,8 @@
     "settings.tools.cli-installed-message": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Installed. Try: veilwriter . Add ~/.local/bin to PATH if needed." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已安装。试试 veilwriter 。如有需要把 ~/.local/bin 加入 PATH。" } }
+        "en": { "stringUnit": { "state": "translated", "value": "Installed. Try: willdeep . Add ~/.local/bin to PATH if needed." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已安装。试试 willdeep 。如有需要把 ~/.local/bin 加入 PATH。" } }
       }
     },
     "settings.local-agents.discovered-section": {
@@ -6898,8 +6898,8 @@
     "settings.skill.auto-extract-description": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "When enabled, VeilWriter can surface reusable workflows as skill candidates." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启用后，VeilWriter 会把可复用的工作流作为技能候选浮现出来。" } }
+        "en": { "stringUnit": { "state": "translated", "value": "When enabled, WillDeep can surface reusable workflows as skill candidates." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启用后，WillDeep 会把可复用的工作流作为技能候选浮现出来。" } }
       }
     },
     "settings.skill.minimum-tool-calls": {

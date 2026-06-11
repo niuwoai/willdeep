@@ -11,7 +11,7 @@
 
 import Testing
 import Foundation
-@testable import VeilWriter
+@testable import WillDeep
 
 @Suite
 struct AgentClientEncodingTests {

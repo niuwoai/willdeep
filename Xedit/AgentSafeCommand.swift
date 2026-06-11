@@ -1,6 +1,6 @@
 //
 //  AgentSafeCommand.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Static classifier that decides whether a shell command can be
 //  auto-approved without bothering the user. Used as a first pass

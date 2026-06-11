@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>VeilWriter</string>
+	<string>WillDeep</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -34,10 +34,10 @@
 		</dict>
 	</array>
 	<key>CFBundleHelpBookFolder</key>
-	<string>VeilWriter.help</string>
+	<string>WillDeep.help</string>
 	<key>CFBundleHelpBookName</key>
-	<string>VeilWriter Help</string>
+	<string>WillDeep Help</string>
 	<key>CFBundleName</key>
-	<string>VeilWriter</string>
+	<string>WillDeep</string>
 </dict>
 </plist>

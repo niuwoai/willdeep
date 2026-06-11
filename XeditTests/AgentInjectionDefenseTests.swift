@@ -1,6 +1,6 @@
 //
 //  AgentInjectionDefenseTests.swift
-//  VeilWriterTests
+//  WillDeepTests
 //
 //  Covers the two prompt-injection defenses introduced in 1.56.1-rc5:
 //
@@ -18,7 +18,7 @@
 
 import Testing
 import Foundation
-@testable import VeilWriter
+@testable import WillDeep
 
 @Suite
 struct AgentInjectionDefenseTests {
@@ -84,7 +84,7 @@ struct AgentInjectionDefenseTests {
 
     @Test
     func systemNoticePassesThroughUntouched() {
-        // VeilWriter authored "Tool call denied" / "Plan mode blocked"
+        // WillDeep authored "Tool call denied" / "Plan mode blocked"
         // strings are trusted — no need to run the neutralizer on them.
         let output = AgentInjectionDefense.sanitizedToolMessageContent(
             payload: "Tool call denied by the user.",

@@ -1,6 +1,6 @@
 //
 //  AppStateAgentSessions.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Extracted from AppState.swift in v1.52.1-rc42 (stage-3 code-health
 //  pass). Houses the Agent-mode session lifecycle, routines, plan and
@@ -259,6 +259,7 @@ extension AppState {
         cfg.routingMode = entry.routingMode
         if cfg.model.isEmpty { cfg.model = entry.flashPrimary }
         agentConfiguration = cfg.normalized
+        clearIncompatibleAgentSessionModelOverride()
     }
 
     /// Activate a different library entry by id and immediately apply
@@ -1114,11 +1115,36 @@ extension AppState {
     func setAgentSessionModel(_ model: String?) {
         let trimmed = model?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let trimmed, !trimmed.isEmpty {
-            agentSessionModelOverride = trimmed
-            recordFetchedAgentModels([trimmed])
+            if agentModelIsCompatibleWithActiveProvider(trimmed) {
+                agentSessionModelOverride = trimmed
+                recordFetchedAgentModels([trimmed])
+            } else {
+                agentSessionModelOverride = nil
+            }
         } else {
             agentSessionModelOverride = nil
         }
+        persistActiveAgentSession()
+    }
+
+    func agentModelIsCompatibleWithActiveProvider(_ model: String) -> Bool {
+        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        guard let active = agentProviderLibrary.active,
+              let preset = AgentProviderPreset.preset(id: active.providerID),
+              preset.id != AgentProviderPreset.customID else {
+            return true
+        }
+        return preset.recognizesModelID(trimmed)
+    }
+
+    private func clearIncompatibleAgentSessionModelOverride() {
+        guard let override = agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !override.isEmpty,
+              !agentModelIsCompatibleWithActiveProvider(override) else {
+            return
+        }
+        agentSessionModelOverride = nil
         persistActiveAgentSession()
     }
 

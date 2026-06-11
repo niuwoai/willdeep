@@ -1,6 +1,6 @@
 //
 //  AgentRoutineScheduler.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Polls user-defined routines on a 30-second cadence and fires the ones
 //  whose next-run moment has passed. macOS suspends Timers while the app
@@ -134,7 +134,7 @@ final class AgentRoutineScheduler {
                 ? "「\(routine.name)」补跑（睡眠唤醒后）"
                 : "「\(routine.name)」开始运行"
             let request = UNNotificationRequest(
-                identifier: "veilwriter.routine.\(routine.id.uuidString).\(Int(Date().timeIntervalSince1970))",
+                identifier: "willdeep.routine.\(routine.id.uuidString).\(Int(Date().timeIntervalSince1970))",
                 content: content,
                 trigger: nil
             )

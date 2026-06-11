@@ -48,7 +48,7 @@ enum AgentInjectionDefense {
         /// self-injection attempt.
         case userAnswer
 
-        /// Strings VeilWriter itself authored (denied / blocked / plan
+        /// Strings WillDeep itself authored (denied / blocked / plan
         /// mode notices). Trusted source, no neutralizer needed.
         case systemNotice
     }

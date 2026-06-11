@@ -1,6 +1,6 @@
 //
 //  AgentComposerPickers.swift
-//  VeilWriter
+//  WillDeep
 //
 //  The three pill-shaped pickers in the composer row, split out of
 //  AgentModeComposerView.swift in rc42:
@@ -212,7 +212,9 @@ struct ModelPickerPill: View {
             // old "fetch + pick" workflow working when the user grabs a
             // brand-new model id mid-conversation.
             let libraryModels = libraryModelSet
-            let extras = appState.agentKnownModelIDs.filter { !libraryModels.contains($0) && !$0.isEmpty }
+            let extras = appState.agentKnownModelIDs.filter {
+                !libraryModels.contains($0) && isKnownModelRelevantToActiveProvider($0)
+            }
             if !extras.isEmpty {
                 Divider()
                 Menu("Recently fetched") {
@@ -333,6 +335,17 @@ struct ModelPickerPill: View {
             s.formUnion(e.allProModels)
         }
         return s
+    }
+
+    private func isKnownModelRelevantToActiveProvider(_ model: String) -> Bool {
+        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        guard let active = appState.agentProviderLibrary.active,
+              let preset = AgentProviderPreset.preset(id: active.providerID),
+              preset.id != AgentProviderPreset.customID else {
+            return true
+        }
+        return preset.recognizesModelID(trimmed)
     }
 
     /// Pill label — prefer the explicit session override, else fall

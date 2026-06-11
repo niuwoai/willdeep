@@ -1,6 +1,6 @@
 # 测试指南
 
-> 适用范围：VeilWriter (Xedit) 本地开发与 PR 自检。
+> 适用范围：WillDeep (Xedit) 本地开发与 PR 自检。
 
 ## 测试目标在哪里
 
@@ -52,7 +52,7 @@ xcodebuild test \
   -only-testing:XeditUITests
 ```
 
-> 提示：UI 测试会真正启动 VeilWriter，会在屏幕上看到窗口闪。跑之前关掉自己手动打开的 VeilWriter 实例，否则状态会乱。
+> 提示：UI 测试会真正启动 WillDeep，会在屏幕上看到窗口闪。跑之前关掉自己手动打开的 WillDeep 实例，否则状态会乱。
 
 ## 三、scripts/run_tests.sh
 
@@ -87,7 +87,7 @@ xcodebuild test \
 ```swift
 import Testing
 import Foundation
-@testable import VeilWriter
+@testable import WillDeep
 
 @Suite("我的功能行为")
 struct MyFeatureTests {
@@ -96,7 +96,7 @@ struct MyFeatureTests {
     /// 所以 init() 就是 setUp，没有专门 tearDown — 在 init 里
     /// 清干净 UserDefaults / 临时目录 / 单例缓存。
     init() {
-        UserDefaults.standard.removeObject(forKey: "im.some.veilwriter.my.feature")
+        UserDefaults.standard.removeObject(forKey: "com.willdeep.my.feature")
     }
 
     @Test("空输入返回 nil")

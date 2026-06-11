@@ -1,6 +1,6 @@
 //
 //  AgentToolCallGrouping.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Codex-style collapsing of consecutive same-kind tool calls into a
 //  single transcript row ("已运行 3 条命令" / "已探索 2 个文件"). The

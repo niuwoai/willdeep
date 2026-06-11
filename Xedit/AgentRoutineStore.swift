@@ -1,6 +1,6 @@
 //
 //  AgentRoutineStore.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Persists user-defined Agent routines as JSON files under the app's
 //  Application Support directory. One file per routine — same shape as
@@ -14,7 +14,7 @@ enum AgentRoutineStore {
     static var directory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
-        return base.appendingPathComponent("VeilWriter", isDirectory: true)
+        return base.appendingPathComponent("WillDeep", isDirectory: true)
             .appendingPathComponent("agent-routines", isDirectory: true)
     }
 

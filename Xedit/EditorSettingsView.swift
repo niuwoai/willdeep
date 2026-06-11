@@ -1,6 +1,6 @@
 //
 //  EditorSettingsView.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Preferences UI for editor appearance.
 //
@@ -603,7 +603,7 @@ struct EditorSettingsView: View {
             Section(L10n.Settings.Tools.cliSection) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("veilwriter")
+                        Text("willdeep")
                             .font(.headline)
                         Text(cliStatusText)
                             .font(.caption)
@@ -1222,9 +1222,9 @@ struct AgentProviderLibrarySection: View {
     }
 
     private func addEntry() {
-        // Default new entries to the OpenAI preset so the user has
-        // something to overwrite immediately.
-        let preset = AgentProviderPreset.preset(id: AgentProviderPreset.openAIID) ?? AgentProviderPreset.all[0]
+        // Default new entries to DeepSeek, matching the fresh-install
+        // provider and avoiding accidental OpenAI model suggestions.
+        let preset = AgentProviderPreset.preset(id: AgentProviderPreset.deepSeekID) ?? AgentProviderPreset.all[0]
         let entry = AgentProviderEntry(
             providerID: preset.id,
             baseURL: preset.baseURL,
