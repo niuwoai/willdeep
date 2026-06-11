@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-11 | Current version: v1.60.0-rc4
+> Last updated: 2026-06-11 | Current version: v1.60.0-rc5
 
 ## Positioning
 
@@ -79,7 +79,7 @@ CLAUDE.md §10 的软上限是 2000 行，硬上限是 3000 行。rc42 拆完 `A
 ## 关键概念
 
 - **AgentRuntime per session** — 一个 `AgentSession` 配一个 `AgentRuntime`。runtime 内独占 `messages`、`requestTask`（当前流式 Task）、`toolDecisionWaiter`（pending 工具批准的 continuation）、`composerDraft`、`mode/plan/goal`、`turnStartedAt` 等。AppState 通过 `activeSessionID -> activeRuntime` 选中"当前"，但其他 runtime 继续在后台跑。切换会话不会取消正在流式的请求；用户回来时还能看到完整 transcript。
-- **Remote Runtime（1.60.0-rc4）** — Agent session 的 workspace 现在可记录为本地路径或远端 runtime + 远端路径。Settings → Runtimes 管理 SSH runtime，使用系统 `ssh -o BatchMode=yes` 探测远端 Linux/macOS 与 arm64/x86_64 架构，并记录 git / rg / shell、Node/npm/yarn、Python/pip、Ruby、Go、Java、GitHub CLI (`gh`) 版本与登录状态、npm/yarn registry、npm/pip proxy 与 `http_proxy` / `https_proxy` / `no_proxy` 等环境变量；未检测到 `gh` 或登录状态时会提示用户在远端安装并执行 `gh auth login`。SSH 配置可选 identity file path，WillDeep 只保存路径、不保存私钥内容；代理 URL 中的账号密码在持久化和展示前会脱敏。Agent 工具 `search_files` / `grep_files` / `read_file` / `list_directory` / `git_status` / `run_command` 会按 session workspace 路由到本地或远端；远端后台任务复用现有 job 管线。`willdeep-agent/` Go daemon MVP 已落地，CLI 用 Cobra，默认只监听 `127.0.0.1`，支持 token 鉴权、HTTP 文件/Git/搜索/后台命令 API、job SSE 输出流和 WebSocket 控制事件；后续 Swift 侧 `DaemonRuntimeBackend` 会复用同一 runtime backend contract。
+- **Remote Runtime（1.60.0-rc5）** — Agent session 的 workspace 现在可记录为本地路径或远端 runtime + 远端路径。Settings → Runtimes 管理 SSH runtime 和 Daemon runtime。SSH 使用系统 `ssh -o BatchMode=yes` 探测远端 Linux/macOS 与 arm64/x86_64 架构，并记录 git / rg / shell、Node/npm/yarn、Python/pip、Ruby、Go、Java、GitHub CLI (`gh`) 版本与登录状态、npm/yarn registry、npm/pip proxy 与 `http_proxy` / `https_proxy` / `no_proxy` 等环境变量；未检测到 `gh` 或登录状态时会提示用户在远端安装并执行 `gh auth login`。SSH 配置可选 identity file path，WillDeep 只保存路径、不保存私钥内容；Daemon runtime 连接 `willdeep-agent` HTTP/WebSocket endpoint，token 存 Keychain，建议通过 SSH tunnel 访问 `127.0.0.1` 绑定的远端 daemon。Agent 工具 `search_files` / `grep_files` / `read_file` / `list_directory` / `git_status` / `run_command` 会按 session workspace 路由到本地、SSH 或 daemon；daemon 后台命令可通过 `get_job_output` / `kill_job` 查询或停止。
 - **@MainActor isolation** — AppState 本身是 `@MainActor`，所有 `@Published` mutation 必须在主线程发生。runtime 的 hot 字段亦然，但 `AgentClient` 的 URLSession 流式回调跨线程时通过 `Task { @MainActor in ... }` 拥抱主线程。`AppState.deinit` 不能 cancel runtime——rc38 曾尝试 `MainActor.assumeIsolated` 但 Swift Testing 在非主线程 release 触发 precondition fail，rc41 回退；清理走 session 显式删除路径。
 - **Per-provider concurrency cap** — 多 runtime 并发跑时，同一 provider 的活跃请求按 `AgentSettingsStore` 的 `concurrencyLimit`（默认 3，1–8 可调）FIFO 排队；不同 provider 互不阻塞。这样 routine 集中触发也不会冲烂同一家 API 的速率。
 - **find/replace 内容哈希缓存** — `AppState.findMatchRanges` 与 `changedLineNumbers` 用 `(content.hashValue, query/savedContent)` 双键缓存（rc39 落地）。SwiftUI body 多次读这俩属性时不再每次重扫全文。

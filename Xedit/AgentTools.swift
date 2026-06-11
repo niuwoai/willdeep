@@ -98,6 +98,21 @@ struct AgentToolContext {
         }
         return SSHRuntimeBackend(descriptor: runtimeDescriptor)
     }
+
+    var daemonBackend: DaemonRuntimeBackend? {
+        guard let runtimeDescriptor,
+              runtimeDescriptor.transport == .daemon,
+              case .remote = workspaceLocation else {
+            return nil
+        }
+        return DaemonRuntimeBackend(descriptor: runtimeDescriptor)
+    }
+
+    var remoteBackend: AgentRemoteRuntimeBackend? {
+        if let sshBackend { return sshBackend }
+        if let daemonBackend { return daemonBackend }
+        return nil
+    }
 }
 
 struct AgentToolResult: Equatable {
@@ -408,7 +423,7 @@ enum AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
-        if let backend = context.sshBackend {
+        if let backend = context.remoteBackend {
             return try await backend.searchFiles(arguments: arguments)
         }
         guard let root = context.rootDirectory else { throw AgentToolError.noWorkspace }
@@ -482,7 +497,7 @@ enum AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
-        if let backend = context.sshBackend {
+        if let backend = context.remoteBackend {
             return try await backend.grepFiles(arguments: arguments)
         }
         guard let root = context.rootDirectory else { throw AgentToolError.noWorkspace }
@@ -671,7 +686,7 @@ enum AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
-        if let backend = context.sshBackend {
+        if let backend = context.remoteBackend {
             return try await backend.readFile(arguments: arguments)
         }
         guard let root = context.rootDirectory else { throw AgentToolError.noWorkspace }
@@ -724,7 +739,7 @@ enum AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
-        if let backend = context.sshBackend {
+        if let backend = context.remoteBackend {
             return try await backend.listDirectory(arguments: arguments)
         }
         guard let root = context.rootDirectory else { throw AgentToolError.noWorkspace }
@@ -774,7 +789,7 @@ enum AgentToolRunner {
     // MARK: git_status
 
     private static func gitStatus(context: AgentToolContext) async throws -> AgentToolResult {
-        if let backend = context.sshBackend {
+        if let backend = context.remoteBackend {
             return try await backend.gitStatus()
         }
         guard let root = context.rootDirectory else { throw AgentToolError.noWorkspace }
@@ -833,7 +848,7 @@ enum AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
-        if let backend = context.sshBackend {
+        if let backend = context.remoteBackend {
             return try await backend.runCommand(arguments: arguments, context: context)
         }
         let root = context.rootDirectory?.standardizedFileURL
@@ -1042,7 +1057,7 @@ enum AgentToolRunner {
         }
 
         let executable: String
-        if context.sshBackend != nil {
+        if context.remoteBackend != nil {
             executable = "claude"
         } else if let localExecutable = claudeCodeExecutablePath() {
             executable = localExecutable
@@ -1196,7 +1211,7 @@ enum AgentToolRunner {
             )
         }
         let executable: String
-        if context.sshBackend != nil {
+        if context.remoteBackend != nil {
             executable = "codex"
         } else if let localExecutable = codexCLIExecutablePath() {
             executable = localExecutable
@@ -1229,7 +1244,7 @@ enum AgentToolRunner {
             )
         }
         let executable: String
-        if context.sshBackend != nil {
+        if context.remoteBackend != nil {
             executable = "cursor"
         } else if let localExecutable = cursorAgentExecutablePath() {
             executable = localExecutable
@@ -1285,6 +1300,9 @@ enum AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
+        if let daemonBackend = context.daemonBackend {
+            return try await daemonBackend.listJobs()
+        }
         guard let registry = context.jobRegistry, let runtimeID = context.runtimeID else {
             return AgentToolResult(summary: "no jobs", payload: "Background job registry not available in this context.")
         }
@@ -1308,6 +1326,9 @@ enum AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
+        if let daemonBackend = context.daemonBackend {
+            return try await daemonBackend.getJobOutput(arguments: arguments)
+        }
         guard let registry = context.jobRegistry, let runtimeID = context.runtimeID else {
             throw AgentToolError.invalidArgument("Background job registry not available.")
         }
@@ -1335,6 +1356,9 @@ enum AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
+        if let daemonBackend = context.daemonBackend {
+            return try await daemonBackend.killJob(arguments: arguments)
+        }
         guard let registry = context.jobRegistry, let runtimeID = context.runtimeID else {
             throw AgentToolError.invalidArgument("Background job registry not available.")
         }

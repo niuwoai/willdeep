@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.60.0-rc5 - 2026-06-11
+
+### Remote Runtime
+
+- macOS app 的 Settings → Runtimes 现在可新增 Daemon Runtime，配置 daemon URL、远端 workspace path 与 Keychain 保存的 daemon token。
+- Agent 工具路由从 SSH-only 扩展为 remote backend 抽象，`search_files`、`grep_files`、`read_file`、`list_directory`、`git_status`、`run_command` 可按 runtime transport 路由到 SSH 或 `willdeep-agent` daemon。
+- `run_command` 在 daemon runtime 下通过 `/v1/run/start` 执行，前台命令轮询远端 job 完成，后台命令返回 daemon job id；`get_job_output` 与 `kill_job` 可查询或停止 daemon job。
+- Daemon Runtime probe 读取 `/v1/probe`，映射远端平台、架构、工具链、registry、proxy 和 GitHub CLI 登录状态。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc5`。
+
 ## 1.60.0-rc4 - 2026-06-11
 
 ### Remote Runtime

@@ -582,9 +582,14 @@ enum L10n {
             static let listSection = String(localized: "settings.remote-runtimes.list-section", defaultValue: "Remote Runtimes")
             static let empty = String(localized: "settings.remote-runtimes.empty", defaultValue: "No remote runtimes configured.")
             static let addButton = String(localized: "settings.remote-runtimes.add", defaultValue: "Add SSH Runtime")
+            static let addDaemonButton = String(localized: "settings.remote-runtimes.add-daemon", defaultValue: "Add Daemon Runtime")
             static let newRuntimeDefaultName = String(localized: "settings.remote-runtimes.new-default-name", defaultValue: "New SSH Runtime")
+            static let newDaemonRuntimeDefaultName = String(localized: "settings.remote-runtimes.new-daemon-default-name", defaultValue: "New Daemon Runtime")
             static let connectionSection = String(localized: "settings.remote-runtimes.connection-section", defaultValue: "SSH Connection")
             static let displayNameLabel = String(localized: "settings.remote-runtimes.display-name", defaultValue: "Display name")
+            static let transportLabel = String(localized: "settings.remote-runtimes.transport", defaultValue: "Transport")
+            static let sshTransportLabel = String(localized: "settings.remote-runtimes.transport.ssh", defaultValue: "SSH")
+            static let daemonTransportLabel = String(localized: "settings.remote-runtimes.transport.daemon", defaultValue: "Daemon")
             static let hostLabel = String(localized: "settings.remote-runtimes.host", defaultValue: "Host")
             static let usernameLabel = String(localized: "settings.remote-runtimes.username", defaultValue: "Username")
             static func portLabel(_ a1: String) -> String {
@@ -592,6 +597,8 @@ enum L10n {
                 return String(format: template, a1)
             }
             static let identityFileLabel = String(localized: "settings.remote-runtimes.identity-file", defaultValue: "SSH identity file path (optional)")
+            static let daemonURLLabel = String(localized: "settings.remote-runtimes.daemon-url", defaultValue: "Daemon URL")
+            static let daemonTokenLabel = String(localized: "settings.remote-runtimes.daemon-token", defaultValue: "Daemon token (stored in Keychain)")
             static let workspacePathLabel = String(localized: "settings.remote-runtimes.workspace-path", defaultValue: "Remote workspace path")
             static let sshDescription = String(localized: "settings.remote-runtimes.ssh-description", defaultValue: "Uses the system ssh client with BatchMode authentication. Configure hosts in your normal SSH config or provide an optional identity-file path; WillDeep stores only the path, never private key contents.")
             static let probeSection = String(localized: "settings.remote-runtimes.probe-section", defaultValue: "Probe")
@@ -623,7 +630,7 @@ enum L10n {
                 return String(format: template, a1)
             }
             static let daemonSection = String(localized: "settings.remote-runtimes.daemon-section", defaultValue: "Daemon Runtime")
-            static let daemonDescription = String(localized: "settings.remote-runtimes.daemon-description", defaultValue: "willdeep-agent daemon support is planned behind the same runtime backend contract. The first release keeps remote execution SSH-based and avoids mutating remote system directories.")
+            static let daemonDescription = String(localized: "settings.remote-runtimes.daemon-description", defaultValue: "Connects to willdeep-agent over HTTP/WebSocket. Keep the daemon bound to 127.0.0.1 and reach it through an SSH tunnel; WillDeep stores the token in Keychain.")
         }
 
         enum Provider {

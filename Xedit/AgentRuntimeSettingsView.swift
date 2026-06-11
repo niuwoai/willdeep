@@ -20,6 +20,9 @@ struct AgentRuntimeSettingsView: View {
     @State private var username = ""
     @State private var port = 22
     @State private var identityFilePath = ""
+    @State private var daemonURL = ""
+    @State private var daemonToken = ""
+    @State private var transport: RuntimeTransport = .ssh
     @State private var workspacePath = ""
 
     private var selectedRuntime: RuntimeDescriptor? {
@@ -90,6 +93,23 @@ struct AgentRuntimeSettingsView: View {
                 } label: {
                     Label(L10n.Settings.RemoteRuntimes.addButton, systemImage: "plus")
                 }
+
+                Button {
+                    let runtime = RuntimeDescriptor(
+                        displayName: L10n.Settings.RemoteRuntimes.newDaemonRuntimeDefaultName,
+                        transport: .daemon,
+                        host: "127.0.0.1",
+                        port: 8765,
+                        username: "",
+                        daemonBaseURL: "http://127.0.0.1:8765",
+                        defaultWorkspacePath: ""
+                    )
+                    runtimes.append(runtime)
+                    selectedRuntimeID = runtime.id
+                    saveAll()
+                } label: {
+                    Label(L10n.Settings.RemoteRuntimes.addDaemonButton, systemImage: "antenna.radiowaves.left.and.right")
+                }
             }
         }
         .formStyle(.grouped)
@@ -99,17 +119,30 @@ struct AgentRuntimeSettingsView: View {
         Form {
             Section(L10n.Settings.RemoteRuntimes.connectionSection) {
                 TextField(L10n.Settings.RemoteRuntimes.displayNameLabel, text: $displayName)
-                TextField(L10n.Settings.RemoteRuntimes.hostLabel, text: $host)
-                TextField(L10n.Settings.RemoteRuntimes.usernameLabel, text: $username)
-                Stepper(value: $port, in: 1...65535) {
-                    Text(L10n.Settings.RemoteRuntimes.portLabel("\(port)"))
+                Picker(L10n.Settings.RemoteRuntimes.transportLabel, selection: $transport) {
+                    Text(L10n.Settings.RemoteRuntimes.sshTransportLabel).tag(RuntimeTransport.ssh)
+                    Text(L10n.Settings.RemoteRuntimes.daemonTransportLabel).tag(RuntimeTransport.daemon)
                 }
-                TextField(L10n.Settings.RemoteRuntimes.identityFileLabel, text: $identityFilePath)
-                TextField(L10n.Settings.RemoteRuntimes.workspacePathLabel, text: $workspacePath)
+                .pickerStyle(.segmented)
 
-                Text(L10n.Settings.RemoteRuntimes.sshDescription)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if transport == .ssh {
+                    TextField(L10n.Settings.RemoteRuntimes.hostLabel, text: $host)
+                    TextField(L10n.Settings.RemoteRuntimes.usernameLabel, text: $username)
+                    Stepper(value: $port, in: 1...65535) {
+                        Text(L10n.Settings.RemoteRuntimes.portLabel("\(port)"))
+                    }
+                    TextField(L10n.Settings.RemoteRuntimes.identityFileLabel, text: $identityFilePath)
+                    Text(L10n.Settings.RemoteRuntimes.sshDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    TextField(L10n.Settings.RemoteRuntimes.daemonURLLabel, text: $daemonURL)
+                    SecureField(L10n.Settings.RemoteRuntimes.daemonTokenLabel, text: $daemonToken)
+                    Text(L10n.Settings.RemoteRuntimes.daemonDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                TextField(L10n.Settings.RemoteRuntimes.workspacePathLabel, text: $workspacePath)
             }
 
             if let selectedRuntime {
@@ -154,7 +187,7 @@ struct AgentRuntimeSettingsView: View {
                             saveCurrent()
                             probeSelectedRuntime()
                         }
-                        .disabled(probingRuntimeID != nil || host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(probingRuntimeID != nil || !canProbe)
 
                         Button(L10n.Settings.RemoteRuntimes.saveButton) {
                             saveCurrent()
@@ -170,13 +203,6 @@ struct AgentRuntimeSettingsView: View {
                     }
                 }
             }
-
-            Section(L10n.Settings.RemoteRuntimes.daemonSection) {
-                Text(L10n.Settings.RemoteRuntimes.daemonDescription)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
             if !statusMessage.isEmpty {
                 Section {
                     Text(statusMessage)
@@ -195,6 +221,9 @@ struct AgentRuntimeSettingsView: View {
             username = NSUserName()
             port = 22
             identityFilePath = ""
+            daemonURL = ""
+            daemonToken = ""
+            transport = .ssh
             workspacePath = ""
             return
         }
@@ -203,6 +232,9 @@ struct AgentRuntimeSettingsView: View {
         username = selectedRuntime.username
         port = selectedRuntime.port
         identityFilePath = selectedRuntime.identityFilePath ?? ""
+        daemonURL = selectedRuntime.daemonBaseURL ?? selectedRuntime.daemonEndpointURL?.absoluteString ?? ""
+        daemonToken = selectedRuntime.transport == .daemon ? RemoteRuntimeSecretStore.daemonToken(runtimeID: selectedRuntime.id) : ""
+        transport = selectedRuntime.transport
         workspacePath = selectedRuntime.defaultWorkspacePath
     }
 
@@ -215,15 +247,26 @@ struct AgentRuntimeSettingsView: View {
             port: port,
             username: username,
             identityFilePath: identityFilePath,
+            daemonBaseURL: daemonURL,
             defaultWorkspacePath: workspacePath
         )
         runtime.displayName = displayName
-        runtime.host = host
-        runtime.username = username
-        runtime.port = port
-        runtime.identityFilePath = identityFilePath
+        runtime.transport = transport
+        if transport == .ssh {
+            runtime.host = host
+            runtime.username = username
+            runtime.port = port
+            runtime.identityFilePath = identityFilePath
+            runtime.daemonBaseURL = nil
+        } else {
+            runtime.daemonBaseURL = daemonURL
+            runtime.host = daemonHost(from: daemonURL)
+            runtime.port = daemonPort(from: daemonURL)
+            runtime.username = ""
+            runtime.identityFilePath = nil
+            RemoteRuntimeSecretStore.saveDaemonToken(daemonToken, runtimeID: runtime.id)
+        }
         runtime.defaultWorkspacePath = workspacePath
-        runtime.transport = .ssh
         upsertLocal(runtime.normalized)
         statusMessage = L10n.Settings.RemoteRuntimes.savedStatus
     }
@@ -234,7 +277,12 @@ struct AgentRuntimeSettingsView: View {
         statusMessage = L10n.Settings.RemoteRuntimes.probingStatus(runtime.displayName)
         Task {
             do {
-                let updated = try await SSHRuntimeBackend(descriptor: runtime).probe()
+                let updated: RuntimeDescriptor
+                if runtime.transport == .daemon {
+                    updated = try await DaemonRuntimeBackend(descriptor: runtime).probe()
+                } else {
+                    updated = try await SSHRuntimeBackend(descriptor: runtime).probe()
+                }
                 await MainActor.run {
                     upsertLocal(updated)
                     probingRuntimeID = nil
@@ -251,6 +299,7 @@ struct AgentRuntimeSettingsView: View {
 
     private func deleteSelected() {
         guard let selectedRuntimeID else { return }
+        RemoteRuntimeSecretStore.deleteDaemonToken(runtimeID: selectedRuntimeID)
         runtimes.removeAll { $0.id == selectedRuntimeID }
         AgentRuntimeStore.saveDescriptors(runtimes)
         self.selectedRuntimeID = runtimes.first?.id
@@ -277,6 +326,17 @@ struct AgentRuntimeSettingsView: View {
 
     private func reload() {
         runtimes = AgentRuntimeStore.loadDescriptors()
+    }
+
+    private var canProbe: Bool {
+        switch transport {
+        case .ssh:
+            return !host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .daemon:
+            return URL(string: daemonURL.trimmingCharacters(in: .whitespacesAndNewlines)) != nil
+        case .local:
+            return false
+        }
     }
 
     private func capabilityLine(_ runtime: RuntimeDescriptor) -> String {
@@ -343,7 +403,18 @@ struct AgentRuntimeSettingsView: View {
 
 private extension RuntimeDescriptor {
     var hostLine: String {
+        if transport == .daemon {
+            return daemonBaseURL ?? daemonEndpointURL?.absoluteString ?? "daemon"
+        }
         let prefix = username.isEmpty ? host : "\(username)@\(host)"
         return "\(prefix):\(port)"
     }
+}
+
+private func daemonHost(from value: String) -> String {
+    URL(string: value.trimmingCharacters(in: .whitespacesAndNewlines))?.host ?? "127.0.0.1"
+}
+
+private func daemonPort(from value: String) -> Int {
+    URL(string: value.trimmingCharacters(in: .whitespacesAndNewlines))?.port ?? 8765
 }
