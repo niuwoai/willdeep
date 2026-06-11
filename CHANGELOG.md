@@ -1,5 +1,96 @@
 # Changelog
 
+## 1.60.0-rc5 - 2026-06-11
+
+### Remote Runtime
+
+- macOS app 的 Settings → Runtimes 现在可新增 Daemon Runtime，配置 daemon URL、远端 workspace path 与 Keychain 保存的 daemon token。
+- Agent 工具路由从 SSH-only 扩展为 remote backend 抽象，`search_files`、`grep_files`、`read_file`、`list_directory`、`git_status`、`run_command` 可按 runtime transport 路由到 SSH 或 `willdeep-agent` daemon。
+- `run_command` 在 daemon runtime 下通过 `/v1/run/start` 执行，前台命令轮询远端 job 完成，后台命令返回 daemon job id；`get_job_output` 与 `kill_job` 可查询或停止 daemon job。
+- Daemon Runtime probe 读取 `/v1/probe`，映射远端平台、架构、工具链、registry、proxy 和 GitHub CLI 登录状态。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc5`。
+
+## 1.60.0-rc4 - 2026-06-11
+
+### Remote Runtime
+
+- 新增 `willdeep-agent/` Go 子模块，提供远端 daemon MVP；CLI 使用 Cobra，支持 `serve`、`probe`、`version` 子命令。
+- `willdeep-agent serve` 默认绑定 `127.0.0.1:8765`，支持 `--workspace` 限定远端 workspace root，并可通过 `--token`、`--token-file` 或 `WILLDEEP_AGENT_TOKEN` 启用 Bearer token 鉴权。
+- daemon HTTP API 覆盖 `/health`、`/v1/probe`、`/v1/fs/list`、`/v1/fs/read`、`/v1/fs/write`、`/v1/search`、`/v1/git/status`、`/v1/run/start`、job 查询、job 输出、job kill 与 SSE job events。
+- daemon WebSocket 通道支持 `hello`、`probe`、`fs.read`、`fs.write`、`fs.list`、`search`、`git.status`、`run.start`、`run.kill` 事件。
+- 远端 path 统一通过 workspace root 规范化，拒绝 `..`、绝对 path 越权和 symlink 逃逸；后台命令输出保留 64KB 环形缓冲，超时上限 6 小时。
+
+### Tests
+
+- 新增 Go 单元测试，覆盖 workspace path 越权、symlink 逃逸、代理凭据脱敏和 token file 加载。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc4`。
+
+## 1.60.0-rc3 - 2026-06-11
+
+### Agent Selection Context
+
+- 编辑器选中文本后的右键菜单新增“添加到对话”和“在侧边 Agent 中提问”，可把当前选区作为 Agent 文本附件加入下一轮对话。
+- 选区附件会记录文件、行号范围和语言信息，打开侧边 Agent 面板后以可移除 chip 展示；即使输入框为空，只要有选区附件也可以发送。
+- “在侧边 Agent 中提问”会打开右侧 Agent 面板、聚焦输入框，并预填一条面向已附加选区的问题提示。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc3`。
+
+## 1.60.0-rc2 - 2026-06-11
+
+### Remote Runtime
+
+- SSH runtime 配置新增可选 identity file path；实际连接会传给系统 `ssh -i`，WillDeep 只保存路径，不保存私钥内容。
+- 远端探测从基础平台信息扩展到工具链、协作工具与网络环境：Node/npm/yarn、Python/pip、Ruby、Go、Java、GitHub CLI (`gh`) 版本与 `gh auth status`，npm/yarn registry，npm/pip proxy，以及 `http_proxy` / `https_proxy` / `no_proxy` 环境变量。
+- 未检测到 `gh` 或未能读取登录状态时，Settings → Runtimes 会给出安装 `gh` / 执行 `gh auth login` 的建议。
+- 探测到的代理 URL 在保存与展示前会脱敏账号密码，避免把代理凭据写进 UserDefaults 或 UI。
+- Settings → Runtimes 的 probe 区域新增 Toolchain、Collaboration、Registries / mirrors、Proxy settings 展示行。
+
+### Tests
+
+- Remote Runtime 单测补充 SSH identity file 参数构造、代理凭据脱敏与旧 probe payload 兼容性覆盖。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc2`。
+
+## 1.60.0-rc1 - 2026-06-11
+
+### Remote Runtime
+
+- 新增 Agent Runtime 抽象，支持把会话 workspace 记录为本地路径或远端 runtime + 远端路径，并兼容旧 `workspaceRootPath` 会话 JSON。
+- Settings 新增 `Runtimes` 标签页，可配置 SSH runtime、保存默认远端 workspace、通过系统 `ssh -o BatchMode=yes` 探测远端平台、架构、git、rg 与 shell。
+- Agent 工具 `search_files`、`grep_files`、`read_file`、`list_directory`、`git_status`、`run_command` 已按会话 workspace 路由：本地会话保持旧行为，远端 SSH 会话在远端执行。
+- Composer workspace picker 会列出已配置默认 workspace 的 SSH runtime；选中后当前空会话迁移到远端 workspace，已有历史的会话则新建远端会话。
+- `run_command` 审批记录会展示远端 runtime 与 cwd；远端后台任务复用现有 job 管线，并在 job 元数据中记录 runtime 展示信息。
+- `claude_code`、`codex_cli`、`cursor_agent` 在远端 SSH session 下默认调用远端 PATH 中的 CLI。
+
+### Tests
+
+- 新增 Remote Runtime 单元测试，覆盖旧 session 迁移、平台/架构解析、远端路径越权拒绝与 SSH 命令构造。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc1`。
+
+## 1.59.0-rc5 - 2026-06-11
+
+### Agent Composer
+
+- 修复中文 / 日文 / 韩文输入法组词期间，SwiftUI 父视图刷新会把旧 binding 值写回 `NSTextView`、导致刚输入的 marked text 被清空的问题。
+- Composer 现在在 `NSTextView.hasMarkedText()` 为真时跳过外部文本回写，避免 streaming transcript、计时器、picker 状态刷新吞掉正在输入的内容。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.59.0-rc5`。
+
 ## 1.59.0-rc4 - 2026-06-11
 
 ### Agent Streaming 性能

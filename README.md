@@ -8,7 +8,7 @@
 
 [![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.59.0--rc4-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.60.0--rc5-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *No Electron. No 800MB Helper processes. No "loading workspace…" spinner that eats your afternoon.*
@@ -56,6 +56,8 @@ Hit **⌘⇧A** and the window flips into a dedicated chat surface — project-g
 - **Bring your own key.** OpenAI, DashScope (qwen / qwq), DeepSeek, Kimi, Moonshot, Claude, or any OpenAI-compatible endpoint. Keys live in Keychain.
 - **Two-tier routing.** Configure a cheap **Flash** model and a strong **Pro** model. Auto-route cost-first or force Pro for hard turns.
 - **Tools, not just chat.** The agent can `search_files`, `grep_files` (real regex), `read_file`, `list_directory`, `git_status`, `run_command`, `ask_user`. It can also list & call **Codex skills** and **MCP servers** you've configured.
+- **Remote runtimes.** Configure SSH hosts in Settings → Runtimes, bind an Agent session to a remote workspace, and the Agent's file reads, grep/search, Git status, shell commands, builds, tests, and delegated CLI agents execute there while the UI stays local.
+- **Remote daemon MVP.** The `willdeep-agent/` Go module ships a remote daemon with HTTP, SSE job events, and WebSocket control events. Run it on a remote Linux/macOS host behind an SSH tunnel: `willdeep-agent serve --workspace /path/to/project --token-file ~/.willdeep-agent-token`.
 - **Auto-approve safe commands.** Read-only stuff (`ls`, `cat`, `git diff`, `rg`, …) runs immediately via a static allowlist. Borderline commands fall through to a tiny LLM judge ("YES/NO — is this read-only?"). Destructive patterns still demand you type `confirm`.
 - **Diff proposals, not blind writes.** Agent edits arrive as unified diffs you can read, **apply, or reject**. Only files inside your workspace. Open tabs + git status update automatically.
 - **Image-in.** Paste, drag, or attach screenshots in the composer. Text-only providers transparently route through a separately configured image-describing provider.
@@ -132,7 +134,7 @@ Requires Xcode and macOS 14+. The app builds as **WillDeep.app**. The public pro
 
 ## Status
 
-WillDeep is in active `1.59.x` development. The editor surface is solid for daily use; the agent stack is the area moving fastest. See [CHANGELOG.md](CHANGELOG.md) for what each release changed and [product-overview.md](product-overview.md) for the full capability matrix and open questions.
+WillDeep is in active `1.60.x` development. The editor surface is solid for daily use; the agent stack is the area moving fastest. See [CHANGELOG.md](CHANGELOG.md) for what each release changed and [product-overview.md](product-overview.md) for the full capability matrix and open questions.
 
 We ship a release candidate the moment a fix lands. Tags follow `vMAJOR.MINOR.PATCH-rcN`.
 
@@ -178,7 +180,7 @@ WillDeep is licensed under the [Apache License 2.0](LICENSE). You are free to us
 
 [![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.59.0--rc4-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.60.0--rc5-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *不靠 Electron。没有 800MB 的 Helper 子进程。没有那种让你怀疑人生的 "loading workspace…"。*
@@ -226,6 +228,7 @@ VS Code 嘴上说自己是文本编辑器，结果开五个 Node 进程来画一
 - **自带 Key。** OpenAI、DashScope（qwen / qwq）、DeepSeek、Kimi、月之暗面、Claude，或者任何 OpenAI 兼容端点都能接。Key 存在 Keychain 里。
 - **双档路由。** 配一个便宜的 **Flash** 模型 + 一个强力的 **Pro** 模型。Auto 模式按成本走 Flash，复杂回合强制走 Pro。
 - **不是聊天，是真的会动手。** Agent 能调 `search_files`、`grep_files`（真正的正则）、`read_file`、`list_directory`、`git_status`、`run_command`、`ask_user`，也能列出并调用你配置的 **Codex skills** 和 **MCP servers**。
+- **远端 runtime。** 在 Settings → Runtimes 配置 SSH 主机，把 Agent 会话绑定到远端 workspace 后，文件读取、grep/search、Git 状态、shell 命令、编译、测试和 CLI Agent 委派都会在远端执行，本地只负责界面和审批。
 - **安全命令自动放行。** 只读的（`ls`、`cat`、`git diff`、`rg` 之类）走静态白名单立即执行。模棱两可的命令落到一个小的 LLM 评委手里（"YES/NO，这个命令是只读吗？"）。带破坏性的命令仍然要你手敲 `confirm`。
 - **补丁式编辑，不盲写。** Agent 改文件以 unified diff 的形式给你看 —— **你点 Apply 才会写**。只能改 workspace 里已存在的文件。打开的 tab 和 git 状态会自动同步。
 - **能塞图。** 在 composer 里粘贴 / 拖拽 / 添加截图。文字模型走不通的时候，自动让另一个图像理解 provider 先描述，再拼回主对话。
@@ -302,7 +305,7 @@ open Xedit.xcodeproj
 
 ## 项目状态
 
-WillDeep 当前在 `1.59.x` 上活跃迭代。编辑器主体已经很稳，可以日常用；Agent 部分是改动最频繁的地方。每次发布的具体变化看 [CHANGELOG.md](CHANGELOG.md)，完整的能力矩阵和未决问题看 [product-overview.md](product-overview.md)。
+WillDeep 当前在 `1.60.x` 上活跃迭代。编辑器主体已经很稳，可以日常用；Agent 部分是改动最频繁的地方。每次发布的具体变化看 [CHANGELOG.md](CHANGELOG.md)，完整的能力矩阵和未决问题看 [product-overview.md](product-overview.md)。
 
 只要一个 fix 落地我们就发一个 release candidate。Tag 格式：`vMAJOR.MINOR.PATCH-rcN`。
 

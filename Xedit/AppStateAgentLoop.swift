@@ -776,7 +776,12 @@ extension AppState {
         // never read AppState.rootDirectory here. Concurrent runtimes
         // can be running against different workspaces; the window's
         // current folder is a UI concept, not a session concept.
-        let workspaceURL = runtime.workspaceRootPath.map { URL(fileURLWithPath: $0) }
+        let workspaceLocation = runtime.workspaceLocation
+            ?? runtime.workspaceRootPath.map { .local(path: $0) }
+        let workspaceURL = workspaceLocation?.localPath.map { URL(fileURLWithPath: $0) }
+        let remoteRuntimeDescriptor: RuntimeDescriptor? = workspaceLocation?.remoteRuntimeID.flatMap {
+            AgentRuntimeStore.descriptor(id: $0)
+        }
         let turnBaselineSnapshot = await Self.loadAgentWorktreeSnapshot(for: workspaceURL)
         let turnBaselineChanges = turnBaselineSnapshot.changes
         if workspaceURL != nil {
@@ -831,7 +836,7 @@ extension AppState {
             // window-level context the user can flip while another
             // session is running, and the model just sees it as
             // "what's on screen right now".
-            let systemPrompt = AgentContextBuilder.systemPrompt(
+            var systemPrompt = AgentContextBuilder.systemPrompt(
                 rootDirectory: workspaceURL,
                 openedFileURL: openedFileURL,
                 fileContent: fileContent,
@@ -842,6 +847,17 @@ extension AppState {
                 currentPlan: runtime.currentPlan,
                 currentGoal: runtime.currentGoal
             )
+            if let remoteRuntimeDescriptor,
+               case .remote(_, let remotePath) = workspaceLocation {
+                systemPrompt += """
+
+                Remote workspace:
+                - Runtime: \(remoteRuntimeDescriptor.displayName) (\(remoteRuntimeDescriptor.sshTarget))
+                - Platform: \(remoteRuntimeDescriptor.platform.displayName) / \(remoteRuntimeDescriptor.arch.displayName)
+                - Root: \(remotePath)
+                - Tools and shell commands execute on the remote runtime through SSH. Tell the user when a command is remote if it matters.
+                """
+            }
             let history = runtime.messages.filter { $0.id != assistantID }
             let collapsedHistory = Self.collapseOldToolResults(in: history)
             let requestMessages = [AgentMessage(role: .system, content: systemPrompt)] + collapsedHistory
@@ -996,11 +1012,19 @@ extension AppState {
                     }
                 }
 
+                var displayArgsDict = argsDict
+                if call.toolName == "run_command",
+                   let remoteRuntimeDescriptor,
+                   case .remote(_, let remotePath) = workspaceLocation {
+                    displayArgsDict["_runtime"] = .string("\(remoteRuntimeDescriptor.displayName) (\(remoteRuntimeDescriptor.sshTarget))")
+                    displayArgsDict["_cwd"] = .string(remotePath)
+                }
+
                 let record = AgentToolCall(
                     messageID: assistantID,
                     externalID: call.externalID,
                     toolName: call.toolName,
-                    arguments: argsDict,
+                    arguments: displayArgsDict,
                     risk: risk,
                     status: initialStatus,
                     approvalSource: autoApproval
@@ -1116,6 +1140,8 @@ extension AppState {
 
                 let context = AgentToolContext(
                     rootDirectory: workspaceURL,
+                    workspaceLocation: workspaceLocation,
+                    runtimeDescriptor: remoteRuntimeDescriptor,
                     runtimeID: runtime.id,
                     jobRegistry: agentJobRegistry
                 )

@@ -69,6 +69,9 @@ struct WorkspacePickerPill: View {
     }
 
     private var label: String {
+        if let remote = activeRemoteWorkspaceLabel {
+            return remote
+        }
         if let root = appState.rootDirectory {
             return root.lastPathComponent
         }
@@ -76,6 +79,10 @@ struct WorkspacePickerPill: View {
     }
 
     private var helpText: String {
+        if let runtime = activeRemoteRuntime,
+           case .remote(_, let path) = appState.activeRuntime?.workspaceLocation {
+            return "\(runtime.displayName): \(path)"
+        }
         if let root = appState.rootDirectory {
             return root.path
         }
@@ -131,6 +138,29 @@ struct WorkspacePickerPill: View {
             Divider()
         }
 
+        let remoteRuntimes = AgentRuntimeStore.loadDescriptors()
+            .filter { $0.transport == .ssh && !$0.defaultWorkspacePath.isEmpty }
+        if !remoteRuntimes.isEmpty {
+            Section("Remote runtimes") {
+                ForEach(remoteRuntimes) { runtime in
+                    Button {
+                        appState.moveActiveAgentSessionToRemoteWorkspace(
+                            runtimeID: runtime.id,
+                            path: runtime.defaultWorkspacePath
+                        )
+                    } label: {
+                        HStack {
+                            Text("\(runtime.displayName): \(runtime.defaultWorkspacePath)")
+                            if activeRemoteRuntime?.id == runtime.id {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+            Divider()
+        }
+
         // Section 3 — Always show the chooser sentinel last. Composer
         // path uses the "and start a new agent session" variant so the
         // picked folder immediately materialises as its own workspace
@@ -141,6 +171,22 @@ struct WorkspacePickerPill: View {
         } label: {
             Label("Choose folder…", systemImage: "folder.badge.plus")
         }
+    }
+
+    private var activeRemoteRuntime: RuntimeDescriptor? {
+        guard case .remote(let runtimeID, _) = appState.activeRuntime?.workspaceLocation else {
+            return nil
+        }
+        return AgentRuntimeStore.descriptor(id: runtimeID)
+    }
+
+    private var activeRemoteWorkspaceLabel: String? {
+        guard let runtime = activeRemoteRuntime,
+              case .remote(_, let path) = appState.activeRuntime?.workspaceLocation else {
+            return nil
+        }
+        let name = URL(fileURLWithPath: path).lastPathComponent
+        return "\(runtime.displayName): \(name.isEmpty ? path : name)"
     }
 
     /// Union of (a) folder paths that appear as workspaceRootPath on

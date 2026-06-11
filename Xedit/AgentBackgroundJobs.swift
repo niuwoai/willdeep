@@ -47,6 +47,9 @@ struct AgentBackgroundJob: Identifiable, Equatable {
     let command: String
     let workingDirectoryPath: String?
     let runtimeID: UUID
+    var runtimeDisplayName: String?
+    var remoteRuntimeID: UUID?
+    var remotePID: Int32?
     let startedAt: Date
     var pid: Int32
     var status: Status
@@ -108,7 +111,10 @@ final class AgentJobRegistry: ObservableObject {
         command: String,
         workingDirectory: URL?,
         runtimeID: UUID,
-        timeoutSeconds: Double?
+        timeoutSeconds: Double?,
+        runtimeDisplayName: String? = nil,
+        runtimeIDForDisplay: UUID? = nil,
+        remotePID: Int32? = nil
     ) throws -> AgentBackgroundJob {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -153,6 +159,9 @@ final class AgentJobRegistry: ObservableObject {
                 command: trimmed,
                 workingDirectoryPath: workingDirectoryPath,
                 runtimeID: runtimeID,
+                runtimeDisplayName: runtimeDisplayName,
+                remoteRuntimeID: runtimeIDForDisplay,
+                remotePID: remotePID,
                 startedAt: Date(),
                 pid: -1,
                 status: .launchFailed,
@@ -175,6 +184,9 @@ final class AgentJobRegistry: ObservableObject {
             command: trimmed,
             workingDirectoryPath: workingDirectoryPath,
             runtimeID: runtimeID,
+            runtimeDisplayName: runtimeDisplayName,
+            remoteRuntimeID: runtimeIDForDisplay,
+            remotePID: remotePID,
             startedAt: startedAt,
             pid: pid,
             status: .running,

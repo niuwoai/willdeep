@@ -60,6 +60,13 @@ struct AgentToolDescriptor: Equatable {
 struct AgentToolContext {
     /// Workspace root. All filesystem tools must refuse paths outside this.
     let rootDirectory: URL?
+    /// Canonical workspace binding. For local workspaces this mirrors
+    /// `rootDirectory`; for remote workspaces it carries the runtime id
+    /// plus remote root path.
+    let workspaceLocation: WorkspaceLocation?
+    /// Remote runtime descriptor resolved by the AppState loop. Nil for
+    /// local sessions or stale/deleted remote runtime ids.
+    let runtimeDescriptor: RuntimeDescriptor?
     /// Runtime that's executing this tool — used by background-job
     /// tools to scope jobs to the originating session. Nil in
     /// non-conversational call paths (tests, ad-hoc skill harness).
@@ -71,12 +78,40 @@ struct AgentToolContext {
 
     init(
         rootDirectory: URL?,
+        workspaceLocation: WorkspaceLocation? = nil,
+        runtimeDescriptor: RuntimeDescriptor? = nil,
         runtimeID: UUID? = nil,
         jobRegistry: AgentJobRegistry? = nil
     ) {
         self.rootDirectory = rootDirectory
+        self.workspaceLocation = workspaceLocation ?? rootDirectory.map { .local(path: $0.standardizedFileURL.path) }
+        self.runtimeDescriptor = runtimeDescriptor
         self.runtimeID = runtimeID
         self.jobRegistry = jobRegistry
+    }
+
+    var sshBackend: SSHRuntimeBackend? {
+        guard let runtimeDescriptor,
+              runtimeDescriptor.transport == .ssh,
+              case .remote = workspaceLocation else {
+            return nil
+        }
+        return SSHRuntimeBackend(descriptor: runtimeDescriptor)
+    }
+
+    var daemonBackend: DaemonRuntimeBackend? {
+        guard let runtimeDescriptor,
+              runtimeDescriptor.transport == .daemon,
+              case .remote = workspaceLocation else {
+            return nil
+        }
+        return DaemonRuntimeBackend(descriptor: runtimeDescriptor)
+    }
+
+    var remoteBackend: AgentRemoteRuntimeBackend? {
+        if let sshBackend { return sshBackend }
+        if let daemonBackend { return daemonBackend }
+        return nil
     }
 }
 
@@ -336,15 +371,15 @@ enum AgentToolRunner {
     ) async throws -> AgentToolResult {
         switch name {
         case "search_files":
-            return try searchFiles(arguments: arguments, context: context)
+            return try await searchFiles(arguments: arguments, context: context)
         case "grep_files":
-            return try grepFiles(arguments: arguments, context: context)
+            return try await grepFiles(arguments: arguments, context: context)
         case "read_file":
-            return try readFile(arguments: arguments, context: context)
+            return try await readFile(arguments: arguments, context: context)
         case "list_directory":
-            return try listDirectory(arguments: arguments, context: context)
+            return try await listDirectory(arguments: arguments, context: context)
         case "git_status":
-            return try gitStatus(context: context)
+            return try await gitStatus(context: context)
         case "run_command":
             return try await runCommand(arguments: arguments, context: context)
         case "claude_code":
@@ -387,7 +422,10 @@ enum AgentToolRunner {
     private static func searchFiles(
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
-    ) throws -> AgentToolResult {
+    ) async throws -> AgentToolResult {
+        if let backend = context.remoteBackend {
+            return try await backend.searchFiles(arguments: arguments)
+        }
         guard let root = context.rootDirectory else { throw AgentToolError.noWorkspace }
         guard let query = arguments["query"]?.stringValue(),
               !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -458,7 +496,10 @@ enum AgentToolRunner {
     private static func grepFiles(
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
-    ) throws -> AgentToolResult {
+    ) async throws -> AgentToolResult {
+        if let backend = context.remoteBackend {
+            return try await backend.grepFiles(arguments: arguments)
+        }
         guard let root = context.rootDirectory else { throw AgentToolError.noWorkspace }
         guard let pattern = arguments["pattern"]?.stringValue(),
               !pattern.isEmpty else {
@@ -644,7 +685,10 @@ enum AgentToolRunner {
     private static func readFile(
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
-    ) throws -> AgentToolResult {
+    ) async throws -> AgentToolResult {
+        if let backend = context.remoteBackend {
+            return try await backend.readFile(arguments: arguments)
+        }
         guard let root = context.rootDirectory else { throw AgentToolError.noWorkspace }
         guard let path = arguments["path"]?.stringValue(),
               !path.isEmpty else {
@@ -694,7 +738,10 @@ enum AgentToolRunner {
     private static func listDirectory(
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
-    ) throws -> AgentToolResult {
+    ) async throws -> AgentToolResult {
+        if let backend = context.remoteBackend {
+            return try await backend.listDirectory(arguments: arguments)
+        }
         guard let root = context.rootDirectory else { throw AgentToolError.noWorkspace }
         let rawPath = arguments["path"]?.stringValue() ?? ""
         let target: URL
@@ -741,7 +788,10 @@ enum AgentToolRunner {
 
     // MARK: git_status
 
-    private static func gitStatus(context: AgentToolContext) throws -> AgentToolResult {
+    private static func gitStatus(context: AgentToolContext) async throws -> AgentToolResult {
+        if let backend = context.remoteBackend {
+            return try await backend.gitStatus()
+        }
         guard let root = context.rootDirectory else { throw AgentToolError.noWorkspace }
         let status = AppState.loadGitStatus(for: root.standardizedFileURL)
         guard status.isRepository else {
@@ -798,6 +848,9 @@ enum AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
+        if let backend = context.remoteBackend {
+            return try await backend.runCommand(arguments: arguments, context: context)
+        }
         let root = context.rootDirectory?.standardizedFileURL
             ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
         guard let command = arguments["command"]?.stringValue(),
@@ -1003,7 +1056,12 @@ enum AgentToolRunner {
             )
         }
 
-        guard let executable = claudeCodeExecutablePath() else {
+        let executable: String
+        if context.remoteBackend != nil {
+            executable = "claude"
+        } else if let localExecutable = claudeCodeExecutablePath() {
+            executable = localExecutable
+        } else {
             throw AgentToolError.commandFailed(
                 127,
                 "Claude Code CLI not found on this Mac. Install it first (e.g. `npm install -g @anthropic-ai/claude-code` or the native installer from https://claude.com/claude-code), then retry. Tell the user instead of retrying blindly."
@@ -1152,7 +1210,12 @@ enum AgentToolRunner {
                 "permission_mode must be one of: \(codexCLIPermissionModes.sorted().joined(separator: ", "))"
             )
         }
-        guard let executable = codexCLIExecutablePath() else {
+        let executable: String
+        if context.remoteBackend != nil {
+            executable = "codex"
+        } else if let localExecutable = codexCLIExecutablePath() {
+            executable = localExecutable
+        } else {
             throw AgentToolError.commandFailed(
                 127,
                 "Codex CLI not found on this Mac. Install Codex CLI or the Codex desktop app, then retry. Tell the user instead of retrying blindly."
@@ -1163,7 +1226,7 @@ enum AgentToolRunner {
             prompt: prompt,
             permissionMode: permissionMode,
             model: arguments["model"]?.stringValue(),
-            workspacePath: context.rootDirectory?.standardizedFileURL.path
+            workspacePath: context.workspaceLocation?.path ?? context.rootDirectory?.standardizedFileURL.path
         )
         return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
     }
@@ -1180,7 +1243,12 @@ enum AgentToolRunner {
                 "permission_mode must be one of: \(cursorAgentPermissionModes.sorted().joined(separator: ", "))"
             )
         }
-        guard let executable = cursorAgentExecutablePath() else {
+        let executable: String
+        if context.remoteBackend != nil {
+            executable = "cursor"
+        } else if let localExecutable = cursorAgentExecutablePath() {
+            executable = localExecutable
+        } else {
             throw AgentToolError.commandFailed(
                 127,
                 "Cursor Agent CLI not found on this Mac. Install Cursor and its command line launcher first, then retry. Tell the user instead of retrying blindly."
@@ -1191,7 +1259,7 @@ enum AgentToolRunner {
             prompt: prompt,
             permissionMode: permissionMode,
             model: arguments["model"]?.stringValue(),
-            workspacePath: context.rootDirectory?.standardizedFileURL.path
+            workspacePath: context.workspaceLocation?.path ?? context.rootDirectory?.standardizedFileURL.path
         )
         return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
     }
@@ -1232,6 +1300,9 @@ enum AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
+        if let daemonBackend = context.daemonBackend {
+            return try await daemonBackend.listJobs()
+        }
         guard let registry = context.jobRegistry, let runtimeID = context.runtimeID else {
             return AgentToolResult(summary: "no jobs", payload: "Background job registry not available in this context.")
         }
@@ -1255,6 +1326,9 @@ enum AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
+        if let daemonBackend = context.daemonBackend {
+            return try await daemonBackend.getJobOutput(arguments: arguments)
+        }
         guard let registry = context.jobRegistry, let runtimeID = context.runtimeID else {
             throw AgentToolError.invalidArgument("Background job registry not available.")
         }
@@ -1282,6 +1356,9 @@ enum AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
+        if let daemonBackend = context.daemonBackend {
+            return try await daemonBackend.killJob(arguments: arguments)
+        }
         guard let registry = context.jobRegistry, let runtimeID = context.runtimeID else {
             throw AgentToolError.invalidArgument("Background job registry not available.")
         }

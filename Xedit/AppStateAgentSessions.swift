@@ -230,8 +230,79 @@ extension AppState {
         )
     }
 
+    func addEditorSelectionToAgentConversation(_ selection: AgentEditorSelectionContext) {
+        stageEditorSelection(selection, prefillQuestion: false)
+    }
+
+    func askAgentAboutEditorSelection(_ selection: AgentEditorSelectionContext) {
+        stageEditorSelection(selection, prefillQuestion: true)
+    }
+
     func removeAgentTextAttachment(id: AgentTextAttachment.ID) {
         agentPendingTextAttachments.removeAll { $0.id == id }
+    }
+
+    private func stageEditorSelection(_ selection: AgentEditorSelectionContext, prefillQuestion: Bool) {
+        let content = AgentTextAttachment.sanitizedPastedContent(selection.text)
+        guard !content.isEmpty else { return }
+
+        if activeRuntime == nil {
+            _ = activeRuntimeAfterCreatingNewSession()
+        }
+
+        let attachment = AgentTextAttachment(
+            filename: editorSelectionAttachmentFilename(selection),
+            content: editorSelectionAttachmentContent(selection, content: content)
+        )
+        agentPendingTextAttachments.append(attachment)
+
+        if prefillQuestion && agentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            agentInput = L10n.AgentSelection.askPrompt
+        }
+
+        isAgentPanelVisible = true
+        agentComposerFocusRevision += 1
+    }
+
+    private func editorSelectionAttachmentFilename(_ selection: AgentEditorSelectionContext) -> String {
+        let filePart = openedFileURL?.lastPathComponent ?? L10n.AgentSelection.untitledFile
+        let linePart = selection.startLine == selection.endLine
+            ? "\(selection.startLine)"
+            : "\(selection.startLine)-\(selection.endLine)"
+        let raw = "\(L10n.AgentSelection.filenamePrefix) \(filePart) L\(linePart).txt"
+        return raw
+            .components(separatedBy: CharacterSet(charactersIn: "/:\\?%*|\"<>"))
+            .joined(separator: "-")
+    }
+
+    private func editorSelectionAttachmentContent(
+        _ selection: AgentEditorSelectionContext,
+        content: String
+    ) -> String {
+        let path = openedFileURL.map { relativePathForAgentSelection($0) } ?? L10n.AgentSelection.untitledFile
+        let lineRange = selection.startLine == selection.endLine
+            ? "\(selection.startLine)"
+            : "\(selection.startLine)-\(selection.endLine)"
+        return """
+        Selection from active editor
+        File: \(path)
+        Lines: \(lineRange)
+        Language: \(effectiveLanguage?.displayName ?? L10n.EditorStatusBar.plainText)
+
+        \(content)
+        """
+    }
+
+    private func relativePathForAgentSelection(_ url: URL) -> String {
+        let standardized = url.standardizedFileURL
+        guard let root = rootDirectory?.standardizedFileURL.path else {
+            return standardized.path
+        }
+        let path = standardized.path
+        guard path.hasPrefix(root) else { return standardized.path }
+        let relative = String(path.dropFirst(root.count))
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return relative.isEmpty ? standardized.lastPathComponent : relative
     }
 
     /// Toggle whether the workspace overview rides along next send.
@@ -714,6 +785,7 @@ extension AppState {
 
         let session = AgentSession(
             workspaceRootPath: rootDirectory?.standardizedFileURL.path,
+            workspaceLocation: (rootDirectory?.standardizedFileURL.path).map { WorkspaceLocation.local(path: $0) },
             modelID: activeAgentModelID
         )
         agentSessions.insert(session, at: 0)
@@ -774,6 +846,36 @@ extension AppState {
         }
 
         return startNewAgentSession(inWorkspaceAt: url.path)
+    }
+
+    @discardableResult
+    func moveActiveAgentSessionToRemoteWorkspace(runtimeID: UUID, path: String) -> AgentSession {
+        let normalizedPath = RemotePathValidator.normalizedWorkspaceRoot(path)
+        if let runtime = activeRuntime, runtime.isEmpty, !runtime.isResponding {
+            pruneEmptyAgentSessions(excluding: runtime.id)
+            runtime.rebindRemoteWorkspace(runtimeID: runtimeID, path: normalizedPath)
+            runtime.worktreeChanges = .init()
+            persistAgentSession(runtime: runtime)
+            return runtime.session
+        }
+
+        pruneEmptyAgentSessions()
+        let session = AgentSession(
+            workspaceRootPath: nil,
+            workspaceLocation: .remote(runtimeID: runtimeID, path: normalizedPath),
+            modelID: activeAgentModelID
+        )
+        agentSessions.insert(session, at: 0)
+        let newRuntime = AgentRuntime(session: session)
+        agentRuntimes[session.id] = newRuntime
+        activeAgentSessionID = session.id
+        subscribeToActiveRuntime()
+        agentSessionDidEditFiles = false
+        agentInteractionMode = .normal
+        agentCurrentPlan = nil
+        agentCurrentGoal = nil
+        AgentSessionStore.save(session)
+        return session
     }
 
     func selectAgentSession(id: AgentSession.ID) {

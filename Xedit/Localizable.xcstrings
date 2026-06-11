@@ -463,6 +463,54 @@
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "查看后台任务" } }
       }
     },
+    "agent-selection.add-to-conversation": {
+      "comment": "Editor context menu item that stages selected text as Agent chat context",
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Add to Conversation" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "添加到对话" } }
+      }
+    },
+    "agent-selection.ask-in-sidebar": {
+      "comment": "Editor context menu item that opens the side Agent panel with selected text attached",
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Ask in Side Agent" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在侧边 Agent 中提问" } }
+      }
+    },
+    "agent-selection.ask-prompt": {
+      "comment": "Prompt prefilled when asking the side Agent about an editor selection",
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Ask about the attached selection: " } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "请基于已添加的选区回答：" } }
+      }
+    },
+    "agent-selection.filename-prefix": {
+      "comment": "Filename prefix for text attachments created from editor selections",
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Selection" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "选区" } }
+      }
+    },
+    "agent-selection.selection-attached-hint": {
+      "comment": "Side Agent composer hint shown when selected editor text has been attached",
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Selection attached · Tools available" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "选区已附加 · 工具可用" } }
+      }
+    },
+    "agent-selection.untitled-file": {
+      "comment": "Fallback file name for editor selection attachments without a saved file",
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Untitled" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "未命名" } }
+      }
+    },
     "agent-text-attachment.pasted-filename": {
       "comment": "Default filename for long text pasted into the Agent composer",
       "extractionState": "manual",
