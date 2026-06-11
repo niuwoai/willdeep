@@ -2949,7 +2949,8 @@ struct WillDeepTests {
     func testAgentImageDescriptionConfigurationDefaultsToDashScopeVision() {
         let configuration = AgentConfiguration.default.normalized
 
-        #expect(configuration.supportsImageInput == true)
+        #expect(configuration.providerID == "deepseek")
+        #expect(configuration.supportsImageInput == false)
         #expect(configuration.imageDescription.providerID == "dashscope")
         #expect(configuration.imageDescription.model == "qwen3-vl-plus")
         #expect(configuration.imageDescription.agentConfiguration.supportsImageInput == true)

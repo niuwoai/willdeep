@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.59.0-rc2 - 2026-06-11
+
+### Agent DeepSeek 默认模型修正
+
+- 新安装 / 空配置的 Agent 主服务商默认改为 DeepSeek，Flash / Pro 分别使用 `deepseek-v4-flash` 与 `deepseek-v4-pro`，不再从 OpenAI 默认模型起步。
+- Settings → Agent 新增服务商时默认创建 DeepSeek 条目，避免新条目继续带出 OpenAI / GPT 模型。
+- Agent 输入框模型选择器的 "Recently fetched" 候选按当前激活服务商过滤；激活 DeepSeek 时不会再把历史抓取过的 `gpt-*` 模型混入备选列表。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.59.0-rc2`。
+
 ## 1.59.0-rc1 - 2026-06-11
 
 ### WillDeep 品牌与域名迁移
