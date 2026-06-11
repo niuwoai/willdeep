@@ -1,13 +1,13 @@
 //
 //  XeditUITests.swift
-//  VeilWriterUITests
+//  WillDeepUITests
 //
 //  Created by rocky on 2026/5/27.
 //
 
 import XCTest
 
-final class VeilWriterUITests: XCTestCase {
+final class WillDeepUITests: XCTestCase {
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.

@@ -1,6 +1,6 @@
 //
 //  AgentChatTranscript.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Scrolling transcript view for the agent chat pane, split out of
 //  AgentModeView.swift in rc42.

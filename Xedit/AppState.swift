@@ -1,6 +1,6 @@
 //
 //  AppState.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Created by rocky on 2026/5/27.
 //
@@ -10,7 +10,7 @@ import Foundation
 import SwiftUI
 import AppKit
 
-/// Central observable state hub for the VeilWriter app.
+/// Central observable state hub for the WillDeep app.
 /// Manages the currently opened file URL, its text content, the dirty (edited) flag,
 /// and the root directory for the sidebar file tree.
 final class AppState: ObservableObject {
@@ -1481,7 +1481,7 @@ final class AppState: ObservableObject {
 
     private static func untitledTabURL() -> URL {
         FileManager.default.temporaryDirectory
-            .appendingPathComponent("veilwriter-untitled-\(UUID().uuidString)")
+            .appendingPathComponent("willdeep-untitled-\(UUID().uuidString)")
             .appendingPathExtension("txt")
     }
 

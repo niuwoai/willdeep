@@ -1,6 +1,6 @@
 //
 //  AgentComposerAttachments.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Small composer chrome split out of AgentModeComposerView.swift in
 //  rc42: three buttons sitting around the text editor —

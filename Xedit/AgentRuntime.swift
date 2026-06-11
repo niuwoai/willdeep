@@ -1,6 +1,6 @@
 //
 //  AgentRuntime.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Per-session Agent runtime. Owns every piece of state that used to
 //  live as a `@Published agent*` field directly on AppState. The split

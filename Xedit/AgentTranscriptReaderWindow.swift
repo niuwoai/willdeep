@@ -1,6 +1,6 @@
 //
 //  AgentTranscriptReaderWindow.swift
-//  VeilWriter
+//  WillDeep
 //
 //  A standalone, AppKit-only reader window for the full transcript of
 //  an AgentSession. The chat pane in Agent mode caps its rendered

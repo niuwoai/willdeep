@@ -1,6 +1,6 @@
 //
 //  ComposerTextInput.swift
-//  VeilWriter
+//  WillDeep
 //
 //  NSTextView-backed composer input + coordinator, split out of
 //  AgentModeComposerView.swift in rc42. Two pieces:

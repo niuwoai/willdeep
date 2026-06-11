@@ -1,6 +1,6 @@
 //
 //  AgentChatHistoryFormatter.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Markdown normalization + the big `AgentChatHistoryRenderer` that bakes
 //  the chat transcript into a single NSAttributedString, split out of

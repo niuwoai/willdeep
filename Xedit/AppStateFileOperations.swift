@@ -1,6 +1,6 @@
 //
 //  AppStateFileOperations.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Extracted from AppState.swift in v1.52.1-rc42 (stage-3 code-health
 //  pass). Houses every file/folder-I/O entry point on AppState:
@@ -95,7 +95,7 @@ extension AppState {
     func openFile() {
         let panel = NSOpenPanel()
         panel.title = "Choose a File"
-        panel.message = "Select a text file to open in VeilWriter."
+        panel.message = "Select a text file to open in WillDeep."
         panel.prompt = "Open"
         panel.canChooseFiles = true
         panel.canChooseDirectories = false

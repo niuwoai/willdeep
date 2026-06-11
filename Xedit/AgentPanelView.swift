@@ -1,6 +1,6 @@
 //
 //  AgentPanelView.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Right-side chat panel for the project agent.
 //

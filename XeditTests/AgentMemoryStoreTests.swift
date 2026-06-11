@@ -1,13 +1,13 @@
 //
 //  AgentMemoryStoreTests.swift
-//  VeilWriterTests
+//  WillDeepTests
 //
 //  Covers local Agent memory settings and record helpers.
 //
 
 import Foundation
 import Testing
-@testable import VeilWriter
+@testable import WillDeep
 
 @Suite
 struct AgentMemoryStoreTests {

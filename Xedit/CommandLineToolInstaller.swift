@@ -1,8 +1,8 @@
 //
 //  CommandLineToolInstaller.swift
-//  VeilWriter
+//  WillDeep
 //
-//  Installs the small shell entry point used to launch VeilWriter from Terminal.
+//  Installs the small shell entry point used to launch WillDeep from Terminal.
 //
 
 import Foundation
@@ -21,17 +21,17 @@ enum CommandLineToolInstaller {
         var errorDescription: String? {
             switch self {
             case .missingAppBundle:
-                return "Could not locate the VeilWriter app bundle."
+                return "Could not locate the WillDeep app bundle."
             case .installerFailed(let message):
                 return message.isEmpty ? "The command line tool could not be installed." : message
             }
         }
     }
 
-    nonisolated static var toolName: String { "veilwriter" }
+    nonisolated static var toolName: String { "willdeep" }
     nonisolated static var installURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".local/bin/veilwriter")
+            .appendingPathComponent(".local/bin/willdeep")
     }
 
     nonisolated static func install(appBundleURL: URL = Bundle.main.bundleURL) throws {
@@ -63,7 +63,7 @@ enum CommandLineToolInstaller {
 
     nonisolated private static func writeScriptThroughUserShell(appBundleURL: URL) throws {
         let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("veilwriter-cli-\(UUID().uuidString)")
+            .appendingPathComponent("willdeep-cli-\(UUID().uuidString)")
         try scriptContent(appBundleURL: appBundleURL)
             .write(to: tempURL, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: tempURL) }
@@ -92,7 +92,7 @@ enum CommandLineToolInstaller {
     }
 
     nonisolated static func scriptContent(appBundleURL: URL = Bundle.main.bundleURL) -> String {
-        let preferredAppPath = "/Applications/VeilWriter.app"
+        let preferredAppPath = "/Applications/WillDeep.app"
         let fallbackAppPath = appBundleURL.path
 
         return """

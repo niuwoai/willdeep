@@ -1,6 +1,6 @@
 //
 //  AgentModeView.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Top-level Agent mode. Layout inspired by Cursor: a project-grouped
 //  session sidebar on the left, a chat pane on the right, and a thin

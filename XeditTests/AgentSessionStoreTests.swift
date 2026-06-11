@@ -15,7 +15,7 @@
 
 import Testing
 import Foundation
-@testable import VeilWriter
+@testable import WillDeep
 
 @Suite
 struct AgentSessionStoreTests {
@@ -145,10 +145,10 @@ struct AgentSessionStoreTests {
     /// Support — this catches accidental directory renames that would
     /// orphan every user's existing sessions.
     @Test
-    func directoryLivesUnderApplicationSupportVeilWriter() {
+    func directoryLivesUnderApplicationSupportWillDeep() {
         let path = AgentSessionStore.directory.path
         #expect(path.contains("Application Support"))
-        #expect(path.contains("VeilWriter"))
+        #expect(path.contains("WillDeep"))
         #expect(path.hasSuffix("agent-sessions"))
     }
 

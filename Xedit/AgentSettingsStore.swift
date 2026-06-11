@@ -1,6 +1,6 @@
 //
 //  AgentSettingsStore.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Stores non-secret agent settings in UserDefaults and the API key in Keychain.
 //
@@ -9,12 +9,12 @@ import Foundation
 import Security
 
 enum AgentSettingsStore {
-    private static let defaultsKey = "im.some.veilwriter.agentSettings.v1"
-    private static let knownModelsKey = "im.some.veilwriter.agentSettings.knownModels.v1"
-    private static let alwaysAllowedCommandsKey = "im.some.veilwriter.agentSettings.alwaysAllowedCommands.v1"
-    private static let autoApproveKey = "im.some.veilwriter.agentSettings.autoApproveSafeCommands.v1"
-    private static let perProviderConcurrencyKey = "im.some.veilwriter.agentSettings.perProviderConcurrencyLimit.v1"
-    private static let chatBaseFontSizeKey = "im.some.veilwriter.agentSettings.chatBaseFontSize.v1"
+    private static let defaultsKey = "com.willdeep.agentSettings.v1"
+    private static let knownModelsKey = "com.willdeep.agentSettings.knownModels.v1"
+    private static let alwaysAllowedCommandsKey = "com.willdeep.agentSettings.alwaysAllowedCommands.v1"
+    private static let autoApproveKey = "com.willdeep.agentSettings.autoApproveSafeCommands.v1"
+    private static let perProviderConcurrencyKey = "com.willdeep.agentSettings.perProviderConcurrencyLimit.v1"
+    private static let chatBaseFontSizeKey = "com.willdeep.agentSettings.chatBaseFontSize.v1"
 
     /// Hard bounds for the Agent chat base font slider. The lower
     /// bound matches the prior caption size so the picker can't shrink
@@ -26,8 +26,8 @@ enum AgentSettingsStore {
     static let chatBaseFontSizeDefault: CGFloat = 13
     /// JSON-encoded `AgentProviderLibrary` minus the API keys, which
     /// live in Keychain under the entry's UUID.
-    private static let providerLibraryKey = "im.some.veilwriter.agentSettings.providerLibrary.v1"
-    private static let defaultKeychainService = "im.some.veilwriter.agent"
+    private static let providerLibraryKey = "com.willdeep.agentSettings.providerLibrary.v1"
+    private static let defaultKeychainService = "com.willdeep.agent"
     private static let keychainAccount = "openai-compatible-api-key"
     private static let imageKeychainAccount = "openai-compatible-image-description-api-key"
     /// Keychain account prefix for per-entry library keys
@@ -382,7 +382,7 @@ enum AgentSettingsStore {
     /// One-shot key (UserDefaults bool) that marks whether the
     /// providerID-vs-baseURL repair has run on this install.
     private static let repairAppliedKey =
-        "im.some.veilwriter.agentSettings.providerLibrary.repairAppliedV1"
+        "com.willdeep.agentSettings.providerLibrary.repairAppliedV1"
 
     /// Repair logic split out for testing. For each entry whose
     /// `baseURL` matches a known preset but whose `providerID` doesn't,
@@ -478,7 +478,7 @@ enum AgentSettingsStore {
     ///    Before this rewrite that meant `SecItemDelete + SecItemAdd`
     ///    ran on *every* entry on *every* edit, and macOS reads each
     ///    Add as a fresh write of secret material — which triggers the
-    ///    "VeilWriter wants to access 'im.some.veilwriter.agent'"
+    ///    "WillDeep wants to access 'com.willdeep.agent'"
     ///    prompt repeatedly. We now read the current stored value
     ///    first and skip the entire write if it's identical.
     /// 2. **Prefer `SecItemUpdate` over delete+add.** When the value

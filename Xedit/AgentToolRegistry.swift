@@ -1,6 +1,6 @@
 //
 //  AgentToolRegistry.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Tool catalog + per-call risk classifier, split out of
 //  AgentTools.swift in rc42. Two responsibilities:

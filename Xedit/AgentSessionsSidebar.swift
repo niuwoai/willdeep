@@ -1,6 +1,6 @@
 //
 //  AgentSessionsSidebar.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Left sidebar for the Agent pane, split out of AgentModeView.swift in
 //  rc42. Two pieces:

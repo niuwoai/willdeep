@@ -1,6 +1,6 @@
 //
 //  AgentSkillSettingsView.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Settings tab for built-in and user-created Agent skills.
 //

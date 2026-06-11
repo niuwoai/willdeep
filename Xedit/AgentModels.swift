@@ -1,6 +1,6 @@
 //
 //  AgentModels.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Lightweight models for the built-in project agent.
 //
@@ -630,11 +630,11 @@ struct AgentConfiguration: Codable, Equatable {
     var customKindOverride: AgentProviderKind?
 
     static let `default` = AgentConfiguration(
-        providerID: AgentProviderPreset.openAIID,
-        baseURL: "https://api.openai.com/v1",
-        model: "gpt-4.1-mini",
-        flashModel: "gpt-4.1-mini",
-        proModel: "gpt-4.1",
+        providerID: AgentProviderPreset.deepSeekID,
+        baseURL: "https://api.deepseek.com",
+        model: "deepseek-v4-flash",
+        flashModel: "deepseek-v4-flash",
+        proModel: "deepseek-v4-pro",
         routingMode: .auto,
         imageDescription: .default,
         apiKey: "",
@@ -671,7 +671,7 @@ struct AgentConfiguration: Codable, Equatable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        providerID = try container.decodeIfPresent(String.self, forKey: .providerID) ?? AgentProviderPreset.openAIID
+        providerID = try container.decodeIfPresent(String.self, forKey: .providerID) ?? AgentConfiguration.default.providerID
         baseURL = try container.decode(String.self, forKey: .baseURL)
         let legacyModel = try container.decodeIfPresent(String.self, forKey: .model) ?? AgentConfiguration.default.model
         model = legacyModel
@@ -835,6 +835,7 @@ struct AgentProviderPreset: Identifiable, Equatable {
     let modelHints: [String]
 
     static let openAIID = "openai"
+    static let deepSeekID = "deepseek"
     static let customID = "custom"
 
     var defaultModel: String { defaultFlashModel }
@@ -920,7 +921,7 @@ struct AgentProviderPreset: Identifiable, Equatable {
             modelHints: ["qwen", "qwq"]
         ),
         AgentProviderPreset(
-            id: "deepseek",
+            id: deepSeekID,
             displayName: "DeepSeek",
             baseURL: "https://api.deepseek.com",
             defaultModel: "deepseek-v4-flash",

@@ -1,6 +1,6 @@
 //
 //  AgentMCPBridge.swift
-//  VeilWriter
+//  WillDeep
 //
 //  MCP server discovery plus stdio and streamable HTTP JSON-RPC transports.
 //
@@ -213,7 +213,7 @@ struct AgentMCPSettings: Codable, Equatable {
 }
 
 enum AgentMCPSettingsStore {
-    private static let settingsKey = "im.some.veilwriter.agentMCPSettings.v1"
+    private static let settingsKey = "com.willdeep.agentMCPSettings.v1"
 
     /// Test-only override, mirroring AgentSettingsStore: redirect every
     /// read / write into a sandbox suite so unit tests can't mutate the
@@ -933,7 +933,7 @@ enum AgentMCPBridge {
         [
             "protocolVersion": "2025-03-26",
             "capabilities": [:],
-            "clientInfo": ["name": "VeilWriter", "version": "1"]
+            "clientInfo": ["name": "WillDeep", "version": "1"]
         ]
     }
 

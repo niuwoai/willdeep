@@ -1,6 +1,6 @@
 //
 //  AgentWebTools.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Built-in network tools: `web_search` (Brave Search API) and
 //  `web_fetch` (GET a public URL, reduce HTML to readable text).

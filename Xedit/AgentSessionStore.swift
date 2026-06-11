@@ -1,6 +1,6 @@
 //
 //  AgentSessionStore.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Persists Agent-mode chat sessions as JSON files under the app's
 //  Application Support directory. One file per session.
@@ -13,7 +13,7 @@ enum AgentSessionStore {
     static var directory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
-        return base.appendingPathComponent("VeilWriter", isDirectory: true)
+        return base.appendingPathComponent("WillDeep", isDirectory: true)
             .appendingPathComponent("agent-sessions", isDirectory: true)
     }
 

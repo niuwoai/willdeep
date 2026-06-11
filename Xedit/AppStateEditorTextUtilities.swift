@@ -1,6 +1,6 @@
 //
 //  AppStateEditorTextUtilities.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Extracted from AppState.swift in v1.52.1-rc42 (stage-3 code-health
 //  pass). Pure nonisolated text-processing helpers used by the editor:

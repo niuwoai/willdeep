@@ -1,6 +1,6 @@
 //
 //  AppStateAgentLoop.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Extracted from AppState.swift in v1.52.1-rc42 (stage-3 code-health
 //  pass). Owns the heavy Agent-mode runtime path:

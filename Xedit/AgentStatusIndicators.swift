@@ -1,6 +1,6 @@
 //
 //  AgentStatusIndicators.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Small status / dashboard surfaces shared across the chat pane, split
 //  out of AgentModeView.swift in rc42:

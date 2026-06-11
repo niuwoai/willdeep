@@ -1,6 +1,6 @@
 //
 //  AgentToolApprovalNotifier.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Posts a system banner when a tool call enters an interactive state
 //  (pendingApproval / awaitingConfirm / awaitingUserAnswer) and the
@@ -59,7 +59,7 @@ enum AgentToolApprovalNotifier {
                 || settings.authorizationStatus == .provisional else {
                 return
             }
-            let identifier = "veilwriter.agent.toolApproval.\(Int(Date().timeIntervalSince1970 * 1000))"
+            let identifier = "willdeep.agent.toolApproval.\(Int(Date().timeIntervalSince1970 * 1000))"
             let request = UNNotificationRequest(
                 identifier: identifier,
                 content: content,
@@ -98,7 +98,7 @@ enum AgentToolApprovalNotifier {
                 || settings.authorizationStatus == .provisional else {
                 return
             }
-            let identifier = "veilwriter.agent.jobFinished.\(job.id.uuidString)"
+            let identifier = "willdeep.agent.jobFinished.\(job.id.uuidString)"
             let request = UNNotificationRequest(
                 identifier: identifier,
                 content: content,

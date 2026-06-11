@@ -1,6 +1,6 @@
 //
 //  XeditTests.swift
-//  VeilWriterTests
+//  WillDeepTests
 //
 //  Created by rocky on 2026/5/27.
 //
@@ -8,10 +8,10 @@
 import Testing
 import Foundation
 import AppKit
-@testable import VeilWriter
+@testable import WillDeep
 
 @Suite(.serialized)
-struct VeilWriterTests {
+struct WillDeepTests {
     private enum TestError: Error {
         case loadTimedOut
     }
@@ -22,9 +22,9 @@ struct VeilWriterTests {
     /// per-test `setUp`.
     init() {
         let keys = [
-            "im.some.veilwriter.recentFiles.v1",
-            "im.some.veilwriter.recentFolders.v1",
-            "im.some.veilwriter.session.v1"
+            "com.willdeep.recentFiles.v1",
+            "com.willdeep.recentFolders.v1",
+            "com.willdeep.session.v1"
         ]
         for key in keys {
             UserDefaults.standard.removeObject(forKey: key)
@@ -301,26 +301,26 @@ struct VeilWriterTests {
         #expect(FileTreeIconDescriptor.file(for: URL(fileURLWithPath: "/tmp/unknown.blob")).symbolName == "doc.fill")
     }
 
-    @Test("command line installer script forwards paths to VeilWriter")
+    @Test("command line installer script forwards paths to WillDeep")
     func testCommandLineInstallerScript() {
-        let appURL = URL(fileURLWithPath: "/Applications/VeilWriter.app")
+        let appURL = URL(fileURLWithPath: "/Applications/WillDeep.app")
         let script = CommandLineToolInstaller.scriptContent(appBundleURL: appURL)
 
         #expect(script.hasPrefix("#!/bin/zsh"))
         #expect(script.contains("/usr/bin/open -a \"$app_path\" -- \"$@\""))
-        #expect(script.contains("app_path='/Applications/VeilWriter.app'"))
+        #expect(script.contains("app_path='/Applications/WillDeep.app'"))
     }
 
     @Test("command line installer uses a user-local path")
     func testCommandLineInstallerUsesUserLocalPath() {
         let path = CommandLineToolInstaller.installURL.standardizedFileURL.path
 
-        #expect(path.hasSuffix("/.local/bin/veilwriter"))
+        #expect(path.hasSuffix("/.local/bin/willdeep"))
     }
 
     @Test("command line installer shell quoting handles apostrophes")
     func testCommandLineInstallerShellQuoting() {
-        let quoted = CommandLineToolInstaller.singleQuotedShellString("/tmp/VeilWriter's App.app")
+        let quoted = CommandLineToolInstaller.singleQuotedShellString("/tmp/WillDeep's App.app")
 
         #expect(quoted.hasPrefix("'"))
         #expect(quoted.hasSuffix("'"))
@@ -331,7 +331,7 @@ struct VeilWriterTests {
     @MainActor
     func testExternalFolderOpen() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("veilwriter_external_folder_\(UUID().uuidString)")
+            .appendingPathComponent("willdeep_external_folder_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -352,9 +352,9 @@ struct VeilWriterTests {
         // test expects to land in `recentFolders`.
         let cachesBase = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
         let originalDir = cachesBase
-            .appendingPathComponent("veilwriter_test_original_\(UUID().uuidString)")
+            .appendingPathComponent("willdeep_test_original_\(UUID().uuidString)")
         let nextDir = cachesBase
-            .appendingPathComponent("veilwriter_test_new_window_\(UUID().uuidString)")
+            .appendingPathComponent("willdeep_test_new_window_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: originalDir, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: nextDir, withIntermediateDirectories: true)
         defer {
@@ -378,7 +378,7 @@ struct VeilWriterTests {
     @MainActor
     func testExternalFileOpen() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("veilwriter_external_file_\(UUID().uuidString)")
+            .appendingPathComponent("willdeep_external_file_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         let fileURL = tempDir.appendingPathComponent("note.md")
         try "hello".write(to: fileURL, atomically: true, encoding: .utf8)
@@ -722,7 +722,7 @@ struct VeilWriterTests {
 
     @Test("git repository status returns folder marker when child changed")
     func testGitRepositoryStatusFolderMarker() {
-        let root = URL(fileURLWithPath: "/tmp/veilwriter-git-root")
+        let root = URL(fileURLWithPath: "/tmp/willdeep-git-root")
         let status = GitRepositoryStatus(
             repositoryRoot: root,
             branchName: "main",
@@ -736,7 +736,7 @@ struct VeilWriterTests {
 
     @Test("git repository status aggregates folder markers deterministically")
     func testGitRepositoryStatusFolderMarkerPriority() {
-        let root = URL(fileURLWithPath: "/tmp/veilwriter-git-root")
+        let root = URL(fileURLWithPath: "/tmp/willdeep-git-root")
         let status = GitRepositoryStatus(
             repositoryRoot: root,
             branchName: "main",
@@ -770,7 +770,7 @@ struct VeilWriterTests {
 
     @Test("worktree change summary combines porcelain entries and numstat")
     func testWorktreeChangeSummaryTotals() {
-        let root = URL(fileURLWithPath: "/tmp/veilwriter-git-root")
+        let root = URL(fileURLWithPath: "/tmp/willdeep-git-root")
         let summary = AgentWorktreeChangeSummary(
             repositoryRoot: root,
             files: [
@@ -859,7 +859,7 @@ struct VeilWriterTests {
     @Test("composer workspace pick migrates an empty active session in place")
     func testComposerWorkspacePickMigratesEmptyActiveSession() throws {
         let workspace = FileManager.default.temporaryDirectory
-            .appendingPathComponent("veilwriter_workspace_pick_\(UUID().uuidString)")
+            .appendingPathComponent("willdeep_workspace_pick_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: workspace) }
 
@@ -1053,7 +1053,7 @@ struct VeilWriterTests {
         let appState = AppState()
         appState.fileContent = "unsaved content"
 
-        let invalidURL = URL(fileURLWithPath: "/tmp/veilwriter_missing_\(UUID().uuidString)/file.txt")
+        let invalidURL = URL(fileURLWithPath: "/tmp/willdeep_missing_\(UUID().uuidString)/file.txt")
         let result = appState.writeCurrentFile(to: invalidURL, updateOpenedURL: false, showsAlert: false)
 
         #expect(result == false)
@@ -1063,7 +1063,7 @@ struct VeilWriterTests {
     @Test("writeCurrentFile can save to a new URL and update current file")
     func testWriteCurrentFileAsNewURL() throws {
         let tempDir = FileManager.default.temporaryDirectory
-        let fileURL = tempDir.appendingPathComponent("veilwriter_test_save_as_\(UUID().uuidString).txt")
+        let fileURL = tempDir.appendingPathComponent("willdeep_test_save_as_\(UUID().uuidString).txt")
         defer { try? FileManager.default.removeItem(at: fileURL) }
 
         let appState = AppState()
@@ -1089,8 +1089,8 @@ struct VeilWriterTests {
     @Test("beginOpeningTab creates tabs and reuses existing file tabs")
     func testBeginOpeningTabCreatesAndReusesTabs() {
         let tempDir = FileManager.default.temporaryDirectory
-        let firstURL = tempDir.appendingPathComponent("veilwriter_tab_first_\(UUID().uuidString).txt")
-        let secondURL = tempDir.appendingPathComponent("veilwriter_tab_second_\(UUID().uuidString).txt")
+        let firstURL = tempDir.appendingPathComponent("willdeep_tab_first_\(UUID().uuidString).txt")
+        let secondURL = tempDir.appendingPathComponent("willdeep_tab_second_\(UUID().uuidString).txt")
 
         let appState = AppState()
         appState.beginOpeningTab(for: firstURL)
@@ -1136,7 +1136,7 @@ struct VeilWriterTests {
 
     @Test("syntax highlighting selection overrides detected file language")
     func testSyntaxHighlightingSelectionOverridesDetectedLanguage() {
-        let fileURL = URL(fileURLWithPath: "/tmp/veilwriter_syntax_override.swift")
+        let fileURL = URL(fileURLWithPath: "/tmp/willdeep_syntax_override.swift")
         let appState = AppState(openedFileURL: fileURL, fileContent: "puts 'hi'")
 
         #expect(appState.detectedLanguage == .swift)
@@ -1158,8 +1158,8 @@ struct VeilWriterTests {
     @Test("closeTab activates a neighboring tab")
     func testCloseTabActivatesNeighbor() {
         let tempDir = FileManager.default.temporaryDirectory
-        let firstURL = tempDir.appendingPathComponent("veilwriter_close_first_\(UUID().uuidString).txt")
-        let secondURL = tempDir.appendingPathComponent("veilwriter_close_second_\(UUID().uuidString).txt")
+        let firstURL = tempDir.appendingPathComponent("willdeep_close_first_\(UUID().uuidString).txt")
+        let secondURL = tempDir.appendingPathComponent("willdeep_close_second_\(UUID().uuidString).txt")
 
         let appState = AppState()
         appState.beginOpeningTab(for: firstURL)
@@ -1181,8 +1181,8 @@ struct VeilWriterTests {
     @Test("closing active tab refreshes editor rendering and highlighting")
     func testCloseTabBumpsEditorRenderAndHighlightRevision() {
         let tempDir = FileManager.default.temporaryDirectory
-        let firstURL = tempDir.appendingPathComponent("veilwriter_render_first_\(UUID().uuidString).swift")
-        let secondURL = tempDir.appendingPathComponent("veilwriter_render_second_\(UUID().uuidString).swift")
+        let firstURL = tempDir.appendingPathComponent("willdeep_render_first_\(UUID().uuidString).swift")
+        let secondURL = tempDir.appendingPathComponent("willdeep_render_second_\(UUID().uuidString).swift")
 
         let appState = AppState()
         appState.beginOpeningTab(for: firstURL)
@@ -1202,8 +1202,8 @@ struct VeilWriterTests {
     @Test("closeActiveTab closes the current tab")
     func testCloseActiveTabClosesCurrentTab() {
         let tempDir = FileManager.default.temporaryDirectory
-        let firstURL = tempDir.appendingPathComponent("veilwriter_active_close_first_\(UUID().uuidString).txt")
-        let secondURL = tempDir.appendingPathComponent("veilwriter_active_close_second_\(UUID().uuidString).txt")
+        let firstURL = tempDir.appendingPathComponent("willdeep_active_close_first_\(UUID().uuidString).txt")
+        let secondURL = tempDir.appendingPathComponent("willdeep_active_close_second_\(UUID().uuidString).txt")
 
         let appState = AppState()
         appState.beginOpeningTab(for: firstURL)
@@ -1220,9 +1220,9 @@ struct VeilWriterTests {
     @Test("tab navigation activates previous next and indexed tabs")
     func testTabNavigationActivatesPreviousNextAndIndexedTabs() {
         let tempDir = FileManager.default.temporaryDirectory
-        let firstURL = tempDir.appendingPathComponent("veilwriter_nav_first_\(UUID().uuidString).txt")
-        let secondURL = tempDir.appendingPathComponent("veilwriter_nav_second_\(UUID().uuidString).txt")
-        let thirdURL = tempDir.appendingPathComponent("veilwriter_nav_third_\(UUID().uuidString).txt")
+        let firstURL = tempDir.appendingPathComponent("willdeep_nav_first_\(UUID().uuidString).txt")
+        let secondURL = tempDir.appendingPathComponent("willdeep_nav_second_\(UUID().uuidString).txt")
+        let thirdURL = tempDir.appendingPathComponent("willdeep_nav_third_\(UUID().uuidString).txt")
 
         let appState = AppState()
         appState.beginOpeningTab(for: firstURL)
@@ -1245,8 +1245,8 @@ struct VeilWriterTests {
     @Test("reopenClosedTab restores most recently closed tab")
     func testReopenClosedTabRestoresMostRecentlyClosedTab() {
         let tempDir = FileManager.default.temporaryDirectory
-        let firstURL = tempDir.appendingPathComponent("veilwriter_reopen_first_\(UUID().uuidString).txt")
-        let secondURL = tempDir.appendingPathComponent("veilwriter_reopen_second_\(UUID().uuidString).txt")
+        let firstURL = tempDir.appendingPathComponent("willdeep_reopen_first_\(UUID().uuidString).txt")
+        let secondURL = tempDir.appendingPathComponent("willdeep_reopen_second_\(UUID().uuidString).txt")
 
         let appState = AppState()
         appState.beginOpeningTab(for: firstURL)
@@ -1312,7 +1312,7 @@ struct VeilWriterTests {
     @Test("quick open file URLs are sorted and limited")
     func testQuickOpenFileURLsAreSortedAndLimited() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("veilwriter_quick_open_\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("willdeep_quick_open_\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -1339,7 +1339,7 @@ struct VeilWriterTests {
     @Test("active tab exposes dirty gutter line numbers")
     func testActiveTabExposesDirtyGutterLineNumbers() {
         let tempDir = FileManager.default.temporaryDirectory
-        let fileURL = tempDir.appendingPathComponent("veilwriter_dirty_gutter_\(UUID().uuidString).swift")
+        let fileURL = tempDir.appendingPathComponent("willdeep_dirty_gutter_\(UUID().uuidString).swift")
         let appState = AppState(openedFileURL: fileURL, fileContent: "let a = 1\nlet b = 2")
 
         appState.fileContent = "let a = 1\nlet b = 3"
@@ -1351,9 +1351,9 @@ struct VeilWriterTests {
     func testEditorIndentationHelpers() {
         let source = "func run() {\n    print(\"ok\")\n}"
 
-        #expect(VeilWriterTextView.leadingWhitespaceBefore(location: 17, in: source) == "    ")
-        #expect(VeilWriterTextView.indentingLines("one\ntwo\n") == "    one\n    two\n")
-        #expect(VeilWriterTextView.outdentingLines("    one\n\ttwo\n  three") == "one\ntwo\nthree")
+        #expect(WillDeepTextView.leadingWhitespaceBefore(location: 17, in: source) == "    ")
+        #expect(WillDeepTextView.indentingLines("one\ntwo\n") == "    one\n    two\n")
+        #expect(WillDeepTextView.outdentingLines("    one\n\ttwo\n  three") == "one\ntwo\nthree")
     }
 
     @Test("save cleanup trims whitespace and ensures final newline")
@@ -1403,9 +1403,9 @@ struct VeilWriterTests {
 
     @Test("preview and focus toggles stay lightweight")
     func testPreviewAndFocusTogglesStayLightweight() {
-        let markdownURL = URL(fileURLWithPath: "/tmp/veilwriter_preview.md")
-        let htmlURL = URL(fileURLWithPath: "/tmp/veilwriter_preview.html")
-        let swiftURL = URL(fileURLWithPath: "/tmp/veilwriter_preview.swift")
+        let markdownURL = URL(fileURLWithPath: "/tmp/willdeep_preview.md")
+        let htmlURL = URL(fileURLWithPath: "/tmp/willdeep_preview.html")
+        let swiftURL = URL(fileURLWithPath: "/tmp/willdeep_preview.swift")
         let appState = AppState(openedFileURL: markdownURL, fileContent: "# Title")
 
         #expect(appState.canShowPreview == true)
@@ -1486,7 +1486,7 @@ struct VeilWriterTests {
     @Test("file modification date detects existing files")
     func testFileModificationDateDetectsExistingFiles() throws {
         let tempDir = FileManager.default.temporaryDirectory
-        let fileURL = tempDir.appendingPathComponent("veilwriter_mod_date_\(UUID().uuidString).txt")
+        let fileURL = tempDir.appendingPathComponent("willdeep_mod_date_\(UUID().uuidString).txt")
         try "first".write(to: fileURL, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: fileURL) }
 
@@ -1566,8 +1566,8 @@ struct VeilWriterTests {
     @Test("replaceAllFindMatches can target all open tabs")
     func testReplaceAllFindMatchesAcrossOpenTabs() {
         let tempDir = FileManager.default.temporaryDirectory
-        let firstURL = tempDir.appendingPathComponent("veilwriter_replace_tabs_first_\(UUID().uuidString).txt")
-        let secondURL = tempDir.appendingPathComponent("veilwriter_replace_tabs_second_\(UUID().uuidString).txt")
+        let firstURL = tempDir.appendingPathComponent("willdeep_replace_tabs_first_\(UUID().uuidString).txt")
+        let secondURL = tempDir.appendingPathComponent("willdeep_replace_tabs_second_\(UUID().uuidString).txt")
 
         let appState = AppState()
         appState.beginOpeningTab(for: firstURL)
@@ -1589,7 +1589,7 @@ struct VeilWriterTests {
     @Test("replaceAllFindMatches can target selected folder files")
     func testReplaceAllFindMatchesInSelectedFolder() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("veilwriter_replace_folder_\(UUID().uuidString)")
+            .appendingPathComponent("willdeep_replace_folder_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -1645,7 +1645,7 @@ struct VeilWriterTests {
     @Test("grep_files matches a regex across workspace files and respects include filter")
     func testGrepFilesMatchesRegexWithInclude() async throws {
         let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("veilwriter_test_grep_\(UUID().uuidString)")
+            .appendingPathComponent("willdeep_test_grep_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: workspace) }
 
@@ -1674,7 +1674,7 @@ struct VeilWriterTests {
     @Test("grep_files rejects invalid regex with a descriptive error")
     func testGrepFilesRejectsInvalidRegex() async throws {
         let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("veilwriter_test_grep_bad_\(UUID().uuidString)")
+            .appendingPathComponent("willdeep_test_grep_bad_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: workspace) }
 
@@ -2201,7 +2201,7 @@ struct VeilWriterTests {
     @Test("run_command drains large output without hanging")
     func testRunCommandDrainsLargeOutput() async throws {
         let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("veilwriter_test_run_command_output_\(UUID().uuidString)")
+            .appendingPathComponent("willdeep_test_run_command_output_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: workspace) }
 
@@ -2230,7 +2230,7 @@ struct VeilWriterTests {
     @Test("run_command exposes common user binary paths")
     func testRunCommandUsesSupplementalShellPath() async throws {
         let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("veilwriter_test_run_command_path_\(UUID().uuidString)")
+            .appendingPathComponent("willdeep_test_run_command_path_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: workspace) }
 
@@ -2251,7 +2251,7 @@ struct VeilWriterTests {
     @Test("quick open skips dependency directories")
     func testQuickOpenSkipsDependencyDirectories() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("veilwriter_quick_open_skip_\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("willdeep_quick_open_skip_\(UUID().uuidString)", isDirectory: true)
         let nodeModules = tempDir.appendingPathComponent("node_modules", isDirectory: true)
         try FileManager.default.createDirectory(at: nodeModules, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
@@ -2576,7 +2576,7 @@ struct VeilWriterTests {
     @Test("MCP fully-trusted servers auto-approve every call")
     @MainActor
     func testMCPFullyTrustedServerAutoApproval() async {
-        let suiteName = "im.some.veilwriter.mcp.test.\(UUID().uuidString)"
+        let suiteName = "com.willdeep.mcp.test.\(UUID().uuidString)"
         guard let sandbox = UserDefaults(suiteName: suiteName) else {
             Issue.record("cannot allocate sandbox defaults suite")
             return
@@ -2588,7 +2588,7 @@ struct VeilWriterTests {
             AgentMCPSettingsStore._setTestDefaultsOverride(nil)
         }
 
-        let serverName = "veilwriter-test-own-mcp"
+        let serverName = "willdeep-test-own-mcp"
         AgentMCPSettingsStore.upsertUserServer(AgentMCPServerConfig(
             name: serverName,
             source: .user,
@@ -3006,7 +3006,7 @@ struct VeilWriterTests {
     @Test("agent tool runner refuses paths outside the workspace")
     func testReadFileRefusesEscapedPath() async throws {
         let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("veilwriter_test_sandbox_\(UUID().uuidString)")
+            .appendingPathComponent("willdeep_test_sandbox_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: workspace) }
 

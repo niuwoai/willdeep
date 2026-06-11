@@ -1,6 +1,6 @@
 //
 //  AgentChatHistoryRendererTests.swift
-//  VeilWriterTests
+//  WillDeepTests
 //
 //  Covers the TextKit Markdown renderer used by Agent chat history and
 //  transcript reader windows.
@@ -9,7 +9,7 @@
 import AppKit
 import Foundation
 import Testing
-@testable import VeilWriter
+@testable import WillDeep
 
 @Suite
 struct AgentChatHistoryRendererTests {

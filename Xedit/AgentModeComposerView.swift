@@ -1,6 +1,6 @@
 //
 //  AgentModeComposerView.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Composer, status bar, slash/at pickers, and compact session badges
 //  used by the dedicated Agent mode surface. Split from AgentModeView

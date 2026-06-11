@@ -1,6 +1,6 @@
 //
 //  EditorView.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Created by rocky on 2026/5/27.
 //
@@ -63,7 +63,7 @@ struct EditorView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
-        let textView = VeilWriterTextView()
+        let textView = WillDeepTextView()
 
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
@@ -111,7 +111,7 @@ struct EditorView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
-        guard let textView = nsView.documentView as? VeilWriterTextView else { return }
+        guard let textView = nsView.documentView as? WillDeepTextView else { return }
 
         context.coordinator.parent = self
 
@@ -248,7 +248,7 @@ struct EditorView: NSViewRepresentable {
         }
 
         func textDidChange(_ notification: Notification) {
-            guard let textView = notification.object as? VeilWriterTextView else { return }
+            guard let textView = notification.object as? WillDeepTextView else { return }
             textView.invalidateFoldableGuidesCache()
             textView.clearFoldedScopes()
             parent.text = textView.string
@@ -263,7 +263,7 @@ struct EditorView: NSViewRepresentable {
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
-            guard let textView = notification.object as? VeilWriterTextView else { return }
+            guard let textView = notification.object as? WillDeepTextView else { return }
             publishCursorPosition(for: textView)
             applyBracketHighlight(to: textView)
             refreshEditorChrome(for: textView)
@@ -272,7 +272,7 @@ struct EditorView: NSViewRepresentable {
         @objc func visibleRectDidChange(_ notification: Notification) {
             guard let clipView = notification.object as? NSClipView,
                   let scrollView = clipView.enclosingScrollView,
-                  let textView = scrollView.documentView as? VeilWriterTextView else {
+                  let textView = scrollView.documentView as? WillDeepTextView else {
                 return
             }
             refreshEditorChrome(for: textView)
@@ -298,7 +298,7 @@ struct EditorView: NSViewRepresentable {
             in textContainer: NSTextContainer,
             forGlyphRange glyphRange: NSRange
         ) -> Bool {
-            guard let textView = textContainer.textView as? VeilWriterTextView,
+            guard let textView = textContainer.textView as? WillDeepTextView,
                   textView.isFoldedGlyphRange(glyphRange, layoutManager: layoutManager) else {
                 return true
             }
@@ -310,7 +310,7 @@ struct EditorView: NSViewRepresentable {
             return true
         }
 
-        func applyAppearance(to textView: VeilWriterTextView, in scrollView: NSScrollView) {
+        func applyAppearance(to textView: WillDeepTextView, in scrollView: NSScrollView) {
             let theme = parent.settings.theme
             let font = parent.settings.editorFont()
             let paragraphStyle = parent.settings.editorParagraphStyle()
@@ -356,7 +356,7 @@ struct EditorView: NSViewRepresentable {
             textView.needsDisplay = true
         }
 
-        func applyText(_ newText: String, to textView: VeilWriterTextView) {
+        func applyText(_ newText: String, to textView: WillDeepTextView) {
             highlightGeneration += 1
             let generation = highlightGeneration
             textView.invalidateFoldableGuidesCache()
@@ -412,7 +412,7 @@ struct EditorView: NSViewRepresentable {
         /// result in place so layout and scroll position are preserved. Skips
         /// regions already highlighted.
         private func highlightVisibleRange(
-            in textView: VeilWriterTextView,
+            in textView: WillDeepTextView,
             language: Language,
             settings: EditorSettings
         ) {
@@ -450,7 +450,7 @@ struct EditorView: NSViewRepresentable {
 
         /// The visible character range expanded to line boundaries plus an
         /// overscan margin, clamped to the document. `nil` if nothing is laid out.
-        private func visibleHighlightRange(in textView: VeilWriterTextView) -> NSRange? {
+        private func visibleHighlightRange(in textView: WillDeepTextView) -> NSRange? {
             guard let layoutManager = textView.layoutManager,
                   let container = textView.textContainer else { return nil }
 
@@ -484,7 +484,7 @@ struct EditorView: NSViewRepresentable {
         ///   layout pass — the difference between an instant switch and a 1-2s
         ///   stall on a large file.
         private func replaceTextStorage(
-            in textView: VeilWriterTextView,
+            in textView: WillDeepTextView,
             with attributed: NSAttributedString,
             preserveViewport: Bool = true
         ) {
@@ -520,7 +520,7 @@ struct EditorView: NSViewRepresentable {
             let offsetWithinLine: CGFloat
         }
 
-        private func topVisibleAnchor(in textView: VeilWriterTextView) -> ScrollAnchor? {
+        private func topVisibleAnchor(in textView: WillDeepTextView) -> ScrollAnchor? {
             guard let layoutManager = textView.layoutManager,
                   let textContainer = textView.textContainer,
                   textView.enclosingScrollView != nil else {
@@ -552,7 +552,7 @@ struct EditorView: NSViewRepresentable {
         /// Scrolls so the anchored line is restored to the same sub-pixel position
         /// it held before the text storage was replaced, after forcing layout so
         /// the document height is correct.
-        private func restoreTopVisibleAnchor(_ anchor: ScrollAnchor?, in textView: VeilWriterTextView) {
+        private func restoreTopVisibleAnchor(_ anchor: ScrollAnchor?, in textView: WillDeepTextView) {
             guard let anchor,
                   let layoutManager = textView.layoutManager,
                   let textContainer = textView.textContainer,
@@ -587,7 +587,7 @@ struct EditorView: NSViewRepresentable {
             textView.enclosingScrollView?.reflectScrolledClipView(clipView)
         }
 
-        func applySearchHighlights(to textView: VeilWriterTextView, scrollToActiveMatch: Bool = true) {
+        func applySearchHighlights(to textView: WillDeepTextView, scrollToActiveMatch: Bool = true) {
             guard let textStorage = textView.textStorage else { return }
 
             let fullRange = NSRange(location: 0, length: textStorage.length)
@@ -617,7 +617,7 @@ struct EditorView: NSViewRepresentable {
             refreshEditorChrome(for: textView)
         }
 
-        private func refreshEditorChrome(for textView: VeilWriterTextView) {
+        private func refreshEditorChrome(for textView: WillDeepTextView) {
             // Only re-apply folding when scopes are actually folded. Applying it
             // unconditionally forced a full-document glyph/layout invalidation on
             // every caret move, which produced severe arrow-key lag.
@@ -631,7 +631,7 @@ struct EditorView: NSViewRepresentable {
         /// `true` so the caller restores the incoming tab afterwards. Returns
         /// `false` when this is the same tab (an edit/setting change, not a
         /// switch), where state must be left untouched.
-        func beginTabTransitionIfNeeded(to newTabID: UUID?, in textView: VeilWriterTextView) -> Bool {
+        func beginTabTransitionIfNeeded(to newTabID: UUID?, in textView: WillDeepTextView) -> Bool {
             guard newTabID != currentTabID else { return false }
 
             if let outgoing = currentTabID {
@@ -655,7 +655,7 @@ struct EditorView: NSViewRepresentable {
         /// fragment's Y depends on every fragment above it: without ensuring
         /// layout from 0 to the target, the rect comes from partial layout and
         /// lands hundreds of lines off.
-        func finishTabTransition(to newTabID: UUID?, in textView: VeilWriterTextView) {
+        func finishTabTransition(to newTabID: UUID?, in textView: WillDeepTextView) {
             guard let newTabID, let saved = tabEditingState[newTabID] else { return }
 
             let length = (textView.string as NSString).length
@@ -689,7 +689,7 @@ struct EditorView: NSViewRepresentable {
 
         /// Character index at the top edge of the current viewport (lazy layout
         /// safe — only queries the visible rect).
-        private func topVisibleCharacterIndex(in textView: VeilWriterTextView) -> Int {
+        private func topVisibleCharacterIndex(in textView: WillDeepTextView) -> Int {
             guard let layoutManager = textView.layoutManager,
                   let container = textView.textContainer else { return 0 }
             let visibleRect = textView.visibleRect
@@ -697,7 +697,7 @@ struct EditorView: NSViewRepresentable {
             return layoutManager.characterIndexForGlyph(at: glyphRange.location)
         }
 
-        func navigate(toLine line: Int, in textView: VeilWriterTextView) {
+        func navigate(toLine line: Int, in textView: WillDeepTextView) {
             let range = Self.rangeForLine(line, in: textView.string)
             textView.window?.makeFirstResponder(textView)
             textView.setSelectedRange(NSRange(location: range.location, length: 0))
@@ -743,7 +743,7 @@ struct EditorView: NSViewRepresentable {
             return NSRange(location: nsText.length, length: 0)
         }
 
-        private func publishCursorPosition(for textView: VeilWriterTextView) {
+        private func publishCursorPosition(for textView: WillDeepTextView) {
             let selectedRange = textView.selectedRange()
             let position = Self.lineAndColumn(for: selectedRange.location, in: textView.string)
             let selectedLines = Self.selectedLineCount(for: selectedRange, in: textView.string)
@@ -756,7 +756,7 @@ struct EditorView: NSViewRepresentable {
         /// document's temporary attributes on every caret move.
         private var highlightedBracketRanges: [NSRange] = []
 
-        private func applyBracketHighlight(to textView: VeilWriterTextView) {
+        private func applyBracketHighlight(to textView: WillDeepTextView) {
             guard let layoutManager = textView.layoutManager else { return }
             let length = (textView.string as NSString).length
 
@@ -883,7 +883,7 @@ struct EditorView: NSViewRepresentable {
         /// Schedules a debounced re-highlight of the current document content.
         /// The highlight runs on a background queue and results are applied on
         /// the main thread, preserving cursor/selection position.
-        private func scheduleHighlight(textView: VeilWriterTextView) {
+        private func scheduleHighlight(textView: WillDeepTextView) {
             guard let lang = currentLanguage else { return }
 
             highlightWorkItem?.cancel()
@@ -968,7 +968,7 @@ private struct BracketPair {
     }
 }
 
-final class VeilWriterTextView: NSTextView {
+final class WillDeepTextView: NSTextView {
     var currentLineColor: NSColor = NSColor.selectedTextBackgroundColor.withAlphaComponent(0.16)
     var foldedPlaceholderColor: NSColor = NSColor.secondaryLabelColor
     var foldedPlaceholderBackgroundColor: NSColor = NSColor.secondaryLabelColor.withAlphaComponent(0.12)
@@ -1511,7 +1511,7 @@ final class LineNumberRulerView: NSRulerView {
         }
 
         let selectedLine = lineNumber(at: textView.selectedRange().location)
-        let foldableGuides = (textView as? VeilWriterTextView)?.foldableGuides() ?? []
+        let foldableGuides = (textView as? WillDeepTextView)?.foldableGuides() ?? []
         let glyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: textContainer)
         var glyphIndex = glyphRange.location
 
@@ -1549,7 +1549,7 @@ final class LineNumberRulerView: NSRulerView {
                 isCurrentLine: settings.highlightsCurrentLine && lineNumber == selectedLine,
                 isChanged: changedLineNumbers.contains(lineNumber),
                 foldGuide: foldGuide,
-                isFolded: foldGuide.map { (textView as? VeilWriterTextView)?.isFolded($0) ?? false } ?? false
+                isFolded: foldGuide.map { (textView as? WillDeepTextView)?.isFolded($0) ?? false } ?? false
             )
 
             let nextGlyphIndex = NSMaxRange(lineGlyphRange)
@@ -1561,7 +1561,7 @@ final class LineNumberRulerView: NSRulerView {
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         guard point.x <= 18,
-              let textView = textView as? VeilWriterTextView,
+              let textView = textView as? WillDeepTextView,
               let line = lineNumber(atRulerY: point.y),
               textView.foldableGuides().contains(where: { $0.startLine == line }) else {
             super.mouseDown(with: event)

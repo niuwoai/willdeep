@@ -1,6 +1,6 @@
 //
 //  AgentMessageView.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Per-message SwiftUI surfaces for the chat transcript, split out of
 //  AgentModeView.swift in rc42. The TextKit-baked history view handles
@@ -773,10 +773,10 @@ struct AgentMessageFooter: View {
             }
 
             Button(action: copyToClipboard) {
-                Image(systemName: didJustCopy ? "checkmark" : "rectangle.on.rectangle")
-                    .font(footerIconFont)
+                Image(systemName: didJustCopy ? "checkmark" : "square.on.square")
+                    .font(didJustCopy ? footerIconFont : copyIconFont)
                     .foregroundStyle(didJustCopy ? Color.green : Color.secondary)
-                    .frame(width: 24, height: 22)
+                    .frame(width: 20, height: 20)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -797,6 +797,10 @@ struct AgentMessageFooter: View {
 
     private var footerIconFont: Font {
         .system(size: 19, weight: .semibold)
+    }
+
+    private var copyIconFont: Font {
+        .system(size: 14, weight: .regular)
     }
 
     private var footerTextFont: Font {

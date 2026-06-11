@@ -5,20 +5,20 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleIdentifier</key>
-	<string>im.some.veilwriter.help</string>
+	<string>com.willdeep.help</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>VeilWriter Help</string>
+	<string>WillDeep Help</string>
 	<key>CFBundlePackageType</key>
 	<string>BNDL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.58.0-rc17</string>
+	<string>1.59.0-rc1</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>HPDBookAccessPath</key>
 	<string>index.html</string>
 	<key>HPDBookTitle</key>
-	<string>VeilWriter Help</string>
+	<string>WillDeep Help</string>
 </dict>
 </plist>

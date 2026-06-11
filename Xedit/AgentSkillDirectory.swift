@@ -1,6 +1,6 @@
 //
 //  AgentSkillDirectory.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Codex skill discovery + the `list_skills`/`read_skill` tool wrappers,
 //  split out of AgentTools.swift in rc42. Three pieces:

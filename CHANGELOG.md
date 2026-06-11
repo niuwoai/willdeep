@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.59.0-rc1 - 2026-06-11
+
+### WillDeep 品牌与域名迁移
+
+- 项目对外品牌从 VeilWriter 改为 **WillDeep**，官方域名标识切换为 `willdeep.com` / `https://willdeep.com`。
+- macOS app 产物、Bundle 展示名、Help Book、发布脚本、README、TESTING、帮助页面和产品概览同步使用 WillDeep。
+- 命令行工具主入口从 `veilwriter` 切换为 `willdeep`，安装路径同步为 `~/.local/bin/willdeep`。
+- 运行时网络标识同步为 `User-Agent: WillDeep/{version} (macOS)`，并继续通过 `X-App-Version` 暴露版本号；OpenRouter 署名 header 改为 `HTTP-Referer: https://willdeep.com` 与 `X-Title: WillDeep`。
+- App、测试 target、UserDefaults、Keychain、通知、缓存与 MCP clientInfo 的标识统一到 `com.willdeep.*` / `WillDeep`。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.59.0-rc1`。
+
+## 1.58.0-rc18 - 2026-06-11
+
+### Agent copy 图标修正
+
+- 当前消息 footer 的 copy 按钮从偏长的 `rectangle.on.rectangle` 换回紧凑的 `square.on.square`，字号和命中框收小，视觉更接近系统标准复制图标。
+- 历史 transcript / 代码块 copy 按钮不再用 `"▭▭"` 字符加负字距硬凑，改为 SF Symbol `square.on.square` 图片附件，避免出现被拉长的双矩形。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.58.0-rc18`。
+
 ## 1.58.0-rc17 - 2026-06-11
 
 ### Codex / Cursor 委派工具

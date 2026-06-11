@@ -1,6 +1,6 @@
 //
 //  AgentSkillSettingsStore.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Local settings and helpers for built-in and user-created Agent skills.
 //
@@ -31,7 +31,7 @@ struct AgentSkillSettings: Codable, Equatable {
 }
 
 enum AgentSkillSettingsStore {
-    private static let settingsKey = "im.some.veilwriter.agentSkillSettings.v1"
+    private static let settingsKey = "com.willdeep.agentSkillSettings.v1"
 
     static func load() -> AgentSkillSettings {
         guard let data = UserDefaults.standard.data(forKey: settingsKey),

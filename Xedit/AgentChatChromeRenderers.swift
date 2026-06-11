@@ -1,6 +1,6 @@
 //
 //  AgentChatChromeRenderers.swift
-//  VeilWriter
+//  WillDeep
 //
 //  NSAttributedString builders for the two click-targets that ride
 //  along inside the chat transcript NSTextView, split out of
@@ -24,47 +24,55 @@
 import AppKit
 
 enum AgentChatHistoryCodeCopyChrome {
-    static let idleLabel = "▭▭ Copy"
+    static let idleText = " Copy"
     static let copiedLabel = "✓ Done"
     static let linkValue = "agent-chat-history-copy-code"
 
     static func button(copied: Bool, code: String, font: NSFont, color: NSColor) -> NSAttributedString {
-        let label = copied ? copiedLabel : idleLabel
-        var attributes: [NSAttributedString.Key: Any] = [
+        if copied {
+            return NSAttributedString(string: copiedLabel, attributes: [
+                .font: font,
+                .foregroundColor: color,
+                .underlineStyle: 0,
+                .agentChatHistoryCodeCopyText: code,
+            ])
+        }
+
+        let result = NSMutableAttributedString()
+        result.append(copySymbolString(pointSize: font.pointSize, color: color))
+        result.append(NSAttributedString(string: idleText, attributes: [
             .font: font,
             .foregroundColor: color,
             .underlineStyle: 0,
             .agentChatHistoryCodeCopyText: code,
-        ]
-        if !copied {
-            attributes[.link] = linkValue
-        }
-        let result = NSMutableAttributedString(string: label, attributes: attributes)
-        if !copied {
-            result.addAttribute(.kern, value: -4.5, range: NSRange(location: 0, length: 2))
-        }
+        ]))
+        result.addAttributes([
+            .link: linkValue,
+            .agentChatHistoryCodeCopyText: code,
+        ], range: NSRange(location: 0, length: result.length))
         return result
     }
 }
 
 enum AgentChatHistoryFooterChrome {
-    static let copyIdleLabel = "▭▭"
     static let copyCopiedLabel = "✓"
     static let retryLabel = "↻"
     static let copyLinkValue = "agent-chat-history-copy-message"
     static let retryLinkValue = "agent-chat-history-retry-last-turn"
 
     static func copyButton(copied: Bool, message: String) -> NSAttributedString {
-        let label = copied ? copyCopiedLabel : copyIdleLabel
         var attributes = copyLinkAttributes(color: copied ? NSColor.systemGreen : NSColor.secondaryLabelColor)
         attributes[.agentChatHistoryMessageCopyText] = message
-        if !copied {
-            attributes[.link] = copyLinkValue
+        if copied {
+            return NSAttributedString(string: copyCopiedLabel, attributes: attributes)
         }
-        let result = NSMutableAttributedString(string: label, attributes: attributes)
-        if !copied {
-            result.addAttribute(.kern, value: -4.5, range: NSRange(location: 0, length: 2))
-        }
+
+        attributes[.link] = copyLinkValue
+        let result = NSMutableAttributedString(attributedString: copySymbolString(
+            pointSize: 13,
+            color: NSColor.secondaryLabelColor
+        ))
+        result.addAttributes(attributes, range: NSRange(location: 0, length: result.length))
         return result
     }
 
@@ -138,4 +146,35 @@ enum AgentChatHistoryFooterChrome {
             .underlineStyle: 0,
         ]
     }
+}
+
+private func copySymbolString(pointSize: CGFloat, color: NSColor) -> NSAttributedString {
+    let configuration = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .regular)
+    guard let image = NSImage(systemSymbolName: "square.on.square", accessibilityDescription: nil)?
+        .withSymbolConfiguration(configuration) else {
+        return NSAttributedString(string: "⧉", attributes: [
+            .font: NSFont.systemFont(ofSize: pointSize, weight: .regular),
+            .foregroundColor: color,
+            .underlineStyle: 0,
+        ])
+    }
+
+    let size = NSSize(width: ceil(pointSize + 1), height: ceil(pointSize + 1))
+    let tinted = NSImage(size: size)
+    tinted.lockFocus()
+    image.draw(
+        in: NSRect(origin: .zero, size: size),
+        from: .zero,
+        operation: .sourceOver,
+        fraction: 1
+    )
+    color.setFill()
+    NSRect(origin: .zero, size: size).fill(using: .sourceIn)
+    tinted.unlockFocus()
+    tinted.isTemplate = false
+
+    let attachment = NSTextAttachment()
+    attachment.image = tinted
+    attachment.bounds = NSRect(x: 0, y: -2, width: size.width, height: size.height)
+    return NSAttributedString(attachment: attachment)
 }

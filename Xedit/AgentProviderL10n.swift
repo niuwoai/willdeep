@@ -83,7 +83,7 @@ extension AgentProviderPreset {
     var inlineNotice: String? {
         switch id {
         case "openrouter":
-            return "本应用会自动附带 `HTTP-Referer: https://83d.me` 与 `X-Title: VeilWriter` 这两个 header，用于在 OpenRouter 应用榜上署名。无需手动填写。"
+            return "本应用会自动附带 `HTTP-Referer: https://willdeep.com` 与 `X-Title: WillDeep` 这两个 header，用于在 OpenRouter 应用榜上署名。无需手动填写。"
         case "some-im":
             return "这是个人中转站，请确认你拥有访问权限再使用。"
         case "gemini":

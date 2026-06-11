@@ -147,7 +147,7 @@ struct WindowChromeConfigurator: NSViewRepresentable {
     /// re-enters `configure(_:)` every runloop turn for ~30 ticks and
     /// we don't want to keep stomping the user's manual resize.
     private static let frameAutosaveAppliedWindows = NSHashTable<NSWindow>.weakObjects()
-    private static let mainWindowFrameAutosaveName = "VeilWriterMainWindow"
+    private static let mainWindowFrameAutosaveName = "WillDeepMainWindow"
     /// AppKit refuses to bind the same autosave name to more than one
     /// window at a time (you get a runtime warning and the second binding
     /// is silently ignored), so we only attach `setFrameAutosaveName` to

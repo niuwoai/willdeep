@@ -1,6 +1,6 @@
 //
 //  AgentEntryModelSelectionTests.swift
-//  VeilWriterTests
+//  WillDeepTests
 //
 //  Covers AppState.selectAgentEntryAndModel — the one-shot picker
 //  primitive used by the chat-mode two-level model menu. Tests run on
@@ -9,7 +9,7 @@
 
 import Testing
 import Foundation
-@testable import VeilWriter
+@testable import WillDeep
 
 @Suite
 @MainActor
@@ -112,7 +112,7 @@ struct AgentEntryModelSelectionTests {
     /// redirected Keychain writes. `saveProviderLibrary` writes the
     /// JSON-encoded entry skeletons (providerID, baseURL, displayName,
     /// model lists) to UserDefaults under
-    /// `im.some.veilwriter.agentSettings.providerLibrary.v1`, and that
+    /// `com.willdeep.agentSettings.providerLibrary.v1`, and that
     /// key still pointed at `UserDefaults.standard`. Every test run
     /// planted two fixture entries — "OpenAI / gpt-4.1-mini" and
     /// "DeepSeek / deepseek-v4-flash" — into the developer's real
@@ -122,7 +122,7 @@ struct AgentEntryModelSelectionTests {
     /// loses its grip on UserDefaults again.
     @Test
     func providerLibraryEntriesStayInSandboxedDefaults() {
-        let providerLibraryKey = "im.some.veilwriter.agentSettings.providerLibrary.v1"
+        let providerLibraryKey = "com.willdeep.agentSettings.providerLibrary.v1"
         let snapshotBefore = UserDefaults.standard.data(forKey: providerLibraryKey)
 
         let sandbox = installKeychainSandbox()
@@ -189,8 +189,8 @@ final class KeychainSandbox {
 
     init() {
         let id = UUID().uuidString
-        self.service = "im.some.veilwriter.agent.test.\(id)"
-        self.suiteName = "im.some.veilwriter.agent.test.defaults.\(id)"
+        self.service = "com.willdeep.agent.test.\(id)"
+        self.suiteName = "com.willdeep.agent.test.defaults.\(id)"
         guard let sandbox = UserDefaults(suiteName: suiteName) else {
             preconditionFailure("Cannot allocate sandbox UserDefaults suite \(suiteName)")
         }

@@ -1,6 +1,6 @@
 //
 //  MarkdownTableParserTests.swift
-//  VeilWriterTests
+//  WillDeepTests
 //
 //  Covers MarkdownPreviewParser's GFM-table detection: with/without
 //  outer pipes, alignment-row tolerance, and the rule that a single
@@ -10,7 +10,7 @@
 
 import Testing
 import Foundation
-@testable import VeilWriter
+@testable import WillDeep
 
 @Suite
 struct MarkdownTableParserTests {

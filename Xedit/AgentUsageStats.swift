@@ -1,6 +1,6 @@
 //
 //  AgentUsageStats.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Pure analytics over the persisted Agent sessions. Powers the
 //  Claude-Code-style stats dashboard shown in place of the empty-chat

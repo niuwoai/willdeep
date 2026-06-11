@@ -1,6 +1,6 @@
 //
 //  AgentSessionRowStatusDot.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Small 5pt circle that lives at the left edge of each Agent-mode
 //  sidebar session row. Shows whether that session is the active one,

@@ -1,6 +1,6 @@
 //
 //  AppStateGitStatus.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Extracted from AppState.swift in v1.52.1-rc42 (stage-3 code-health
 //  pass). Houses the pure-static git plumbing AppState uses for sidebar

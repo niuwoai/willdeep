@@ -1,6 +1,6 @@
 //
 //  AgentChatHistoryTextView.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Renders the assistant transcript's historical (non-streaming)
 //  messages into a single NSTextView. SwiftUI's per-message bubble

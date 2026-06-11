@@ -1,6 +1,6 @@
 //
 //  AgentNetworkSupport.swift
-//  Xedit
+//  WillDeep
 //
 //  Protocol-agnostic helpers shared by every provider adapter
 //  (OpenAI Chat / OpenAI Responses / Anthropic Messages / Gemini).
@@ -27,7 +27,7 @@ enum AgentNetworkSupport {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
     }()
 
-    static let userAgentHeaderValue: String = "Xedit/\(appVersionHeaderValue) (macOS)"
+    static let userAgentHeaderValue: String = "WillDeep/\(appVersionHeaderValue) (macOS)"
 
     static func defaultSession() -> URLSession {
         let configuration = URLSessionConfiguration.default

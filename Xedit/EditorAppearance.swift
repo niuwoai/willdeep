@@ -1,6 +1,6 @@
 //
 //  EditorAppearance.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Editor appearance settings, built-in fonts, and built-in color themes.
 //
@@ -125,8 +125,8 @@ struct EditorSettings: Codable, Equatable {
 }
 
 enum EditorSettingsStore {
-    private static let key = "im.some.veilwriter.editorSettings.v1"
-    static let didChangeNotification = Notification.Name("im.some.veilwriter.editorSettingsDidChange")
+    private static let key = "com.willdeep.editorSettings.v1"
+    static let didChangeNotification = Notification.Name("com.willdeep.editorSettingsDidChange")
 
     static func load() -> EditorSettings {
         guard let data = UserDefaults.standard.data(forKey: key),

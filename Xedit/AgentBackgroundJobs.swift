@@ -1,6 +1,6 @@
 //
 //  AgentBackgroundJobs.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Long-running shell jobs spawned by `run_command` with
 //  `run_in_background: true`. The Claude Code-style design:

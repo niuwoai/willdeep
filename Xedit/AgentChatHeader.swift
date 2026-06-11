@@ -1,6 +1,6 @@
 //
 //  AgentChatHeader.swift
-//  VeilWriter
+//  WillDeep
 //
 //  Title bar for the active agent session, split out of AgentModeView.swift
 //  in rc42. Three pieces sit in one row at the top of the chat pane:
