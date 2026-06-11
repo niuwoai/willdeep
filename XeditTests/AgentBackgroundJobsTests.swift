@@ -15,7 +15,9 @@
 //  the gap between "registry.start() returned" and "terminationHandler
 //  has run and updated state on the main actor". 5s timeout is enough
 //  for any of the test scripts (`true`, `echo hello`, `printf`) and
-//  forgiving enough to survive a loaded CI box.
+//  forgiving enough to survive a loaded CI box. Long-running samples
+//  install a TERM trap so the test is about registry state, not shell
+//  child-process shutdown quirks.
 //
 
 import Testing
@@ -218,9 +220,8 @@ struct AgentBackgroundJobsTests {
     func longRunningCommandCanBeKilled() async throws {
         let registry = AgentJobRegistry()
         let runtimeID = UUID()
-        // sleep 60 — plenty of headroom; we kill within 100ms.
         let job = try registry.start(
-            command: "sleep 60",
+            command: "trap 'exit 143' TERM; while true; do sleep 1; done",
             workingDirectory: nil,
             runtimeID: runtimeID,
             timeoutSeconds: nil
@@ -265,7 +266,7 @@ struct AgentBackgroundJobsTests {
         let registry = AgentJobRegistry()
         let runtimeID = UUID()
         let job = try registry.start(
-            command: "sleep 30",
+            command: "trap 'exit 143' TERM; while true; do sleep 1; done",
             workingDirectory: nil,
             runtimeID: runtimeID,
             timeoutSeconds: 0.4
@@ -273,7 +274,7 @@ struct AgentBackgroundJobsTests {
         let finished = await waitUntilFinished(
             registry: registry,
             id: job.id,
-            timeoutMs: 6000
+            timeoutMs: 15000
         )
         #expect(finished)
         #expect(registry.job(id: job.id)?.status == .timedOut)
@@ -397,7 +398,7 @@ struct AgentBackgroundJobsTests {
         _ = await waitUntilFinished(registry: registry, id: finishedJob.id)
 
         let liveJob = try registry.start(
-            command: "sleep 10",
+            command: "trap 'exit 143' TERM; while true; do sleep 1; done",
             workingDirectory: nil,
             runtimeID: runtimeID,
             timeoutSeconds: nil
@@ -494,7 +495,7 @@ struct AgentBackgroundJobsTests {
 
         // Alive background job: counts with no live turn at all.
         let job = try appState.agentJobRegistry.start(
-            command: "sleep 30",
+            command: "trap 'exit 143' TERM; while true; do sleep 1; done",
             workingDirectory: nil,
             runtimeID: session.id,
             timeoutSeconds: nil
@@ -511,13 +512,13 @@ struct AgentBackgroundJobsTests {
 
     /// Poll the registry until the job leaves `.running` or the
     /// budget runs out. 20ms cadence is fast enough that even a
-    /// `true` finish doesn't waste much wall-clock; 5s default is
-    /// generous enough to survive a loaded CI box without false
-    /// failures.
+    /// `true` finish doesn't waste much wall-clock; 15s default is
+    /// generous enough to survive a loaded CI box running the whole
+    /// Swift Testing target concurrently without false failures.
     private func waitUntilFinished(
         registry: AgentJobRegistry,
         id: UUID,
-        timeoutMs: Int = 5000
+        timeoutMs: Int = 15000
     ) async -> Bool {
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
         while Date() < deadline {

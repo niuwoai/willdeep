@@ -36,7 +36,9 @@ struct AgentChatHistoryRendererTests {
         #expect(rendered.string.contains("Title"))
         #expect(rendered.string.contains("bold"))
         #expect(rendered.string.contains("code"))
-        #expect(rendered.string.contains("swift  ⎘ Copy"))
+        #expect(rendered.string.contains("swift"))
+        #expect(rendered.string.contains(" Copy"))
+        #expect(firstAttributeRange(.agentChatHistoryCodeCopyText, containing: "let value = 1", in: rendered) != nil)
         #expect(rendered.string.contains("let value = 1"))
         #expect(!rendered.string.contains("# Title"))
         #expect(!rendered.string.contains("**bold**"))
@@ -272,11 +274,19 @@ struct AgentChatHistoryRendererTests {
         #expect(rendered.string.contains("You\nhello"))
         #expect(rendered.string.contains("✦ Assistant\ndone"))
         #expect(!rendered.string.contains("YOU"))
-        #expect(!rendered.string.contains("hello\n⎘"))
-        #expect(rendered.string.contains("done\n⎘  ◷ 8.4s  in 1.2k · out 2.3k  ↻"))
+        #expect(rendered.string.contains("  ◷ 8.4s  in 1.2k · out 2.3k  ↻"))
+        #expect(firstAttributeRange(.agentChatHistoryMessageCopyText, value: "hello", in: rendered) == nil)
 
-        let assistantCopyRange = (rendered.string as NSString).range(of: "done\n⎘")
-        let assistantCopyLocation = assistantCopyRange.location + "done\n".count
+        let assistantCopyRange = try #require(firstAttributeRange(
+            .agentChatHistoryMessageCopyText,
+            value: "done",
+            in: rendered
+        ))
+        let assistantCopyLocation = assistantCopyRange.location
+        #expect(rendered.attribute(.link, at: assistantCopyLocation, effectiveRange: nil) != nil)
+        let doneRange = (rendered.string as NSString).range(of: "done")
+        #expect(doneRange.location != NSNotFound)
+        #expect(assistantCopyLocation > doneRange.location)
         let copyFont = try #require(rendered.attribute(
             .font,
             at: assistantCopyLocation,
@@ -402,9 +412,7 @@ struct AgentChatHistoryRendererTests {
 
         let plain = AgentChatHistoryRenderer.render(messages: [user], isDark: false)
         #expect(plain.string.contains("You\nhello"))
-        #expect(plain.string.contains("⎘"))
-        let hiddenCopyRange = (plain.string as NSString).range(of: "⎘")
-        #expect(hiddenCopyRange.location != NSNotFound)
+        let hiddenCopyRange = try #require(firstCopyIconRange(in: plain))
         #expect(plain.attribute(.link, at: hiddenCopyRange.location, effectiveRange: nil) == nil)
         #expect(plain.attribute(
             NSAttributedString.Key("AgentChatHistoryMessageCopyText"),
@@ -424,9 +432,11 @@ struct AgentChatHistoryRendererTests {
             hoveredUserMessageID: id
         )
         #expect(hovered.string.contains("You\nhello"))
-        #expect(hovered.string.contains("⎘"))
-        let visibleCopyRange = (hovered.string as NSString).range(of: "⎘")
-        #expect(visibleCopyRange.location != NSNotFound)
+        let visibleCopyRange = try #require(firstAttributeRange(
+            .agentChatHistoryMessageCopyText,
+            value: "hello",
+            in: hovered
+        ))
         #expect(hovered.attribute(.link, at: visibleCopyRange.location, effectiveRange: nil) != nil)
         #expect(hovered.attribute(
             NSAttributedString.Key("AgentChatHistoryMessageCopyText"),
@@ -439,6 +449,58 @@ struct AgentChatHistoryRendererTests {
             effectiveRange: nil
         ) as? NSColor)
         #expect(visibleColor.alphaComponent > 0)
+    }
+
+    private func firstAttributeRange(
+        _ key: NSAttributedString.Key,
+        value expectedValue: String,
+        in attributed: NSAttributedString
+    ) -> NSRange? {
+        var found = NSRange(location: NSNotFound, length: 0)
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        attributed.enumerateAttribute(key, in: fullRange) { value, range, stop in
+            guard (value as? String) == expectedValue else { return }
+            found = range
+            stop.pointee = true
+        }
+        return found.location == NSNotFound ? nil : found
+    }
+
+    private func firstAttributeRange(
+        _ key: NSAttributedString.Key,
+        containing expectedSubstring: String,
+        in attributed: NSAttributedString
+    ) -> NSRange? {
+        var found = NSRange(location: NSNotFound, length: 0)
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        attributed.enumerateAttribute(key, in: fullRange) { value, range, stop in
+            guard let stringValue = value as? String,
+                  stringValue.contains(expectedSubstring) else { return }
+            found = range
+            stop.pointee = true
+        }
+        return found.location == NSNotFound ? nil : found
+    }
+
+    private func firstCopyIconRange(in attributed: NSAttributedString) -> NSRange? {
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        var found = NSRange(location: NSNotFound, length: 0)
+        attributed.enumerateAttribute(.attachment, in: fullRange) { value, range, stop in
+            guard value != nil else { return }
+            found = range
+            stop.pointee = true
+        }
+        if found.location != NSNotFound {
+            return found
+        }
+
+        for fallbackSymbol in ["⧉", "⎘"] {
+            let range = (attributed.string as NSString).range(of: fallbackSymbol)
+            if range.location != NSNotFound {
+                return range
+            }
+        }
+        return nil
     }
 
     @Test
@@ -481,7 +543,13 @@ struct AgentChatHistoryRendererTests {
         let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
 
         #expect(rendered.string.contains("────────────────────────"))
-        #expect(rendered.string.contains("html  ⎘ Copy"))
+        #expect(rendered.string.contains("html"))
+        #expect(rendered.string.contains(" Copy"))
+        #expect(firstAttributeRange(
+            .agentChatHistoryCodeCopyText,
+            containing: "<details><summary>",
+            in: rendered
+        ) != nil)
         #expect(rendered.string.contains("<details><summary>该文件是此次合并新引入的：</summary>"))
         #expect(rendered.string.contains("提交 3e05c43 新增。</details>"))
         #expect(!rendered.string.contains("----"))

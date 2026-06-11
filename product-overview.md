@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-11 | Current version: v1.60.0-rc14
+> Last updated: 2026-06-11 | Current version: v1.60.0-rc15
 
 ## Positioning
 
@@ -87,7 +87,7 @@ CLAUDE.md §10 的软上限是 2000 行，硬上限是 3000 行。rc42 拆完 `A
 - **Brand Cleanup（1.60.0-rc10）** — Settings → Local Agents 的接入状态标题不再暴露旧品牌名，统一显示 WillDeep；当前产品文档中面向用户的打开方式描述也同步改为 WillDeep。
 - **App Icon（1.60.0-rc12）** — macOS App icon 使用旧版科技网格作为底部背景，上层叠加深度镜头抽象标识，强调 AI 聚焦、层次感与简洁科技气质；`AppIcon.appiconset` 与 `appicons/` 保持同步。
 - **Agent Models Usage（1.60.0-rc13）** — Agent mode 新会话统计卡的 Models tab 不再复用概要格子，而是按 provider + 完整 model id 聚合会话内用量，显示输入/输出 token、缓存命中率、reasoning token 和估算费用。`AgentMessage` 新增 cached/cache-write/reasoning token 字段，四个 `AgentClient` 适配器会解析各自官方 usage 字段；`AgentSession` 同步记录 provider 快照，旧会话则用模型名前缀做 best-effort 归类。
-- **SafeCommand fd redirection（1.60.0-rc14）** — SafeCommand shell 分段器会保留 `2>&1` / `1>&2` 这类 fd 重定向，不再把其中的 `&` 当作后台操作符；`whois ... 2>&1 | grep ...` 这类只读网络查询管道可以继续走静态自动放行。
+- **SafeCommand fd redirection（1.60.0-rc14）** — SafeCommand shell 分段器会保留 `2>&1` / `1>&2` 这类 fd 重定向，不再把其中的 `&` 当作后台操作符；`whois ... 2>&1 | grep ...` 这类只读网络查询管道可以继续走静态自动放行。**1.60.0-rc15** 同步修复 chat history copy chrome 测试：代码块和消息 footer 的复制按钮现在按 attributed string 的 link / payload / hidden style 断言，不再依赖 SF Symbol 附件在 `.string` 中呈现为固定 glyph；background job lifecycle 测试改用带 `TERM` trap 的长跑样本，减少全量并发测试中的时序误报。
 - **@MainActor isolation** — AppState 本身是 `@MainActor`，所有 `@Published` mutation 必须在主线程发生。runtime 的 hot 字段亦然，但 `AgentClient` 的 URLSession 流式回调跨线程时通过 `Task { @MainActor in ... }` 拥抱主线程。`AppState.deinit` 不能 cancel runtime——rc38 曾尝试 `MainActor.assumeIsolated` 但 Swift Testing 在非主线程 release 触发 precondition fail，rc41 回退；清理走 session 显式删除路径。
 - **Per-provider concurrency cap** — 多 runtime 并发跑时，同一 provider 的活跃请求按 `AgentSettingsStore` 的 `concurrencyLimit`（默认 3，1–8 可调）FIFO 排队；不同 provider 互不阻塞。这样自动化集中触发也不会冲烂同一家 API 的速率。
 - **find/replace 内容哈希缓存** — `AppState.findMatchRanges` 与 `changedLineNumbers` 用 `(content.hashValue, query/savedContent)` 双键缓存（rc39 落地）。SwiftUI body 多次读这俩属性时不再每次重扫全文。

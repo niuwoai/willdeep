@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.60.0-rc15 - 2026-06-11
+
+### Fixed
+
+- 修复 Agent chat history copy chrome 测试对复制按钮纯文本 glyph 的脆弱断言；代码块和消息 footer 的测试改为校验 attributed string 上的复制 payload、link 和隐藏态样式，兼容 SF Symbol 附件渲染。
+- 加固 background job lifecycle 测试：长跑命令改为带 `TERM` trap 的轻量循环，并放宽异步完成轮询预算，避免全量并发测试时因 shell 子进程关闭时序误报。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc15`。
+
 ## 1.60.0-rc14 - 2026-06-11
 
 ### Fixed
