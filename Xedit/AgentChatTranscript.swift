@@ -109,13 +109,20 @@ struct AgentChatTranscript: View {
                         if let streamingID = streamingMessageID,
                            let streamingMessage = rendered.first(where: { $0.id == streamingID }),
                            shouldShowMessageBubble(streamingMessage) {
+                            let display = truncatedForBubble(streamingMessage)
                             AgentModeMessageView(
-                                message: streamingMessage,
+                                message: display.rendered,
                                 isStreamingThisMessage: true,
                                 baseFontSize: appState.agentChatBaseFontSize
                             )
                                 .id(streamingMessage.id)
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+                            if display.truncated {
+                                longMessageTruncationCard(
+                                    original: streamingMessage,
+                                    originalLength: display.originalLength
+                                )
+                            }
                         }
 
                         // Tool call groups: older calls are summarized

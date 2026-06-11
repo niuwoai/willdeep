@@ -31,6 +31,81 @@ import AppKit
 import Foundation
 import UserNotifications
 
+@MainActor
+private final class AgentStreamingMessageBuffer {
+    private static let flushIntervalNanoseconds: UInt64 = 50_000_000
+    private static let immediateFlushCharacterCount = 1_200
+
+    private weak var runtime: AgentRuntime?
+    private let assistantID: AgentMessage.ID
+    private var pendingContent = ""
+    private var pendingReasoning = ""
+    private var flushTask: Task<Void, Never>?
+
+    init(runtime: AgentRuntime, assistantID: AgentMessage.ID) {
+        self.runtime = runtime
+        self.assistantID = assistantID
+    }
+
+    func appendTextDelta(_ delta: String) {
+        guard !delta.isEmpty else { return }
+        pendingContent += delta
+        scheduleFlush()
+        flushIfNeeded()
+    }
+
+    func appendReasoningDelta(_ delta: String) {
+        guard !delta.isEmpty else { return }
+        pendingReasoning += delta
+        scheduleFlush()
+        flushIfNeeded()
+    }
+
+    func flushPending() {
+        flushTask?.cancel()
+        flushTask = nil
+        applyPendingDeltas()
+    }
+
+    private func scheduleFlush() {
+        guard flushTask == nil else { return }
+        flushTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: Self.flushIntervalNanoseconds)
+            guard let self else { return }
+            self.flushTask = nil
+            self.applyPendingDeltas()
+        }
+    }
+
+    private func flushIfNeeded() {
+        guard pendingContent.count + pendingReasoning.count >= Self.immediateFlushCharacterCount else {
+            return
+        }
+        flushPending()
+    }
+
+    private func applyPendingDeltas() {
+        guard !pendingContent.isEmpty || !pendingReasoning.isEmpty,
+              let runtime,
+              let index = runtime.messages.firstIndex(where: { $0.id == assistantID }) else {
+            pendingContent = ""
+            pendingReasoning = ""
+            return
+        }
+
+        if !pendingContent.isEmpty {
+            runtime.messages[index].content += pendingContent
+            pendingContent = ""
+        }
+        if !pendingReasoning.isEmpty {
+            var existing = runtime.messages[index].reasoningContent ?? ""
+            existing += pendingReasoning
+            runtime.messages[index].reasoningContent = existing
+            pendingReasoning = ""
+        }
+    }
+}
+
 extension AppState {
 
     func dispatchAgentMessage(
@@ -318,7 +393,8 @@ extension AppState {
 
     var activeAgentModelID: String {
         if let override = agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !override.isEmpty {
+           !override.isEmpty,
+           agentModelIsCompatibleWithActiveProvider(override) {
             return override
         }
         return agentConfiguration.normalized.model(for: .interactive)
@@ -326,7 +402,8 @@ extension AppState {
 
     var agentModelStatusText: String {
         if let override = agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !override.isEmpty {
+           !override.isEmpty,
+           agentModelIsCompatibleWithActiveProvider(override) {
             return "Override · \(override)"
         }
         return agentConfiguration.normalized.routingLabel
@@ -771,6 +848,7 @@ extension AppState {
 
             var finishReason: String?
             var latestToolCalls: [AgentMessageToolCall] = []
+            let streamBuffer = AgentStreamingMessageBuffer(runtime: runtime, assistantID: assistantID)
 
             do {
                 try await client.streamChat(
@@ -784,28 +862,27 @@ extension AppState {
                         }
                         switch event {
                         case .textDelta(let delta):
-                            runtime.messages[index].content += delta
+                            streamBuffer.appendTextDelta(delta)
                         case .reasoningDelta(let delta):
-                            // Append into reasoningContent so the next
-                            // turn echoes it back verbatim. DashScope
-                            // thinking-mode returns HTTP 400 if this
-                            // field disappears between turns.
-                            var existing = runtime.messages[index].reasoningContent ?? ""
-                            existing += delta
-                            runtime.messages[index].reasoningContent = existing
+                            streamBuffer.appendReasoningDelta(delta)
                         case .toolCallsUpdated(let calls):
+                            streamBuffer.flushPending()
                             runtime.messages[index].toolCalls = calls
                             latestToolCalls = calls
                         case .finishedTurn(let reason):
+                            streamBuffer.flushPending()
                             finishReason = reason
                         case .usageReported(let prompt, let completion, let total):
+                            streamBuffer.flushPending()
                             runtime.messages[index].usageTokens = total
                             runtime.messages[index].promptTokens = prompt > 0 ? prompt : nil
                             runtime.messages[index].completionTokens = completion > 0 ? completion : nil
                         }
                     }
                 }
+                streamBuffer.flushPending()
             } catch is CancellationError {
+                streamBuffer.flushPending()
                 if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }),
                    runtime.messages[index].content.isEmpty,
                    runtime.messages[index].toolCalls.isEmpty {
@@ -813,6 +890,7 @@ extension AppState {
                 }
                 return
             } catch {
+                streamBuffer.flushPending()
                 setAgentError(error, for: runtime)
                 if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }),
                    runtime.messages[index].content.isEmpty,

@@ -108,6 +108,20 @@ struct AgentEntryModelSelectionTests {
         #expect(app.agentSessionModelOverride == nil)
     }
 
+    @Test
+    func switchingProviderClearsForeignSessionOverride() {
+        let _sandbox = installKeychainSandbox(); _ = _sandbox
+        let (app, openai, deepseek) = makeAppStateWithTwoEntries()
+        app.selectAgentEntryAndModel(entryID: openai.id, model: "gpt-4o-mini")
+        #expect(app.agentSessionModelOverride == "gpt-4o-mini")
+
+        app.setActiveProviderLibraryEntry(id: deepseek.id)
+
+        #expect(app.agentConfiguration.providerID == "deepseek")
+        #expect(app.agentSessionModelOverride == nil)
+        #expect(app.activeAgentModelID == "deepseek-v4-flash")
+    }
+
     /// Regression: before 1.57.0-rc6 the `KeychainSandbox` only
     /// redirected Keychain writes. `saveProviderLibrary` writes the
     /// JSON-encoded entry skeletons (providerID, baseURL, displayName,

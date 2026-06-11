@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.59.0-rc4 - 2026-06-11
+
+### Agent Streaming 性能
+
+- Agent 流式输出改为 50ms 批量发布文本 / reasoning delta，不再每个 token 都触发一次 `@Published messages` 更新，降低 SwiftUI 主线程布局压力。
+- 工具调用、usage、finish、取消和错误路径都会强制 flush 缓冲区，避免节流导致末尾 token 或 reasoning 内容丢失。
+- 当前 streaming assistant bubble 接入已有的 3000 字符渲染上限；超长回复继续保留“查看完整内容”入口，避免单条长消息把 SwiftUI 文本排版拖满 CPU。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.59.0-rc4`。
+
+## 1.59.0-rc3 - 2026-06-11
+
+### Agent DeepSeek 会话模型兜底
+
+- 切换到 DeepSeek 服务商时，如果当前会话还残留旧的 `gpt-*` session override，会自动清空并回到 DeepSeek 的 Flash / Pro 路由默认值。
+- 设置会话模型 override 时会校验当前服务商是否识别该模型；DeepSeek 激活时不再接受 OpenAI / GPT 模型作为实际请求模型。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.59.0-rc3`。
+
 ## 1.59.0-rc2 - 2026-06-11
 
 ### Agent DeepSeek 默认模型修正
