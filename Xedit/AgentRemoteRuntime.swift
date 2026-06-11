@@ -72,8 +72,116 @@ struct RuntimeCapabilities: Codable, Equatable {
     var hasGit: Bool
     var hasRipgrep: Bool
     var shellPath: String?
+    var nodeVersion: String?
+    var npmVersion: String?
+    var yarnVersion: String?
+    var pythonVersion: String?
+    var pipVersion: String?
+    var rubyVersion: String?
+    var goVersion: String?
+    var javaVersion: String?
+    var ghVersion: String?
+    var ghAuthStatus: String?
+    var npmRegistry: String?
+    var yarnRegistry: String?
+    var npmProxy: String?
+    var npmHTTPSProxy: String?
+    var pipProxy: String?
+    var proxyEnvironment: [String: String]
 
-    static let empty = RuntimeCapabilities(hasGit: false, hasRipgrep: false, shellPath: nil)
+    static let empty = RuntimeCapabilities(
+        hasGit: false,
+        hasRipgrep: false,
+        shellPath: nil,
+        nodeVersion: nil,
+        npmVersion: nil,
+        yarnVersion: nil,
+        pythonVersion: nil,
+        pipVersion: nil,
+        rubyVersion: nil,
+        goVersion: nil,
+        javaVersion: nil,
+        ghVersion: nil,
+        ghAuthStatus: nil,
+        npmRegistry: nil,
+        yarnRegistry: nil,
+        npmProxy: nil,
+        npmHTTPSProxy: nil,
+        pipProxy: nil,
+        proxyEnvironment: [:]
+    )
+
+    enum CodingKeys: String, CodingKey {
+        case hasGit, hasRipgrep, shellPath
+        case nodeVersion, npmVersion, yarnVersion, pythonVersion, pipVersion
+        case rubyVersion, goVersion, javaVersion, ghVersion, ghAuthStatus
+        case npmRegistry, yarnRegistry, npmProxy, npmHTTPSProxy, pipProxy, proxyEnvironment
+    }
+
+    init(
+        hasGit: Bool,
+        hasRipgrep: Bool,
+        shellPath: String?,
+        nodeVersion: String? = nil,
+        npmVersion: String? = nil,
+        yarnVersion: String? = nil,
+        pythonVersion: String? = nil,
+        pipVersion: String? = nil,
+        rubyVersion: String? = nil,
+        goVersion: String? = nil,
+        javaVersion: String? = nil,
+        ghVersion: String? = nil,
+        ghAuthStatus: String? = nil,
+        npmRegistry: String? = nil,
+        yarnRegistry: String? = nil,
+        npmProxy: String? = nil,
+        npmHTTPSProxy: String? = nil,
+        pipProxy: String? = nil,
+        proxyEnvironment: [String: String] = [:]
+    ) {
+        self.hasGit = hasGit
+        self.hasRipgrep = hasRipgrep
+        self.shellPath = shellPath
+        self.nodeVersion = nodeVersion
+        self.npmVersion = npmVersion
+        self.yarnVersion = yarnVersion
+        self.pythonVersion = pythonVersion
+        self.pipVersion = pipVersion
+        self.rubyVersion = rubyVersion
+        self.goVersion = goVersion
+        self.javaVersion = javaVersion
+        self.ghVersion = ghVersion
+        self.ghAuthStatus = ghAuthStatus
+        self.npmRegistry = npmRegistry
+        self.yarnRegistry = yarnRegistry
+        self.npmProxy = npmProxy
+        self.npmHTTPSProxy = npmHTTPSProxy
+        self.pipProxy = pipProxy
+        self.proxyEnvironment = proxyEnvironment
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.hasGit = try c.decodeIfPresent(Bool.self, forKey: .hasGit) ?? false
+        self.hasRipgrep = try c.decodeIfPresent(Bool.self, forKey: .hasRipgrep) ?? false
+        self.shellPath = try c.decodeIfPresent(String.self, forKey: .shellPath)
+        self.nodeVersion = try c.decodeIfPresent(String.self, forKey: .nodeVersion)
+        self.npmVersion = try c.decodeIfPresent(String.self, forKey: .npmVersion)
+        self.yarnVersion = try c.decodeIfPresent(String.self, forKey: .yarnVersion)
+        self.pythonVersion = try c.decodeIfPresent(String.self, forKey: .pythonVersion)
+        self.pipVersion = try c.decodeIfPresent(String.self, forKey: .pipVersion)
+        self.rubyVersion = try c.decodeIfPresent(String.self, forKey: .rubyVersion)
+        self.goVersion = try c.decodeIfPresent(String.self, forKey: .goVersion)
+        self.javaVersion = try c.decodeIfPresent(String.self, forKey: .javaVersion)
+        self.ghVersion = try c.decodeIfPresent(String.self, forKey: .ghVersion)
+        self.ghAuthStatus = try c.decodeIfPresent(String.self, forKey: .ghAuthStatus)
+        self.npmRegistry = try c.decodeIfPresent(String.self, forKey: .npmRegistry)
+        self.yarnRegistry = try c.decodeIfPresent(String.self, forKey: .yarnRegistry)
+        self.npmProxy = try c.decodeIfPresent(String.self, forKey: .npmProxy)
+        self.npmHTTPSProxy = try c.decodeIfPresent(String.self, forKey: .npmHTTPSProxy)
+        self.pipProxy = try c.decodeIfPresent(String.self, forKey: .pipProxy)
+        self.proxyEnvironment = try c.decodeIfPresent([String: String].self, forKey: .proxyEnvironment) ?? [:]
+    }
 }
 
 struct RuntimeDescriptor: Identifiable, Codable, Equatable {
@@ -83,6 +191,7 @@ struct RuntimeDescriptor: Identifiable, Codable, Equatable {
     var host: String
     var port: Int
     var username: String
+    var identityFilePath: String?
     var defaultWorkspacePath: String
     var platform: RuntimePlatform
     var arch: RuntimeArch
@@ -96,6 +205,7 @@ struct RuntimeDescriptor: Identifiable, Codable, Equatable {
         host: String,
         port: Int = 22,
         username: String,
+        identityFilePath: String? = nil,
         defaultWorkspacePath: String,
         platform: RuntimePlatform = .unknown,
         arch: RuntimeArch = .unknown,
@@ -108,6 +218,7 @@ struct RuntimeDescriptor: Identifiable, Codable, Equatable {
         self.host = host
         self.port = port
         self.username = username
+        self.identityFilePath = identityFilePath
         self.defaultWorkspacePath = defaultWorkspacePath
         self.platform = platform
         self.arch = arch
@@ -120,6 +231,10 @@ struct RuntimeDescriptor: Identifiable, Codable, Equatable {
         copy.displayName = copy.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         copy.host = copy.host.trimmingCharacters(in: .whitespacesAndNewlines)
         copy.username = copy.username.trimmingCharacters(in: .whitespacesAndNewlines)
+        copy.identityFilePath = copy.identityFilePath?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if copy.identityFilePath?.isEmpty == true {
+            copy.identityFilePath = nil
+        }
         copy.defaultWorkspacePath = RemotePathValidator.normalizedWorkspaceRoot(copy.defaultWorkspacePath)
         copy.port = min(max(copy.port, 1), 65535)
         if copy.displayName.isEmpty {
@@ -319,28 +434,68 @@ struct SSHRuntimeBackend {
 
     func probe() async throws -> RuntimeDescriptor {
         let command = """
-        printf '%s\\n' \
-        "__willdeep_probe_v1__" \
-        "$(uname -s 2>/dev/null || true)" \
-        "$(uname -m 2>/dev/null || true)" \
-        "$(pwd 2>/dev/null || true)" \
-        "$(command -v git 2>/dev/null || true)" \
-        "$(command -v rg 2>/dev/null || true)" \
-        "$(command -v bash 2>/dev/null || command -v sh 2>/dev/null || true)"
+        wd_val() { if command -v "$1" >/dev/null 2>&1; then shift; "$@" 2>/dev/null | head -n 1; fi; }
+        wd_cfg() { "$@" 2>/dev/null | head -n 1 | sed 's/^undefined$//;s/^null$//'; }
+        printf '__willdeep_probe_v2__\\n'
+        printf 'platform=%s\\n' "$(uname -s 2>/dev/null || true)"
+        printf 'arch=%s\\n' "$(uname -m 2>/dev/null || true)"
+        printf 'pwd=%s\\n' "$(pwd 2>/dev/null || true)"
+        printf 'git=%s\\n' "$(command -v git 2>/dev/null || true)"
+        printf 'rg=%s\\n' "$(command -v rg 2>/dev/null || true)"
+        printf 'shell=%s\\n' "$(command -v bash 2>/dev/null || command -v sh 2>/dev/null || true)"
+        printf 'node=%s\\n' "$(wd_val node node --version)"
+        printf 'npm=%s\\n' "$(wd_val npm npm --version)"
+        printf 'yarn=%s\\n' "$(wd_val yarn yarn --version)"
+        printf 'python=%s\\n' "$(python3 --version 2>/dev/null | head -n 1 || python --version 2>/dev/null | head -n 1 || true)"
+        printf 'pip=%s\\n' "$(pip3 --version 2>/dev/null | head -n 1 || pip --version 2>/dev/null | head -n 1 || true)"
+        printf 'ruby=%s\\n' "$(wd_val ruby ruby --version)"
+        printf 'go=%s\\n' "$(wd_val go go version)"
+        printf 'java=%s\\n' "$(java -version 2>&1 | head -n 1 || true)"
+        printf 'gh=%s\\n' "$(wd_val gh gh --version)"
+        printf 'gh_auth=%s\\n' "$(if command -v gh >/dev/null 2>&1; then gh auth status 2>&1 | head -n 1; fi)"
+        printf 'npm_registry=%s\\n' "$(wd_cfg npm config get registry)"
+        printf 'npm_proxy=%s\\n' "$(wd_cfg npm config get proxy)"
+        printf 'npm_https_proxy=%s\\n' "$(wd_cfg npm config get https-proxy)"
+        printf 'yarn_registry=%s\\n' "$(wd_cfg yarn config get npmRegistryServer || wd_cfg yarn config get registry)"
+        printf 'pip_proxy=%s\\n' "$(wd_cfg pip3 config get global.proxy || wd_cfg pip config get global.proxy || true)"
+        printf 'env_http_proxy=%s\\n' "${http_proxy:-${HTTP_PROXY:-}}"
+        printf 'env_https_proxy=%s\\n' "${https_proxy:-${HTTPS_PROXY:-}}"
+        printf 'env_no_proxy=%s\\n' "${no_proxy:-${NO_PROXY:-}}"
         """
         let outcome = await runSSH(remoteCommand: command, timeout: defaultTimeout)
         try throwIfFailed(outcome)
         let lines = outcome.stdout.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        guard lines.first == "__willdeep_probe_v1__", lines.count >= 7 else {
+        guard lines.first == "__willdeep_probe_v2__" else {
             throw AgentToolError.commandFailed(-1, "Unexpected SSH probe response.")
         }
+        let fields = parseProbeFields(lines.dropFirst())
         var updated = descriptor.normalized
-        updated.platform = RuntimePlatform.parse(lines[1])
-        updated.arch = RuntimeArch.parse(lines[2])
+        updated.platform = RuntimePlatform.parse(fields["platform"] ?? "")
+        updated.arch = RuntimeArch.parse(fields["arch"] ?? "")
         updated.capabilities = RuntimeCapabilities(
-            hasGit: !lines[4].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-            hasRipgrep: !lines[5].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-            shellPath: lines[6].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : lines[6]
+            hasGit: nonEmpty(fields["git"]) != nil,
+            hasRipgrep: nonEmpty(fields["rg"]) != nil,
+            shellPath: nonEmpty(fields["shell"]),
+            nodeVersion: nonEmpty(fields["node"]),
+            npmVersion: nonEmpty(fields["npm"]),
+            yarnVersion: nonEmpty(fields["yarn"]),
+            pythonVersion: nonEmpty(fields["python"]),
+            pipVersion: nonEmpty(fields["pip"]),
+            rubyVersion: nonEmpty(fields["ruby"]),
+            goVersion: nonEmpty(fields["go"]),
+            javaVersion: nonEmpty(fields["java"]),
+            ghVersion: nonEmpty(fields["gh"]),
+            ghAuthStatus: nonEmpty(fields["gh_auth"]),
+            npmRegistry: nonEmpty(fields["npm_registry"]),
+            yarnRegistry: nonEmpty(fields["yarn_registry"]),
+            npmProxy: redactedOptionalProxy(fields["npm_proxy"]),
+            npmHTTPSProxy: redactedOptionalProxy(fields["npm_https_proxy"]),
+            pipProxy: redactedOptionalProxy(fields["pip_proxy"]),
+            proxyEnvironment: [
+                "http_proxy": redactedOptionalProxy(fields["env_http_proxy"]),
+                "https_proxy": redactedOptionalProxy(fields["env_https_proxy"]),
+                "no_proxy": nonEmpty(fields["env_no_proxy"])
+            ].compactMapValues { $0 }
         )
         updated.lastProbeAt = Date()
         return updated
@@ -498,7 +653,7 @@ struct SSHRuntimeBackend {
     }
 
     func sshShellCommand(remoteCommand: String) -> String {
-        (["/usr/bin/ssh", "-o", "BatchMode=yes", "-p", "\(descriptor.port)", descriptor.sshTarget, remoteCommand])
+        (["/usr/bin/ssh"] + sshArguments(remoteCommand: remoteCommand))
             .map(AgentToolRunner.shellQuoted)
             .joined(separator: " ")
     }
@@ -524,12 +679,7 @@ struct SSHRuntimeBackend {
         await Task.detached(priority: .userInitiated) {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
-            process.arguments = [
-                "-o", "BatchMode=yes",
-                "-p", "\(descriptor.port)",
-                descriptor.sshTarget,
-                remoteCommand
-            ]
+            process.arguments = sshArguments(remoteCommand: remoteCommand)
             process.environment = AgentToolRunner.shellEnvironment()
 
             let stdoutPipe = Pipe()
@@ -611,6 +761,46 @@ struct SSHRuntimeBackend {
             throw AgentToolError.missingArgument(name)
         }
         return value
+    }
+
+    private func sshArguments(remoteCommand: String) -> [String] {
+        var args = ["-o", "BatchMode=yes", "-p", "\(descriptor.port)"]
+        if let identityFilePath = descriptor.identityFilePath, !identityFilePath.isEmpty {
+            args += ["-i", identityFilePath]
+        }
+        args += [descriptor.sshTarget, remoteCommand]
+        return args
+    }
+
+    private func parseProbeFields<S: Sequence>(_ lines: S) -> [String: String] where S.Element == String {
+        var fields: [String: String] = [:]
+        for line in lines {
+            guard let separator = line.firstIndex(of: "=") else { continue }
+            let key = String(line[..<separator])
+            let value = String(line[line.index(after: separator)...])
+            fields[key] = value
+        }
+        return fields
+    }
+
+    private func nonEmpty(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func redactedOptionalProxy(_ value: String?) -> String? {
+        guard let value = nonEmpty(value) else { return nil }
+        return Self.redactProxyCredential(value)
+    }
+
+    static func redactProxyCredential(_ value: String) -> String {
+        guard var components = URLComponents(string: value),
+              components.user != nil || components.password != nil else {
+            return value
+        }
+        components.user = components.user == nil ? nil : "redacted"
+        components.password = components.password == nil ? nil : "redacted"
+        return components.string ?? value
     }
 }
 

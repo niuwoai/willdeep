@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.60.0-rc2 - 2026-06-11
+
+### Remote Runtime
+
+- SSH runtime 配置新增可选 identity file path；实际连接会传给系统 `ssh -i`，WillDeep 只保存路径，不保存私钥内容。
+- 远端探测从基础平台信息扩展到工具链、协作工具与网络环境：Node/npm/yarn、Python/pip、Ruby、Go、Java、GitHub CLI (`gh`) 版本与 `gh auth status`，npm/yarn registry，npm/pip proxy，以及 `http_proxy` / `https_proxy` / `no_proxy` 环境变量。
+- 未检测到 `gh` 或未能读取登录状态时，Settings → Runtimes 会给出安装 `gh` / 执行 `gh auth login` 的建议。
+- 探测到的代理 URL 在保存与展示前会脱敏账号密码，避免把代理凭据写进 UserDefaults 或 UI。
+- Settings → Runtimes 的 probe 区域新增 Toolchain、Collaboration、Registries / mirrors、Proxy settings 展示行。
+
+### Tests
+
+- Remote Runtime 单测补充 SSH identity file 参数构造、代理凭据脱敏与旧 probe payload 兼容性覆盖。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc2`。
+
 ## 1.60.0-rc1 - 2026-06-11
 
 ### Remote Runtime

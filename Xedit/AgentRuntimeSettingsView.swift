@@ -19,6 +19,7 @@ struct AgentRuntimeSettingsView: View {
     @State private var host = ""
     @State private var username = ""
     @State private var port = 22
+    @State private var identityFilePath = ""
     @State private var workspacePath = ""
 
     private var selectedRuntime: RuntimeDescriptor? {
@@ -103,6 +104,7 @@ struct AgentRuntimeSettingsView: View {
                 Stepper(value: $port, in: 1...65535) {
                     Text(L10n.Settings.RemoteRuntimes.portLabel("\(port)"))
                 }
+                TextField(L10n.Settings.RemoteRuntimes.identityFileLabel, text: $identityFilePath)
                 TextField(L10n.Settings.RemoteRuntimes.workspacePathLabel, text: $workspacePath)
 
                 Text(L10n.Settings.RemoteRuntimes.sshDescription)
@@ -117,6 +119,29 @@ struct AgentRuntimeSettingsView: View {
                     }
                     LabeledContent(L10n.Settings.RemoteRuntimes.capabilitiesLabel) {
                         Text(capabilityLine(selectedRuntime))
+                    }
+                    if !toolchainLine(selectedRuntime).isEmpty {
+                        LabeledContent(L10n.Settings.RemoteRuntimes.toolchainLabel) {
+                            Text(toolchainLine(selectedRuntime))
+                        }
+                    }
+                    if !collaborationLine(selectedRuntime).isEmpty {
+                        LabeledContent(L10n.Settings.RemoteRuntimes.collaborationLabel) {
+                            Text(collaborationLine(selectedRuntime))
+                                .lineLimit(3)
+                        }
+                    }
+                    if !mirrorLine(selectedRuntime).isEmpty {
+                        LabeledContent(L10n.Settings.RemoteRuntimes.mirrorLabel) {
+                            Text(mirrorLine(selectedRuntime))
+                                .lineLimit(3)
+                        }
+                    }
+                    if !proxyLine(selectedRuntime).isEmpty {
+                        LabeledContent(L10n.Settings.RemoteRuntimes.proxyLabel) {
+                            Text(proxyLine(selectedRuntime))
+                                .lineLimit(4)
+                        }
                     }
                     if let lastProbeAt = selectedRuntime.lastProbeAt {
                         LabeledContent(L10n.Settings.RemoteRuntimes.lastProbeLabel) {
@@ -169,6 +194,7 @@ struct AgentRuntimeSettingsView: View {
             host = ""
             username = NSUserName()
             port = 22
+            identityFilePath = ""
             workspacePath = ""
             return
         }
@@ -176,6 +202,7 @@ struct AgentRuntimeSettingsView: View {
         host = selectedRuntime.host
         username = selectedRuntime.username
         port = selectedRuntime.port
+        identityFilePath = selectedRuntime.identityFilePath ?? ""
         workspacePath = selectedRuntime.defaultWorkspacePath
     }
 
@@ -187,12 +214,14 @@ struct AgentRuntimeSettingsView: View {
             host: host,
             port: port,
             username: username,
+            identityFilePath: identityFilePath,
             defaultWorkspacePath: workspacePath
         )
         runtime.displayName = displayName
         runtime.host = host
         runtime.username = username
         runtime.port = port
+        runtime.identityFilePath = identityFilePath
         runtime.defaultWorkspacePath = workspacePath
         runtime.transport = .ssh
         upsertLocal(runtime.normalized)
@@ -255,6 +284,60 @@ struct AgentRuntimeSettingsView: View {
         let rg = runtime.capabilities.hasRipgrep ? "rg" : "no rg"
         let shell = runtime.capabilities.shellPath ?? "shell unknown"
         return "\(git), \(rg), \(shell)"
+    }
+
+    private func toolchainLine(_ runtime: RuntimeDescriptor) -> String {
+        [
+            runtime.capabilities.nodeVersion.map { "node \($0)" },
+            runtime.capabilities.npmVersion.map { "npm \($0)" },
+            runtime.capabilities.yarnVersion.map { "yarn \($0)" },
+            runtime.capabilities.pythonVersion,
+            runtime.capabilities.pipVersion,
+            runtime.capabilities.rubyVersion,
+            runtime.capabilities.goVersion,
+            runtime.capabilities.javaVersion
+        ]
+        .compactMap { $0 }
+        .joined(separator: ", ")
+    }
+
+    private func collaborationLine(_ runtime: RuntimeDescriptor) -> String {
+        guard let ghVersion = runtime.capabilities.ghVersion else {
+            return L10n.Settings.RemoteRuntimes.githubCLIMissing
+        }
+        var values = ["gh \(ghVersion)"]
+        if let authStatus = runtime.capabilities.ghAuthStatus {
+            values.append("auth: \(authStatus)")
+        } else {
+            values.append(L10n.Settings.RemoteRuntimes.githubCLIAuthSuggested)
+        }
+        return values.joined(separator: "\n")
+    }
+
+    private func mirrorLine(_ runtime: RuntimeDescriptor) -> String {
+        [
+            runtime.capabilities.npmRegistry.map { "npm: \($0)" },
+            runtime.capabilities.yarnRegistry.map { "yarn: \($0)" }
+        ]
+        .compactMap { $0 }
+        .joined(separator: "\n")
+    }
+
+    private func proxyLine(_ runtime: RuntimeDescriptor) -> String {
+        var values: [String] = []
+        if let npmProxy = runtime.capabilities.npmProxy {
+            values.append("npm proxy: \(npmProxy)")
+        }
+        if let npmHTTPSProxy = runtime.capabilities.npmHTTPSProxy {
+            values.append("npm https-proxy: \(npmHTTPSProxy)")
+        }
+        if let pipProxy = runtime.capabilities.pipProxy {
+            values.append("pip proxy: \(pipProxy)")
+        }
+        values += runtime.capabilities.proxyEnvironment
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key): \($0.value)" }
+        return values.joined(separator: "\n")
     }
 }
 

@@ -58,6 +58,7 @@ struct AgentRemoteRuntimeTests {
             host: "build.example.com",
             port: 2222,
             username: "dev",
+            identityFilePath: "/Users/me/.ssh/build key",
             defaultWorkspacePath: "/srv/my app"
         )
         let backend = SSHRuntimeBackend(descriptor: runtime)
@@ -65,7 +66,31 @@ struct AgentRemoteRuntimeTests {
         let command = backend.sshShellCommand(remoteCommand: remote)
         #expect(command.contains("'/usr/bin/ssh'"))
         #expect(command.contains("'-p' '2222'"))
+        #expect(command.contains("'-i' '/Users/me/.ssh/build key'"))
         #expect(command.contains("'dev@build.example.com'"))
         #expect(command.contains("cd '\\''/srv/my app'\\''"))
+    }
+
+    @Test("proxy credentials are redacted before persistence")
+    func proxyCredentialsAreRedacted() {
+        let redacted = SSHRuntimeBackend.redactProxyCredential("http://alice:secret@proxy.example.com:8080")
+        #expect(redacted == "http://redacted:redacted@proxy.example.com:8080")
+        #expect(SSHRuntimeBackend.redactProxyCredential("http://proxy.example.com:8080") == "http://proxy.example.com:8080")
+    }
+
+    @Test("runtime capabilities decode old probe payloads")
+    func runtimeCapabilitiesDecodeOldPayloads() throws {
+        let json = """
+        {
+          "hasGit": true,
+          "hasRipgrep": false,
+          "shellPath": "/bin/bash"
+        }
+        """
+        let capabilities = try JSONDecoder().decode(RuntimeCapabilities.self, from: Data(json.utf8))
+        #expect(capabilities.hasGit)
+        #expect(capabilities.shellPath == "/bin/bash")
+        #expect(capabilities.ghVersion == nil)
+        #expect(capabilities.proxyEnvironment.isEmpty)
     }
 }
