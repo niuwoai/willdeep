@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.60.0-rc11 - 2026-06-11
+
+### Changed
+
+- 将 macOS App icon 更新为选定的深度镜头抽象标识，生成 16px 到 1024px 全套 AppIcon 资源，并同步根目录 `appicons/` 备份资源。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc11`。
+
 ## 1.60.0-rc10 - 2026-06-11
 
 ### Fixed
