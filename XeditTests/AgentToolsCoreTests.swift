@@ -59,7 +59,10 @@ struct AgentToolsCoreTests {
         for source in [AgentToolApprovalSource.user,
                        .alwaysAllowList,
                        .staticAllowlist,
-                       .llmJudge] {
+                       .llmJudge,
+                       .goalMode,
+                       .workspaceAccess,
+                       .trustedServer] {
             let data = try JSONEncoder().encode([source])
             let decoded = try JSONDecoder().decode([AgentToolApprovalSource].self, from: data)
             #expect(decoded.first == source)
@@ -259,5 +262,69 @@ struct AgentToolsCoreTests {
         let env = AgentToolRunner.shellEnvironment(from: base)
         #expect(env["HOME"] == "/Users/test")
         #expect(env["LANG"] == "en_US.UTF-8")
+    }
+}
+
+@Suite
+struct AgentQueueModeTests {
+    @Test
+    @MainActor
+    func stopAgentResponseDeniesAwaitingUserAnswer() {
+        let state = AppState()
+        _ = state.startNewAgentSession()
+        guard let runtime = state.activeRuntime else {
+            Issue.record("Expected active runtime")
+            return
+        }
+
+        let callID = UUID()
+        runtime.isResponding = true
+        runtime.toolCalls = [
+            AgentToolCall(
+                id: callID,
+                messageID: UUID(),
+                externalID: "ask-user-1",
+                toolName: "ask_user",
+                arguments: [:],
+                risk: .userInput,
+                status: .awaitingUserAnswer
+            )
+        ]
+
+        state.stopAgentResponse()
+
+        #expect(runtime.toolCalls.first?.status == .denied)
+        #expect(runtime.toolCalls.first?.errorMessage == "Response stopped")
+    }
+
+    @Test
+    @MainActor
+    func sendingQueuedMessageNowDeniesAwaitingUserAnswer() {
+        let state = AppState()
+        _ = state.startNewAgentSession()
+        guard let runtime = state.activeRuntime else {
+            Issue.record("Expected active runtime")
+            return
+        }
+
+        let queued = AgentQueuedMessage(id: UUID(), text: "next please")
+        runtime.isResponding = true
+        runtime.queuedMessages = [queued]
+        runtime.toolCalls = [
+            AgentToolCall(
+                messageID: UUID(),
+                externalID: "ask-user-1",
+                toolName: "ask_user",
+                arguments: [:],
+                risk: .userInput,
+                status: .awaitingUserAnswer
+            )
+        ]
+
+        state.sendQueuedAgentMessageNow(id: queued.id)
+
+        #expect(runtime.toolCalls.first?.status == .denied)
+        #expect(runtime.toolCalls.first?.errorMessage == "Sending queued message")
+        #expect(runtime.queuedMessages.first?.id == queued.id)
     }
 }

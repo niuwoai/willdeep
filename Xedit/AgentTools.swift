@@ -187,14 +187,17 @@ enum AgentToolDecision {
 /// means the SafeCommand classifier flagged it as read-only. `.llmJudge`
 /// means the LLM judge classifier approved it. `.goalMode` means the
 /// session was in Goal mode, which auto-approves write-tier calls
-/// (danger-tier still gates on the user). nil = either pure read
-/// (never gated) or still pending.
+/// (danger-tier still gates on the user). `.workspaceAccess` means the
+/// current session's composer approval mode grants write-tier access
+/// inside the active workspace. nil = either pure read (never gated) or
+/// still pending.
 enum AgentToolApprovalSource: String, Equatable, Codable {
     case user
     case alwaysAllowList
     case staticAllowlist
     case llmJudge
     case goalMode
+    case workspaceAccess
     /// The user marked this MCP server as fully trusted ("my own MCP")
     /// in MCP settings — every call to it auto-runs, writes included.
     case trustedServer

@@ -38,6 +38,36 @@ enum L10n {
         static let untitledFile = String(localized: "agent-selection.untitled-file", defaultValue: "Untitled")
     }
 
+    enum ApprovalMode {
+        static let pickerHelp = String(localized: "approval-mode.picker-help", defaultValue: "Choose how this session approves Agent tool calls.")
+        static let requestEveryTime = String(localized: "approval-mode.request-every-time", defaultValue: "Ask every time")
+        static let requestEveryTimeSummary = String(localized: "approval-mode.request-every-time.summary", defaultValue: "Ask before write, command, network, or remote actions.")
+        static let smart = String(localized: "approval-mode.smart", defaultValue: "Smart approval")
+        static let smartSummary = String(localized: "approval-mode.smart.summary", defaultValue: "Auto-run low-risk calls; ask for risky actions.")
+        static let workspaceAccess = String(localized: "approval-mode.workspace-access", defaultValue: "Workspace access")
+        static let workspaceAccessSummary = String(localized: "approval-mode.workspace-access.summary", defaultValue: "Allow current workspace actions; keep hard safety gates.")
+    }
+
+    enum PluginPicker {
+        static let help = String(localized: "plugin-picker.help", defaultValue: "Browse installed plugin skills and MCP capabilities.")
+        static func installedPlugins(_ a1: String) -> String {
+            let template = String(localized: "plugin-picker.installed-plugins", defaultValue: "%@ installed plugins")
+            return String(format: template, a1)
+        }
+        static let label = String(localized: "plugin-picker.label", defaultValue: "Plugins")
+        static func mcpServers(_ a1: String) -> String {
+            let template = String(localized: "plugin-picker.mcp-servers", defaultValue: "%@ MCP servers")
+            return String(format: template, a1)
+        }
+        static let none = String(localized: "plugin-picker.none", defaultValue: "No plugin capabilities found.")
+    }
+
+    enum Composer {
+        static let queueSendHelp = String(localized: "composer.queue-send.help", defaultValue: "Queue this message after the current turn")
+        static let sendHelp = String(localized: "composer.send.help", defaultValue: "Send")
+        static let stopHelp = String(localized: "composer.stop.help", defaultValue: "Stop the current Agent turn")
+    }
+
     enum Command {
         static let closeTabShortcut = String(localized: "command.close-tab.shortcut", defaultValue: "⌘W")
         static let closeTabSubtitle = String(localized: "command.close-tab.subtitle", defaultValue: "Close the active tab")
@@ -326,6 +356,10 @@ enum L10n {
     }
 
     enum QueuedMessage {
+        static let actionsButton = String(localized: "queued-message.actions-button", defaultValue: "Queued message actions")
+        static let actionsButtonHelp = String(localized: "queued-message.actions-button.help", defaultValue: "Show queued message actions")
+        static let closeQueueButton = String(localized: "queued-message.close-queue-button", defaultValue: "Close queue")
+        static let closeQueueButtonHelp = String(localized: "queued-message.close-queue-button.help", defaultValue: "Remove this message from the queue")
         static let editButton = String(localized: "queued-message.edit-button", defaultValue: "Edit queued message")
         static let editButtonHelp = String(localized: "queued-message.edit-button.help", defaultValue: "Edit this queued message in the composer")
         static let label = String(localized: "queued-message.label", defaultValue: "Queued")

@@ -891,6 +891,7 @@ struct QueuedMessageRow: View {
     var baseFontSize: CGFloat = NSFont.systemFontSize
     var onEdit: () -> Void = {}
     var onSendNow: () -> Void = {}
+    var onRemove: () -> Void = {}
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -909,18 +910,27 @@ struct QueuedMessageRow: View {
                         .foregroundStyle(.orange)
                         .textCase(.uppercase)
                     Spacer(minLength: 8)
-                    queuedActionButton(
-                        symbol: "pencil",
-                        accessibilityLabel: L10n.QueuedMessage.editButton,
-                        help: L10n.QueuedMessage.editButtonHelp,
-                        action: onEdit
-                    )
-                    queuedActionButton(
-                        symbol: "paperplane.fill",
-                        accessibilityLabel: L10n.QueuedMessage.sendNowButton,
-                        help: L10n.QueuedMessage.sendNowButtonHelp,
-                        action: onSendNow
-                    )
+                    Menu {
+                        Button(action: onEdit) {
+                            Label(L10n.QueuedMessage.editButton, systemImage: "pencil")
+                        }
+                        Button(action: onSendNow) {
+                            Label(L10n.QueuedMessage.sendNowButton, systemImage: "paperplane.fill")
+                        }
+                        Divider()
+                        Button(role: .destructive, action: onRemove) {
+                            Label(L10n.QueuedMessage.closeQueueButton, systemImage: "xmark.circle")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 13, weight: .semibold))
+                            .frame(width: 24, height: 22)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel(L10n.QueuedMessage.actionsButton)
+                    .help(L10n.QueuedMessage.actionsButtonHelp)
                 }
                 if !message.text.isEmpty {
                     Text(message.text)
@@ -950,23 +960,6 @@ struct QueuedMessageRow: View {
         .padding(.leading, index == 0 ? 0 : 16)
     }
 
-    private func queuedActionButton(
-        symbol: String,
-        accessibilityLabel: String,
-        help: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 12, weight: .semibold))
-                .frame(width: 22, height: 20)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.orange)
-        .contentShape(Rectangle())
-        .accessibilityLabel(accessibilityLabel)
-        .help(help)
-    }
 }
 
 // MARK: - Empty state

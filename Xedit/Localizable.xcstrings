@@ -3955,6 +3955,132 @@
         }
       }
     },
+    "composer.queue-send.help": {
+      "comment": "tooltip for queueing the current composer message while Agent is responding",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Queue this message after the current turn"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "把这条消息排到当前轮次之后发送"
+          }
+        }
+      }
+    },
+    "composer.send.help": {
+      "comment": "tooltip for sending the composer message",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "发送"
+          }
+        }
+      }
+    },
+    "composer.stop.help": {
+      "comment": "tooltip for stopping the current Agent turn",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop the current Agent turn"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止当前 Agent 轮次"
+          }
+        }
+      }
+    },
+    "queued-message.actions-button": {
+      "comment": "accessibility label for queued message action menu",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Queued message actions"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "排队消息操作"
+          }
+        }
+      }
+    },
+    "queued-message.actions-button.help": {
+      "comment": "tooltip for queued message action menu",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show queued message actions"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示排队消息操作"
+          }
+        }
+      }
+    },
+    "queued-message.close-queue-button": {
+      "comment": "menu item for removing a queued message",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close queue"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭排队"
+          }
+        }
+      }
+    },
+    "queued-message.close-queue-button.help": {
+      "comment": "tooltip for removing a queued message",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove this message from the queue"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从队列中移除这条消息"
+          }
+        }
+      }
+    },
     "queued-message.edit-button": {
       "comment": "accessibility label for editing a queued message",
       "extractionState": "manual",
@@ -5532,6 +5658,210 @@
           "stringUnit": {
             "state": "translated",
             "value": "行"
+          }
+        }
+      }
+    },
+    "approval-mode.picker-help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose how this session approves Agent tool calls."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择此会话如何审批 Agent 工具调用。"
+          }
+        }
+      }
+    },
+    "approval-mode.request-every-time": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask every time"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每次询问"
+          }
+        }
+      }
+    },
+    "approval-mode.request-every-time.summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask before write, command, network, or remote actions."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "写入、命令、联网或远端操作前询问。"
+          }
+        }
+      }
+    },
+    "approval-mode.smart": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smart approval"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "智能审批"
+          }
+        }
+      }
+    },
+    "approval-mode.smart.summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto-run low-risk calls; ask for risky actions."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "低风险自动执行，高风险继续询问。"
+          }
+        }
+      }
+    },
+    "approval-mode.workspace-access": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace access"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace 访问"
+          }
+        }
+      }
+    },
+    "approval-mode.workspace-access.summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow current workspace actions; keep hard safety gates."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许当前 workspace 操作，保留硬安全闸。"
+          }
+        }
+      }
+    },
+    "plugin-picker.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Browse installed plugin skills and MCP capabilities."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "浏览已安装的插件技能和 MCP 能力。"
+          }
+        }
+      }
+    },
+    "plugin-picker.installed-plugins": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ installed plugins"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 个已安装插件"
+          }
+        }
+      }
+    },
+    "plugin-picker.label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugins"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "插件"
+          }
+        }
+      }
+    },
+    "plugin-picker.mcp-servers": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ MCP servers"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 个 MCP 服务"
+          }
+        }
+      }
+    },
+    "plugin-picker.none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No plugin capabilities found."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未发现插件能力。"
           }
         }
       }

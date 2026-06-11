@@ -12,9 +12,12 @@
 //     on macOS dismiss on the slightest hover drift). Has a
 //     "Recently fetched" tail menu for ad-hoc model IDs not in the
 //     library entries.
-//   - `AgentModePickerPill`: Normal / Plan / Goal selector with an
-//     attached goal-editor sheet — Plan locks writes until approval,
-//     Goal pins an objective to every reply.
+//   - `AgentModePickerPill`: Normal / Plan / Goal selector. Plan locks
+//     writes until approval; Goal gathers the objective through chat
+//     and pins it to every reply once defined.
+//   - `AgentApprovalModePickerPill`: per-session tool approval posture
+//     selector — request every time, smart approval, or workspace access.
+//   - `AgentPluginPickerPill`: installed plugin/MCP capability browser.
 //
 //  Previously `private struct` inside the composer file; now internal
 //  so the composer card and any future host can mount them across
@@ -210,6 +213,197 @@ struct WorkspacePickerPill: View {
         }
 
         return result.sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
+    }
+}
+
+// MARK: - Approval mode picker
+
+struct AgentApprovalModePickerPill: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        Menu {
+            ForEach(AgentApprovalMode.allCases) { mode in
+                Button {
+                    appState.setAgentApprovalMode(mode)
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Image(systemName: mode.symbol)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(mode.displayName)
+                            Text(mode.summary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        if appState.agentApprovalMode == mode {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: appState.agentApprovalMode.symbol)
+                    .font(.system(size: 10, weight: .semibold))
+                Text(appState.agentApprovalMode.displayName)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .foregroundStyle(pillForeground)
+            .background(Capsule(style: .continuous).fill(pillBackground))
+            .overlay(Capsule(style: .continuous).stroke(pillBorder, lineWidth: 1))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(L10n.ApprovalMode.pickerHelp)
+    }
+
+    private var pillForeground: Color {
+        appState.agentApprovalMode == .workspaceAccess ? Color.white : Color.secondary
+    }
+
+    private var pillBackground: Color {
+        switch appState.agentApprovalMode {
+        case .requestEveryTime: return Color.secondary.opacity(0.10)
+        case .smart: return Color.accentColor.opacity(0.14)
+        case .workspaceAccess: return Color.accentColor
+        }
+    }
+
+    private var pillBorder: Color {
+        switch appState.agentApprovalMode {
+        case .requestEveryTime: return Color.secondary.opacity(0.25)
+        case .smart: return Color.accentColor.opacity(0.35)
+        case .workspaceAccess: return Color.clear
+        }
+    }
+}
+
+// MARK: - Plugin picker
+
+struct AgentPluginPickerPill: View {
+    @EnvironmentObject var appState: AppState
+    @State private var pluginSkills: [AgentSkillEntry] = []
+    @State private var mcpServers: [AgentMCPServerConfig] = []
+
+    var body: some View {
+        Menu {
+            if pluginGroups.isEmpty && mcpServers.isEmpty {
+                Text(L10n.PluginPicker.none)
+            }
+
+            if !pluginGroups.isEmpty {
+                Section(L10n.PluginPicker.installedPlugins("\(pluginGroups.count)")) {
+                    ForEach(pluginGroups, id: \.name) { group in
+                        if group.skills.count == 1, let skill = group.skills.first {
+                            Button {
+                                appState.attachAgentSkill(skill)
+                            } label: {
+                                pluginRow(name: group.displayName, checked: isSkillAttached(skill))
+                            }
+                        } else {
+                            Menu(group.displayName) {
+                                ForEach(group.skills.prefix(12)) { skill in
+                                    Button {
+                                        appState.attachAgentSkill(skill)
+                                    } label: {
+                                        pluginRow(name: skill.name, checked: isSkillAttached(skill))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !mcpServers.isEmpty {
+                Section(L10n.PluginPicker.mcpServers("\(mcpServers.count)")) {
+                    ForEach(mcpServers.prefix(12)) { server in
+                        Label(server.name, systemImage: serverIcon(server))
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "puzzlepiece.extension")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(L10n.PluginPicker.label)
+                    .font(.system(size: 11, weight: .medium))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .foregroundStyle(.secondary)
+            .background(Capsule(style: .continuous).fill(Color.secondary.opacity(0.10)))
+            .overlay(Capsule(style: .continuous).stroke(Color.secondary.opacity(0.25), lineWidth: 1))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(L10n.PluginPicker.help)
+        .onAppear(perform: refresh)
+    }
+
+    private var pluginGroups: [PluginSkillGroup] {
+        let grouped = Dictionary(grouping: pluginSkills.filter { $0.source == .plugin }) { skill in
+            skill.identifier.split(separator: ":").first.map(String.init) ?? skill.identifier
+        }
+        return grouped.map { key, skills in
+            PluginSkillGroup(name: key, skills: skills.sorted { $0.name < $1.name })
+        }
+        .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    @ViewBuilder
+    private func pluginRow(name: String, checked: Bool) -> some View {
+        HStack {
+            Label(name, systemImage: "puzzlepiece.extension")
+            if checked {
+                Image(systemName: "checkmark")
+            }
+        }
+    }
+
+    private func isSkillAttached(_ skill: AgentSkillEntry) -> Bool {
+        appState.agentPendingSkills.contains { $0.identifier == skill.identifier }
+    }
+
+    private func serverIcon(_ server: AgentMCPServerConfig) -> String {
+        switch server.source {
+        case .cursor: return "cursorarrow.rays"
+        case .codex: return "terminal"
+        case .user: return "server.rack"
+        }
+    }
+
+    private func refresh() {
+        pluginSkills = AgentSkillDirectory.list(includeDisabled: false)
+        mcpServers = AgentMCPServerDirectory.list(includeDisabled: false)
+    }
+
+    private struct PluginSkillGroup {
+        let name: String
+        let skills: [AgentSkillEntry]
+
+        var displayName: String {
+            switch name.lowercased() {
+            case "browser": return "Browser"
+            case "chrome": return "Chrome"
+            case "gmail": return "Gmail"
+            case "github": return "GitHub"
+            default:
+                return name
+                    .split(separator: "-")
+                    .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+                    .joined(separator: " ")
+            }
+        }
     }
 }
 
@@ -418,28 +612,15 @@ extension String {
 
 struct AgentModePickerPill: View {
     @EnvironmentObject var appState: AppState
-    @State private var showingGoalEditor = false
 
     var body: some View {
         Menu {
             ForEach(AgentInteractionMode.allCases) { mode in
                 Button {
-                    if mode == .goal {
-                        // Goal mode requires a definition; if there's
-                        // already a goal we just flip the mode, otherwise
-                        // open the editor sheet first.
-                        appState.setAgentInteractionMode(.goal)
-                        if appState.agentCurrentGoal == nil { showingGoalEditor = true }
-                    } else {
-                        appState.setAgentInteractionMode(mode)
-                    }
+                    appState.setAgentInteractionMode(mode)
                 } label: {
                     Label(mode.displayName, systemImage: mode.symbol)
                 }
-            }
-            if appState.agentInteractionMode == .goal {
-                Divider()
-                Button("Edit goal…") { showingGoalEditor = true }
             }
         } label: {
             HStack(spacing: 4) {
@@ -460,17 +641,6 @@ struct AgentModePickerPill: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Conversation mode — Plan locks writes until you approve; Goal pins an objective to every reply.")
-        .sheet(isPresented: $showingGoalEditor) {
-            AgentGoalEditorSheet { statement, items in
-                appState.setAgentGoal(statement: statement, items: items)
-                if appState.agentInteractionMode != .goal {
-                    appState.setAgentInteractionMode(.goal)
-                }
-                showingGoalEditor = false
-            } onCancel: {
-                showingGoalEditor = false
-            }
-        }
     }
 
     private var pillForeground: Color {

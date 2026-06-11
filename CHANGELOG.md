@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.60.0-rc8 - 2026-06-11
+
+### Agent Queue
+
+- Composer 在 Agent 忙碌时不再只有停止按钮；输入区有内容时会显示排队发送按钮，可把下一条消息加入当前会话队列。
+- 排队消息卡改为 Codex 风格的更多菜单，支持编辑消息、立即发送和关闭排队。
+- 停止当前轮次或立即发送队列消息时，会同步关闭正在等待用户回答的 `ask_user` 卡片，避免旧询问卡残留阻塞后续消息。
+
+### Tests
+
+- 新增 Agent queue 单元测试，覆盖停止响应与立即发送队列消息时关闭 awaiting-user-answer 工具卡。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc8`。
+
+## 1.60.0-rc7 - 2026-06-11
+
+### Agent Composer
+
+- Composer 新增“插件”菜单，展示已安装 plugin-cache skills 与可用 MCP servers；插件技能可直接附加到下一条 Agent 消息。
+- Goal 模式不再在 composer 切换时弹出“定义目标”表单；首次开启后由 Agent 通过对话追问或归纳目标。
+- Goal setup 新增 `goal` fenced block 解析，Agent 输出目标与验收项后，WillDeep 自动生成 Goal 卡；既有 Goal 卡仍可用铅笔按钮手动微调。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc7`。
+
+## 1.60.0-rc6 - 2026-06-11
+
+### Agent Approval
+
+- Agent composer 新增会话级审批模式选择，可在“每次询问”“智能审批”“Workspace 访问”之间切换。
+- `AgentSession` 新增 `approvalMode` 持久化字段，旧 session JSON 自动迁移为默认 `smart`。
+- 工具审批路由现在结合当前审批模式：每次询问关闭 write-tier 自动放行；智能审批保留既有 SafeCommand / Always Allow / MCP trust / Goal mode 逻辑；Workspace 访问可自动放行当前 workspace 的命令与代理类写操作，同时保留 danger confirm、Plan gate 与未信任 MCP 审批。
+- Agent 系统提示会包含当前审批模式，工具卡会标记 Workspace Access 自动放行来源。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc6`。
+
 ## 1.60.0-rc5 - 2026-06-11
 
 ### Remote Runtime

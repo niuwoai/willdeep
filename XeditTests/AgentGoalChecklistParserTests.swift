@@ -22,6 +22,46 @@ struct AgentGoalChecklistParserTests {
     }
 
     @Test
+    func extractsGoalDefinitionBlock() {
+        let reply = """
+        我先把目标确认下来。
+
+        ```goal
+        Goal: Ship remote runtime support end to end
+        Acceptance:
+        - SSH runtime can run commands
+        - Daemon runtime can read files
+        - Version and docs are updated
+        ```
+        """
+        let parsed = AgentGoalParser.extract(from: reply)
+        #expect(parsed?.statement == "Ship remote runtime support end to end")
+        #expect(parsed?.checklist.map(\.text) == [
+            "SSH runtime can run commands",
+            "Daemon runtime can read files",
+            "Version and docs are updated",
+        ])
+    }
+
+    @Test
+    func goalDefinitionSupportsNumberedChecklist() {
+        let reply = """
+        ```goal
+        Goal: Improve approval UX
+        Checklist:
+        1. Composer exposes approval mode
+        2. Session persists the choice
+        ```
+        """
+        let parsed = AgentGoalParser.extract(from: reply)
+        #expect(parsed?.statement == "Improve approval UX")
+        #expect(parsed?.checklist.map(\.text) == [
+            "Composer exposes approval mode",
+            "Session persists the choice",
+        ])
+    }
+
+    @Test
     func flipsItemsDoneAndUndone() {
         let g = goal(3)
         let reply = """

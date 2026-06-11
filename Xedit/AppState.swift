@@ -178,6 +178,11 @@ final class AppState: ObservableObject {
         get { activeRuntime?.interactionMode ?? .normal }
         set { activeRuntime?.interactionMode = newValue }
     }
+    /// Per-session approval behavior shown in the composer.
+    var agentApprovalMode: AgentApprovalMode {
+        get { activeRuntime?.approvalMode ?? .smart }
+        set { activeRuntime?.approvalMode = newValue }
+    }
     /// Current proposed/approved plan for Plan mode.
     var agentCurrentPlan: AgentPlan? {
         get { activeRuntime?.currentPlan }
