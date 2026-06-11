@@ -101,6 +101,13 @@ struct ComposerTextEditor: NSViewRepresentable {
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let textView = nsView.documentView as? NSTextView else { return }
         if textView.string != text {
+            // During Chinese/Japanese/Korean IME composition, NSTextView
+            // holds marked text that is not committed to the SwiftUI
+            // binding yet. Parent view refreshes (streaming transcript,
+            // timers, picker state) can arrive in that window; writing
+            // the older binding value back here clears the marked text,
+            // which feels like newly typed characters were swallowed.
+            guard !textView.hasMarkedText() else { return }
             // Track programmatic text changes so the history cursor
             // doesn't think the user kept typing on top of a recalled
             // message — this also covers the slash-command path

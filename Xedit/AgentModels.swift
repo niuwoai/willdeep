@@ -284,6 +284,9 @@ struct AgentSession: Identifiable, Codable, Equatable {
     var title: String
     /// Optional — sessions started before a folder was picked have no root.
     var workspaceRootPath: String?
+    /// Canonical workspace binding. Remote sessions persist here while
+    /// `workspaceRootPath` remains as the local-only compatibility slot.
+    var workspaceLocation: WorkspaceLocation?
     /// Model id captured at the time the session was last sent (so changing
     /// the global model later doesn't silently switch what an old chat used).
     var modelID: String?
@@ -336,6 +339,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         id: UUID = UUID(),
         title: String = "New Chat",
         workspaceRootPath: String? = nil,
+        workspaceLocation: WorkspaceLocation? = nil,
         modelID: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
@@ -352,6 +356,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.id = id
         self.title = title
         self.workspaceRootPath = workspaceRootPath
+        self.workspaceLocation = workspaceLocation ?? workspaceRootPath.map { .local(path: $0) }
         self.modelID = modelID
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -370,6 +375,9 @@ struct AgentSession: Identifiable, Codable, Equatable {
     var isArchived: Bool { archivedAt != nil }
 
     var workspaceName: String {
+        if let workspaceLocation {
+            return workspaceLocation.displayName
+        }
         guard let path = workspaceRootPath, !path.isEmpty else { return "No workspace" }
         return URL(fileURLWithPath: path).lastPathComponent
     }
@@ -379,7 +387,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
     // currentGoal) loads cleanly — every newer field uses
     // decodeIfPresent with a default.
     enum CodingKeys: String, CodingKey {
-        case id, title, workspaceRootPath, modelID, createdAt, updatedAt, messages
+        case id, title, workspaceRootPath, workspaceLocation, modelID, createdAt, updatedAt, messages
         case didEditFiles, agentEditedPaths, interactionMode, currentPlan, currentGoal
         case pinnedAt, archivedAt, titleIsUserSet
     }
@@ -389,6 +397,8 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.id = try c.decode(UUID.self, forKey: .id)
         self.title = try c.decode(String.self, forKey: .title)
         self.workspaceRootPath = try c.decodeIfPresent(String.self, forKey: .workspaceRootPath)
+        self.workspaceLocation = try c.decodeIfPresent(WorkspaceLocation.self, forKey: .workspaceLocation)
+            ?? self.workspaceRootPath.map { .local(path: $0) }
         self.modelID = try c.decodeIfPresent(String.self, forKey: .modelID)
         self.createdAt = try c.decode(Date.self, forKey: .createdAt)
         self.updatedAt = try c.decode(Date.self, forKey: .updatedAt)

@@ -1,0 +1,266 @@
+//
+//  AgentRuntimeSettingsView.swift
+//  WillDeep
+//
+//  Settings tab for remote Agent runtimes. SSH is the first transport;
+//  daemon support is represented in the model but intentionally not
+//  install-mutating in this UI.
+//
+
+import SwiftUI
+
+struct AgentRuntimeSettingsView: View {
+    @State private var runtimes = AgentRuntimeStore.loadDescriptors()
+    @State private var selectedRuntimeID: UUID?
+    @State private var statusMessage = ""
+    @State private var probingRuntimeID: UUID?
+
+    @State private var displayName = ""
+    @State private var host = ""
+    @State private var username = ""
+    @State private var port = 22
+    @State private var workspacePath = ""
+
+    private var selectedRuntime: RuntimeDescriptor? {
+        guard let selectedRuntimeID else { return nil }
+        return runtimes.first { $0.id == selectedRuntimeID }
+    }
+
+    var body: some View {
+        HSplitView {
+            runtimeList
+                .frame(minWidth: 220, idealWidth: 260)
+            runtimeEditor
+                .frame(minWidth: 380)
+        }
+        .onAppear {
+            reload()
+            if selectedRuntimeID == nil {
+                selectedRuntimeID = runtimes.first?.id
+                loadSelectedRuntime()
+            }
+        }
+        .onChange(of: selectedRuntimeID) { _, _ in
+            loadSelectedRuntime()
+        }
+    }
+
+    private var runtimeList: some View {
+        Form {
+            Section(L10n.Settings.RemoteRuntimes.listSection) {
+                if runtimes.isEmpty {
+                    Text(L10n.Settings.RemoteRuntimes.empty)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(runtimes) { runtime in
+                        Button {
+                            selectedRuntimeID = runtime.id
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: runtime.transport == .ssh ? "terminal" : "antenna.radiowaves.left.and.right")
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(runtime.displayName)
+                                        .font(.headline)
+                                    Text(runtime.hostLine)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if selectedRuntimeID == runtime.id {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                Button {
+                    let runtime = RuntimeDescriptor(
+                        displayName: L10n.Settings.RemoteRuntimes.newRuntimeDefaultName,
+                        host: "",
+                        username: NSUserName(),
+                        defaultWorkspacePath: ""
+                    )
+                    runtimes.append(runtime)
+                    selectedRuntimeID = runtime.id
+                    saveAll()
+                } label: {
+                    Label(L10n.Settings.RemoteRuntimes.addButton, systemImage: "plus")
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var runtimeEditor: some View {
+        Form {
+            Section(L10n.Settings.RemoteRuntimes.connectionSection) {
+                TextField(L10n.Settings.RemoteRuntimes.displayNameLabel, text: $displayName)
+                TextField(L10n.Settings.RemoteRuntimes.hostLabel, text: $host)
+                TextField(L10n.Settings.RemoteRuntimes.usernameLabel, text: $username)
+                Stepper(value: $port, in: 1...65535) {
+                    Text(L10n.Settings.RemoteRuntimes.portLabel("\(port)"))
+                }
+                TextField(L10n.Settings.RemoteRuntimes.workspacePathLabel, text: $workspacePath)
+
+                Text(L10n.Settings.RemoteRuntimes.sshDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let selectedRuntime {
+                Section(L10n.Settings.RemoteRuntimes.probeSection) {
+                    LabeledContent(L10n.Settings.RemoteRuntimes.platformLabel) {
+                        Text("\(selectedRuntime.platform.displayName) / \(selectedRuntime.arch.displayName)")
+                    }
+                    LabeledContent(L10n.Settings.RemoteRuntimes.capabilitiesLabel) {
+                        Text(capabilityLine(selectedRuntime))
+                    }
+                    if let lastProbeAt = selectedRuntime.lastProbeAt {
+                        LabeledContent(L10n.Settings.RemoteRuntimes.lastProbeLabel) {
+                            Text(lastProbeAt.formatted(date: .abbreviated, time: .shortened))
+                        }
+                    }
+
+                    HStack {
+                        Button(probingRuntimeID == selectedRuntime.id ? L10n.Settings.RemoteRuntimes.probingButton : L10n.Settings.RemoteRuntimes.probeButton) {
+                            saveCurrent()
+                            probeSelectedRuntime()
+                        }
+                        .disabled(probingRuntimeID != nil || host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                        Button(L10n.Settings.RemoteRuntimes.saveButton) {
+                            saveCurrent()
+                        }
+
+                        Button(role: .destructive) {
+                            deleteSelected()
+                        } label: {
+                            Label(L10n.Settings.RemoteRuntimes.deleteButton, systemImage: "trash")
+                        }
+
+                        Spacer()
+                    }
+                }
+            }
+
+            Section(L10n.Settings.RemoteRuntimes.daemonSection) {
+                Text(L10n.Settings.RemoteRuntimes.daemonDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if !statusMessage.isEmpty {
+                Section {
+                    Text(statusMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func loadSelectedRuntime() {
+        guard let selectedRuntime else {
+            displayName = ""
+            host = ""
+            username = NSUserName()
+            port = 22
+            workspacePath = ""
+            return
+        }
+        displayName = selectedRuntime.displayName
+        host = selectedRuntime.host
+        username = selectedRuntime.username
+        port = selectedRuntime.port
+        workspacePath = selectedRuntime.defaultWorkspacePath
+    }
+
+    private func saveCurrent() {
+        let id = selectedRuntimeID ?? UUID()
+        var runtime = selectedRuntime ?? RuntimeDescriptor(
+            id: id,
+            displayName: displayName,
+            host: host,
+            port: port,
+            username: username,
+            defaultWorkspacePath: workspacePath
+        )
+        runtime.displayName = displayName
+        runtime.host = host
+        runtime.username = username
+        runtime.port = port
+        runtime.defaultWorkspacePath = workspacePath
+        runtime.transport = .ssh
+        upsertLocal(runtime.normalized)
+        statusMessage = L10n.Settings.RemoteRuntimes.savedStatus
+    }
+
+    private func probeSelectedRuntime() {
+        guard let runtime = selectedRuntime?.normalized else { return }
+        probingRuntimeID = runtime.id
+        statusMessage = L10n.Settings.RemoteRuntimes.probingStatus(runtime.displayName)
+        Task {
+            do {
+                let updated = try await SSHRuntimeBackend(descriptor: runtime).probe()
+                await MainActor.run {
+                    upsertLocal(updated)
+                    probingRuntimeID = nil
+                    statusMessage = L10n.Settings.RemoteRuntimes.probeSucceeded(updated.platform.displayName, updated.arch.displayName)
+                }
+            } catch {
+                await MainActor.run {
+                    probingRuntimeID = nil
+                    statusMessage = L10n.Settings.RemoteRuntimes.probeFailed(error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func deleteSelected() {
+        guard let selectedRuntimeID else { return }
+        runtimes.removeAll { $0.id == selectedRuntimeID }
+        AgentRuntimeStore.saveDescriptors(runtimes)
+        self.selectedRuntimeID = runtimes.first?.id
+        loadSelectedRuntime()
+        statusMessage = L10n.Settings.RemoteRuntimes.deletedStatus
+    }
+
+    private func upsertLocal(_ runtime: RuntimeDescriptor) {
+        if let index = runtimes.firstIndex(where: { $0.id == runtime.id }) {
+            runtimes[index] = runtime
+        } else {
+            runtimes.append(runtime)
+        }
+        saveAll()
+        selectedRuntimeID = runtime.id
+        loadSelectedRuntime()
+    }
+
+    private func saveAll() {
+        runtimes = runtimes.map(\.normalized)
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        AgentRuntimeStore.saveDescriptors(runtimes)
+    }
+
+    private func reload() {
+        runtimes = AgentRuntimeStore.loadDescriptors()
+    }
+
+    private func capabilityLine(_ runtime: RuntimeDescriptor) -> String {
+        let git = runtime.capabilities.hasGit ? "git" : "no git"
+        let rg = runtime.capabilities.hasRipgrep ? "rg" : "no rg"
+        let shell = runtime.capabilities.shellPath ?? "shell unknown"
+        return "\(git), \(rg), \(shell)"
+    }
+}
+
+private extension RuntimeDescriptor {
+    var hostLine: String {
+        let prefix = username.isEmpty ? host : "\(username)@\(host)"
+        return "\(prefix):\(port)"
+    }
+}

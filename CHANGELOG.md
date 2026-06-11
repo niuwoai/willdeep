@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.60.0-rc1 - 2026-06-11
+
+### Remote Runtime
+
+- 新增 Agent Runtime 抽象，支持把会话 workspace 记录为本地路径或远端 runtime + 远端路径，并兼容旧 `workspaceRootPath` 会话 JSON。
+- Settings 新增 `Runtimes` 标签页，可配置 SSH runtime、保存默认远端 workspace、通过系统 `ssh -o BatchMode=yes` 探测远端平台、架构、git、rg 与 shell。
+- Agent 工具 `search_files`、`grep_files`、`read_file`、`list_directory`、`git_status`、`run_command` 已按会话 workspace 路由：本地会话保持旧行为，远端 SSH 会话在远端执行。
+- Composer workspace picker 会列出已配置默认 workspace 的 SSH runtime；选中后当前空会话迁移到远端 workspace，已有历史的会话则新建远端会话。
+- `run_command` 审批记录会展示远端 runtime 与 cwd；远端后台任务复用现有 job 管线，并在 job 元数据中记录 runtime 展示信息。
+- `claude_code`、`codex_cli`、`cursor_agent` 在远端 SSH session 下默认调用远端 PATH 中的 CLI。
+
+### Tests
+
+- 新增 Remote Runtime 单元测试，覆盖旧 session 迁移、平台/架构解析、远端路径越权拒绝与 SSH 命令构造。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc1`。
+
+## 1.59.0-rc5 - 2026-06-11
+
+### Agent Composer
+
+- 修复中文 / 日文 / 韩文输入法组词期间，SwiftUI 父视图刷新会把旧 binding 值写回 `NSTextView`、导致刚输入的 marked text 被清空的问题。
+- Composer 现在在 `NSTextView.hasMarkedText()` 为真时跳过外部文本回写，避免 streaming transcript、计时器、picker 状态刷新吞掉正在输入的内容。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.59.0-rc5`。
+
 ## 1.59.0-rc4 - 2026-06-11
 
 ### Agent Streaming 性能

@@ -80,6 +80,11 @@ struct EditorSettingsView: View {
                     Label(L10n.Settings.tabLocalAgents, systemImage: "cpu")
                 }
 
+            AgentRuntimeSettingsView()
+                .tabItem {
+                    Label(L10n.Settings.tabRemoteRuntimes, systemImage: "network")
+                }
+
             AgentMemorySettingsView()
                 .tabItem {
                     Label(L10n.Settings.tabMemory, systemImage: "brain.head.profile")

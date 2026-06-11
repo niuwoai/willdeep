@@ -38,6 +38,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// for "this session's workspace" — that's a window-level concept
     /// that drifts when the user opens a different folder.
     private(set) var workspaceRootPath: String?
+    private(set) var workspaceLocation: WorkspaceLocation?
 
     // MARK: - Conversation state
 
@@ -114,6 +115,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.id = session.id
         self.session = session
         self.workspaceRootPath = session.workspaceRootPath
+        self.workspaceLocation = session.workspaceLocation
 
         // Seed live state from persisted session.
         self.messages = session.messages
@@ -130,7 +132,17 @@ final class AgentRuntime: ObservableObject, Identifiable {
     func rebindWorkspace(to path: String?) {
         let normalized = path?.trimmingCharacters(in: .whitespacesAndNewlines)
         workspaceRootPath = normalized?.isEmpty == true ? nil : normalized
+        workspaceLocation = workspaceRootPath.map { .local(path: $0) }
         session.workspaceRootPath = workspaceRootPath
+        session.workspaceLocation = workspaceLocation
+    }
+
+    func rebindRemoteWorkspace(runtimeID: UUID, path: String) {
+        let normalized = RemotePathValidator.normalizedWorkspaceRoot(path)
+        workspaceRootPath = nil
+        workspaceLocation = .remote(runtimeID: runtimeID, path: normalized)
+        session.workspaceRootPath = nil
+        session.workspaceLocation = workspaceLocation
     }
 
     // MARK: - Persistence
@@ -141,6 +153,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     func persist() {
         session.messages = messages
         session.workspaceRootPath = workspaceRootPath
+        session.workspaceLocation = workspaceLocation
         session.didEditFiles = didEditFiles
         session.agentEditedPaths = agentEditedPaths.sorted()
         session.interactionMode = interactionMode

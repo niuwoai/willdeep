@@ -714,6 +714,7 @@ extension AppState {
 
         let session = AgentSession(
             workspaceRootPath: rootDirectory?.standardizedFileURL.path,
+            workspaceLocation: (rootDirectory?.standardizedFileURL.path).map { WorkspaceLocation.local(path: $0) },
             modelID: activeAgentModelID
         )
         agentSessions.insert(session, at: 0)
@@ -774,6 +775,36 @@ extension AppState {
         }
 
         return startNewAgentSession(inWorkspaceAt: url.path)
+    }
+
+    @discardableResult
+    func moveActiveAgentSessionToRemoteWorkspace(runtimeID: UUID, path: String) -> AgentSession {
+        let normalizedPath = RemotePathValidator.normalizedWorkspaceRoot(path)
+        if let runtime = activeRuntime, runtime.isEmpty, !runtime.isResponding {
+            pruneEmptyAgentSessions(excluding: runtime.id)
+            runtime.rebindRemoteWorkspace(runtimeID: runtimeID, path: normalizedPath)
+            runtime.worktreeChanges = .init()
+            persistAgentSession(runtime: runtime)
+            return runtime.session
+        }
+
+        pruneEmptyAgentSessions()
+        let session = AgentSession(
+            workspaceRootPath: nil,
+            workspaceLocation: .remote(runtimeID: runtimeID, path: normalizedPath),
+            modelID: activeAgentModelID
+        )
+        agentSessions.insert(session, at: 0)
+        let newRuntime = AgentRuntime(session: session)
+        agentRuntimes[session.id] = newRuntime
+        activeAgentSessionID = session.id
+        subscribeToActiveRuntime()
+        agentSessionDidEditFiles = false
+        agentInteractionMode = .normal
+        agentCurrentPlan = nil
+        agentCurrentGoal = nil
+        AgentSessionStore.save(session)
+        return session
     }
 
     func selectAgentSession(id: AgentSession.ID) {

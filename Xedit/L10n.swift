@@ -445,6 +445,7 @@ enum L10n {
         static let tabMcp = String(localized: "settings.tab.mcp", defaultValue: "MCP")
         static let tabTools = String(localized: "settings.tab.tools", defaultValue: "Tools")
         static let tabLocalAgents = String(localized: "settings.tab.local-agents", defaultValue: "Local Agents")
+        static let tabRemoteRuntimes = String(localized: "settings.tab.remote-runtimes", defaultValue: "Runtimes")
 
         static let sectionTypography = String(localized: "settings.section.typography", defaultValue: "Typography")
         static let sectionColorStyle = String(localized: "settings.section.color-style", defaultValue: "Color Style")
@@ -566,6 +567,47 @@ enum L10n {
                 let template = String(localized: "settings.local-agents.direct-tool", defaultValue: "Direct delegation available through `%@`.")
                 return String(format: template, a1)
             }
+        }
+
+        enum RemoteRuntimes {
+            static let listSection = String(localized: "settings.remote-runtimes.list-section", defaultValue: "Remote Runtimes")
+            static let empty = String(localized: "settings.remote-runtimes.empty", defaultValue: "No remote runtimes configured.")
+            static let addButton = String(localized: "settings.remote-runtimes.add", defaultValue: "Add SSH Runtime")
+            static let newRuntimeDefaultName = String(localized: "settings.remote-runtimes.new-default-name", defaultValue: "New SSH Runtime")
+            static let connectionSection = String(localized: "settings.remote-runtimes.connection-section", defaultValue: "SSH Connection")
+            static let displayNameLabel = String(localized: "settings.remote-runtimes.display-name", defaultValue: "Display name")
+            static let hostLabel = String(localized: "settings.remote-runtimes.host", defaultValue: "Host")
+            static let usernameLabel = String(localized: "settings.remote-runtimes.username", defaultValue: "Username")
+            static func portLabel(_ a1: String) -> String {
+                let template = String(localized: "settings.remote-runtimes.port", defaultValue: "Port %@")
+                return String(format: template, a1)
+            }
+            static let workspacePathLabel = String(localized: "settings.remote-runtimes.workspace-path", defaultValue: "Remote workspace path")
+            static let sshDescription = String(localized: "settings.remote-runtimes.ssh-description", defaultValue: "Uses the system ssh client with BatchMode authentication. Configure keys and hosts in your normal SSH config; WillDeep does not store private keys.")
+            static let probeSection = String(localized: "settings.remote-runtimes.probe-section", defaultValue: "Probe")
+            static let platformLabel = String(localized: "settings.remote-runtimes.platform", defaultValue: "Platform")
+            static let capabilitiesLabel = String(localized: "settings.remote-runtimes.capabilities", defaultValue: "Capabilities")
+            static let lastProbeLabel = String(localized: "settings.remote-runtimes.last-probe", defaultValue: "Last probe")
+            static let probeButton = String(localized: "settings.remote-runtimes.probe", defaultValue: "Test & Probe")
+            static let probingButton = String(localized: "settings.remote-runtimes.probing", defaultValue: "Probing...")
+            static let saveButton = String(localized: "settings.remote-runtimes.save", defaultValue: "Save")
+            static let deleteButton = String(localized: "settings.remote-runtimes.delete", defaultValue: "Delete")
+            static let savedStatus = String(localized: "settings.remote-runtimes.saved", defaultValue: "Runtime saved.")
+            static let deletedStatus = String(localized: "settings.remote-runtimes.deleted", defaultValue: "Runtime deleted.")
+            static func probingStatus(_ a1: String) -> String {
+                let template = String(localized: "settings.remote-runtimes.probing-status", defaultValue: "Probing %@...")
+                return String(format: template, a1)
+            }
+            static func probeSucceeded(_ a1: String, _ a2: String) -> String {
+                let template = String(localized: "settings.remote-runtimes.probe-succeeded", defaultValue: "Probe succeeded: %1$@ / %2$@.")
+                return String(format: template, a1, a2)
+            }
+            static func probeFailed(_ a1: String) -> String {
+                let template = String(localized: "settings.remote-runtimes.probe-failed", defaultValue: "Probe failed: %@")
+                return String(format: template, a1)
+            }
+            static let daemonSection = String(localized: "settings.remote-runtimes.daemon-section", defaultValue: "Daemon Runtime")
+            static let daemonDescription = String(localized: "settings.remote-runtimes.daemon-description", defaultValue: "willdeep-agent daemon support is planned behind the same runtime backend contract. The first release keeps remote execution SSH-based and avoids mutating remote system directories.")
         }
 
         enum Provider {
