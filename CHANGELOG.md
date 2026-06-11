@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.60.0-rc12 - 2026-06-11
+
+### Changed
+
+- 将 macOS App icon 调整为“旧版科技网格背景 + 深度镜头标识”叠层方案，保留中心镂空透出底部背景，并同步 16px 到 1024px 全套图标资源。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc12`。
+
 ## 1.60.0-rc11 - 2026-06-11
 
 ### Changed
