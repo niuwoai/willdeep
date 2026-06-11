@@ -2,10 +2,10 @@
 //  AgentRoutineScheduler.swift
 //  WillDeep
 //
-//  Polls user-defined routines on a 30-second cadence and fires the ones
+//  Polls user-defined automations on a 30-second cadence and fires the ones
 //  whose next-run moment has passed. macOS suspends Timers while the app
-//  sleeps; on wake we catch up any routine whose target time slipped past
-//  while we were paused. Optional UserNotifications surface "Routine X
+//  sleeps; on wake we catch up any automation whose target time slipped past
+//  while we were paused. Optional UserNotifications surface "Automation X
 //  started" when the user has granted permission.
 //
 
@@ -129,10 +129,10 @@ final class AgentRoutineScheduler {
                 return
             }
             let content = UNMutableNotificationContent()
-            content.title = "Routine 已启动"
+            content.title = L10n.Automation.notificationTitle
             content.body = catchUp
-                ? "「\(routine.name)」补跑（睡眠唤醒后）"
-                : "「\(routine.name)」开始运行"
+                ? L10n.Automation.notificationBodyCatchUp(routine.name)
+                : L10n.Automation.notificationBodyStarted(routine.name)
             let request = UNNotificationRequest(
                 identifier: "willdeep.routine.\(routine.id.uuidString).\(Int(Date().timeIntervalSince1970))",
                 content: content,

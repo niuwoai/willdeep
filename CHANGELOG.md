@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.60.0-rc10 - 2026-06-11
+
+### Fixed
+
+- 修复 Settings → Local Agents 中旧品牌名的接入状态标题露出，统一改为 “WillDeep 接入状态”。
+- 当前产品文档中面向用户的 “Xedit new-window” 打开方式描述同步改为 “WillDeep new-window”。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc10`。
+
+## 1.60.0-rc9 - 2026-06-11
+
+### Automations
+
+- 将 Agent mode 侧栏的 Routines 用户界面改造为“自动化”，创建、编辑、右键菜单、通知和调度摘要统一使用自动化文案。
+- 自动化空状态改成 Codex 风格的创建入口，内置“每日简报”“每周回顾”“项目监控”三个模板；点击模板会打开创建弹窗并预填名称、提示词和调度。
+- 新增自动化相关 `L10n.Automation` facade 与 String Catalog 中英文资源，避免新增 SwiftUI 文案继续硬编码。
+- 底层继续复用 `AgentRoutine` / `agent-routines` JSON 路径作为兼容存储层，已有 routine 数据无需迁移即可继续运行。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc9`。
+
 ## 1.60.0-rc8 - 2026-06-11
 
 ### Agent Queue

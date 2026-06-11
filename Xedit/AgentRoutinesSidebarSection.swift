@@ -2,11 +2,8 @@
 //  AgentRoutinesSidebarSection.swift
 //  WillDeep
 //
-//  The "ROUTINES" block that sits in the Agent-mode sidebar between
-//  primary actions and the workspace list. New file (rather than another
-//  300 lines inside AgentModeView) because AgentModeView is already past
-//  the 3000-line soft cap — at least keep new feature code out of the
-//  bloat.
+//  The user-facing Automations block in the Agent-mode sidebar. The
+//  underlying model is still AgentRoutine for storage compatibility.
 //
 
 import SwiftUI
@@ -29,6 +26,47 @@ struct AgentRoutinesSidebarSection: View {
         let isNew: Bool
     }
 
+    private enum AutomationTemplate: String, CaseIterable, Identifiable {
+        case dailyBrief, weeklyReview, projectMonitor
+
+        var id: String { rawValue }
+
+        var icon: String {
+            switch self {
+            case .dailyBrief: return "bell"
+            case .weeklyReview: return "calendar"
+            case .projectMonitor: return "folder.badge.gearshape"
+            }
+        }
+
+        var name: String {
+            switch self {
+            case .dailyBrief: return L10n.Automation.templateDailyBriefName
+            case .weeklyReview: return L10n.Automation.templateWeeklyReviewName
+            case .projectMonitor: return L10n.Automation.templateProjectMonitorName
+            }
+        }
+
+        var prompt: String {
+            switch self {
+            case .dailyBrief: return L10n.Automation.templateDailyBriefPrompt
+            case .weeklyReview: return L10n.Automation.templateWeeklyReviewPrompt
+            case .projectMonitor: return L10n.Automation.templateProjectMonitorPrompt
+            }
+        }
+
+        var schedule: AgentRoutineSchedule {
+            switch self {
+            case .dailyBrief:
+                return .weekdaysAt(hour: 9, minute: 0)
+            case .weeklyReview:
+                return .weeklyAt(weekday: 6, hour: 17, minute: 0)
+            case .projectMonitor:
+                return .interval(minutes: 120)
+            }
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -49,16 +87,13 @@ struct AgentRoutinesSidebarSection: View {
 
     private var header: some View {
         HStack(spacing: 6) {
-            Text("Routines")
+            Text(L10n.Automation.header)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             Spacer(minLength: 0)
             Button {
-                let seeded = AgentRoutine(
-                    workspaceRootPath: appState.rootDirectory?.standardizedFileURL.path
-                )
-                editing = RoutineSheetTarget(routine: seeded, isNew: true)
+                openTemplate(nil)
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 10, weight: .semibold))
@@ -67,19 +102,56 @@ struct AgentRoutinesSidebarSection: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("新建 Routine")
+            .help(L10n.Automation.helpCreate)
         }
         .padding(.horizontal, 14)
         .padding(.bottom, 6)
     }
 
     private var emptyState: some View {
-        Text("还没有 Routine。点击 + 创建一条到点自动运行的提示词。")
-            .font(.system(size: 11))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 4)
-            .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "clock")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 20)
+                Text(L10n.Automation.emptyState)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                ForEach(AutomationTemplate.allCases) { template in
+                    templateButton(template)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 5)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func templateButton(_ template: AutomationTemplate) -> some View {
+        Button {
+            openTemplate(template)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: template.icon)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 13)
+                Text(template.name)
+                    .font(.system(size: 11))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(AgentDesign.subtleBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -124,17 +196,17 @@ struct AgentRoutinesSidebarSection: View {
             }
         }
         .contextMenu {
-            Button(routine.isEnabled ? "停用" : "启用") {
+            Button(routine.isEnabled ? L10n.Automation.menuDisable : L10n.Automation.menuEnable) {
                 appState.toggleAgentRoutineEnabled(id: routine.id)
             }
-            Button("立即运行一次") {
+            Button(L10n.Automation.runNow) {
                 appState.runAgentRoutineNow(id: routine.id)
             }
             Divider()
-            Button("编辑…") {
+            Button(L10n.Automation.edit) {
                 editing = RoutineSheetTarget(routine: routine, isNew: false)
             }
-            Button("删除 Routine", role: .destructive) {
+            Button(L10n.Automation.delete, role: .destructive) {
                 appState.deleteAgentRoutine(id: routine.id)
             }
         }
@@ -154,7 +226,7 @@ struct AgentRoutinesSidebarSection: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("立即运行一次")
+                .help(L10n.Automation.helpRunNow)
 
                 Button {
                     appState.toggleAgentRoutineEnabled(id: routine.id)
@@ -166,8 +238,20 @@ struct AgentRoutinesSidebarSection: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(routine.isEnabled ? "停用" : "启用")
+                .help(routine.isEnabled ? L10n.Automation.menuDisable : L10n.Automation.menuEnable)
             }
         }
+    }
+
+    private func openTemplate(_ template: AutomationTemplate?) {
+        var seeded = AgentRoutine(
+            workspaceRootPath: appState.rootDirectory?.standardizedFileURL.path
+        )
+        if let template {
+            seeded.name = template.name
+            seeded.prompt = template.prompt
+            seeded.schedule = template.schedule
+        }
+        editing = RoutineSheetTarget(routine: seeded, isNew: true)
     }
 }

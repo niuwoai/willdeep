@@ -48,6 +48,85 @@ enum L10n {
         static let workspaceAccessSummary = String(localized: "approval-mode.workspace-access.summary", defaultValue: "Allow current workspace actions; keep hard safety gates.")
     }
 
+    enum Automation {
+        static let cancel = String(localized: "automation.cancel", defaultValue: "Cancel")
+        static let createTitle = String(localized: "automation.create-title", defaultValue: "New Automation")
+        static let defaultName = String(localized: "automation.default-name", defaultValue: "Untitled Automation")
+        static let delete = String(localized: "automation.delete", defaultValue: "Delete Automation")
+        static let edit = String(localized: "automation.edit", defaultValue: "Edit…")
+        static let editTitle = String(localized: "automation.edit-title", defaultValue: "Edit Automation")
+        static let emptyState = String(localized: "automation.empty-state", defaultValue: "Create your first automation")
+        static let enabled = String(localized: "automation.enabled", defaultValue: "Enabled")
+        static let followCurrentRoute = String(localized: "automation.follow-current-route", defaultValue: "Follow current Flash / Pro route")
+        static let followCurrentRouteShort = String(localized: "automation.follow-current-route.short", defaultValue: "Follow current route")
+        static let header = String(localized: "automation.header", defaultValue: "Automations")
+        static let helpCreate = String(localized: "automation.help.create", defaultValue: "New Automation")
+        static let helpRunNow = String(localized: "automation.help.run-now", defaultValue: "Run once now")
+        static let helpRunOnce = String(localized: "automation.help.run-once", defaultValue: "Does not affect the schedule. Disabled automations can still run once manually.")
+        static let labelEvery = String(localized: "automation.label.every", defaultValue: "Every")
+        static let labelModel = String(localized: "automation.label.model", defaultValue: "Model")
+        static let labelName = String(localized: "automation.label.name", defaultValue: "Name")
+        static let labelPrompt = String(localized: "automation.label.prompt", defaultValue: "Prompt (sent as the first user message each run)")
+        static let labelSchedule = String(localized: "automation.label.schedule", defaultValue: "Schedule")
+        static let labelScheduleType = String(localized: "automation.label.schedule-type", defaultValue: "Schedule type")
+        static let labelWorkspace = String(localized: "automation.label.workspace", defaultValue: "Workspace")
+        static let menuDisable = String(localized: "automation.menu.disable", defaultValue: "Disable")
+        static let menuEnable = String(localized: "automation.menu.enable", defaultValue: "Enable")
+        static let noWorkspace = String(localized: "automation.no-workspace", defaultValue: "No workspace")
+        static let placeholderName = String(localized: "automation.placeholder.name", defaultValue: "e.g. Daily PR summary")
+        static let runNow = String(localized: "automation.run-now", defaultValue: "Run once now")
+        static let save = String(localized: "automation.save", defaultValue: "Save")
+        static let scheduleDaily = String(localized: "automation.schedule.daily", defaultValue: "Daily")
+        static let scheduleInterval = String(localized: "automation.schedule.interval", defaultValue: "Interval")
+        static let scheduleNextPrefix = String(localized: "automation.schedule.next-prefix", defaultValue: "Next:")
+        static let scheduleWeekdays = String(localized: "automation.schedule.weekdays", defaultValue: "Weekdays")
+        static let scheduleWeekdaysDetail = String(localized: "automation.schedule.weekdays-detail", defaultValue: "Weekdays (Mon-Fri)")
+        static let scheduleWeekly = String(localized: "automation.schedule.weekly", defaultValue: "Weekly")
+        static let templateDailyBriefName = String(localized: "automation.template.daily-brief.name", defaultValue: "Daily Brief")
+        static let templateDailyBriefPrompt = String(localized: "automation.template.daily-brief.prompt", defaultValue: "Generate a morning brief for the current project: inspect git status, recent changes, TODO clues, and risks that need attention today. Return prioritized action items.")
+        static let templateProjectMonitorName = String(localized: "automation.template.project-monitor.name", defaultValue: "Project Monitor")
+        static let templateProjectMonitorPrompt = String(localized: "automation.template.project-monitor.prompt", defaultValue: "Inspect the current project for obvious risks: uncommitted changes, TODO/FIXME markers, recently edited key files, and anything that may need my attention. Summarize findings and next actions.")
+        static let templateWeeklyReviewName = String(localized: "automation.template.weekly-review.name", defaultValue: "Weekly Review")
+        static let templateWeeklyReviewPrompt = String(localized: "automation.template.weekly-review.prompt", defaultValue: "Review the current project for the week: summarize major changes, completed work, remaining risks, and suggested next-week focus. Keep it concise.")
+        static let weekdayFriday = String(localized: "automation.weekday.friday", defaultValue: "Fri")
+        static let weekdayMonday = String(localized: "automation.weekday.monday", defaultValue: "Mon")
+        static let weekdaySaturday = String(localized: "automation.weekday.saturday", defaultValue: "Sat")
+        static let weekdaySunday = String(localized: "automation.weekday.sunday", defaultValue: "Sun")
+        static let weekdayThursday = String(localized: "automation.weekday.thursday", defaultValue: "Thu")
+        static let weekdayTuesday = String(localized: "automation.weekday.tuesday", defaultValue: "Tue")
+        static let weekdayWednesday = String(localized: "automation.weekday.wednesday", defaultValue: "Wed")
+        static func intervalHours(_ a1: String) -> String {
+            let template = String(localized: "automation.interval.hours", defaultValue: "Every %@ hours")
+            return String(format: template, a1)
+        }
+        static let intervalOneHour = String(localized: "automation.interval.one-hour", defaultValue: "Every hour")
+        static func intervalMinutes(_ a1: String) -> String {
+            let template = String(localized: "automation.interval.minutes", defaultValue: "Every %@ minutes")
+            return String(format: template, a1)
+        }
+        static func notificationBodyCatchUp(_ a1: String) -> String {
+            let template = String(localized: "automation.notification.body.catch-up", defaultValue: "%@ caught up after wake")
+            return String(format: template, a1)
+        }
+        static func notificationBodyStarted(_ a1: String) -> String {
+            let template = String(localized: "automation.notification.body.started", defaultValue: "%@ started")
+            return String(format: template, a1)
+        }
+        static let notificationTitle = String(localized: "automation.notification.title", defaultValue: "Automation started")
+        static func scheduleDailySummary(_ a1: String) -> String {
+            let template = String(localized: "automation.schedule.daily.summary", defaultValue: "Daily %@")
+            return String(format: template, a1)
+        }
+        static func scheduleWeekdaySummary(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "automation.schedule.weekday.summary", defaultValue: "%@ %@")
+            return String(format: template, a1, a2)
+        }
+        static func scheduleWeekdaysSummary(_ a1: String) -> String {
+            let template = String(localized: "automation.schedule.weekdays.summary", defaultValue: "Weekdays %@")
+            return String(format: template, a1)
+        }
+    }
+
     enum PluginPicker {
         static let help = String(localized: "plugin-picker.help", defaultValue: "Browse installed plugin skills and MCP capabilities.")
         static func installedPlugins(_ a1: String) -> String {

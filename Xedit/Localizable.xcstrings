@@ -6315,6 +6315,391 @@
         }
       }
     },
+    "automation.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Cancel" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "取消" } }
+      }
+    },
+    "automation.create-title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "New Automation" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "新建自动化" } }
+      }
+    },
+    "automation.default-name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Untitled Automation" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "未命名自动化" } }
+      }
+    },
+    "automation.delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Delete Automation" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "删除自动化" } }
+      }
+    },
+    "automation.edit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Edit…" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "编辑…" } }
+      }
+    },
+    "automation.edit-title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Edit Automation" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "编辑自动化" } }
+      }
+    },
+    "automation.empty-state": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Create your first automation" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "创建首个自动化" } }
+      }
+    },
+    "automation.enabled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Enabled" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启用" } }
+      }
+    },
+    "automation.follow-current-route": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Follow current Flash / Pro route" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "跟随当前 Flash / Pro 路由" } }
+      }
+    },
+    "automation.follow-current-route.short": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Follow current route" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "跟随当前路由" } }
+      }
+    },
+    "automation.header": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Automations" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "自动化" } }
+      }
+    },
+    "automation.help.create": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "New Automation" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "新建自动化" } }
+      }
+    },
+    "automation.help.run-now": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Run once now" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "立即运行一次" } }
+      }
+    },
+    "automation.help.run-once": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Does not affect the schedule. Disabled automations can still run once manually." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "不影响调度计划。即使自动化被禁用也会运行一次。" } }
+      }
+    },
+    "automation.interval.hours": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Every %1$@ hours" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "每 %1$@ 小时" } }
+      }
+    },
+    "automation.interval.minutes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Every %1$@ minutes" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "每 %1$@ 分钟" } }
+      }
+    },
+    "automation.interval.one-hour": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Every hour" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "每小时" } }
+      }
+    },
+    "automation.label.every": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Every" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "每" } }
+      }
+    },
+    "automation.label.model": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Model" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "模型" } }
+      }
+    },
+    "automation.label.name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Name" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "名称" } }
+      }
+    },
+    "automation.label.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Prompt (sent as the first user message each run)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "Prompt（每次运行作为首条用户消息）" } }
+      }
+    },
+    "automation.label.schedule": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Schedule" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "调度" } }
+      }
+    },
+    "automation.label.schedule-type": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Schedule type" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "调度类型" } }
+      }
+    },
+    "automation.label.workspace": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Workspace" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "工作区" } }
+      }
+    },
+    "automation.menu.disable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Disable" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "停用" } }
+      }
+    },
+    "automation.menu.enable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Enable" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启用" } }
+      }
+    },
+    "automation.no-workspace": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No workspace" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "不绑定工作区" } }
+      }
+    },
+    "automation.notification.body.catch-up": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%1$@ caught up after wake" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "「%1$@」补跑（睡眠唤醒后）" } }
+      }
+    },
+    "automation.notification.body.started": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%1$@ started" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "「%1$@」开始运行" } }
+      }
+    },
+    "automation.notification.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Automation started" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "自动化已启动" } }
+      }
+    },
+    "automation.placeholder.name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "e.g. Daily PR summary" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "如：每日 PR 摘要" } }
+      }
+    },
+    "automation.run-now": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Run once now" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "立即运行一次" } }
+      }
+    },
+    "automation.save": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Save" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "保存" } }
+      }
+    },
+    "automation.schedule.daily": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Daily" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "每天" } }
+      }
+    },
+    "automation.schedule.daily.summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Daily %1$@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "每天 %1$@" } }
+      }
+    },
+    "automation.schedule.interval": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Interval" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "按间隔" } }
+      }
+    },
+    "automation.schedule.next-prefix": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Next:" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "下次：" } }
+      }
+    },
+    "automation.schedule.weekday.summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%1$@ %2$@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%1$@ %2$@" } }
+      }
+    },
+    "automation.schedule.weekdays": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Weekdays" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "工作日" } }
+      }
+    },
+    "automation.schedule.weekdays-detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Weekdays (Mon-Fri)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "工作日（周一至周五）" } }
+      }
+    },
+    "automation.schedule.weekdays.summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Weekdays %1$@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "工作日 %1$@" } }
+      }
+    },
+    "automation.schedule.weekly": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Weekly" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "每周" } }
+      }
+    },
+    "automation.template.daily-brief.name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Daily Brief" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "每日简报" } }
+      }
+    },
+    "automation.template.daily-brief.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Generate a morning brief for the current project: inspect git status, recent changes, TODO clues, and risks that need attention today. Return prioritized action items." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "请生成一份当前项目的晨间简报：检查 git 状态、最近变更、TODO 线索和今天需要关注的风险，并输出按优先级排序的行动项。" } }
+      }
+    },
+    "automation.template.project-monitor.name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Project Monitor" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "项目监控" } }
+      }
+    },
+    "automation.template.project-monitor.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Inspect the current project for obvious risks: uncommitted changes, TODO/FIXME markers, recently edited key files, and anything that may need my attention. Summarize findings and next actions." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "请检查当前项目是否存在明显风险：未提交变更、TODO/FIXME 标记、最近修改的关键文件，以及任何可能需要我注意的事项。请汇总发现和下一步行动。" } }
+      }
+    },
+    "automation.template.weekly-review.name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Weekly Review" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "每周回顾" } }
+      }
+    },
+    "automation.template.weekly-review.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Review the current project for the week: summarize major changes, completed work, remaining risks, and suggested next-week focus. Keep it concise." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "请回顾当前项目本周情况：总结主要变化、已完成工作、遗留风险和下周建议关注点。保持简洁。" } }
+      }
+    },
+    "automation.weekday.friday": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Fri" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "周五" } }
+      }
+    },
+    "automation.weekday.monday": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Mon" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "周一" } }
+      }
+    },
+    "automation.weekday.saturday": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Sat" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "周六" } }
+      }
+    },
+    "automation.weekday.sunday": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Sun" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "周日" } }
+      }
+    },
+    "automation.weekday.thursday": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Thu" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "周四" } }
+      }
+    },
+    "automation.weekday.tuesday": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Tue" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "周二" } }
+      }
+    },
+    "automation.weekday.wednesday": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Wed" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "周三" } }
+      }
+    },
     "v%@": {},
     "willdeep": {},
     "·": {},
@@ -6723,8 +7108,8 @@
     "settings.local-agents.integration-section": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Xedit Integration" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "Xedit 接入状态" } }
+        "en": { "stringUnit": { "state": "translated", "value": "WillDeep Integration" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "WillDeep 接入状态" } }
       }
     },
     "settings.local-agents.integration-description": {

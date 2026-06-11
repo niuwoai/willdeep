@@ -2,16 +2,15 @@
 //  AgentRoutine.swift
 //  WillDeep
 //
-//  A scheduled prompt the user wants the Agent to run automatically.
-//  When a routine fires, a fresh AgentSession is created (bound to the
-//  routine's workspace + model) and the prompt is dispatched as the
-//  first user message.
+//  Compatibility model for user-facing Automations. The persisted
+//  JSON still uses the historical "routine" type names/paths so
+//  existing scheduled prompts keep loading without migration.
 //
 
 import Foundation
 
-/// How often / when a routine should fire. Persisted as a tagged enum so
-/// existing routine JSON survives adding new schedule kinds later.
+/// How often / when an automation should fire. Persisted as a tagged enum
+/// so existing JSON survives adding new schedule kinds later.
 enum AgentRoutineSchedule: Codable, Equatable {
     /// Every N minutes from the last run (or from `createdAt` if never run).
     case interval(minutes: Int)
@@ -23,21 +22,23 @@ enum AgentRoutineSchedule: Codable, Equatable {
     /// 1 = Sunday … 7 = Saturday.
     case weeklyAt(weekday: Int, hour: Int, minute: Int)
 
-    /// One-line human summary shown next to the routine name in the sidebar.
+    /// One-line human summary shown next to the automation name in the sidebar.
     var summary: String {
         switch self {
         case .interval(let minutes):
             if minutes % 60 == 0 {
                 let hours = minutes / 60
-                return hours == 1 ? "每小时" : "每 \(hours) 小时"
+                return hours == 1
+                    ? L10n.Automation.intervalOneHour
+                    : L10n.Automation.intervalHours("\(hours)")
             }
-            return "每 \(minutes) 分钟"
+            return L10n.Automation.intervalMinutes("\(minutes)")
         case .dailyAt(let h, let m):
-            return "每天 \(Self.formatTime(h, m))"
+            return L10n.Automation.scheduleDailySummary(Self.formatTime(h, m))
         case .weekdaysAt(let h, let m):
-            return "工作日 \(Self.formatTime(h, m))"
+            return L10n.Automation.scheduleWeekdaysSummary(Self.formatTime(h, m))
         case .weeklyAt(let weekday, let h, let m):
-            return "\(Self.weekdayName(weekday)) \(Self.formatTime(h, m))"
+            return L10n.Automation.scheduleWeekdaySummary(Self.weekdayName(weekday), Self.formatTime(h, m))
         }
     }
 
@@ -47,14 +48,14 @@ enum AgentRoutineSchedule: Codable, Equatable {
 
     private static func weekdayName(_ weekday: Int) -> String {
         switch weekday {
-        case 1: return "周日"
-        case 2: return "周一"
-        case 3: return "周二"
-        case 4: return "周三"
-        case 5: return "周四"
-        case 6: return "周五"
-        case 7: return "周六"
-        default: return "周?"
+        case 1: return L10n.Automation.weekdaySunday
+        case 2: return L10n.Automation.weekdayMonday
+        case 3: return L10n.Automation.weekdayTuesday
+        case 4: return L10n.Automation.weekdayWednesday
+        case 5: return L10n.Automation.weekdayThursday
+        case 6: return L10n.Automation.weekdayFriday
+        case 7: return L10n.Automation.weekdaySaturday
+        default: return "?"
         }
     }
 
@@ -154,8 +155,8 @@ enum AgentRoutineSchedule: Codable, Equatable {
     }
 }
 
-/// A user-defined scheduled prompt. The `prompt` is sent as the first
-/// user message of a brand-new session every time the routine fires.
+/// A user-defined automation. The `prompt` is sent as the first user
+/// message of a brand-new session every time the schedule fires.
 struct AgentRoutine: Identifiable, Codable, Equatable {
     let id: UUID
     var name: String
@@ -177,7 +178,7 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
 
     init(
         id: UUID = UUID(),
-        name: String = "未命名 Routine",
+        name: String = L10n.Automation.defaultName,
         prompt: String = "",
         workspaceRootPath: String? = nil,
         modelID: String? = nil,
@@ -203,7 +204,7 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
 
     /// Workspace folder name (or "No workspace"), mirroring AgentSession.
     var workspaceDisplayName: String {
-        guard let path = workspaceRootPath, !path.isEmpty else { return "No workspace" }
+        guard let path = workspaceRootPath, !path.isEmpty else { return L10n.Automation.noWorkspace }
         return URL(fileURLWithPath: path).lastPathComponent
     }
 

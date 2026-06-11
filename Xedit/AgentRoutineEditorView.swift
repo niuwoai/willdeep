@@ -2,10 +2,9 @@
 //  AgentRoutineEditorView.swift
 //  WillDeep
 //
-//  Sheet for creating / editing an Agent routine: name, prompt, workspace
-//  binding, model override, schedule, enabled flag. Presented from the
-//  Agent-mode sidebar's Routines section. Saving hands the routine back
-//  to AppState which persists it and reschedules.
+//  Sheet for creating / editing an Automation: name, prompt, workspace
+//  binding, model override, schedule, enabled flag. The underlying type
+//  remains AgentRoutine so existing persisted JSON stays compatible.
 //
 
 import SwiftUI
@@ -33,10 +32,10 @@ struct AgentRoutineEditorView: View {
         var id: String { rawValue }
         var label: String {
             switch self {
-            case .interval: return "按间隔"
-            case .daily:    return "每天"
-            case .weekdays: return "工作日"
-            case .weekly:   return "每周"
+            case .interval: return L10n.Automation.scheduleInterval
+            case .daily:    return L10n.Automation.scheduleDaily
+            case .weekdays: return L10n.Automation.scheduleWeekdays
+            case .weekly:   return L10n.Automation.scheduleWeekly
             }
         }
     }
@@ -96,7 +95,7 @@ struct AgentRoutineEditorView: View {
 
     private var header: some View {
         HStack {
-            Text(isNew ? "新建 Routine" : "编辑 Routine")
+            Text(isNew ? L10n.Automation.createTitle : L10n.Automation.editTitle)
                 .font(.system(size: 14, weight: .semibold))
             Spacer()
         }
@@ -106,15 +105,15 @@ struct AgentRoutineEditorView: View {
 
     private var nameField: some View {
         VStack(alignment: .leading, spacing: 6) {
-            sectionLabel("名称")
-            TextField("如：每日 PR 摘要", text: $draft.name)
+            sectionLabel(L10n.Automation.labelName)
+            TextField(L10n.Automation.placeholderName, text: $draft.name)
                 .textFieldStyle(.roundedBorder)
         }
     }
 
     private var promptField: some View {
         VStack(alignment: .leading, spacing: 6) {
-            sectionLabel("Prompt（每次运行作为首条用户消息）")
+            sectionLabel(L10n.Automation.labelPrompt)
             TextEditor(text: $draft.prompt)
                 .font(.system(size: 12))
                 .frame(minHeight: 120)
@@ -127,13 +126,13 @@ struct AgentRoutineEditorView: View {
 
     private var workspaceField: some View {
         VStack(alignment: .leading, spacing: 6) {
-            sectionLabel("Workspace")
+            sectionLabel(L10n.Automation.labelWorkspace)
             Menu {
                 Button {
                     draft.workspaceRootPath = nil
                 } label: {
                     HStack {
-                        Text("不绑定 Workspace")
+                        Text(L10n.Automation.noWorkspace)
                         if draft.workspaceRootPath == nil {
                             Image(systemName: "checkmark")
                         }
@@ -179,13 +178,13 @@ struct AgentRoutineEditorView: View {
 
     private var modelField: some View {
         VStack(alignment: .leading, spacing: 6) {
-            sectionLabel("模型")
+            sectionLabel(L10n.Automation.labelModel)
             Menu {
                 Button {
                     draft.modelID = nil
                 } label: {
                     HStack {
-                        Text("跟随当前 Flash / Pro 路由")
+                        Text(L10n.Automation.followCurrentRoute)
                         if draft.modelID == nil {
                             Image(systemName: "checkmark")
                         }
@@ -211,7 +210,7 @@ struct AgentRoutineEditorView: View {
                 HStack {
                     Image(systemName: "sparkle")
                         .foregroundStyle(.secondary)
-                    Text(draft.modelID?.isEmpty == false ? draft.modelID! : "跟随当前路由")
+                    Text(draft.modelID?.isEmpty == false ? draft.modelID! : L10n.Automation.followCurrentRouteShort)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer()
@@ -234,8 +233,8 @@ struct AgentRoutineEditorView: View {
 
     private var scheduleField: some View {
         VStack(alignment: .leading, spacing: 6) {
-            sectionLabel("调度")
-            Picker("调度类型", selection: $scheduleKind) {
+            sectionLabel(L10n.Automation.labelSchedule)
+            Picker(L10n.Automation.labelScheduleType, selection: $scheduleKind) {
                 ForEach(ScheduleKind.allCases) { kind in
                     Text(kind.label).tag(kind)
                 }
@@ -247,27 +246,27 @@ struct AgentRoutineEditorView: View {
             HStack(spacing: 8) {
                 switch scheduleKind {
                 case .interval:
-                    Text("每")
+                    Text(L10n.Automation.labelEvery)
                     Stepper(value: $intervalMinutes, in: 1...720, step: 5) {
-                        Text("\(intervalMinutes) 分钟")
+                        Text(L10n.Automation.intervalMinutes("\(intervalMinutes)"))
                             .monospacedDigit()
                     }
                     .fixedSize()
                 case .daily:
-                    Text("每天")
+                    Text(L10n.Automation.scheduleDaily)
                     timePicker
                 case .weekdays:
-                    Text("工作日（周一至周五）")
+                    Text(L10n.Automation.scheduleWeekdaysDetail)
                     timePicker
                 case .weekly:
-                    Picker("星期", selection: $weekday) {
-                        Text("周一").tag(2)
-                        Text("周二").tag(3)
-                        Text("周三").tag(4)
-                        Text("周四").tag(5)
-                        Text("周五").tag(6)
-                        Text("周六").tag(7)
-                        Text("周日").tag(1)
+                    Picker(L10n.Automation.scheduleWeekly, selection: $weekday) {
+                        Text(L10n.Automation.weekdayMonday).tag(2)
+                        Text(L10n.Automation.weekdayTuesday).tag(3)
+                        Text(L10n.Automation.weekdayWednesday).tag(4)
+                        Text(L10n.Automation.weekdayThursday).tag(5)
+                        Text(L10n.Automation.weekdayFriday).tag(6)
+                        Text(L10n.Automation.weekdaySaturday).tag(7)
+                        Text(L10n.Automation.weekdaySunday).tag(1)
                     }
                     .labelsHidden()
                     .fixedSize()
@@ -304,7 +303,7 @@ struct AgentRoutineEditorView: View {
 
     private var enabledField: some View {
         Toggle(isOn: $draft.isEnabled) {
-            Text("启用")
+            Text(L10n.Automation.enabled)
         }
         .toggleStyle(.switch)
     }
@@ -312,18 +311,18 @@ struct AgentRoutineEditorView: View {
     private var footer: some View {
         HStack {
             if !isNew {
-                Button("立即运行一次") {
+                Button(L10n.Automation.runNow) {
                     save(closing: false)
                     appState.runAgentRoutineNow(id: draft.id)
                     dismiss()
                 }
-                .help("不影响调度计划。即使 Routine 被禁用也会运行一次。")
+                .help(L10n.Automation.helpRunOnce)
                 .disabled(!isSaveEnabled)
             }
             Spacer()
-            Button("取消") { dismiss() }
+            Button(L10n.Automation.cancel) { dismiss() }
                 .keyboardShortcut(.cancelAction)
-            Button("保存") {
+            Button(L10n.Automation.save) {
                 save(closing: true)
             }
             .keyboardShortcut(.defaultAction)
@@ -361,14 +360,14 @@ struct AgentRoutineEditorView: View {
     }
 
     private var currentScheduleSummary: String {
-        "下次：\(assembledSchedule().summary)"
+        "\(L10n.Automation.scheduleNextPrefix) \(assembledSchedule().summary)"
     }
 
     // MARK: Pickers — candidates
 
     private var workspaceLabel: String {
         guard let path = draft.workspaceRootPath, !path.isEmpty else {
-            return "不绑定 Workspace"
+            return L10n.Automation.noWorkspace
         }
         return URL(fileURLWithPath: path).lastPathComponent
     }
