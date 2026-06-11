@@ -57,6 +57,14 @@ struct EditorView: NSViewRepresentable {
     /// Called when the user picks a syntax highlighting mode from the editor menu.
     var onSyntaxHighlightingChange: ((SyntaxHighlightingSelection) -> Void)?
 
+    /// Called from the editor context menu to stage the current text selection
+    /// as Agent conversation context without immediately sending it.
+    var onAddSelectionToAgentConversation: ((AgentEditorSelectionContext) -> Void)?
+
+    /// Called from the editor context menu to reveal the side Agent panel and
+    /// stage the current text selection as context for a question.
+    var onAskSelectionInAgentPanel: ((AgentEditorSelectionContext) -> Void)?
+
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
@@ -94,6 +102,12 @@ struct EditorView: NSViewRepresentable {
         textView.scopeGuideLanguage = language
         textView.onSyntaxHighlightingChange = { [weak coordinator = context.coordinator] selection in
             coordinator?.parent.onSyntaxHighlightingChange?(selection)
+        }
+        textView.onAddSelectionToAgentConversation = { [weak coordinator = context.coordinator] selection in
+            coordinator?.parent.onAddSelectionToAgentConversation?(selection)
+        }
+        textView.onAskSelectionInAgentPanel = { [weak coordinator = context.coordinator] selection in
+            coordinator?.parent.onAskSelectionInAgentPanel?(selection)
         }
 
         let ruler = LineNumberRulerView(scrollView: scrollView, textView: textView)
@@ -135,6 +149,12 @@ struct EditorView: NSViewRepresentable {
         textView.scopeGuideLanguage = language
         textView.onSyntaxHighlightingChange = { [weak coordinator = context.coordinator] selection in
             coordinator?.parent.onSyntaxHighlightingChange?(selection)
+        }
+        textView.onAddSelectionToAgentConversation = { [weak coordinator = context.coordinator] selection in
+            coordinator?.parent.onAddSelectionToAgentConversation?(selection)
+        }
+        textView.onAskSelectionInAgentPanel = { [weak coordinator = context.coordinator] selection in
+            coordinator?.parent.onAskSelectionInAgentPanel?(selection)
         }
         // `applyAppearance` sets a dozen NSTextView properties (font, theme,
         // typingAttributes, paragraph style) and re-tiles the line-number ruler
@@ -977,6 +997,8 @@ final class WillDeepTextView: NSTextView {
     var syntaxHighlightingSelection: SyntaxHighlightingSelection = .automatic
     var detectedLanguage: Language?
     var onSyntaxHighlightingChange: ((SyntaxHighlightingSelection) -> Void)?
+    var onAddSelectionToAgentConversation: ((AgentEditorSelectionContext) -> Void)?
+    var onAskSelectionInAgentPanel: ((AgentEditorSelectionContext) -> Void)?
     private var foldedGuides: Set<ScopeGuide> = []
 
     /// Tracks whether the layout currently reflects `foldedGuides`. While this is
@@ -1004,6 +1026,19 @@ final class WillDeepTextView: NSTextView {
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = super.menu(for: event) ?? NSMenu()
+        if currentAgentSelectionContext() != nil {
+            if menu.items.isEmpty == false {
+                menu.addItem(.separator())
+            }
+            menu.addItem(agentSelectionMenuItem(
+                title: L10n.AgentSelection.addToConversation,
+                action: #selector(addSelectionToAgentConversation(_:))
+            ))
+            menu.addItem(agentSelectionMenuItem(
+                title: L10n.AgentSelection.askInSidebar,
+                action: #selector(askSelectionInAgentPanel(_:))
+            ))
+        }
         if menu.items.isEmpty == false {
             menu.addItem(.separator())
         }
@@ -1042,6 +1077,61 @@ final class WillDeepTextView: NSTextView {
             guard let language = Language(rawValue: value) else { return }
             onSyntaxHighlightingChange?(.language(language))
         }
+    }
+
+    @objc private func addSelectionToAgentConversation(_ sender: NSMenuItem) {
+        guard let context = currentAgentSelectionContext() else { return }
+        onAddSelectionToAgentConversation?(context)
+    }
+
+    @objc private func askSelectionInAgentPanel(_ sender: NSMenuItem) {
+        guard let context = currentAgentSelectionContext() else { return }
+        onAskSelectionInAgentPanel?(context)
+    }
+
+    private func agentSelectionMenuItem(title: String, action: Selector) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        return item
+    }
+
+    private func currentAgentSelectionContext() -> AgentEditorSelectionContext? {
+        let selected = selectedRange()
+        guard selected.length > 0 else { return nil }
+        let nsText = string as NSString
+        let boundedLocation = min(max(0, selected.location), nsText.length)
+        let boundedEnd = min(max(boundedLocation, NSMaxRange(selected)), nsText.length)
+        guard boundedEnd > boundedLocation else { return nil }
+
+        let selectedText = nsText.substring(with: NSRange(
+            location: boundedLocation,
+            length: boundedEnd - boundedLocation
+        ))
+        let trimmed = selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let startLine = Self.lineNumber(for: boundedLocation, in: nsText)
+        let endLine = Self.lineNumber(for: max(boundedLocation, boundedEnd - 1), in: nsText)
+        return AgentEditorSelectionContext(
+            text: selectedText,
+            startLine: startLine,
+            endLine: max(startLine, endLine)
+        )
+    }
+
+    private static func lineNumber(for location: Int, in text: NSString) -> Int {
+        let boundedLocation = min(max(0, location), text.length)
+        var lineStart = 0
+        var lineEnd = 0
+        var contentsEnd = 0
+        text.getLineStart(
+            &lineStart,
+            end: &lineEnd,
+            contentsEnd: &contentsEnd,
+            for: NSRange(location: boundedLocation, length: 0)
+        )
+        let prefix = text.substring(with: NSRange(location: 0, length: lineStart))
+        return prefix.components(separatedBy: .newlines).count
     }
 
     private func syntaxHighlightingMenuItem() -> NSMenuItem {

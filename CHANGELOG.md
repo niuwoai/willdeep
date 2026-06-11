@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.60.0-rc3 - 2026-06-11
+
+### Agent Selection Context
+
+- 编辑器选中文本后的右键菜单新增“添加到对话”和“在侧边 Agent 中提问”，可把当前选区作为 Agent 文本附件加入下一轮对话。
+- 选区附件会记录文件、行号范围和语言信息，打开侧边 Agent 面板后以可移除 chip 展示；即使输入框为空，只要有选区附件也可以发送。
+- “在侧边 Agent 中提问”会打开右侧 Agent 面板、聚焦输入框，并预填一条面向已附加选区的问题提示。
+
+### Remote Runtime
+
+- 新增 `willdeep-agent/` Go 子模块，提供远端 daemon MVP；CLI 使用 Cobra，支持 `serve`、`probe`、`version` 子命令。
+- `willdeep-agent serve` 默认绑定 `127.0.0.1:8765`，支持 `--workspace` 限定远端 workspace root，并可通过 `--token`、`--token-file` 或 `WILLDEEP_AGENT_TOKEN` 启用 Bearer token 鉴权。
+- daemon HTTP API 覆盖 `/health`、`/v1/probe`、`/v1/fs/list`、`/v1/fs/read`、`/v1/fs/write`、`/v1/search`、`/v1/git/status`、`/v1/run/start`、job 查询、job 输出、job kill 与 SSE job events。
+- daemon WebSocket 通道支持 `hello`、`probe`、`fs.read`、`fs.write`、`fs.list`、`search`、`git.status`、`run.start`、`run.kill` 事件。
+- 远端 path 统一通过 workspace root 规范化，拒绝 `..`、绝对 path 越权和 symlink 逃逸；后台命令输出保留 64KB 环形缓冲，超时上限 6 小时。
+
+### Tests
+
+- 新增 Go 单元测试，覆盖 workspace path 越权、symlink 逃逸、代理凭据脱敏和 token file 加载。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc3`。
+
 ## 1.60.0-rc2 - 2026-06-11
 
 ### Remote Runtime

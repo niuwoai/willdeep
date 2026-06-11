@@ -8,7 +8,7 @@
 
 [![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.60.0--rc2-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.60.0--rc3-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *No Electron. No 800MB Helper processes. No "loading workspace…" spinner that eats your afternoon.*
@@ -57,6 +57,7 @@ Hit **⌘⇧A** and the window flips into a dedicated chat surface — project-g
 - **Two-tier routing.** Configure a cheap **Flash** model and a strong **Pro** model. Auto-route cost-first or force Pro for hard turns.
 - **Tools, not just chat.** The agent can `search_files`, `grep_files` (real regex), `read_file`, `list_directory`, `git_status`, `run_command`, `ask_user`. It can also list & call **Codex skills** and **MCP servers** you've configured.
 - **Remote runtimes.** Configure SSH hosts in Settings → Runtimes, bind an Agent session to a remote workspace, and the Agent's file reads, grep/search, Git status, shell commands, builds, tests, and delegated CLI agents execute there while the UI stays local.
+- **Remote daemon MVP.** The `willdeep-agent/` Go module ships a remote daemon with HTTP, SSE job events, and WebSocket control events. Run it on a remote Linux/macOS host behind an SSH tunnel: `willdeep-agent serve --workspace /path/to/project --token-file ~/.willdeep-agent-token`.
 - **Auto-approve safe commands.** Read-only stuff (`ls`, `cat`, `git diff`, `rg`, …) runs immediately via a static allowlist. Borderline commands fall through to a tiny LLM judge ("YES/NO — is this read-only?"). Destructive patterns still demand you type `confirm`.
 - **Diff proposals, not blind writes.** Agent edits arrive as unified diffs you can read, **apply, or reject**. Only files inside your workspace. Open tabs + git status update automatically.
 - **Image-in.** Paste, drag, or attach screenshots in the composer. Text-only providers transparently route through a separately configured image-describing provider.
@@ -133,7 +134,7 @@ Requires Xcode and macOS 14+. The app builds as **WillDeep.app**. The public pro
 
 ## Status
 
-WillDeep is in active `1.59.x` development. The editor surface is solid for daily use; the agent stack is the area moving fastest. See [CHANGELOG.md](CHANGELOG.md) for what each release changed and [product-overview.md](product-overview.md) for the full capability matrix and open questions.
+WillDeep is in active `1.60.x` development. The editor surface is solid for daily use; the agent stack is the area moving fastest. See [CHANGELOG.md](CHANGELOG.md) for what each release changed and [product-overview.md](product-overview.md) for the full capability matrix and open questions.
 
 We ship a release candidate the moment a fix lands. Tags follow `vMAJOR.MINOR.PATCH-rcN`.
 
@@ -179,7 +180,7 @@ WillDeep is licensed under the [Apache License 2.0](LICENSE). You are free to us
 
 [![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.60.0--rc2-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.60.0--rc3-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *不靠 Electron。没有 800MB 的 Helper 子进程。没有那种让你怀疑人生的 "loading workspace…"。*
@@ -304,7 +305,7 @@ open Xedit.xcodeproj
 
 ## 项目状态
 
-WillDeep 当前在 `1.59.x` 上活跃迭代。编辑器主体已经很稳，可以日常用；Agent 部分是改动最频繁的地方。每次发布的具体变化看 [CHANGELOG.md](CHANGELOG.md)，完整的能力矩阵和未决问题看 [product-overview.md](product-overview.md)。
+WillDeep 当前在 `1.60.x` 上活跃迭代。编辑器主体已经很稳，可以日常用；Agent 部分是改动最频繁的地方。每次发布的具体变化看 [CHANGELOG.md](CHANGELOG.md)，完整的能力矩阵和未决问题看 [product-overview.md](product-overview.md)。
 
 只要一个 fix 落地我们就发一个 release candidate。Tag 格式：`vMAJOR.MINOR.PATCH-rcN`。
 

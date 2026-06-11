@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-11 | Current version: v1.60.0-rc2
+> Last updated: 2026-06-11 | Current version: v1.60.0-rc3
 
 ## Positioning
 
@@ -16,7 +16,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 
 - **入口** — `XeditApp.swift`：`@main App`，注入唯一 `AppState` `@StateObject` 给整个窗口树。
 - **状态枢纽** — `AppState.swift`：全局 `ObservableObject`，承载工作区根目录、tab 集、find/replace、git 状态、Agent 配置库等"窗口级"状态。rc42 完成体检阶段 3：把原 4946 行的 AppState 用 `extension` 拆成 6 个伴生文件（`AppStateAgentLoop`、`AppStateAgentSessions`、`AppStateFileOperations`、`AppStateGitStatus`、`AppStateEditorTextUtilities`、`AppStatePersistenceStores`），主类瘦身到 ~1364 行，所有伴生文件 < 1400 行；门面 + callsite 不动。**per-session Agent 状态已经在 rc2 抽到 `AgentRuntime`**：22 个原本 `@Published` 在 AppState 上的 Agent 字段（messages / patchProposals / queue / mode / plan / goal …）下沉到 `AgentRuntime`，AppState 上保留同名 get/set delegate 转发到 `activeRuntime`，并把 `activeRuntime.objectWillChange` 通过 `subscribeToActiveRuntime()` republish 到自身的 publisher 上，UI 端无感。
-- **视图层** — `ContentView.swift`（rc40 拆完，1798 行）是主窗口外壳，子视图（背景、空状态、窗口 chrome、Markdown 预览）独立成 `ContentViewBackgrounds.swift` / `EmptyStateViews.swift` / `MainWindowChrome.swift` / `MarkdownPreview.swift`。Agent 面板有两套渲染：`AgentPanelView`（侧边 panel 模式）和 `AgentModeView`（Cmd+Shift+A 进入的全屏 mode），共用 `AgentChatHistoryTextView`（TextKit 历史）和 `AgentModeComposerView`（输入区）。
+- **视图层** — `ContentView.swift`（rc40 拆完，1804 行）是主窗口外壳，子视图（背景、空状态、窗口 chrome、Markdown 预览）独立成 `ContentViewBackgrounds.swift` / `EmptyStateViews.swift` / `MainWindowChrome.swift` / `MarkdownPreview.swift`。Agent 面板有两套渲染：`AgentPanelView`（侧边 panel 模式）和 `AgentModeView`（Cmd+Shift+A 进入的全屏 mode），共用 `AgentChatHistoryTextView`（TextKit 历史）和 `AgentModeComposerView`（输入区）。
 - **Agent 运行时** — `AgentRuntime.swift` 一个会话一个实例，独占自身的 messages / requestTask / toolDecisionWaiter / 模式 / 草稿等；多个 runtime 可以并发跑（后台 routine 不会抢占用户的 active session）。**`AgentClient.swift` 自 1.56 起是 facade**：根据 `configuration.providerKind` 把调用分派给 4 个原生适配器——`OpenAIChatAdapter`（OpenAI / DashScope / DeepSeek / Kimi / Moonshot / OpenRouter / SiliconFlow / AnyRouter / some.im / Custom）、`AnthropicMessagesAdapter`（claude preset，rc2 起原生 /v1/messages）、`GeminiAdapter`（gemini preset，rc4 起原生 /v1beta/models/{model}:streamGenerateContent）、`OpenAIResponsesAdapter`（openai-responses preset，rc5 起原生 /responses，给 o-系列推理模型用）。共享工具（HTTP timeouts、User-Agent、URL 拼接、错误体脱敏）抽到 `AgentNetworkSupport.swift`。UI 文案集中在 `AgentProviderL10n.swift`，每个 `AgentProviderKind` 与 `AgentProviderPreset` 都有 `shortLabel` / `helpText` / `apiKeySourceHint` / `inlineNotice` 工具属性。`AgentTools.swift` 是内建工具（`search_files` / `grep_files` / `read_file` / `list_directory` / `git_status` / `run_command` / `ask_user` / skill / MCP / 1.57 新增的 `list_jobs` / `get_job_output` / `kill_job`）。**1.57 起** `run_command` 支持 `run_in_background: true`，把长任务交给 `AgentBackgroundJobs.swift` 的 `AgentJobRegistry`：子进程在 host 这边继续跑，agent loop 在下一轮 turn 开头自动把完成事件渲染成 `.system` 消息塞进 history，不用模型 busy-poll；UI 用 AgentPanelView 右侧抽屉展示 alive jobs + 实时计时器 + Kill 按钮；1.58.0-rc1 起两个 transcript 底部还有 Claude Code 式「✳ N 个任务运行中」状态行（`AgentRunningTasksRow`，统计前台 `.running` 工具 + 存活后台作业，turn 结束后只要作业还活着就继续显示）。**1.58 起**新增 `spawn_agent` 子 agent（`AgentSubagents.swift`）：模型可派出只读子 agent（headless 循环复用 AgentClient 四适配器 + AgentToolRunner，工具面仅 search/grep/read/list/git_status/skills + read 风险 shell，无审批 UI 故任何需审批操作直接拒绝；嵌套封死一层，回合上限 12），同步模式内联返回报告，`run_in_background: true` 最多 3 个并行、完成后经 `AgentSubagentRegistry` 复用后台作业管道注入 `<subagent-report>` 系统消息。rc2 再加 `claude_code` 工具：把写任务委派给本机 Claude Code CLI（headless `claude -p`，薄组装层直接走 runCommand 后台管道；`.write` 风险逐次审批，Always Allow 签名按 permission_mode 区分，`bypassPermissions` 硬编码排除）。rc16 起 Settings 新增 Local Agents 标签，扫描 Claude Code / Codex CLI / OpenCode / Aider / Gemini CLI / Qwen Code / Cursor CLI / Goose / Amp / Crush 的常见安装路径与 PATH，并标明哪些已接入为可直接委派的 Agent 工具。rc17 起新增 `codex_cli` 与 `cursor_agent` 两个委派工具：分别调用本机 `codex exec` 和 `cursor agent --print`，默认后台运行，按 permission_mode 提供只读 plan/ask 与 workspace-write 模式，并固定排除 dangerous bypass / yolo / force 路径。`AgentSessionStore` 负责 JSON 持久化（`~/Library/Application Support/WillDeep/agent-sessions/`），`AgentRoutineStore` + `AgentRoutineScheduler` 负责定时 routine。
 - **编辑器内核** — `EditorView.swift` 包 `NSTextView`，搭配 `SyntaxHighlighter.swift`（NSRegularExpression 静态缓存，viewport 高亮）/ `ScopeGuideCalculator.swift`（fold + scope guide）。
 
@@ -28,7 +28,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 | --- | --- | --- |
 | `AppState.swift` | ~1364 | 全局状态枢纽 + 6 个 manager 伴生文件聚合（rc42 拆完） |
 | `AppStateAgentLoop.swift` | ~1382 | `dispatchAgentMessage` / `runAgentLoop` / `awaitToolDecision` / 工具决策处理 / context 压缩 / patch 应用（rc42 拆出） |
-| `AppStateAgentSessions.swift` | ~1052 | sendAgentMessage / sessions/routines 生命周期 / Plan & Goal / provider library 切换 / 附件管理（rc42 拆出） |
+| `AppStateAgentSessions.swift` | ~1280 | sendAgentMessage / sessions/routines 生命周期 / Plan & Goal / provider library 切换 / 附件管理（rc42 拆出） |
 | `AppStateFileOperations.swift` | ~540 | NSOpenPanel / file load/save / session restore / security-scoped bookmark（rc42 拆出） |
 | `AppStateGitStatus.swift` | ~488 | git porcelain 解析 + `loadGitStatus` / `refreshGitStatusAfterAgentTool` / worktree snapshot/diff preview（rc42 拆出） |
 | `AppStateEditorTextUtilities.swift` | ~180 | nonisolated 文本工具：findRanges / changedLineNumbers / 行操作 / 目录枚举（rc42 拆出） |
@@ -51,9 +51,9 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 | `AgentChatHistoryTextView.swift` | ~541 | NSViewRepresentable 包装 + NSTextView 子类 + bubble layout manager（rc45 拆完） |
 | `AgentChatHistoryFormatter.swift` | ~1247 | Markdown normalizer + AgentChatHistoryRenderer TextKit baker（rc45 拆出） |
 | `AgentChatChromeRenderers.swift` | ~121 | 代码 copy 按钮 + footer 按钮 NSAttributedString builder（rc45 拆出） |
-| `ContentView.swift` | ~1798 | 主窗口外壳（rc40 拆完） |
-| `EditorView.swift` | ~1692 | NSTextView 包装、滚动、caret/scroll 记忆、folding |
-| `AgentPanelView.swift` | ~1610 | 侧边 panel 形态的 Agent 面板 |
+| `ContentView.swift` | ~1804 | 主窗口外壳（rc40 拆完） |
+| `EditorView.swift` | ~1782 | NSTextView 包装、滚动、caret/scroll 记忆、folding |
+| `AgentPanelView.swift` | ~1977 | 侧边 panel 形态的 Agent 面板 |
 | `EditorSettingsView.swift` | ~1393 | Settings 主窗口：通用 / 字体 / Agent / Skills / Memory / MCP |
 | `AgentModels.swift` | ~1116 | `AgentSession` / `AgentMessage` / `AgentConfiguration` / `AgentProviderLibrary` 等数据模型 |
 | `SyntaxHighlighter.swift` | ~902 | 多语言正则规则 + 静态 NSRegularExpression 缓存 + viewport 高亮 |
@@ -74,12 +74,12 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 
 其余文件（`AgentMemoryStore` / `AgentSkillSettingsStore` / `FileTreeView` / `EditorInspector` / `EditorAppearance` / `EditorTab` / `FileSystemNode` / `ProjectFileListCache` / `CommandLineToolInstaller` / `AgentImageViews` / `AgentRoutine*` 等）单一职责、规模可控（<500 行），目前不在重构清单。
 
-CLAUDE.md §10 的软上限是 2000 行，硬上限是 3000 行。rc42 拆完 `AppState.swift`（1364 行）；rc45 拆完 `AgentModeView.swift` / `AgentTools.swift` / `AgentModeComposerView.swift` / `AgentChatHistoryTextView.swift` 共 14 个新文件，全部低于 1500 行任务目标。当前所有 `Xedit/*.swift` 主文件均 ≤ 1798 行（`ContentView.swift`）。
+CLAUDE.md §10 的软上限是 2000 行，硬上限是 3000 行。rc42 拆完 `AppState.swift`（1364 行）；rc45 拆完 `AgentModeView.swift` / `AgentTools.swift` / `AgentModeComposerView.swift` / `AgentChatHistoryTextView.swift` 共 14 个新文件，全部低于 1500 行任务目标。当前所有 `Xedit/*.swift` 主文件均 < 2000 行（`AgentPanelView.swift` 约 1977 行，已接近软上限，后续扩展应优先拆分）。
 
 ## 关键概念
 
 - **AgentRuntime per session** — 一个 `AgentSession` 配一个 `AgentRuntime`。runtime 内独占 `messages`、`requestTask`（当前流式 Task）、`toolDecisionWaiter`（pending 工具批准的 continuation）、`composerDraft`、`mode/plan/goal`、`turnStartedAt` 等。AppState 通过 `activeSessionID -> activeRuntime` 选中"当前"，但其他 runtime 继续在后台跑。切换会话不会取消正在流式的请求；用户回来时还能看到完整 transcript。
-- **Remote Runtime（1.60.0-rc2）** — Agent session 的 workspace 现在可记录为本地路径或远端 runtime + 远端路径。Settings → Runtimes 管理 SSH runtime，使用系统 `ssh -o BatchMode=yes` 探测远端 Linux/macOS 与 arm64/x86_64 架构，并记录 git / rg / shell、Node/npm/yarn、Python/pip、Ruby、Go、Java、GitHub CLI (`gh`) 版本与登录状态、npm/yarn registry、npm/pip proxy 与 `http_proxy` / `https_proxy` / `no_proxy` 等环境变量；未检测到 `gh` 或登录状态时会提示用户在远端安装并执行 `gh auth login`。SSH 配置可选 identity file path，WillDeep 只保存路径、不保存私钥内容；代理 URL 中的账号密码在持久化和展示前会脱敏。Agent 工具 `search_files` / `grep_files` / `read_file` / `list_directory` / `git_status` / `run_command` 会按 session workspace 路由到本地或远端；远端后台任务复用现有 job 管线。`willdeep-agent` daemon 作为后续增强保留在同一 backend 模型之后。
+- **Remote Runtime（1.60.0-rc3）** — Agent session 的 workspace 现在可记录为本地路径或远端 runtime + 远端路径。Settings → Runtimes 管理 SSH runtime，使用系统 `ssh -o BatchMode=yes` 探测远端 Linux/macOS 与 arm64/x86_64 架构，并记录 git / rg / shell、Node/npm/yarn、Python/pip、Ruby、Go、Java、GitHub CLI (`gh`) 版本与登录状态、npm/yarn registry、npm/pip proxy 与 `http_proxy` / `https_proxy` / `no_proxy` 等环境变量；未检测到 `gh` 或登录状态时会提示用户在远端安装并执行 `gh auth login`。SSH 配置可选 identity file path，WillDeep 只保存路径、不保存私钥内容；代理 URL 中的账号密码在持久化和展示前会脱敏。Agent 工具 `search_files` / `grep_files` / `read_file` / `list_directory` / `git_status` / `run_command` 会按 session workspace 路由到本地或远端；远端后台任务复用现有 job 管线。`willdeep-agent/` Go daemon MVP 已落地，CLI 用 Cobra，默认只监听 `127.0.0.1`，支持 token 鉴权、HTTP 文件/Git/搜索/后台命令 API、job SSE 输出流和 WebSocket 控制事件；后续 Swift 侧 `DaemonRuntimeBackend` 会复用同一 runtime backend contract。
 - **@MainActor isolation** — AppState 本身是 `@MainActor`，所有 `@Published` mutation 必须在主线程发生。runtime 的 hot 字段亦然，但 `AgentClient` 的 URLSession 流式回调跨线程时通过 `Task { @MainActor in ... }` 拥抱主线程。`AppState.deinit` 不能 cancel runtime——rc38 曾尝试 `MainActor.assumeIsolated` 但 Swift Testing 在非主线程 release 触发 precondition fail，rc41 回退；清理走 session 显式删除路径。
 - **Per-provider concurrency cap** — 多 runtime 并发跑时，同一 provider 的活跃请求按 `AgentSettingsStore` 的 `concurrencyLimit`（默认 3，1–8 可调）FIFO 排队；不同 provider 互不阻塞。这样 routine 集中触发也不会冲烂同一家 API 的速率。
 - **find/replace 内容哈希缓存** — `AppState.findMatchRanges` 与 `changedLineNumbers` 用 `(content.hashValue, query/savedContent)` 双键缓存（rc39 落地）。SwiftUI body 多次读这俩属性时不再每次重扫全文。
@@ -152,6 +152,7 @@ CLAUDE.md §2 要求 React 部分必须走 i18n，但 WillDeep 是 SwiftUI macOS
 - Use Focus Mode to hide editor chrome when reading or writing.
 - Open a lightweight split editor pane to view another text file beside the active editor.
 - Use a first-phase project Agent panel backed by an OpenAI-compatible streaming chat API, with current folder, active file, and selected text included as compact context.
+- Add selected editor text to the side Agent conversation from the editor context menu, or open the side Agent panel with that selection attached as a removable text chip for a follow-up question.
 - Configure Agent providers from a tabbed Settings window, with built-in OpenAI-compatible presets for OpenAI, DashScope, DeepSeek, Kimi, Moonshot, Claude, and custom endpoints.
 - Fetch Agent model IDs from provider `/models` endpoints and assign returned models to separate Flash and Pro slots in Settings. Agent routing can run cost-first through Auto/Flash or force Pro for stronger turns. API keys remain stored in Keychain.
 - Review Agent-generated unified diff proposals in the Agent panel, then apply or reject them explicitly. Accepted patches are limited to existing files inside the current workspace and update open tabs plus Git status.

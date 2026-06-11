@@ -29,6 +29,15 @@ enum L10n {
         static let removeHelp = String(localized: "agent-text-attachment.remove-help", defaultValue: "Remove pasted text")
     }
 
+    enum AgentSelection {
+        static let addToConversation = String(localized: "agent-selection.add-to-conversation", defaultValue: "Add to Conversation")
+        static let askInSidebar = String(localized: "agent-selection.ask-in-sidebar", defaultValue: "Ask in Side Agent")
+        static let askPrompt = String(localized: "agent-selection.ask-prompt", defaultValue: "Ask about the attached selection: ")
+        static let filenamePrefix = String(localized: "agent-selection.filename-prefix", defaultValue: "Selection")
+        static let selectionAttachedHint = String(localized: "agent-selection.selection-attached-hint", defaultValue: "Selection attached · Tools available")
+        static let untitledFile = String(localized: "agent-selection.untitled-file", defaultValue: "Untitled")
+    }
+
     enum Command {
         static let closeTabShortcut = String(localized: "command.close-tab.shortcut", defaultValue: "⌘W")
         static let closeTabSubtitle = String(localized: "command.close-tab.subtitle", defaultValue: "Close the active tab")

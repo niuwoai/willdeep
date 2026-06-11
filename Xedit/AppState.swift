@@ -74,6 +74,7 @@ final class AppState: ObservableObject {
     @Published var hasExternalFileChanges = false
     @Published var gitStatus = GitRepositoryStatus()
     @Published var isAgentPanelVisible = false
+    @Published var agentComposerFocusRevision = 0
     @Published var agentConfiguration: AgentConfiguration {
         didSet {
             // A 方案：library 才是 provider 字段（providerID/baseURL/

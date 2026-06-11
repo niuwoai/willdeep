@@ -223,6 +223,12 @@ struct ContentView: View {
                             },
                             onSyntaxHighlightingChange: { selection in
                                 appState.setSyntaxHighlightingSelection(selection)
+                            },
+                            onAddSelectionToAgentConversation: { selection in
+                                appState.addEditorSelectionToAgentConversation(selection)
+                            },
+                            onAskSelectionInAgentPanel: { selection in
+                                appState.askAgentAboutEditorSelection(selection)
                             }
                         )
                         .editorGlassBackground(settings: appState.editorSettings)

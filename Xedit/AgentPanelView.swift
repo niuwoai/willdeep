@@ -204,6 +204,12 @@ struct AgentPanelView: View {
                 Spacer(minLength: 0)
             }
 
+            if !appState.agentPendingTextAttachments.isEmpty {
+                AgentComposerTextAttachmentStrip(attachments: appState.agentPendingTextAttachments) { id in
+                    appState.removeAgentTextAttachment(id: id)
+                }
+            }
+
             TextEditor(text: $appState.agentInput)
                 .font(.system(size: 13))
                 .scrollContentBackground(.hidden)
@@ -223,10 +229,21 @@ struct AgentPanelView: View {
                 } label: {
                     Label(appState.isAgentResponding ? "Sending" : "Send", systemImage: "paperplane.fill")
                 }
-                .disabled(appState.isAgentResponding || appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(appState.isAgentResponding || !canSend)
             }
         }
         .padding(10)
+        .onChange(of: appState.agentComposerFocusRevision) { _, _ in
+            inputFocused = true
+        }
+    }
+
+    private var canSend: Bool {
+        !appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !appState.agentPendingTextAttachments.isEmpty
+            || !appState.agentPendingImages.isEmpty
+            || !appState.agentPendingFiles.isEmpty
+            || appState.agentPendingIncludeWorkspaceOverview
     }
 
     private var contextLabel: String {
@@ -242,6 +259,9 @@ struct AgentPanelView: View {
     private var contextHint: String {
         if appState.rootDirectory == nil {
             return "Open a folder to enable tools"
+        }
+        if !appState.agentPendingTextAttachments.isEmpty {
+            return L10n.AgentSelection.selectionAttachedHint
         }
         if appState.selectedCharacterCount > 0 {
             return "Selection included · Tools available"

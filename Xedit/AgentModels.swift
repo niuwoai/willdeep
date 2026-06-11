@@ -12,6 +12,12 @@ enum AppMode: String, Codable {
     case agent
 }
 
+struct AgentEditorSelectionContext: Equatable {
+    let text: String
+    let startLine: Int
+    let endLine: Int
+}
+
 enum AgentRole: String, Codable {
     case system
     case user
