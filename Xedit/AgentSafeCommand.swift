@@ -99,8 +99,14 @@ enum SafeCommand {
         "env", "printenv", "uname", "whoami", "id", "date", "uptime",
         // process snapshot (no signals)
         "ps", "top",
-        // network read-only
-        "ping", "host", "dig", "nslookup", "traceroute"
+        // network read-only. whois 和 dig/host 同族——往查询端口发一个
+        // 域名字符串、读回注册信息，无写语义。漏掉它的代价是整条命令
+        // 落到 LLM judge，而 judge 提示词对"开网络 socket"判得很严，
+        // 实际等于每次都要用户手点（用户实测反馈，1.58.0-rc11 补上）。
+        "ping", "host", "dig", "nslookup", "traceroute", "whois",
+        // shell 循环/条件的无副作用胶水：read 只写 shell 变量，test/[
+        // 只算真值，seq/true/false/sleep/expr 纯计算或干等。
+        "read", "test", "[", "[[", "seq", "true", "false", "sleep", "expr"
     ]
 
     /// Commands that COULD be safe but whose argument shape matters.
@@ -162,6 +168,19 @@ enum SafeCommand {
     /// flagged forms (`cp -r`, `cp -R`, `ln -s`, `ln -f`) are the
     /// destructive shapes (recursive overwrite, replace symlinks).
     static let dangerousHeadsWithFlag: Set<String> = ["cp", "ln"]
+
+    /// Shell 控制流关键字，自身带一个真正的命令负载：`do echo hi`、
+    /// `then git status`、`if grep -q x f`、`while read line`。剥掉
+    /// 关键字后递归分类剩余部分，让段的判定继承真实命令的判定。
+    /// `!`（取反）同理。
+    private static let prefixControlKeywords: Set<String> = [
+        "do", "then", "else", "elif", "if", "while", "until", "!"
+    ]
+
+    /// 纯块闭合/无负载关键字——出现即整段，没东西可执行。
+    private static let bareControlKeywords: Set<String> = [
+        "done", "fi", "esac", "{", "}"
+    ]
 
     // MARK: - Internals
 
@@ -244,6 +263,25 @@ enum SafeCommand {
         if dangerousHeadsWithFlag.contains(firstToken),
            tokens.dropFirst().contains(where: { $0.hasPrefix("-") }) {
             return .alwaysDangerous
+        }
+
+        // Shell 控制流（用户实测：`for ext in io ai …; do echo …; whois …`
+        // 这种纯只读循环此前因为 for/do 段头不被认识而落到 LLM judge，
+        // judge 对网络命令又判得严，结果次次要人工点。处理规则：
+        //   - `for VAR in words…` 是纯循环头，words 是惰性字符串
+        //     （`$(…)` 形式在整行检查就被拦了），本身不执行任何东西；
+        //   - do/then/if/while… 剥掉关键字递归分类真实负载，
+        //     `do rm -rf /` 照样会被上面的 dangerous-token 走查毙掉；
+        //   - done/fi/esac 纯闭合，无负载。
+        if firstToken == "for" {
+            return .alwaysSafe
+        }
+        if prefixControlKeywords.contains(firstToken) {
+            let rest = tokens.dropFirst().joined(separator: " ")
+            return rest.isEmpty ? .alwaysSafe : classifySegment(rest)
+        }
+        if bareControlKeywords.contains(firstToken) {
+            return .alwaysSafe
         }
 
         if alwaysSafeFirstTokens.contains(firstToken) {

@@ -37,7 +37,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// parallel (rc3); none of them can rely on `AppState.rootDirectory`
     /// for "this session's workspace" — that's a window-level concept
     /// that drifts when the user opens a different folder.
-    let workspaceRootPath: String?
+    private(set) var workspaceRootPath: String?
 
     // MARK: - Conversation state
 
@@ -124,6 +124,15 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.currentGoal = session.currentGoal
     }
 
+    /// Move an idle/new session to another workspace. Used by the
+    /// composer workspace picker before the first user turn, so the
+    /// sidebar immediately reflects the selected folder.
+    func rebindWorkspace(to path: String?) {
+        let normalized = path?.trimmingCharacters(in: .whitespacesAndNewlines)
+        workspaceRootPath = normalized?.isEmpty == true ? nil : normalized
+        session.workspaceRootPath = workspaceRootPath
+    }
+
     // MARK: - Persistence
 
     /// Push the runtime's persisted-shape state back onto `session`
@@ -131,6 +140,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// fields `AgentSession` cares about.
     func persist() {
         session.messages = messages
+        session.workspaceRootPath = workspaceRootPath
         session.didEditFiles = didEditFiles
         session.agentEditedPaths = agentEditedPaths.sorted()
         session.interactionMode = interactionMode

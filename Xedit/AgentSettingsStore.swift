@@ -33,6 +33,8 @@ enum AgentSettingsStore {
     /// Keychain account prefix for per-entry library keys
     /// (full account = `libraryEntryKeychainPrefix + UUID string`).
     private static let libraryEntryKeychainPrefix = "library-entry-"
+    /// Brave Search API key for the built-in `web_search` tool.
+    private static let braveSearchKeychainAccount = "brave-search-api-key"
 
     /// Test-only override for the Keychain service name. Production code
     /// never touches this — it stays nil and `keychainService` returns
@@ -309,6 +311,22 @@ enum AgentSettingsStore {
     /// hand it to whichever library entry actually deserves it.
     static func loadLegacyProviderAPIKey() -> String {
         loadAPIKey(account: keychainAccount)
+    }
+
+    // MARK: - Web tools
+
+    /// Brave Search API key consumed by `web_search` at call time. Empty
+    /// string means "not configured" — the tool surfaces a setup hint to
+    /// the model instead of failing silently.
+    static func loadBraveSearchAPIKey() -> String {
+        loadAPIKey(account: braveSearchKeychainAccount)
+    }
+
+    static func saveBraveSearchAPIKey(_ key: String) {
+        saveAPIKey(
+            key.trimmingCharacters(in: .whitespacesAndNewlines),
+            account: braveSearchKeychainAccount
+        )
     }
 
     // MARK: - Provider library

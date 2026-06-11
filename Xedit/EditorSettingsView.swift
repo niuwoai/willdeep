@@ -45,6 +45,12 @@ struct EditorSettingsView: View {
     /// AppStateAgentTitleSummarizer.
     @State private var agentTitleModelBuffer: String = ""
     @State private var agentSaveStatus: String = ""
+    // Brave Search key for the built-in web_search tool. Saved/loaded
+    // straight through AgentSettingsStore (Keychain) — it has no slot
+    // in AgentConfiguration, so it stays out of commitAgentBuffers.
+    @State private var braveSearchAPIKeyBuffer: String = ""
+    @State private var braveSearchAPIKeySaved: String = ""
+    @State private var braveSearchSaveStatus: String = ""
 
     var body: some View {
         TabView {
@@ -389,6 +395,31 @@ struct EditorSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section(L10n.Settings.sectionWebTools) {
+                LabeledContent(L10n.Settings.WebTools.braveKeyLabel) {
+                    RevealableSecretField(
+                        text: $braveSearchAPIKeyBuffer,
+                        placeholder: "",
+                        onCommit: { commitBraveSearchAPIKey() }
+                    )
+                }
+                HStack {
+                    Button(L10n.Settings.buttonSave) {
+                        commitBraveSearchAPIKey()
+                    }
+                    .disabled(braveSearchAPIKeyBuffer == braveSearchAPIKeySaved)
+
+                    if !braveSearchSaveStatus.isEmpty {
+                        Text(braveSearchSaveStatus)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Text(L10n.Settings.WebTools.description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section(L10n.Settings.sectionConcurrency) {
                 HStack {
                     Text(L10n.Settings.perProviderConcurrency)
@@ -473,6 +504,20 @@ struct EditorSettingsView: View {
         imageModelBuffer = configuration.imageDescription.model
         imageAPIKeyBuffer = configuration.imageDescription.apiKey
         agentTitleModelBuffer = configuration.titleModel
+        braveSearchAPIKeySaved = AgentSettingsStore.loadBraveSearchAPIKey()
+        braveSearchAPIKeyBuffer = braveSearchAPIKeySaved
+    }
+
+    private func commitBraveSearchAPIKey() {
+        let trimmed = braveSearchAPIKeyBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+        AgentSettingsStore.saveBraveSearchAPIKey(trimmed)
+        braveSearchAPIKeyBuffer = trimmed
+        braveSearchAPIKeySaved = trimmed
+        braveSearchSaveStatus = L10n.Settings.savedStatus
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            if braveSearchSaveStatus == L10n.Settings.savedStatus { braveSearchSaveStatus = "" }
+        }
     }
 
     private func commitAgentBuffers() {

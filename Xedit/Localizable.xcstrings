@@ -4301,6 +4301,57 @@
         }
       }
     },
+    "settings.section.web-tools": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Web tools"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Web 工具"
+          }
+        }
+      }
+    },
+    "settings.web-tools.brave-api-key": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brave Search API Key"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brave Search API 密钥"
+          }
+        }
+      }
+    },
+    "settings.web-tools.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enables the built-in web_search tool. Get a free key at brave.com/search/api — it is stored in the macOS Keychain. web_fetch needs no key and asks for approval per domain."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用于启用内置 web_search 搜索工具。可在 brave.com/search/api 免费申请，密钥保存在 macOS 钥匙串中。web_fetch 抓取网页无需密钥，按域名逐次授权。"
+          }
+        }
+      }
+    },
     "settings.section.typography": {
       "extractionState": "manual",
       "localizations": {

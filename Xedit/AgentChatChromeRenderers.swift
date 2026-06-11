@@ -6,7 +6,7 @@
 //  along inside the chat transcript NSTextView, split out of
 //  AgentChatHistoryTextView.swift in rc42:
 //
-//   - `AgentChatHistoryCodeCopyChrome`: the "⎘ Copy" button glyph
+//   - `AgentChatHistoryCodeCopyChrome`: the copy button glyph
 //     embedded above every fenced code block. Carries the code body
 //     in a custom attributed-string attribute so the NSTextView's
 //     `textView(_:clickedOnLink:at:)` delegate can copy it without
@@ -24,7 +24,7 @@
 import AppKit
 
 enum AgentChatHistoryCodeCopyChrome {
-    static let idleLabel = "⎘ Copy"
+    static let idleLabel = "▭▭ Copy"
     static let copiedLabel = "✓ Done"
     static let linkValue = "agent-chat-history-copy-code"
 
@@ -39,12 +39,16 @@ enum AgentChatHistoryCodeCopyChrome {
         if !copied {
             attributes[.link] = linkValue
         }
-        return NSAttributedString(string: label, attributes: attributes)
+        let result = NSMutableAttributedString(string: label, attributes: attributes)
+        if !copied {
+            result.addAttribute(.kern, value: -4.5, range: NSRange(location: 0, length: 2))
+        }
+        return result
     }
 }
 
 enum AgentChatHistoryFooterChrome {
-    static let copyIdleLabel = "⎘"
+    static let copyIdleLabel = "▭▭"
     static let copyCopiedLabel = "✓"
     static let retryLabel = "↻"
     static let copyLinkValue = "agent-chat-history-copy-message"
@@ -57,7 +61,11 @@ enum AgentChatHistoryFooterChrome {
         if !copied {
             attributes[.link] = copyLinkValue
         }
-        return NSAttributedString(string: label, attributes: attributes)
+        let result = NSMutableAttributedString(string: label, attributes: attributes)
+        if !copied {
+            result.addAttribute(.kern, value: -4.5, range: NSRange(location: 0, length: 2))
+        }
+        return result
     }
 
     static func retryButton() -> NSAttributedString {
@@ -104,7 +112,7 @@ enum AgentChatHistoryFooterChrome {
     }
 
     private static var iconFont: NSFont {
-        NSFont.systemFont(ofSize: 16, weight: .semibold)
+        NSFont.systemFont(ofSize: 18, weight: .semibold)
     }
 
     private static var retryIconFont: NSFont {

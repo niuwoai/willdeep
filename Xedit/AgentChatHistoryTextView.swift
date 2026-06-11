@@ -686,7 +686,7 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
     private func bubbleColor(for kind: AgentChatHistoryBubbleKind) -> NSColor {
         switch kind {
         case .user:
-            return NSColor.quaternaryLabelColor.withAlphaComponent(0.10)
+            return NSColor.quaternaryLabelColor.withAlphaComponent(0.07)
         case .assistant:
             return NSColor.quaternaryLabelColor.withAlphaComponent(0.06)
         case .system:

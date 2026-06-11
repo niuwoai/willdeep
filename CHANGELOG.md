@@ -1,5 +1,62 @@
 # Changelog
 
+## 1.58.0-rc14 - 2026-06-11
+
+### Agent 工具调用摘要间距优化
+
+- **TextKit 历史消息路径**（[AgentChatHistoryFormatter.swift](Xedit/AgentChatHistoryFormatter.swift)）：assistant 正文后紧跟 inline 工具调用摘要时，透明分隔高度从 14pt 提到 22pt，并给工具调用摘要标题段落增加 2pt 顶部段落间距，让“执行了 N 条工具调用”不再贴着上方 AI 输出。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.58.0-rc14`。
+
+## 1.58.0-rc13 - 2026-06-11
+
+### Agent workspace 绑定修复
+
+- Composer 下方 workspace picker 选择已有目录时，空白当前会话会立即迁移到该 workspace；已有历史的会话则新建一条目标 workspace 会话，避免旧对话上下文被静默改根目录。
+- 无 workspace 会话允许执行 `run_command`，工作目录回退到用户主目录 `~`；读写审批分级仍按原策略执行。
+- 左侧 workspace 分组标题行右侧常驻 `plus.circle` 新建会话按钮，不再只靠 hover 或右键菜单发现入口。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.58.0-rc13`。
+
+## 1.58.0-rc12 - 2026-06-11
+
+### Agent 复制图标放大并改成双矩形
+
+- **SwiftUI 当前消息路径**（[AgentMessageView.swift](Xedit/AgentMessageView.swift)）：用户消息与助手消息 footer 的复制按钮从 `square.on.square` 换成更直观的 `rectangle.on.rectangle`，字号放大到 19pt，并加固定 24x22 命中框，复制入口更容易看见和点击。
+- **TextKit 历史消息路径**（[AgentChatChromeRenderers.swift](Xedit/AgentChatChromeRenderers.swift)）：历史 transcript 的复制标记从不易辨认的 `⎘` 改成双矩形 `▭▭`，并放大到 18pt；代码块复制按钮同步使用同一视觉。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.58.0-rc12`。
+
+## 1.58.0-rc11 - 2026-06-11
+
+### Agent 用户消息气泡默认显示浅背景
+
+- **SwiftUI 当前消息路径**（[AgentMessageView.swift](Xedit/AgentMessageView.swift)）：用户输入气泡不再等 hover 才显示圆角背景，默认使用很浅的 `primary` 透明填充，hover 时仅略微加深；复制/时间 footer 仍保持 hover 显示，避免常驻控件干扰阅读。
+- **TextKit 历史消息路径**（[AgentChatHistoryFormatter.swift](Xedit/AgentChatHistoryFormatter.swift)、[AgentChatHistoryTextView.swift](Xedit/AgentChatHistoryTextView.swift)）：历史用户消息主体同样默认打上 bubble chrome，并把用户背景透明度调轻，保证新旧消息视觉一致但不显得厚重。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.58.0-rc11`。
+
+## 1.58.0-rc10 - 2026-06-10
+
+### 聊天代码块上下加 margin
+
+用户反馈 transcript 里的代码区贴正文太近。两条渲染路径分别处理：
+
+- **TextKit 历史路径**（[AgentChatHistoryFormatter.swift](Xedit/AgentChatHistoryFormatter.swift)）：新增 `applyCodeBlockVerticalMargins`——代码块**首段**设 `paragraphSpacingBefore = 10`、**末段**设 `paragraphSpacing = 10`。不能像表格那样把间距设在整个 range 上：代码行之间是字面 `\n`（每行独立段落），整段设置会把行距也撑开。原先助手气泡代码块顶部的 4pt spacer 行 hack 移除（职责由段落间距接管）；user 气泡不打 codeBlockID 标签吃不到新 margin，spacer 保留兜底。
+- **SwiftUI 流式路径**（[AgentMessageView.swift](Xedit/AgentMessageView.swift)）：SwiftUI `Text` 不认 `NSParagraphStyle`，只能用微型 spacer 行模拟。顶部 spacer 从 4pt 加大到 6pt；底部新增对称 spacer，由下一次 `appendSeparator` 在 `"\n\n"` 之后补上（直接在代码块后追加会排在分隔符前、把空隙撑成两个整行）。代码块是最后一块时不补，流式中结尾是代码块不会在气泡底部多出空白。
+
+### 版本
+
+- pbxproj × 6 个 target、Help bundle Info.plist、product-overview.md 全部同步到 `1.58.0-rc10`。
+
 ## 1.58.0-rc9 - 2026-06-10
 
 ### 修复：空闲时主线程 98% CPU（呼吸动画 + @FocusedObject 全场景重建）

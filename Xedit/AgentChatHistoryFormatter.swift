@@ -136,6 +136,15 @@ enum AgentChatHistoryRenderer {
         /// 视觉上重心向标题倾斜。
         static let headingParagraphBefore: CGFloat = 12
         static let headingParagraph: CGFloat = 6
+        /// 代码块的上下 margin。用户反馈代码区贴正文太近。注意不能像
+        /// 表格那样把 before/spacing 设在整个 range 上——代码行之间是
+        /// 字面 \n（每行独立段落），整段设置会把行距也撑开；所以只对
+        /// 首段设 before、末段设 spacing，见 applyCodeBlockVerticalMargins。
+        static let codeBlockBefore: CGFloat = 10
+        static let codeBlockAfter: CGFloat = 10
+        /// Inline 工具调用摘要需要和上一段 assistant 正文明显分开；
+        /// 这是 transcript 里“说完话，开始动手”的视觉边界。
+        static let inlineToolGroupBefore: CGFloat = 22
         static let toolLine: CGFloat = 1.5
     }
 
@@ -355,23 +364,14 @@ enum AgentChatHistoryRenderer {
                     secondaryColor: secondaryColor
                 )
                 let attachmentRange = NSRange(location: attachmentStart, length: result.length - attachmentStart)
-                if !isHoveredUserMessage {
-                    applyBodyChrome(
-                        to: result,
-                        range: attachmentRange,
-                        paragraphStyle: bodyParagraphStyle(for: message.role),
-                        userMessageID: message.id
-                    )
-                } else {
-                    applyBubbleChrome(
-                        kind: bubbleKind(for: message.role),
-                        to: result,
-                        range: attachmentRange,
-                        paragraphStyle: bodyParagraphStyle(for: message.role),
-                        userMessageID: message.id,
-                        foregroundColor: nil
-                    )
-                }
+                applyBubbleChrome(
+                    kind: bubbleKind(for: message.role),
+                    to: result,
+                    range: attachmentRange,
+                    paragraphStyle: bodyParagraphStyle(for: message.role),
+                    userMessageID: message.id,
+                    foregroundColor: nil
+                )
                 hasMessageBubbleContent = true
             }
 
@@ -396,23 +396,14 @@ enum AgentChatHistoryRenderer {
                     )
                 }
                 let bodyRange = NSRange(location: bodyStart, length: result.length - bodyStart)
-                if message.role == .user && !isHoveredUserMessage {
-                    applyBodyChrome(
-                        to: result,
-                        range: bodyRange,
-                        paragraphStyle: bodyParagraphStyle(for: message.role),
-                        userMessageID: message.id
-                    )
-                } else {
-                    applyBubbleChrome(
-                        kind: bubbleKind(for: message.role),
-                        to: result,
-                        range: bodyRange,
-                        paragraphStyle: bodyParagraphStyle(for: message.role),
-                        userMessageID: message.role == .user ? message.id : nil,
-                        foregroundColor: nil
-                    )
-                }
+                applyBubbleChrome(
+                    kind: bubbleKind(for: message.role),
+                    to: result,
+                    range: bodyRange,
+                    paragraphStyle: bodyParagraphStyle(for: message.role),
+                    userMessageID: message.role == .user ? message.id : nil,
+                    foregroundColor: nil
+                )
                 hasMessageBubbleContent = true
             }
 
@@ -428,7 +419,7 @@ enum AgentChatHistoryRenderer {
                     // body bubble and the tool summary bubble. Beyond
                     // resolving the bubble-baseline overlap, this gap
                     // is also the user-visible "the assistant's prose
-                    // ended, a tool call starts here" separator — 14pt
+                    // ended, a tool call starts here" separator — 22pt
                     // gives the two bubbles real breathing room without
                     // making the conversation feel disjointed.
                     let spacerStyle = NSMutableParagraphStyle()
@@ -438,7 +429,7 @@ enum AgentChatHistoryRenderer {
                     result.append(NSAttributedString(
                         string: "\n",
                         attributes: [
-                            .font: NSFont.systemFont(ofSize: 14),
+                            .font: NSFont.systemFont(ofSize: MarkdownSpacing.inlineToolGroupBefore),
                             .foregroundColor: NSColor.clear,
                             .paragraphStyle: spacerStyle,
                         ]
@@ -713,6 +704,33 @@ enum AgentChatHistoryRenderer {
         return style
     }
 
+    /// 给代码块首段加 margin-top、末段加 margin-bottom。代码块内部每行
+    /// 都是独立段落（保留字面 \n），before/spacing 设在整个 range 上会把
+    /// 行与行之间也撑开，所以必须定点打在首末两个段落上。
+    private static func applyCodeBlockVerticalMargins(
+        to attributed: NSMutableAttributedString,
+        codeRange: NSRange,
+        baseStyle: NSParagraphStyle
+    ) {
+        guard codeRange.length > 0 else { return }
+        let text = attributed.string as NSString
+        let firstParagraph = text.paragraphRange(for: NSRange(location: codeRange.location, length: 0))
+        let lastParagraph = text.paragraphRange(for: NSRange(location: NSMaxRange(codeRange) - 1, length: 0))
+        if firstParagraph == lastParagraph {
+            let style = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+            style.paragraphSpacingBefore = MarkdownSpacing.codeBlockBefore
+            style.paragraphSpacing = MarkdownSpacing.codeBlockAfter
+            attributed.addAttribute(.paragraphStyle, value: style, range: firstParagraph)
+            return
+        }
+        let firstStyle = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        firstStyle.paragraphSpacingBefore = MarkdownSpacing.codeBlockBefore
+        attributed.addAttribute(.paragraphStyle, value: firstStyle, range: firstParagraph)
+        let lastStyle = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        lastStyle.paragraphSpacing = MarkdownSpacing.codeBlockAfter
+        attributed.addAttribute(.paragraphStyle, value: lastStyle, range: lastParagraph)
+    }
+
     private static func tableBlockParagraphStyle(from baseStyle: NSParagraphStyle) -> NSParagraphStyle {
         let style = codeBlockParagraphStyle(from: baseStyle).mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
         style.lineSpacing = MarkdownSpacing.tableLine
@@ -747,6 +765,7 @@ enum AgentChatHistoryRenderer {
         let style = NSMutableParagraphStyle()
         style.alignment = .left
         style.lineSpacing = 1
+        style.paragraphSpacingBefore = 2
         style.paragraphSpacing = 1
         style.headIndent = 22
         style.firstLineHeadIndent = 22
@@ -794,6 +813,7 @@ enum AgentChatHistoryRenderer {
         attributed.enumerateAttribute(.agentChatHistoryCodeBlockID, in: range, options: []) { value, subrange, _ in
             guard value != nil else { return }
             attributed.addAttribute(.paragraphStyle, value: codeParagraphStyle, range: subrange)
+            applyCodeBlockVerticalMargins(to: attributed, codeRange: subrange, baseStyle: codeParagraphStyle)
         }
         let tableParagraphStyle = tableBlockParagraphStyle(from: paragraphStyle)
         attributed.enumerateAttribute(.agentChatHistoryTableBlockID, in: range, options: []) { value, subrange, _ in
@@ -828,6 +848,7 @@ enum AgentChatHistoryRenderer {
         attributed.enumerateAttribute(.agentChatHistoryCodeBlockID, in: range, options: []) { value, subrange, _ in
             guard value != nil else { return }
             attributed.addAttribute(.paragraphStyle, value: codeParagraphStyle, range: subrange)
+            applyCodeBlockVerticalMargins(to: attributed, codeRange: subrange, baseStyle: codeParagraphStyle)
         }
         let tableParagraphStyle = tableBlockParagraphStyle(from: paragraphStyle)
         attributed.enumerateAttribute(.agentChatHistoryTableBlockID, in: range, options: []) { value, subrange, _ in
@@ -1362,7 +1383,11 @@ enum AgentChatHistoryRenderer {
             case .code:
                 let hadPreviousBlock = didAppendBlock
                 appendBlockSeparator()
-                if hadPreviousBlock {
+                // user 气泡不打 codeBlockID 标签（applyChrome 只给非 user
+                // 角色加段落级 margin），保留旧的小 spacer 行兜底；助手/
+                // 系统气泡的上下气垫由 applyCodeBlockVerticalMargins 的
+                // paragraphSpacingBefore/After 承担，不再叠 spacer。
+                if hadPreviousBlock && role == .user {
                     result.append(NSAttributedString(
                         string: "\n",
                         attributes: [

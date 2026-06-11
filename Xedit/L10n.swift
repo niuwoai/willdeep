@@ -455,6 +455,7 @@ enum L10n {
         static let sectionConcurrency = String(localized: "settings.section.concurrency", defaultValue: "Concurrency")
         static let sectionAgentAppearance = String(localized: "settings.section.agent-appearance", defaultValue: "Appearance")
         static let sectionAgentAlwaysAllow = String(localized: "settings.section.agent-always-allow", defaultValue: "Agent Always Allow")
+        static let sectionWebTools = String(localized: "settings.section.web-tools", defaultValue: "Web tools")
 
         static let toggleShowLineNumbers = String(localized: "settings.toggle.show-line-numbers", defaultValue: "Show Line Numbers")
         static let toggleHighlightCurrentLine = String(localized: "settings.toggle.highlight-current-line", defaultValue: "Highlight Current Line")
@@ -490,6 +491,11 @@ enum L10n {
         static let chooseBackgroundImageTitle = String(localized: "settings.choose-background-image.title", defaultValue: "Choose Editor Background Image")
         static let savedStatus = String(localized: "settings.saved-status", defaultValue: "Saved.")
         static let allChangesSaved = String(localized: "settings.all-changes-saved", defaultValue: "All changes saved")
+
+        enum WebTools {
+            static let braveKeyLabel = String(localized: "settings.web-tools.brave-api-key", defaultValue: "Brave Search API Key")
+            static let description = String(localized: "settings.web-tools.description", defaultValue: "Enables the built-in web_search tool. Get a free key at brave.com/search/api — it is stored in the macOS Keychain. web_fetch needs no key and asks for approval per domain.")
+        }
 
         enum ImageUnderstanding {
             static let providerLabel = String(localized: "settings.image-understanding.provider", defaultValue: "Provider")

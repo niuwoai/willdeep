@@ -228,10 +228,15 @@ enum AgentSubagentRunner {
     /// The only tools a subagent may call. Deliberately excludes:
     /// `spawn_agent` (no nesting), `ask_user` (nobody to ask),
     /// MCP tools (server side effects unknowable), background-job
-    /// tools (a child shouldn't leave processes behind).
+    /// tools (a child shouldn't leave processes behind), and
+    /// `web_fetch` (write-tier: arbitrary fetches need the parent
+    /// session's approval UI, which a child doesn't have).
+    /// `web_search` is in: read-tier, single well-known endpoint,
+    /// and research subagents are its main customer.
     static let allowedToolNames: Set<String> = [
         "search_files", "grep_files", "read_file", "list_directory",
         "git_status", "run_command", "list_skills", "read_skill",
+        "web_search",
     ]
 
     static var toolDescriptors: [AgentToolDescriptor] {
@@ -253,7 +258,7 @@ enum AgentSubagentRunner {
         }
         lines.append("""
         Rules:
-        - You have READ-ONLY access: search/grep/read/list tools plus read-only shell commands. Write operations are denied — do not attempt them; report what should be changed instead.
+        - You have READ-ONLY access: search/grep/read/list tools, read-only shell commands, and `web_search` for public web lookups. Write operations are denied — do not attempt them; report what should be changed instead.
         - You cannot ask the user anything. Make reasonable assumptions and note them.
         - Work autonomously until the task is done, then STOP calling tools and write your final report as a normal message.
         - Your final message IS the deliverable returned to the parent agent. Make it self-contained, specific (file paths, line numbers, code excerpts), and free of filler.

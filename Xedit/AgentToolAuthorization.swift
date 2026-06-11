@@ -162,6 +162,15 @@ enum AgentToolAuthorization {
             let mode = arguments["permission_mode"]?.stringValue()?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? "acceptEdits"
             return "claude_code:\(mode)"
+        case "web_fetch":
+            // Scope by host: pinning means "I trust this domain", not
+            // "exactly this URL". Path/query stay out of the signature.
+            guard let raw = arguments["url"]?.stringValue(),
+                  let host = URL(string: raw.trimmingCharacters(in: .whitespacesAndNewlines))?.host,
+                  !host.isEmpty else {
+                return nil
+            }
+            return "web_fetch:\(host.lowercased())"
         default:
             return nil
         }

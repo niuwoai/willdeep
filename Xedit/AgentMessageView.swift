@@ -8,7 +8,7 @@
 //  need to live as SwiftUI:
 //
 //   - `AgentModeMessageView`: the per-message bubble. User on the right
-//     with a soft outlined card (hover reveals copy + timestamp), assistant
+//     with a soft card (hover reveals copy + timestamp), assistant
 //     on the left with a sparkle avatar and the markdown body card. Takes
 //     `isStreamingThisMessage` as a plain Bool prop — derived from AppState
 //     in the parent — because reading AppState here would pull every
@@ -151,11 +151,11 @@ struct AgentModeMessageView: View {
             .padding(.bottom, 14)
             .background(
                 RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                    .fill(Color.primary.opacity(isHoveringUser ? 0.035 : 0))
+                    .fill(Color.primary.opacity(isHoveringUser ? 0.04 : 0.026))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                    .stroke(Color.primary.opacity(isHoveringUser ? 0.025 : 0), lineWidth: 1)
+                    .stroke(Color.primary.opacity(isHoveringUser ? 0.032 : 0.018), lineWidth: 1)
             )
             .frame(maxWidth: AgentDesign.chatMaxContentWidth * AgentDesign.userMessageMaxWidthRatio, alignment: .leading)
             .onHover { isHoveringUser = $0 }
@@ -327,11 +327,19 @@ enum AgentAssistantMarkdownRenderer {
         let safe = AgentLongTokenBreaker.inject(into: normalized)
         let blocks = MarkdownPreviewParser.blocks(from: safe)
         var result = AttributedString()
+        var pendingCodeBottomSpacer = false
 
         func appendSeparator() {
             if !result.characters.isEmpty {
                 result += AttributedString("\n\n")
+                if pendingCodeBottomSpacer {
+                    var spacer = AttributedString("\n")
+                    spacer.font = .system(size: 6)
+                    spacer.foregroundColor = Color.clear
+                    result += spacer
+                }
             }
+            pendingCodeBottomSpacer = false
         }
 
         for block in blocks {
@@ -376,11 +384,14 @@ enum AgentAssistantMarkdownRenderer {
                 result += prefix + body
 
             case .code:
+                // SwiftUI Text 不认 NSParagraphStyle，代码块的上下 margin
+                // 只能用微型 spacer 行模拟（TextKit 历史路径走的是
+                // applyCodeBlockVerticalMargins 的段落间距）。
                 let hadPreviousContent = !result.characters.isEmpty
                 appendSeparator()
                 if hadPreviousContent {
                     var spacer = AttributedString("\n")
-                    spacer.font = .system(size: 4)
+                    spacer.font = .system(size: 6)
                     spacer.foregroundColor = Color.clear
                     result += spacer
                 }
@@ -404,6 +415,12 @@ enum AgentAssistantMarkdownRenderer {
                     code.backgroundColor = Color.primary.opacity(0.035)
                     result += code
                 }
+                // 底部 margin 由下一次 appendSeparator 在 "\n\n" 之后补
+                // 一行微型 spacer（与顶部结构完全镜像）；直接在这里追加
+                // 会排在分隔符前面、把空隙撑成两个整行。代码块是最后
+                // 一块时分隔符不会再来，flag 自然作废，流式中结尾是
+                // 代码块也不会在气泡底部多出空白。
+                pendingCodeBottomSpacer = true
 
             case .divider:
                 appendSeparator()
@@ -756,9 +773,10 @@ struct AgentMessageFooter: View {
             }
 
             Button(action: copyToClipboard) {
-                Image(systemName: didJustCopy ? "checkmark" : "square.on.square")
+                Image(systemName: didJustCopy ? "checkmark" : "rectangle.on.rectangle")
                     .font(footerIconFont)
                     .foregroundStyle(didJustCopy ? Color.green : Color.secondary)
+                    .frame(width: 24, height: 22)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -778,7 +796,7 @@ struct AgentMessageFooter: View {
     }
 
     private var footerIconFont: Font {
-        .system(size: 16, weight: .semibold)
+        .system(size: 19, weight: .semibold)
     }
 
     private var footerTextFont: Font {

@@ -117,6 +117,24 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "web_search",
+            description: "Search the web with Brave Search and return result titles, URLs, and snippets. Use for current events, library/API documentation, error messages, or anything not answerable from the workspace. Requires a Brave Search API key configured in Settings → Agent → Web tools. Read-only.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "query", type: .string, description: "Search query. Keep it keyword-style; quote exact phrases.", required: true),
+                AgentToolParameter(name: "count", type: .integer, description: "Number of results to return, 1–20. Defaults to 8.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "web_fetch",
+            description: "Fetch a public http(s) URL with GET and return its content as readable plain text (HTML is reduced to text; JSON/plain text passes through). Requires user approval; the user can Always-Allow a specific domain. Refuses private, loopback, and link-local hosts, including via redirects. Prefer web_search first when you don't already have an exact URL.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "url", type: .string, description: "Absolute http(s) URL to fetch.", required: true),
+                AgentToolParameter(name: "max_chars", type: .integer, description: "Maximum characters of extracted text to return. Defaults to 20000, capped at 100000.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "list_mcp_servers",
             description: "List configured MCP servers from Codex config with sensitive environment values redacted. Does not start servers. Read-only.",
             risk: .read,

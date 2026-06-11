@@ -117,7 +117,7 @@ struct WorkspacePickerPill: View {
             Section("Switch workspace") {
                 ForEach(knownRoots, id: \.self) { url in
                     Button {
-                        appState.openFolderURL(url)
+                        appState.moveActiveAgentSessionToWorkspace(at: url.standardizedFileURL.path)
                     } label: {
                         HStack {
                             Text(url.lastPathComponent)

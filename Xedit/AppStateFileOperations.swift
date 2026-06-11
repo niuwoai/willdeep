@@ -65,11 +65,13 @@ extension AppState {
                 return URL(fileURLWithPath: path).standardizedFileURL.path == standardized.path
                     && !session.isArchived
             }
-            if alreadyHere && hasSessionHere {
+            if alreadyHere && hasSessionHere,
+               let runtime = self.activeRuntime,
+               runtime.workspaceRootPath == standardized.path {
                 self.openFolderURL(url)
                 return
             }
-            _ = self.startNewAgentSession(inWorkspaceAt: standardized.path)
+            _ = self.moveActiveAgentSessionToWorkspace(at: standardized.path)
         }
     }
 

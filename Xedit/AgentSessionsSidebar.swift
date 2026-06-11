@@ -227,19 +227,17 @@ struct AgentSessionsSidebar: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 0)
-                if hoveredWorkspaceHeader == workspace {
-                    Button {
-                        appState.startNewAgentSession(inWorkspaceAt: hasRealWorkspace ? workspace : nil)
-                    } label: {
-                        Image(systemName: "plus.circle")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 16, height: 16)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help(L10n.Sidebar.workspaceMenuNewChat)
+                Button {
+                    appState.startNewAgentSession(inWorkspaceAt: hasRealWorkspace ? workspace : nil)
+                } label: {
+                    Image(systemName: "plus.circle")
+                        .font(.system(size: 12))
+                        .foregroundStyle(hoveredWorkspaceHeader == workspace ? .secondary : .tertiary)
+                        .frame(width: 16, height: 16)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .help(L10n.Sidebar.workspaceMenuNewChat)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 4)

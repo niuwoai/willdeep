@@ -100,6 +100,7 @@ enum AgentToolError: LocalizedError {
     case commandTimeout
     case unknownTool(String)
     case invalidRegex(String)
+    case httpFailed(Int, String)
 
     var errorDescription: String? {
         switch self {
@@ -131,6 +132,8 @@ enum AgentToolError: LocalizedError {
             return "Unknown tool: \(name)"
         case .invalidRegex(let detail):
             return "Invalid regular expression: \(detail)"
+        case .httpFailed(let status, let detail):
+            return "HTTP \(status): \(detail)"
         }
     }
 }
@@ -356,6 +359,10 @@ enum AgentToolRunner {
             return try AgentSkillCatalog.listSkills(arguments: arguments)
         case "read_skill":
             return try AgentSkillCatalog.readSkill(arguments: arguments)
+        case "web_search":
+            return try await AgentWebTools.webSearch(arguments: arguments)
+        case "web_fetch":
+            return try await AgentWebTools.webFetch(arguments: arguments)
         case "list_mcp_servers":
             return try AgentMCPBridge.listServers()
         case "list_mcp_tools":
@@ -787,7 +794,8 @@ enum AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
-        guard let root = context.rootDirectory else { throw AgentToolError.noWorkspace }
+        let root = context.rootDirectory?.standardizedFileURL
+            ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
         guard let command = arguments["command"]?.stringValue(),
               !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw AgentToolError.missingArgument("command")

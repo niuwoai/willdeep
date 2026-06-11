@@ -723,6 +723,29 @@ extension AppState {
         return startNewAgentSession()
     }
 
+    /// Bind the current composer/session to a selected workspace. Empty
+    /// placeholder sessions are migrated in place; sessions with real
+    /// history get a fresh chat so old tool context is never silently
+    /// rewritten to a different folder.
+    @discardableResult
+    func moveActiveAgentSessionToWorkspace(at workspacePath: String) -> AgentSession {
+        let url = URL(fileURLWithPath: workspacePath).standardizedFileURL
+        if Self.isExistingDirectory(url),
+           rootDirectory?.standardizedFileURL.path != url.path {
+            openFolderURL(url)
+        }
+
+        if let runtime = activeRuntime, runtime.isEmpty, !runtime.isResponding {
+            pruneEmptyAgentSessions(excluding: runtime.id)
+            runtime.rebindWorkspace(to: url.path)
+            runtime.worktreeChanges = .init()
+            persistAgentSession(runtime: runtime)
+            return runtime.session
+        }
+
+        return startNewAgentSession(inWorkspaceAt: url.path)
+    }
+
     func selectAgentSession(id: AgentSession.ID) {
         guard agentSessions.contains(where: { $0.id == id }) else { return }
         // Save the outgoing session first.
@@ -760,10 +783,11 @@ extension AppState {
     /// who hit ⌘N and walked away. The currently-active session is
     /// preserved even when empty (the user is presumably about to type
     /// into it). Wipes both the in-memory list and the persisted JSON.
-    func pruneEmptyAgentSessions() {
+    func pruneEmptyAgentSessions(excluding protectedID: AgentSession.ID? = nil) {
         let activeID = activeAgentSessionID
         let toRemove = agentSessions.filter { session in
             if session.id == activeID { return false }
+            if session.id == protectedID { return false }
             if pendingDispatchQueue.contains(where: { $0.runtimeID == session.id }) { return false }
             if let runtime = agentRuntimes[session.id] {
                 if runtime.isResponding || runtime.requestTask != nil || runtime.toolDecisionWaiter != nil {

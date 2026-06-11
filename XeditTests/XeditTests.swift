@@ -856,6 +856,32 @@ struct VeilWriterTests {
     }
 
     @MainActor
+    @Test("composer workspace pick migrates an empty active session in place")
+    func testComposerWorkspacePickMigratesEmptyActiveSession() throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("veilwriter_workspace_pick_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState(rootDirectory: nil)
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        let session = appState.startNewAgentSession()
+        defer {
+            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
+                AgentSessionStore.delete(id: id)
+            }
+        }
+        let initialCount = appState.agentSessions.count
+
+        let rebound = appState.moveActiveAgentSessionToWorkspace(at: workspace.path)
+
+        #expect(rebound.id == session.id)
+        #expect(appState.agentSessions.count == initialCount)
+        #expect(appState.activeRuntime?.workspaceRootPath == workspace.standardizedFileURL.path)
+        #expect(appState.agentSessions.first(where: { $0.id == session.id })?.workspaceRootPath == workspace.standardizedFileURL.path)
+    }
+
+    @MainActor
     @Test("live thinking preview tracks streaming reasoning and dies with the indicator")
     func testAgentLiveThinkingPreview() {
         let appState = AppState()
@@ -1750,6 +1776,30 @@ struct VeilWriterTests {
         #expect(SafeCommand.classify(command: "git status 2>/dev/null") == .alwaysSafe)
     }
 
+    @Test("SafeCommand: shell 控制流 + whois 等只读网络命令自动放行")
+    func testSafeCommandShellControlFlow() {
+        // 用户实测案例：纯只读 whois 循环此前落到 LLM judge 又被拒，
+        // 次次人工审批。for 头 / do 前缀 / whois / done 现在全部静态放行。
+        #expect(SafeCommand.classify(
+            command: "for ext in io ai app dev co net org; do echo \"=== deepcoder.$ext ===\"; whois \"deepcoder.$ext\" 2>&1 | grep -iE \"no match|not found|status\"; done"
+        ) == .alwaysSafe)
+
+        // 控制流关键字本身无负载。
+        #expect(SafeCommand.classify(command: "while read line; do echo \"$line\"; done") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "if grep -q TODO a.swift; then echo found; fi") == .alwaysSafe)
+
+        // 关键字剥掉后负载照常受走查约束——危险负载一票否决。
+        #expect(SafeCommand.classify(command: "for f in a b; do rm \"$f\"; done") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "if true; then sudo reboot; fi") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "while true; do curl http://x.example; done") == .alwaysDangerous)
+
+        // 未知负载仍然降级到 needsJudgment，不会因为有 for 头就放行。
+        #expect(SafeCommand.classify(command: "for f in a b; do mycustomtool \"$f\"; done") == .needsJudgment)
+
+        // whois 与 dig/host 同族，直接安全。
+        #expect(SafeCommand.classify(command: "whois example.com") == .alwaysSafe)
+    }
+
     @Test("SafeCommand rejects find with -delete or -exec")
     func testSafeCommandFindRules() {
         #expect(SafeCommand.classify(command: "find . -name '*.swift'") == .alwaysSafe)
@@ -2130,6 +2180,22 @@ struct VeilWriterTests {
         #expect(outsideCDRisk == .write)
         #expect(outsideGitDashCRisk == .write)
         #expect(outsideReadRisk == .write)
+    }
+
+    @Test("run_command uses home directory when no workspace is bound")
+    func testRunCommandUsesHomeDirectoryWithoutWorkspace() async throws {
+        let context = AgentToolContext(rootDirectory: nil)
+        let result = try await AgentToolRunner.run(
+            name: "run_command",
+            arguments: [
+                "command": .string("pwd"),
+                "timeout_seconds": .number(5)
+            ],
+            context: context
+        )
+
+        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        #expect(result.payload.contains(home))
     }
 
     @Test("run_command drains large output without hanging")
