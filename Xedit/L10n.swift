@@ -590,10 +590,11 @@ enum L10n {
     }
 
     enum Settings {
+        static let windowTitle = String(localized: "settings.window.title", defaultValue: "Settings")
         static let tabTypography = String(localized: "settings.tab.typography", defaultValue: "Typography")
         static let tabAppearance = String(localized: "settings.tab.appearance", defaultValue: "Appearance")
         static let tabWorkspace = String(localized: "settings.tab.workspace", defaultValue: "Workspace")
-        static let tabAgent = String(localized: "settings.tab.agent", defaultValue: "Agent")
+        static let tabAgent = String(localized: "settings.tab.agent", defaultValue: "AI Providers")
         static let tabMemory = String(localized: "settings.tab.memory", defaultValue: "Memory")
         static let tabSkills = String(localized: "settings.tab.skills", defaultValue: "Skills")
         static let tabMcp = String(localized: "settings.tab.mcp", defaultValue: "MCP")
@@ -909,6 +910,63 @@ enum L10n {
             static let autoExtractDescription = String(localized: "settings.skill.auto-extract-description", defaultValue: "When enabled, WillDeep can surface reusable workflows as skill candidates.")
             static let minimumToolCallsLabel = String(localized: "settings.skill.minimum-tool-calls", defaultValue: "Minimum tool calls")
             static let minimumToolCallsHint = String(localized: "settings.skill.minimum-tool-calls-hint", defaultValue: "Conversations with fewer tool calls are skipped.")
+            static let marketplaceSection = String(localized: "settings.skill.marketplace-section", defaultValue: "Skill Marketplace")
+            static let marketplaceDescription = String(localized: "settings.skill.marketplace-description", defaultValue: "Install first-party skills from the bundled static catalog. A server-backed marketplace can replace this catalog later.")
+            static let marketplaceInstall = String(localized: "settings.skill.marketplace-install", defaultValue: "Install")
+            static let marketplaceInstalled = String(localized: "settings.skill.marketplace-installed", defaultValue: "Installed")
+            static let marketplaceUpdate = String(localized: "settings.skill.marketplace-update", defaultValue: "Update")
+            static let marketplaceUninstall = String(localized: "settings.skill.marketplace-uninstall", defaultValue: "Uninstall")
+            static let marketplaceConflictLabel = String(localized: "settings.skill.marketplace-conflict-label", defaultValue: "Name conflict")
+            static let marketplaceNoResults = String(localized: "settings.skill.marketplace-no-results", defaultValue: "No marketplace skills match the current search.")
+            static let marketplaceStaticSource = String(localized: "settings.skill.marketplace-static-source", defaultValue: "Static catalog")
+            static let marketplaceCredentialConfigured = String(localized: "settings.skill.marketplace-credential-configured", defaultValue: "Configured")
+            static let marketplaceCredentialRequired = String(localized: "settings.skill.marketplace-credential-required", defaultValue: "Required")
+            static let marketplaceCredentialClear = String(localized: "settings.skill.marketplace-credential-clear", defaultValue: "Clear")
+            static let marketplaceInvalidSkill = String(localized: "settings.skill.marketplace-invalid-skill", defaultValue: "Marketplace skill name is invalid.")
+            static func marketplaceCount(_ a1: String) -> String {
+                let template = String(localized: "settings.skill.marketplace-count", defaultValue: "%@ marketplace skills")
+                return String(format: template, a1)
+            }
+            static func marketplaceCredentialCleared(_ a1: String) -> String {
+                let template = String(localized: "settings.skill.marketplace-credential-cleared", defaultValue: "Cleared %@.")
+                return String(format: template, a1)
+            }
+            static func marketplaceVersion(_ a1: String) -> String {
+                let template = String(localized: "settings.skill.marketplace-version", defaultValue: "v%@")
+                return String(format: template, a1)
+            }
+            static func marketplaceMinimumVersion(_ a1: String) -> String {
+                let template = String(localized: "settings.skill.marketplace-minimum-version", defaultValue: "Requires WillDeep %@+")
+                return String(format: template, a1)
+            }
+            static func marketplaceInstalledStatus(_ a1: String) -> String {
+                let template = String(localized: "settings.skill.marketplace-installed-status", defaultValue: "Installed %@")
+                return String(format: template, a1)
+            }
+            static func marketplaceUpdateStatus(_ a1: String, _ a2: String) -> String {
+                let template = String(localized: "settings.skill.marketplace-update-status", defaultValue: "Installed %@ · Latest %@")
+                return String(format: template, a1, a2)
+            }
+            static func marketplaceInstalledMessage(_ a1: String) -> String {
+                let template = String(localized: "settings.skill.marketplace-installed-message", defaultValue: "Installed %@.")
+                return String(format: template, a1)
+            }
+            static func marketplaceUpdatedMessage(_ a1: String) -> String {
+                let template = String(localized: "settings.skill.marketplace-updated-message", defaultValue: "Updated %@.")
+                return String(format: template, a1)
+            }
+            static func marketplaceUninstalledMessage(_ a1: String) -> String {
+                let template = String(localized: "settings.skill.marketplace-uninstalled-message", defaultValue: "Uninstalled %@.")
+                return String(format: template, a1)
+            }
+            static func marketplaceConflict(_ a1: String) -> String {
+                let template = String(localized: "settings.skill.marketplace-conflict", defaultValue: "A user skill named %@ already exists. Rename or remove it before installing this marketplace skill.")
+                return String(format: template, a1)
+            }
+            static func marketplaceMissing(_ a1: String) -> String {
+                let template = String(localized: "settings.skill.marketplace-missing", defaultValue: "Marketplace skill %@ is not installed.")
+                return String(format: template, a1)
+            }
             static func availableCount(_ a1: String, _ a2: String) -> String {
                 let template = String(localized: "settings.skill.available-count", defaultValue: "%1$@ of %2$@ skills available")
                 return String(format: template, a1, a2)

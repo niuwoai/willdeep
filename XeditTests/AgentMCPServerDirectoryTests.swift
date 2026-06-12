@@ -80,4 +80,51 @@ struct AgentMCPServerDirectoryTests {
         #expect(settingsList.contains { $0.id == "user:local-test-mcp" && !$0.isEnabled })
         #expect(!agentList.contains { $0.id == "user:local-test-mcp" })
     }
+
+    @Test
+    func userServerSecretsAreStoredAsKeychainReferences() throws {
+        let suiteName = "willdeep-mcp-credentials-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        let keychainService = AgentCredentialStore._setTestKeychainServiceOverride(suiteName)
+        AgentMCPSettingsStore._setTestDefaultsOverride(defaults)
+        defer {
+            AgentCredentialStore._wipeTestKeychain()
+            AgentCredentialStore._setTestKeychainServiceOverride(nil)
+            AgentMCPSettingsStore._setTestDefaultsOverride(nil)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let server = AgentMCPServerConfig(
+            name: "secure-mcp",
+            source: .user,
+            transport: .streamableHTTP,
+            url: "https://example.com/mcp",
+            headers: [
+                "Authorization": "Bearer test-secret",
+                "X-Workspace": "local"
+            ]
+        )
+
+        AgentMCPSettingsStore.upsertUserServer(server)
+        let stored = try #require(AgentMCPSettingsStore.load().userServers.first)
+        let authorization = try #require(stored.headers["Authorization"])
+
+        #expect(keychainService == suiteName)
+        #expect(authorization.hasPrefix(AgentCredentialStore.referencePrefix))
+        #expect(authorization != "Bearer test-secret")
+        #expect(stored.headers["X-Workspace"] == "local")
+        #expect(stored.redactedHeaders["Authorization"] == "[redacted]")
+        #expect(AgentCredentialStore.resolve(authorization) == "Bearer test-secret")
+
+        let account = String(authorization.dropFirst(AgentCredentialStore.referencePrefix.count))
+        let updated = AgentMCPServerConfig(
+            name: "secure-mcp",
+            source: .user,
+            transport: .streamableHTTP,
+            url: "https://example.com/mcp",
+            headers: ["X-Workspace": "local"]
+        )
+        AgentMCPSettingsStore.upsertUserServer(updated)
+        #expect(AgentCredentialStore.load(account: account).isEmpty)
+    }
 }

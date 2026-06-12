@@ -2326,7 +2326,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "代理"
+            "value": "智能体"
           }
         }
       }
@@ -4615,19 +4615,36 @@
         }
       }
     },
+    "settings.window.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置"
+          }
+        }
+      }
+    },
     "settings.tab.agent": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Agent"
+            "value": "AI Providers"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Agent"
+            "value": "AI 服务商"
           }
         }
       }

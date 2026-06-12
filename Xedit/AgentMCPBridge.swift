@@ -114,16 +114,23 @@ struct AgentMCPServerConfig: Identifiable, Codable, Equatable, Sendable {
     }
 
     static func redactedValue(for key: String, value: String) -> String {
+        if AgentCredentialStore.isReference(value) {
+            return "[redacted]"
+        }
+        if isSensitiveCredentialKey(key) {
+            return value.isEmpty ? "" : "[redacted]"
+        }
+        return value
+    }
+
+    static func isSensitiveCredentialKey(_ key: String) -> Bool {
         let lowercased = key.lowercased()
-        if lowercased.contains("token")
+        return lowercased.contains("token")
             || lowercased.contains("secret")
             || lowercased.contains("password")
             || lowercased == "authorization"
             || lowercased == "cookie"
-            || lowercased.contains("key") {
-            return "[redacted]"
-        }
-        return value
+            || lowercased.contains("key")
     }
 }
 
@@ -338,6 +345,25 @@ enum AgentMCPSettingsStore {
         var normalized = server.normalized
         normalized.source = .user
         normalized.id = "user:\(normalized.name)"
+        let previousServer = settings.userServers.first {
+            $0.id == normalized.id || $0.name == normalized.name
+        }
+        normalized.headers = secureKeyValueMap(
+            normalized.headers,
+            serverID: normalized.id,
+            kind: "headers"
+        )
+        normalized.env = secureKeyValueMap(
+            normalized.env,
+            serverID: normalized.id,
+            kind: "env"
+        )
+        if let previousServer {
+            let retainedAccounts = credentialAccounts(in: normalized.headers)
+                .union(credentialAccounts(in: normalized.env))
+            deleteCredentialReferences(in: previousServer.headers, retaining: retainedAccounts)
+            deleteCredentialReferences(in: previousServer.env, retaining: retainedAccounts)
+        }
         settings.userServers.removeAll { $0.id == normalized.id || $0.name == normalized.name }
         settings.userServers.append(normalized)
         settings.userServers.sort { $0.name < $1.name }
@@ -346,6 +372,10 @@ enum AgentMCPSettingsStore {
 
     static func deleteUserServer(id: String) {
         var settings = load()
+        if let server = settings.userServers.first(where: { $0.id == id }) {
+            deleteCredentialReferences(in: server.headers)
+            deleteCredentialReferences(in: server.env)
+        }
         settings.userServers.removeAll { $0.id == id }
         settings.disabledServerIDs.removeAll { $0 == id }
         save(settings)
@@ -354,9 +384,53 @@ enum AgentMCPSettingsStore {
     static func clearAuthorizationHeader(id: String) {
         var settings = load()
         guard let index = settings.userServers.firstIndex(where: { $0.id == id }) else { return }
-        settings.userServers[index].headers.removeValue(forKey: "Authorization")
-        settings.userServers[index].headers.removeValue(forKey: "authorization")
+        let keys = settings.userServers[index].headers.keys.filter { $0.lowercased() == "authorization" }
+        for key in keys {
+            if let value = settings.userServers[index].headers[key] {
+                deleteCredentialReferences(in: [key: value])
+            }
+            let account = AgentCredentialStore.mcpAccount(serverID: id, kind: "headers", key: key)
+            AgentCredentialStore.delete(account: account)
+            settings.userServers[index].headers.removeValue(forKey: key)
+        }
         save(settings)
+    }
+
+    private static func secureKeyValueMap(
+        _ values: [String: String],
+        serverID: String,
+        kind: String
+    ) -> [String: String] {
+        Dictionary(uniqueKeysWithValues: values.map { key, value in
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard AgentMCPServerConfig.isSensitiveCredentialKey(key),
+                  !trimmed.isEmpty,
+                  !AgentCredentialStore.isReference(trimmed) else {
+                return (key, value)
+            }
+            let account = AgentCredentialStore.mcpAccount(serverID: serverID, kind: kind, key: key)
+            AgentCredentialStore.save(trimmed, account: account)
+            return (key, AgentCredentialStore.reference(account: account))
+        })
+    }
+
+    private static func deleteCredentialReferences(
+        in values: [String: String],
+        retaining retainedAccounts: Set<String> = []
+    ) {
+        for account in credentialAccounts(in: values) where !retainedAccounts.contains(account) {
+            AgentCredentialStore.delete(account: account)
+        }
+    }
+
+    private static func credentialAccounts(in values: [String: String]) -> Set<String> {
+        var accounts: Set<String> = []
+        for value in values.values {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.hasPrefix(AgentCredentialStore.referencePrefix) else { continue }
+            accounts.insert(String(trimmed.dropFirst(AgentCredentialStore.referencePrefix.count)))
+        }
+        return accounts
     }
 }
 
@@ -728,7 +802,7 @@ enum AgentMCPBridge {
 
         var environment = ProcessInfo.processInfo.environment
         for (key, value) in server.env {
-            environment[key] = value
+            environment[key] = AgentCredentialStore.resolve(value)
         }
         process.environment = environment
 
@@ -805,7 +879,7 @@ enum AgentMCPBridge {
         var sessionID: String?
         let initialize = try await sendHTTPRequest(
             url: url,
-            headers: server.headers,
+            headers: resolvedHeaders(server.headers),
             sessionID: nil,
             timeout: server.startupTimeout,
             object: [
@@ -820,7 +894,7 @@ enum AgentMCPBridge {
 
         _ = try await sendHTTPRequest(
             url: url,
-            headers: server.headers,
+            headers: resolvedHeaders(server.headers),
             sessionID: sessionID,
             timeout: server.startupTimeout,
             object: [
@@ -833,7 +907,7 @@ enum AgentMCPBridge {
 
         let response = try await sendHTTPRequest(
             url: url,
-            headers: server.headers,
+            headers: resolvedHeaders(server.headers),
             sessionID: sessionID,
             timeout: server.startupTimeout,
             object: [
@@ -898,6 +972,12 @@ enum AgentMCPBridge {
             throw AgentToolError.commandFailed(-1, prettyJSON(error))
         }
         return (object, nextSessionID)
+    }
+
+    private static func resolvedHeaders(_ headers: [String: String]) -> [String: String] {
+        Dictionary(uniqueKeysWithValues: headers.map { key, value in
+            (key, AgentCredentialStore.resolve(value))
+        })
     }
 
     nonisolated private static func parseSSEJSONRPCResponse(_ data: Data) throws -> [String: Any] {
