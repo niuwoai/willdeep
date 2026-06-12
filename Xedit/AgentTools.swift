@@ -75,19 +75,26 @@ struct AgentToolContext {
     /// when nil, `run_command` with `run_in_background: true` falls
     /// back to the foreground path so behavior is still defined.
     let jobRegistry: AgentJobRegistry?
+    /// Effective sandbox mode chosen by the AppState approval gateway.
+    /// Read-only tools and auto-approved commands get a scrubbed local
+    /// environment; user-approved write/network/credential commands run
+    /// in the escalated/full-user environment.
+    let sandboxMode: AgentSandboxMode
 
     init(
         rootDirectory: URL?,
         workspaceLocation: WorkspaceLocation? = nil,
         runtimeDescriptor: RuntimeDescriptor? = nil,
         runtimeID: UUID? = nil,
-        jobRegistry: AgentJobRegistry? = nil
+        jobRegistry: AgentJobRegistry? = nil,
+        sandboxMode: AgentSandboxMode = .readOnly
     ) {
         self.rootDirectory = rootDirectory
         self.workspaceLocation = workspaceLocation ?? rootDirectory.map { .local(path: $0.standardizedFileURL.path) }
         self.runtimeDescriptor = runtimeDescriptor
         self.runtimeID = runtimeID
         self.jobRegistry = jobRegistry
+        self.sandboxMode = sandboxMode
     }
 
     var sshBackend: SSHRuntimeBackend? {
@@ -198,6 +205,10 @@ enum AgentToolApprovalSource: String, Equatable, Codable {
     case llmJudge
     case goalMode
     case workspaceAccess
+    /// The user approved a call that requires access outside the default
+    /// sandbox boundary (network, credentials/keychain, system paths, or
+    /// destructive shell syntax).
+    case escalated
     /// The user marked this MCP server as fully trusted ("my own MCP")
     /// in MCP settings — every call to it auto-runs, writes included.
     case trustedServer
@@ -256,7 +267,7 @@ enum AgentJSONValue: Equatable {
     case array([AgentJSONValue])
     case object([String: AgentJSONValue])
 
-    var displaySummary: String {
+    nonisolated var displaySummary: String {
         switch self {
         case .null: return "null"
         case .bool(let value): return value ? "true" : "false"
@@ -278,12 +289,12 @@ enum AgentJSONValue: Equatable {
         }
     }
 
-    static func decode(from data: Data) throws -> AgentJSONValue {
+    nonisolated static func decode(from data: Data) throws -> AgentJSONValue {
         let parsed = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
         return wrap(parsed)
     }
 
-    static func decode(from string: String) -> AgentJSONValue {
+    nonisolated static func decode(from string: String) -> AgentJSONValue {
         guard let data = string.data(using: .utf8) else { return .string(string) }
         do {
             return try decode(from: data)
@@ -292,7 +303,7 @@ enum AgentJSONValue: Equatable {
         }
     }
 
-    static func wrap(_ value: Any) -> AgentJSONValue {
+    nonisolated static func wrap(_ value: Any) -> AgentJSONValue {
         if value is NSNull { return .null }
         if let boolean = value as? Bool { return .bool(boolean) }
         if let number = value as? NSNumber {
@@ -311,7 +322,7 @@ enum AgentJSONValue: Equatable {
         return .null
     }
 
-    var rawAny: Any {
+    nonisolated var rawAny: Any {
         switch self {
         case .null: return NSNull()
         case .bool(let value): return value
@@ -327,12 +338,12 @@ enum AgentJSONValue: Equatable {
         }
     }
 
-    func stringValue() -> String? {
+    nonisolated func stringValue() -> String? {
         if case .string(let value) = self { return value }
         return nil
     }
 
-    func intValue() -> Int? {
+    nonisolated func intValue() -> Int? {
         switch self {
         case .number(let value): return Int(value)
         case .string(let value): return Int(value)
@@ -340,7 +351,7 @@ enum AgentJSONValue: Equatable {
         }
     }
 
-    func boolValue() -> Bool? {
+    nonisolated func boolValue() -> Bool? {
         switch self {
         case .bool(let value): return value
         case .number(let value): return value != 0
@@ -354,7 +365,7 @@ enum AgentJSONValue: Equatable {
         }
     }
 
-    func stringArrayValue() -> [String]? {
+    nonisolated func stringArrayValue() -> [String]? {
         guard case .array(let values) = self else { return nil }
         let strings = values.compactMap { $0.stringValue() }
         // Only treat the array as "string array" when every element was
@@ -902,7 +913,8 @@ enum AgentToolRunner {
                         command: command,
                         workingDirectory: root,
                         runtimeID: runtimeID,
-                        timeoutSeconds: bgTimeout
+                        timeoutSeconds: bgTimeout,
+                        sandboxMode: context.sandboxMode
                     )
                 }
             } catch {
@@ -926,10 +938,20 @@ enum AgentToolRunner {
 
         let outcome = await Task.detached(priority: .userInitiated) { () -> CommandOutcome in
             let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/sh")
-            process.arguments = ["-c", command]
+            let launch = AgentSandboxPolicy.shellLaunch(
+                command: command,
+                mode: context.sandboxMode,
+                rootDirectory: context.rootDirectory
+            )
+            process.executableURL = launch.executableURL
+            process.arguments = launch.arguments
             process.currentDirectoryURL = root
-            process.environment = shellEnvironment()
+            let baseEnvironment = shellEnvironment()
+            process.environment = AgentSandboxPolicy.sandboxedEnvironment(
+                mode: context.sandboxMode,
+                rootDirectory: context.rootDirectory,
+                base: baseEnvironment
+            )
 
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()
@@ -979,8 +1001,8 @@ enum AgentToolRunner {
 
             return CommandOutcome(
                 exitStatus: process.terminationStatus,
-                stdout: stdoutCollector.stringValue,
-                stderr: stderrCollector.stringValue,
+                stdout: AgentSandboxPolicy.scrub(stdoutCollector.stringValue),
+                stderr: AgentSandboxPolicy.scrub(stderrCollector.stringValue),
                 timedOut: runState.didTimeout,
                 launchFailed: false
             )

@@ -62,6 +62,7 @@ struct AgentToolsCoreTests {
                        .llmJudge,
                        .goalMode,
                        .workspaceAccess,
+                       .escalated,
                        .trustedServer] {
             let data = try JSONEncoder().encode([source])
             let decoded = try JSONDecoder().decode([AgentToolApprovalSource].self, from: data)
@@ -262,6 +263,84 @@ struct AgentToolsCoreTests {
         let env = AgentToolRunner.shellEnvironment(from: base)
         #expect(env["HOME"] == "/Users/test")
         #expect(env["LANG"] == "en_US.UTF-8")
+    }
+
+    // MARK: - AgentSandboxPolicy
+
+    @Test
+    func sandboxPolicyKeepsReadOnlyCommandsInsideReadOnlyMode() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        let decision = AgentSandboxPolicy.commandDecision(
+            command: "pwd && rg AgentSandboxPolicy .",
+            rootDirectory: root
+        )
+        #expect(decision.mode == .readOnly)
+        #expect(decision.requiresUserApproval == false)
+        #expect(decision.requiresTypedConfirmation == false)
+    }
+
+    @Test
+    func sandboxPolicyRequiresEscalationForNetworkAndCredentialCommands() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        let decision = AgentSandboxPolicy.commandDecision(
+            command: "gh auth status",
+            rootDirectory: root
+        )
+        #expect(decision.mode == .escalated)
+        #expect(decision.requiresUserApproval == true)
+        #expect(decision.requiresTypedConfirmation == false)
+        #expect(decision.prefixRule == ["gh", "auth"])
+    }
+
+    @Test
+    func sandboxPolicyRequiresConfirmationForOutsideWorkspacePaths() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        let decision = AgentSandboxPolicy.commandDecision(
+            command: "cat /Users/rocky/.ssh/id_ed25519",
+            rootDirectory: root
+        )
+        #expect(decision.mode == .escalated)
+        #expect(decision.requiresUserApproval == true)
+        #expect(decision.requiresTypedConfirmation == true)
+    }
+
+    @Test
+    func sandboxedEnvironmentScrubsSecretsAndUsesTemporaryHome() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        let env = AgentSandboxPolicy.sandboxedEnvironment(
+            mode: .workspaceWrite,
+            rootDirectory: root,
+            base: [
+                "PATH": "/usr/bin",
+                "HOME": "/Users/real",
+                "GITHUB_TOKEN": "ghp_should_not_survive",
+                "MY_SECRET": "secret-value",
+                "LANG": "en_US.UTF-8"
+            ]
+        )
+        #expect(env["GITHUB_TOKEN"] == nil)
+        #expect(env["MY_SECRET"] == nil)
+        #expect(env["LANG"] == "en_US.UTF-8")
+        #expect(env["HOME"] != "/Users/real")
+        #expect(env["WILLDEEP_AGENT_SANDBOX"] == AgentSandboxMode.workspaceWrite.rawValue)
+        #expect(env["WILLDEEP_WORKSPACE_ROOT"] == root.path)
+    }
+
+    @Test
+    func sandboxLaunchWrapsNonEscalatedCommandsWhenSeatbeltIsAvailable() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        let launch = AgentSandboxPolicy.shellLaunch(
+            command: "pwd",
+            mode: .readOnly,
+            rootDirectory: root
+        )
+        if FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec") {
+            #expect(launch.executableURL.path == "/usr/bin/sandbox-exec")
+            #expect(launch.arguments.contains("/bin/sh"))
+            #expect(launch.arguments.contains("pwd"))
+        } else {
+            #expect(launch.executableURL.path == "/bin/sh")
+        }
     }
 }
 

@@ -2567,6 +2567,7 @@ struct WillDeepTests {
         defer { withExtendedLifetime(sandbox) {} }
         let appState = AppState()
         appState.autoApproveSafeCommands = true
+        let root = URL(fileURLWithPath: "/tmp/willdeep-test-workspace")
 
         let approved = await appState.autoApprovalSource(
             toolName: "call_mcp_tool",
@@ -2575,7 +2576,8 @@ struct WillDeepTests {
                 "tool": .string("list_issues"),
                 "arguments_json": .string(#"{"repo":"a/b"}"#),
             ],
-            risk: .write
+            risk: .write,
+            rootDirectory: root
         )
         #expect(approved == .staticAllowlist)
 
@@ -2587,7 +2589,8 @@ struct WillDeepTests {
                 "server": .string("github"),
                 "tool": .string("list_issues"),
             ],
-            risk: .write
+            risk: .write,
+            rootDirectory: root
         )
         #expect(gated == nil)
     }
@@ -2638,13 +2641,15 @@ struct WillDeepTests {
 
         // 完全可信:写类工具名也自动放行,且不依赖主开关。
         let appState = AppState()
+        let root = URL(fileURLWithPath: "/tmp/willdeep-test-workspace")
         let approval = await appState.autoApprovalSource(
             toolName: "call_mcp_tool",
             arguments: [
                 "server": .string(serverName),
                 "tool": .string("create_record"),
             ],
-            risk: .write
+            risk: .write,
+            rootDirectory: root
         )
         #expect(approval == .trustedServer)
 
@@ -2656,7 +2661,8 @@ struct WillDeepTests {
                 "server": .string(serverName),
                 "tool": .string("list_records"),
             ],
-            risk: .write
+            risk: .write,
+            rootDirectory: root
         )
         #expect(gated == nil)
     }
@@ -2665,12 +2671,14 @@ struct WillDeepTests {
     @MainActor
     func testGoalModeAutoApproval() async {
         let appState = AppState()
+        let root = URL(fileURLWithPath: "/tmp/willdeep-test-workspace")
 
         // write 层 + goal 模式 → 自动放行，来源标记为 goalMode。
         let writeApproval = await appState.autoApprovalSource(
             toolName: "run_command",
             arguments: ["command": .string("swift build")],
             risk: .write,
+            rootDirectory: root,
             interactionMode: .goal
         )
         #expect(writeApproval == .goalMode)
@@ -2680,6 +2688,7 @@ struct WillDeepTests {
             toolName: "run_command",
             arguments: ["command": .string("rm -rf /tmp/x")],
             risk: .danger,
+            rootDirectory: root,
             interactionMode: .goal
         )
         #expect(dangerApproval == nil)
@@ -2689,6 +2698,7 @@ struct WillDeepTests {
             toolName: "claude_code",
             arguments: ["prompt": .string("do x")],
             risk: .write,
+            rootDirectory: root,
             interactionMode: .normal
         )
         #expect(normalApproval == nil)
@@ -2701,11 +2711,13 @@ struct WillDeepTests {
         defer { withExtendedLifetime(sandbox) {} }
         let appState = AppState()
         appState.autoApproveSafeCommands = true
+        let root = URL(fileURLWithPath: "/tmp/willdeep-test-workspace")
 
         let askEveryTime = await appState.autoApprovalSource(
             toolName: "run_command",
             arguments: ["command": .string("ls")],
             risk: .write,
+            rootDirectory: root,
             approvalMode: .requestEveryTime
         )
         #expect(askEveryTime == nil)
@@ -2714,6 +2726,7 @@ struct WillDeepTests {
             toolName: "run_command",
             arguments: ["command": .string("ls")],
             risk: .write,
+            rootDirectory: root,
             approvalMode: .smart
         )
         #expect(smart == .staticAllowlist)
@@ -2722,6 +2735,7 @@ struct WillDeepTests {
             toolName: "run_command",
             arguments: ["command": .string("swift test")],
             risk: .write,
+            rootDirectory: root,
             approvalMode: .workspaceAccess
         )
         #expect(workspace == .workspaceAccess)
@@ -2733,6 +2747,7 @@ struct WillDeepTests {
                 "tool": .string("create_issue"),
             ],
             risk: .write,
+            rootDirectory: root,
             approvalMode: .workspaceAccess
         )
         #expect(untrustedMCP == nil)

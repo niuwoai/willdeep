@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-12 | Current version: v1.60.0-rc24
+> Last updated: 2026-06-12 | Current version: v1.60.0-rc25
 
 ## Positioning
 
@@ -90,6 +90,7 @@ CLAUDE.md §10 的软上限是 2000 行，硬上限是 3000 行。rc42 拆完 `A
 - **Agent Terminology（1.60.0-rc18）** — 编辑器右上角进入 Agent mode 的短按钮中文从“代理”改为“智能体”，避免和网络代理 / proxy 语义混淆；tooltip 继续使用“Agent 模式”说明完整模式语义。
 - **Settings Terminology（1.60.0-rc21）** — Settings 窗口标题固定为“Settings / 设置”；主模型服务商配置 tab 改名为“AI Providers / AI 服务商”，与“Local Agents / 本机 Agent”明确区分。
 - **Credential Store（1.60.0-rc22）** — 新增统一 `AgentCredentialStore`，MCP 用户服务器的敏感 header/env 会在保存时自动转成 `keychain://` 引用并写入 macOS Keychain；运行 stdio/streamable-http MCP 时再解析注入真实值，列表和工具输出继续只显示脱敏值。Skill Marketplace 条目可声明凭据需求，安装时通过安全输入框写入 Keychain，并在 skill metadata 中记录环境变量到 Keychain 引用的映射。
+- **Agent Sandbox & Escalation（1.60.0-rc25）** — Agent 工具执行新增 Codex-style 沙箱策略：只读命令默认使用脱敏环境与临时 HOME，并在 macOS 可用时通过 `sandbox-exec` 禁止网络和越权写入；workspace-write 命令仍需审批，只允许 workspace / 临时目录写入；网络、凭据/macOS Keychain、系统路径和破坏性 shell 形态进入 escalated 模式，Goal mode / Workspace Access 不再静默放行。工具卡展示 `_sandbox`、`_approval_reason`、`_prefix_rule`，执行结果写入 `~/Library/Application Support/WillDeep/AgentAudit/sandbox.jsonl` 并对 token/secret 脱敏。
 - **Static Skill Marketplace（1.60.0-rc20）** — Settings → Skills 新增静态 Skill Marketplace 区域，首批内置 WillDeep 官方 skill 条目支持搜索、安装、更新和卸载；安装器将条目写入 `~/.codex/skills/<slug>/SKILL.md`，用 frontmatter 记录 marketplace id/version，并保护同名用户 skill 不被覆盖。rc20 扩展 PDF Design 与 Image Processing 条目，其中 Image Processing 会随安装写入 `scripts/process_image.py`，支持裁剪、缩放、格式转换、透明色处理、透明边裁切、画布填充与扁平化。安装后复用既有 `AgentSkillDirectory`，立即进入 Agent 工具、Settings 技能列表和 composer `@` 选择器。
 - **Large workspace guardrails（1.60.0-rc17）** — Editor 文件树、Quick Open、跨文件夹查找替换、Agent 本地工具和远端 daemon 均跳过常见依赖/构建目录（如 `node_modules` / `.git` / `target` / `.gradle` / `.terraform` / `.dart_tool` / `DerivedData` / `Pods` / `vendor`），并对目录项、遍历节点数和搜索文件数设硬上限，避免打开或扫描大目录时内存暴涨。macOS deployment target 同步降为 14.6，便于在 Sonoma 14.6+ 运行。**1.60.0-rc15** 同步修复 chat history copy chrome 测试：代码块和消息 footer 的复制按钮现在按 attributed string 的 link / payload / hidden style 断言，不再依赖 SF Symbol 附件在 `.string` 中呈现为固定 glyph；background job lifecycle 测试改用带 `TERM` trap 的长跑样本，减少全量并发测试中的时序误报。
 - **@MainActor isolation** — AppState 本身是 `@MainActor`，所有 `@Published` mutation 必须在主线程发生。runtime 的 hot 字段亦然，但 `AgentClient` 的 URLSession 流式回调跨线程时通过 `Task { @MainActor in ... }` 拥抱主线程。`AppState.deinit` 不能 cancel runtime——rc38 曾尝试 `MainActor.assumeIsolated` 但 Swift Testing 在非主线程 release 触发 precondition fail，rc41 回退；清理走 session 显式删除路径。

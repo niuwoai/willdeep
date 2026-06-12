@@ -613,12 +613,25 @@ extension AppState {
         toolName: String,
         arguments: [String: AgentJSONValue],
         risk: AgentToolRisk,
+        rootDirectory: URL?,
         interactionMode: AgentInteractionMode = .normal,
         approvalMode: AgentApprovalMode = .smart
     ) async -> AgentToolApprovalSource? {
         guard risk == .write else { return nil }
 
         if approvalMode == .requestEveryTime {
+            return nil
+        }
+
+        let sandboxDecision = AgentSandboxPolicy.decision(
+            toolName: toolName,
+            arguments: arguments,
+            rootDirectory: rootDirectory
+        )
+        if sandboxDecision.mode == .escalated {
+            if isAgentToolCallAlwaysAllowed(toolName: toolName, arguments: arguments, risk: risk) {
+                return .alwaysAllowList
+            }
             return nil
         }
 
@@ -748,6 +761,27 @@ extension AppState {
             return AgentMCPSettingsStore.trustLevel(name: server) == .fullyTrusted
         default:
             return false
+        }
+    }
+
+    private func sandboxModeForToolExecution(
+        risk: AgentToolRisk,
+        approvalSource: AgentToolApprovalSource?,
+        sandboxDecision: AgentSandboxDecision
+    ) -> AgentSandboxMode {
+        if sandboxDecision.mode == .escalated {
+            return .escalated
+        }
+        if risk == .read {
+            return .readOnly
+        }
+        switch approvalSource {
+        case .workspaceAccess, .goalMode, .alwaysAllowList, .trustedServer, .user:
+            return .workspaceWrite
+        case .escalated:
+            return .escalated
+        case .staticAllowlist, .llmJudge, .none:
+            return sandboxDecision.mode
         }
     }
 
@@ -1025,11 +1059,17 @@ extension AppState {
                     arguments: argsDict,
                     rootDirectory: workspaceURL
                 )
+                let sandboxDecision = AgentSandboxPolicy.decision(
+                    toolName: call.toolName,
+                    arguments: argsDict,
+                    rootDirectory: workspaceURL
+                )
 
                 let autoApproval = await autoApprovalSource(
                     toolName: call.toolName,
                     arguments: argsDict,
                     risk: risk,
+                    rootDirectory: workspaceURL,
                     interactionMode: runtime.interactionMode,
                     approvalMode: runtime.approvalMode
                 )
@@ -1052,6 +1092,13 @@ extension AppState {
                    case .remote(_, let remotePath) = workspaceLocation {
                     displayArgsDict["_runtime"] = .string("\(remoteRuntimeDescriptor.displayName) (\(remoteRuntimeDescriptor.sshTarget))")
                     displayArgsDict["_cwd"] = .string(remotePath)
+                }
+                if call.toolName == "run_command" || sandboxDecision.mode == .escalated {
+                    displayArgsDict["_sandbox"] = .string(sandboxDecision.mode.rawValue)
+                    displayArgsDict["_approval_reason"] = .string(sandboxDecision.reason)
+                    if let prefixRule = sandboxDecision.prefixRule, !prefixRule.isEmpty {
+                        displayArgsDict["_prefix_rule"] = .string(prefixRule.joined(separator: " "))
+                    }
                 }
 
                 let record = AgentToolCall(
@@ -1143,6 +1190,13 @@ extension AppState {
                             runtime.toolCalls[index].status = .denied
                             runtime.toolCalls[index].errorMessage = reason
                         }
+                        AgentSandboxAuditLog.append(
+                            toolName: call.toolName,
+                            arguments: argsDict,
+                            decision: sandboxDecision,
+                            approvalSource: nil,
+                            outcome: "denied"
+                        )
                         appendToolMessage(
                             for: runtime,
                             toolCallID: call.externalID,
@@ -1153,7 +1207,7 @@ extension AppState {
                     }
                     if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
                         runtime.toolCalls[index].status = .running
-                        runtime.toolCalls[index].approvalSource = .user
+                        runtime.toolCalls[index].approvalSource = sandboxDecision.mode == .escalated ? .escalated : .user
                     }
                 }
 
@@ -1177,7 +1231,12 @@ extension AppState {
                     workspaceLocation: workspaceLocation,
                     runtimeDescriptor: remoteRuntimeDescriptor,
                     runtimeID: runtime.id,
-                    jobRegistry: agentJobRegistry
+                    jobRegistry: agentJobRegistry,
+                    sandboxMode: sandboxModeForToolExecution(
+                        risk: risk,
+                        approvalSource: autoApproval,
+                        sandboxDecision: sandboxDecision
+                    )
                 )
                 do {
                     let result = try await AgentToolRunner.run(
@@ -1189,6 +1248,13 @@ extension AppState {
                         runtime.toolCalls[index].status = .succeeded
                         runtime.toolCalls[index].result = result
                     }
+                    AgentSandboxAuditLog.append(
+                        toolName: call.toolName,
+                        arguments: argsDict,
+                        decision: sandboxDecision,
+                        approvalSource: runtime.toolCalls.first(where: { $0.id == recordID })?.approvalSource ?? autoApproval,
+                        outcome: "succeeded"
+                    )
                     if call.toolName == "run_command" || risk != .read {
                         await refreshGitStatusAfterAgentTool(
                             for: runtime,
@@ -1202,6 +1268,13 @@ extension AppState {
                         runtime.toolCalls[index].status = .failed
                         runtime.toolCalls[index].errorMessage = error.localizedDescription
                     }
+                    AgentSandboxAuditLog.append(
+                        toolName: call.toolName,
+                        arguments: argsDict,
+                        decision: sandboxDecision,
+                        approvalSource: runtime.toolCalls.first(where: { $0.id == recordID })?.approvalSource ?? autoApproval,
+                        outcome: "failed"
+                    )
                     appendToolMessage(
                         for: runtime,
                         toolCallID: call.externalID,

@@ -34,8 +34,512 @@ struct AgentAlwaysAllowedCommand: Codable, Equatable, Identifiable {
     }
 }
 
+enum AgentSandboxMode: String, Codable, Equatable {
+    case readOnly
+    case workspaceWrite
+    case escalated
+}
+
+struct AgentSandboxDecision: Equatable {
+    let mode: AgentSandboxMode
+    let requiresUserApproval: Bool
+    let requiresTypedConfirmation: Bool
+    let reason: String
+    let prefixRule: [String]?
+
+    var risk: AgentToolRisk {
+        if requiresTypedConfirmation { return .danger }
+        if requiresUserApproval { return .write }
+        return .read
+    }
+}
+
+struct AgentSandboxLaunch: Equatable {
+    let executableURL: URL
+    let arguments: [String]
+}
+
+/// Codex-style local execution policy for agent tools.
+///
+/// The app cannot create the exact same Linux/macOS seatbelt sandbox that
+/// Codex CLI uses in every environment, so this policy provides the same
+/// product contract at the tool boundary:
+///  - read-only commands run in a scrubbed environment;
+///  - workspace writes require explicit approval;
+///  - network/credential/system/destructive commands require escalation;
+///  - remembered approvals are scoped to narrow command prefixes.
+enum AgentSandboxPolicy {
+    nonisolated private static let shellControlOperators: Set<Character> = ["|", "&", ";", "\n"]
+    nonisolated private static let redirectionCharacters: Set<Character> = [">", "<"]
+
+    nonisolated private static let workspaceWriteHeads: Set<String> = [
+        "apply_patch", "git", "make", "xcodebuild", "swift", "go",
+        "cargo", "npm", "pnpm", "yarn", "ruby", "node", "python", "python3"
+    ]
+
+    nonisolated private static let networkHeads: Set<String> = [
+        "curl", "wget", "ssh", "scp", "rsync", "gh", "brew"
+    ]
+
+    nonisolated private static let credentialHeads: Set<String> = [
+        "security", "op", "pass", "gpg", "ssh-add"
+    ]
+
+    nonisolated private static let destructiveHeads: Set<String> = [
+        "rm", "rmdir", "mv", "chmod", "chown", "chgrp", "sudo", "doas", "su",
+        "kill", "killall", "pkill", "diskutil", "fdisk", "mkfs", "shutdown",
+        "reboot", "halt", "poweroff", "launchctl", "dd"
+    ]
+
+    nonisolated private static let sensitivePathFragments: [String] = [
+        "/.ssh", "/.gnupg", "/.aws", "/.config/gh", "/library/keychains",
+        ".env", "id_rsa", "id_ed25519", "credentials", "token", "secret"
+    ]
+
+    nonisolated private static let sandboxExecPath = "/usr/bin/sandbox-exec"
+
+    nonisolated static func decision(
+        toolName: String,
+        arguments: [String: AgentJSONValue],
+        rootDirectory: URL?
+    ) -> AgentSandboxDecision {
+        switch toolName {
+        case "run_command":
+            guard let command = arguments["command"]?.stringValue() else {
+                return AgentSandboxDecision(
+                    mode: .escalated,
+                    requiresUserApproval: true,
+                    requiresTypedConfirmation: true,
+                    reason: "Missing command argument.",
+                    prefixRule: nil
+                )
+            }
+            return commandDecision(command: command, rootDirectory: rootDirectory)
+        case "web_fetch":
+            return AgentSandboxDecision(
+                mode: .escalated,
+                requiresUserApproval: true,
+                requiresTypedConfirmation: false,
+                reason: "Network access to an arbitrary URL requires approval.",
+                prefixRule: nil
+            )
+        case "call_mcp_tool", "claude_code", "codex_cli", "cursor_agent", "kill_job":
+            return AgentSandboxDecision(
+                mode: .workspaceWrite,
+                requiresUserApproval: true,
+                requiresTypedConfirmation: false,
+                reason: "This tool can modify state or run external code.",
+                prefixRule: nil
+            )
+        default:
+            return AgentSandboxDecision(
+                mode: .readOnly,
+                requiresUserApproval: false,
+                requiresTypedConfirmation: false,
+                reason: "Read-only workspace tool.",
+                prefixRule: nil
+            )
+        }
+    }
+
+    nonisolated static func commandDecision(command: String, rootDirectory: URL?) -> AgentSandboxDecision {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return AgentSandboxDecision(
+                mode: .escalated,
+                requiresUserApproval: true,
+                requiresTypedConfirmation: true,
+                reason: "Empty command is refused.",
+                prefixRule: nil
+            )
+        }
+
+        if containsShellExpansion(trimmed) {
+            return AgentSandboxDecision(
+                mode: .escalated,
+                requiresUserApproval: true,
+                requiresTypedConfirmation: true,
+                reason: "Shell expansion or redirection can escape the sandbox.",
+                prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed)
+            )
+        }
+
+        guard let segments = splitCommandSegments(trimmed), !segments.isEmpty else {
+            return AgentSandboxDecision(
+                mode: .escalated,
+                requiresUserApproval: true,
+                requiresTypedConfirmation: true,
+                reason: "Complex shell syntax requires explicit escalation.",
+                prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed)
+            )
+        }
+
+        var needsWorkspaceWrite = false
+        var needsEscalation = false
+        var needsConfirmation = false
+        var reasons: [String] = []
+        var workingDirectory = rootDirectory?.standardizedFileURL
+
+        for segment in segments {
+            guard let tokens = AgentCommandAuthorization.shellTokens(from: segment),
+                  let head = tokens.first?.lowercased() else {
+                needsEscalation = true
+                needsConfirmation = true
+                reasons.append("Unable to parse command segment safely.")
+                continue
+            }
+
+            if head == "cd" {
+                if let next = tokens.dropFirst().first,
+                   let resolved = resolvePath(next, workingDirectory: workingDirectory, rootDirectory: rootDirectory),
+                   isInsideWorkspace(resolved, rootDirectory: rootDirectory) {
+                    workingDirectory = resolved
+                } else {
+                    needsEscalation = true
+                    needsConfirmation = true
+                    reasons.append("Changing directory outside the workspace requires escalation.")
+                }
+                continue
+            }
+
+            if destructiveHeads.contains(head) {
+                needsEscalation = true
+                needsConfirmation = true
+                reasons.append("Destructive or privilege-changing command `\(head)` requires typed confirmation.")
+            } else if networkHeads.contains(head) || credentialHeads.contains(head) {
+                needsEscalation = true
+                reasons.append("Command `\(head)` may use network, credentials, or macOS keychain access.")
+            } else if workspaceWriteHeads.contains(head), SafeCommand.classify(command: segment) != .alwaysSafe {
+                needsWorkspaceWrite = true
+                reasons.append("Command `\(head)` may write inside the workspace.")
+            }
+
+            if tokens.dropFirst().contains(where: referencesSensitivePath) {
+                needsEscalation = true
+                needsConfirmation = true
+                reasons.append("Command references a sensitive path or credential-like value.")
+            }
+
+            if tokens.dropFirst().contains(where: { token in
+                guard looksLikePath(token),
+                      let resolved = resolvePath(token, workingDirectory: workingDirectory, rootDirectory: rootDirectory) else {
+                    return false
+                }
+                return !isInsideWorkspace(resolved, rootDirectory: rootDirectory)
+            }) {
+                needsEscalation = true
+                needsConfirmation = true
+                reasons.append("Command references a path outside the workspace.")
+            }
+        }
+
+        if needsEscalation {
+            return AgentSandboxDecision(
+                mode: .escalated,
+                requiresUserApproval: true,
+                requiresTypedConfirmation: needsConfirmation,
+                reason: reasons.uniqued().joined(separator: " "),
+                prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed)
+            )
+        }
+
+        if needsWorkspaceWrite {
+            return AgentSandboxDecision(
+                mode: .workspaceWrite,
+                requiresUserApproval: true,
+                requiresTypedConfirmation: false,
+                reason: reasons.uniqued().joined(separator: " "),
+                prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed)
+            )
+        }
+
+        return AgentSandboxDecision(
+            mode: .readOnly,
+            requiresUserApproval: false,
+            requiresTypedConfirmation: false,
+            reason: "Command is read-only and stays inside the workspace.",
+            prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed)
+        )
+    }
+
+    nonisolated static func sandboxedEnvironment(
+        mode: AgentSandboxMode,
+        rootDirectory: URL?,
+        base: [String: String] = ProcessInfo.processInfo.environment
+    ) -> [String: String] {
+        var environment = base
+        for key in environment.keys where keyLooksSensitive(key) {
+            environment.removeValue(forKey: key)
+        }
+        environment["WILLDEEP_AGENT_SANDBOX"] = mode.rawValue
+        environment["WILLDEEP_WORKSPACE_ROOT"] = rootDirectory?.standardizedFileURL.path ?? ""
+
+        if mode != .escalated {
+            let sandboxHome = FileManager.default.temporaryDirectory
+                .appendingPathComponent("willdeep-agent-sandbox-home", isDirectory: true)
+            try? FileManager.default.createDirectory(at: sandboxHome, withIntermediateDirectories: true)
+            environment["HOME"] = sandboxHome.path
+            environment["SSH_AUTH_SOCK"] = nil
+            environment["GITHUB_TOKEN"] = nil
+            environment["GH_TOKEN"] = nil
+        }
+        return environment
+    }
+
+    nonisolated static func shellLaunch(
+        command: String,
+        mode: AgentSandboxMode,
+        rootDirectory: URL?
+    ) -> AgentSandboxLaunch {
+        guard mode != .escalated,
+              FileManager.default.isExecutableFile(atPath: sandboxExecPath) else {
+            return AgentSandboxLaunch(
+                executableURL: URL(fileURLWithPath: "/bin/sh"),
+                arguments: ["-c", command]
+            )
+        }
+        return AgentSandboxLaunch(
+            executableURL: URL(fileURLWithPath: sandboxExecPath),
+            arguments: ["-p", seatbeltProfile(mode: mode, rootDirectory: rootDirectory), "/bin/sh", "-c", command]
+        )
+    }
+
+    nonisolated static func scrub(_ text: String) -> String {
+        var result = text
+        let patterns = [
+            #"(?i)(api[_-]?key|token|secret|password|authorization)\s*[:=]\s*['"]?[^'"\s]{8,}"#,
+            #"gh[pousr]_[A-Za-z0-9_]{20,}"#,
+            #"sk-[A-Za-z0-9_-]{20,}"#,
+            #"xox[baprs]-[A-Za-z0-9-]{20,}"#
+        ]
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern) {
+                let range = NSRange(result.startIndex..<result.endIndex, in: result)
+                result = regex.stringByReplacingMatches(in: result, range: range, withTemplate: "[REDACTED]")
+            }
+        }
+        return result
+    }
+
+    nonisolated private static func seatbeltProfile(mode: AgentSandboxMode, rootDirectory: URL?) -> String {
+        var writeAllows: [String] = [
+            "(subpath \(profileString(FileManager.default.temporaryDirectory.standardizedFileURL.path)))"
+        ]
+        if mode == .workspaceWrite, let root = rootDirectory?.standardizedFileURL.path {
+            writeAllows.append("(subpath \(profileString(root)))")
+        }
+        let writeRule = "(allow file-write* \(writeAllows.joined(separator: " ")))"
+        return """
+        (version 1)
+        (deny default)
+        (allow process*)
+        (allow signal (target self))
+        (allow sysctl-read)
+        (allow file-read*)
+        \(writeRule)
+        (allow ipc*)
+        (allow mach-lookup)
+        (deny network*)
+        """
+    }
+
+    nonisolated private static func profileString(_ value: String) -> String {
+        let escaped = value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
+    }
+
+    nonisolated private static func containsShellExpansion(_ command: String) -> Bool {
+        command.contains("$(") || command.contains("`") || command.contains("<(")
+            || command.contains("<<") || command.contains(">>")
+            || command.contains(where: { redirectionCharacters.contains($0) })
+    }
+
+    nonisolated private static func splitCommandSegments(_ command: String) -> [String]? {
+        var segments: [String] = []
+        var current = ""
+        var activeQuote: Character?
+        var escaped = false
+        var index = command.startIndex
+
+        while index < command.endIndex {
+            let ch = command[index]
+            if escaped {
+                current.append(ch)
+                escaped = false
+                index = command.index(after: index)
+                continue
+            }
+            if ch == "\\" {
+                escaped = true
+                current.append(ch)
+                index = command.index(after: index)
+                continue
+            }
+            if let quote = activeQuote {
+                if ch == quote { activeQuote = nil }
+                current.append(ch)
+                index = command.index(after: index)
+                continue
+            }
+            if ch == "\"" || ch == "'" {
+                activeQuote = ch
+                current.append(ch)
+                index = command.index(after: index)
+                continue
+            }
+            if shellControlOperators.contains(ch) {
+                if ch == "&" {
+                    let next = command.index(after: index)
+                    guard next < command.endIndex, command[next] == "&" else { return nil }
+                    index = command.index(after: next)
+                } else if ch == "|" {
+                    let next = command.index(after: index)
+                    if next < command.endIndex, command[next] == "|" {
+                        index = command.index(after: next)
+                    } else {
+                        index = command.index(after: index)
+                    }
+                } else {
+                    index = command.index(after: index)
+                }
+                let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { segments.append(trimmed) }
+                current = ""
+                continue
+            }
+            current.append(ch)
+            index = command.index(after: index)
+        }
+
+        if activeQuote != nil || escaped { return nil }
+        let tail = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !tail.isEmpty { segments.append(tail) }
+        return segments
+    }
+
+    nonisolated private static func resolvePath(_ raw: String, workingDirectory: URL?, rootDirectory: URL?) -> URL? {
+        let cleaned = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+        guard looksLikePath(cleaned) else { return nil }
+        if cleaned.hasPrefix("/") {
+            return URL(fileURLWithPath: cleaned).standardizedFileURL
+        }
+        let base = workingDirectory ?? rootDirectory?.standardizedFileURL
+        return base?.appendingPathComponent(cleaned).standardizedFileURL
+    }
+
+    nonisolated private static func isInsideWorkspace(_ url: URL, rootDirectory: URL?) -> Bool {
+        guard let root = rootDirectory?.standardizedFileURL.path else { return false }
+        let path = url.standardizedFileURL.path
+        return path == root || path.hasPrefix(root + "/")
+    }
+
+    nonisolated private static func looksLikePath(_ token: String) -> Bool {
+        token.hasPrefix("/") || token.hasPrefix("./") || token.hasPrefix("../") || token == ".."
+    }
+
+    nonisolated private static func referencesSensitivePath(_ token: String) -> Bool {
+        let lower = token.lowercased()
+        return sensitivePathFragments.contains { lower.contains($0) }
+    }
+
+    nonisolated private static func keyLooksSensitive(_ key: String) -> Bool {
+        let lower = key.lowercased()
+        return lower.contains("token") || lower.contains("secret") || lower.contains("password")
+            || lower.contains("api_key") || lower.contains("apikey") || lower.contains("credential")
+    }
+}
+
+enum AgentSandboxAuditLog {
+    struct Entry: Codable, Equatable {
+        let timestamp: Date
+        let toolName: String
+        let mode: AgentSandboxMode
+        let approvedBy: String
+        let summary: String
+        let reason: String
+        let outcome: String
+    }
+
+    private static let maxLineBytes = 8 * 1024
+
+    static func append(
+        toolName: String,
+        arguments: [String: AgentJSONValue],
+        decision: AgentSandboxDecision,
+        approvalSource: AgentToolApprovalSource?,
+        outcome: String
+    ) {
+        let entry = Entry(
+            timestamp: Date(),
+            toolName: toolName,
+            mode: decision.mode,
+            approvedBy: approvalSource?.rawValue ?? (decision.requiresUserApproval ? "userRequired" : "autoReadOnly"),
+            summary: AgentSandboxPolicy.scrub(summary(toolName: toolName, arguments: arguments)),
+            reason: AgentSandboxPolicy.scrub(decision.reason),
+            outcome: outcome
+        )
+        guard let data = try? JSONEncoder.agentSandboxEncoder.encode(entry) else { return }
+        var line = String(data: data, encoding: .utf8) ?? "{}"
+        if line.utf8.count > maxLineBytes {
+            line = String(line.prefix(maxLineBytes)) + "\"...[truncated]\"}"
+        }
+        line += "\n"
+        guard let url = auditURL(),
+              let bytes = line.data(using: .utf8) else {
+            return
+        }
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        if FileManager.default.fileExists(atPath: url.path),
+           let handle = try? FileHandle(forWritingTo: url) {
+            defer { try? handle.close() }
+            try? handle.seekToEnd()
+            try? handle.write(contentsOf: bytes)
+        } else {
+            try? bytes.write(to: url, options: [.atomic])
+        }
+    }
+
+    private static func summary(toolName: String, arguments: [String: AgentJSONValue]) -> String {
+        if toolName == "run_command", let command = arguments["command"]?.stringValue() {
+            return command
+        }
+        if toolName == "web_fetch", let url = arguments["url"]?.stringValue() {
+            return url
+        }
+        if toolName == "call_mcp_tool" {
+            let server = arguments["server"]?.stringValue() ?? "?"
+            let tool = arguments["tool"]?.stringValue() ?? "?"
+            return "\(server).\(tool)"
+        }
+        return toolName
+    }
+
+    private static func auditURL() -> URL? {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return base
+            .appendingPathComponent("WillDeep", isDirectory: true)
+            .appendingPathComponent("AgentAudit", isDirectory: true)
+            .appendingPathComponent("sandbox.jsonl")
+    }
+}
+
+private extension JSONEncoder {
+    static var agentSandboxEncoder: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.sortedKeys]
+        return encoder
+    }
+}
+
 enum AgentCommandAuthorization {
-    static func signature(for command: String) -> String? {
+    nonisolated static func signature(for command: String) -> String? {
         guard let tokens = shellTokens(from: command) else { return nil }
         guard let executable = tokens.first?.lowercased(), !executable.isEmpty else {
             return nil
@@ -60,29 +564,44 @@ enum AgentCommandAuthorization {
         return tokenAllowsBareSignature(executable) ? executable : nil
     }
 
-    static func displayName(for command: String) -> String {
+    nonisolated static func displayName(for command: String) -> String {
         signature(for: command) ?? command.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func tokenUsesSubcommand(_ token: String) -> Bool {
+    nonisolated static func prefixRule(for command: String) -> [String]? {
+        guard let tokens = shellTokens(from: command), !tokens.isEmpty else { return nil }
+        let executable = tokens[0].lowercased()
+        if executable == "git", tokens.count >= 2 {
+            return [executable, tokens[1].lowercased()]
+        }
+        if ["npm", "pnpm", "yarn"].contains(executable), tokens.count >= 3, tokens[1].lowercased() == "run" {
+            return [executable, "run", tokens[2].lowercased()]
+        }
+        if tokenUsesSubcommand(executable), tokens.count >= 2 {
+            return [executable, tokens[1].lowercased()]
+        }
+        return tokenAllowsBareSignature(executable) ? [executable] : nil
+    }
+
+    nonisolated private static func tokenUsesSubcommand(_ token: String) -> Bool {
         [
             "cargo", "go", "swift", "xcodebuild", "make",
             "ruby", "python", "python3", "node",
-            "npm", "pnpm", "yarn"
+            "npm", "pnpm", "yarn", "gh"
         ].contains(token)
     }
 
-    private static func tokenAllowsBareSignature(_ token: String) -> Bool {
+    nonisolated private static func tokenAllowsBareSignature(_ token: String) -> Bool {
         ["ls", "pwd"].contains(token)
     }
 
     /// Trim once and check non-empty, used by MCP signature derivation.
-    fileprivate static func cleaned(_ raw: String) -> String? {
+    nonisolated fileprivate static func cleaned(_ raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private static func shellTokens(from command: String) -> [String]? {
+    nonisolated static func shellTokens(from command: String) -> [String]? {
         var tokens: [String] = []
         var current = ""
         var activeQuote: Character?
@@ -126,6 +645,13 @@ enum AgentCommandAuthorization {
             tokens.append(current)
         }
         return tokens
+    }
+}
+
+private extension Array where Element: Hashable {
+    nonisolated func uniqued() -> [Element] {
+        var seen = Set<Element>()
+        return filter { seen.insert($0).inserted }
     }
 }
 

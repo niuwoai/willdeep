@@ -231,6 +231,13 @@ enum AgentToolRegistry {
     ) -> AgentToolRisk {
         guard let descriptor = descriptor(for: name) else { return .danger }
         if descriptor.name == "run_command", let command = arguments["command"]?.stringValue() {
+            let sandboxDecision = AgentSandboxPolicy.commandDecision(command: command, rootDirectory: rootDirectory)
+            if sandboxDecision.requiresTypedConfirmation {
+                return .danger
+            }
+            if sandboxDecision.requiresUserApproval {
+                return .write
+            }
             if looksDangerous(command: command) {
                 return .danger
             }

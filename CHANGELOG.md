@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.60.0-rc25 - 2026-06-12
+
+### Added
+
+- 新增 Agent 沙箱/提权策略：只读命令使用脱敏环境与临时 HOME，并在 macOS 可用时通过 `sandbox-exec` 禁止网络和越权写入；workspace-write 命令保留审批，网络/凭据/macOS Keychain/系统路径/破坏性 shell 形态进入 escalated 模式。
+- 新增 Agent 工具审计日志 `~/Library/Application Support/WillDeep/AgentAudit/sandbox.jsonl`，记录工具、沙箱模式、批准来源、原因和脱敏摘要。
+
+### Changed
+
+- Goal mode 与 Workspace Access 不再静默放行 escalated 命令；除非用户已用 Always Allow 固定窄 prefix，否则仍需审批/确认。
+- 工具卡参数区展示 `_sandbox`、`_approval_reason` 与 `_prefix_rule`，自动审批 badge 新增 `ESCALATED`。
+
+### Fixed
+
+- `run_command` 前台/后台执行统一使用沙箱环境构造，并对 stdout/stderr 中的 token/secret 做脱敏。
+
+### Tests
+
+- 补充 AgentSandboxPolicy 单测，覆盖只读命令、`gh` 提权、仓库外敏感路径确认、沙箱环境脱敏。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc25`。
+
 ## 1.60.0-rc24 - 2026-06-12
 
 ### Fixed

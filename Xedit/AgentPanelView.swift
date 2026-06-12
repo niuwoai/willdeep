@@ -1560,6 +1560,7 @@ struct AgentToolCallCard: View {
         case .llmJudge: return "AI OK"
         case .goalMode: return "GOAL"
         case .workspaceAccess: return "WORKSPACE"
+        case .escalated: return "ESCALATED"
         case .trustedServer: return "TRUSTED"
         }
     }
@@ -1573,6 +1574,7 @@ struct AgentToolCallCard: View {
         case .llmJudge: return "An LLM judge classified this call as read-only / safe."
         case .goalMode: return "Auto-approved because this session is in Goal mode. Danger-tier commands still ask."
         case .workspaceAccess: return "Auto-approved by this session's Workspace Access approval mode. Danger-tier commands still ask."
+        case .escalated: return "You approved this call to run outside the default sandbox boundary."
         case .trustedServer: return "You marked this MCP server as fully trusted — all its calls auto-run."
         }
     }
