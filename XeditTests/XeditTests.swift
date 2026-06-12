@@ -856,6 +856,27 @@ struct WillDeepTests {
     }
 
     @MainActor
+    @Test("goal running status bar only shows during an active goal turn")
+    func testGoalRunningStatusBarVisibility() {
+        let appState = AppState()
+        appState.startNewAgentSession()
+
+        appState.agentInteractionMode = .goal
+        appState.setAgentGoal(statement: "Ship the thing", items: ["Build", "Verify"])
+        #expect(appState.shouldShowGoalRunningStatusBar == false)
+
+        appState.isAgentResponding = true
+        #expect(appState.shouldShowGoalRunningStatusBar == true)
+
+        appState.agentInteractionMode = .normal
+        #expect(appState.shouldShowGoalRunningStatusBar == false)
+
+        appState.agentInteractionMode = .goal
+        appState.setAgentGoal(statement: "", items: [])
+        #expect(appState.shouldShowGoalRunningStatusBar == false)
+    }
+
+    @MainActor
     @Test("composer workspace pick migrates an empty active session in place")
     func testComposerWorkspacePickMigratesEmptyActiveSession() throws {
         let workspace = FileManager.default.temporaryDirectory
@@ -2103,10 +2124,16 @@ struct WillDeepTests {
             for: "run_command",
             arguments: ["command": .string("git push --force origin main")]
         )
+        let forcePushWithDirectoryRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("git -C /Users/rocky/Sites/Xedit push --force origin main")],
+            rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+        )
 
         #expect(benignRisk == .read)
         #expect(dangerousRisk == .danger)
         #expect(forcePushRisk == .danger)
+        #expect(forcePushWithDirectoryRisk == .danger)
     }
 
     @Test("run_command classifies cd plus read-only commands as read risk")
@@ -2131,12 +2158,29 @@ struct WillDeepTests {
             for: "run_command",
             arguments: ["command": .string("cd Xedit && git diff > /tmp/out.patch")]
         )
+        let harmlessRedirectionRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cd Xedit && git status 2>/dev/null")]
+        )
+        let redirectedDecision = AgentSandboxPolicy.commandDecision(
+            command: "cd Xedit && git diff > /tmp/out.patch",
+            rootDirectory: nil
+        )
+        let harmlessRedirectionDecision = AgentSandboxPolicy.commandDecision(
+            command: "cd Xedit && git status 2>/dev/null",
+            rootDirectory: nil
+        )
 
         #expect(gitDiffRisk == .read)
         #expect(grepRisk == .read)
         #expect(writeAfterCDRisk == .write)
         #expect(unsafeCDRisk == .write)
+        #expect(redirectedDecision.mode == .workspaceWrite)
+        #expect(redirectedDecision.requiresTypedConfirmation == false)
+        #expect(harmlessRedirectionDecision.mode == .readOnly)
+        #expect(harmlessRedirectionDecision.requiresTypedConfirmation == false)
         #expect(redirectedReadRisk == .write)
+        #expect(harmlessRedirectionRisk == .read)
     }
 
     @Test("run_command allows workspace absolute cd for read-only commands")

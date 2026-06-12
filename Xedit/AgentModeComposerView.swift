@@ -25,6 +25,11 @@ struct AgentChatComposer: View {
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
 
+                if appState.shouldShowGoalRunningStatusBar, let goal = appState.agentCurrentGoal {
+                    AgentGoalRunningStatusBar(goal: goal)
+                        .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                }
+
                 ComposerCard()
                     .frame(maxWidth: AgentDesign.chatMaxContentWidth)
             }
@@ -75,6 +80,74 @@ private struct AgentComposerWorktreeSummaryBar: View {
         .monospacedDigit()
         .padding(.horizontal, 12)
         .frame(height: 24)
+    }
+}
+
+private struct AgentGoalRunningStatusBar: View {
+    let goal: AgentGoal
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1.0)) { context in
+            HStack(spacing: 6) {
+                Image(systemName: "target")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+
+                Text(L10n.GoalStatusBar.runningPrefix)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text(summaryText)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                if let startedAt = appState.agentTurnStartedAt {
+                    Text("· \(Self.formatElapsed(context.date.timeIntervalSince(startedAt)))")
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 24)
+            .contentShape(Rectangle())
+            .help(helpText)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(accessibilityLabel)
+        }
+    }
+
+    private var summaryText: String {
+        let statement = goal.statement.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !statement.isEmpty { return statement }
+        return goal.checklist.first?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? L10n.GoalStatusBar.untitled
+    }
+
+    private var helpText: String {
+        guard !goal.checklist.isEmpty else { return summaryText }
+        let done = goal.checklist.filter(\.done).count
+        return L10n.GoalStatusBar.progressHelp("\(done)", "\(goal.checklist.count)")
+    }
+
+    private var accessibilityLabel: String {
+        "\(L10n.GoalStatusBar.runningPrefix) \(summaryText)"
+    }
+
+    private static func formatElapsed(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds))
+        if total < 60 { return "\(total)s" }
+        let minutes = total / 60
+        let remaining = total % 60
+        if minutes < 60 { return "\(minutes)m \(remaining)s" }
+        let hours = minutes / 60
+        return "\(hours)h \(minutes % 60)m"
     }
 }
 

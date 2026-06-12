@@ -2547,6 +2547,60 @@
         }
       }
     },
+    "goal-status-bar.progress-help": {
+      "comment": "tooltip showing goal checklist progress",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@/%2$@ checklist items done"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已完成 %1$@/%2$@ 个清单项"
+          }
+        }
+      }
+    },
+    "goal-status-bar.running-prefix": {
+      "comment": "compact composer status label shown while a goal-mode turn is running",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Goal in progress"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "进行中的目标"
+          }
+        }
+      }
+    },
+    "goal-status-bar.untitled": {
+      "comment": "fallback title for a goal without a statement",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untitled goal"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未命名目标"
+          }
+        }
+      }
+    },
     "goal-editor-sheet.cancel": {
       "comment": "button to cancel",
       "extractionState": "manual",

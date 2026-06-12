@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.60.0-rc27 - 2026-06-12
+
+### Added
+
+- Goal 模式进行中时，composer 上方新增紧凑状态提示，显示“Goal in progress”、当前目标摘要和实时耗时，靠近现有文件变更审查条。
+
+### Fixed
+
+- 修复 Agent 沙箱策略导致 CI `XeditTests` 失败的问题：`git push --force` / `git reset --hard` / `git clean -f` 继续进入 danger typed confirmation；`cd` 到 workspace 外、读取 workspace 外路径和 shell 重定向降为普通 write 审批，不再误判为 danger。
+- 修复 `git -C <workspace> diff/status/log` 等只读 git 全局参数形态被判成 write 的问题。
+
+### Tests
+
+- 新增 `shouldShowGoalRunningStatusBar` 状态条件测试，覆盖仅在 Goal 模式、目标非空且 Agent 正在响应时显示。
+- 复用现有 `run_command` 风险分级测试覆盖 force-push、workspace 内外 `cd`、重定向和 `git -C` 只读场景。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc27`。
+
 ## 1.60.0-rc25 - 2026-06-12
 
 ### Added

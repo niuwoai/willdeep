@@ -305,6 +305,15 @@ enum L10n {
         static let header = String(localized: "goal-card.header", defaultValue: "Goal")
     }
 
+    enum GoalStatusBar {
+        static func progressHelp(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "goal-status-bar.progress-help", defaultValue: "%@/%@ checklist items done")
+            return String(format: template, a1, a2)
+        }
+        static let runningPrefix = String(localized: "goal-status-bar.running-prefix", defaultValue: "Goal in progress")
+        static let untitled = String(localized: "goal-status-bar.untitled", defaultValue: "Untitled goal")
+    }
+
     enum GoalEditorSheet {
         static let cancel = String(localized: "goal-editor-sheet.cancel", defaultValue: "Cancel")
         static let checklistLabel = String(localized: "goal-editor-sheet.checklist-label", defaultValue: "Acceptance checklist one per line")

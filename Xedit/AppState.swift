@@ -701,6 +701,12 @@ final class AppState: ObservableObject {
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 
+    var shouldShowGoalRunningStatusBar: Bool {
+        agentInteractionMode == .goal
+            && isAgentResponding
+            && agentCurrentGoal?.isEmpty == false
+    }
+
     var canShowPreview: Bool {
         let language = effectiveLanguage
         return language == .markdown || language == .html

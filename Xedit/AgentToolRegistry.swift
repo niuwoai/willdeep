@@ -238,12 +238,7 @@ enum AgentToolRegistry {
             if sandboxDecision.requiresUserApproval {
                 return .write
             }
-            if looksDangerous(command: command) {
-                return .danger
-            }
-            if isReadOnlyShellCommand(command, rootDirectory: rootDirectory) {
-                return .read
-            }
+            return .read
         }
         return descriptor.risk
     }

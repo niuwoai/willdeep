@@ -329,7 +329,10 @@ enum SafeCommand {
 
     private static func classifyGit(tokens: [String]) -> CommandSafety {
         guard tokens.count >= 2 else { return .alwaysSafe } // bare `git` → safe (usage)
-        let sub = tokens[1].lowercased()
+        guard let subcommandIndex = gitSubcommandIndex(tokens: tokens) else {
+            return .needsJudgment
+        }
+        let sub = tokens[subcommandIndex].lowercased()
         if safeGitSubcommands.contains(sub) {
             // git config --global SOMETHING value would write, but
             // detecting that needs full arg parsing. `git config X` to
@@ -339,24 +342,50 @@ enum SafeCommand {
                 let writeFlags: Set<String> = ["--add", "--set", "--unset", "--unset-all",
                                                 "--replace-all", "--remove-section",
                                                 "--rename-section", "--edit"]
-                if tokens.dropFirst(2).contains(where: { writeFlags.contains($0.lowercased()) }) {
+                if tokens.dropFirst(subcommandIndex + 1).contains(where: { writeFlags.contains($0.lowercased()) }) {
                     return .needsJudgment
                 }
                 // `git config user.email rocky@...` (no flag, three args)
                 // is a write. Be strict: only allow --get / --list / no
                 // value form.
-                let nonFlagArgs = tokens.dropFirst(2).filter { !$0.hasPrefix("-") }
+                let nonFlagArgs = tokens.dropFirst(subcommandIndex + 1).filter { !$0.hasPrefix("-") }
                 if nonFlagArgs.count >= 2 { return .needsJudgment }
             }
             if sub == "stash" {
                 // git stash (without args) saves; git stash list/show are reads.
-                let next = tokens.count >= 3 ? tokens[2].lowercased() : ""
+                let nextIndex = subcommandIndex + 1
+                let next = tokens.count > nextIndex ? tokens[nextIndex].lowercased() : ""
                 let readOnlyStash: Set<String> = ["list", "show"]
                 return readOnlyStash.contains(next) ? .alwaysSafe : .needsJudgment
             }
             return .alwaysSafe
         }
         return .needsJudgment
+    }
+
+    private static func gitSubcommandIndex(tokens: [String]) -> Int? {
+        var index = 1
+        while index < tokens.count {
+            let token = tokens[index].lowercased()
+            if token == "-c" {
+                index += 2
+                continue
+            }
+            if token.hasPrefix("--git-dir=") || token.hasPrefix("--work-tree=") || token.hasPrefix("-c=") {
+                index += 1
+                continue
+            }
+            if token == "--git-dir" || token == "--work-tree" {
+                index += 2
+                continue
+            }
+            if token.hasPrefix("-") {
+                index += 1
+                continue
+            }
+            return index
+        }
+        return nil
     }
 
     private static func classifyFind(tokens: [String]) -> CommandSafety {

@@ -154,15 +154,16 @@ enum AgentSandboxPolicy {
             )
         }
 
-        if containsShellExpansion(trimmed) {
+        if containsUnsafeShellExpansion(trimmed) {
             return AgentSandboxDecision(
                 mode: .escalated,
                 requiresUserApproval: true,
                 requiresTypedConfirmation: true,
-                reason: "Shell expansion or redirection can escape the sandbox.",
+                reason: "Shell expansion can escape the sandbox.",
                 prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed)
             )
         }
+        let hasRedirection = containsRedirection(trimmed)
 
         guard let segments = splitCommandSegments(trimmed), !segments.isEmpty else {
             return AgentSandboxDecision(
@@ -189,15 +190,30 @@ enum AgentSandboxPolicy {
                 continue
             }
 
+            if forcefulGitMutation(tokens) {
+                needsEscalation = true
+                needsConfirmation = true
+                reasons.append("Forceful git history or workspace mutation requires typed confirmation.")
+            }
+
+            if hasRedirection {
+                needsWorkspaceWrite = true
+                reasons.append("Shell redirection may write outside normal tool output.")
+            }
+
             if head == "cd" {
-                if let next = tokens.dropFirst().first,
-                   let resolved = resolvePath(next, workingDirectory: workingDirectory, rootDirectory: rootDirectory),
-                   isInsideWorkspace(resolved, rootDirectory: rootDirectory) {
-                    workingDirectory = resolved
+                if let next = tokens.dropFirst().first {
+                    if let resolved = resolvePath(next, workingDirectory: workingDirectory, rootDirectory: rootDirectory),
+                       isInsideWorkspace(resolved, rootDirectory: rootDirectory) {
+                        workingDirectory = resolved
+                    } else if rootDirectory == nil, isSafeRelativeDirectoryHop(next) {
+                        workingDirectory = resolveRelativeDirectoryHop(next, workingDirectory: workingDirectory)
+                    } else {
+                        needsWorkspaceWrite = true
+                        reasons.append("Changing directory outside the workspace requires approval.")
+                    }
                 } else {
-                    needsEscalation = true
-                    needsConfirmation = true
-                    reasons.append("Changing directory outside the workspace requires escalation.")
+                    workingDirectory = rootDirectory?.standardizedFileURL ?? workingDirectory
                 }
                 continue
             }
@@ -209,9 +225,27 @@ enum AgentSandboxPolicy {
             } else if networkHeads.contains(head) || credentialHeads.contains(head) {
                 needsEscalation = true
                 reasons.append("Command `\(head)` may use network, credentials, or macOS keychain access.")
-            } else if workspaceWriteHeads.contains(head), SafeCommand.classify(command: segment) != .alwaysSafe {
-                needsWorkspaceWrite = true
-                reasons.append("Command `\(head)` may write inside the workspace.")
+            } else {
+                switch SafeCommand.classify(command: segment) {
+                case .alwaysSafe:
+                    break
+                case .alwaysDangerous:
+                    if hasRedirection {
+                        needsWorkspaceWrite = true
+                        reasons.append("Command `\(head)` uses shell redirection and requires approval.")
+                    } else {
+                        needsEscalation = true
+                        needsConfirmation = true
+                        reasons.append("Command `\(head)` matches a destructive shell pattern.")
+                    }
+                case .needsJudgment:
+                    needsWorkspaceWrite = true
+                    if workspaceWriteHeads.contains(head) {
+                        reasons.append("Command `\(head)` may write inside the workspace.")
+                    } else {
+                        reasons.append("Command `\(head)` is not known to be read-only.")
+                    }
+                }
             }
 
             if tokens.dropFirst().contains(where: referencesSensitivePath) {
@@ -227,8 +261,7 @@ enum AgentSandboxPolicy {
                 }
                 return !isInsideWorkspace(resolved, rootDirectory: rootDirectory)
             }) {
-                needsEscalation = true
-                needsConfirmation = true
+                needsWorkspaceWrite = true
                 reasons.append("Command references a path outside the workspace.")
             }
         }
@@ -350,10 +383,63 @@ enum AgentSandboxPolicy {
         return "\"\(escaped)\""
     }
 
-    nonisolated private static func containsShellExpansion(_ command: String) -> Bool {
+    nonisolated private static func containsUnsafeShellExpansion(_ command: String) -> Bool {
         command.contains("$(") || command.contains("`") || command.contains("<(")
-            || command.contains("<<") || command.contains(">>")
-            || command.contains(where: { redirectionCharacters.contains($0) })
+            || command.contains("<<")
+    }
+
+    nonisolated private static func containsRedirection(_ command: String) -> Bool {
+        guard command.contains(where: { redirectionCharacters.contains($0) }) else { return false }
+        return !onlyContainsHarmlessRedirections(command)
+    }
+
+    nonisolated private static func onlyContainsHarmlessRedirections(_ command: String) -> Bool {
+        var stripped = command
+        for token in ["2>&1", "2>/dev/null", "1>/dev/null", ">/dev/null"] {
+            stripped = stripped.replacingOccurrences(of: token, with: "")
+        }
+        return !stripped.contains(where: { redirectionCharacters.contains($0) })
+    }
+
+    nonisolated private static func forcefulGitMutation(_ tokens: [String]) -> Bool {
+        guard tokens.first?.lowercased() == "git" else { return false }
+        let lowered = tokens.map { $0.lowercased() }
+        guard let subcommandIndex = gitSubcommandIndex(tokens: lowered) else {
+            return false
+        }
+        let subcommand = lowered[subcommandIndex]
+        let args = Array(lowered.dropFirst(subcommandIndex + 1))
+        if subcommand == "push" {
+            return args.contains("--force") || args.contains("--force-with-lease") || args.contains("-f")
+        }
+        if subcommand == "reset" {
+            return args.contains("--hard")
+        }
+        if subcommand == "clean" {
+            return args.contains("-f") || args.contains("-fd") || args.contains("-xdf")
+        }
+        return false
+    }
+
+    nonisolated private static func gitSubcommandIndex(tokens: [String]) -> Int? {
+        var index = 1
+        while index < tokens.count {
+            let token = tokens[index]
+            if token == "-c" || token == "--git-dir" || token == "--work-tree" {
+                index += 2
+                continue
+            }
+            if token.hasPrefix("--git-dir=") || token.hasPrefix("--work-tree=") || token.hasPrefix("-c=") {
+                index += 1
+                continue
+            }
+            if token.hasPrefix("-") {
+                index += 1
+                continue
+            }
+            return index
+        }
+        return nil
     }
 
     nonisolated private static func splitCommandSegments(_ command: String) -> [String]? {
@@ -385,6 +471,11 @@ enum AgentSandboxPolicy {
             }
             if ch == "\"" || ch == "'" {
                 activeQuote = ch
+                current.append(ch)
+                index = command.index(after: index)
+                continue
+            }
+            if ch == "&", current.last == ">" {
                 current.append(ch)
                 index = command.index(after: index)
                 continue
@@ -437,6 +528,26 @@ enum AgentSandboxPolicy {
 
     nonisolated private static func looksLikePath(_ token: String) -> Bool {
         token.hasPrefix("/") || token.hasPrefix("./") || token.hasPrefix("../") || token == ".."
+    }
+
+    nonisolated private static func isSafeRelativeDirectoryHop(_ raw: String) -> Bool {
+        let cleaned = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+        guard !cleaned.isEmpty,
+              !cleaned.hasPrefix("/"),
+              !cleaned.hasPrefix("~"),
+              !cleaned.contains("*"),
+              !cleaned.contains("?") else {
+            return false
+        }
+        return cleaned
+            .split(separator: "/", omittingEmptySubsequences: false)
+            .allSatisfy { !$0.isEmpty && $0 != ".." }
+    }
+
+    nonisolated private static func resolveRelativeDirectoryHop(_ raw: String, workingDirectory: URL?) -> URL {
+        let cleaned = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+        let base = workingDirectory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        return base.appendingPathComponent(cleaned, isDirectory: true).standardizedFileURL
     }
 
     nonisolated private static func referencesSensitivePath(_ token: String) -> Bool {
@@ -636,7 +747,7 @@ enum AgentCommandAuthorization {
                 }
                 continue
             }
-            if "|&;<>".contains(character) {
+            if "|&;".contains(character) {
                 return nil
             }
             current.append(character)
