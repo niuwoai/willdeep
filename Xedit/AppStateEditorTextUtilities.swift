@@ -19,6 +19,8 @@ import AppKit
 import Foundation
 
 extension AppState {
+    nonisolated private static let maxTextFileTraversalNodes = 50_000
+    nonisolated private static let maxTextFilesForFolderOperations = 4_000
 
     nonisolated static func findRanges(in text: String, query: String) -> [NSRange] {
         guard !query.isEmpty, !text.isEmpty else { return [] }
@@ -128,15 +130,25 @@ extension AppState {
         }
 
         var urls: [URL] = []
+        var visited = 0
         for case let url as URL in enumerator {
-            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey]),
-                  values.isRegularFile == true else {
+            visited += 1
+            if visited > maxTextFileTraversalNodes { break }
+            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey]) else {
                 continue
             }
+            if values.isDirectory == true {
+                if ProjectDirectoryExclusions.shouldSkip(url) {
+                    enumerator.skipDescendants()
+                }
+                continue
+            }
+            guard values.isRegularFile == true else { continue }
             if shouldRequireLargeFileConfirmation(at: url) || isBinaryFile(at: url) {
                 continue
             }
             urls.append(url)
+            if urls.count >= maxTextFilesForFolderOperations { break }
         }
         return urls
     }
@@ -154,7 +166,10 @@ extension AppState {
 
         var urls: [URL] = []
         let candidateLimit = max(limit * 4, limit)
+        var visited = 0
         for case let url as URL in enumerator {
+            visited += 1
+            if visited > ProjectFileListCache.maxTraversalNodes { break }
             guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey]) else {
                 continue
             }

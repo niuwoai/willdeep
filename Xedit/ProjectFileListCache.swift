@@ -23,6 +23,10 @@ nonisolated enum ProjectFileListCache {
     /// evicted (by their cache file's modification time) on each write.
     static let maxCachedProjects = 50
 
+    /// Hard cap on URL visits during project scans. File-count caps alone do
+    /// not protect repositories with huge generated directory fans.
+    static let maxTraversalNodes = 50_000
+
     struct Entry: Codable, Equatable {
         let relativePath: String
         let mtime: Double
@@ -116,7 +120,10 @@ nonisolated enum ProjectFileListCache {
             includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .contentModificationDateKey, .fileSizeKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         ) {
+            var visited = 0
             for case let url as URL in enumerator {
+                visited += 1
+                if visited > maxTraversalNodes { break }
                 guard let values = try? url.resourceValues(
                     forKeys: [.isDirectoryKey, .isRegularFileKey, .contentModificationDateKey, .fileSizeKey]
                 ) else {
@@ -203,22 +210,53 @@ nonisolated enum ProjectFileListCache {
 
 nonisolated enum ProjectDirectoryExclusions {
     private static let names: Set<String> = [
+        ".angular",
         ".build",
+        ".cache",
+        ".cargo",
+        ".dart_tool",
+        ".direnv",
         ".git",
+        ".gradle",
+        ".mypy_cache",
         ".next",
+        ".nuxt",
+        ".parcel-cache",
+        ".pnpm-store",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".serverless",
+        ".stack-work",
+        ".svelte-kit",
         ".swiftpm",
+        ".terraform",
         ".turbo",
+        ".tox",
         ".venv",
+        ".yarn",
+        "__pycache__",
+        "_build",
+        "bazel-bin",
+        "bazel-out",
+        "bazel-testlogs",
+        "bower_components",
+        "Carthage",
         "DerivedData",
+        "Pods",
         "build",
         "coverage",
+        "deps",
         "dist",
+        "env",
         "node_modules",
+        "out",
         "target",
+        "venv",
         "vendor"
     ]
 
     static func shouldSkip(_ url: URL) -> Bool {
-        names.contains(url.lastPathComponent)
+        let name = url.lastPathComponent
+        return names.contains(name) || name.hasPrefix("bazel-")
     }
 }

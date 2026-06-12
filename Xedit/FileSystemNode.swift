@@ -12,6 +12,10 @@ import Foundation
 /// Children are loaded lazily via FileManager when `loadChildren()` is called,
 /// keeping directory scans fast even for large projects.
 final class FileSystemNode: ObservableObject, Identifiable, Hashable {
+    /// Per-directory child cap for the sidebar tree. A single generated folder
+    /// can contain tens of thousands of entries; rendering all of them would
+    /// balloon memory before the user can do anything useful.
+    private static let maxLoadedChildren = 1_000
 
     // MARK: - Stored Properties
 
@@ -70,10 +74,8 @@ final class FileSystemNode: ObservableObject, Identifiable, Hashable {
     func loadChildren() {
         guard isDirectory, children == nil else { return }
 
-        let fileManager = FileManager.default
         let keys: [URLResourceKey] = [.isDirectoryKey]
-
-        guard let contents = try? fileManager.contentsOfDirectory(
+        guard let enumerator = FileManager.default.enumerator(
             at: url,
             includingPropertiesForKeys: keys,
             options: [.skipsHiddenFiles]
@@ -83,6 +85,21 @@ final class FileSystemNode: ObservableObject, Identifiable, Hashable {
                 self?.children = []
             }
             return
+        }
+
+        var contents: [URL] = []
+        for case let childURL as URL in enumerator {
+            let isDir = (try? childURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            if isDir {
+                enumerator.skipDescendants()
+                if ProjectDirectoryExclusions.shouldSkip(childURL) {
+                    continue
+                }
+            }
+            contents.append(childURL)
+            if contents.count >= Self.maxLoadedChildren {
+                break
+            }
         }
 
         let nodes = contents

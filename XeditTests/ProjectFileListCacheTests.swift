@@ -189,7 +189,34 @@ struct ProjectFileListCacheTests {
     /// the rule operates on `lastPathComponent`.
     @Test
     func exclusionsRecognizeStandardSkipList() {
-        let names = [".build", ".git", "node_modules", "DerivedData", "dist", "vendor", "target"]
+        let names = [
+            ".angular",
+            ".build",
+            ".cargo",
+            ".dart_tool",
+            ".git",
+            ".gradle",
+            ".mypy_cache",
+            ".pnpm-store",
+            ".pytest_cache",
+            ".ruff_cache",
+            ".stack-work",
+            ".terraform",
+            ".yarn",
+            "__pycache__",
+            "_build",
+            "bazel-bin",
+            "bazel-out",
+            "bazel-testlogs",
+            "node_modules",
+            "DerivedData",
+            "Pods",
+            "deps",
+            "dist",
+            "vendor",
+            "target",
+            "bazel-my-workspace"
+        ]
         for name in names {
             let url = URL(fileURLWithPath: "/anywhere/\(name)")
             #expect(ProjectDirectoryExclusions.shouldSkip(url),

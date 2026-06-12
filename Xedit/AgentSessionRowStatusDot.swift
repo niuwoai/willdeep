@@ -48,11 +48,22 @@ private struct ObservedDot: View {
         // withAnimation(.repeatForever)/.animation(.repeatForever) ——
         // 那会让 SwiftUI 每帧跑一次图事务，N 个会话行 × 每帧叠加，
         // 见 AgentBreathingIndicator 注释（1.58.0-rc9 CPU 修复）。
-        Image(systemName: "circle.fill")
-            .font(.system(size: 5))
-            .foregroundStyle(color)
-            .symbolEffect(.breathe, isActive: shouldPulse)
+        dotImage
             .frame(width: 5, height: 5)
+    }
+
+    @ViewBuilder
+    private var dotImage: some View {
+        if #available(macOS 15.0, *) {
+            Image(systemName: "circle.fill")
+                .font(.system(size: 5))
+                .foregroundStyle(color)
+                .symbolEffect(.breathe, isActive: shouldPulse)
+        } else {
+            Image(systemName: "circle.fill")
+                .font(.system(size: 5))
+                .foregroundStyle(color)
+        }
     }
 
     private var shouldPulse: Bool {

@@ -43,15 +43,11 @@ func (s *Server) handleWSMessage(ctx context.Context, message WSMessage) WSRespo
 		if err != nil {
 			return wsError(message, err)
 		}
-		entries, err := os.ReadDir(path)
+		items, truncated, err := s.listDirectory(path, false)
 		if err != nil {
 			return wsError(message, err)
 		}
-		items := make([]map[string]any, 0, len(entries))
-		for _, entry := range entries {
-			items = append(items, map[string]any{"name": entry.Name(), "is_dir": entry.IsDir()})
-		}
-		return wsOK(message, map[string]any{"entries": items})
+		return wsOK(message, map[string]any{"entries": items, "truncated": truncated})
 	case "fs.write":
 		path, err := s.config.Workspace.Resolve(wsString(message.Payload, "path"))
 		if err != nil {

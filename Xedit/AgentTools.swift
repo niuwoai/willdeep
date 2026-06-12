@@ -421,6 +421,7 @@ enum AgentToolRunner {
     private static let maxFileSizeForSearch: Int = 512 * 1024
     private static let maxSearchResults = 200
     private static let maxScannedFiles = 4_000
+    private static let maxToolTraversalNodes = 50_000
 
     private static func searchFiles(
         arguments: [String: AgentJSONValue],
@@ -449,8 +450,11 @@ enum AgentToolRunner {
 
         var matches: [String] = []
         var scanned = 0
+        var visited = 0
 
         for case let url as URL in enumerator {
+            visited += 1
+            if visited > maxToolTraversalNodes { break }
             guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey]) else {
                 continue
             }
@@ -548,8 +552,11 @@ enum AgentToolRunner {
 
         var matches: [String] = []
         var scanned = 0
+        var visited = 0
 
         for case let url as URL in enumerator {
+            visited += 1
+            if visited > maxToolTraversalNodes { break }
             guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey]) else {
                 continue
             }
@@ -762,30 +769,49 @@ enum AgentToolRunner {
             throw AgentToolError.notRegular(rawPath)
         }
 
-        let entries = (try? FileManager.default.contentsOfDirectory(
+        guard let enumerator = FileManager.default.enumerator(
             at: target,
             includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
             options: [.skipsHiddenFiles]
-        )) ?? []
+        ) else {
+            throw AgentToolError.notFound(target.path)
+        }
+
+        var entries: [URL] = []
+        var truncated = false
+        for case let url as URL in enumerator {
+            let values = try? url.resourceValues(forKeys: [.isDirectoryKey])
+            if values?.isDirectory == true {
+                enumerator.skipDescendants()
+                if ProjectDirectoryExclusions.shouldSkip(url) {
+                    continue
+                }
+            }
+            if entries.count >= maxDirectoryEntries {
+                truncated = true
+                break
+            }
+            entries.append(url)
+        }
 
         let sorted = entries.sorted {
             $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
         }
 
         var lines: [String] = []
-        for (index, url) in sorted.enumerated() {
-            if index >= maxDirectoryEntries {
-                lines.append("...[truncated, \(sorted.count - maxDirectoryEntries) more entries]")
-                break
-            }
+        for url in sorted {
             let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
             let isDir = values?.isDirectory ?? false
             let label = isDir ? "[dir]" : "[file]"
             let size = values?.fileSize.map { " \($0)B" } ?? ""
             lines.append("\(label) \(url.lastPathComponent)\(isDir ? "/" : size)")
         }
+        if truncated {
+            lines.append("...[truncated, more entries omitted]")
+        }
 
-        let summary = "\(rawPath.isEmpty ? "." : rawPath) (\(sorted.count) entr\(sorted.count == 1 ? "y" : "ies"))"
+        let countLabel = truncated ? "\(sorted.count)+" : "\(sorted.count)"
+        let summary = "\(rawPath.isEmpty ? "." : rawPath) (\(countLabel) entr\(sorted.count == 1 && !truncated ? "y" : "ies"))"
         return AgentToolResult(summary: summary, payload: lines.isEmpty ? "(empty directory)" : lines.joined(separator: "\n"))
     }
 

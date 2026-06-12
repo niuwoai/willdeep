@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -45,6 +46,59 @@ type APIResponse struct {
 	OK    bool   `json:"ok"`
 	Error string `json:"error,omitempty"`
 	Data  any    `json:"data,omitempty"`
+}
+
+const (
+	maxFSListEntries     = 400
+	maxSearchFileSize    = 512 * 1024
+	maxSearchFiles       = 4_000
+	maxSearchVisitedPath = 50_000
+)
+
+var skippedDirectoryNames = map[string]struct{}{
+	".angular":         {},
+	".build":           {},
+	".cache":           {},
+	".cargo":           {},
+	".dart_tool":       {},
+	".direnv":          {},
+	".git":             {},
+	".gradle":          {},
+	".mypy_cache":      {},
+	".next":            {},
+	".nuxt":            {},
+	".parcel-cache":    {},
+	".pnpm-store":      {},
+	".pytest_cache":    {},
+	".ruff_cache":      {},
+	".serverless":      {},
+	".stack-work":      {},
+	".svelte-kit":      {},
+	".swiftpm":         {},
+	".terraform":       {},
+	".turbo":           {},
+	".tox":             {},
+	".venv":            {},
+	".yarn":            {},
+	"__pycache__":      {},
+	"_build":           {},
+	"bazel-bin":        {},
+	"bazel-out":        {},
+	"bazel-testlogs":   {},
+	"bower_components": {},
+	"Carthage":         {},
+	"DerivedData":      {},
+	"Pods":             {},
+	"build":            {},
+	"coverage":         {},
+	"deps":             {},
+	"dist":             {},
+	"env":              {},
+	"node_modules":     {},
+	"out":              {},
+	"target":           {},
+	"venv":             {},
+	"vendor":           {},
 }
 
 func NewServerConfig(input ServerConfigInput) (ServerConfig, error) {
@@ -149,28 +203,12 @@ func (s *Server) handleFSList(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	entries, err := os.ReadDir(path)
+	items, truncated, err := s.listDirectory(path, true)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	items := make([]map[string]any, 0, len(entries))
-	for _, entry := range entries {
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
-		fullPath := filepath.Join(path, entry.Name())
-		items = append(items, map[string]any{
-			"name":     entry.Name(),
-			"path":     s.config.Workspace.Relative(fullPath),
-			"is_dir":   entry.IsDir(),
-			"size":     info.Size(),
-			"mode":     info.Mode().String(),
-			"modified": info.ModTime().UTC(),
-		})
-	}
-	writeOK(w, map[string]any{"entries": items})
+	writeOK(w, map[string]any{"entries": items, "truncated": truncated})
 }
 
 func (s *Server) handleFSRead(w http.ResponseWriter, r *http.Request) {
@@ -358,7 +396,13 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) search(ctx context.Context, path string, query string, limit int) ([]string, error) {
 	if _, err := exec.LookPath("rg"); err == nil {
-		cmd := exec.CommandContext(ctx, "rg", "--line-number", "--no-heading", "--color", "never", "-F", query, path)
+		args := []string{"--line-number", "--no-heading", "--color", "never"}
+		for name := range skippedDirectoryNames {
+			args = append(args, "--glob", "!"+name+"/**")
+		}
+		args = append(args, "--glob", "!bazel-*/**")
+		args = append(args, "-F", query, path)
+		cmd := exec.CommandContext(ctx, "rg", args...)
 		output, err := cmd.CombinedOutput()
 		if err != nil && len(output) == 0 {
 			return []string{}, nil
@@ -366,8 +410,28 @@ func (s *Server) search(ctx context.Context, path string, query string, limit in
 		return limitLines(string(output), limit), nil
 	}
 	var results []string
+	visited := 0
+	scanned := 0
 	err := filepath.WalkDir(path, func(path string, entry os.DirEntry, err error) error {
-		if err != nil || entry.IsDir() || len(results) >= limit {
+		if err != nil {
+			return nil
+		}
+		visited++
+		if visited > maxSearchVisitedPath || len(results) >= limit {
+			return filepath.SkipAll
+		}
+		if entry.IsDir() {
+			if shouldSkipDirectoryName(entry.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		scanned++
+		if scanned > maxSearchFiles {
+			return filepath.SkipAll
+		}
+		info, err := entry.Info()
+		if err != nil || info.Size() > maxSearchFileSize {
 			return nil
 		}
 		data, err := os.ReadFile(path)
@@ -385,6 +449,65 @@ func (s *Server) search(ctx context.Context, path string, query string, limit in
 		return nil
 	})
 	return results, err
+}
+
+func (s *Server) listDirectory(path string, includeDetails bool) ([]map[string]any, bool, error) {
+	dir, err := os.Open(path)
+	if err != nil {
+		return nil, false, err
+	}
+	defer dir.Close()
+
+	filtered := make([]os.DirEntry, 0, maxFSListEntries)
+	truncated := false
+	for {
+		entries, err := dir.ReadDir(128)
+		if err != nil && !errors.Is(err, io.EOF) {
+			return nil, false, err
+		}
+		for _, entry := range entries {
+			if entry.IsDir() && shouldSkipDirectoryName(entry.Name()) {
+				continue
+			}
+			if len(filtered) >= maxFSListEntries {
+				truncated = true
+				break
+			}
+			filtered = append(filtered, entry)
+		}
+		if truncated || errors.Is(err, io.EOF) {
+			break
+		}
+	}
+	sort.Slice(filtered, func(i, j int) bool {
+		return strings.ToLower(filtered[i].Name()) < strings.ToLower(filtered[j].Name())
+	})
+
+	items := make([]map[string]any, 0, len(filtered))
+	for _, entry := range filtered {
+		item := map[string]any{
+			"name":   entry.Name(),
+			"is_dir": entry.IsDir(),
+		}
+		if includeDetails {
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			fullPath := filepath.Join(path, entry.Name())
+			item["path"] = s.config.Workspace.Relative(fullPath)
+			item["size"] = info.Size()
+			item["mode"] = info.Mode().String()
+			item["modified"] = info.ModTime().UTC()
+		}
+		items = append(items, item)
+	}
+	return items, truncated, nil
+}
+
+func shouldSkipDirectoryName(name string) bool {
+	_, ok := skippedDirectoryNames[name]
+	return ok || strings.HasPrefix(name, "bazel-")
 }
 
 func (s *Server) runShortCommand(ctx context.Context, name string, args ...string) (string, error) {

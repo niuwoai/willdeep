@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.60.0-rc17 - 2026-06-12
+
+### Fixed
+
+- 扩展大目录防护的跨语言依赖/缓存目录跳过表，覆盖 Rust `target` / `.cargo`、Python `.mypy_cache` / `.pytest_cache` / `.ruff_cache`、Elixir `_build` / `deps`、Dart `.dart_tool`、Terraform `.terraform`、Bazel `bazel-*` / `bazel-bin` / `bazel-out` / `bazel-testlogs`、前端框架缓存 `.nuxt` / `.svelte-kit` / `.parcel-cache` / `.angular` 等常见目录。
+- 远端 daemon 的 `rg` 搜索分支同步排除 `bazel-*` 目录，Go fallback 和 HTTP/WebSocket 目录列表也使用同一套前缀判断，避免本地与远端 Agent 扫描规则不一致。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc17`。
+
+## 1.60.0-rc16 - 2026-06-12
+
+### Fixed
+
+- 大目录打开/扫描加护栏：Editor 文件树每层限量并跳过 `node_modules`、`.git`、`.gradle`、`DerivedData`、`Pods`、`vendor` 等依赖/构建目录；Quick Open、跨文件夹查找替换、Agent 本地 `search_files` / `grep_files` / `list_directory` 均增加遍历节点数、文件数或目录项上限。
+- 远端 daemon 同步加固：HTTP/WebSocket `fs.list` 不再一次性读取整个巨型目录；`search` 对 `rg` 注入依赖目录排除 glob，Go fallback 也会跳过依赖目录并限制遍历和单文件大小。
+- 将 macOS deployment target 从 `26.4` 降到 `14.6`，README 系统要求同步标为 macOS 14.6+。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc16`。
+
 ## 1.60.0-rc15 - 2026-06-11
 
 ### Fixed

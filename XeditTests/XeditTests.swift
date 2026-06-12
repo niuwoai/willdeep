@@ -2268,6 +2268,43 @@ struct WillDeepTests {
         #expect(!urls.map(\.lastPathComponent).contains("dep.swift"))
     }
 
+    @Test("folder text operations skip dependency directories")
+    func testTextFileURLsSkipDependencyDirectories() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_text_file_skip_\(UUID().uuidString)", isDirectory: true)
+        let nodeModules = tempDir.appendingPathComponent("node_modules", isDirectory: true)
+        try FileManager.default.createDirectory(at: nodeModules, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let source = tempDir.appendingPathComponent("Source.swift")
+        let dependency = nodeModules.appendingPathComponent("Dependency.swift")
+        try "source".write(to: source, atomically: true, encoding: .utf8)
+        try "dependency".write(to: dependency, atomically: true, encoding: .utf8)
+
+        let paths = AppState.textFileURLs(in: tempDir).map(\.lastPathComponent)
+
+        #expect(paths.contains("Source.swift"))
+        #expect(!paths.contains("Dependency.swift"))
+    }
+
+    @Test("agent list_directory skips dependency directories")
+    func testAgentListDirectorySkipsDependencyDirectories() async throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_agent_list_skip_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: workspace.appendingPathComponent("node_modules"), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        try "source".write(to: workspace.appendingPathComponent("App.swift"), atomically: true, encoding: .utf8)
+
+        let result = try await AgentToolRunner.run(
+            name: "list_directory",
+            arguments: ["path": .string(".")],
+            context: AgentToolContext(rootDirectory: workspace)
+        )
+
+        #expect(result.payload.contains("App.swift"))
+        #expect(!result.payload.contains("node_modules"))
+    }
+
     @Test("shouldAutoCompressNow flips true once estimated context usage crosses 75%")
     @MainActor
     func testShouldAutoCompressTriggersAt75Percent() {

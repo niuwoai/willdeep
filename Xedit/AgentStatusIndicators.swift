@@ -479,15 +479,26 @@ struct PlanStatusPill: View {
 ///     真的开始流式输出后那块分割线会自动让位，呼吸 icon 接力到底。
 struct AgentBreathingIndicator: View {
     var body: some View {
-        Image(systemName: "sparkle")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(Color.accentColor)
-            .symbolEffect(.breathe)
+        icon
             .frame(width: 22, height: 22)
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.top, 6)
             .padding(.bottom, 2)
             .accessibilityLabel("Agent 正在输出")
+    }
+
+    @ViewBuilder
+    private var icon: some View {
+        if #available(macOS 15.0, *) {
+            Image(systemName: "sparkle")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .symbolEffect(.breathe)
+        } else {
+            Image(systemName: "sparkle")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+        }
     }
 }
 
@@ -534,10 +545,7 @@ struct AgentRunningTasksRow: View {
         HStack(spacing: 7) {
             // 脉动必须走 symbolEffect（渲染服务器驱动），禁用
             // withAnimation(.repeatForever) —— 见 AgentBreathingIndicator 注释。
-            Image(systemName: "asterisk")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(Color.accentColor)
-                .symbolEffect(.breathe)
+            runningIcon
                 .frame(width: 14, height: 14)
             Text(label)
                 .font(AgentDesign.secondaryFont)
@@ -548,6 +556,20 @@ struct AgentRunningTasksRow: View {
         .padding(.bottom, 2)
         .contentShape(Rectangle())
         .accessibilityLabel(label)
+    }
+
+    @ViewBuilder
+    private var runningIcon: some View {
+        if #available(macOS 15.0, *) {
+            Image(systemName: "asterisk")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Color.accentColor)
+                .symbolEffect(.breathe)
+        } else {
+            Image(systemName: "asterisk")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Color.accentColor)
+        }
     }
 
     private var label: String {

@@ -6,9 +6,9 @@
 
 **A native macOS editor that opens fast, stays out of your way, and ships an agent that actually edits your code.**
 
-[![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)](https://www.apple.com/macos/)
+[![macOS](https://img.shields.io/badge/macOS-14.6%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.60.0--rc15-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.60.0--rc17-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *No Electron. No 800MB Helper processes. No "loading workspace…" spinner that eats your afternoon.*
@@ -85,7 +85,7 @@ open Xedit.xcodeproj
 # ⌘R
 ```
 
-Requires Xcode and macOS 14+. The app builds as **WillDeep.app**. The public product domain is [willdeep.com](https://willdeep.com).
+Requires Xcode and macOS 14.6+. The app builds as **WillDeep.app**. The public product domain is [willdeep.com](https://willdeep.com).
 
 ### Use it
 
@@ -178,9 +178,9 @@ WillDeep is licensed under the [Apache License 2.0](LICENSE). You are free to us
 
 **一个打开就能用的 macOS 原生编辑器，自带一个真的会改代码的 Agent。**
 
-[![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)](https://www.apple.com/macos/)
+[![macOS](https://img.shields.io/badge/macOS-14.6%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.60.0--rc15-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.60.0--rc17-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *不靠 Electron。没有 800MB 的 Helper 子进程。没有那种让你怀疑人生的 "loading workspace…"。*
@@ -256,7 +256,7 @@ open Xedit.xcodeproj
 # ⌘R
 ```
 
-需要 Xcode 和 macOS 14+。产物叫 **WillDeep.app**。公开产品域名是 [willdeep.com](https://willdeep.com)。
+需要 Xcode 和 macOS 14.6+。产物叫 **WillDeep.app**。公开产品域名是 [willdeep.com](https://willdeep.com)。
 
 ### 用起来
 
