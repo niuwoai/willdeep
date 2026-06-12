@@ -519,6 +519,7 @@ struct EditorView: NSViewRepresentable {
                     range: NSRange(location: 0, length: textStorage.length)
                 )
             }
+            refreshVisibleTextLayout(for: textView)
             applySearchHighlights(to: textView, scrollToActiveMatch: false)
             if let selected {
                 textView.selectedRanges = selected
@@ -528,6 +529,22 @@ struct EditorView: NSViewRepresentable {
                 restoreTopVisibleAnchor(topAnchor, in: textView)
             }
             refreshEditorChrome(for: textView)
+        }
+
+        private func refreshVisibleTextLayout(for textView: WillDeepTextView) {
+            guard let layoutManager = textView.layoutManager,
+                  let textContainer = textView.textContainer else {
+                textView.needsDisplay = true
+                textView.enclosingScrollView?.contentView.needsDisplay = true
+                return
+            }
+
+            let visibleRect = textView.visibleRect
+            if visibleRect.width > 0, visibleRect.height > 0 {
+                layoutManager.ensureLayout(forBoundingRect: visibleRect, in: textContainer)
+            }
+            textView.needsDisplay = true
+            textView.enclosingScrollView?.contentView.needsDisplay = true
         }
 
         /// A scroll anchor: the character at the top of the viewport plus the

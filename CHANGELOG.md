@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.60.0-rc24 - 2026-06-12
+
+### Fixed
+
+- 修复 GitHub Actions 上 `userServerSecretsAreStoredAsKeychainReferences` 偶发失败；测试环境下 `AgentCredentialStore` 使用隔离的内存凭据后端，不再依赖 runner 的 macOS Keychain 状态。
+- 保留 Editor 模式正文空白修复：替换 `NSTextStorage` 后会刷新当前可见文本布局和正文绘制。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc24`。
+
+## 1.60.0-rc23 - 2026-06-12
+
+### Fixed
+
+- 修复 Editor 模式下文件已加载出行号但正文区域可能空白的问题；替换 `NSTextStorage` 后会明确刷新当前可见文本布局和正文绘制。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc23`。
+
 ## 1.60.0-rc22 - 2026-06-12
 
 ### Added

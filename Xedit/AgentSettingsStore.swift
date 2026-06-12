@@ -540,6 +540,7 @@ enum AgentCredentialStore {
     nonisolated private static let defaultKeychainService = "com.willdeep.credentials"
 
     nonisolated(unsafe) private static var testKeychainServiceOverride: String?
+    nonisolated(unsafe) private static var testKeychainStorage: [String: String]?
 
     nonisolated private static var keychainService: String {
         testKeychainServiceOverride ?? defaultKeychainService
@@ -548,10 +549,16 @@ enum AgentCredentialStore {
     @discardableResult
     static func _setTestKeychainServiceOverride(_ service: String?) -> String {
         testKeychainServiceOverride = service
+        testKeychainStorage = service == nil ? nil : [:]
         return keychainService
     }
 
     static func _wipeTestKeychain() {
+        if testKeychainStorage != nil {
+            testKeychainStorage?.removeAll()
+            return
+        }
+
         guard let service = testKeychainServiceOverride else { return }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -579,6 +586,11 @@ enum AgentCredentialStore {
             return
         }
 
+        if testKeychainStorage != nil {
+            testKeychainStorage?[account] = trimmed
+            return
+        }
+
         if load(account: account) == trimmed { return }
 
         let baseQuery: [String: Any] = [
@@ -603,6 +615,10 @@ enum AgentCredentialStore {
     }
 
     nonisolated static func load(account: String) -> String {
+        if let testKeychainStorage {
+            return testKeychainStorage[account] ?? ""
+        }
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
@@ -621,6 +637,11 @@ enum AgentCredentialStore {
     }
 
     nonisolated static func delete(account: String) {
+        if testKeychainStorage != nil {
+            testKeychainStorage?.removeValue(forKey: account)
+            return
+        }
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
