@@ -590,10 +590,11 @@ enum L10n {
     }
 
     enum Settings {
+        static let windowTitle = String(localized: "settings.window.title", defaultValue: "Settings")
         static let tabTypography = String(localized: "settings.tab.typography", defaultValue: "Typography")
         static let tabAppearance = String(localized: "settings.tab.appearance", defaultValue: "Appearance")
         static let tabWorkspace = String(localized: "settings.tab.workspace", defaultValue: "Workspace")
-        static let tabAgent = String(localized: "settings.tab.agent", defaultValue: "Agent")
+        static let tabAgent = String(localized: "settings.tab.agent", defaultValue: "AI Providers")
         static let tabMemory = String(localized: "settings.tab.memory", defaultValue: "Memory")
         static let tabSkills = String(localized: "settings.tab.skills", defaultValue: "Skills")
         static let tabMcp = String(localized: "settings.tab.mcp", defaultValue: "MCP")

@@ -1858,6 +1858,7 @@ private struct SettingsWindowResizableEnforcer: NSViewRepresentable {
         window.contentMaxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
                                        height: CGFloat.greatestFiniteMagnitude)
         window.isMovableByWindowBackground = false
+        window.title = L10n.Settings.windowTitle
         window.standardWindowButton(.zoomButton)?.isEnabled = true
         window.standardWindowButton(.miniaturizeButton)?.isEnabled = true
     }
