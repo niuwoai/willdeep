@@ -1,5 +1,66 @@
 # Changelog
 
+## 1.60.0-rc22 - 2026-06-12
+
+### Added
+
+- 新增统一 `AgentCredentialStore`，使用 macOS Keychain 保存 MCP / Skill Marketplace 凭据，并用 `keychain://...` 引用替代配置中的明文密钥。
+- 用户创建 MCP server 时，敏感 header/env（如 `Authorization`、`*_TOKEN`、`*_API_KEY`、`*_SECRET`）会自动写入 Keychain；运行 stdio 或 streamable-http MCP 时再解析并注入真实值。
+- Skill Marketplace 条目新增 `credentialRequirements`，可声明安装所需 API key 及注入环境变量；Settings → Skills 会显示安全输入框、配置状态和清除入口。
+
+### Changed
+
+- MCP 列表、工具摘要和 Settings 仍只显示脱敏值；删除用户 MCP server 或卸载 marketplace skill 时同步清理关联 Keychain 凭据。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc22`。
+
+## 1.60.0-rc21 - 2026-06-12
+
+### Fixed
+
+- Settings 窗口标题固定为通用“Settings / 设置”，不再随当前 tab 显示为“Agent”。
+- Settings 里的主 Agent 配置 tab 改名为“AI Providers / AI 服务商”，与“Local Agents / 本机 Agent”区分，减少两个 Agent tab 的语义混淆。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc21`。
+
+## 1.60.0-rc20 - 2026-06-12
+
+### Added
+
+- Skill Marketplace 新增 `PDF Design` 条目，用于生成、转换和 QA PDF 交付物，强调页面系统、导出后逐页视觉检查、表格/图片/页眉页脚/分页质量门槛。
+- Skill Marketplace 新增 `Image Processing` 条目，用于确定性图片处理；支持裁剪、缩放、格式转换、透明色处理、透明边裁切、画布填充、透明扁平化等素材工作流。
+- 市场安装器支持随 skill 写入附属文件；`Image Processing` 安装时会同步落盘 `scripts/process_image.py`，避免只安装说明而缺少可执行处理脚本。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc20`。
+
+## 1.60.0-rc19 - 2026-06-12
+
+### Added
+
+- Settings → Skills 新增静态 Skill Marketplace 区域，内置首批 WillDeep 官方 skill 条目，可直接搜索、安装、更新和卸载。
+- 新增 `AgentSkillMarketplaceStore`，将静态市场条目安装到用户 skill 目录并用 frontmatter 记录 marketplace id/version；同名用户 skill 会进入冲突保护，不会被市场安装覆盖。
+- 市场安装后复用现有 `AgentSkillDirectory` 发现链路，已安装 skill 会立即出现在 Agent 工具、Settings 技能列表和 composer `@` 选择器中。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc19`。
+
+## 1.60.0-rc18 - 2026-06-12
+
+### Fixed
+
+- 将编辑器右上角进入 Agent mode 的中文短按钮从“代理”改为“智能体”，与产品语义保持一致，并避免和网络代理 / proxy 混淆。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.60.0-rc18`。
+
 ## 1.60.0-rc17 - 2026-06-12
 
 ### Fixed

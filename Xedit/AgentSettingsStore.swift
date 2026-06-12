@@ -534,3 +534,135 @@ enum AgentSettingsStore {
         SecItemAdd(addQuery as CFDictionary, nil)
     }
 }
+
+enum AgentCredentialStore {
+    nonisolated static let referencePrefix = "keychain://"
+    nonisolated private static let defaultKeychainService = "com.willdeep.credentials"
+
+    nonisolated(unsafe) private static var testKeychainServiceOverride: String?
+
+    nonisolated private static var keychainService: String {
+        testKeychainServiceOverride ?? defaultKeychainService
+    }
+
+    @discardableResult
+    static func _setTestKeychainServiceOverride(_ service: String?) -> String {
+        testKeychainServiceOverride = service
+        return keychainService
+    }
+
+    static func _wipeTestKeychain() {
+        guard let service = testKeychainServiceOverride else { return }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+
+    nonisolated static func reference(account: String) -> String {
+        "\(referencePrefix)\(account)"
+    }
+
+    nonisolated static func mcpAccount(serverID: String, kind: String, key: String) -> String {
+        "mcp/\(sanitize(serverID))/\(sanitize(kind))/\(sanitize(key))"
+    }
+
+    nonisolated static func skillAccount(entryID: String, credentialID: String) -> String {
+        "skill/\(sanitize(entryID))/\(sanitize(credentialID))"
+    }
+
+    nonisolated static func save(_ secret: String, account: String) {
+        let trimmed = secret.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else {
+            delete(account: account)
+            return
+        }
+
+        if load(account: account) == trimmed { return }
+
+        let baseQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: account
+        ]
+        let updateAttrs: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+        ]
+        let updateStatus = SecItemUpdate(baseQuery as CFDictionary, updateAttrs as CFDictionary)
+        if updateStatus == errSecSuccess { return }
+        if updateStatus != errSecItemNotFound {
+            SecItemDelete(baseQuery as CFDictionary)
+        }
+
+        var addQuery = baseQuery
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        SecItemAdd(addQuery as CFDictionary, nil)
+    }
+
+    nonisolated static func load(account: String) -> String {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+              let data = item as? Data,
+              let value = String(data: data, encoding: .utf8) else {
+            return ""
+        }
+        return value
+    }
+
+    nonisolated static func delete(account: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: account
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+
+    nonisolated static func isReference(_ value: String) -> Bool {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix(referencePrefix)
+            || value.contains("${credential:")
+    }
+
+    nonisolated static func resolve(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix(referencePrefix) {
+            return load(account: String(trimmed.dropFirst(referencePrefix.count)))
+        }
+
+        var resolved = value
+        while let range = resolved.range(of: "${credential:") {
+            guard let end = resolved[range.upperBound...].firstIndex(of: "}") else { break }
+            let account = String(resolved[range.upperBound..<end])
+            let secret = load(account: account)
+            resolved.replaceSubrange(range.lowerBound...end, with: secret)
+        }
+        return resolved
+    }
+
+    nonisolated static func hasSecret(reference value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix(referencePrefix) {
+            return !load(account: String(trimmed.dropFirst(referencePrefix.count))).isEmpty
+        }
+        return false
+    }
+
+    nonisolated private static func sanitize(_ value: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_.:"))
+        let scalars = value.unicodeScalars.map { scalar -> Character in
+            allowed.contains(scalar) ? Character(scalar) : "-"
+        }
+        return String(scalars).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+    }
+}
