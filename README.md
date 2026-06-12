@@ -151,9 +151,13 @@ When you open a PR, please:
 
 ---
 
-## License
+## License And Open Core
 
-WillDeep is licensed under the [Apache License 2.0](LICENSE). You are free to use, modify, and redistribute the code — including for commercial purposes — provided you comply with the terms in the license file (notably attribution and the patent grant clauses).
+WillDeep uses an [Apache License 2.0](LICENSE) + [Open Core](OPEN_CORE.md) model.
+
+The code in this repository is open source under Apache 2.0 unless a file says otherwise. You are free to use, modify, and redistribute it — including for commercial purposes — provided you comply with the license terms.
+
+The WillDeep name, logo, official signed builds, hosted services, cloud sync, managed runtimes, team features, marketplace offerings, and enterprise support may be provided separately as commercial products or services. Code already released in this repository under Apache 2.0 remains Apache 2.0.
 
 ---
 
@@ -322,9 +326,13 @@ WillDeep 当前在 `1.60.x` 上活跃迭代。编辑器主体已经很稳，可�
 
 ---
 
-## License
+## 许可与 Open Core
 
-WillDeep 采用 [Apache License 2.0](LICENSE) 许可。你可以自由使用、修改、再分发本项目（包括商用），前提是遵守许可证条款（保留版权声明、专利授权条款等）。
+WillDeep 采用 [Apache License 2.0](LICENSE) + [Open Core](OPEN_CORE.md) 模式。
+
+除非具体文件另有说明，本仓库代码按 Apache 2.0 开源。你可以自由使用、修改、再分发本项目（包括商用），前提是遵守许可证条款。
+
+WillDeep 名称、Logo、官方签名构建、托管服务、云同步、受管 runtime、团队功能、marketplace 能力与企业支持可能作为独立商业产品或服务提供。本仓库中已经按 Apache 2.0 发布的代码，会继续保持 Apache 2.0。
 
 ---
 
