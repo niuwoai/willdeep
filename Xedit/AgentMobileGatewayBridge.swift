@@ -173,6 +173,14 @@ struct AgentMobileGatewayQueuedMessageSnapshot: Equatable {
     var sessionID: UUID
 }
 
+struct AgentMobileGatewayMessageSnapshot: Equatable {
+    var id: UUID
+    var role: String
+    var content: String
+    var createdAt: Date
+    var sessionID: UUID
+}
+
 struct AgentMobileGatewayCommandResult: Equatable {
     var sessionID: UUID?
     var message: String?
@@ -221,6 +229,7 @@ protocol AgentMobileGatewayControlling: AnyObject {
         maxBytes: Int?
     ) throws -> AgentMobileGatewayFileSnapshot
     var mobileGatewayQueuedMessages: [AgentMobileGatewayQueuedMessageSnapshot] { get }
+    var mobileGatewayRecentMessages: [AgentMobileGatewayMessageSnapshot] { get }
     func mobileGatewayUpdateQueue(
         sessionID: UUID?,
         action: String,
@@ -473,7 +482,8 @@ enum AgentMobileGatewayCommandRouter {
                 "pending_tools": .array(controller.mobileGatewayPendingToolApprovals.map(toolApprovalJSON)),
                 "patch_proposals": .array(controller.mobileGatewayPendingPatchProposals.map(patchProposalJSON)),
                 "jobs": .array(controller.mobileGatewayJobs.map(jobJSON)),
-                "queued_messages": .array(controller.mobileGatewayQueuedMessages.map(queuedMessageJSON))
+                "queued_messages": .array(controller.mobileGatewayQueuedMessages.map(queuedMessageJSON)),
+                "messages": .array(controller.mobileGatewayRecentMessages.map(messageJSON))
             ],
             timestamp: isoTimestamp(now)
         )
@@ -669,6 +679,16 @@ enum AgentMobileGatewayCommandRouter {
         ])
     }
 
+    private static func messageJSON(_ message: AgentMobileGatewayMessageSnapshot) -> AgentMobileGatewayJSON {
+        .object([
+            "id": .string(message.id.uuidString),
+            "role": .string(message.role),
+            "content": .string(message.content),
+            "created_at": .string(isoTimestamp(message.createdAt)),
+            "session_id": .string(message.sessionID.uuidString)
+        ])
+    }
+
     private static func jobPayload(_ job: AgentMobileGatewayJobSnapshot) -> [String: AgentMobileGatewayJSON] {
         var payload: [String: AgentMobileGatewayJSON] = [
             "id": .string(job.id.uuidString),
@@ -787,6 +807,8 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
 
     private weak var appState: AppState?
     private var webSocketTask: URLSessionWebSocketTask?
+    private var appStateCancellable: AnyCancellable?
+    private var snapshotTask: Task<Void, Never>?
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
@@ -794,6 +816,11 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         self.appState = appState
         self.encoder = JSONEncoder()
         self.decoder = JSONDecoder()
+        self.appStateCancellable = appState.objectWillChange.sink { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.scheduleSnapshot()
+            }
+        }
     }
 
     func connect(baseURL: URL, desktopToken: String, session: URLSession = .shared) {
@@ -814,6 +841,8 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
     }
 
     func disconnect() {
+        snapshotTask?.cancel()
+        snapshotTask = nil
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         isConnected = false
@@ -830,6 +859,16 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         }
         for job in appState.mobileGatewayJobs {
             send(AgentMobileGatewayCommandRouter.jobUpdatedEnvelope(job))
+        }
+    }
+
+    private func scheduleSnapshot() {
+        guard isConnected, webSocketTask != nil else { return }
+        snapshotTask?.cancel()
+        snapshotTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            self?.publishSnapshot()
         }
     }
 
@@ -999,6 +1038,27 @@ extension AppState: AgentMobileGatewayControlling {
                     sessionID: runtime.id
                 )
             }
+        }
+    }
+
+    var mobileGatewayRecentMessages: [AgentMobileGatewayMessageSnapshot] {
+        agentSessions.compactMap { runtime(for: $0.id) }.flatMap { runtime in
+            runtime.messages
+                .filter { message in
+                    message.role == .user ||
+                    message.role == .assistant ||
+                    message.role == .system
+                }
+                .suffix(Self.mobileGatewayMaxRecentMessagesPerSession)
+                .map { message in
+                    AgentMobileGatewayMessageSnapshot(
+                        id: message.id,
+                        role: message.role.rawValue,
+                        content: Self.mobileGatewayMessageContentPreview(message),
+                        createdAt: message.createdAt,
+                        sessionID: runtime.id
+                    )
+                }
         }
     }
 
@@ -1345,6 +1405,35 @@ extension AppState: AgentMobileGatewayControlling {
             return "\(message.images.count) images"
         }
         return "Queued message"
+    }
+
+    private static let mobileGatewayMaxRecentMessagesPerSession = 40
+    private static let mobileGatewayMaxMessageCharacters = 12_000
+
+    private static func mobileGatewayMessageContentPreview(_ message: AgentMessage) -> String {
+        var blocks: [String] = []
+        let trimmed = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            blocks.append(trimmed)
+        }
+        if message.role == .user {
+            if !message.images.isEmpty {
+                blocks.append("[\(message.images.count) images]")
+            }
+            if !message.textAttachments.isEmpty {
+                let names = message.textAttachments
+                    .map(\.displayName)
+                    .prefix(3)
+                    .joined(separator: ", ")
+                blocks.append("[attachments: \(names)]")
+            }
+        }
+        let joined = blocks.joined(separator: "\n\n")
+        if joined.count <= mobileGatewayMaxMessageCharacters {
+            return joined
+        }
+        return String(joined.prefix(mobileGatewayMaxMessageCharacters))
+            .trimmingCharacters(in: .whitespacesAndNewlines) + "\n..."
     }
 
     private static let mobileGatewayDefaultReadBytes = 64 * 1024

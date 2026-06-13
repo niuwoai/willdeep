@@ -169,6 +169,16 @@ struct AgentMobileGatewayBridgeTests {
                 sessionID: session.id
             )
         ]
+        let messageID = UUID()
+        controller.messages = [
+            AgentMobileGatewayMessageSnapshot(
+                id: messageID,
+                role: "assistant",
+                content: "I can update the Android app from the Mac.",
+                createdAt: fixedDate,
+                sessionID: session.id
+            )
+        ]
 
         let response = AgentMobileGatewayCommandRouter.handle(
             AgentMobileGatewayEnvelope(id: "cmd-5", type: "session.list"),
@@ -210,6 +220,16 @@ struct AgentMobileGatewayBridgeTests {
         #expect(queued["id"]?.stringValue == queuedID.uuidString)
         #expect(queued["text_preview"]?.stringValue == "Run the Android build after this turn")
         #expect(queued["session_id"]?.stringValue == session.id.uuidString)
+
+        guard case .array(let messages)? = response.payload["messages"],
+              case .object(let message)? = messages.first else {
+            Issue.record("messages payload missing")
+            return
+        }
+        #expect(message["id"]?.stringValue == messageID.uuidString)
+        #expect(message["role"]?.stringValue == "assistant")
+        #expect(message["content"]?.stringValue == "I can update the Android app from the Mac.")
+        #expect(message["created_at"]?.stringValue == "2026-06-13T12:00:00.000Z")
     }
 
     @Test @MainActor
@@ -412,6 +432,7 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
     var jobs: [AgentMobileGatewayJobSnapshot] = []
     var files: [String: AgentMobileGatewayFileSnapshot] = [:]
     var queuedMessages: [AgentMobileGatewayQueuedMessageSnapshot] = []
+    var messages: [AgentMobileGatewayMessageSnapshot] = []
     var toolDecisions: [ToolDecision] = []
     var patchDecisions: [PatchDecision] = []
     var killedJobs: [JobKill] = []
@@ -461,6 +482,7 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
     var mobileGatewayPendingPatchProposals: [AgentMobileGatewayPatchSnapshot] { pendingPatches }
     var mobileGatewayJobs: [AgentMobileGatewayJobSnapshot] { jobs }
     var mobileGatewayQueuedMessages: [AgentMobileGatewayQueuedMessageSnapshot] { queuedMessages }
+    var mobileGatewayRecentMessages: [AgentMobileGatewayMessageSnapshot] { messages }
 
     func mobileGatewayRuntimeIsResponding(sessionID: UUID) -> Bool {
         false

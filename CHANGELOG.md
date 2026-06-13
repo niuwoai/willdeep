@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.75.0-rc1 - 2026-06-14
+
+### Added
+
+- Mobile Gateway `state.snapshot` now includes recent user, assistant, and system messages for Android conversation display.
+- The Swift desktop peer now debounces AppState changes and republishes snapshots while the gateway is connected, so Android can follow Agent progress without manual refresh.
+- Android Mobile Gateway adds a Conversation panel and parses `message.append`, `message.delta`, and `message.done` events.
+
+### Tests
+
+- Added Swift router coverage for message snapshots.
+- Added Android model coverage for message snapshot parsing and streaming message events.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.75.0-rc1`。
+
 ## 1.74.0-rc1 - 2026-06-14
 
 ### Added

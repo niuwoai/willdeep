@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-06-14 | Target version: v1.74.0-rc1
+> Last updated: 2026-06-14 | Target version: v1.75.0-rc1
 
 ## Summary
 
@@ -66,8 +66,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.74.0-rc1`
-- `X-Server-Version: 1.74.0-rc1`
+- `X-App-Version: 1.75.0-rc1`
+- `X-Server-Version: 1.75.0-rc1`
 
 ### `GET /mobile/health`
 
@@ -79,7 +79,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.74.0-rc1",
+    "version": "1.75.0-rc1",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
@@ -258,7 +258,8 @@ The desktop app remains responsible for the actual command result and subsequent
 
 Current desktop bridge behavior:
 
-- `state.snapshot` includes session summaries, pending tool approvals, patch proposals, background jobs, and queued message previews.
+- `state.snapshot` includes session summaries, pending tool approvals, patch proposals, background jobs, queued message previews, and recent conversation messages.
+- The Swift desktop peer debounces AppState changes and republishes snapshots while connected so mobile clients can follow Agent progress during long turns.
 - `publishSnapshot()` also emits `tool.pending` and `patch.upsert` envelopes for currently blocked work.
 - `tool.decide` resolves `.pendingApproval` tool calls through the same runtime continuation as the Mac UI.
 - `.awaitingConfirm` danger-tier tool calls still require `payload.typed_confirmation == "confirm"`; a mobile approve without that field returns `command.error`.
