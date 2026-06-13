@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.67.0-rc1 - 2026-06-13
+
+### Added
+
+- 新增 `willdeep-agent serve-mobile`，提供局域网 Mobile Gateway：支持短期二维码配对 payload、一次性 pairing token、设备 token 鉴权、设备撤销、桌面 peer / mobile peer WebSocket 转发。
+- Mobile Gateway HTTP 响应与现有 Go API 统一暴露 `X-App-Version` / `X-Server-Version`，便于排查桌面端和 gateway 版本一致性。
+- 新增 `docs/MOBILE_GATEWAY_REQUIREMENTS.md`，记录 Android 后续接入前的 Mac 端 gateway 需求、协议、边界、安全要求和验收标准。
+
+### Tests
+
+- 新增 Mobile Gateway Go 单测，覆盖 pairing token 生命周期、版本 header、WebSocket 鉴权、移动端命令转发、桌面事件广播、未知命令错误和撤销设备断连。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.67.0-rc1`。
+
+## 1.66.0-rc1 - 2026-06-13
+
+### Added
+
+- Agent memory 现在会真正进入 Agent turn：每轮请求按最近用户消息、当前文件和选中文本检索相关全局/项目记忆，并把紧凑 memory context 注入 system prompt。
+- `AgentMemoryRecord` 新增作用域、项目指纹、topics、confidence、敏感内容标记与 provenance；旧 memory JSON 可兼容解码，保存时会对 token/API key/private key 形态内容脱敏。
+- 回合结束后会从明显的“记住 / must / prefer / 项目规则”等语句里自动抽取长期候选记忆；维护周期新增重复 memory 合并，并继续执行 transient TTL 归档和过期 archive 清理。
+- Settings → Memory 现在支持手动创建/编辑全局或当前项目作用域 memory，并在列表中展示 confidence、topics、敏感脱敏标记、provenance、项目指纹与最后召回时间，便于审计自动记忆。
+
+### Tests
+
+- 扩展 Agent memory 单测，覆盖敏感内容脱敏、项目作用域检索、手动项目 memory 访问统计、memory context 生成、自动候选抽取和维护合并。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.66.0-rc1`。
+
 ## 1.65.0-rc4 - 2026-06-13
 
 ### Fixed
