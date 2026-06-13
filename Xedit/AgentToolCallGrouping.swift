@@ -3,7 +3,7 @@
 //  WillDeep
 //
 //  Codex-style collapsing of consecutive same-kind tool calls into a
-//  single transcript row ("已运行 3 条命令" / "已探索 2 个文件"). The
+//  single transcript row ("已运行 3 条命令" / "已读取 2 个文件"). The
 //  Agent-mode transcript renders one card per group instead of one
 //  card per tool call so a busy turn doesn't drown the chat.
 //
@@ -77,6 +77,17 @@ enum AgentToolKind: Equatable {
         }
     }
 
+    func groupTitle(for calls: [AgentToolCall]) -> String {
+        switch self {
+        case .fileExploration:
+            return AgentToolActivitySummary(calls: calls).explorationText ?? groupTitle(calls.count)
+        case .runCommand:
+            return "已运行 \(calls.count) 条命令"
+        default:
+            return groupTitle(calls.count)
+        }
+    }
+
     var groupIcon: String {
         switch self {
         case .runCommand: return "terminal"
@@ -114,6 +125,10 @@ struct AgentToolCallSegment: Identifiable, Equatable {
     }
 
     var count: Int { calls.count }
+
+    var title: String {
+        kind.groupTitle(for: calls)
+    }
 }
 
 enum AgentToolCallGrouping {
@@ -154,24 +169,32 @@ enum AgentToolCallGrouping {
 }
 
 struct AgentToolActivitySummary: Equatable {
-    var exploredPathCount: Int
+    var readFileCount: Int
+    var listedDirectoryCount: Int
     var searchCount: Int
     var gitStatusCount: Int
     var commandCount: Int
 
     init(calls: [AgentToolCall]) {
-        var exploredPaths = Set<String>()
+        var readFiles = Set<String>()
+        var listedDirectories = Set<String>()
         var searches = 0
         var gitStatuses = 0
         var commands = 0
 
         for call in calls {
             switch call.toolName {
-            case "read_file", "list_directory":
+            case "read_file":
                 if let path = call.arguments["path"]?.stringValue() {
-                    exploredPaths.insert(path.isEmpty ? "." : path)
+                    readFiles.insert(path.isEmpty ? "." : path)
                 } else {
-                    exploredPaths.insert(".")
+                    readFiles.insert(".")
+                }
+            case "list_directory":
+                if let path = call.arguments["path"]?.stringValue() {
+                    listedDirectories.insert(path.isEmpty ? "." : path)
+                } else {
+                    listedDirectories.insert(".")
                 }
             case "grep_files", "search_files":
                 searches += 1
@@ -184,26 +207,34 @@ struct AgentToolActivitySummary: Equatable {
             }
         }
 
-        exploredPathCount = exploredPaths.count
+        readFileCount = readFiles.count
+        listedDirectoryCount = listedDirectories.count
         searchCount = searches
         gitStatusCount = gitStatuses
         commandCount = commands
     }
 
+    var exploredPathCount: Int {
+        readFileCount + listedDirectoryCount
+    }
+
     var hasActivity: Bool {
-        exploredPathCount > 0 || searchCount > 0 || gitStatusCount > 0 || commandCount > 0
+        readFileCount > 0 || listedDirectoryCount > 0 || searchCount > 0 || gitStatusCount > 0 || commandCount > 0
     }
 
     var explorationText: String? {
         var parts: [String] = []
-        if exploredPathCount > 0 {
-            parts.append("已探索 \(exploredPathCount) 个路径")
+        if readFileCount > 0 {
+            parts.append("已读取 \(readFileCount) 个文件")
+        }
+        if listedDirectoryCount > 0 {
+            parts.append("已浏览 \(listedDirectoryCount) 个目录")
         }
         if searchCount > 0 {
-            parts.append("\(searchCount) 次搜索")
+            parts.append(searchCount == 1 ? "已搜索代码" : "已搜索代码 \(searchCount) 次")
         }
         if gitStatusCount > 0 {
-            parts.append("\(gitStatusCount) 次 git 状态")
+            parts.append(gitStatusCount == 1 ? "已查看 Git 状态" : "已查看 Git 状态 \(gitStatusCount) 次")
         }
         guard !parts.isEmpty else { return nil }
         return parts.joined(separator: " · ")
@@ -212,5 +243,10 @@ struct AgentToolActivitySummary: Equatable {
     var commandText: String? {
         guard commandCount > 0 else { return nil }
         return "已运行 \(commandCount) 条命令"
+    }
+
+    var activityText: String? {
+        let parts = [explorationText, commandText].compactMap(\.self)
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }

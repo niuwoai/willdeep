@@ -140,7 +140,7 @@ struct AgentChatTranscript: View {
                                     ForEach(segments) { segment in
                                         AgentToolCallGroup(
                                             calls: segment.calls,
-                                            headline: segment.kind.groupTitle(segment.count),
+                                            headline: segment.title,
                                             headlineIcon: segment.kind.groupIcon
                                         )
                                     }

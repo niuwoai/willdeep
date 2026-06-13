@@ -413,9 +413,9 @@ enum AgentChatHistoryRenderer {
             // Tool call summary (when the assistant emitted tool calls
             // *alongside* its own prose). Rendered through the same
             // collapsible header as the standalone tool-call group so
-            // the bubble defaults to a one-line "▸ 执行了 N 条工具调用
-            // · run_command  command: ssh ..." link; clicking flips the
-            // chevron and reveals the full per-call summary below.
+            // the bubble defaults to a one-line activity summary such
+            // as "▸ 已读取 2 个文件 · 已运行 1 条命令"; clicking flips
+            // the chevron and reveals the full per-call summary below.
             if !message.toolCalls.isEmpty {
                 if !body.isEmpty {
                     // Transparent spacer paragraph between the assistant
@@ -873,11 +873,8 @@ enum AgentChatHistoryRenderer {
         secondaryColor: NSColor
     ) {
         let start = result.length
-        let count = group.calls.count
         let chevron = isExpanded ? "▾" : "▸"
-        let title = "\(chevron) 执行了 \(count) 条工具调用"
-        let preview = collapsedToolPreview(for: group.calls)
-        let titleText = preview.isEmpty ? title : "\(title) · \(preview)"
+        let titleText = "\(chevron) \(collapsedToolTitle(for: group.calls))"
         result.append(NSAttributedString(
             string: titleText,
             attributes: [
@@ -912,13 +909,89 @@ enum AgentChatHistoryRenderer {
         )
     }
 
-    private static func collapsedToolPreview(for toolCalls: [AgentMessageToolCall]) -> String {
-        guard let first = toolCalls.first else { return "" }
-        let arguments = compactArguments(for: first, limit: 160)
-        if arguments.isEmpty {
-            return first.toolName
+    private static func collapsedToolTitle(for toolCalls: [AgentMessageToolCall]) -> String {
+        guard !toolCalls.isEmpty else { return "工具调用" }
+        if let text = ToolHistoryActivitySummary(toolCalls: toolCalls).text {
+            return text
         }
-        return "\(first.toolName)  \(arguments)"
+        if toolCalls.count == 1, let first = toolCalls.first {
+            return "已调用 \(readableToolName(first.toolName))"
+        }
+        return "已调用 \(toolCalls.count) 个工具"
+    }
+
+    private static func readableToolName(_ name: String) -> String {
+        name
+            .replacingOccurrences(of: "_", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private struct ToolHistoryActivitySummary {
+        var readFileCount = 0
+        var listedDirectoryCount = 0
+        var searchCount = 0
+        var gitStatusCount = 0
+        var commandCount = 0
+
+        init(toolCalls: [AgentMessageToolCall]) {
+            var readFiles = Set<String>()
+            var listedDirectories = Set<String>()
+
+            for call in toolCalls {
+                let arguments = Self.argumentsDictionary(from: call.argumentsJSON)
+                switch call.toolName {
+                case "read_file":
+                    readFiles.insert(Self.path(in: arguments))
+                case "list_directory":
+                    listedDirectories.insert(Self.path(in: arguments))
+                case "grep_files", "search_files":
+                    searchCount += 1
+                case "git_status":
+                    gitStatusCount += 1
+                case "run_command":
+                    commandCount += 1
+                default:
+                    break
+                }
+            }
+
+            readFileCount = readFiles.count
+            listedDirectoryCount = listedDirectories.count
+        }
+
+        var text: String? {
+            var parts: [String] = []
+            if readFileCount > 0 {
+                parts.append("已读取 \(readFileCount) 个文件")
+            }
+            if listedDirectoryCount > 0 {
+                parts.append("已浏览 \(listedDirectoryCount) 个目录")
+            }
+            if searchCount > 0 {
+                parts.append(searchCount == 1 ? "已搜索代码" : "已搜索代码 \(searchCount) 次")
+            }
+            if gitStatusCount > 0 {
+                parts.append(gitStatusCount == 1 ? "已查看 Git 状态" : "已查看 Git 状态 \(gitStatusCount) 次")
+            }
+            if commandCount > 0 {
+                parts.append("已运行 \(commandCount) 条命令")
+            }
+            return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        }
+
+        private static func argumentsDictionary(from json: String) -> [String: Any] {
+            guard let data = json.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data),
+                  let dict = object as? [String: Any] else {
+                return [:]
+            }
+            return dict
+        }
+
+        private static func path(in arguments: [String: Any]) -> String {
+            guard let path = arguments["path"] as? String, !path.isEmpty else { return "." }
+            return path
+        }
     }
 
     private static func toolCallSummary(for toolCalls: [AgentMessageToolCall], argumentLimit: Int = 160) -> String {

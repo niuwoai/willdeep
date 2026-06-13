@@ -113,6 +113,24 @@ struct AgentMobileGatewaySessionSnapshot: Codable, Equatable {
     var isResponding: Bool
 }
 
+struct AgentMobileGatewayToolApprovalSnapshot: Equatable {
+    var id: String
+    var title: String
+    var summary: String
+    var toolName: String
+    var inputPreview: String
+    var sessionID: UUID
+}
+
+struct AgentMobileGatewayPatchSnapshot: Equatable {
+    var id: UUID
+    var title: String
+    var summary: String
+    var path: String
+    var stats: String
+    var sessionID: UUID
+}
+
 struct AgentMobileGatewayCommandResult: Equatable {
     var sessionID: UUID?
     var message: String?
@@ -132,22 +150,60 @@ protocol AgentMobileGatewayControlling: AnyObject {
     func mobileGatewaySelectSession(id: UUID) -> Bool
     func mobileGatewaySendMessage(sessionID: UUID?, text: String) throws -> AgentMobileGatewayCommandResult
     func mobileGatewayStopTurn(sessionID: UUID?) throws -> AgentMobileGatewayCommandResult
+    var mobileGatewayPendingToolApprovals: [AgentMobileGatewayToolApprovalSnapshot] { get }
+    var mobileGatewayPendingPatchProposals: [AgentMobileGatewayPatchSnapshot] { get }
+    func mobileGatewayDecideTool(
+        sessionID: UUID?,
+        toolID: String,
+        approved: Bool,
+        typedConfirmation: String?,
+        answer: String?
+    ) throws -> AgentMobileGatewayCommandResult
+    func mobileGatewayDecidePatch(
+        sessionID: UUID?,
+        patchID: UUID,
+        approved: Bool
+    ) throws -> AgentMobileGatewayCommandResult
 }
 
 enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
     case missingText
+    case missingID(String)
+    case missingAnswer
+    case invalidDecision
     case invalidSessionID(String)
     case sessionNotFound(UUID)
+    case toolNotFound(String)
+    case toolNotPending(String)
+    case confirmationRequired(String)
+    case invalidPatchID(String)
+    case patchNotFound(UUID)
     case unsupportedCommand(String)
 
     var errorDescription: String? {
         switch self {
         case .missingText:
             return "message.send requires payload.text."
+        case .missingID(let type):
+            return "\(type) requires payload.id."
+        case .missingAnswer:
+            return "ask_user decisions require payload.answer."
+        case .invalidDecision:
+            return "Decision must be approve or reject."
         case .invalidSessionID(let value):
             return "Invalid session id: \(value)."
         case .sessionNotFound(let id):
             return "Session not found: \(id.uuidString)."
+        case .toolNotFound(let id):
+            return "Tool call not found: \(id)."
+        case .toolNotPending(let id):
+            return "Tool call is not awaiting a mobile decision: \(id)."
+        case .confirmationRequired(let id):
+            return "Tool call \(id) requires typed confirmation."
+        case .invalidPatchID(let value):
+            return "Invalid patch id: \(value)."
+        case .patchNotFound(let id):
+            return "Patch proposal not found: \(id.uuidString)."
         case .unsupportedCommand(let type):
             return "Unsupported mobile command: \(type)."
         }
@@ -209,6 +265,37 @@ enum AgentMobileGatewayCommandRouter {
                     message: result.message,
                     now: now
                 )
+            case "tool.decide":
+                let toolID = try requiredPayloadString("id", aliases: ["tool_call_id", "approval_id"], from: envelope)
+                let result = try controller.mobileGatewayDecideTool(
+                    sessionID: try optionalSessionID(from: envelope),
+                    toolID: toolID,
+                    approved: try approvedDecision(from: envelope),
+                    typedConfirmation: envelope.payload["typed_confirmation"]?.stringValue,
+                    answer: envelope.payload["answer"]?.stringValue
+                )
+                return ackEnvelope(
+                    for: envelope,
+                    sessionID: result.sessionID,
+                    message: result.message,
+                    now: now
+                )
+            case "patch.decide":
+                let rawPatchID = try requiredPayloadString("id", aliases: ["patch_id"], from: envelope)
+                guard let patchID = UUID(uuidString: rawPatchID) else {
+                    throw AgentMobileGatewayCommandError.invalidPatchID(rawPatchID)
+                }
+                let result = try controller.mobileGatewayDecidePatch(
+                    sessionID: try optionalSessionID(from: envelope),
+                    patchID: patchID,
+                    approved: try approvedDecision(from: envelope)
+                )
+                return ackEnvelope(
+                    for: envelope,
+                    sessionID: result.sessionID,
+                    message: result.message,
+                    now: now
+                )
             default:
                 throw AgentMobileGatewayCommandError.unsupportedCommand(envelope.type)
             }
@@ -235,8 +322,34 @@ enum AgentMobileGatewayCommandRouter {
             type: "state.snapshot",
             payload: [
                 "sessions": .array(sessions),
-                "active_session_id": activeID.map { .string($0.uuidString) } ?? .null
+                "active_session_id": activeID.map { .string($0.uuidString) } ?? .null,
+                "pending_tools": .array(controller.mobileGatewayPendingToolApprovals.map(toolApprovalJSON)),
+                "patch_proposals": .array(controller.mobileGatewayPendingPatchProposals.map(patchProposalJSON))
             ],
+            timestamp: isoTimestamp(now)
+        )
+    }
+
+    static func toolPendingEnvelope(
+        _ approval: AgentMobileGatewayToolApprovalSnapshot,
+        now: Date = Date()
+    ) -> AgentMobileGatewayEnvelope {
+        AgentMobileGatewayEnvelope(
+            type: "tool.pending",
+            sessionID: approval.sessionID.uuidString,
+            payload: toolApprovalPayload(approval),
+            timestamp: isoTimestamp(now)
+        )
+    }
+
+    static func patchUpsertEnvelope(
+        _ proposal: AgentMobileGatewayPatchSnapshot,
+        now: Date = Date()
+    ) -> AgentMobileGatewayEnvelope {
+        AgentMobileGatewayEnvelope(
+            type: "patch.upsert",
+            sessionID: proposal.sessionID.uuidString,
+            payload: patchProposalPayload(proposal),
             timestamp: isoTimestamp(now)
         )
     }
@@ -312,6 +425,36 @@ enum AgentMobileGatewayCommandRouter {
         ])
     }
 
+    private static func toolApprovalJSON(_ approval: AgentMobileGatewayToolApprovalSnapshot) -> AgentMobileGatewayJSON {
+        .object(toolApprovalPayload(approval))
+    }
+
+    private static func toolApprovalPayload(_ approval: AgentMobileGatewayToolApprovalSnapshot) -> [String: AgentMobileGatewayJSON] {
+        [
+            "id": .string(approval.id),
+            "title": .string(approval.title),
+            "summary": .string(approval.summary),
+            "tool_name": .string(approval.toolName),
+            "input_preview": .string(approval.inputPreview),
+            "session_id": .string(approval.sessionID.uuidString)
+        ]
+    }
+
+    private static func patchProposalJSON(_ proposal: AgentMobileGatewayPatchSnapshot) -> AgentMobileGatewayJSON {
+        .object(patchProposalPayload(proposal))
+    }
+
+    private static func patchProposalPayload(_ proposal: AgentMobileGatewayPatchSnapshot) -> [String: AgentMobileGatewayJSON] {
+        [
+            "id": .string(proposal.id.uuidString),
+            "title": .string(proposal.title),
+            "summary": .string(proposal.summary),
+            "path": .string(proposal.path),
+            "stats": .string(proposal.stats),
+            "session_id": .string(proposal.sessionID.uuidString)
+        ]
+    }
+
     private static func requiredSessionID(from envelope: AgentMobileGatewayEnvelope) throws -> UUID {
         guard let sessionID = try optionalSessionID(from: envelope) else {
             throw AgentMobileGatewayCommandError.invalidSessionID("")
@@ -326,6 +469,41 @@ enum AgentMobileGatewayCommandRouter {
             throw AgentMobileGatewayCommandError.invalidSessionID(raw)
         }
         return id
+    }
+
+    private static func requiredPayloadString(
+        _ key: String,
+        aliases: [String] = [],
+        from envelope: AgentMobileGatewayEnvelope
+    ) throws -> String {
+        for candidate in [key] + aliases {
+            if let value = envelope.payload[candidate]?.stringValue?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !value.isEmpty {
+                return value
+            }
+        }
+        throw AgentMobileGatewayCommandError.missingID(envelope.type)
+    }
+
+    private static func approvedDecision(from envelope: AgentMobileGatewayEnvelope) throws -> Bool {
+        if let approved = envelope.payload["approved"]?.boolValue {
+            return approved
+        }
+        guard let raw = envelope.payload["decision"]?.stringValue?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+              !raw.isEmpty else {
+            throw AgentMobileGatewayCommandError.invalidDecision
+        }
+        switch raw {
+        case "approve", "approved", "allow", "confirm", "yes", "true":
+            return true
+        case "reject", "rejected", "deny", "denied", "no", "false":
+            return false
+        default:
+            throw AgentMobileGatewayCommandError.invalidDecision
+        }
     }
 
     private static func isoTimestamp(_ date: Date) -> String {
@@ -375,6 +553,12 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
     func publishSnapshot() {
         guard let appState else { return }
         send(AgentMobileGatewayCommandRouter.snapshotEnvelope(controller: appState))
+        for approval in appState.mobileGatewayPendingToolApprovals {
+            send(AgentMobileGatewayCommandRouter.toolPendingEnvelope(approval))
+        }
+        for proposal in appState.mobileGatewayPendingPatchProposals {
+            send(AgentMobileGatewayCommandRouter.patchUpsertEnvelope(proposal))
+        }
     }
 
     private func receiveNext() {
@@ -456,6 +640,55 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
 extension AppState: AgentMobileGatewayControlling {
     var mobileGatewaySessions: [AgentSession] { agentSessions }
     var mobileGatewayActiveSessionID: UUID? { activeAgentSessionID }
+    var mobileGatewayPendingToolApprovals: [AgentMobileGatewayToolApprovalSnapshot] {
+        agentRuntimes.values.flatMap { runtime in
+            runtime.toolCalls
+                .filter { call in
+                    call.status == .pendingApproval ||
+                    call.status == .awaitingConfirm ||
+                    call.status == .awaitingUserAnswer
+                }
+                .map { call in
+                    AgentMobileGatewayToolApprovalSnapshot(
+                        id: call.id.uuidString,
+                        title: mobileGatewayToolTitle(for: call),
+                        summary: mobileGatewayToolSummary(for: call),
+                        toolName: call.toolName,
+                        inputPreview: Self.mobileGatewayArgumentsPreview(call.arguments),
+                        sessionID: runtime.id
+                    )
+                }
+        }
+        .sorted { lhs, rhs in
+            if lhs.sessionID != rhs.sessionID {
+                return lhs.sessionID.uuidString < rhs.sessionID.uuidString
+            }
+            return lhs.id < rhs.id
+        }
+    }
+
+    var mobileGatewayPendingPatchProposals: [AgentMobileGatewayPatchSnapshot] {
+        agentRuntimes.values.flatMap { runtime in
+            runtime.patchProposals
+                .filter { $0.status == .pending }
+                .map { proposal in
+                    AgentMobileGatewayPatchSnapshot(
+                        id: proposal.id,
+                        title: proposal.title,
+                        summary: "Patch proposal",
+                        path: Self.mobileGatewayPatchPath(from: proposal.diff),
+                        stats: Self.mobileGatewayPatchStats(from: proposal.diff),
+                        sessionID: runtime.id
+                    )
+                }
+        }
+        .sorted { lhs, rhs in
+            if lhs.sessionID != rhs.sessionID {
+                return lhs.sessionID.uuidString < rhs.sessionID.uuidString
+            }
+            return lhs.id.uuidString < rhs.id.uuidString
+        }
+    }
 
     func mobileGatewayRuntimeIsResponding(sessionID: UUID) -> Bool {
         agentRuntimes[sessionID]?.isResponding ?? false
@@ -496,6 +729,151 @@ extension AppState: AgentMobileGatewayControlling {
         }
         stopAgentResponse()
         return .ok(sessionID: activeAgentSessionID)
+    }
+
+    func mobileGatewayDecideTool(
+        sessionID: UUID?,
+        toolID: String,
+        approved: Bool,
+        typedConfirmation: String?,
+        answer: String?
+    ) throws -> AgentMobileGatewayCommandResult {
+        let runtime = try mobileGatewayRuntime(sessionID: sessionID)
+        guard let index = runtime.toolCalls.firstIndex(where: { call in
+            call.id.uuidString == toolID || call.externalID == toolID
+        }) else {
+            throw AgentMobileGatewayCommandError.toolNotFound(toolID)
+        }
+        let call = runtime.toolCalls[index]
+        guard call.status == .pendingApproval || call.status == .awaitingConfirm || call.status == .awaitingUserAnswer else {
+            throw AgentMobileGatewayCommandError.toolNotPending(toolID)
+        }
+
+        let decision: AgentToolDecision
+        if approved {
+            switch call.status {
+            case .awaitingConfirm:
+                guard typedConfirmation?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "confirm" else {
+                    throw AgentMobileGatewayCommandError.confirmationRequired(toolID)
+                }
+                decision = .approved
+            case .awaitingUserAnswer:
+                guard let answer = answer?.trimmingCharacters(in: .whitespacesAndNewlines), !answer.isEmpty else {
+                    throw AgentMobileGatewayCommandError.missingAnswer
+                }
+                decision = .answered(answer)
+            default:
+                decision = .approved
+            }
+        } else {
+            decision = .denied(reason: "Denied from Android")
+            runtime.toolCalls[index].status = .denied
+            runtime.toolCalls[index].errorMessage = "Denied from Android"
+        }
+
+        runtime.toolDecisionWaiter?.resume(returning: decision)
+        runtime.toolDecisionWaiter = nil
+        return .ok(sessionID: runtime.id, message: approved ? "Tool approved" : "Tool rejected")
+    }
+
+    func mobileGatewayDecidePatch(
+        sessionID: UUID?,
+        patchID: UUID,
+        approved: Bool
+    ) throws -> AgentMobileGatewayCommandResult {
+        if let sessionID {
+            guard mobileGatewaySelectSession(id: sessionID) else {
+                throw AgentMobileGatewayCommandError.sessionNotFound(sessionID)
+            }
+        }
+        guard agentPatchProposals.contains(where: { $0.id == patchID && $0.status == .pending }) else {
+            throw AgentMobileGatewayCommandError.patchNotFound(patchID)
+        }
+        if approved {
+            applyAgentPatchProposal(id: patchID)
+        } else {
+            rejectAgentPatchProposal(id: patchID)
+        }
+        return .ok(sessionID: activeAgentSessionID, message: approved ? "Patch approved" : "Patch rejected")
+    }
+
+    private func mobileGatewayRuntime(sessionID: UUID?) throws -> AgentRuntime {
+        if let sessionID {
+            guard let runtime = runtime(for: sessionID) else {
+                throw AgentMobileGatewayCommandError.sessionNotFound(sessionID)
+            }
+            return runtime
+        }
+        guard let runtime = activeRuntime else {
+            throw AgentMobileGatewayCommandError.invalidSessionID("")
+        }
+        return runtime
+    }
+
+    private func mobileGatewayToolTitle(for call: AgentToolCall) -> String {
+        switch call.status {
+        case .awaitingConfirm:
+            return "\(call.toolName) requires confirmation"
+        case .awaitingUserAnswer:
+            return call.toolName == "ask_user" ? "Agent asks a question" : call.toolName
+        default:
+            return call.toolName
+        }
+    }
+
+    private func mobileGatewayToolSummary(for call: AgentToolCall) -> String {
+        switch call.status {
+        case .pendingApproval:
+            return "Waiting for approval"
+        case .awaitingConfirm:
+            return "Danger-tier tool requires typed confirmation on the Mac protocol."
+        case .awaitingUserAnswer:
+            return "Waiting for your answer"
+        default:
+            return ""
+        }
+    }
+
+    private static func mobileGatewayArgumentsPreview(_ arguments: [String: AgentJSONValue]) -> String {
+        guard !arguments.isEmpty else { return "" }
+        let object = arguments.mapValues(\.rawAny)
+        if JSONSerialization.isValidJSONObject(object),
+           let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+           let text = String(data: data, encoding: .utf8) {
+            return mobileGatewayTruncated(text)
+        }
+        return mobileGatewayTruncated(arguments.map { "\($0.key): \($0.value.displaySummary)" }.sorted().joined(separator: ", "))
+    }
+
+    private static func mobileGatewayPatchPath(from diff: String) -> String {
+        for line in diff.split(separator: "\n") {
+            if line.hasPrefix("+++ b/") {
+                return String(line.dropFirst(6))
+            }
+            if line.hasPrefix("--- a/") {
+                return String(line.dropFirst(6))
+            }
+        }
+        return ""
+    }
+
+    private static func mobileGatewayPatchStats(from diff: String) -> String {
+        var added = 0
+        var deleted = 0
+        for line in diff.split(separator: "\n") {
+            guard !line.hasPrefix("+++") && !line.hasPrefix("---") else { continue }
+            if line.hasPrefix("+") {
+                added += 1
+            } else if line.hasPrefix("-") {
+                deleted += 1
+            }
+        }
+        return "+\(added) -\(deleted)"
+    }
+
+    private static func mobileGatewayTruncated(_ text: String, limit: Int = 300) -> String {
+        if text.count <= limit { return text }
+        return String(text.prefix(limit)).trimmingCharacters(in: .whitespacesAndNewlines) + "..."
     }
 }
 

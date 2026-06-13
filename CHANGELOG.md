@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.70.0-rc1 - 2026-06-14
+
+### Added
+
+- Agent 工具调用收起态改为 Codex 风格活动摘要：读取文件、浏览目录、搜索代码、查看 Git 状态和运行命令会显示为自然语言摘要，不再默认暴露 tool 名称与参数。
+- SwiftUI 实时 transcript 与 TextKit 历史 transcript 使用同一套摘要口径；展开后仍保留完整 tool 参数、输出、错误和审批记录，方便排查。
+- Mobile Gateway desktop peer 现在会把 pending tool / patch proposal 同步给 Android，并消费 `tool.decide` / `patch.decide` 命令，普通工具审批、补丁应用/拒绝都回到 macOS 既有入口；danger-tier 工具仍要求 typed confirmation，Android 不能绕过安全门。
+
+### Tests
+
+- 更新工具调用历史渲染与分组摘要回归测试，覆盖收起态不泄露底层命令参数、展开态仍可审计细节。
+- 新增 Mobile Gateway bridge 单测，覆盖 pending approval snapshot、`tool.decide` / `patch.decide` 路由，以及非法 decision 拦截。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.70.0-rc1`。
+
 ## 1.69.0-rc1 - 2026-06-14
 
 ### Added

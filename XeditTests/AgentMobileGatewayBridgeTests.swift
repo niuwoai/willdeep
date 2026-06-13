@@ -87,6 +87,134 @@ struct AgentMobileGatewayBridgeTests {
         #expect(response.payload["type"]?.stringValue == "file.read")
     }
 
+    @Test @MainActor
+    func snapshotIncludesPendingToolAndPatchApprovals() {
+        let session = AgentSession(title: "Approval session")
+        let patchID = UUID()
+        let controller = FakeMobileGatewayController(sessions: [session], activeSessionID: session.id)
+        controller.pendingTools = [
+            AgentMobileGatewayToolApprovalSnapshot(
+                id: "tool-1",
+                title: "run_command",
+                summary: "Waiting for approval",
+                toolName: "run_command",
+                inputPreview: "{\"command\":\"make test\"}",
+                sessionID: session.id
+            )
+        ]
+        controller.pendingPatches = [
+            AgentMobileGatewayPatchSnapshot(
+                id: patchID,
+                title: "Update file",
+                summary: "Patch proposal",
+                path: "Sources/App.swift",
+                stats: "+2 -1",
+                sessionID: session.id
+            )
+        ]
+
+        let response = AgentMobileGatewayCommandRouter.handle(
+            AgentMobileGatewayEnvelope(id: "cmd-5", type: "session.list"),
+            controller: controller,
+            now: fixedDate
+        )
+
+        guard case .array(let tools)? = response.payload["pending_tools"],
+              case .object(let tool)? = tools.first else {
+            Issue.record("pending_tools payload missing")
+            return
+        }
+        #expect(tool["id"]?.stringValue == "tool-1")
+        #expect(tool["session_id"]?.stringValue == session.id.uuidString)
+
+        guard case .array(let patches)? = response.payload["patch_proposals"],
+              case .object(let patch)? = patches.first else {
+            Issue.record("patch_proposals payload missing")
+            return
+        }
+        #expect(patch["id"]?.stringValue == patchID.uuidString)
+        #expect(patch["path"]?.stringValue == "Sources/App.swift")
+    }
+
+    @Test @MainActor
+    func toolDecideRoutesApprovalToController() {
+        let session = AgentSession(title: "Tool approval")
+        let controller = FakeMobileGatewayController(sessions: [session], activeSessionID: session.id)
+        let response = AgentMobileGatewayCommandRouter.handle(
+            AgentMobileGatewayEnvelope(
+                id: "cmd-6",
+                type: "tool.decide",
+                sessionID: session.id.uuidString,
+                payload: [
+                    "id": .string("tool-1"),
+                    "decision": .string("approve")
+                ]
+            ),
+            controller: controller,
+            now: fixedDate
+        )
+
+        #expect(response.type == "ack")
+        #expect(response.payload["type"]?.stringValue == "tool.decide")
+        #expect(controller.toolDecisions == [
+            FakeMobileGatewayController.ToolDecision(
+                sessionID: session.id,
+                toolID: "tool-1",
+                approved: true,
+                typedConfirmation: nil,
+                answer: nil
+            )
+        ])
+    }
+
+    @Test @MainActor
+    func toolDecideRejectsInvalidDecision() {
+        let session = AgentSession(title: "Tool approval")
+        let controller = FakeMobileGatewayController(sessions: [session], activeSessionID: session.id)
+        let response = AgentMobileGatewayCommandRouter.handle(
+            AgentMobileGatewayEnvelope(
+                id: "cmd-7",
+                type: "tool.decide",
+                sessionID: session.id.uuidString,
+                payload: [
+                    "id": .string("tool-1"),
+                    "decision": .string("maybe")
+                ]
+            ),
+            controller: controller,
+            now: fixedDate
+        )
+
+        #expect(response.type == "command.error")
+        #expect(response.payload["message"]?.stringValue == "Decision must be approve or reject.")
+        #expect(controller.toolDecisions.isEmpty)
+    }
+
+    @Test @MainActor
+    func patchDecideRoutesDecisionToController() {
+        let session = AgentSession(title: "Patch approval")
+        let patchID = UUID()
+        let controller = FakeMobileGatewayController(sessions: [session], activeSessionID: session.id)
+        let response = AgentMobileGatewayCommandRouter.handle(
+            AgentMobileGatewayEnvelope(
+                id: "cmd-8",
+                type: "patch.decide",
+                sessionID: session.id.uuidString,
+                payload: [
+                    "patch_id": .string(patchID.uuidString),
+                    "approved": .bool(false)
+                ]
+            ),
+            controller: controller,
+            now: fixedDate
+        )
+
+        #expect(response.type == "ack")
+        #expect(controller.patchDecisions == [
+            FakeMobileGatewayController.PatchDecision(sessionID: session.id, patchID: patchID, approved: false)
+        ])
+    }
+
     private var fixedDate: Date {
         DateComponents(
             calendar: Calendar(identifier: .gregorian),
@@ -112,6 +240,24 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
     var selectedSessionIDs: [UUID] = []
     var sentMessages: [SentMessage] = []
     var stoppedSessionIDs: [UUID?] = []
+    var pendingTools: [AgentMobileGatewayToolApprovalSnapshot] = []
+    var pendingPatches: [AgentMobileGatewayPatchSnapshot] = []
+    var toolDecisions: [ToolDecision] = []
+    var patchDecisions: [PatchDecision] = []
+
+    struct ToolDecision: Equatable {
+        var sessionID: UUID?
+        var toolID: String
+        var approved: Bool
+        var typedConfirmation: String?
+        var answer: String?
+    }
+
+    struct PatchDecision: Equatable {
+        var sessionID: UUID?
+        var patchID: UUID
+        var approved: Bool
+    }
 
     init(sessions: [AgentSession], activeSessionID: UUID?) {
         self.sessions = sessions
@@ -120,6 +266,8 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
 
     var mobileGatewaySessions: [AgentSession] { sessions }
     var mobileGatewayActiveSessionID: UUID? { activeSessionID }
+    var mobileGatewayPendingToolApprovals: [AgentMobileGatewayToolApprovalSnapshot] { pendingTools }
+    var mobileGatewayPendingPatchProposals: [AgentMobileGatewayPatchSnapshot] { pendingPatches }
 
     func mobileGatewayRuntimeIsResponding(sessionID: UUID) -> Bool {
         false
@@ -152,6 +300,34 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
 
     func mobileGatewayStopTurn(sessionID: UUID?) throws -> AgentMobileGatewayCommandResult {
         stoppedSessionIDs.append(sessionID)
+        return .ok(sessionID: sessionID ?? activeSessionID)
+    }
+
+    func mobileGatewayDecideTool(
+        sessionID: UUID?,
+        toolID: String,
+        approved: Bool,
+        typedConfirmation: String?,
+        answer: String?
+    ) throws -> AgentMobileGatewayCommandResult {
+        toolDecisions.append(
+            ToolDecision(
+                sessionID: sessionID,
+                toolID: toolID,
+                approved: approved,
+                typedConfirmation: typedConfirmation,
+                answer: answer
+            )
+        )
+        return .ok(sessionID: sessionID ?? activeSessionID)
+    }
+
+    func mobileGatewayDecidePatch(
+        sessionID: UUID?,
+        patchID: UUID,
+        approved: Bool
+    ) throws -> AgentMobileGatewayCommandResult {
+        patchDecisions.append(PatchDecision(sessionID: sessionID, patchID: patchID, approved: approved))
         return .ok(sessionID: sessionID ?? activeSessionID)
     }
 }

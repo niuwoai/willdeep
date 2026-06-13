@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-06-14 | Target version: v1.69.0-rc1
+> Last updated: 2026-06-14 | Target version: v1.70.0-rc1
 
 ## Summary
 
@@ -34,6 +34,7 @@ The Swift macOS app connects to the gateway as the desktop peer using the deskto
 - revoke devices;
 - receive mobile commands;
 - publish desktop events such as session snapshots, message deltas, tool states, patch proposals, and worktree updates.
+- consume mobile approval decisions and route them back through the existing macOS tool / patch approval machinery.
 
 The current Swift bridge supports the first command set needed for phone-to-Mac task dispatch:
 
@@ -59,8 +60,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.69.0-rc1`
-- `X-Server-Version: 1.69.0-rc1`
+- `X-App-Version: 1.70.0-rc1`
+- `X-Server-Version: 1.70.0-rc1`
 
 ### `GET /mobile/health`
 
@@ -72,7 +73,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.69.0-rc1",
+    "version": "1.70.0-rc1",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
@@ -248,6 +249,14 @@ Gateway behavior:
 - The forwarded payload includes `_device_id`.
 
 The desktop app remains responsible for the actual command result and subsequent state events.
+
+Current desktop bridge behavior:
+
+- `state.snapshot` includes session summaries plus pending tool approvals and patch proposals.
+- `publishSnapshot()` also emits `tool.pending` and `patch.upsert` envelopes for currently blocked work.
+- `tool.decide` resolves `.pendingApproval` tool calls through the same runtime continuation as the Mac UI.
+- `.awaitingConfirm` danger-tier tool calls still require `payload.typed_confirmation == "confirm"`; a mobile approve without that field returns `command.error`.
+- `patch.decide` selects the target session and calls the existing patch apply/reject entry points.
 
 ## Security Requirements
 
