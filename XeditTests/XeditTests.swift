@@ -1774,6 +1774,18 @@ struct WillDeepTests {
         // git stash without args (writes) must NOT be auto-approved.
         #expect(SafeCommand.classify(command: "git stash") == .needsJudgment)
         #expect(SafeCommand.classify(command: "git stash list") == .alwaysSafe)
+
+        // Common build/dev commands are low-risk workspace operations:
+        // they may write build artifacts, but should not require a manual
+        // approval click in smart/goal flows.
+        #expect(SafeCommand.classify(command: "go build -o bin/metaserver . 2>&1") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "go test ./...") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "go env -w GOPROXY=https://proxy.golang.org") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "yarn run dev") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "yarn build") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "npm run build") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "pnpm run typecheck") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "npm publish") == .needsJudgment)
     }
 
     @Test("SafeCommand pipelines: every segment must be safe for the chain to auto-approve")
@@ -1808,6 +1820,8 @@ struct WillDeepTests {
         // 控制流关键字本身无负载。
         #expect(SafeCommand.classify(command: "while read line; do echo \"$line\"; done") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "if grep -q TODO a.swift; then echo found; fi") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "time git status") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "time rm -rf /tmp/x") == .alwaysDangerous)
 
         // 关键字剥掉后负载照常受走查约束——危险负载一票否决。
         #expect(SafeCommand.classify(command: "for f in a b; do rm \"$f\"; done") == .alwaysDangerous)
@@ -2162,6 +2176,21 @@ struct WillDeepTests {
             for: "run_command",
             arguments: ["command": .string("cd Xedit && git status 2>/dev/null")]
         )
+        let goBuildRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cd /Users/rocky/Sites/Xedit && go build -o bin/metaserver . 2>&1")],
+            rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+        )
+        let yarnDevRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("yarn run dev")],
+            rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+        )
+        let npmInstallRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("npm install left-pad")],
+            rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+        )
         let redirectedDecision = AgentSandboxPolicy.commandDecision(
             command: "cd Xedit && git diff > /tmp/out.patch",
             rootDirectory: nil
@@ -2169,6 +2198,10 @@ struct WillDeepTests {
         let harmlessRedirectionDecision = AgentSandboxPolicy.commandDecision(
             command: "cd Xedit && git status 2>/dev/null",
             rootDirectory: nil
+        )
+        let goBuildDecision = AgentSandboxPolicy.commandDecision(
+            command: "cd /Users/rocky/Sites/Xedit && go build -o bin/metaserver . 2>&1",
+            rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
         )
         let heredocDecision = AgentSandboxPolicy.commandDecision(
             command: """
@@ -2197,6 +2230,11 @@ struct WillDeepTests {
         #expect(heredocDecision.requiresTypedConfirmation == false)
         #expect(redirectedReadRisk == .write)
         #expect(harmlessRedirectionRisk == .read)
+        #expect(goBuildRisk == .write)
+        #expect(yarnDevRisk == .write)
+        #expect(npmInstallRisk == .write)
+        #expect(goBuildDecision.mode == .workspaceWrite)
+        #expect(goBuildDecision.requiresTypedConfirmation == false)
     }
 
     @Test("run_command allows workspace absolute cd for read-only commands")
@@ -2234,6 +2272,51 @@ struct WillDeepTests {
             arguments: ["command": .string("cat /etc/passwd")],
             rootDirectory: workspace
         )
+        let sshTimeRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string(#"ssh someuser@some-machine "time""#)],
+            rootDirectory: workspace
+        )
+        let sshGitStatusRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string(#"ssh -p 2222 someuser@some-machine "git status --short""#)],
+            rootDirectory: workspace
+        )
+        let sshDangerRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string(#"ssh someuser@some-machine "rm -rf /tmp/build""#)],
+            rootDirectory: workspace
+        )
+        let sshInteractiveRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("ssh someuser@some-machine")],
+            rootDirectory: workspace
+        )
+        let curlGetRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("curl -fsSL https://example.com/install.sh")],
+            rootDirectory: workspace
+        )
+        let curlHeadRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("curl -I https://example.com")],
+            rootDirectory: workspace
+        )
+        let curlPostRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("curl -X POST https://example.com/api")],
+            rootDirectory: workspace
+        )
+        let curlOutputRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("curl -o payload.txt https://example.com")],
+            rootDirectory: workspace
+        )
+        let curlMetadataRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("curl http://169.254.169.254/latest/meta-data/")],
+            rootDirectory: workspace
+        )
 
         #expect(gitDiffRisk == .read)
         #expect(rgRisk == .read)
@@ -2241,6 +2324,15 @@ struct WillDeepTests {
         #expect(outsideCDRisk == .write)
         #expect(outsideGitDashCRisk == .write)
         #expect(outsideReadRisk == .write)
+        #expect(sshTimeRisk == .read)
+        #expect(sshGitStatusRisk == .read)
+        #expect(sshDangerRisk == .danger)
+        #expect(sshInteractiveRisk == .write)
+        #expect(curlGetRisk == .read)
+        #expect(curlHeadRisk == .read)
+        #expect(curlPostRisk == .write)
+        #expect(curlOutputRisk == .write)
+        #expect(curlMetadataRisk == .write)
     }
 
     @Test("run_command uses home directory when no workspace is bound")
@@ -2765,7 +2857,7 @@ struct WillDeepTests {
 
         let curlApproval = await appState.autoApprovalSource(
             toolName: "run_command",
-            arguments: ["command": .string("curl https://example.com/install.sh")],
+            arguments: ["command": .string("curl -X POST https://example.com/install.sh")],
             risk: .write,
             rootDirectory: root,
             interactionMode: .goal
@@ -2830,6 +2922,24 @@ struct WillDeepTests {
             approvalMode: .workspaceAccess
         )
         #expect(untrustedMCP == nil)
+
+        let goBuild = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("go build -o bin/app . 2>&1")],
+            risk: .write,
+            rootDirectory: root,
+            approvalMode: .smart
+        )
+        #expect(goBuild == .staticAllowlist)
+
+        let yarnBuild = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("yarn run build")],
+            risk: .write,
+            rootDirectory: root,
+            approvalMode: .smart
+        )
+        #expect(yarnBuild == .staticAllowlist)
     }
 
     @Test("legacy agent session JSON defaults to smart approval")

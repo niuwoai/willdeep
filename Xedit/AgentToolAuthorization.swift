@@ -223,12 +223,28 @@ enum AgentSandboxPolicy {
                 needsEscalation = true
                 needsConfirmation = true
                 reasons.append("Destructive or privilege-changing command `\(head)` requires typed confirmation.")
-            } else if networkHeads.contains(head) || credentialHeads.contains(head) {
+            } else if networkHeads.contains(head) {
+                switch classifyNetworkReadOnly(head: head, tokens: tokens) {
+                case .alwaysSafe:
+                    break
+                case .alwaysDangerous:
+                    needsEscalation = true
+                    needsConfirmation = true
+                    reasons.append("Command `\(head)` runs a dangerous remote or network operation.")
+                case .needsJudgment:
+                    needsEscalation = true
+                    reasons.append("Command `\(head)` may use network, credentials, or macOS keychain access.")
+                }
+            } else if credentialHeads.contains(head) {
                 needsEscalation = true
                 reasons.append("Command `\(head)` may use network, credentials, or macOS keychain access.")
             } else {
                 switch SafeCommand.classify(command: segment) {
                 case .alwaysSafe:
+                    if workspaceWriteHeads.contains(head) {
+                        needsWorkspaceWrite = true
+                        reasons.append("Command `\(head)` is a low-risk workspace build or development operation.")
+                    }
                     break
                 case .alwaysDangerous:
                     if hasRedirection {
@@ -461,6 +477,145 @@ enum AgentSandboxPolicy {
             return args.contains("-f") || args.contains("-fd") || args.contains("-xdf")
         }
         return false
+    }
+
+    nonisolated private static func classifyNetworkReadOnly(head: String, tokens: [String]) -> CommandSafety {
+        switch head {
+        case "curl":
+            return isReadOnlyCurl(tokens) ? .alwaysSafe : .needsJudgment
+        case "ssh":
+            return classifySSHRemoteCommand(tokens)
+        default:
+            return .needsJudgment
+        }
+    }
+
+    nonisolated private static func isReadOnlyCurl(_ tokens: [String]) -> Bool {
+        guard tokens.first?.lowercased() == "curl" else { return false }
+        var requestMethod = "GET"
+        var sawPublicURL = false
+        var index = 1
+        let safeNoArgumentLongFlags: Set<String> = [
+            "--fail", "--fail-with-body", "--silent", "--show-error", "--verbose",
+            "--location", "--location-trusted", "--head", "--include",
+            "--compressed", "--http1.1", "--http2", "--http3", "--ipv4", "--ipv6",
+            "--insecure", "--no-progress-meter"
+        ]
+        let safeArgumentLongFlags: Set<String> = [
+            "--connect-timeout", "--max-time", "--retry", "--retry-delay",
+            "--retry-max-time", "--user-agent", "--referer", "--url",
+            "--cacert", "--capath", "--resolve", "--connect-to"
+        ]
+        let unsafeLongFlagPrefixes = [
+            "--data", "--form", "--upload-file", "--output", "--remote-name",
+            "--dump-header", "--cookie-jar", "--config", "--netrc", "--user",
+            "--proxy-user", "--oauth2-bearer", "--aws-sigv4", "--request-target"
+        ]
+
+        while index < tokens.count {
+            let token = tokens[index]
+            let lower = token.lowercased()
+            if lower == "--" {
+                index += 1
+                continue
+            }
+            if lower == "-x" || lower == "--request" {
+                guard index + 1 < tokens.count else { return false }
+                requestMethod = tokens[index + 1].uppercased()
+                index += 2
+                continue
+            }
+            if lower.hasPrefix("-x") && lower.count > 2 {
+                requestMethod = String(token.dropFirst(2)).uppercased()
+                index += 1
+                continue
+            }
+            if lower.hasPrefix("--request=") {
+                requestMethod = String(token.dropFirst("--request=".count)).uppercased()
+                index += 1
+                continue
+            }
+            if unsafeLongFlagPrefixes.contains(where: { lower == $0 || lower.hasPrefix($0 + "=") }) {
+                return false
+            }
+            if safeNoArgumentLongFlags.contains(lower) {
+                if lower == "--head" { requestMethod = "HEAD" }
+                index += 1
+                continue
+            }
+            if safeArgumentLongFlags.contains(lower) {
+                guard index + 1 < tokens.count else { return false }
+                if lower == "--url" {
+                    sawPublicURL = sawPublicURL || AgentWebTools.validatedPublicURL(tokens[index + 1]) != nil
+                }
+                index += 2
+                continue
+            }
+            if let flagName = lower.split(separator: "=", maxSplits: 1).first,
+               safeArgumentLongFlags.contains(String(flagName)) {
+                if flagName == "--url" {
+                    let rawURL = String(lower.dropFirst("--url=".count))
+                    sawPublicURL = sawPublicURL || AgentWebTools.validatedPublicURL(rawURL) != nil
+                }
+                index += 1
+                continue
+            }
+            if lower.hasPrefix("-") {
+                if lower.contains("o") || lower.contains("O") ||
+                    lower.contains("d") || lower.contains("F") ||
+                    lower.contains("T") || lower.contains("u") {
+                    return false
+                }
+                let safeShortFlags = Set("slivkf")
+                guard lower.dropFirst().allSatisfy({ safeShortFlags.contains($0) }) else {
+                    return false
+                }
+                if lower.contains("I") { requestMethod = "HEAD" }
+                index += 1
+                continue
+            }
+            sawPublicURL = sawPublicURL || AgentWebTools.validatedPublicURL(token) != nil
+            index += 1
+        }
+
+        return sawPublicURL && (requestMethod == "GET" || requestMethod == "HEAD")
+    }
+
+    nonisolated private static func classifySSHRemoteCommand(_ tokens: [String]) -> CommandSafety {
+        guard tokens.first?.lowercased() == "ssh" else { return .needsJudgment }
+        guard let hostIndex = sshHostIndex(tokens) else { return .needsJudgment }
+        let remoteCommandTokens = tokens.dropFirst(hostIndex + 1)
+        guard !remoteCommandTokens.isEmpty else { return .needsJudgment }
+        return SafeCommand.classify(command: remoteCommandTokens.joined(separator: " "))
+    }
+
+    nonisolated private static func sshHostIndex(_ tokens: [String]) -> Int? {
+        var index = 1
+        let optionsWithArgument: Set<String> = [
+            "-b", "-c", "-D", "-E", "-e", "-F", "-i", "-J", "-L", "-l", "-m",
+            "-O", "-o", "-p", "-Q", "-R", "-S", "-W", "-w"
+        ]
+        while index < tokens.count {
+            let token = tokens[index]
+            if token == "--" {
+                index += 1
+                continue
+            }
+            if optionsWithArgument.contains(token) {
+                index += 2
+                continue
+            }
+            if token.hasPrefix("-o") && token.count > 2 {
+                index += 1
+                continue
+            }
+            if token.hasPrefix("-") {
+                index += 1
+                continue
+            }
+            return index
+        }
+        return nil
     }
 
     nonisolated private static func gitSubcommandIndex(tokens: [String]) -> Int? {
@@ -790,6 +945,10 @@ enum AgentCommandAuthorization {
                 continue
             }
             if "|&;".contains(character) {
+                if character == "&", current.last == ">" {
+                    current.append(character)
+                    continue
+                }
                 return nil
             }
             current.append(character)

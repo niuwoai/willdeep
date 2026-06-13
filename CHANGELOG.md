@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.65.0-rc4 - 2026-06-13
+
+### Fixed
+
+- `go build` / `go test` 等常见 Go 构建测试命令现在作为低风险 workspace-write 操作自动放行；`go env -w` 等会改全局配置的命令仍需审批。
+- `yarn/npm/pnpm run dev/build/test/lint/typecheck` 等常见前端脚本现在作为低风险 workspace-write 操作自动放行；`npm publish`、安装依赖和未知脚本仍需审批。
+- 修复 `2>&1` 中的 `&` 被 shell tokenizer 误判为复杂控制符，导致 `go build ... 2>&1` 进入 typed confirmation 的问题。
+
+### Tests
+
+- 新增 Go 构建、前端脚本、`2>&1` 解析与静态自动审批的回归覆盖。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.65.0-rc4`。
+
+## 1.65.0-rc3 - 2026-06-13
+
+### Fixed
+
+- `ssh user@host "只读命令"` 现在会按远端命令内容重新分级；例如 `ssh host "time"`、`ssh host "git status"` 可降为 read 风险，远端 `rm` 等危险命令仍进入 typed confirmation。
+- `curl` 的普通公网 GET/HEAD 请求可降为 read 风险；`POST`、`--data`、上传、输出到文件、凭据参数和私网/metadata URL 仍保留审批。
+
+### Tests
+
+- 新增 ssh 远端只读/危险命令、curl GET/HEAD/POST/输出文件/metadata URL 的风险分级回归覆盖。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.65.0-rc3`。
+
 ## 1.65.0-rc2 - 2026-06-13
 
 ### Fixed
