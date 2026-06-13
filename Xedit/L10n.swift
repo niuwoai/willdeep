@@ -632,6 +632,7 @@ enum L10n {
         static let tabWorkspace = String(localized: "settings.tab.workspace", defaultValue: "Workspace")
         static let tabAgent = String(localized: "settings.tab.agent", defaultValue: "AI Providers")
         static let tabMemory = String(localized: "settings.tab.memory", defaultValue: "Memory")
+        static let tabRules = String(localized: "settings.tab.rules", defaultValue: "Rules")
         static let tabSkills = String(localized: "settings.tab.skills", defaultValue: "Skills")
         static let tabMcp = String(localized: "settings.tab.mcp", defaultValue: "MCP")
         static let tabTools = String(localized: "settings.tab.tools", defaultValue: "Tools")
@@ -1132,6 +1133,33 @@ enum L10n {
             static let exportPanelTitle = String(localized: "settings.memory.export-panel-title", defaultValue: "Export Memory Snapshot")
             static func exportedTo(_ a1: String) -> String {
                 let template = String(localized: "settings.memory.exported-to", defaultValue: "Exported to %@.")
+                return String(format: template, a1)
+            }
+        }
+
+        enum GlobalRules {
+            static let fileSection = String(localized: "settings.global-rules.file-section", defaultValue: "Global Rules File")
+            static let enableToggle = String(localized: "settings.global-rules.enable", defaultValue: "Enable global rules")
+            static let filePathLabel = String(localized: "settings.global-rules.file-path", defaultValue: "File")
+            static let reloadButton = String(localized: "settings.global-rules.reload", defaultValue: "Reload")
+            static let description = String(localized: "settings.global-rules.description", defaultValue: "WillDeep reads this Markdown file before every Agent turn. The default is ~/.willdeep/CLAUDE.md, but you can point it at any personal rules file.")
+            static let editorSection = String(localized: "settings.global-rules.editor-section", defaultValue: "Rules Content")
+            static let precedenceNote = String(localized: "settings.global-rules.precedence-note", defaultValue: "Global rules apply across workspaces. Repository AGENTS.md or CLAUDE.md files are still included as project-specific instructions.")
+            static let choosePanelTitle = String(localized: "settings.global-rules.choose-title", defaultValue: "Choose Global Rules File")
+            static func loadedStatus(_ a1: String) -> String {
+                let template = String(localized: "settings.global-rules.loaded-status", defaultValue: "Loaded %@.")
+                return String(format: template, a1)
+            }
+            static func noFileStatus(_ a1: String) -> String {
+                let template = String(localized: "settings.global-rules.no-file-status", defaultValue: "No rules file yet at %@. Save to create it.")
+                return String(format: template, a1)
+            }
+            static func savedStatus(_ a1: String) -> String {
+                let template = String(localized: "settings.global-rules.saved-status", defaultValue: "Saved %@.")
+                return String(format: template, a1)
+            }
+            static func saveFailed(_ a1: String) -> String {
+                let template = String(localized: "settings.global-rules.save-failed", defaultValue: "Save failed: %@")
                 return String(format: template, a1)
             }
         }

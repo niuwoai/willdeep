@@ -90,6 +90,11 @@ struct EditorSettingsView: View {
                     Label(L10n.Settings.tabMemory, systemImage: "brain.head.profile")
                 }
 
+            AgentGlobalRulesSettingsView()
+                .tabItem {
+                    Label(L10n.Settings.tabRules, systemImage: "doc.text.magnifyingglass")
+                }
+
             AgentSkillSettingsView()
                 .tabItem {
                     Label(L10n.Settings.tabSkills, systemImage: "wand.and.stars")

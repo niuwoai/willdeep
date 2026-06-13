@@ -195,6 +195,18 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "cline_cli",
+            description: "Delegate a complex coding task to the locally installed Cline CLI (`cline`). Cline can inspect and edit the workspace, run shell commands, and work multi-step; use it for self-contained implementation tasks. Requires user approval. Use `permission_mode: \"plan\"` for plan mode. The prompt must be fully self-contained: Cline sees the workspace files but not this conversation.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "prompt", type: .string, description: "Self-contained task description. Include relevant file paths, acceptance criteria, and constraints — the delegated Cline CLI session cannot ask follow-up questions here.", required: true),
+                AgentToolParameter(name: "permission_mode", type: .string, description: "One of `plan` (Cline plan mode), `act`, or `default` (alias for act). Defaults to act.", required: false),
+                AgentToolParameter(name: "model", type: .string, description: "Optional Cline model id forwarded with `--model`.", required: false),
+                AgentToolParameter(name: "run_in_background", type: .boolean, description: "Defaults to true: returns a job handle (job_xxxxxx) and the result arrives as a background-task notification; inspect progress with get_job_output. Set false only for quick questions (120s foreground ceiling).", required: false),
+                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Hard timeout. Background default 1800 (max 21600); foreground capped at 120.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "spawn_agent",
             description: "Spawn a read-only subagent to work on a self-contained task (codebase exploration, research, summarizing many files) and return its findings. The subagent runs its own tool loop against the same workspace but can only read — search/grep/read/list plus read-only shell commands; it cannot write files, ask the user, or spawn further agents. Use it to keep large exploration out of your own context. The prompt must be self-contained: the subagent does not see this conversation.",
             risk: .read,

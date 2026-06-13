@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.65.0-rc2 - 2026-06-13
+
+### Fixed
+
+- heredoc 生成代码文件不再被归为 typed confirmation 危险操作；heredoc 正文会从 shell 风险扫描中剥离，头部重定向仍按 workspace write 审批/沙箱处理。
+- Goal 模式下通过公共 URL 校验的 `web_fetch` 网络读取会自动放行；`curl`、`ssh`、凭据访问和破坏性 shell 形态仍保留审批/确认边界。
+
+### Tests
+
+- 新增 heredoc 写文件风险分级回归测试，覆盖正文中包含 `$(` 字样时仍只按写入处理。
+- 新增 Goal 模式网络读取自动放行测试，并确认任意 `curl` shell 命令不会被 Goal 模式误放行。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.65.0-rc2`。
+
+## 1.65.0-rc1 - 2026-06-13
+
+### Added
+
+- 本地 Agent 委派工具新增 `cline_cli`，支持调用本机 Cline CLI 的一次性 headless 任务，默认后台运行并复用 WillDeep 的审批、沙箱、后台作业和日志链路。
+- Settings → Local Agents 新增 Cline CLI 发现项，扫描常见安装路径与 PATH，并标记为可直接委派的 Agent 工具。
+
+### Tests
+
+- 补充 Cline CLI 工具注册、命令行拼接、可执行文件发现、Always Allow 签名和子 agent 禁用面的回归覆盖。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.65.0-rc1`。
+
 ## 1.64.0-rc4 - 2026-06-13
 
 ### Fixed

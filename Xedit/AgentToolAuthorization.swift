@@ -123,7 +123,7 @@ enum AgentSandboxPolicy {
                 reason: "Network access to an arbitrary URL requires approval.",
                 prefixRule: nil
             )
-        case "call_mcp_tool", "claude_code", "codex_cli", "cursor_agent", "kill_job":
+        case "call_mcp_tool", "claude_code", "codex_cli", "cursor_agent", "cline_cli", "kill_job":
             return AgentSandboxDecision(
                 mode: .workspaceWrite,
                 requiresUserApproval: true,
@@ -154,7 +154,8 @@ enum AgentSandboxPolicy {
             )
         }
 
-        if containsUnsafeShellExpansion(trimmed) {
+        let policyCommand = commandWithHeredocBodiesRemoved(trimmed)
+        if containsUnsafeShellExpansion(policyCommand) {
             return AgentSandboxDecision(
                 mode: .escalated,
                 requiresUserApproval: true,
@@ -163,9 +164,9 @@ enum AgentSandboxPolicy {
                 prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed)
             )
         }
-        let hasRedirection = containsRedirection(trimmed)
+        let hasRedirection = containsRedirection(policyCommand)
 
-        guard let segments = splitCommandSegments(trimmed), !segments.isEmpty else {
+        guard let segments = splitCommandSegments(policyCommand), !segments.isEmpty else {
             return AgentSandboxDecision(
                 mode: .escalated,
                 requiresUserApproval: true,
@@ -385,7 +386,48 @@ enum AgentSandboxPolicy {
 
     nonisolated private static func containsUnsafeShellExpansion(_ command: String) -> Bool {
         command.contains("$(") || command.contains("`") || command.contains("<(")
-            || command.contains("<<")
+    }
+
+    nonisolated private static func commandWithHeredocBodiesRemoved(_ command: String) -> String {
+        guard command.contains("<<") else { return command }
+        var keptLines: [String] = []
+        var pendingDelimiter: String?
+
+        for line in command.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+            if let delimiter = pendingDelimiter {
+                if line.trimmingCharacters(in: .whitespacesAndNewlines) == delimiter {
+                    pendingDelimiter = nil
+                }
+                continue
+            }
+            keptLines.append(line)
+            if let delimiter = heredocDelimiter(in: line) {
+                pendingDelimiter = delimiter
+            }
+        }
+
+        return keptLines.joined(separator: "\n")
+    }
+
+    nonisolated private static func heredocDelimiter(in line: String) -> String? {
+        guard let marker = line.range(of: "<<") else { return nil }
+        var tail = String(line[marker.upperBound...])
+        if tail.first == "-" {
+            tail.removeFirst()
+        }
+        tail = tail.trimmingCharacters(in: .whitespaces)
+        guard let first = tail.first else { return nil }
+        if first == "'" || first == "\"" {
+            let quote = first
+            let body = tail.dropFirst()
+            guard let end = body.firstIndex(of: quote) else { return nil }
+            let delimiter = String(body[..<end])
+            return delimiter.isEmpty ? nil : delimiter
+        }
+        let stopCharacters = CharacterSet.whitespaces.union(CharacterSet(charactersIn: "|&;<>"))
+        let delimiter = tail.unicodeScalars.prefix { !stopCharacters.contains($0) }
+        let value = String(String.UnicodeScalarView(delimiter))
+        return value.isEmpty ? nil : value
     }
 
     nonisolated private static func containsRedirection(_ command: String) -> Bool {
@@ -807,6 +849,10 @@ enum AgentToolAuthorization {
             let mode = arguments["permission_mode"]?.stringValue()?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? "default"
             return "cursor_agent:\(mode)"
+        case "cline_cli":
+            let mode = arguments["permission_mode"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? "act"
+            return "cline_cli:\(mode == "default" ? "act" : mode)"
         case "web_fetch":
             // Scope by host: pinning means "I trust this domain", not
             // "exactly this URL". Path/query stay out of the signature.

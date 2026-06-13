@@ -1060,6 +1060,10 @@ struct AgentToolCallGroup: View {
             RoundedRectangle(cornerRadius: 6)
                 .stroke(groupBorderColor, lineWidth: 1)
         )
+        // The expanded card paints padding above its title row. Give that
+        // expanded chrome its own external breathing room so it never
+        // visually climbs into the previous assistant bubble.
+        .padding(.top, detailsVisible ? 8 : 0)
     }
 
     private var detailsVisible: Bool {

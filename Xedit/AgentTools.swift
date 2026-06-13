@@ -402,6 +402,8 @@ enum AgentToolRunner {
             return try await codexCLI(arguments: arguments, context: context)
         case "cursor_agent":
             return try await cursorAgent(arguments: arguments, context: context)
+        case "cline_cli":
+            return try await clineCLI(arguments: arguments, context: context)
         case "list_jobs":
             return try await listJobs(arguments: arguments, context: context)
         case "get_job_output":
@@ -1143,10 +1145,11 @@ enum AgentToolRunner {
         return try await runCommand(arguments: forwarded, context: context)
     }
 
-    // MARK: codex_cli / cursor_agent
+    // MARK: codex_cli / cursor_agent / cline_cli
 
     nonisolated static let codexCLIPermissionModes: Set<String> = ["plan", "workspaceWrite", "default"]
     nonisolated static let cursorAgentPermissionModes: Set<String> = ["plan", "ask", "default"]
+    nonisolated static let clineCLIPermissionModes: Set<String> = ["plan", "act", "default"]
 
     nonisolated static func codexCLIExecutablePath(
         environment: [String: String] = shellEnvironment(),
@@ -1165,6 +1168,15 @@ enum AgentToolRunner {
         executablePath(commandName: "cursor", preferredPaths: [
             "/usr/local/bin/cursor",
             "/opt/homebrew/bin/cursor",
+        ], environment: environment, isExecutable: isExecutable)
+    }
+
+    nonisolated static func clineCLIExecutablePath(
+        environment: [String: String] = shellEnvironment(),
+        isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
+    ) -> String? {
+        executablePath(commandName: "cline", preferredPaths: [
+            "\(NSHomeDirectory())/.local/bin/cline",
         ], environment: environment, isExecutable: isExecutable)
     }
 
@@ -1249,6 +1261,30 @@ enum AgentToolRunner {
         return parts.joined(separator: " ")
     }
 
+    nonisolated static func clineCLICommandLine(
+        executable: String,
+        prompt: String,
+        permissionMode: String,
+        model: String?,
+        workspacePath: String?
+    ) -> String {
+        var parts = [
+            shellQuoted(executable),
+            "--json",
+        ]
+        if permissionMode == "plan" {
+            parts.append("--plan")
+        }
+        if let workspacePath, !workspacePath.isEmpty {
+            parts += ["--cwd", shellQuoted(workspacePath)]
+        }
+        if let model, !model.isEmpty {
+            parts += ["--model", shellQuoted(model)]
+        }
+        parts.append(shellQuoted(prompt))
+        return parts.joined(separator: " ")
+    }
+
     private static func codexCLI(
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
@@ -1309,6 +1345,40 @@ enum AgentToolRunner {
             executable: executable,
             prompt: prompt,
             permissionMode: permissionMode,
+            model: arguments["model"]?.stringValue(),
+            workspacePath: context.workspaceLocation?.path ?? context.rootDirectory?.standardizedFileURL.path
+        )
+        return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
+    }
+
+    private static func clineCLI(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        let prompt = try delegatedAgentPrompt(arguments: arguments)
+        let permissionMode = arguments["permission_mode"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "act"
+        guard clineCLIPermissionModes.contains(permissionMode) else {
+            throw AgentToolError.invalidArgument(
+                "permission_mode must be one of: \(clineCLIPermissionModes.sorted().joined(separator: ", "))"
+            )
+        }
+        let executable: String
+        if context.remoteBackend != nil {
+            executable = "cline"
+        } else if let localExecutable = clineCLIExecutablePath() {
+            executable = localExecutable
+        } else {
+            throw AgentToolError.commandFailed(
+                127,
+                "Cline CLI not found on this Mac. Install it first with `npm install -g cline`, then retry. Tell the user instead of retrying blindly."
+            )
+        }
+        let normalizedMode = permissionMode == "default" ? "act" : permissionMode
+        let command = clineCLICommandLine(
+            executable: executable,
+            prompt: prompt,
+            permissionMode: normalizedMode,
             model: arguments["model"]?.stringValue(),
             workspacePath: context.workspaceLocation?.path ?? context.rootDirectory?.standardizedFileURL.path
         )

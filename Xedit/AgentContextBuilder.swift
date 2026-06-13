@@ -22,7 +22,8 @@ enum AgentContextBuilder {
         interactionMode: AgentInteractionMode = .normal,
         approvalMode: AgentApprovalMode = .smart,
         currentPlan: AgentPlan? = nil,
-        currentGoal: AgentGoal? = nil
+        currentGoal: AgentGoal? = nil,
+        globalRules: String? = AgentGlobalRulesStore.loadRules()
     ) -> String {
         var sections: [String] = []
         sections.append("""
@@ -144,6 +145,15 @@ enum AgentContextBuilder {
             - Root: \(rootDirectory.path)
             - Name: \(rootDirectory.lastPathComponent)
             """)
+
+            if let rules = globalRules?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !rules.isEmpty {
+                sections.append("""
+                Global user instructions:
+                These instructions apply to every workspace. Project instructions below are more specific and may add stricter requirements.
+                \(rules)
+                """)
+            }
 
             if let rules = projectRules(in: rootDirectory) {
                 sections.append("""

@@ -621,29 +621,22 @@ extension AppState {
     ) async -> AgentToolApprovalSource? {
         guard risk == .write else { return nil }
 
-        if approvalMode == .requestEveryTime {
-            return nil
-        }
-
         let sandboxDecision = AgentSandboxPolicy.decision(
             toolName: toolName,
             arguments: arguments,
             rootDirectory: rootDirectory
         )
-        if sandboxDecision.mode == .escalated {
-            if isAgentToolCallAlwaysAllowed(toolName: toolName, arguments: arguments, risk: risk) {
-                return .alwaysAllowList
-            }
-            return nil
-        }
-
         // 0. Goal mode: the whole point is running to the goal without
         //    babysitting, so write-tier calls auto-approve. Two things
         //    deliberately stay out of this fast path: danger-tier calls
         //    never reach this function (risk guard above) and keep their
         //    explicit Confirm gate, and MCP tools on servers the user
         //    marked untrusted still fall through to per-call approval.
-        if interactionMode == .goal {
+        //    Public network reads such as web_fetch are a narrow escalated
+        //    exception: they touch the network, but do not mutate local
+        //    state and still pass the tool's SSRF guard before execution.
+        if interactionMode == .goal,
+           sandboxDecision.mode != .escalated || goalModeCanAutoApproveEscalated(toolName: toolName, arguments: arguments) {
             if toolName == "call_mcp_tool" {
                 if let server = arguments["server"]?.stringValue(),
                    AgentMCPSettingsStore.isServerTrusted(name: server) {
@@ -653,6 +646,17 @@ extension AppState {
             } else {
                 return .goalMode
             }
+        }
+
+        if approvalMode == .requestEveryTime {
+            return nil
+        }
+
+        if sandboxDecision.mode == .escalated {
+            if isAgentToolCallAlwaysAllowed(toolName: toolName, arguments: arguments, risk: risk) {
+                return .alwaysAllowList
+            }
+            return nil
         }
 
         if approvalMode == .workspaceAccess,
@@ -749,12 +753,24 @@ extension AppState {
         return safe ? .llmJudge : nil
     }
 
+    private func goalModeCanAutoApproveEscalated(
+        toolName: String,
+        arguments: [String: AgentJSONValue]
+    ) -> Bool {
+        switch toolName {
+        case "web_fetch":
+            return arguments["url"]?.stringValue().flatMap(AgentWebTools.validatedPublicURL(_:)) != nil
+        default:
+            return false
+        }
+    }
+
     private func workspaceAccessCanAutoApprove(
         toolName: String,
         arguments: [String: AgentJSONValue]
     ) -> Bool {
         switch toolName {
-        case "run_command", "kill_job", "claude_code", "codex_cli", "cursor_agent", "web_fetch":
+        case "run_command", "kill_job", "claude_code", "codex_cli", "cursor_agent", "cline_cli", "web_fetch":
             return true
         case "call_mcp_tool":
             guard let server = arguments["server"]?.stringValue() else {

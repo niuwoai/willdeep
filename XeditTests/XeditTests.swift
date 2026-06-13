@@ -2170,6 +2170,20 @@ struct WillDeepTests {
             command: "cd Xedit && git status 2>/dev/null",
             rootDirectory: nil
         )
+        let heredocDecision = AgentSandboxPolicy.commandDecision(
+            command: """
+            cat > Sources/App/main.go << 'GOEOF'
+            package main
+
+            import "fmt"
+
+            func main() {
+                fmt.Println("$(literal shell-looking text in generated code)")
+            }
+            GOEOF
+            """,
+            rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-test-workspace")
+        )
 
         #expect(gitDiffRisk == .read)
         #expect(grepRisk == .read)
@@ -2179,6 +2193,8 @@ struct WillDeepTests {
         #expect(redirectedDecision.requiresTypedConfirmation == false)
         #expect(harmlessRedirectionDecision.mode == .readOnly)
         #expect(harmlessRedirectionDecision.requiresTypedConfirmation == false)
+        #expect(heredocDecision.mode == .workspaceWrite)
+        #expect(heredocDecision.requiresTypedConfirmation == false)
         #expect(redirectedReadRisk == .write)
         #expect(harmlessRedirectionRisk == .read)
     }
@@ -2723,7 +2739,8 @@ struct WillDeepTests {
             arguments: ["command": .string("swift build")],
             risk: .write,
             rootDirectory: root,
-            interactionMode: .goal
+            interactionMode: .goal,
+            approvalMode: .requestEveryTime
         )
         #expect(writeApproval == .goalMode)
 
@@ -2736,6 +2753,24 @@ struct WillDeepTests {
             interactionMode: .goal
         )
         #expect(dangerApproval == nil)
+
+        let fetchApproval = await appState.autoApprovalSource(
+            toolName: "web_fetch",
+            arguments: ["url": .string("https://example.com/docs")],
+            risk: .write,
+            rootDirectory: root,
+            interactionMode: .goal
+        )
+        #expect(fetchApproval == .goalMode)
+
+        let curlApproval = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("curl https://example.com/install.sh")],
+            risk: .write,
+            rootDirectory: root,
+            interactionMode: .goal
+        )
+        #expect(curlApproval == nil)
 
         // normal 模式不受影响：没有命中其他自动路径时仍等用户。
         let normalApproval = await appState.autoApprovalSource(
@@ -2879,7 +2914,7 @@ struct WillDeepTests {
         #expect(defaultSignature == "claude_code:acceptEdits")
     }
 
-    @Test("codex_cli and cursor_agent tools are registered as write risk")
+    @Test("codex_cli, cursor_agent, and cline_cli tools are registered as write risk")
     func testExternalAgentToolRegistration() {
         let codex = AgentToolRegistry.descriptor(for: "codex_cli")
         #expect(codex != nil)
@@ -2894,6 +2929,13 @@ struct WillDeepTests {
         #expect(cursor?.parameters.first(where: { $0.name == "prompt" })?.required == true)
         #expect(cursor?.parameters.contains(where: { $0.name == "permission_mode" }) == true)
         #expect(!AgentToolRunner.cursorAgentPermissionModes.contains("yolo"))
+
+        let cline = AgentToolRegistry.descriptor(for: "cline_cli")
+        #expect(cline != nil)
+        #expect(cline?.risk == .write)
+        #expect(cline?.parameters.first(where: { $0.name == "prompt" })?.required == true)
+        #expect(cline?.parameters.contains(where: { $0.name == "permission_mode" }) == true)
+        #expect(!AgentToolRunner.clineCLIPermissionModes.contains("yolo"))
     }
 
     @Test("codex_cli command line uses sandboxed non-interactive exec")
@@ -2956,6 +2998,33 @@ struct WillDeepTests {
         #expect(!write.contains("--model"))
     }
 
+    @Test("cline_cli command line uses json one-shot mode and cwd")
+    func testClineCLICommandLineComposition() {
+        let command = AgentToolRunner.clineCLICommandLine(
+            executable: "/usr/local/bin/cline",
+            prompt: "fix O'Brien parser",
+            permissionMode: "plan",
+            model: "anthropic/claude-sonnet-4-6",
+            workspacePath: "/tmp/Work Dir"
+        )
+        #expect(command.hasPrefix("'/usr/local/bin/cline' --json"))
+        #expect(command.contains("--plan"))
+        #expect(command.contains("--cwd '/tmp/Work Dir'"))
+        #expect(command.contains("--model 'anthropic/claude-sonnet-4-6'"))
+        #expect(command.contains("'fix O'\\''Brien parser'"))
+        #expect(!command.contains("--yolo"))
+
+        let act = AgentToolRunner.clineCLICommandLine(
+            executable: "/x/cline",
+            prompt: "implement",
+            permissionMode: "act",
+            model: nil,
+            workspacePath: nil
+        )
+        #expect(!act.contains("--plan"))
+        #expect(!act.contains("--model"))
+    }
+
     @Test("external agent executable discovery and local catalog expose direct tools")
     func testExternalAgentDiscovery() {
         let codex = AgentToolRunner.codexCLIExecutablePath(
@@ -2970,9 +3039,16 @@ struct WillDeepTests {
         )
         #expect(cursor == "/usr/local/bin/cursor")
 
+        let cline = AgentToolRunner.clineCLIExecutablePath(
+            environment: ["PATH": "/usr/local/bin"],
+            isExecutable: { $0 == "/usr/local/bin/cline" }
+        )
+        #expect(cline == "/usr/local/bin/cline")
+
         let entries = LocalAgentCLI.catalog
         #expect(entries.first(where: { $0.id == "codex-cli" })?.integration == .directTool("codex_cli"))
         #expect(entries.first(where: { $0.id == "cursor-cli" })?.integration == .directTool("cursor_agent"))
+        #expect(entries.first(where: { $0.id == "cline-cli" })?.integration == .directTool("cline_cli"))
     }
 
     @Test("external agent always-allow signatures are scoped by permission mode")
@@ -2993,6 +3069,14 @@ struct WillDeepTests {
             toolName: "cursor_agent",
             arguments: [:]
         ) == "cursor_agent:default")
+        #expect(AgentToolAuthorization.signature(
+            toolName: "cline_cli",
+            arguments: ["permission_mode": .string("plan")]
+        ) == "cline_cli:plan")
+        #expect(AgentToolAuthorization.signature(
+            toolName: "cline_cli",
+            arguments: [:]
+        ) == "cline_cli:act")
     }
 
     @Test("subagent tool surface is read-only and cannot nest or ask")
@@ -3003,6 +3087,7 @@ struct WillDeepTests {
         #expect(!allowed.contains("claude_code"))
         #expect(!allowed.contains("codex_cli"))
         #expect(!allowed.contains("cursor_agent"))
+        #expect(!allowed.contains("cline_cli"))
         #expect(!allowed.contains("ask_user"))
         #expect(!allowed.contains("call_mcp_tool"))
         #expect(!allowed.contains("kill_job"))
