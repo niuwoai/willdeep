@@ -294,6 +294,42 @@ struct AgentMobileGatewayBridgeTests {
         ])
     }
 
+    @Test @MainActor
+    func fileReadReturnsContentInAckPayload() {
+        let session = AgentSession(title: "Files")
+        let controller = FakeMobileGatewayController(sessions: [session], activeSessionID: session.id)
+        controller.files["README.md"] = AgentMobileGatewayFileSnapshot(
+            path: "README.md",
+            content: "# WillDeep\n",
+            truncated: false,
+            byteCount: 11,
+            sessionID: session.id
+        )
+        let response = AgentMobileGatewayCommandRouter.handle(
+            AgentMobileGatewayEnvelope(
+                id: "cmd-10",
+                type: "file.read",
+                sessionID: session.id.uuidString,
+                payload: [
+                    "path": .string("README.md"),
+                    "max_bytes": .int(512)
+                ]
+            ),
+            controller: controller,
+            now: fixedDate
+        )
+
+        #expect(response.type == "ack")
+        #expect(response.sessionID == session.id.uuidString)
+        #expect(response.payload["type"]?.stringValue == "file.read")
+        #expect(response.payload["path"]?.stringValue == "README.md")
+        #expect(response.payload["content"]?.stringValue == "# WillDeep\n")
+        #expect(response.payload["truncated"]?.boolValue == false)
+        #expect(controller.fileReads == [
+            FakeMobileGatewayController.FileRead(sessionID: session.id, path: "README.md", maxBytes: 512)
+        ])
+    }
+
     private var fixedDate: Date {
         DateComponents(
             calendar: Calendar(identifier: .gregorian),
@@ -323,9 +359,11 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
     var pendingPatches: [AgentMobileGatewayPatchSnapshot] = []
     var diffs: [UUID: AgentMobileGatewayDiffSnapshot] = [:]
     var jobs: [AgentMobileGatewayJobSnapshot] = []
+    var files: [String: AgentMobileGatewayFileSnapshot] = [:]
     var toolDecisions: [ToolDecision] = []
     var patchDecisions: [PatchDecision] = []
     var killedJobs: [JobKill] = []
+    var fileReads: [FileRead] = []
 
     struct ToolDecision: Equatable {
         var sessionID: UUID?
@@ -344,6 +382,12 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
     struct JobKill: Equatable {
         var sessionID: UUID?
         var jobID: String
+    }
+
+    struct FileRead: Equatable {
+        var sessionID: UUID?
+        var path: String
+        var maxBytes: Int?
     }
 
     init(sessions: [AgentSession], activeSessionID: UUID?) {
@@ -435,5 +479,17 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
     ) throws -> AgentMobileGatewayCommandResult {
         killedJobs.append(JobKill(sessionID: sessionID, jobID: jobID))
         return .ok(sessionID: sessionID ?? activeSessionID, message: "Job killed")
+    }
+
+    func mobileGatewayReadFile(
+        sessionID: UUID?,
+        path: String,
+        maxBytes: Int?
+    ) throws -> AgentMobileGatewayFileSnapshot {
+        fileReads.append(FileRead(sessionID: sessionID, path: path, maxBytes: maxBytes))
+        guard let file = files[path] else {
+            throw AgentMobileGatewayCommandError.fileNotFound(path)
+        }
+        return file
     }
 }

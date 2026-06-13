@@ -71,6 +71,11 @@ indirect enum AgentMobileGatewayJSON: Codable, Equatable {
         if case .bool(let value) = self { return value }
         return nil
     }
+
+    var intValue: Int? {
+        if case .int(let value) = self { return value }
+        return nil
+    }
 }
 
 struct AgentMobileGatewayEnvelope: Codable, Equatable, Identifiable {
@@ -152,6 +157,14 @@ struct AgentMobileGatewayJobSnapshot: Equatable {
     var sessionID: UUID
 }
 
+struct AgentMobileGatewayFileSnapshot: Equatable {
+    var path: String
+    var content: String
+    var truncated: Bool
+    var byteCount: Int
+    var sessionID: UUID
+}
+
 struct AgentMobileGatewayCommandResult: Equatable {
     var sessionID: UUID?
     var message: String?
@@ -194,11 +207,17 @@ protocol AgentMobileGatewayControlling: AnyObject {
         sessionID: UUID?,
         jobID: String
     ) throws -> AgentMobileGatewayCommandResult
+    func mobileGatewayReadFile(
+        sessionID: UUID?,
+        path: String,
+        maxBytes: Int?
+    ) throws -> AgentMobileGatewayFileSnapshot
 }
 
 enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
     case missingText
     case missingID(String)
+    case missingPath(String)
     case missingAnswer
     case invalidDecision
     case invalidSessionID(String)
@@ -209,6 +228,11 @@ enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
     case invalidPatchID(String)
     case patchNotFound(UUID)
     case jobNotFound(String)
+    case noWorkspace
+    case pathOutsideWorkspace(String)
+    case fileNotFound(String)
+    case notRegularFile(String)
+    case binaryFile(String)
     case unsupportedCommand(String)
 
     var errorDescription: String? {
@@ -217,6 +241,8 @@ enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
             return "message.send requires payload.text."
         case .missingID(let type):
             return "\(type) requires payload.id."
+        case .missingPath(let type):
+            return "\(type) requires payload.path."
         case .missingAnswer:
             return "ask_user decisions require payload.answer."
         case .invalidDecision:
@@ -237,6 +263,16 @@ enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
             return "Patch proposal not found: \(id.uuidString)."
         case .jobNotFound(let id):
             return "Background job not found: \(id)."
+        case .noWorkspace:
+            return "No local workspace is available for this session."
+        case .pathOutsideWorkspace(let path):
+            return "Path is outside the session workspace: \(path)."
+        case .fileNotFound(let path):
+            return "File not found: \(path)."
+        case .notRegularFile(let path):
+            return "Path is not a regular file: \(path)."
+        case .binaryFile(let path):
+            return "Refusing to read binary file: \(path)."
         case .unsupportedCommand(let type):
             return "Unsupported mobile command: \(type)."
         }
@@ -353,6 +389,19 @@ enum AgentMobileGatewayCommandRouter {
                     for: envelope,
                     sessionID: result.sessionID,
                     message: result.message,
+                    now: now
+                )
+            case "file.read":
+                let path = try requiredPayloadPath(from: envelope)
+                let maxBytes = envelope.payload["max_bytes"]?.intValue
+                let file = try controller.mobileGatewayReadFile(
+                    sessionID: try optionalSessionID(from: envelope),
+                    path: path,
+                    maxBytes: maxBytes
+                )
+                return fileAckEnvelope(
+                    for: envelope,
+                    file: file,
                     now: now
                 )
             default:
@@ -483,6 +532,26 @@ enum AgentMobileGatewayCommandRouter {
         )
     }
 
+    private static func fileAckEnvelope(
+        for envelope: AgentMobileGatewayEnvelope,
+        file: AgentMobileGatewayFileSnapshot,
+        now: Date
+    ) -> AgentMobileGatewayEnvelope {
+        AgentMobileGatewayEnvelope(
+            id: envelope.id,
+            type: "ack",
+            sessionID: file.sessionID.uuidString,
+            payload: [
+                "type": .string(envelope.type),
+                "path": .string(file.path),
+                "content": .string(file.content),
+                "truncated": .bool(file.truncated),
+                "byte_count": .int(file.byteCount)
+            ],
+            timestamp: isoTimestamp(now)
+        )
+    }
+
     private static func errorEnvelope(
         for envelope: AgentMobileGatewayEnvelope,
         error: Error,
@@ -600,6 +669,17 @@ enum AgentMobileGatewayCommandRouter {
             }
         }
         throw AgentMobileGatewayCommandError.missingID(envelope.type)
+    }
+
+    private static func requiredPayloadPath(from envelope: AgentMobileGatewayEnvelope) throws -> String {
+        for candidate in ["path", "file", "file_path"] {
+            if let value = envelope.payload[candidate]?.stringValue?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !value.isEmpty {
+                return value
+            }
+        }
+        throw AgentMobileGatewayCommandError.missingPath(envelope.type)
     }
 
     private static func approvedDecision(from envelope: AgentMobileGatewayEnvelope) throws -> Bool {
@@ -983,6 +1063,56 @@ extension AppState: AgentMobileGatewayControlling {
         )
     }
 
+    func mobileGatewayReadFile(
+        sessionID: UUID?,
+        path: String,
+        maxBytes: Int?
+    ) throws -> AgentMobileGatewayFileSnapshot {
+        let runtime = try mobileGatewayRuntime(sessionID: sessionID)
+        guard let workspaceRootPath = runtime.workspaceRootPath, !workspaceRootPath.isEmpty else {
+            throw AgentMobileGatewayCommandError.noWorkspace
+        }
+        let root = URL(fileURLWithPath: workspaceRootPath).standardizedFileURL
+        let rootPath = root.path
+        let requestedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        let targetURL: URL
+        if (requestedPath as NSString).isAbsolutePath {
+            targetURL = URL(fileURLWithPath: requestedPath).standardizedFileURL
+        } else {
+            targetURL = root.appendingPathComponent(requestedPath).standardizedFileURL
+        }
+        let targetPath = targetURL.path
+        guard targetPath == rootPath || targetPath.hasPrefix(rootPath + "/") else {
+            throw AgentMobileGatewayCommandError.pathOutsideWorkspace(path)
+        }
+
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: targetPath, isDirectory: &isDirectory) else {
+            throw AgentMobileGatewayCommandError.fileNotFound(path)
+        }
+        guard !isDirectory.boolValue else {
+            throw AgentMobileGatewayCommandError.notRegularFile(path)
+        }
+        guard !Self.isBinaryFile(at: targetURL) else {
+            throw AgentMobileGatewayCommandError.binaryFile(path)
+        }
+
+        let limit = max(1, min(maxBytes ?? Self.mobileGatewayDefaultReadBytes, Self.mobileGatewayAbsoluteMaxReadBytes))
+        let handle = try FileHandle(forReadingFrom: targetURL)
+        defer { try? handle.close() }
+        let data = handle.readData(ofLength: limit + 1)
+        let truncated = data.count > limit
+        let usable = truncated ? Data(data.prefix(limit)) : data
+        let content = String(data: usable, encoding: .utf8) ?? Self.decodeText(from: usable)
+        return AgentMobileGatewayFileSnapshot(
+            path: Self.mobileGatewayRelativePath(for: targetURL, rootPath: rootPath),
+            content: content,
+            truncated: truncated,
+            byteCount: usable.count,
+            sessionID: runtime.id
+        )
+    }
+
     private func mobileGatewayRuntime(sessionID: UUID?) throws -> AgentRuntime {
         if let sessionID {
             guard let runtime = runtime(for: sessionID) else {
@@ -1055,6 +1185,15 @@ extension AppState: AgentMobileGatewayControlling {
             }
         }
         return "+\(added) -\(deleted)"
+    }
+
+    private static let mobileGatewayDefaultReadBytes = 64 * 1024
+    private static let mobileGatewayAbsoluteMaxReadBytes = 256 * 1024
+
+    private static func mobileGatewayRelativePath(for url: URL, rootPath: String) -> String {
+        let path = url.standardizedFileURL.path
+        guard path == rootPath || path.hasPrefix(rootPath + "/") else { return path }
+        return String(path.dropFirst(rootPath.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
 
     private static func mobileGatewayTruncated(_ text: String, limit: Int = 300) -> String {

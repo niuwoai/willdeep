@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.73.0-rc1 - 2026-06-14
+
+### Added
+
+- Mobile Gateway Swift desktop bridge now handles `file.read` by resolving paths inside the selected local session workspace and returning text content through an `ack` payload.
+- `file.read` refuses workspace escapes, directories, missing files, and binary files; reads are capped at the same 64 KiB default / 256 KiB hard limit shape as the Agent `read_file` tool.
+- Android Mobile Gateway can request and display workspace files from the selected Mac session.
+
+### Tests
+
+- Added Swift router coverage for `file.read` ack payloads.
+- Added Android model coverage for `file.read` ack parsing and command encoding.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.73.0-rc1`。
+
 ## 1.72.0-rc1 - 2026-06-14
 
 ### Added
