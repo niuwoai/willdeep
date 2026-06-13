@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-13 | Current version: v1.63.0-rc4
+> Last updated: 2026-06-13 | Current version: v1.64.0-rc4
 
 ## Positioning
 
@@ -97,6 +97,7 @@ CLAUDE.md §10 的软上限是 2000 行，硬上限是 3000 行。rc42 拆完 `A
 - **Goal Mode Retry & Task Clarity（1.63.0-rc2）** — Goal 模式遇到临时网络错误、上游超时、限流或 5xx 时会自动等待 3 秒重试，最多 5 次；底部任务行会区分“Agent 轮次仍在任务中”和“本轮已结束但后台任务仍在运行”，排队消息菜单的移除动作统一显示为“删除”。
 - **Remote Runtime Form Polish（1.63.0-rc3）** — Settings → Runtimes 的 SSH / Daemon 输入控件改为带边框文本输入；SSH 端口可直接键入数字，identity file path 新建默认 `~/.ssh/id_rsa`，执行 ssh 前会展开 `~`。
 - **Queue Stop & Compact Rows（1.63.0-rc4）** — Composer 中止当前输出后会立即发送队首排队消息；排队消息在 transcript 中合并为一个紧凑列表，每行右侧直接显示发送、删除、编辑图标按钮。
+- **Global Agent Rules（1.64.0-rc1）** — Settings 新增 Rules 标签页，可启用/停用全局规则文件、选择任意 Markdown 路径并直接编辑保存。默认路径为 `~/.willdeep/CLAUDE.md`；每轮 Agent system prompt 会先注入全局规则，再注入当前仓库的 `AGENTS.md` / `CLAUDE.md` / README / product overview，让个人偏好跨项目生效，同时保留项目规则的更具体约束。
 - **Agent Sandbox & Escalation（1.60.0-rc27）** — Agent 工具执行新增 Codex-style 沙箱策略：只读命令默认使用脱敏环境与临时 HOME，并在 macOS 可用时通过 `sandbox-exec` 禁止网络和越权写入；workspace-write 命令仍需审批，只允许 workspace / 临时目录写入；网络、凭据/macOS Keychain、系统路径和破坏性 shell 形态进入 escalated 模式，Goal mode / Workspace Access 不再静默放行。工具卡展示 `_sandbox`、`_approval_reason`、`_prefix_rule`，执行结果写入 `~/Library/Application Support/WillDeep/AgentAudit/sandbox.jsonl` 并对 token/secret 脱敏。rc27 修正风险分级边界：forceful git 操作仍为 danger，workspace 外只读/重定向为普通 write 审批，`git -C <workspace>` 只读命令可回到 read 风险。
 - **Static Skill Marketplace（1.60.0-rc20）** — Settings → Skills 新增静态 Skill Marketplace 区域，首批内置 WillDeep 官方 skill 条目支持搜索、安装、更新和卸载；安装器将条目写入 `~/.codex/skills/<slug>/SKILL.md`，用 frontmatter 记录 marketplace id/version，并保护同名用户 skill 不被覆盖。rc20 扩展 PDF Design 与 Image Processing 条目，其中 Image Processing 会随安装写入 `scripts/process_image.py`，支持裁剪、缩放、格式转换、透明色处理、透明边裁切、画布填充与扁平化。安装后复用既有 `AgentSkillDirectory`，立即进入 Agent 工具、Settings 技能列表和 composer `@` 选择器。
 - **Large workspace guardrails（1.60.0-rc17）** — Editor 文件树、Quick Open、跨文件夹查找替换、Agent 本地工具和远端 daemon 均跳过常见依赖/构建目录（如 `node_modules` / `.git` / `target` / `.gradle` / `.terraform` / `.dart_tool` / `DerivedData` / `Pods` / `vendor`），并对目录项、遍历节点数和搜索文件数设硬上限，避免打开或扫描大目录时内存暴涨。macOS deployment target 同步降为 14.6，便于在 Sonoma 14.6+ 运行。**1.60.0-rc15** 同步修复 chat history copy chrome 测试：代码块和消息 footer 的复制按钮现在按 attributed string 的 link / payload / hidden style 断言，不再依赖 SF Symbol 附件在 `.string` 中呈现为固定 glyph；background job lifecycle 测试改用带 `TERM` trap 的长跑样本，减少全量并发测试中的时序误报。

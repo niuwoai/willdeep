@@ -1,5 +1,52 @@
 # Changelog
 
+## 1.64.0-rc4 - 2026-06-13
+
+### Fixed
+
+- 修复 Agent 会话侧栏工作区分组右键菜单仍引用旧变量导致测试构建失败的问题，统一走 `startNewSession(inWorkspaceGroup:)`。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.64.0-rc4`。
+
+## 1.64.0-rc3 - 2026-06-13
+
+### Fixed
+
+- 修复 SSH / 远端 runtime workspace 会话在左侧侧栏被归到 `No workspace` 的问题；远端会话现在使用稳定的远端 workspace 分组 key，并在组标题中显示 runtime 名称。
+- 远端 workspace 分组右侧的新建会话按钮会继续创建同一远端 workspace 的会话，不再回落为空工作区。
+
+### Tests
+
+- 新增远端 workspace 会话分组 key 回归测试，确保远端会话不会被判定为 `No workspace`。
+- 新增全局 Agent 规则测试，覆盖默认 `~/.willdeep/CLAUDE.md` 路径、`~` 展开、禁用开关、prompt 注入截断以及全局规则先于项目规则注入。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.64.0-rc3`。
+
+## 1.64.0-rc2 - 2026-06-13
+
+### Fixed
+
+- 工具调用组展开后会保留额外顶部留白，避免展开卡片背景与上一条 AI 输出气泡发生视觉重叠。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.64.0-rc2`。
+
+## 1.64.0-rc1 - 2026-06-13
+
+### Added
+
+- Settings 新增 Rules 标签页，支持启用/停用全局 Agent 规则文件、选择文件路径、编辑内容并保存，默认路径为 `~/.willdeep/CLAUDE.md`。
+- Agent system prompt 每轮会注入全局规则文件内容，并继续读取当前工作区的 `AGENTS.md` / `CLAUDE.md` 等项目规则；项目规则保留更具体的仓库级约束。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.64.0-rc1`。
+
 ## 1.63.0-rc4 - 2026-06-13
 
 ### Fixed

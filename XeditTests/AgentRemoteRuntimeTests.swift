@@ -28,6 +28,18 @@ struct AgentRemoteRuntimeTests {
         #expect(session.workspaceLocation == .local(path: "/tmp/legacy-workspace"))
     }
 
+    @Test("remote workspace sessions get a real sidebar group key")
+    func remoteWorkspaceSessionSidebarGroupKey() {
+        let runtimeID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let session = AgentSession(
+            workspaceLocation: .remote(runtimeID: runtimeID, path: "/srv/apps/xedit/")
+        )
+
+        #expect(session.workspaceRootPath == nil)
+        #expect(session.workspaceSidebarGroupKey == "remote:11111111-1111-1111-1111-111111111111:/srv/apps/xedit")
+        #expect(session.workspaceSidebarGroupKey != AgentSession.noWorkspaceSidebarGroupKey)
+    }
+
     @Test("runtime platform and architecture parsing covers supported remote shapes")
     func platformAndArchParsing() {
         #expect(RuntimePlatform.parse("Darwin") == .macOS)

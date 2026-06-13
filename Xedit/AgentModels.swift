@@ -304,8 +304,8 @@ struct AgentQueuedMessage: Identifiable, Equatable {
 }
 
 /// A persisted Agent conversation. Lives as one JSON file under the app's
-/// Application Support directory. `workspaceRootPath` is used to group
-/// sessions by project in the Agent-mode sidebar.
+/// Application Support directory. `workspaceLocation` is the canonical
+/// workspace binding; `workspaceRootPath` remains for local legacy sessions.
 struct AgentSession: Identifiable, Codable, Equatable {
     let id: UUID
     var title: String
@@ -421,6 +421,24 @@ struct AgentSession: Identifiable, Codable, Equatable {
         guard let path = workspaceRootPath, !path.isEmpty else { return "No workspace" }
         return URL(fileURLWithPath: path).lastPathComponent
     }
+
+    var workspaceSidebarGroupKey: String {
+        if let workspaceLocation {
+            switch workspaceLocation {
+            case .local(let path):
+                return path.isEmpty ? Self.noWorkspaceSidebarGroupKey : path
+            case .remote(let runtimeID, let path):
+                let normalizedPath = RemotePathValidator.normalizedWorkspaceRoot(path)
+                return "remote:\(runtimeID.uuidString):\(normalizedPath)"
+            }
+        }
+        guard let path = workspaceRootPath, !path.isEmpty else {
+            return Self.noWorkspaceSidebarGroupKey
+        }
+        return path
+    }
+
+    static let noWorkspaceSidebarGroupKey = "_no_workspace_"
 
     // Custom decoding so older session JSON without the newer fields
     // (didEditFiles, agentEditedPaths, interactionMode, approvalMode, currentPlan,
