@@ -175,6 +175,7 @@ struct AgentChatTranscript: View {
                         if runningTasks > 0 {
                             AgentRunningTasksRow(
                                 count: runningTasks,
+                                isAgentTurnActive: appState.isAgentResponding,
                                 detail: appState.agentRunningTaskSummary
                             )
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)

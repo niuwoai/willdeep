@@ -496,8 +496,8 @@ enum L10n {
     enum QueuedMessage {
         static let actionsButton = String(localized: "queued-message.actions-button", defaultValue: "Queued message actions")
         static let actionsButtonHelp = String(localized: "queued-message.actions-button.help", defaultValue: "Show queued message actions")
-        static let closeQueueButton = String(localized: "queued-message.close-queue-button", defaultValue: "Close queue")
-        static let closeQueueButtonHelp = String(localized: "queued-message.close-queue-button.help", defaultValue: "Remove this message from the queue")
+        static let deleteButton = String(localized: "queued-message.delete-button", defaultValue: "Delete")
+        static let deleteButtonHelp = String(localized: "queued-message.delete-button.help", defaultValue: "Delete this queued message")
         static let editButton = String(localized: "queued-message.edit-button", defaultValue: "Edit queued message")
         static let editButtonHelp = String(localized: "queued-message.edit-button.help", defaultValue: "Edit this queued message in the composer")
         static let label = String(localized: "queued-message.label", defaultValue: "Queued")
@@ -760,19 +760,28 @@ enum L10n {
             static let newDaemonRuntimeDefaultName = String(localized: "settings.remote-runtimes.new-daemon-default-name", defaultValue: "New Daemon Runtime")
             static let connectionSection = String(localized: "settings.remote-runtimes.connection-section", defaultValue: "SSH Connection")
             static let displayNameLabel = String(localized: "settings.remote-runtimes.display-name", defaultValue: "Display name")
+            static let displayNamePrompt = String(localized: "settings.remote-runtimes.display-name.prompt", defaultValue: "Name shown in the runtime list")
             static let transportLabel = String(localized: "settings.remote-runtimes.transport", defaultValue: "Transport")
             static let sshTransportLabel = String(localized: "settings.remote-runtimes.transport.ssh", defaultValue: "SSH")
             static let daemonTransportLabel = String(localized: "settings.remote-runtimes.transport.daemon", defaultValue: "Daemon")
             static let hostLabel = String(localized: "settings.remote-runtimes.host", defaultValue: "Host")
+            static let hostPrompt = String(localized: "settings.remote-runtimes.host.prompt", defaultValue: "example.com or SSH config host")
             static let usernameLabel = String(localized: "settings.remote-runtimes.username", defaultValue: "Username")
+            static let usernamePrompt = String(localized: "settings.remote-runtimes.username.prompt", defaultValue: "Remote login user")
+            static let portInputLabel = String(localized: "settings.remote-runtimes.port-input", defaultValue: "Port")
+            static let portPrompt = String(localized: "settings.remote-runtimes.port.prompt", defaultValue: "22")
             static func portLabel(_ a1: String) -> String {
                 let template = String(localized: "settings.remote-runtimes.port", defaultValue: "Port %@")
                 return String(format: template, a1)
             }
             static let identityFileLabel = String(localized: "settings.remote-runtimes.identity-file", defaultValue: "SSH identity file path (optional)")
+            static let identityFilePrompt = String(localized: "settings.remote-runtimes.identity-file.prompt", defaultValue: "~/.ssh/id_rsa")
             static let daemonURLLabel = String(localized: "settings.remote-runtimes.daemon-url", defaultValue: "Daemon URL")
+            static let daemonURLPrompt = String(localized: "settings.remote-runtimes.daemon-url.prompt", defaultValue: "http://127.0.0.1:8765")
             static let daemonTokenLabel = String(localized: "settings.remote-runtimes.daemon-token", defaultValue: "Daemon token (stored in Keychain)")
+            static let daemonTokenPrompt = String(localized: "settings.remote-runtimes.daemon-token.prompt", defaultValue: "Paste daemon token")
             static let workspacePathLabel = String(localized: "settings.remote-runtimes.workspace-path", defaultValue: "Remote workspace path")
+            static let workspacePathPrompt = String(localized: "settings.remote-runtimes.workspace-path.prompt", defaultValue: "/path/to/workspace")
             static let sshDescription = String(localized: "settings.remote-runtimes.ssh-description", defaultValue: "Uses the system ssh client with BatchMode authentication. Configure hosts in your normal SSH config or provide an optional identity-file path; WillDeep stores only the path, never private key contents.")
             static let probeSection = String(localized: "settings.remote-runtimes.probe-section", defaultValue: "Probe")
             static let platformLabel = String(localized: "settings.remote-runtimes.platform", defaultValue: "Platform")
@@ -1133,6 +1142,11 @@ enum L10n {
         static let runningTaskOne = String(localized: "transcript.running-tasks.one", defaultValue: "1 running task")
         static func runningTasksMany(_ a1: String) -> String {
             let template = String(localized: "transcript.running-tasks.many", defaultValue: "%@ running tasks")
+            return String(format: template, a1)
+        }
+        static let backgroundTaskOne = String(localized: "transcript.background-tasks.one", defaultValue: "Turn ended · 1 background task running")
+        static func backgroundTasksMany(_ a1: String) -> String {
+            let template = String(localized: "transcript.background-tasks.many", defaultValue: "Turn ended · %@ background tasks running")
             return String(format: template, a1)
         }
         static let runningTasksHelp = String(localized: "transcript.running-tasks.help", defaultValue: "Tasks are still running — output resumes when they finish")

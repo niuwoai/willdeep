@@ -9,6 +9,9 @@
 
 import SwiftUI
 
+private let defaultSSHIdentityFilePath = "~/.ssh/id_rsa"
+private let remoteRuntimePortRange = 1...65535
+
 struct AgentRuntimeSettingsView: View {
     @State private var runtimes = AgentRuntimeStore.loadDescriptors()
     @State private var selectedRuntimeID: UUID?
@@ -85,6 +88,7 @@ struct AgentRuntimeSettingsView: View {
                         displayName: L10n.Settings.RemoteRuntimes.newRuntimeDefaultName,
                         host: "",
                         username: NSUserName(),
+                        identityFilePath: defaultSSHIdentityFilePath,
                         defaultWorkspacePath: ""
                     )
                     runtimes.append(runtime)
@@ -118,7 +122,11 @@ struct AgentRuntimeSettingsView: View {
     private var runtimeEditor: some View {
         Form {
             Section(L10n.Settings.RemoteRuntimes.connectionSection) {
-                TextField(L10n.Settings.RemoteRuntimes.displayNameLabel, text: $displayName)
+                textInput(
+                    L10n.Settings.RemoteRuntimes.displayNameLabel,
+                    text: $displayName,
+                    prompt: L10n.Settings.RemoteRuntimes.displayNamePrompt
+                )
                 Picker(L10n.Settings.RemoteRuntimes.transportLabel, selection: $transport) {
                     Text(L10n.Settings.RemoteRuntimes.sshTransportLabel).tag(RuntimeTransport.ssh)
                     Text(L10n.Settings.RemoteRuntimes.daemonTransportLabel).tag(RuntimeTransport.daemon)
@@ -126,23 +134,45 @@ struct AgentRuntimeSettingsView: View {
                 .pickerStyle(.segmented)
 
                 if transport == .ssh {
-                    TextField(L10n.Settings.RemoteRuntimes.hostLabel, text: $host)
-                    TextField(L10n.Settings.RemoteRuntimes.usernameLabel, text: $username)
-                    Stepper(value: $port, in: 1...65535) {
-                        Text(L10n.Settings.RemoteRuntimes.portLabel("\(port)"))
-                    }
-                    TextField(L10n.Settings.RemoteRuntimes.identityFileLabel, text: $identityFilePath)
+                    textInput(
+                        L10n.Settings.RemoteRuntimes.hostLabel,
+                        text: $host,
+                        prompt: L10n.Settings.RemoteRuntimes.hostPrompt
+                    )
+                    textInput(
+                        L10n.Settings.RemoteRuntimes.usernameLabel,
+                        text: $username,
+                        prompt: L10n.Settings.RemoteRuntimes.usernamePrompt
+                    )
+                    portInput
+                    textInput(
+                        L10n.Settings.RemoteRuntimes.identityFileLabel,
+                        text: $identityFilePath,
+                        prompt: L10n.Settings.RemoteRuntimes.identityFilePrompt
+                    )
                     Text(L10n.Settings.RemoteRuntimes.sshDescription)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    TextField(L10n.Settings.RemoteRuntimes.daemonURLLabel, text: $daemonURL)
-                    SecureField(L10n.Settings.RemoteRuntimes.daemonTokenLabel, text: $daemonToken)
+                    textInput(
+                        L10n.Settings.RemoteRuntimes.daemonURLLabel,
+                        text: $daemonURL,
+                        prompt: L10n.Settings.RemoteRuntimes.daemonURLPrompt
+                    )
+                    secureInput(
+                        L10n.Settings.RemoteRuntimes.daemonTokenLabel,
+                        text: $daemonToken,
+                        prompt: L10n.Settings.RemoteRuntimes.daemonTokenPrompt
+                    )
                     Text(L10n.Settings.RemoteRuntimes.daemonDescription)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                TextField(L10n.Settings.RemoteRuntimes.workspacePathLabel, text: $workspacePath)
+                textInput(
+                    L10n.Settings.RemoteRuntimes.workspacePathLabel,
+                    text: $workspacePath,
+                    prompt: L10n.Settings.RemoteRuntimes.workspacePathPrompt
+                )
             }
 
             if let selectedRuntime {
@@ -212,6 +242,51 @@ struct AgentRuntimeSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onChange(of: transport) { _, newTransport in
+            if newTransport == .ssh && identityFilePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                identityFilePath = defaultSSHIdentityFilePath
+            }
+        }
+        .onChange(of: port) { _, newPort in
+            port = clampedPort(newPort)
+        }
+    }
+
+    private var portInput: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L10n.Settings.RemoteRuntimes.portInputLabel)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField(
+                L10n.Settings.RemoteRuntimes.portPrompt,
+                value: $port,
+                format: .number.grouping(.never)
+            )
+            .textFieldStyle(.roundedBorder)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func textInput(_ title: String, text: Binding<String>, prompt: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField(prompt, text: text)
+                .textFieldStyle(.roundedBorder)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func secureInput(_ title: String, text: Binding<String>, prompt: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            SecureField(prompt, text: text)
+                .textFieldStyle(.roundedBorder)
+        }
+        .padding(.vertical, 2)
     }
 
     private func loadSelectedRuntime() {
@@ -220,7 +295,7 @@ struct AgentRuntimeSettingsView: View {
             host = ""
             username = NSUserName()
             port = 22
-            identityFilePath = ""
+            identityFilePath = defaultSSHIdentityFilePath
             daemonURL = ""
             daemonToken = ""
             transport = .ssh
@@ -230,8 +305,8 @@ struct AgentRuntimeSettingsView: View {
         displayName = selectedRuntime.displayName
         host = selectedRuntime.host
         username = selectedRuntime.username
-        port = selectedRuntime.port
-        identityFilePath = selectedRuntime.identityFilePath ?? ""
+        port = clampedPort(selectedRuntime.port)
+        identityFilePath = selectedRuntime.identityFilePath ?? defaultSSHIdentityFilePath
         daemonURL = selectedRuntime.daemonBaseURL ?? selectedRuntime.daemonEndpointURL?.absoluteString ?? ""
         daemonToken = selectedRuntime.transport == .daemon ? RemoteRuntimeSecretStore.daemonToken(runtimeID: selectedRuntime.id) : ""
         transport = selectedRuntime.transport
@@ -252,10 +327,11 @@ struct AgentRuntimeSettingsView: View {
         )
         runtime.displayName = displayName
         runtime.transport = transport
+        runtime.port = clampedPort(port)
         if transport == .ssh {
             runtime.host = host
             runtime.username = username
-            runtime.port = port
+            runtime.port = clampedPort(port)
             runtime.identityFilePath = identityFilePath
             runtime.daemonBaseURL = nil
         } else {
@@ -417,4 +493,8 @@ private func daemonHost(from value: String) -> String {
 
 private func daemonPort(from value: String) -> Int {
     URL(string: value.trimmingCharacters(in: .whitespacesAndNewlines))?.port ?? 8765
+}
+
+private func clampedPort(_ value: Int) -> Int {
+    min(max(value, remoteRuntimePortRange.lowerBound), remoteRuntimePortRange.upperBound)
 }

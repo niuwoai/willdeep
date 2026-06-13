@@ -943,7 +943,7 @@ struct QueuedMessageRow: View {
                         }
                         Divider()
                         Button(role: .destructive, action: onRemove) {
-                            Label(L10n.QueuedMessage.closeQueueButton, systemImage: "xmark.circle")
+                            Label(L10n.QueuedMessage.deleteButton, systemImage: "trash")
                         }
                     } label: {
                         Image(systemName: "ellipsis")

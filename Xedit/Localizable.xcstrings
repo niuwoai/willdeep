@@ -4141,38 +4141,38 @@
         }
       }
     },
-    "queued-message.close-queue-button": {
-      "comment": "menu item for removing a queued message",
+    "queued-message.delete-button": {
+      "comment": "menu item for deleting a queued message before it is sent",
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Close queue"
+            "value": "Delete"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "关闭排队"
+            "value": "删除"
           }
         }
       }
     },
-    "queued-message.close-queue-button.help": {
-      "comment": "tooltip for removing a queued message",
+    "queued-message.delete-button.help": {
+      "comment": "tooltip for deleting a queued message before it is sent",
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Remove this message from the queue"
+            "value": "Delete this queued message"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "从队列中移除这条消息"
+            "value": "删除这条排队消息"
           }
         }
       }
@@ -6626,6 +6626,42 @@
         }
       }
     },
+    "transcript.background-tasks.many": {
+      "comment": "background-tasks status row label after the Agent turn ended, N > 1; %@ is the count",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn ended · %@ background tasks running"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本轮已结束 · %@ 个后台任务运行中"
+          }
+        }
+      }
+    },
+    "transcript.background-tasks.one": {
+      "comment": "background-tasks status row label after the Agent turn ended, exactly one task",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn ended · 1 background task running"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本轮已结束 · 1 个后台任务运行中"
+          }
+        }
+      }
+    },
     "transcript.running-tasks.help": {
       "comment": "tooltip on the running-tasks status row at the bottom of the transcript",
       "extractionState": "manual",
@@ -7545,6 +7581,69 @@
       "localizations": {
         "en": { "stringUnit": { "state": "translated", "value": "Pick a provider on the left, or add one with +" } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "从左侧选一个服务商，或点 + 添加" } }
+      }
+    },
+    "settings.remote-runtimes.display-name.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Name shown in the runtime list" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "显示在 runtime 列表里的名称" } }
+      }
+    },
+    "settings.remote-runtimes.host.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "example.com or SSH config host" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "example.com 或 SSH config 主机名" } }
+      }
+    },
+    "settings.remote-runtimes.username.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Remote login user" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "远端登录用户" } }
+      }
+    },
+    "settings.remote-runtimes.port-input": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Port" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "端口" } }
+      }
+    },
+    "settings.remote-runtimes.port.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "22" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "22" } }
+      }
+    },
+    "settings.remote-runtimes.identity-file.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "~/.ssh/id_rsa" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "~/.ssh/id_rsa" } }
+      }
+    },
+    "settings.remote-runtimes.daemon-url.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "http://127.0.0.1:8765" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "http://127.0.0.1:8765" } }
+      }
+    },
+    "settings.remote-runtimes.daemon-token.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Paste daemon token" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "粘贴 daemon token" } }
+      }
+    },
+    "settings.remote-runtimes.workspace-path.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "/path/to/workspace" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "/path/to/workspace" } }
       }
     },
     "settings.provider.connection": {

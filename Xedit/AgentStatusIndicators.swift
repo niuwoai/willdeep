@@ -526,6 +526,7 @@ struct AgentBreathingIndicator: View {
 /// 鼠标用户通过点击展开 jobs 抽屉查看。
 struct AgentRunningTasksRow: View {
     let count: Int
+    var isAgentTurnActive: Bool = true
     var detail: String? = nil
     var onTap: (() -> Void)? = nil
 
@@ -573,8 +574,13 @@ struct AgentRunningTasksRow: View {
     }
 
     private var label: String {
-        count == 1
-            ? L10n.Transcript.runningTaskOne
-            : L10n.Transcript.runningTasksMany(String(count))
+        if isAgentTurnActive {
+            return count == 1
+                ? L10n.Transcript.runningTaskOne
+                : L10n.Transcript.runningTasksMany(String(count))
+        }
+        return count == 1
+            ? L10n.Transcript.backgroundTaskOne
+            : L10n.Transcript.backgroundTasksMany(String(count))
     }
 }

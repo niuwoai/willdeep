@@ -861,10 +861,16 @@ struct SSHRuntimeBackend: AgentRemoteRuntimeBackend {
     private func sshArguments(remoteCommand: String) -> [String] {
         var args = ["-o", "BatchMode=yes", "-p", "\(descriptor.port)"]
         if let identityFilePath = descriptor.identityFilePath, !identityFilePath.isEmpty {
-            args += ["-i", identityFilePath]
+            args += ["-i", expandedIdentityFilePath(identityFilePath)]
         }
         args += [descriptor.sshTarget, remoteCommand]
         return args
+    }
+
+    private func expandedIdentityFilePath(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("~") else { return trimmed }
+        return (trimmed as NSString).expandingTildeInPath
     }
 
     private func parseProbeFields<S: Sequence>(_ lines: S) -> [String: String] where S.Element == String {

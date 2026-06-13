@@ -71,6 +71,22 @@ struct AgentRemoteRuntimeTests {
         #expect(command.contains("cd '\\''/srv/my app'\\''"))
     }
 
+    @Test("ssh backend expands tilde identity file paths before launching ssh")
+    func sshCommandConstructionExpandsTildeIdentityPath() {
+        let runtime = RuntimeDescriptor(
+            displayName: "Build Box",
+            host: "build.example.com",
+            username: "dev",
+            identityFilePath: "~/.ssh/id_rsa",
+            defaultWorkspacePath: "/srv/app"
+        )
+        let backend = SSHRuntimeBackend(descriptor: runtime)
+        let command = backend.sshShellCommand(remoteCommand: "true")
+        let expandedPath = "\(NSHomeDirectory())/.ssh/id_rsa"
+        #expect(command.contains("'-i' '\(expandedPath)'"))
+        #expect(!command.contains("'~/.ssh/id_rsa'"))
+    }
+
     @Test("proxy credentials are redacted before persistence")
     func proxyCredentialsAreRedacted() {
         let redacted = SSHRuntimeBackend.redactProxyCredential("http://alice:secret@proxy.example.com:8080")

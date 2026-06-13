@@ -107,6 +107,8 @@ private final class AgentStreamingMessageBuffer {
 }
 
 extension AppState {
+    private static let maxGoalTransientNetworkRetries = 5
+    private static let goalTransientNetworkRetryDelayNanoseconds: UInt64 = 3_000_000_000
 
     func dispatchAgentMessage(
         for runtime: AgentRuntime,
@@ -931,36 +933,56 @@ extension AppState {
             let streamBuffer = AgentStreamingMessageBuffer(runtime: runtime, assistantID: assistantID)
 
             do {
-                try await client.streamChat(
-                    messages: requestMessages,
-                    tools: AgentToolRegistry.all
-                ) { event in
-                    await MainActor.run { [weak runtime] in
-                        guard let runtime,
-                              let index = runtime.messages.firstIndex(where: { $0.id == assistantID }) else {
-                            return
+                var retryCount = 0
+                while true {
+                    do {
+                        try await client.streamChat(
+                            messages: requestMessages,
+                            tools: AgentToolRegistry.all
+                        ) { event in
+                            await MainActor.run { [weak runtime] in
+                                guard let runtime,
+                                      let index = runtime.messages.firstIndex(where: { $0.id == assistantID }) else {
+                                    return
+                                }
+                                switch event {
+                                case .textDelta(let delta):
+                                    streamBuffer.appendTextDelta(delta)
+                                case .reasoningDelta(let delta):
+                                    streamBuffer.appendReasoningDelta(delta)
+                                case .toolCallsUpdated(let calls):
+                                    streamBuffer.flushPending()
+                                    runtime.messages[index].toolCalls = calls
+                                    latestToolCalls = calls
+                                case .finishedTurn(let reason):
+                                    streamBuffer.flushPending()
+                                    finishReason = reason
+                                case .usageReported(let prompt, let completion, let total, let cachedPrompt, let cacheWritePrompt, let reasoning):
+                                    streamBuffer.flushPending()
+                                    runtime.messages[index].usageTokens = total
+                                    runtime.messages[index].promptTokens = prompt > 0 ? prompt : nil
+                                    runtime.messages[index].completionTokens = completion > 0 ? completion : nil
+                                    runtime.messages[index].cachedPromptTokens = cachedPrompt > 0 ? cachedPrompt : nil
+                                    runtime.messages[index].cacheWritePromptTokens = cacheWritePrompt > 0 ? cacheWritePrompt : nil
+                                    runtime.messages[index].reasoningTokens = reasoning > 0 ? reasoning : nil
+                                }
+                            }
                         }
-                        switch event {
-                        case .textDelta(let delta):
-                            streamBuffer.appendTextDelta(delta)
-                        case .reasoningDelta(let delta):
-                            streamBuffer.appendReasoningDelta(delta)
-                        case .toolCallsUpdated(let calls):
-                            streamBuffer.flushPending()
-                            runtime.messages[index].toolCalls = calls
-                            latestToolCalls = calls
-                        case .finishedTurn(let reason):
-                            streamBuffer.flushPending()
-                            finishReason = reason
-                        case .usageReported(let prompt, let completion, let total, let cachedPrompt, let cacheWritePrompt, let reasoning):
-                            streamBuffer.flushPending()
-                            runtime.messages[index].usageTokens = total
-                            runtime.messages[index].promptTokens = prompt > 0 ? prompt : nil
-                            runtime.messages[index].completionTokens = completion > 0 ? completion : nil
-                            runtime.messages[index].cachedPromptTokens = cachedPrompt > 0 ? cachedPrompt : nil
-                            runtime.messages[index].cacheWritePromptTokens = cacheWritePrompt > 0 ? cacheWritePrompt : nil
-                            runtime.messages[index].reasoningTokens = reasoning > 0 ? reasoning : nil
+                        break
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        streamBuffer.flushPending()
+                        guard shouldRetryTransientGoalNetworkError(
+                            error,
+                            for: runtime,
+                            assistantID: assistantID,
+                            retryCount: retryCount
+                        ) else {
+                            throw error
                         }
+                        retryCount += 1
+                        try await Task.sleep(nanoseconds: Self.goalTransientNetworkRetryDelayNanoseconds)
                     }
                 }
                 streamBuffer.flushPending()
@@ -1477,6 +1499,44 @@ extension AppState {
                     waiter.resume(returning: .denied(reason: "Cancelled"))
                 }
             }
+        }
+    }
+
+    private func shouldRetryTransientGoalNetworkError(
+        _ error: Error,
+        for runtime: AgentRuntime,
+        assistantID: AgentMessage.ID,
+        retryCount: Int
+    ) -> Bool {
+        guard runtime.interactionMode == .goal else { return false }
+        guard retryCount < Self.maxGoalTransientNetworkRetries else { return false }
+        guard isTransientAgentNetworkError(error) else { return false }
+        guard let index = runtime.messages.firstIndex(where: { $0.id == assistantID }) else { return false }
+        let message = runtime.messages[index]
+        return message.content.isEmpty
+            && message.toolCalls.isEmpty
+            && (message.reasoningContent ?? "").isEmpty
+    }
+
+    private func isTransientAgentNetworkError(_ error: Error) -> Bool {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut, .networkConnectionLost, .notConnectedToInternet,
+                 .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed,
+                 .internationalRoamingOff, .callIsActive, .dataNotAllowed:
+                return true
+            default:
+                return false
+            }
+        }
+        guard case AgentClientError.serverStatus(let providerError) = error else {
+            return false
+        }
+        switch providerError.statusCode {
+        case 408, 429, 500...599:
+            return true
+        default:
+            return false
         }
     }
 

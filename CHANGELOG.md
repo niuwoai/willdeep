@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.63.0-rc3 - 2026-06-13
+
+### Fixed
+
+- Settings → Runtimes 的 SSH / Daemon 表单输入框改为更明显的带边框文本输入，帮助用户识别可点击输入区域。
+- SSH runtime 的端口配置从 Stepper 改为数字输入框，避免从 `22` 改到高位端口时需要反复点击。
+- SSH identity file path 新建时默认使用 `~/.ssh/id_rsa`，实际执行 `/usr/bin/ssh -i` 前会展开 `~` 到当前用户主目录。
+
+### Tests
+
+- 补充 SSH runtime 命令构造测试，覆盖 identity file path 的 `~` 展开行为。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.63.0-rc3`。
+
+## 1.63.0-rc2 - 2026-06-13
+
+### Fixed
+
+- Goal 模式遇到临时网络错误、上游超时、限流或 5xx 时会自动等待 3 秒并重试，最多 5 次；用户仍可点停止取消当前轮次。
+- Agent 底部运行状态现在区分“本轮仍在执行任务”和“本轮已结束但后台任务仍在运行”，避免呼吸动画消失后误判对话是否结束。
+- 排队消息菜单的删除动作从“关闭排队”改为“删除”，语义更直接。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.63.0-rc2`。
+
 ## 1.63.0-rc1 - 2026-06-13
 
 ### Added
