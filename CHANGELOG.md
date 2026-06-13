@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.74.0-rc1 - 2026-06-14
+
+### Added
+
+- Mobile Gateway Swift desktop bridge now includes queued Agent messages in `state.snapshot`.
+- Mobile `queue.update` commands now route through the existing macOS Agent queue for adding, removing, clearing, and sending queued requests immediately.
+- Android Mobile Gateway can display queued Mac requests, queue the current composer text, send a queued request now, remove a queued request, or clear the selected session queue.
+
+### Tests
+
+- Added Swift router coverage for queued message snapshots and `queue.update`.
+- Added Android model coverage for queued message parsing and `queue.update` envelope encoding.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.74.0-rc1`。
+
 ## 1.73.0-rc1 - 2026-06-14
 
 ### Added

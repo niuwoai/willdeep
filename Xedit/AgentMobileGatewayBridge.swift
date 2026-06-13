@@ -165,6 +165,14 @@ struct AgentMobileGatewayFileSnapshot: Equatable {
     var sessionID: UUID
 }
 
+struct AgentMobileGatewayQueuedMessageSnapshot: Equatable {
+    var id: UUID
+    var textPreview: String
+    var imageCount: Int
+    var textAttachmentCount: Int
+    var sessionID: UUID
+}
+
 struct AgentMobileGatewayCommandResult: Equatable {
     var sessionID: UUID?
     var message: String?
@@ -212,13 +220,22 @@ protocol AgentMobileGatewayControlling: AnyObject {
         path: String,
         maxBytes: Int?
     ) throws -> AgentMobileGatewayFileSnapshot
+    var mobileGatewayQueuedMessages: [AgentMobileGatewayQueuedMessageSnapshot] { get }
+    func mobileGatewayUpdateQueue(
+        sessionID: UUID?,
+        action: String,
+        messageID: UUID?,
+        text: String?
+    ) throws -> AgentMobileGatewayCommandResult
 }
 
 enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
     case missingText
     case missingID(String)
+    case missingAction(String)
     case missingPath(String)
     case missingAnswer
+    case invalidAction(String)
     case invalidDecision
     case invalidSessionID(String)
     case sessionNotFound(UUID)
@@ -228,6 +245,7 @@ enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
     case invalidPatchID(String)
     case patchNotFound(UUID)
     case jobNotFound(String)
+    case queueMessageNotFound(UUID)
     case noWorkspace
     case pathOutsideWorkspace(String)
     case fileNotFound(String)
@@ -241,10 +259,14 @@ enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
             return "message.send requires payload.text."
         case .missingID(let type):
             return "\(type) requires payload.id."
+        case .missingAction(let type):
+            return "\(type) requires payload.action."
         case .missingPath(let type):
             return "\(type) requires payload.path."
         case .missingAnswer:
             return "ask_user decisions require payload.answer."
+        case .invalidAction(let value):
+            return "Unsupported queue action: \(value)."
         case .invalidDecision:
             return "Decision must be approve or reject."
         case .invalidSessionID(let value):
@@ -263,6 +285,8 @@ enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
             return "Patch proposal not found: \(id.uuidString)."
         case .jobNotFound(let id):
             return "Background job not found: \(id)."
+        case .queueMessageNotFound(let id):
+            return "Queued message not found: \(id.uuidString)."
         case .noWorkspace:
             return "No local workspace is available for this session."
         case .pathOutsideWorkspace(let path):
@@ -404,6 +428,21 @@ enum AgentMobileGatewayCommandRouter {
                     file: file,
                     now: now
                 )
+            case "queue.update":
+                let action = try requiredPayloadAction(from: envelope)
+                let messageID = try optionalPayloadUUID("id", aliases: ["message_id", "queued_id"], from: envelope)
+                let result = try controller.mobileGatewayUpdateQueue(
+                    sessionID: try optionalSessionID(from: envelope),
+                    action: action,
+                    messageID: messageID,
+                    text: envelope.payload["text"]?.stringValue
+                )
+                return ackEnvelope(
+                    for: envelope,
+                    sessionID: result.sessionID,
+                    message: result.message,
+                    now: now
+                )
             default:
                 throw AgentMobileGatewayCommandError.unsupportedCommand(envelope.type)
             }
@@ -433,7 +472,8 @@ enum AgentMobileGatewayCommandRouter {
                 "active_session_id": activeID.map { .string($0.uuidString) } ?? .null,
                 "pending_tools": .array(controller.mobileGatewayPendingToolApprovals.map(toolApprovalJSON)),
                 "patch_proposals": .array(controller.mobileGatewayPendingPatchProposals.map(patchProposalJSON)),
-                "jobs": .array(controller.mobileGatewayJobs.map(jobJSON))
+                "jobs": .array(controller.mobileGatewayJobs.map(jobJSON)),
+                "queued_messages": .array(controller.mobileGatewayQueuedMessages.map(queuedMessageJSON))
             ],
             timestamp: isoTimestamp(now)
         )
@@ -619,6 +659,16 @@ enum AgentMobileGatewayCommandRouter {
         .object(jobPayload(job))
     }
 
+    private static func queuedMessageJSON(_ message: AgentMobileGatewayQueuedMessageSnapshot) -> AgentMobileGatewayJSON {
+        .object([
+            "id": .string(message.id.uuidString),
+            "text_preview": .string(message.textPreview),
+            "image_count": .int(message.imageCount),
+            "text_attachment_count": .int(message.textAttachmentCount),
+            "session_id": .string(message.sessionID.uuidString)
+        ])
+    }
+
     private static func jobPayload(_ job: AgentMobileGatewayJobSnapshot) -> [String: AgentMobileGatewayJSON] {
         var payload: [String: AgentMobileGatewayJSON] = [
             "id": .string(job.id.uuidString),
@@ -680,6 +730,29 @@ enum AgentMobileGatewayCommandRouter {
             }
         }
         throw AgentMobileGatewayCommandError.missingPath(envelope.type)
+    }
+
+    private static func requiredPayloadAction(from envelope: AgentMobileGatewayEnvelope) throws -> String {
+        if let value = envelope.payload["action"]?.stringValue?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+           !value.isEmpty {
+            return value
+        }
+        throw AgentMobileGatewayCommandError.missingAction(envelope.type)
+    }
+
+    private static func optionalPayloadUUID(
+        _ key: String,
+        aliases: [String] = [],
+        from envelope: AgentMobileGatewayEnvelope
+    ) throws -> UUID? {
+        let raw = try? requiredPayloadString(key, aliases: aliases, from: envelope)
+        guard let raw else { return nil }
+        guard let id = UUID(uuidString: raw) else {
+            throw AgentMobileGatewayCommandError.missingID(envelope.type)
+        }
+        return id
     }
 
     private static func approvedDecision(from envelope: AgentMobileGatewayEnvelope) throws -> Bool {
@@ -915,6 +988,20 @@ extension AppState: AgentMobileGatewayControlling {
         }
     }
 
+    var mobileGatewayQueuedMessages: [AgentMobileGatewayQueuedMessageSnapshot] {
+        agentSessions.compactMap { runtime(for: $0.id) }.flatMap { runtime in
+            runtime.queuedMessages.map { message in
+                AgentMobileGatewayQueuedMessageSnapshot(
+                    id: message.id,
+                    textPreview: Self.mobileGatewayQueuedTextPreview(message),
+                    imageCount: message.images.count,
+                    textAttachmentCount: message.textAttachments.count,
+                    sessionID: runtime.id
+                )
+            }
+        }
+    }
+
     func mobileGatewayRuntimeIsResponding(sessionID: UUID) -> Bool {
         agentRuntimes[sessionID]?.isResponding ?? false
     }
@@ -1113,6 +1200,65 @@ extension AppState: AgentMobileGatewayControlling {
         )
     }
 
+    func mobileGatewayUpdateQueue(
+        sessionID: UUID?,
+        action: String,
+        messageID: UUID?,
+        text: String?
+    ) throws -> AgentMobileGatewayCommandResult {
+        let runtime = try mobileGatewayRuntime(sessionID: sessionID)
+        let normalizedAction = action
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+
+        switch normalizedAction {
+        case "add":
+            let prompt = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !prompt.isEmpty else {
+                throw AgentMobileGatewayCommandError.missingText
+            }
+            runtime.queuedMessages.append(AgentQueuedMessage(text: prompt))
+            return .ok(sessionID: runtime.id, message: "Queued message added")
+
+        case "clear":
+            runtime.queuedMessages.removeAll()
+            runtime.shouldConsumeQueueAfterStop = false
+            return .ok(sessionID: runtime.id, message: "Queue cleared")
+
+        case "remove", "delete":
+            guard let messageID else {
+                throw AgentMobileGatewayCommandError.missingID("queue.update")
+            }
+            guard let index = runtime.queuedMessages.firstIndex(where: { $0.id == messageID }) else {
+                throw AgentMobileGatewayCommandError.queueMessageNotFound(messageID)
+            }
+            runtime.queuedMessages.remove(at: index)
+            if runtime.queuedMessages.isEmpty {
+                runtime.shouldConsumeQueueAfterStop = false
+            }
+            return .ok(sessionID: runtime.id, message: "Queued message removed")
+
+        case "send_now":
+            guard let messageID else {
+                throw AgentMobileGatewayCommandError.missingID("queue.update")
+            }
+            guard let index = runtime.queuedMessages.firstIndex(where: { $0.id == messageID }) else {
+                throw AgentMobileGatewayCommandError.queueMessageNotFound(messageID)
+            }
+            let message = runtime.queuedMessages.remove(at: index)
+            runtime.queuedMessages.insert(message, at: 0)
+            if activeAgentSessionID != runtime.id {
+                selectAgentSession(id: runtime.id)
+            }
+            sendQueuedAgentMessageNow(id: messageID)
+            return .ok(sessionID: runtime.id, message: "Queued message sent")
+
+        default:
+            throw AgentMobileGatewayCommandError.invalidAction(action)
+        }
+    }
+
     private func mobileGatewayRuntime(sessionID: UUID?) throws -> AgentRuntime {
         if let sessionID {
             guard let runtime = runtime(for: sessionID) else {
@@ -1185,6 +1331,20 @@ extension AppState: AgentMobileGatewayControlling {
             }
         }
         return "+\(added) -\(deleted)"
+    }
+
+    private static func mobileGatewayQueuedTextPreview(_ message: AgentQueuedMessage) -> String {
+        let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            return mobileGatewayTruncated(trimmed)
+        }
+        if !message.textAttachments.isEmpty {
+            return "\(message.textAttachments.count) text attachments"
+        }
+        if !message.images.isEmpty {
+            return "\(message.images.count) images"
+        }
+        return "Queued message"
     }
 
     private static let mobileGatewayDefaultReadBytes = 64 * 1024

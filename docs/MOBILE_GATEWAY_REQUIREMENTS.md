@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-06-14 | Target version: v1.73.0-rc1
+> Last updated: 2026-06-14 | Target version: v1.74.0-rc1
 
 ## Summary
 
@@ -47,8 +47,10 @@ The current Swift bridge supports the first command set needed for phone-to-Mac 
 - `patch.decide`
 - `diff.get`
 - `job.kill`
+- `file.read`
+- `queue.update`
 
-Commands that would touch files must remain desktop-mediated and will be wired in follow-up passes without bypassing existing safety gates.
+Commands that touch files and queues remain desktop-mediated and must not bypass existing safety gates.
 
 ### Mobile Peer
 
@@ -64,8 +66,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.73.0-rc1`
-- `X-Server-Version: 1.73.0-rc1`
+- `X-App-Version: 1.74.0-rc1`
+- `X-Server-Version: 1.74.0-rc1`
 
 ### `GET /mobile/health`
 
@@ -77,7 +79,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.73.0-rc1",
+    "version": "1.74.0-rc1",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
@@ -256,7 +258,7 @@ The desktop app remains responsible for the actual command result and subsequent
 
 Current desktop bridge behavior:
 
-- `state.snapshot` includes session summaries plus pending tool approvals and patch proposals.
+- `state.snapshot` includes session summaries, pending tool approvals, patch proposals, background jobs, and queued message previews.
 - `publishSnapshot()` also emits `tool.pending` and `patch.upsert` envelopes for currently blocked work.
 - `tool.decide` resolves `.pendingApproval` tool calls through the same runtime continuation as the Mac UI.
 - `.awaitingConfirm` danger-tier tool calls still require `payload.typed_confirmation == "confirm"`; a mobile approve without that field returns `command.error`.
@@ -266,6 +268,7 @@ Current desktop bridge behavior:
 - `state.snapshot` includes background job metadata, and `publishSnapshot()` also emits `job.updated` envelopes for current jobs.
 - `job.kill` resolves a session-scoped job handle and calls the existing `AgentJobRegistry.kill` path; it does not grant mobile process handles or shell access.
 - `file.read` reads only text files inside the selected local session workspace, rejects path escapes/directories/binary files, and returns `path`, `content`, `truncated`, and `byte_count` in an `ack` payload.
+- `queue.update` controls only the selected session queue through desktop AppState: `add` queues text, `remove` deletes a queued message by id, `clear` removes all queued messages for the session, and `send_now` promotes a queued message through the same Mac-side send-now path used by the desktop UI.
 
 ## Security Requirements
 

@@ -159,6 +159,16 @@ struct AgentMobileGatewayBridgeTests {
                 sessionID: session.id
             )
         ]
+        let queuedID = UUID()
+        controller.queuedMessages = [
+            AgentMobileGatewayQueuedMessageSnapshot(
+                id: queuedID,
+                textPreview: "Run the Android build after this turn",
+                imageCount: 0,
+                textAttachmentCount: 0,
+                sessionID: session.id
+            )
+        ]
 
         let response = AgentMobileGatewayCommandRouter.handle(
             AgentMobileGatewayEnvelope(id: "cmd-5", type: "session.list"),
@@ -191,6 +201,15 @@ struct AgentMobileGatewayBridgeTests {
         #expect(job["handle"]?.stringValue == "job_abcdef")
         #expect(job["status"]?.stringValue == "running")
         #expect(job["is_alive"]?.boolValue == true)
+
+        guard case .array(let queuedMessages)? = response.payload["queued_messages"],
+              case .object(let queued)? = queuedMessages.first else {
+            Issue.record("queued_messages payload missing")
+            return
+        }
+        #expect(queued["id"]?.stringValue == queuedID.uuidString)
+        #expect(queued["text_preview"]?.stringValue == "Run the Android build after this turn")
+        #expect(queued["session_id"]?.stringValue == session.id.uuidString)
     }
 
     @Test @MainActor
@@ -330,6 +349,38 @@ struct AgentMobileGatewayBridgeTests {
         ])
     }
 
+    @Test @MainActor
+    func queueUpdateRoutesActionToController() {
+        let session = AgentSession(title: "Queue")
+        let queuedID = UUID()
+        let controller = FakeMobileGatewayController(sessions: [session], activeSessionID: session.id)
+        let response = AgentMobileGatewayCommandRouter.handle(
+            AgentMobileGatewayEnvelope(
+                id: "cmd-11",
+                type: "queue.update",
+                sessionID: session.id.uuidString,
+                payload: [
+                    "action": .string("send_now"),
+                    "message_id": .string(queuedID.uuidString)
+                ]
+            ),
+            controller: controller,
+            now: fixedDate
+        )
+
+        #expect(response.type == "ack")
+        #expect(response.sessionID == session.id.uuidString)
+        #expect(response.payload["type"]?.stringValue == "queue.update")
+        #expect(controller.queueUpdates == [
+            FakeMobileGatewayController.QueueUpdate(
+                sessionID: session.id,
+                action: "send_now",
+                messageID: queuedID,
+                text: nil
+            )
+        ])
+    }
+
     private var fixedDate: Date {
         DateComponents(
             calendar: Calendar(identifier: .gregorian),
@@ -360,10 +411,12 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
     var diffs: [UUID: AgentMobileGatewayDiffSnapshot] = [:]
     var jobs: [AgentMobileGatewayJobSnapshot] = []
     var files: [String: AgentMobileGatewayFileSnapshot] = [:]
+    var queuedMessages: [AgentMobileGatewayQueuedMessageSnapshot] = []
     var toolDecisions: [ToolDecision] = []
     var patchDecisions: [PatchDecision] = []
     var killedJobs: [JobKill] = []
     var fileReads: [FileRead] = []
+    var queueUpdates: [QueueUpdate] = []
 
     struct ToolDecision: Equatable {
         var sessionID: UUID?
@@ -390,6 +443,13 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
         var maxBytes: Int?
     }
 
+    struct QueueUpdate: Equatable {
+        var sessionID: UUID?
+        var action: String
+        var messageID: UUID?
+        var text: String?
+    }
+
     init(sessions: [AgentSession], activeSessionID: UUID?) {
         self.sessions = sessions
         self.activeSessionID = activeSessionID
@@ -400,6 +460,7 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
     var mobileGatewayPendingToolApprovals: [AgentMobileGatewayToolApprovalSnapshot] { pendingTools }
     var mobileGatewayPendingPatchProposals: [AgentMobileGatewayPatchSnapshot] { pendingPatches }
     var mobileGatewayJobs: [AgentMobileGatewayJobSnapshot] { jobs }
+    var mobileGatewayQueuedMessages: [AgentMobileGatewayQueuedMessageSnapshot] { queuedMessages }
 
     func mobileGatewayRuntimeIsResponding(sessionID: UUID) -> Bool {
         false
@@ -491,5 +552,22 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
             throw AgentMobileGatewayCommandError.fileNotFound(path)
         }
         return file
+    }
+
+    func mobileGatewayUpdateQueue(
+        sessionID: UUID?,
+        action: String,
+        messageID: UUID?,
+        text: String?
+    ) throws -> AgentMobileGatewayCommandResult {
+        queueUpdates.append(
+            QueueUpdate(
+                sessionID: sessionID,
+                action: action,
+                messageID: messageID,
+                text: text
+            )
+        )
+        return .ok(sessionID: sessionID ?? activeSessionID, message: "Queue updated")
     }
 }
