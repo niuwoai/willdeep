@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.68.0-rc1 - 2026-06-13
+
+### Added
+
+- macOS 侧新增 `AgentMobileGatewayBridge`，可作为 Swift desktop peer 连接 Go Mobile Gateway 的 `/mobile/ws`，解码统一 envelope 并把移动端命令路由回现有 AppState Agent 会话入口。
+- Mobile Gateway desktop peer 现在支持 `session.list`、`session.create`、`session.select`、`message.send` 和 `turn.stop`，让手机端需求能进入 WillDeep 的正常 Agent dispatch 流程。
+- Mobile Gateway 需求文档补充 Swift desktop peer 当前能力边界，明确文件读取、diff、补丁、工具审批和 job 控制仍需后续桌面受控命令接入。
+
+### Tests
+
+- 新增 Mobile Gateway Swift 路由单测，覆盖会话快照、创建会话、向指定会话发送消息和未知命令错误。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档、Business Model 文档全部同步到 `1.68.0-rc1`。
+
 ## 1.67.0-rc2 - 2026-06-13
 
 ### Added

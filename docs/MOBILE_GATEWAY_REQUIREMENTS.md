@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-06-13 | Target version: v1.67.0-rc2
+> Last updated: 2026-06-13 | Target version: v1.68.0-rc1
 
 ## Summary
 
@@ -28,12 +28,22 @@ This phase implements the Mac-side Go gateway and records the protocol contract.
 
 ### Desktop Peer
 
-The Swift macOS app connects to the gateway as the desktop peer using the desktop bearer token. It is the only peer allowed to:
+The Swift macOS app connects to the gateway as the desktop peer using the desktop bearer token. The first desktop peer bridge is implemented in `AgentMobileGatewayBridge.swift`: it decodes gateway envelopes, routes supported mobile commands back through `AppState`, and publishes state snapshots/events through the gateway. It is the only peer allowed to:
 
 - fetch the current pairing payload;
 - revoke devices;
 - receive mobile commands;
 - publish desktop events such as session snapshots, message deltas, tool states, patch proposals, and worktree updates.
+
+The current Swift bridge supports the first command set needed for phone-to-Mac task dispatch:
+
+- `session.list`
+- `session.create`
+- `session.select`
+- `message.send`
+- `turn.stop`
+
+Commands that would touch files, diffs, jobs, patches, or tool decisions must remain desktop-mediated and will be wired in follow-up passes without bypassing existing safety gates.
 
 ### Mobile Peer
 
@@ -49,8 +59,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.67.0-rc2`
-- `X-Server-Version: 1.67.0-rc2`
+- `X-App-Version: 1.68.0-rc1`
+- `X-Server-Version: 1.68.0-rc1`
 
 ### `GET /mobile/health`
 
@@ -62,7 +72,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.67.0-rc2",
+    "version": "1.68.0-rc1",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"

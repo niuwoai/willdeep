@@ -381,6 +381,10 @@ final class AppState: ObservableObject {
     /// finishes / streams output. Views that need finer-grained
     /// updates can `@ObservedObject` the registry directly.
     private var jobRegistrySubscription: AnyCancellable?
+    /// Desktop peer for the LAN Mobile Gateway. The Go gateway handles
+    /// pairing/device auth; this bridge translates authorized mobile
+    /// commands back into normal AppState Agent operations.
+    lazy var mobileGatewayDesktopPeer = AgentMobileGatewayDesktopPeer(appState: self)
     // A 方案删除了 cfg → library 的回灌方向，此前的 reentrancy 守卫
     // (`isReconcilingProviderLibrary`) 不再需要。
 
