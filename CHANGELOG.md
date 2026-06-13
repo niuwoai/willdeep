@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.77.0-rc1 - 2026-06-14
+
+### Added
+
+- Added `scripts/mobile_gateway_integration_test.rb`, a dependency-free Ruby integration script that starts a real `willdeep-agent serve-mobile`, pairs a simulated Android device, connects desktop and mobile WebSocket peers, forwards `message.send`, receives `ack`, and verifies desktop events including `worktree.updated` broadcast back to mobile.
+- The integration script emits JSON and Markdown reports under `build/mobile_gateway_integration/` for CI and local review.
+
+### Tests
+
+- Verified the Mobile Gateway integration script end-to-end with `ruby scripts/mobile_gateway_integration_test.rb`.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.77.0-rc1`。
+
 ## 1.76.0-rc1 - 2026-06-14
 
 ### Added

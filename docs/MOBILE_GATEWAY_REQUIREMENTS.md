@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-06-14 | Target version: v1.76.0-rc1
+> Last updated: 2026-06-14 | Target version: v1.77.0-rc1
 
 ## Summary
 
@@ -66,8 +66,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.76.0-rc1`
-- `X-Server-Version: 1.76.0-rc1`
+- `X-App-Version: 1.77.0-rc1`
+- `X-Server-Version: 1.77.0-rc1`
 
 ### `GET /mobile/health`
 
@@ -79,7 +79,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.76.0-rc1",
+    "version": "1.77.0-rc1",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
@@ -315,4 +315,4 @@ All user-visible SwiftUI text must go through `Localizable.xcstrings` and `L10n.
 
 - Go unit tests must cover pairing token claim, expiration, one-time use, health version headers, WebSocket auth, command forwarding, desktop event broadcast, unknown command errors, and revoke behavior.
 - Swift tests should be added when the desktop bridge lands, covering state snapshot conversion and command routing into existing Agent runtime methods.
-- An integration script can later simulate desktop and mobile peers and emit JSON plus Markdown reports.
+- `scripts/mobile_gateway_integration_test.rb` starts a real local gateway, simulates desktop and mobile peers, verifies pairing, command forwarding, ack, event broadcast, and emits JSON plus Markdown reports.
