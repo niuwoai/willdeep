@@ -412,7 +412,7 @@ extension AppState {
     }
 
     var estimatedAgentRequestMessages: [AgentMessage] {
-        let systemPrompt = AgentContextBuilder.systemPrompt(
+        var systemPrompt = AgentContextBuilder.systemPrompt(
             rootDirectory: rootDirectory,
             openedFileURL: openedFileURL,
             fileContent: fileContent,
@@ -424,6 +424,22 @@ extension AppState {
             currentPlan: agentCurrentPlan,
             currentGoal: agentCurrentGoal
         )
+        let settings = AgentMemorySettingsStore.loadSettings()
+        let memoryResults = AgentMemoryEngine.retrieve(
+            query: Self.memoryRetrievalQuery(
+                messages: agentMessages,
+                openedFileURL: openedFileURL,
+                selectedText: selectedText
+            ),
+            records: AgentMemorySettingsStore.loadRecords(),
+            settings: settings,
+            rootDirectory: rootDirectory,
+            openedFileURL: openedFileURL,
+            selectedText: selectedText
+        )
+        if let memoryContext = AgentMemoryEngine.contextBlock(for: memoryResults) {
+            systemPrompt += "\n\n\(memoryContext)"
+        }
         let collapsedHistory = Self.collapseOldToolResults(in: agentMessages)
         return AgentClient.providerReadyMessages([
             AgentMessage(role: .system, content: systemPrompt)
@@ -872,6 +888,19 @@ extension AppState {
         if workspaceURL != nil {
             runtime.worktreeChanges = turnBaselineChanges
         }
+        let memoryState = AgentMemoryState()
+        let memoryQuery = Self.memoryRetrievalQuery(
+            messages: runtime.messages,
+            openedFileURL: openedFileURL,
+            selectedText: selectedText
+        )
+        let retrievedMemories = memoryState.retrieveMemories(
+            query: memoryQuery,
+            rootDirectory: workspaceURL,
+            openedFileURL: openedFileURL,
+            selectedText: selectedText
+        )
+        let memoryContextBlock = AgentMemoryEngine.contextBlock(for: retrievedMemories)
 
         for _ in 0..<Self.maxAgentToolRounds {
             // Background-job completion notices. Pulled at the top of
@@ -943,6 +972,9 @@ extension AppState {
                 - Root: \(remotePath)
                 - Tools and shell commands execute on the remote runtime through SSH. Tell the user when a command is remote if it matters.
                 """
+            }
+            if let memoryContextBlock {
+                systemPrompt += "\n\n\(memoryContextBlock)"
             }
             let history = runtime.messages.filter { $0.id != assistantID }
             let collapsedHistory = Self.collapseOldToolResults(in: history)
@@ -1040,6 +1072,12 @@ extension AppState {
             // No tool calls → assistant finished talking. Capture patches and return.
             guard !latestToolCalls.isEmpty else {
                 captureAgentPatchProposals(for: runtime, fromMessageID: assistantID)
+                captureAutomaticMemories(
+                    for: runtime,
+                    assistantID: assistantID,
+                    memoryState: memoryState,
+                    workspaceURL: workspaceURL
+                )
                 // A stream can end "successfully" having produced nothing
                 // (provider hiccup, content filter, empty stop). Drop the
                 // placeholder like the error/cancel paths do — if it stays
@@ -1335,6 +1373,46 @@ extension AppState {
 
         runtime.errorMessage = "Agent paused after \(Self.maxAgentToolRounds) tool-call rounds to avoid an accidental loop. Send another message to continue."
         runtime.errorDetails = nil
+    }
+
+    private static func memoryRetrievalQuery(
+        messages: [AgentMessage],
+        openedFileURL: URL?,
+        selectedText: String
+    ) -> String {
+        let recentUserText = messages
+            .reversed()
+            .filter { $0.role == .user }
+            .prefix(3)
+            .map(\.modelContent)
+            .reversed()
+            .joined(separator: "\n\n")
+        return [
+            recentUserText,
+            openedFileURL?.path ?? "",
+            selectedText
+        ]
+        .joined(separator: "\n\n")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func captureAutomaticMemories(
+        for runtime: AgentRuntime,
+        assistantID: AgentMessage.ID,
+        memoryState: AgentMemoryState,
+        workspaceURL: URL?
+    ) {
+        guard memoryState.settings.normalized.isMemoryEnabled,
+              memoryState.settings.normalized.autoSummaryEnabled,
+              let assistant = runtime.messages.first(where: { $0.id == assistantID }) else {
+            return
+        }
+        let latestUser = runtime.messages.last { $0.role == .user }
+        memoryState.addAutomaticMemories(
+            fromUser: latestUser?.modelContent ?? "",
+            assistantText: assistant.modelContent,
+            rootDirectory: workspaceURL
+        )
     }
 
     func setAgentError(_ error: Error, for runtime: AgentRuntime) {

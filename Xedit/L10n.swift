@@ -1089,6 +1089,8 @@ enum L10n {
             static let manualLabel = String(localized: "settings.memory.manual", defaultValue: "Manual")
             static let addMemorySection = String(localized: "settings.memory.add-memory-section", defaultValue: "Add Memory")
             static let lifetimeLabel = String(localized: "settings.memory.lifetime", defaultValue: "Lifetime")
+            static let scopeLabel = String(localized: "settings.memory.scope", defaultValue: "Scope")
+            static let projectScopeRequiresWorkspace = String(localized: "settings.memory.project-scope-requires-workspace", defaultValue: "Open a workspace before saving a project-scoped memory.")
             static let addMemoryButton = String(localized: "settings.memory.add-memory", defaultValue: "Add memory")
             static let searchSection = String(localized: "settings.memory.search-section", defaultValue: "Search Memories")
             static let searchPlaceholder = String(localized: "settings.memory.search-placeholder", defaultValue: "Search by text...")
@@ -1121,6 +1123,27 @@ enum L10n {
             }
             static func usedXTimes(_ a1: String) -> String {
                 let template = String(localized: "settings.memory.used-x-times", defaultValue: "Used %@x")
+                return String(format: template, a1)
+            }
+            static func confidenceTag(_ a1: String) -> String {
+                let template = String(localized: "settings.memory.confidence-tag", defaultValue: "%@%% confidence")
+                return String(format: template, a1)
+            }
+            static let sensitiveTag = String(localized: "settings.memory.sensitive-tag", defaultValue: "Sensitive redacted")
+            static func topicsLine(_ a1: String) -> String {
+                let template = String(localized: "settings.memory.topics-line", defaultValue: "Topics: %@")
+                return String(format: template, a1)
+            }
+            static func provenanceLine(_ a1: String) -> String {
+                let template = String(localized: "settings.memory.provenance-line", defaultValue: "Provenance: %@")
+                return String(format: template, a1)
+            }
+            static func projectFingerprintLine(_ a1: String) -> String {
+                let template = String(localized: "settings.memory.project-fingerprint-line", defaultValue: "Project fingerprint: %@")
+                return String(format: template, a1)
+            }
+            static func lastAccessedLine(_ a1: String) -> String {
+                let template = String(localized: "settings.memory.last-accessed-line", defaultValue: "Last retrieved: %@")
                 return String(format: template, a1)
             }
             static let archivedTag = String(localized: "settings.memory.archived-tag", defaultValue: "Archived")
