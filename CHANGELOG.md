@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.61.0-rc1 - 2026-06-13
+
+### Added
+
+- Agent 聊天历史里的 Markdown 表格现在可点击打开独立详情窗口；主 transcript 保持低内存 TextKit 等宽文本表格，详情窗口用 `NSTableView` 提供真实列、网格线、交替行背景和横向滚动。
+
+### Fixed
+
+- 修复 Agent 流式 Markdown 渲染、长 token 断行和用户内容拆分的静态 LRU cache 并发读写 race；Swift Testing 并发执行 renderer case 时不再可能撞坏 Dictionary storage。
+
+### Tests
+
+- 扩展聊天历史渲染单测，覆盖 Markdown 表格 range 上的详情 payload 与内部 link 标记。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.61.0-rc1`。
+
 ## 1.60.0-rc27 - 2026-06-12
 
 ### Added

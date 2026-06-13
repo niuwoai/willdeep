@@ -374,6 +374,11 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             return true
         }
 
+        if let payload = textStorage.attribute(.agentChatHistoryTablePayload, at: charIndex, effectiveRange: nil) as? AgentMarkdownTablePayload {
+            AgentMarkdownTableDetailWindowRegistry.open(payload: payload)
+            return true
+        }
+
         if let groupID = textStorage.attribute(.agentChatHistoryToolGroupID, at: charIndex, effectiveRange: nil) as? String {
             if expandedToolGroupIDs.contains(groupID) {
                 expandedToolGroupIDs.remove(groupID)
@@ -406,6 +411,7 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             AgentChatHistoryCodeCopyChrome.linkValue,
             AgentChatHistoryFooterChrome.copyLinkValue,
             AgentChatHistoryFooterChrome.retryLinkValue,
+            AgentChatHistoryTableLink.value,
             "agent-chat-history-tool-group",
         ].contains(value)
     }
@@ -472,6 +478,10 @@ enum AgentChatHistoryLayoutMetrics {
     static let userBodyTailIndent: CGFloat = -46
 }
 
+enum AgentChatHistoryTableLink {
+    static let value = "agent-chat-history-table"
+}
+
 extension NSAttributedString.Key {
     static let agentChatHistoryBubbleKind = NSAttributedString.Key("AgentChatHistoryBubbleKind")
     static let agentChatHistoryCodeBlockID = NSAttributedString.Key("AgentChatHistoryCodeBlockID")
@@ -479,6 +489,7 @@ extension NSAttributedString.Key {
     static let agentChatHistoryMessageCopyText = NSAttributedString.Key("AgentChatHistoryMessageCopyText")
     static let agentChatHistoryRetryLastTurn = NSAttributedString.Key("AgentChatHistoryRetryLastTurn")
     static let agentChatHistoryTableBlockID = NSAttributedString.Key("AgentChatHistoryTableBlockID")
+    static let agentChatHistoryTablePayload = NSAttributedString.Key("AgentChatHistoryTablePayload")
     static let agentChatHistoryToolGroupID = NSAttributedString.Key("AgentChatHistoryToolGroupID")
     static let agentChatHistoryUserMessageID = NSAttributedString.Key("AgentChatHistoryUserMessageID")
     /// Markup so the formatter's `applyBubbleChrome` step can swap in a
