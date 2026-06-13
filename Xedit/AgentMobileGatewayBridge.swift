@@ -181,6 +181,22 @@ struct AgentMobileGatewayMessageSnapshot: Equatable {
     var sessionID: UUID
 }
 
+struct AgentMobileGatewayWorktreeFileSnapshot: Equatable {
+    var path: String
+    var kind: String
+    var addedLines: Int
+    var deletedLines: Int
+}
+
+struct AgentMobileGatewayWorktreeSnapshot: Equatable {
+    var repositoryRoot: String?
+    var fileCount: Int
+    var totalAddedLines: Int
+    var totalDeletedLines: Int
+    var files: [AgentMobileGatewayWorktreeFileSnapshot]
+    var sessionID: UUID
+}
+
 struct AgentMobileGatewayCommandResult: Equatable {
     var sessionID: UUID?
     var message: String?
@@ -230,6 +246,7 @@ protocol AgentMobileGatewayControlling: AnyObject {
     ) throws -> AgentMobileGatewayFileSnapshot
     var mobileGatewayQueuedMessages: [AgentMobileGatewayQueuedMessageSnapshot] { get }
     var mobileGatewayRecentMessages: [AgentMobileGatewayMessageSnapshot] { get }
+    var mobileGatewayWorktreeChanges: [AgentMobileGatewayWorktreeSnapshot] { get }
     func mobileGatewayUpdateQueue(
         sessionID: UUID?,
         action: String,
@@ -483,7 +500,8 @@ enum AgentMobileGatewayCommandRouter {
                 "patch_proposals": .array(controller.mobileGatewayPendingPatchProposals.map(patchProposalJSON)),
                 "jobs": .array(controller.mobileGatewayJobs.map(jobJSON)),
                 "queued_messages": .array(controller.mobileGatewayQueuedMessages.map(queuedMessageJSON)),
-                "messages": .array(controller.mobileGatewayRecentMessages.map(messageJSON))
+                "messages": .array(controller.mobileGatewayRecentMessages.map(messageJSON)),
+                "worktree_changes": .array(controller.mobileGatewayWorktreeChanges.map(worktreeJSON))
             ],
             timestamp: isoTimestamp(now)
         )
@@ -521,6 +539,18 @@ enum AgentMobileGatewayCommandRouter {
             type: "job.updated",
             sessionID: job.sessionID.uuidString,
             payload: jobPayload(job),
+            timestamp: isoTimestamp(now)
+        )
+    }
+
+    static func worktreeUpdatedEnvelope(
+        _ worktree: AgentMobileGatewayWorktreeSnapshot,
+        now: Date = Date()
+    ) -> AgentMobileGatewayEnvelope {
+        AgentMobileGatewayEnvelope(
+            type: "worktree.updated",
+            sessionID: worktree.sessionID.uuidString,
+            payload: worktreePayload(worktree),
             timestamp: isoTimestamp(now)
         )
     }
@@ -687,6 +717,28 @@ enum AgentMobileGatewayCommandRouter {
             "created_at": .string(isoTimestamp(message.createdAt)),
             "session_id": .string(message.sessionID.uuidString)
         ])
+    }
+
+    private static func worktreeJSON(_ worktree: AgentMobileGatewayWorktreeSnapshot) -> AgentMobileGatewayJSON {
+        .object(worktreePayload(worktree))
+    }
+
+    private static func worktreePayload(_ worktree: AgentMobileGatewayWorktreeSnapshot) -> [String: AgentMobileGatewayJSON] {
+        [
+            "repository_root": worktree.repositoryRoot.map { .string($0) } ?? .null,
+            "file_count": .int(worktree.fileCount),
+            "total_added_lines": .int(worktree.totalAddedLines),
+            "total_deleted_lines": .int(worktree.totalDeletedLines),
+            "session_id": .string(worktree.sessionID.uuidString),
+            "files": .array(worktree.files.map { file in
+                .object([
+                    "path": .string(file.path),
+                    "kind": .string(file.kind),
+                    "added_lines": .int(file.addedLines),
+                    "deleted_lines": .int(file.deletedLines)
+                ])
+            })
+        ]
     }
 
     private static func jobPayload(_ job: AgentMobileGatewayJobSnapshot) -> [String: AgentMobileGatewayJSON] {
@@ -859,6 +911,9 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         }
         for job in appState.mobileGatewayJobs {
             send(AgentMobileGatewayCommandRouter.jobUpdatedEnvelope(job))
+        }
+        for worktree in appState.mobileGatewayWorktreeChanges {
+            send(AgentMobileGatewayCommandRouter.worktreeUpdatedEnvelope(worktree))
         }
     }
 
@@ -1059,6 +1114,28 @@ extension AppState: AgentMobileGatewayControlling {
                         sessionID: runtime.id
                     )
                 }
+        }
+    }
+
+    var mobileGatewayWorktreeChanges: [AgentMobileGatewayWorktreeSnapshot] {
+        agentSessions.compactMap { runtime(for: $0.id) }.compactMap { runtime in
+            let changes = runtime.worktreeChanges
+            guard !changes.isEmpty else { return nil }
+            return AgentMobileGatewayWorktreeSnapshot(
+                repositoryRoot: changes.repositoryRoot?.standardizedFileURL.path,
+                fileCount: changes.fileCount,
+                totalAddedLines: changes.totalAddedLines,
+                totalDeletedLines: changes.totalDeletedLines,
+                files: changes.files.map { file in
+                    AgentMobileGatewayWorktreeFileSnapshot(
+                        path: file.path,
+                        kind: file.kind.rawValue,
+                        addedLines: file.addedLines,
+                        deletedLines: file.deletedLines
+                    )
+                },
+                sessionID: runtime.id
+            )
         }
     }
 

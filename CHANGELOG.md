@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.76.0-rc1 - 2026-06-14
+
+### Added
+
+- Mobile Gateway `state.snapshot` now includes desktop-mediated worktree changed-file summaries for each active Agent session.
+- The Swift desktop peer now emits `worktree.updated` envelopes after snapshots so Android can show files changed by Mac-side Agent work.
+
+### Fixed
+
+- Goal 模式激活目标后，每轮助手回复现在必须在结尾做 Goal self-check，明确目标是 complete、in progress 还是 blocked，并始终输出 `goal-check` 块；无清单变化时用 `# no changes`。
+- `goal-check` 解析器现在把 `blocked` 视为未完成状态，可把误勾选或后续验证失败的验收项翻回未完成。
+
+### Tests
+
+- Added Swift Mobile Gateway bridge coverage for worktree changed-file snapshot encoding.
+- Added coverage for Goal 模式系统提示的每轮自检要求，以及 `blocked` 状态回退解析。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.76.0-rc1`。
+
 ## 1.75.0-rc1 - 2026-06-14
 
 ### Added

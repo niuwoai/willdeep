@@ -179,6 +179,29 @@ struct AgentMobileGatewayBridgeTests {
                 sessionID: session.id
             )
         ]
+        controller.worktrees = [
+            AgentMobileGatewayWorktreeSnapshot(
+                repositoryRoot: "/tmp/project",
+                fileCount: 2,
+                totalAddedLines: 12,
+                totalDeletedLines: 3,
+                files: [
+                    AgentMobileGatewayWorktreeFileSnapshot(
+                        path: "app/src/main/java/MainActivity.kt",
+                        kind: "M",
+                        addedLines: 10,
+                        deletedLines: 2
+                    ),
+                    AgentMobileGatewayWorktreeFileSnapshot(
+                        path: "README.md",
+                        kind: "A",
+                        addedLines: 2,
+                        deletedLines: 1
+                    )
+                ],
+                sessionID: session.id
+            )
+        ]
 
         let response = AgentMobileGatewayCommandRouter.handle(
             AgentMobileGatewayEnvelope(id: "cmd-5", type: "session.list"),
@@ -230,6 +253,21 @@ struct AgentMobileGatewayBridgeTests {
         #expect(message["role"]?.stringValue == "assistant")
         #expect(message["content"]?.stringValue == "I can update the Android app from the Mac.")
         #expect(message["created_at"]?.stringValue == "2026-06-13T12:00:00.000Z")
+
+        guard case .array(let worktrees)? = response.payload["worktree_changes"],
+              case .object(let worktree)? = worktrees.first,
+              case .array(let files)? = worktree["files"],
+              case .object(let firstFile)? = files.first else {
+            Issue.record("worktree_changes payload missing")
+            return
+        }
+        #expect(worktree["repository_root"]?.stringValue == "/tmp/project")
+        #expect(worktree["file_count"]?.intValue == 2)
+        #expect(worktree["total_added_lines"]?.intValue == 12)
+        #expect(worktree["total_deleted_lines"]?.intValue == 3)
+        #expect(firstFile["path"]?.stringValue == "app/src/main/java/MainActivity.kt")
+        #expect(firstFile["kind"]?.stringValue == "M")
+        #expect(firstFile["added_lines"]?.intValue == 10)
     }
 
     @Test @MainActor
@@ -433,6 +471,7 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
     var files: [String: AgentMobileGatewayFileSnapshot] = [:]
     var queuedMessages: [AgentMobileGatewayQueuedMessageSnapshot] = []
     var messages: [AgentMobileGatewayMessageSnapshot] = []
+    var worktrees: [AgentMobileGatewayWorktreeSnapshot] = []
     var toolDecisions: [ToolDecision] = []
     var patchDecisions: [PatchDecision] = []
     var killedJobs: [JobKill] = []
@@ -483,6 +522,7 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
     var mobileGatewayJobs: [AgentMobileGatewayJobSnapshot] { jobs }
     var mobileGatewayQueuedMessages: [AgentMobileGatewayQueuedMessageSnapshot] { queuedMessages }
     var mobileGatewayRecentMessages: [AgentMobileGatewayMessageSnapshot] { messages }
+    var mobileGatewayWorktreeChanges: [AgentMobileGatewayWorktreeSnapshot] { worktrees }
 
     func mobileGatewayRuntimeIsResponding(sessionID: UUID) -> Bool {
         false

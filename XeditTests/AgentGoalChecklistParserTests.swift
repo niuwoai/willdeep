@@ -144,4 +144,36 @@ struct AgentGoalChecklistParserTests {
         #expect(next?.checklist[2].done == true)
         #expect(next?.checklist[3].done == true)
     }
+
+    @Test
+    func blockedFlipsPreviouslyDoneItemBack() {
+        let g = goal(2, done: [1])
+        let reply = """
+        Goal self-check: blocked because the verification command failed.
+
+        ```goal-check
+        1: blocked
+        # no changes for item 2
+        ```
+        """
+        let next = AgentGoalChecklistParser.applyEvaluation(to: g, from: reply)
+        #expect(next?.checklist[0].done == false)
+        #expect(next?.checklist[1].done == false)
+    }
+
+    @Test
+    func activeGoalPromptRequiresTurnEndSelfCheck() {
+        let prompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: URL(fileURLWithPath: "/tmp/project"),
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            interactionMode: .goal,
+            currentGoal: goal(2)
+        )
+        #expect(prompt.contains("Turn-end self-check (REQUIRED on every Goal-mode assistant reply after the goal is defined)"))
+        #expect(prompt.contains("Goal self-check"))
+        #expect(prompt.contains("# no changes"))
+    }
 }
