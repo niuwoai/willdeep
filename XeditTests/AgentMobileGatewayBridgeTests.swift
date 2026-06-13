@@ -88,6 +88,37 @@ struct AgentMobileGatewayBridgeTests {
     }
 
     @Test @MainActor
+    func diffGetReturnsPatchDiffInAckPayload() {
+        let session = AgentSession(title: "Patch diff")
+        let patchID = UUID()
+        let controller = FakeMobileGatewayController(sessions: [session], activeSessionID: session.id)
+        controller.diffs[patchID] = AgentMobileGatewayDiffSnapshot(
+            patchID: patchID,
+            title: "Agent Patch",
+            diff: "diff --git a/App.swift b/App.swift\n+print(\"hello\")",
+            sessionID: session.id
+        )
+
+        let response = AgentMobileGatewayCommandRouter.handle(
+            AgentMobileGatewayEnvelope(
+                id: "cmd-diff",
+                type: "diff.get",
+                sessionID: session.id.uuidString,
+                payload: ["patch_id": .string(patchID.uuidString)]
+            ),
+            controller: controller,
+            now: fixedDate
+        )
+
+        #expect(response.type == "ack")
+        #expect(response.sessionID == session.id.uuidString)
+        #expect(response.payload["type"]?.stringValue == "diff.get")
+        #expect(response.payload["patch_id"]?.stringValue == patchID.uuidString)
+        #expect(response.payload["title"]?.stringValue == "Agent Patch")
+        #expect(response.payload["diff"]?.stringValue == "diff --git a/App.swift b/App.swift\n+print(\"hello\")")
+    }
+
+    @Test @MainActor
     func snapshotIncludesPendingToolAndPatchApprovals() {
         let session = AgentSession(title: "Approval session")
         let patchID = UUID()
@@ -242,6 +273,7 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
     var stoppedSessionIDs: [UUID?] = []
     var pendingTools: [AgentMobileGatewayToolApprovalSnapshot] = []
     var pendingPatches: [AgentMobileGatewayPatchSnapshot] = []
+    var diffs: [UUID: AgentMobileGatewayDiffSnapshot] = [:]
     var toolDecisions: [ToolDecision] = []
     var patchDecisions: [PatchDecision] = []
 
@@ -329,5 +361,15 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
     ) throws -> AgentMobileGatewayCommandResult {
         patchDecisions.append(PatchDecision(sessionID: sessionID, patchID: patchID, approved: approved))
         return .ok(sessionID: sessionID ?? activeSessionID)
+    }
+
+    func mobileGatewayDiff(
+        sessionID: UUID?,
+        patchID: UUID
+    ) throws -> AgentMobileGatewayDiffSnapshot {
+        guard let diff = diffs[patchID] else {
+            throw AgentMobileGatewayCommandError.patchNotFound(patchID)
+        }
+        return diff
     }
 }

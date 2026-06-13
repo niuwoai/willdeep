@@ -131,6 +131,13 @@ struct AgentMobileGatewayPatchSnapshot: Equatable {
     var sessionID: UUID
 }
 
+struct AgentMobileGatewayDiffSnapshot: Equatable {
+    var patchID: UUID
+    var title: String
+    var diff: String
+    var sessionID: UUID
+}
+
 struct AgentMobileGatewayCommandResult: Equatable {
     var sessionID: UUID?
     var message: String?
@@ -164,6 +171,10 @@ protocol AgentMobileGatewayControlling: AnyObject {
         patchID: UUID,
         approved: Bool
     ) throws -> AgentMobileGatewayCommandResult
+    func mobileGatewayDiff(
+        sessionID: UUID?,
+        patchID: UUID
+    ) throws -> AgentMobileGatewayDiffSnapshot
 }
 
 enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
@@ -296,6 +307,20 @@ enum AgentMobileGatewayCommandRouter {
                     message: result.message,
                     now: now
                 )
+            case "diff.get":
+                let rawPatchID = try requiredPayloadString("id", aliases: ["patch_id"], from: envelope)
+                guard let patchID = UUID(uuidString: rawPatchID) else {
+                    throw AgentMobileGatewayCommandError.invalidPatchID(rawPatchID)
+                }
+                let diff = try controller.mobileGatewayDiff(
+                    sessionID: try optionalSessionID(from: envelope),
+                    patchID: patchID
+                )
+                return diffAckEnvelope(
+                    for: envelope,
+                    diff: diff,
+                    now: now
+                )
             default:
                 throw AgentMobileGatewayCommandError.unsupportedCommand(envelope.type)
             }
@@ -388,6 +413,25 @@ enum AgentMobileGatewayCommandRouter {
             type: "ack",
             sessionID: sessionID?.uuidString ?? envelope.sessionID,
             payload: payload,
+            timestamp: isoTimestamp(now)
+        )
+    }
+
+    private static func diffAckEnvelope(
+        for envelope: AgentMobileGatewayEnvelope,
+        diff: AgentMobileGatewayDiffSnapshot,
+        now: Date
+    ) -> AgentMobileGatewayEnvelope {
+        AgentMobileGatewayEnvelope(
+            id: envelope.id,
+            type: "ack",
+            sessionID: diff.sessionID.uuidString,
+            payload: [
+                "type": .string(envelope.type),
+                "patch_id": .string(diff.patchID.uuidString),
+                "title": .string(diff.title),
+                "diff": .string(diff.diff)
+            ],
             timestamp: isoTimestamp(now)
         )
     }
@@ -795,6 +839,32 @@ extension AppState: AgentMobileGatewayControlling {
             rejectAgentPatchProposal(id: patchID)
         }
         return .ok(sessionID: activeAgentSessionID, message: approved ? "Patch approved" : "Patch rejected")
+    }
+
+    func mobileGatewayDiff(
+        sessionID: UUID?,
+        patchID: UUID
+    ) throws -> AgentMobileGatewayDiffSnapshot {
+        let runtime: AgentRuntime
+        if let sessionID {
+            runtime = try mobileGatewayRuntime(sessionID: sessionID)
+        } else if let found = agentRuntimes.values.first(where: { runtime in
+            runtime.patchProposals.contains(where: { $0.id == patchID })
+        }) {
+            runtime = found
+        } else {
+            throw AgentMobileGatewayCommandError.patchNotFound(patchID)
+        }
+
+        guard let proposal = runtime.patchProposals.first(where: { $0.id == patchID && $0.status == .pending }) else {
+            throw AgentMobileGatewayCommandError.patchNotFound(patchID)
+        }
+        return AgentMobileGatewayDiffSnapshot(
+            patchID: proposal.id,
+            title: proposal.title,
+            diff: proposal.diff,
+            sessionID: runtime.id
+        )
     }
 
     private func mobileGatewayRuntime(sessionID: UUID?) throws -> AgentRuntime {

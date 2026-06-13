@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.71.0-rc1 - 2026-06-14
+
+### Added
+
+- Mobile Gateway Swift desktop bridge now handles `diff.get` for pending Agent patch proposals and returns the unified diff in the command `ack` payload.
+- Android Mobile Gateway can request and display patch diffs before approving or rejecting patch proposals.
+
+### Tests
+
+- Added Swift router coverage for `diff.get` ack payloads.
+- Added Android model coverage for parsing `diff.get` ack payloads.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.71.0-rc1`。
+
 ## 1.70.0-rc1 - 2026-06-14
 
 ### Added
