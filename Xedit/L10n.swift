@@ -8,6 +8,24 @@ import Foundation
 // To regenerate: see scripts/i18n_regenerate.rb (TODO if we ever automate this).
 
 enum L10n {
+    enum AppUpdate {
+        static let download = String(localized: "app-update.download", defaultValue: "Download")
+        static let later = String(localized: "app-update.later", defaultValue: "Later")
+        static let releaseNotes = String(localized: "app-update.release-notes", defaultValue: "Release Notes")
+        static func message(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "app-update.message", defaultValue: "Current version: %@\nLatest version: %@")
+            return String(format: template, a1, a2)
+        }
+        static func minimumSystem(_ a1: String) -> String {
+            let template = String(localized: "app-update.minimum-system", defaultValue: "Requires macOS %@ or later.")
+            return String(format: template, a1)
+        }
+        static func title(_ a1: String) -> String {
+            let template = String(localized: "app-update.title", defaultValue: "WillDeep %@ is available")
+            return String(format: template, a1)
+        }
+    }
+
     enum Alert {
         static let binaryFileButtonOk = String(localized: "alert.binary-file.button.ok", defaultValue: "OK")
         static func binaryFileMessage(_ a1: String) -> String {

@@ -2,6 +2,48 @@
   "sourceLanguage": "en",
   "strings": {
     "": {},
+    "app-update.download": {
+      "comment": "Primary button in the app update alert",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Download" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "下载" } }
+      }
+    },
+    "app-update.later": {
+      "comment": "Dismiss button in the app update alert",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Later" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "稍后" } }
+      }
+    },
+    "app-update.message": {
+      "comment": "App update alert body. Placeholder 1 is current version, placeholder 2 is latest version.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Current version: %1$@\nLatest version: %2$@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "当前版本：%1$@\n最新版本：%2$@" } }
+      }
+    },
+    "app-update.minimum-system": {
+      "comment": "App update alert minimum macOS line. Placeholder 1 is the minimum system version.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Requires macOS %@ or later." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "需要 macOS %@ 或更高版本。" } }
+      }
+    },
+    "app-update.release-notes": {
+      "comment": "Secondary button in the app update alert",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Release Notes" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "发行说明" } }
+      }
+    },
+    "app-update.title": {
+      "comment": "App update alert title. Placeholder 1 is the latest version.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "WillDeep %@ is available" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "WillDeep %@ 可用" } }
+      }
+    },
     "%@  %lld": {
       "localizations": {
         "en": {

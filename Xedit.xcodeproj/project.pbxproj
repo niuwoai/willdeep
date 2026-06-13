@@ -9,6 +9,9 @@
 /* Begin PBXBuildFile section */
 		5CA6B0922FC70A00006DFCCC /* WillDeep.help in Resources */ = {isa = PBXBuildFile; fileRef = 5CA6B0912FC70A00006DFCCC /* WillDeep.help */; };
 		5CA6B0A22FD0C9E0006DFCCC /* BundledSkills in Resources */ = {isa = PBXBuildFile; fileRef = 5CA6B0A12FD0C9E0006DFCCC /* BundledSkills */; };
+		5CA6B0B42FDDF001006DFCCC /* AIPipe.m in Sources */ = {isa = PBXBuildFile; fileRef = 5CA6B0AE2FDDF001006DFCCC /* AIPipe.m */; };
+		5CA6B0B52FDDF001006DFCCC /* AIPipeConfig.m in Sources */ = {isa = PBXBuildFile; fileRef = 5CA6B0B02FDDF001006DFCCC /* AIPipeConfig.m */; };
+		5CA6B0B62FDDF001006DFCCC /* AIPipeLogItem.m in Sources */ = {isa = PBXBuildFile; fileRef = 5CA6B0B22FDDF001006DFCCC /* AIPipeLogItem.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -34,6 +37,12 @@
 		5CA6B07B2FC6D8FA006DFCCC /* XeditUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = XeditUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5CA6B0912FC70A00006DFCCC /* WillDeep.help */ = {isa = PBXFileReference; lastKnownFileType = wrapper.help; path = WillDeep.help; sourceTree = "<group>"; };
 		5CA6B0A12FD0C9E0006DFCCC /* BundledSkills */ = {isa = PBXFileReference; lastKnownFileType = folder; path = BundledSkills; sourceTree = "<group>"; };
+		5CA6B0AD2FDDF001006DFCCC /* AIPipe.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AIPipe.h; sourceTree = "<group>"; };
+		5CA6B0AE2FDDF001006DFCCC /* AIPipe.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AIPipe.m; sourceTree = "<group>"; };
+		5CA6B0AF2FDDF001006DFCCC /* AIPipeConfig.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AIPipeConfig.h; sourceTree = "<group>"; };
+		5CA6B0B02FDDF001006DFCCC /* AIPipeConfig.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AIPipeConfig.m; sourceTree = "<group>"; };
+		5CA6B0B12FDDF001006DFCCC /* AIPipeLogItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AIPipeLogItem.h; sourceTree = "<group>"; };
+		5CA6B0B22FDDF001006DFCCC /* AIPipeLogItem.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AIPipeLogItem.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -96,6 +105,7 @@
 			isa = PBXGroup;
 			children = (
 				5CA6B0632FC6D8F9006DFCCC /* Xedit */,
+				5CA6B0A92FDDF001006DFCCC /* Vendor */,
 				5CA6B0A12FD0C9E0006DFCCC /* BundledSkills */,
 				5CA6B0902FC70A00006DFCCC /* Help */,
 				5CA6B0742FC6D8FA006DFCCC /* XeditTests */,
@@ -120,6 +130,35 @@
 				5CA6B0912FC70A00006DFCCC /* WillDeep.help */,
 			);
 			path = Help;
+			sourceTree = "<group>";
+		};
+		5CA6B0A92FDDF001006DFCCC /* Vendor */ = {
+			isa = PBXGroup;
+			children = (
+				5CA6B0AA2FDDF001006DFCCC /* iossdk */,
+			);
+			path = Vendor;
+			sourceTree = "<group>";
+		};
+		5CA6B0AA2FDDF001006DFCCC /* iossdk */ = {
+			isa = PBXGroup;
+			children = (
+				5CA6B0AC2FDDF001006DFCCC /* AIPipe */,
+			);
+			path = iossdk;
+			sourceTree = "<group>";
+		};
+		5CA6B0AC2FDDF001006DFCCC /* AIPipe */ = {
+			isa = PBXGroup;
+			children = (
+				5CA6B0AD2FDDF001006DFCCC /* AIPipe.h */,
+				5CA6B0AE2FDDF001006DFCCC /* AIPipe.m */,
+				5CA6B0AF2FDDF001006DFCCC /* AIPipeConfig.h */,
+				5CA6B0B02FDDF001006DFCCC /* AIPipeConfig.m */,
+				5CA6B0B12FDDF001006DFCCC /* AIPipeLogItem.h */,
+				5CA6B0B22FDDF001006DFCCC /* AIPipeLogItem.m */,
+			);
+			path = AIPipe;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -269,6 +308,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5CA6B0B42FDDF001006DFCCC /* AIPipe.m in Sources */,
+				5CA6B0B52FDDF001006DFCCC /* AIPipeConfig.m in Sources */,
+				5CA6B0B62FDDF001006DFCCC /* AIPipeLogItem.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -316,6 +358,10 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Vendor/iossdk/AIPipe",
+				);
 				INFOPLIST_FILE = Xedit/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = WillDeep;
 				INFOPLIST_KEY_CFBundleName = WillDeep;
@@ -324,7 +370,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = "1.61.0-rc1";
+				MARKETING_VERSION = "1.63.0-rc1";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
 				REGISTER_APP_GROUPS = YES;
@@ -332,6 +378,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Xedit/WillDeep-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -351,6 +398,10 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Vendor/iossdk/AIPipe",
+				);
 				INFOPLIST_FILE = Xedit/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = WillDeep;
 				INFOPLIST_KEY_CFBundleName = WillDeep;
@@ -359,7 +410,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = "1.61.0-rc1";
+				MARKETING_VERSION = "1.63.0-rc1";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
 				REGISTER_APP_GROUPS = YES;
@@ -367,6 +418,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Xedit/WillDeep-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -501,7 +553,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = "1.61.0-rc1";
+				MARKETING_VERSION = "1.63.0-rc1";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -522,7 +574,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = "1.61.0-rc1";
+				MARKETING_VERSION = "1.63.0-rc1";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -541,7 +593,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.61.0-rc1";
+				MARKETING_VERSION = "1.63.0-rc1";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -560,7 +612,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.61.0-rc1";
+				MARKETING_VERSION = "1.63.0-rc1";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;

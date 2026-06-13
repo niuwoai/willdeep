@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.63.0-rc1 - 2026-06-13
+
+### Added
+
+- 新增轻量自动更新检查：应用启动后请求 `https://meta.niuwoai.com/willdeep/meta.json`，解析远端版本号和下载地址，发现新版本时弹出下载提示。
+- `meta.json` 兼容 `download_url` / `downloadURL`、`release_notes_url` / `releaseNotesURL`、`minimum_system_version` / `minimumSystemVersion` 字段；版本比较支持 `v` 前缀、缺省 patch 位和 `-rcN` 预发布号。
+- 新增 `docs/UPDATE_META.md`，记录 `meta.json` 发布格式和示例。
+
+### Tests
+
+- 新增 `AppUpdateCheckerTests`，覆盖语义化版本排序和 meta JSON 字段解析。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.63.0-rc1`。
+
+## 1.62.0-rc1 - 2026-06-13
+
+### Added
+
+- 集成 AIPipe iOS/macOS SDK 源码到 `Vendor/iossdk`，并把核心 Objective-C 源文件加入 Xcode target。
+- 新增 macOS AppDelegate 启动桥接：应用启动时可通过 `AIPIPE_API_KEY` / `AIPipeAPIKey` 初始化 AIPipe，endpoint 默认使用 `https://17push.com/api/v1`，也可由 `AIPIPE_ENDPOINT` / `AIPipeEndpoint` 覆盖；退出时主动 flush 上报队列。
+
+### Fixed
+
+- 修复 vendored AIPipe SDK 在当前 Xcode/macOS SDK 下的 uncaught exception handler 函数指针兼容问题。
+
+### Security
+
+- AIPipe API key 不写入仓库；运行时必须通过环境变量或外部 Info.plist 配置注入。
+
+### Tests
+
+- `xcodebuild build -project Xedit.xcodeproj -scheme Xedit -destination 'platform=macOS'` 通过。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.62.0-rc1`。
+
 ## 1.61.0-rc1 - 2026-06-13
 
 ### Added

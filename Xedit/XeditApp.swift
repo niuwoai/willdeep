@@ -10,6 +10,8 @@ import AppKit
 
 @main
 struct WillDeepApp: App {
+    @NSApplicationDelegateAdaptor(WillDeepAppDelegate.self) private var appDelegate
+
     var body: some Scene {
         WindowGroup {
             WindowRootView()
