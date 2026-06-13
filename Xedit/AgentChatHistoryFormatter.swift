@@ -1470,10 +1470,21 @@ enum AgentChatHistoryRenderer {
                             ]
                         ))
                         if role != .user {
+                            let tableRange = NSRange(location: tableBlockStart, length: result.length - tableBlockStart)
                             result.addAttribute(
                                 .agentChatHistoryTableBlockID,
                                 value: NSNumber(value: tableBlockID),
-                                range: NSRange(location: tableBlockStart, length: result.length - tableBlockStart)
+                                range: tableRange
+                            )
+                            result.addAttribute(
+                                .agentChatHistoryTablePayload,
+                                value: AgentMarkdownTablePayload(headers: headers, rows: rows),
+                                range: tableRange
+                            )
+                            result.addAttribute(
+                                .link,
+                                value: AgentChatHistoryTableLink.value,
+                                range: tableRange
                             )
                         }
                     }

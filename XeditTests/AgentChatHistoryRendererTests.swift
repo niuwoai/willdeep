@@ -349,6 +349,16 @@ struct AgentChatHistoryRendererTests {
         ) as? NSNumber)
         #expect(tableID.intValue == 0)
 
+        let payload = try #require(rendered.attribute(
+            .agentChatHistoryTablePayload,
+            at: tableRange.location,
+            effectiveRange: nil
+        ) as? AgentMarkdownTablePayload)
+        #expect(payload.headers == ["时间", "提交", "作者", "说明"])
+        #expect(payload.rows.count == 2)
+        #expect(payload.rows[0][1] == "`1633595`")
+        #expect(rendered.attribute(.link, at: tableRange.location, effectiveRange: nil) as? String == AgentChatHistoryTableLink.value)
+
         let paragraphStyle = try #require(rendered.attribute(
             .paragraphStyle,
             at: tableRange.location,

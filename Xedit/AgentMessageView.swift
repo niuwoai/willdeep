@@ -295,6 +295,7 @@ enum AgentAssistantMarkdownRenderer {
 
     private static var cache: [RenderCacheKey: AttributedString] = [:]
     private static var cacheOrder: [RenderCacheKey] = []
+    private static let cacheLock = NSLock()
     private static let cacheLimit = 128
 
     static func render(
@@ -307,14 +308,21 @@ enum AgentAssistantMarkdownRenderer {
             isDark: isDark,
             baseFontSize: baseFontSize
         )
-        if let hit = cache[key] { return hit }
+        cacheLock.lock()
+        let hit = cache[key]
+        cacheLock.unlock()
+        if let hit { return hit }
+
         let result = build(from: content, isDark: isDark, baseFontSize: baseFontSize)
+
+        cacheLock.lock()
         cache[key] = result
         cacheOrder.append(key)
         if cacheOrder.count > cacheLimit {
             let evict = cacheOrder.removeFirst()
             cache.removeValue(forKey: evict)
         }
+        cacheLock.unlock()
         return result
     }
 
@@ -559,6 +567,7 @@ enum AgentLongTokenBreaker {
     /// identity for the same input cuts the loop.
     private static var cache: [Int: String] = [:]
     private static var cacheOrder: [Int] = []
+    private static let cacheLock = NSLock()
     private static let cacheLimit = 128
 
     static func inject(into source: String) -> String {
@@ -567,14 +576,21 @@ enum AgentLongTokenBreaker {
         guard source.count > threshold else { return source }
 
         let key = source.hashValue
-        if let hit = cache[key] { return hit }
+        cacheLock.lock()
+        let hit = cache[key]
+        cacheLock.unlock()
+        if let hit { return hit }
+
         let result = compute(source)
+
+        cacheLock.lock()
         cache[key] = result
         cacheOrder.append(key)
         if cacheOrder.count > cacheLimit {
             let evict = cacheOrder.removeFirst()
             cache.removeValue(forKey: evict)
         }
+        cacheLock.unlock()
         return result
     }
 
@@ -654,18 +670,26 @@ enum AgentUserContentSplitter {
     /// low-frequency.
     private static var cache: [Int: Split] = [:]
     private static var cacheOrder: [Int] = []
+    private static let cacheLock = NSLock()
     private static let cacheLimit = 64
 
     static func split(_ content: String) -> Split {
         let key = content.hashValue
-        if let hit = cache[key] { return hit }
+        cacheLock.lock()
+        let hit = cache[key]
+        cacheLock.unlock()
+        if let hit { return hit }
+
         let result = computeSplit(content)
+
+        cacheLock.lock()
         cache[key] = result
         cacheOrder.append(key)
         if cacheOrder.count > cacheLimit {
             let evict = cacheOrder.removeFirst()
             cache.removeValue(forKey: evict)
         }
+        cacheLock.unlock()
         return result
     }
 
