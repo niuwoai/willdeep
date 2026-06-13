@@ -138,6 +138,20 @@ struct AgentMobileGatewayDiffSnapshot: Equatable {
     var sessionID: UUID
 }
 
+struct AgentMobileGatewayJobSnapshot: Equatable {
+    var id: UUID
+    var handle: String
+    var command: String
+    var status: String
+    var isAlive: Bool
+    var pid: Int32
+    var exitCode: Int32?
+    var outputByteCount: Int
+    var startedAt: Date
+    var finishedAt: Date?
+    var sessionID: UUID
+}
+
 struct AgentMobileGatewayCommandResult: Equatable {
     var sessionID: UUID?
     var message: String?
@@ -175,6 +189,11 @@ protocol AgentMobileGatewayControlling: AnyObject {
         sessionID: UUID?,
         patchID: UUID
     ) throws -> AgentMobileGatewayDiffSnapshot
+    var mobileGatewayJobs: [AgentMobileGatewayJobSnapshot] { get }
+    func mobileGatewayKillJob(
+        sessionID: UUID?,
+        jobID: String
+    ) throws -> AgentMobileGatewayCommandResult
 }
 
 enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
@@ -189,6 +208,7 @@ enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
     case confirmationRequired(String)
     case invalidPatchID(String)
     case patchNotFound(UUID)
+    case jobNotFound(String)
     case unsupportedCommand(String)
 
     var errorDescription: String? {
@@ -215,6 +235,8 @@ enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
             return "Invalid patch id: \(value)."
         case .patchNotFound(let id):
             return "Patch proposal not found: \(id.uuidString)."
+        case .jobNotFound(let id):
+            return "Background job not found: \(id)."
         case .unsupportedCommand(let type):
             return "Unsupported mobile command: \(type)."
         }
@@ -321,6 +343,18 @@ enum AgentMobileGatewayCommandRouter {
                     diff: diff,
                     now: now
                 )
+            case "job.kill":
+                let jobID = try requiredPayloadString("id", aliases: ["job_id"], from: envelope)
+                let result = try controller.mobileGatewayKillJob(
+                    sessionID: try optionalSessionID(from: envelope),
+                    jobID: jobID
+                )
+                return ackEnvelope(
+                    for: envelope,
+                    sessionID: result.sessionID,
+                    message: result.message,
+                    now: now
+                )
             default:
                 throw AgentMobileGatewayCommandError.unsupportedCommand(envelope.type)
             }
@@ -349,7 +383,8 @@ enum AgentMobileGatewayCommandRouter {
                 "sessions": .array(sessions),
                 "active_session_id": activeID.map { .string($0.uuidString) } ?? .null,
                 "pending_tools": .array(controller.mobileGatewayPendingToolApprovals.map(toolApprovalJSON)),
-                "patch_proposals": .array(controller.mobileGatewayPendingPatchProposals.map(patchProposalJSON))
+                "patch_proposals": .array(controller.mobileGatewayPendingPatchProposals.map(patchProposalJSON)),
+                "jobs": .array(controller.mobileGatewayJobs.map(jobJSON))
             ],
             timestamp: isoTimestamp(now)
         )
@@ -375,6 +410,18 @@ enum AgentMobileGatewayCommandRouter {
             type: "patch.upsert",
             sessionID: proposal.sessionID.uuidString,
             payload: patchProposalPayload(proposal),
+            timestamp: isoTimestamp(now)
+        )
+    }
+
+    static func jobUpdatedEnvelope(
+        _ job: AgentMobileGatewayJobSnapshot,
+        now: Date = Date()
+    ) -> AgentMobileGatewayEnvelope {
+        AgentMobileGatewayEnvelope(
+            type: "job.updated",
+            sessionID: job.sessionID.uuidString,
+            payload: jobPayload(job),
             timestamp: isoTimestamp(now)
         )
     }
@@ -499,6 +546,31 @@ enum AgentMobileGatewayCommandRouter {
         ]
     }
 
+    private static func jobJSON(_ job: AgentMobileGatewayJobSnapshot) -> AgentMobileGatewayJSON {
+        .object(jobPayload(job))
+    }
+
+    private static func jobPayload(_ job: AgentMobileGatewayJobSnapshot) -> [String: AgentMobileGatewayJSON] {
+        var payload: [String: AgentMobileGatewayJSON] = [
+            "id": .string(job.id.uuidString),
+            "handle": .string(job.handle),
+            "command": .string(job.command),
+            "status": .string(job.status),
+            "is_alive": .bool(job.isAlive),
+            "pid": .int(Int(job.pid)),
+            "output_byte_count": .int(job.outputByteCount),
+            "started_at": .string(isoTimestamp(job.startedAt)),
+            "session_id": .string(job.sessionID.uuidString)
+        ]
+        if let exitCode = job.exitCode {
+            payload["exit_code"] = .int(Int(exitCode))
+        }
+        if let finishedAt = job.finishedAt {
+            payload["finished_at"] = .string(isoTimestamp(finishedAt))
+        }
+        return payload
+    }
+
     private static func requiredSessionID(from envelope: AgentMobileGatewayEnvelope) throws -> UUID {
         guard let sessionID = try optionalSessionID(from: envelope) else {
             throw AgentMobileGatewayCommandError.invalidSessionID("")
@@ -602,6 +674,9 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         }
         for proposal in appState.mobileGatewayPendingPatchProposals {
             send(AgentMobileGatewayCommandRouter.patchUpsertEnvelope(proposal))
+        }
+        for job in appState.mobileGatewayJobs {
+            send(AgentMobileGatewayCommandRouter.jobUpdatedEnvelope(job))
         }
     }
 
@@ -731,6 +806,32 @@ extension AppState: AgentMobileGatewayControlling {
                 return lhs.sessionID.uuidString < rhs.sessionID.uuidString
             }
             return lhs.id.uuidString < rhs.id.uuidString
+        }
+    }
+
+    var mobileGatewayJobs: [AgentMobileGatewayJobSnapshot] {
+        agentRuntimes.values.flatMap { runtime in
+            agentJobRegistry.jobs(forRuntime: runtime.id).map { job in
+                AgentMobileGatewayJobSnapshot(
+                    id: job.id,
+                    handle: job.displayHandle,
+                    command: Self.mobileGatewayTruncated(job.command),
+                    status: job.status.rawValue,
+                    isAlive: job.isAlive,
+                    pid: job.pid,
+                    exitCode: job.exitCode,
+                    outputByteCount: job.outputByteCount,
+                    startedAt: job.startedAt,
+                    finishedAt: job.finishedAt,
+                    sessionID: runtime.id
+                )
+            }
+        }
+        .sorted { lhs, rhs in
+            if lhs.sessionID != rhs.sessionID {
+                return lhs.sessionID.uuidString < rhs.sessionID.uuidString
+            }
+            return lhs.startedAt > rhs.startedAt
         }
     }
 
@@ -864,6 +965,21 @@ extension AppState: AgentMobileGatewayControlling {
             title: proposal.title,
             diff: proposal.diff,
             sessionID: runtime.id
+        )
+    }
+
+    func mobileGatewayKillJob(
+        sessionID: UUID?,
+        jobID: String
+    ) throws -> AgentMobileGatewayCommandResult {
+        let runtime = try mobileGatewayRuntime(sessionID: sessionID)
+        guard let job = agentJobRegistry.job(matchingHandle: jobID, runtimeID: runtime.id) else {
+            throw AgentMobileGatewayCommandError.jobNotFound(jobID)
+        }
+        let didSignal = agentJobRegistry.kill(id: job.id)
+        return .ok(
+            sessionID: runtime.id,
+            message: didSignal ? "Job killed" : "Job was not running"
         )
     }
 

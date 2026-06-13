@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-06-14 | Target version: v1.71.0-rc1
+> Last updated: 2026-06-14 | Target version: v1.72.0-rc1
 
 ## Summary
 
@@ -46,8 +46,9 @@ The current Swift bridge supports the first command set needed for phone-to-Mac 
 - `tool.decide`
 - `patch.decide`
 - `diff.get`
+- `job.kill`
 
-Commands that would touch files or jobs must remain desktop-mediated and will be wired in follow-up passes without bypassing existing safety gates.
+Commands that would touch files must remain desktop-mediated and will be wired in follow-up passes without bypassing existing safety gates.
 
 ### Mobile Peer
 
@@ -63,8 +64,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.71.0-rc1`
-- `X-Server-Version: 1.71.0-rc1`
+- `X-App-Version: 1.72.0-rc1`
+- `X-Server-Version: 1.72.0-rc1`
 
 ### `GET /mobile/health`
 
@@ -76,7 +77,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.71.0-rc1",
+    "version": "1.72.0-rc1",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
@@ -262,6 +263,8 @@ Current desktop bridge behavior:
 - `.awaitingUserAnswer` tool calls require `payload.answer`; empty answers return `command.error`.
 - `patch.decide` selects the target session and calls the existing patch apply/reject entry points.
 - `diff.get` returns the pending patch unified diff in an `ack` payload with `patch_id`, `title`, and `diff`; it does not grant mobile direct filesystem access.
+- `state.snapshot` includes background job metadata, and `publishSnapshot()` also emits `job.updated` envelopes for current jobs.
+- `job.kill` resolves a session-scoped job handle and calls the existing `AgentJobRegistry.kill` path; it does not grant mobile process handles or shell access.
 
 ## Security Requirements
 

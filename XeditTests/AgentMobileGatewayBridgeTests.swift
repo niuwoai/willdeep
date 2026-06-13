@@ -122,6 +122,7 @@ struct AgentMobileGatewayBridgeTests {
     func snapshotIncludesPendingToolAndPatchApprovals() {
         let session = AgentSession(title: "Approval session")
         let patchID = UUID()
+        let jobID = UUID()
         let controller = FakeMobileGatewayController(sessions: [session], activeSessionID: session.id)
         controller.pendingTools = [
             AgentMobileGatewayToolApprovalSnapshot(
@@ -140,6 +141,21 @@ struct AgentMobileGatewayBridgeTests {
                 summary: "Patch proposal",
                 path: "Sources/App.swift",
                 stats: "+2 -1",
+                sessionID: session.id
+            )
+        ]
+        controller.jobs = [
+            AgentMobileGatewayJobSnapshot(
+                id: jobID,
+                handle: "job_abcdef",
+                command: "yarn test",
+                status: "running",
+                isAlive: true,
+                pid: 1234,
+                exitCode: nil,
+                outputByteCount: 42,
+                startedAt: fixedDate,
+                finishedAt: nil,
                 sessionID: session.id
             )
         ]
@@ -165,6 +181,16 @@ struct AgentMobileGatewayBridgeTests {
         }
         #expect(patch["id"]?.stringValue == patchID.uuidString)
         #expect(patch["path"]?.stringValue == "Sources/App.swift")
+
+        guard case .array(let jobs)? = response.payload["jobs"],
+              case .object(let job)? = jobs.first else {
+            Issue.record("jobs payload missing")
+            return
+        }
+        #expect(job["id"]?.stringValue == jobID.uuidString)
+        #expect(job["handle"]?.stringValue == "job_abcdef")
+        #expect(job["status"]?.stringValue == "running")
+        #expect(job["is_alive"]?.boolValue == true)
     }
 
     @Test @MainActor
@@ -246,6 +272,28 @@ struct AgentMobileGatewayBridgeTests {
         ])
     }
 
+    @Test @MainActor
+    func jobKillRoutesToController() {
+        let session = AgentSession(title: "Jobs")
+        let controller = FakeMobileGatewayController(sessions: [session], activeSessionID: session.id)
+        let response = AgentMobileGatewayCommandRouter.handle(
+            AgentMobileGatewayEnvelope(
+                id: "cmd-9",
+                type: "job.kill",
+                sessionID: session.id.uuidString,
+                payload: ["job_id": .string("job_abcdef")]
+            ),
+            controller: controller,
+            now: fixedDate
+        )
+
+        #expect(response.type == "ack")
+        #expect(response.payload["type"]?.stringValue == "job.kill")
+        #expect(controller.killedJobs == [
+            FakeMobileGatewayController.JobKill(sessionID: session.id, jobID: "job_abcdef")
+        ])
+    }
+
     private var fixedDate: Date {
         DateComponents(
             calendar: Calendar(identifier: .gregorian),
@@ -274,8 +322,10 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
     var pendingTools: [AgentMobileGatewayToolApprovalSnapshot] = []
     var pendingPatches: [AgentMobileGatewayPatchSnapshot] = []
     var diffs: [UUID: AgentMobileGatewayDiffSnapshot] = [:]
+    var jobs: [AgentMobileGatewayJobSnapshot] = []
     var toolDecisions: [ToolDecision] = []
     var patchDecisions: [PatchDecision] = []
+    var killedJobs: [JobKill] = []
 
     struct ToolDecision: Equatable {
         var sessionID: UUID?
@@ -291,6 +341,11 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
         var approved: Bool
     }
 
+    struct JobKill: Equatable {
+        var sessionID: UUID?
+        var jobID: String
+    }
+
     init(sessions: [AgentSession], activeSessionID: UUID?) {
         self.sessions = sessions
         self.activeSessionID = activeSessionID
@@ -300,6 +355,7 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
     var mobileGatewayActiveSessionID: UUID? { activeSessionID }
     var mobileGatewayPendingToolApprovals: [AgentMobileGatewayToolApprovalSnapshot] { pendingTools }
     var mobileGatewayPendingPatchProposals: [AgentMobileGatewayPatchSnapshot] { pendingPatches }
+    var mobileGatewayJobs: [AgentMobileGatewayJobSnapshot] { jobs }
 
     func mobileGatewayRuntimeIsResponding(sessionID: UUID) -> Bool {
         false
@@ -371,5 +427,13 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
             throw AgentMobileGatewayCommandError.patchNotFound(patchID)
         }
         return diff
+    }
+
+    func mobileGatewayKillJob(
+        sessionID: UUID?,
+        jobID: String
+    ) throws -> AgentMobileGatewayCommandResult {
+        killedJobs.append(JobKill(sessionID: sessionID, jobID: jobID))
+        return .ok(sessionID: sessionID ?? activeSessionID, message: "Job killed")
     }
 }

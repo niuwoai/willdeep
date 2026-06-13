@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.72.0-rc1 - 2026-06-14
+
+### Added
+
+- Mobile Gateway Swift desktop bridge now includes background job snapshots in `state.snapshot` and emits `job.updated` for current Agent background jobs.
+- Mobile `job.kill` commands now route through the existing session-scoped `AgentJobRegistry.kill` path instead of exposing process handles or shell access.
+- Android Mobile Gateway can display Mac background jobs and send kill requests for running jobs.
+
+### Tests
+
+- Added Swift router coverage for job snapshots and `job.kill`.
+- Added Android model coverage for job snapshots, `job.updated`, and `job.kill` envelope encoding.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.72.0-rc1`。
+
 ## 1.71.0-rc1 - 2026-06-14
 
 ### Added
