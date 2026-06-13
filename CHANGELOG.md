@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.63.0-rc4 - 2026-06-13
+
+### Fixed
+
+- Composer 中止按钮现在会在取消当前 Agent 输出后立刻发送队首排队消息，并跳过本次停止后的自动压缩等待。
+- 排队消息改为单个紧凑列表展示，多条消息一行一个；每行右侧直接提供发送、删除、编辑图标按钮，不再使用下拉菜单。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.63.0-rc4`。
+
 ## 1.63.0-rc3 - 2026-06-13
 
 ### Fixed

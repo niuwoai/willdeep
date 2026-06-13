@@ -714,9 +714,20 @@ extension AppState {
     func stopAgentResponse() {
         guard let runtime = activeRuntime, runtime.isResponding else { return }
         closeAwaitingUserAnswer(for: runtime, reason: "Response stopped")
+        runtime.shouldConsumeQueueAfterStop = !runtime.queuedMessages.isEmpty
         runtime.requestTask?.cancel()
-        // The loop's defer clears `isAgentResponding` and triggers
-        // `consumeNextQueuedMessageIfNeeded()`.
+        Task { @MainActor [weak self, weak runtime] in
+            for _ in 0..<20 {
+                try? await Task.sleep(nanoseconds: 150_000_000)
+                guard let self, let runtime else { return }
+                guard runtime.shouldConsumeQueueAfterStop else { return }
+                if !runtime.isResponding, runtime.requestTask == nil {
+                    runtime.shouldConsumeQueueAfterStop = false
+                    self.consumeNextQueuedMessageIfNeeded(for: runtime)
+                    return
+                }
+            }
+        }
     }
 
     private func closeAwaitingUserAnswer(for runtime: AgentRuntime, reason: String) {

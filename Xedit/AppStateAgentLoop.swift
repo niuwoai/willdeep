@@ -821,14 +821,18 @@ extension AppState {
     @MainActor
     func runAgentLoop(for runtime: AgentRuntime, configuration: AgentConfiguration) async {
         defer {
+            let shouldConsumeQueueAfterStop = runtime.shouldConsumeQueueAfterStop
             runtime.isResponding = false
             runtime.turnStartedAt = nil
             runtime.requestTask = nil
+            runtime.shouldConsumeQueueAfterStop = false
             captureAgentPlanFromLatestMessage(for: runtime)
             captureAgentGoalDefinitionFromLatestMessage(for: runtime)
             captureAgentGoalEvaluationFromLatestMessage(for: runtime)
             persistAgentSession(runtime: runtime)
-            maybeAutoCompressContext(for: runtime)
+            if !shouldConsumeQueueAfterStop {
+                maybeAutoCompressContext(for: runtime)
+            }
             consumeNextQueuedMessageIfNeeded(for: runtime)
             // Always release the provider slot last so the queue drain
             // sees a fully cleared `isResponding` and won't refuse to

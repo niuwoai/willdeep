@@ -94,6 +94,11 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// stops the response.
     var requestTask: Task<Void, Never>?
 
+    /// Set when the user presses Stop while queued messages exist. The
+    /// cancelled turn skips post-turn compression so the queue head can
+    /// dispatch as soon as the provider/tool loop unwinds.
+    var shouldConsumeQueueAfterStop: Bool = false
+
     /// Continuation resumed when the user resolves a blocking tool
     /// call (Allow / Deny / Confirm / answer ask_user). Per-runtime
     /// so concurrent sessions don't race over a single waiter slot.

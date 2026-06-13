@@ -906,7 +906,41 @@ struct AgentTextAttachmentBubbleStrip: View {
     }
 }
 
-struct QueuedMessageRow: View {
+struct QueuedMessagesList: View {
+    let messages: [AgentQueuedMessage]
+    var baseFontSize: CGFloat = NSFont.systemFontSize
+    var onEdit: (AgentQueuedMessage) -> Void = { _ in }
+    var onSendNow: (AgentQueuedMessage) -> Void = { _ in }
+    var onRemove: (AgentQueuedMessage) -> Void = { _ in }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(messages.enumerated()), id: \.element.id) { offset, message in
+                QueuedMessageRow(
+                    index: offset,
+                    message: message,
+                    baseFontSize: baseFontSize,
+                    onEdit: { onEdit(message) },
+                    onSendNow: { onSendNow(message) },
+                    onRemove: { onRemove(message) }
+                )
+                if offset < messages.count - 1 {
+                    Divider()
+                        .padding(.leading, 38)
+                }
+            }
+        }
+        .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+        .background(Color.orange.opacity(0.045))
+        .clipShape(RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius)
+                .stroke(Color.orange.opacity(0.22), lineWidth: 1)
+        )
+    }
+}
+
+private struct QueuedMessageRow: View {
     let index: Int
     let message: AgentQueuedMessage
     /// Mirror of the Agent chat base font size so the queued preview
@@ -918,72 +952,86 @@ struct QueuedMessageRow: View {
     var onRemove: () -> Void = {}
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .center, spacing: 8) {
             Text("\(index + 1).")
                 .font(AgentDesign.captionFont.monospacedDigit())
                 .foregroundStyle(.orange)
                 .frame(width: 22, alignment: .trailing)
-                .padding(.top, 2)
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .center, spacing: 6) {
-                    Image(systemName: "hourglass")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.orange)
-                    Text(L10n.QueuedMessage.label)
-                        .font(AgentDesign.captionFont)
-                        .foregroundStyle(.orange)
-                        .textCase(.uppercase)
-                    Spacer(minLength: 8)
-                    Menu {
-                        Button(action: onEdit) {
-                            Label(L10n.QueuedMessage.editButton, systemImage: "pencil")
-                        }
-                        Button(action: onSendNow) {
-                            Label(L10n.QueuedMessage.sendNowButton, systemImage: "paperplane.fill")
-                        }
-                        Divider()
-                        Button(role: .destructive, action: onRemove) {
-                            Label(L10n.QueuedMessage.deleteButton, systemImage: "trash")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 13, weight: .semibold))
-                            .frame(width: 24, height: 22)
+            HStack(alignment: .center, spacing: 6) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .center, spacing: 5) {
+                        Image(systemName: "hourglass")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.orange)
+                        Text(L10n.QueuedMessage.label)
+                            .font(AgentDesign.captionFont)
+                            .foregroundStyle(.orange)
+                            .textCase(.uppercase)
                     }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel(L10n.QueuedMessage.actionsButton)
-                    .help(L10n.QueuedMessage.actionsButtonHelp)
-                }
-                if !message.text.isEmpty {
-                    Text(message.text)
-                        .font(.system(size: baseFontSize))
+                    Text(previewText)
+                        .font(.system(size: max(11, min(baseFontSize, 13))))
                         .foregroundStyle(.secondary)
-                        .lineLimit(3)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
-                if !message.images.isEmpty {
-                    Text("\(message.images.count) image\(message.images.count == 1 ? "" : "s")")
-                        .font(AgentDesign.captionFont)
-                        .foregroundStyle(.secondary)
-                }
-                if !message.textAttachments.isEmpty {
-                    AgentTextAttachmentBubbleStrip(attachments: message.textAttachments)
-                        .padding(.top, 2)
+                Spacer(minLength: 8)
+                HStack(spacing: 2) {
+                    iconButton(
+                        systemName: "paperplane.fill",
+                        accessibilityLabel: L10n.QueuedMessage.sendNowButton,
+                        help: L10n.QueuedMessage.sendNowButtonHelp,
+                        action: onSendNow
+                    )
+                    iconButton(
+                        systemName: "trash",
+                        accessibilityLabel: L10n.QueuedMessage.deleteButton,
+                        help: L10n.QueuedMessage.deleteButtonHelp,
+                        role: .destructive,
+                        action: onRemove
+                    )
+                    iconButton(
+                        systemName: "pencil",
+                        accessibilityLabel: L10n.QueuedMessage.editButton,
+                        help: L10n.QueuedMessage.editButtonHelp,
+                        action: onEdit
+                    )
                 }
             }
         }
-        .padding(10)
-        .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
-        .background(Color.orange.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius)
-                .stroke(Color.orange.opacity(0.25), lineWidth: 1)
-        )
-        .padding(.leading, index == 0 ? 0 : 16)
+        .padding(.horizontal, 10)
+        .frame(height: 46)
     }
 
+    private var previewText: String {
+        let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty { return text.replacingOccurrences(of: "\n", with: " ") }
+        if !message.textAttachments.isEmpty {
+            return L10n.QueuedMessage.textAttachmentCount("\(message.textAttachments.count)")
+        }
+        if !message.images.isEmpty {
+            return L10n.QueuedMessage.imageCount("\(message.images.count)")
+        }
+        return L10n.QueuedMessage.emptyPreview
+    }
+
+    private func iconButton(
+        systemName: String,
+        accessibilityLabel: String,
+        help: String,
+        role: ButtonRole? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(role: role, action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(role == .destructive ? Color.red.opacity(0.85) : Color.secondary)
+        .accessibilityLabel(accessibilityLabel)
+        .help(help)
+    }
 }
 
 // MARK: - Empty state

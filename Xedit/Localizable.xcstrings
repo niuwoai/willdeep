@@ -4213,6 +4213,42 @@
         }
       }
     },
+    "queued-message.empty-preview": {
+      "comment": "fallback preview text for a queued message with no visible text",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Queued message"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "排队消息"
+          }
+        }
+      }
+    },
+    "queued-message.image-count": {
+      "comment": "queued message preview for image-only messages. Placeholder 1 is the image count.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ images"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 张图片"
+          }
+        }
+      }
+    },
     "queued-message.label": {
       "comment": "label for queued message card",
       "extractionState": "manual",
@@ -4227,6 +4263,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "已排队"
+          }
+        }
+      }
+    },
+    "queued-message.text-attachment-count": {
+      "comment": "queued message preview for text-attachment-only messages. Placeholder 1 is the attachment count.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ text attachments"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 个文本附件"
           }
         }
       }

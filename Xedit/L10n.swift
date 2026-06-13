@@ -500,9 +500,18 @@ enum L10n {
         static let deleteButtonHelp = String(localized: "queued-message.delete-button.help", defaultValue: "Delete this queued message")
         static let editButton = String(localized: "queued-message.edit-button", defaultValue: "Edit queued message")
         static let editButtonHelp = String(localized: "queued-message.edit-button.help", defaultValue: "Edit this queued message in the composer")
+        static let emptyPreview = String(localized: "queued-message.empty-preview", defaultValue: "Queued message")
+        static func imageCount(_ a1: String) -> String {
+            let template = String(localized: "queued-message.image-count", defaultValue: "%@ images")
+            return String(format: template, a1)
+        }
         static let label = String(localized: "queued-message.label", defaultValue: "Queued")
         static let sendNowButton = String(localized: "queued-message.send-now-button", defaultValue: "Send queued message now")
         static let sendNowButtonHelp = String(localized: "queued-message.send-now-button.help", defaultValue: "Send this queued message now")
+        static func textAttachmentCount(_ a1: String) -> String {
+            let template = String(localized: "queued-message.text-attachment-count", defaultValue: "%@ text attachments")
+            return String(format: template, a1)
+        }
     }
 
     enum QuickOpen {
