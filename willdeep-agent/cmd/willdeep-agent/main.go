@@ -77,6 +77,7 @@ func newServeMobileCommand() *cobra.Command {
 	var port int
 	var desktopName string
 	var desktopToken string
+	var desktopTokenFile string
 	var pairingTTL time.Duration
 	var allowPairing bool
 	var pairingBaseURL string
@@ -85,11 +86,19 @@ func newServeMobileCommand() *cobra.Command {
 		Use:   "serve-mobile",
 		Short: "Start the LAN mobile gateway for WillDeep",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedDesktopToken := desktopToken
+			if desktopTokenFile != "" {
+				bytes, err := os.ReadFile(desktopTokenFile)
+				if err != nil {
+					return fmt.Errorf("read desktop token file: %w", err)
+				}
+				resolvedDesktopToken = string(bytes)
+			}
 			cfg, err := agent.NewMobileGatewayConfig(agent.MobileGatewayConfigInput{
 				Host:           host,
 				Port:           port,
 				DesktopName:    desktopName,
-				DesktopToken:   desktopToken,
+				DesktopToken:   resolvedDesktopToken,
 				PairingTTL:     pairingTTL,
 				AllowPairing:   allowPairing,
 				PairingBaseURL: pairingBaseURL,
@@ -107,6 +116,7 @@ func newServeMobileCommand() *cobra.Command {
 	cmd.Flags().IntVar(&port, "port", 8876, "listen port")
 	cmd.Flags().StringVar(&desktopName, "desktop-name", "", "desktop name shown in pairing payload")
 	cmd.Flags().StringVar(&desktopToken, "desktop-token", "", "desktop peer bearer token; generated if empty")
+	cmd.Flags().StringVar(&desktopTokenFile, "desktop-token-file", "", "file containing desktop peer bearer token")
 	cmd.Flags().DurationVar(&pairingTTL, "pairing-ttl", 2*time.Minute, "pairing token lifetime")
 	cmd.Flags().BoolVar(&allowPairing, "allow-pairing", true, "allow QR pairing for new devices")
 	cmd.Flags().StringVar(&pairingBaseURL, "pairing-base-url", "", "public LAN base URL embedded in pairing payload")

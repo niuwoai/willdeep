@@ -124,6 +124,60 @@ func TestMobileGatewayPairingPayloadRequiresDesktopAuth(t *testing.T) {
 	}
 }
 
+func TestMobileGatewayDevicesRequiresDesktopAuthAndRedactsTokens(t *testing.T) {
+	gateway := newTestMobileGateway(t)
+	claimTestDevice(t, gateway, "Pixel")
+	server := httptest.NewServer(gateway.routes())
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/mobile/devices")
+	if err != nil {
+		t.Fatalf("GET devices without auth: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("devices without auth status = %d, want 401", resp.StatusCode)
+	}
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/mobile/devices", nil)
+	if err != nil {
+		t.Fatalf("new devices request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer desktop-secret")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET devices with desktop auth: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("devices with auth status = %d, want 200", resp.StatusCode)
+	}
+	var raw map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		t.Fatalf("decode devices response: %v", err)
+	}
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		t.Fatalf("marshal decoded devices response: %v", err)
+	}
+	text := string(encoded)
+	if strings.Contains(text, "TokenHash") || strings.Contains(text, "token_hash") || strings.Contains(text, "desktop-secret") {
+		t.Fatalf("devices response leaked token material: %s", text)
+	}
+	data, ok := raw["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("devices data = %#v", raw["data"])
+	}
+	devices, ok := data["devices"].([]any)
+	if !ok || len(devices) != 1 {
+		t.Fatalf("devices = %#v, want one device", data["devices"])
+	}
+	device, ok := devices[0].(map[string]any)
+	if !ok || device["name"] != "Pixel" {
+		t.Fatalf("device = %#v", devices[0])
+	}
+}
+
 func TestMobileGatewayWebSocketAuthAndForwarding(t *testing.T) {
 	gateway := newTestMobileGateway(t)
 	_, deviceToken := claimTestDevice(t, gateway, "Pixel")

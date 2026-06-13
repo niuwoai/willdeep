@@ -385,6 +385,9 @@ final class AppState: ObservableObject {
     /// pairing/device auth; this bridge translates authorized mobile
     /// commands back into normal AppState Agent operations.
     lazy var mobileGatewayDesktopPeer = AgentMobileGatewayDesktopPeer(appState: self)
+    /// Starts/stops the local Go Mobile Gateway process and feeds
+    /// desktop-authenticated state into Settings.
+    lazy var mobileGatewayCoordinator = MobileGatewayCoordinator(appState: self)
     // A 方案删除了 cfg → library 的回灌方向，此前的 reentrancy 守卫
     // (`isReconcilingProviderLibrary`) 不再需要。
 
@@ -499,6 +502,7 @@ final class AppState: ObservableObject {
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
             }
+        mobileGatewayCoordinator.startIfEnabled()
     }
 
     deinit {

@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.68.0-rc2 - 2026-06-13
+
+### Added
+
+- Settings 新增 Mobile Gateway tab，可启停局域网网关、显示 LAN 地址/协议版本/二维码配对 payload、刷新设备列表并撤销已配对设备。
+- macOS 新增 `MobileGatewayCoordinator` 和 `MobileGatewaySettingsStore`，负责启动 `willdeep-agent serve-mobile`、通过 Keychain 管理 desktop token、通过受保护 token 文件传参，并连接 Swift desktop peer。
+- Xcode 主 target 新增 build phase，将 `willdeep-agent` 编译进 app Resources，设置页也保留自定义可执行文件路径兜底。
+- Go Mobile Gateway 新增 desktop-only `GET /mobile/devices`，用于返回已配对设备元数据。
+- `willdeep-agent serve-mobile` 新增 `--desktop-token-file`，避免 desktop bearer token 暴露在进程参数中。
+
+### Tests
+
+- Go Mobile Gateway 单测新增设备列表鉴权与 token 脱敏覆盖。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档、Business Model 文档全部同步到 `1.68.0-rc2`。
+
 ## 1.68.0-rc1 - 2026-06-13
 
 ### Added

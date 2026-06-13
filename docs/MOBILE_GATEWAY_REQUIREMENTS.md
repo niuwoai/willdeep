@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-06-13 | Target version: v1.68.0-rc1
+> Last updated: 2026-06-13 | Target version: v1.68.0-rc2
 
 ## Summary
 
@@ -59,8 +59,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.68.0-rc1`
-- `X-Server-Version: 1.68.0-rc1`
+- `X-App-Version: 1.68.0-rc2`
+- `X-Server-Version: 1.68.0-rc2`
 
 ### `GET /mobile/health`
 
@@ -72,7 +72,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.68.0-rc1",
+    "version": "1.68.0-rc2",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
@@ -133,6 +133,26 @@ Response data:
 ```
 
 Device tokens must be stored hashed by the gateway and stored securely by the client.
+
+### `GET /mobile/devices`
+
+Desktop-only endpoint. Requires `Authorization: Bearer <desktop_token>`. Lists paired device metadata for the macOS Settings UI. The response must never include device tokens or token hashes.
+
+Response data:
+
+```json
+{
+  "devices": [
+    {
+      "id": "dev_xxx",
+      "name": "Pixel 9",
+      "created_at": "2026-06-13T12:00:00Z",
+      "last_connected_at": "2026-06-13T12:01:00Z",
+      "revoked_at": null
+    }
+  ]
+}
+```
 
 ### `POST /mobile/devices/revoke`
 
@@ -241,14 +261,17 @@ The desktop app remains responsible for the actual command result and subsequent
 
 ## macOS Settings Requirements
 
-The macOS app should add a Mobile Gateway settings section in a follow-up Swift integration pass:
+The macOS app includes a Mobile Gateway settings section:
 
 - enable or disable LAN access;
-- show the selected LAN address and port;
+- start or stop `willdeep-agent serve-mobile`;
+- show the selected LAN address, port, and resolved gateway executable;
 - show protocol version;
 - show QR pairing payload;
 - list paired devices with last connected time;
 - revoke a paired device.
+
+The Swift coordinator uses the bundled `willdeep-agent` resource by default, allows an explicit executable path as a fallback, passes the desktop bearer token through a protected token file instead of the process argument list, fetches pairing/device metadata through desktop-authenticated HTTP, and connects the desktop peer bridge to `/mobile/ws`.
 
 All user-visible SwiftUI text must go through `Localizable.xcstrings` and `L10n.swift`.
 

@@ -13,6 +13,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -217,6 +218,7 @@ func (g *MobileGateway) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /mobile/health", g.handleHealth)
 	mux.HandleFunc("GET /mobile/pairing", g.handlePairingPayload)
+	mux.HandleFunc("GET /mobile/devices", g.handleDevices)
 	mux.HandleFunc("POST /mobile/pair/claim", g.handlePairClaim)
 	mux.HandleFunc("POST /mobile/devices/revoke", g.handleDeviceRevoke)
 	mux.HandleFunc("GET /mobile/ws", g.handleWebSocket)
@@ -250,6 +252,23 @@ func (g *MobileGateway) handlePairingPayload(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeOK(w, map[string]any{"pairing_payload": payload})
+}
+
+func (g *MobileGateway) handleDevices(w http.ResponseWriter, r *http.Request) {
+	if !g.isDesktopRequest(r) {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	g.mu.Lock()
+	devices := make([]mobileDevice, 0, len(g.devices))
+	for _, device := range g.devices {
+		devices = append(devices, *device)
+	}
+	g.mu.Unlock()
+	sort.Slice(devices, func(i, j int) bool {
+		return devices[i].CreatedAt.Before(devices[j].CreatedAt)
+	})
+	writeOK(w, map[string]any{"devices": devices})
 }
 
 func (g *MobileGateway) handlePairClaim(w http.ResponseWriter, r *http.Request) {

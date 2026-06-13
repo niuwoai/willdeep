@@ -638,6 +638,7 @@ enum L10n {
         static let tabTools = String(localized: "settings.tab.tools", defaultValue: "Tools")
         static let tabLocalAgents = String(localized: "settings.tab.local-agents", defaultValue: "Local Agents")
         static let tabRemoteRuntimes = String(localized: "settings.tab.remote-runtimes", defaultValue: "Runtimes")
+        static let tabMobileGateway = String(localized: "settings.tab.mobile-gateway", defaultValue: "Mobile Gateway")
 
         static let sectionTypography = String(localized: "settings.section.typography", defaultValue: "Typography")
         static let sectionColorStyle = String(localized: "settings.section.color-style", defaultValue: "Color Style")
@@ -757,6 +758,63 @@ enum L10n {
             }
             static func directTool(_ a1: String) -> String {
                 let template = String(localized: "settings.local-agents.direct-tool", defaultValue: "Direct delegation available through `%@`.")
+                return String(format: template, a1)
+            }
+        }
+
+        enum MobileGateway {
+            static let controlSection = String(localized: "settings.mobile-gateway.control-section", defaultValue: "LAN Access")
+            static let listenSection = String(localized: "settings.mobile-gateway.listen-section", defaultValue: "Gateway")
+            static let pairingSection = String(localized: "settings.mobile-gateway.pairing-section", defaultValue: "Pairing")
+            static let devicesSection = String(localized: "settings.mobile-gateway.devices-section", defaultValue: "Paired Devices")
+            static let enableToggle = String(localized: "settings.mobile-gateway.enable-toggle", defaultValue: "Enable LAN Mobile Gateway")
+            static let allowPairingToggle = String(localized: "settings.mobile-gateway.allow-pairing-toggle", defaultValue: "Allow new device pairing")
+            static let statusLabel = String(localized: "settings.mobile-gateway.status", defaultValue: "Status")
+            static let addressLabel = String(localized: "settings.mobile-gateway.address", defaultValue: "LAN address")
+            static let protocolLabel = String(localized: "settings.mobile-gateway.protocol", defaultValue: "Protocol")
+            static let desktopPeerLabel = String(localized: "settings.mobile-gateway.desktop-peer", defaultValue: "Desktop peer")
+            static let pairingBaseURLLabel = String(localized: "settings.mobile-gateway.pairing-base-url", defaultValue: "Pairing URL")
+            static let expiresLabel = String(localized: "settings.mobile-gateway.expires", defaultValue: "Expires")
+            static let hostPrompt = String(localized: "settings.mobile-gateway.host-prompt", defaultValue: "0.0.0.0")
+            static let desktopNamePrompt = String(localized: "settings.mobile-gateway.desktop-name-prompt", defaultValue: "Desktop name shown on Android")
+            static let executablePathPrompt = String(localized: "settings.mobile-gateway.executable-path-prompt", defaultValue: "Optional willdeep-agent executable path")
+            static let startButton = String(localized: "settings.mobile-gateway.start", defaultValue: "Start")
+            static let stopButton = String(localized: "settings.mobile-gateway.stop", defaultValue: "Stop")
+            static let restartButton = String(localized: "settings.mobile-gateway.restart", defaultValue: "Apply & Restart")
+            static let refreshButton = String(localized: "settings.mobile-gateway.refresh", defaultValue: "Refresh")
+            static let copyPayloadButton = String(localized: "settings.mobile-gateway.copy-payload", defaultValue: "Copy pairing payload")
+            static let revokeButton = String(localized: "settings.mobile-gateway.revoke", defaultValue: "Revoke")
+            static let notRunning = String(localized: "settings.mobile-gateway.not-running", defaultValue: "Not running")
+            static let connected = String(localized: "settings.mobile-gateway.connected", defaultValue: "Connected")
+            static let disconnected = String(localized: "settings.mobile-gateway.disconnected", defaultValue: "Disconnected")
+            static let stopped = String(localized: "settings.mobile-gateway.stopped", defaultValue: "Stopped")
+            static let starting = String(localized: "settings.mobile-gateway.starting", defaultValue: "Starting...")
+            static let running = String(localized: "settings.mobile-gateway.running", defaultValue: "Running")
+            static let noPairingPayload = String(localized: "settings.mobile-gateway.no-pairing-payload", defaultValue: "Pairing is unavailable. Restart the gateway to rotate a short-lived QR token.")
+            static let startToPair = String(localized: "settings.mobile-gateway.start-to-pair", defaultValue: "Start the gateway to show a QR pairing code.")
+            static let noDevices = String(localized: "settings.mobile-gateway.no-devices", defaultValue: "No Android devices are paired yet.")
+            static let revoked = String(localized: "settings.mobile-gateway.revoked", defaultValue: "Revoked")
+            static let qrAccessibilityLabel = String(localized: "settings.mobile-gateway.qr-accessibility-label", defaultValue: "Mobile Gateway pairing QR code")
+            static let qrUnavailable = String(localized: "settings.mobile-gateway.qr-unavailable", defaultValue: "QR code unavailable")
+            static let listenDescription = String(localized: "settings.mobile-gateway.listen-description", defaultValue: "The gateway listens only after you enable it. Android connects over the local network; Agent execution, tools, patches, and file access still run through the Mac app.")
+            static func portLabel(_ a1: String) -> String {
+                let template = String(localized: "settings.mobile-gateway.port", defaultValue: "Port %@")
+                return String(format: template, a1)
+            }
+            static func resolvedExecutable(_ a1: String) -> String {
+                let template = String(localized: "settings.mobile-gateway.resolved-executable", defaultValue: "Using %@")
+                return String(format: template, a1)
+            }
+            static func failed(_ a1: String) -> String {
+                let template = String(localized: "settings.mobile-gateway.failed", defaultValue: "Failed: %@")
+                return String(format: template, a1)
+            }
+            static func lastConnected(_ a1: String) -> String {
+                let template = String(localized: "settings.mobile-gateway.last-connected", defaultValue: "Last connected %@")
+                return String(format: template, a1)
+            }
+            static func createdAt(_ a1: String) -> String {
+                let template = String(localized: "settings.mobile-gateway.created-at", defaultValue: "Paired %@")
                 return String(format: template, a1)
             }
         }
