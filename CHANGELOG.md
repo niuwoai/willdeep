@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.69.0-rc1 - 2026-06-14
+
+### Added
+
+- Agent composer 的 Workspace 菜单新增 Git worktree 区域，可从当前 Git 仓库创建 sibling worktree、切换已有 worktree、删除当前非主 worktree，并清理 stale worktree。
+- 新建 worktree 会按输入分支名生成安全的 sibling 目录；成功后自动打开该目录，并复用既有“空会话迁移 / 有历史则新建会话”的 workspace 绑定规则。
+- Git root 识别改用 `git rev-parse --show-toplevel` 优先，支持 `.git` 为文件的 worktree 根目录继续显示 branch、diff 和 Agent worktree 变更摘要。
+- Git runner 新增带退出码、stderr 和 timeout 状态的结果类型，创建/删除 worktree 失败时能把真实 Git 错误展示给用户。
+
+### Tests
+
+- 新增 Git worktree parser、默认路径去重和真实临时 Git 仓库创建/list/root-detection 覆盖。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档、Business Model 文档全部同步到 `1.69.0-rc1`。
+
 ## 1.68.0-rc2 - 2026-06-13
 
 ### Added

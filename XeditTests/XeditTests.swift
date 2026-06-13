@@ -14,6 +14,7 @@ import AppKit
 struct WillDeepTests {
     private enum TestError: Error {
         case loadTimedOut
+        case gitFailed(String)
     }
 
     /// Wipes the shared `UserDefaults` keys that AppState persists into so
@@ -28,6 +29,13 @@ struct WillDeepTests {
         ]
         for key in keys {
             UserDefaults.standard.removeObject(forKey: key)
+        }
+    }
+
+    private func requireGit(_ arguments: [String], in directory: URL) throws {
+        let result = AppState.runGitCommand(arguments: arguments, in: directory)
+        guard result.succeeded else {
+            throw TestError.gitFailed(result.userMessage)
         }
     }
 
@@ -821,6 +829,80 @@ struct WillDeepTests {
             lineStats: AgentLineChangeStats(added: nil, deleted: nil),
             hasNumstatEntry: false
         ) == true)
+    }
+
+    @Test("git worktree porcelain parser captures branches and prunable rows")
+    func testGitWorktreePorcelainParser() {
+        let worktrees = AppState.parseGitWorktreeListPorcelain(
+            """
+            worktree /tmp/repo
+            HEAD 1111111111111111111111111111111111111111
+            branch refs/heads/main
+
+            worktree /tmp/repo-feature
+            HEAD 2222222222222222222222222222222222222222
+            branch refs/heads/feature/demo
+
+            worktree /tmp/repo-old
+            HEAD 3333333333333333333333333333333333333333
+            detached
+            prunable gitdir file points to non-existent location
+            """
+        )
+
+        #expect(worktrees.count == 3)
+        #expect(worktrees[0].isPrimary == true)
+        #expect(worktrees[0].branch == "main")
+        #expect(worktrees[1].branch == "feature/demo")
+        #expect(worktrees[2].isDetached == true)
+        #expect(worktrees[2].isPrunable == true)
+        #expect(worktrees[2].pruneReason == "gitdir file points to non-existent location")
+    }
+
+    @Test("git worktree names are sanitized and default paths avoid collisions")
+    func testGitWorktreeDefaultNaming() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_worktree_name_\(UUID().uuidString)")
+            .appendingPathComponent("Repo")
+        let existing = root.deletingLastPathComponent().appendingPathComponent("Repo-feature-name")
+        try FileManager.default.createDirectory(at: existing, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+
+        #expect(AppState.sanitizedGitWorktreeName(" feature/name ! ") == "feature-name")
+        let next = AppState.defaultGitWorktreeURL(repositoryRoot: root, branchName: "feature/name !")
+        #expect(next.lastPathComponent == "Repo-feature-name-2")
+    }
+
+    @Test("git worktree creation lists and detects worktree git-file roots")
+    func testGitWorktreeCreateListAndFindRoot() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_worktree_create_\(UUID().uuidString)")
+        let repository = base.appendingPathComponent("main")
+        try FileManager.default.createDirectory(at: repository, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        try requireGit(["init"], in: repository)
+        try requireGit(["config", "user.email", "tests@example.com"], in: repository)
+        try requireGit(["config", "user.name", "WillDeep Tests"], in: repository)
+        try "hello\n".write(to: repository.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+        try requireGit(["add", "README.md"], in: repository)
+        try requireGit(["commit", "-m", "initial"], in: repository)
+
+        let created = AppState.createGitWorktree(from: repository, branchName: "feature test")
+        guard case .success(let result) = created else {
+            Issue.record("Expected worktree creation to succeed")
+            return
+        }
+
+        #expect(result.worktree.branch == "feature-test")
+        #expect(FileManager.default.fileExists(atPath: result.worktree.url.appendingPathComponent(".git").path))
+
+        let detectedRoot = AppState.findGitRepositoryRoot(startingAt: result.worktree.url)
+        #expect(detectedRoot?.standardizedFileURL.path == result.worktree.url.path)
+
+        let worktrees = AppState.listGitWorktrees(for: result.worktree.url)
+        #expect(worktrees.contains { $0.url == repository.standardizedFileURL && $0.isPrimary })
+        #expect(worktrees.contains { $0.url == result.worktree.url && $0.branch == "feature-test" })
     }
 
     @MainActor
@@ -1967,7 +2049,7 @@ struct WillDeepTests {
         #expect(segments[1].count == 2)
         #expect(segments[2].kind == .runCommand)
         #expect(segments[2].count == 1)
-        #expect(segments[1].kind.groupTitle(2) == "已探索 2 个文件")
+        #expect(segments[1].title == "已读取 1 个文件 · 已搜索代码")
     }
 
     @Test("AgentToolActivitySummary counts exploration searches and commands")
@@ -1983,11 +2065,13 @@ struct WillDeepTests {
 
         let summary = AgentToolActivitySummary(calls: calls)
 
+        #expect(summary.readFileCount == 1)
+        #expect(summary.listedDirectoryCount == 1)
         #expect(summary.exploredPathCount == 2)
         #expect(summary.searchCount == 1)
         #expect(summary.gitStatusCount == 1)
         #expect(summary.commandCount == 1)
-        #expect(summary.explorationText == "已探索 2 个路径 · 1 次搜索 · 1 次 git 状态")
+        #expect(summary.explorationText == "已读取 1 个文件 · 已浏览 1 个目录 · 已搜索代码 · 已查看 Git 状态")
         #expect(summary.commandText == "已运行 1 条命令")
     }
 

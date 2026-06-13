@@ -1,6 +1,6 @@
 # WillDeep Business Model Notes
 
-> Last updated: 2026-06-13 | Current version: v1.68.0-rc2
+> Last updated: 2026-06-14 | Current version: v1.69.0-rc1
 
 本文记录 WillDeep 采用 **Apache 2.0 + Open Core** 后的商业化判断。它不是定价承诺，也不是法律意见；它用于帮助团队判断哪些能力应该开源，哪些能力适合商业化，以及怎样避免把产品带进低价竞争。
 

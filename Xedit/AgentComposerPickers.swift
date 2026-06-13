@@ -69,6 +69,12 @@ struct WorkspacePickerPill: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help(helpText)
+        .onAppear {
+            appState.refreshAgentGitWorktrees()
+        }
+        .onChange(of: appState.rootDirectory) { _, _ in
+            appState.refreshAgentGitWorktrees()
+        }
     }
 
     private var label: String {
@@ -114,6 +120,52 @@ struct WorkspacePickerPill: View {
                         pb.setString(branch, forType: .string)
                     } label: {
                         Label("Copy branch name", systemImage: "arrow.triangle.branch")
+                    }
+                }
+            }
+            Divider()
+        }
+
+        if appState.gitStatus.isRepository {
+            Section("Git worktrees") {
+                Button {
+                    appState.createAgentGitWorktreeFromActiveWorkspace()
+                } label: {
+                    Label("New worktree…", systemImage: "arrow.triangle.branch")
+                }
+
+                ForEach(appState.agentGitWorktrees) { worktree in
+                    Button {
+                        appState.moveActiveAgentSessionToWorkspace(at: worktree.path)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(worktree.displayName)
+                                Text(worktree.branchLabel)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            if isActiveWorktree(worktree) {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                    .disabled(worktree.isBare)
+                }
+
+                if let removable = activeRemovableWorktree {
+                    Button(role: .destructive) {
+                        appState.removeAgentGitWorktree(removable)
+                    } label: {
+                        Label("Remove current worktree…", systemImage: "trash")
+                    }
+                }
+
+                if appState.agentGitWorktrees.contains(where: \.isPrunable) {
+                    Button {
+                        appState.pruneAgentGitWorktrees()
+                    } label: {
+                        Label("Prune stale worktrees", systemImage: "scissors")
                     }
                 }
             }
@@ -181,6 +233,16 @@ struct WorkspacePickerPill: View {
             return nil
         }
         return AgentRuntimeStore.descriptor(id: runtimeID)
+    }
+
+    private var activeRemovableWorktree: AgentGitWorktree? {
+        appState.agentGitWorktrees.first { worktree in
+            isActiveWorktree(worktree) && !worktree.isPrimary && !worktree.isBare
+        }
+    }
+
+    private func isActiveWorktree(_ worktree: AgentGitWorktree) -> Bool {
+        appState.rootDirectory?.standardizedFileURL.path == worktree.url.path
     }
 
     private var activeRemoteWorkspaceLabel: String? {

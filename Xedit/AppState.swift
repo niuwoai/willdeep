@@ -73,6 +73,7 @@ final class AppState: ObservableObject {
     @Published private(set) var selectedText = ""
     @Published var hasExternalFileChanges = false
     @Published var gitStatus = GitRepositoryStatus()
+    @Published var agentGitWorktrees: [AgentGitWorktree] = []
     @Published var isAgentPanelVisible = false
     @Published var agentComposerFocusRevision = 0
     @Published var agentConfiguration: AgentConfiguration {
@@ -843,6 +844,7 @@ final class AppState: ObservableObject {
             registerRecentFolder(fileURL)
             setRootDirectory(fileURL)
             refreshGitStatus()
+            refreshAgentGitWorktrees()
             persistSession()
             return
         }
@@ -868,6 +870,7 @@ final class AppState: ObservableObject {
 
         setRootDirectory(url)
         refreshGitStatus()
+        refreshAgentGitWorktrees()
         persistSession()
     }
 
