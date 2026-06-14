@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.78.0-rc9 - 2026-06-14
+
+### Added
+
+- Added `scripts/mobile_gateway_end_to_end_acceptance.rb`, a cross-repository final gate that runs Mac Gateway live readiness first, skips Android live acceptance when Mac readiness fails, and runs the Android live acceptance wrapper only after the Mac side is ready.
+
+### Tests
+
+- Verified the end-to-end gate writes combined JSON/Markdown evidence and fails with Mac readiness actions while the Mac Gateway is not running.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc9`。
+
 ## 1.78.0-rc8 - 2026-06-14
 
 ### Added

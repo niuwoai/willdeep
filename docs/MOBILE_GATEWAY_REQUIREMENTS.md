@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-06-14 | Target version: v1.78.0-rc8
+> Last updated: 2026-06-14 | Target version: v1.78.0-rc9
 
 ## Summary
 
@@ -66,8 +66,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.78.0-rc8`
-- `X-Server-Version: 1.78.0-rc8`
+- `X-App-Version: 1.78.0-rc9`
+- `X-Server-Version: 1.78.0-rc9`
 
 ### `GET /mobile/health`
 
@@ -79,7 +79,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.78.0-rc8",
+    "version": "1.78.0-rc9",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
@@ -342,3 +342,4 @@ All user-visible SwiftUI text must go through `Localizable.xcstrings` and `L10n.
 - Swift tests cover state snapshot conversion, command routing into existing Agent runtime methods, real `AppState.mobileGatewaySendMessage` dispatch into `sendAgentMessage()`, message append/delta/done event generation, `AppState` workspace path guard enforcement for `file.read`, danger-tier typed confirmation enforcement for `tool.decide`, `ask_user` answer enforcement, and patch apply/reject routing through the existing desktop patch state machine.
 - `scripts/mobile_gateway_integration_test.rb` starts a real local gateway, simulates desktop and mobile peers, verifies pairing, desktop-authenticated pairing rotation, command forwarding, ack, unknown-command errors, ordered message stream event broadcast, worktree event broadcast, device revocation disconnect/reconnect rejection, and emits JSON plus Markdown reports with acceptance evidence.
 - `scripts/mobile_gateway_live_readiness.rb` checks a running Mac Gateway before Android live acceptance by probing public health, verifying the default desktop-token file exists, rotating a pairing payload through desktop auth, and writing JSON plus Markdown readiness reports without printing bearer or pairing tokens.
+- `scripts/mobile_gateway_end_to_end_acceptance.rb` is the final cross-repository gate: it runs Mac live readiness first, skips Android live acceptance when Mac readiness fails, runs the Android live acceptance wrapper when Mac readiness passes, and writes JSON plus Markdown combined evidence.
