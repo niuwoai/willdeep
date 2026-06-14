@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.78.0-rc11 - 2026-06-14
+
+### Tests
+
+- Strengthened `scripts/mobile_gateway_end_to_end_acceptance.rb` so the cross-repository final gate verifies the Android live acceptance wrapper requires code activity and fails if the Android report omits `mac_code_activity_after_send`.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc11`。
+
 ## 1.78.0-rc10 - 2026-06-14
 
 ### Tests

@@ -12,10 +12,21 @@ ANDROID_DIR = ENV.fetch("WILLDEEP_ANDROID_DIR", DEFAULT_ANDROID_DIR)
 READINESS_SCRIPT = File.join(ROOT_DIR, "scripts", "mobile_gateway_live_readiness.rb")
 READINESS_REPORT_JSON = File.join(ROOT_DIR, "build", "mobile_gateway_live_readiness", "report.json")
 ANDROID_ACCEPTANCE_SCRIPT = File.join(ANDROID_DIR, "scripts", "mobile_gateway_live_acceptance.rb")
+ANDROID_CONNECTED_SMOKE_SCRIPT = File.join(ANDROID_DIR, "scripts", "android_connected_smoke_test.rb")
 ANDROID_ACCEPTANCE_REPORT_JSON = File.join(ANDROID_DIR, "build", "mobile_gateway_live_acceptance", "report.json")
 OUT_DIR = File.join(ROOT_DIR, "build", "mobile_gateway_end_to_end_acceptance")
 REPORT_JSON = File.join(OUT_DIR, "report.json")
 REPORT_MD = File.join(OUT_DIR, "report.md")
+ANDROID_REQUIRED_FINAL_EVIDENCE = %w[
+  live_pairing_payload
+  mac_gateway_health
+  android_device
+  device_gateway_reachability
+  instrumented_pair_and_ws
+  mobile_message_send_ack
+  mac_agent_activity_after_send
+  mac_code_activity_after_send
+].freeze
 
 def run_command(*command, chdir:)
   stdout, stderr, status = Open3.capture3(*command, chdir: chdir)
@@ -109,16 +120,65 @@ def android_preflight_evidence(preflight)
   ]
 end
 
-def build_acceptance_evidence(readiness, android, android_ran, android_preflight_report)
+def read_text(path)
+  File.read(path)
+rescue Errno::ENOENT
+  ""
+end
+
+def android_acceptance_contract
+  live_script = read_text(ANDROID_ACCEPTANCE_SCRIPT)
+  smoke_script = read_text(ANDROID_CONNECTED_SMOKE_SCRIPT)
+  checks = {
+    "live_acceptance_script_present" => File.file?(ANDROID_ACCEPTANCE_SCRIPT),
+    "connected_smoke_script_present" => File.file?(ANDROID_CONNECTED_SMOKE_SCRIPT),
+    "wrapper_enables_code_activity" => live_script.include?("\"MOBILE_GATEWAY_EXPECT_CODE_ACTIVITY\" => \"1\""),
+    "smoke_requires_code_activity_evidence" => smoke_script.include?("mac_code_activity_after_send"),
+    "smoke_requires_code_activity_marker" => smoke_script.include?("Mac code activity signal marker is required"),
+  }
+
+  {
+    "status" => checks.values.all? ? "passed" : "failed",
+    "checks" => checks,
+  }
+end
+
+def android_contract_evidence(contract)
+  failed = contract.fetch("checks").select { |_key, value| value != true }.keys
+  {
+    "key" => "android_final_code_activity_gate",
+    "status" => failed.empty? ? "passed" : "failed",
+    "evidence" => if failed.empty?
+                    "Android final live acceptance requires MOBILE_GATEWAY_EXPECT_CODE_ACTIVITY=1 and mac_code_activity_after_send evidence."
+                  else
+                    "Android final live acceptance is missing required code-activity contract checks: #{failed.join(", ")}."
+                  end,
+  }
+end
+
+def missing_android_required_evidence(android)
+  keys = android.fetch("acceptance_evidence", []).map { |item| item.fetch("key", nil) }.compact
+  ANDROID_REQUIRED_FINAL_EVIDENCE.reject { |key| keys.include?(key) }
+end
+
+def build_acceptance_evidence(readiness, android, android_ran, android_preflight_report, android_contract)
   evidence = []
   readiness.fetch("acceptance_evidence", []).each do |item|
     key = item.fetch("key")
     evidence << item.merge("key" => key.start_with?("mac_") ? key : "mac_#{key}")
   end
   evidence.concat(android_preflight_evidence(android_preflight_report))
+  evidence << android_contract_evidence(android_contract)
   if android_ran
     android.fetch("acceptance_evidence", []).each do |item|
       evidence << item.merge("key" => "android_#{item.fetch("key")}")
+    end
+    missing_android_required_evidence(android).each do |key|
+      evidence << {
+        "key" => "android_#{key}",
+        "status" => "failed",
+        "evidence" => "Android live acceptance report did not include required final evidence key `#{key}`.",
+      }
     end
   else
     evidence << {
@@ -146,6 +206,7 @@ def write_reports(report)
     "- Status: `#{report[:status]}`",
     "- Mac readiness: `#{report[:mac_readiness_status]}`",
     "- Android preflight: `#{report[:android_preflight_status]}`",
+    "- Android final code activity gate: `#{report[:android_final_code_activity_gate_status]}`",
     "- Android live acceptance: `#{report[:android_live_acceptance_status]}`",
     "- Android ready devices: `#{report[:android_ready_device_count]}`",
     "- Android repo: `#{report[:android_dir]}`",
@@ -171,6 +232,7 @@ end
 readiness_run = run_command("ruby", READINESS_SCRIPT, chdir: ROOT_DIR)
 readiness_report = read_json(READINESS_REPORT_JSON)
 android_preflight_report = android_preflight
+android_contract_report = android_acceptance_contract
 android_ran = readiness_report["status"] == "passed"
 android_run = nil
 android_report = nil
@@ -202,7 +264,13 @@ else
   }
 end
 
-acceptance_evidence = build_acceptance_evidence(readiness_report, android_report, android_ran, android_preflight_report)
+acceptance_evidence = build_acceptance_evidence(
+  readiness_report,
+  android_report,
+  android_ran,
+  android_preflight_report,
+  android_contract_report,
+)
 status = acceptance_evidence.all? { |item| item["status"] == "passed" } ? "passed" : "failed"
 report = {
   generated_at: Time.now.utc.iso8601,
@@ -210,11 +278,13 @@ report = {
   android_dir: ANDROID_DIR,
   mac_readiness_status: readiness_report["status"],
   android_preflight_status: android_preflight_report["status"],
+  android_final_code_activity_gate_status: android_contract_report["status"],
   android_ready_device_count: android_preflight_report["ready_device_count"],
   android_live_acceptance_status: android_report["status"],
   mac_readiness_report_json: READINESS_REPORT_JSON,
   android_live_acceptance_report_json: android_ran ? ANDROID_ACCEPTANCE_REPORT_JSON : nil,
   android_preflight: android_preflight_report,
+  android_acceptance_contract: android_contract_report,
   command_runs: {
     mac_readiness: readiness_run,
     android_preflight: android_preflight_report["command_run"],
