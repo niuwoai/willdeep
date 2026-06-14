@@ -4,6 +4,7 @@
 require "fileutils"
 require "json"
 require "net/http"
+require "open3"
 require "time"
 require "uri"
 
@@ -109,12 +110,71 @@ rescue StandardError => e
   { status: "failed", error: "#{e.class}: #{e.message}" }
 end
 
-def acceptance_evidence(health, token, rotate)
+def listener_process_probe
+  uri = URI(BASE_URL)
+  port = uri.port
+  stdout, stderr, status = Open3.capture3("lsof", "-nP", "-iTCP:#{port}", "-sTCP:LISTEN")
+  listener_line = stdout.lines.drop(1).find { |line| !line.strip.empty? }
+  unless status.success? && listener_line
+    error = stderr.strip.empty? ? "no process is listening on TCP port #{port}" : stderr.strip
+    return {
+      status: "failed",
+      port: port,
+      pid: nil,
+      parent_pid: nil,
+      command: nil,
+      executable: nil,
+      error: error,
+    }
+  end
+
+  columns = listener_line.split(/\s+/, 9)
+  pid = columns[1].to_i
+  ps_stdout, ps_stderr, ps_status = Open3.capture3("ps", "-p", pid.to_s, "-o", "ppid=", "-o", "command=")
+  ps_output = ps_stdout.strip
+  parent_pid = ps_status.success? ? ps_output[/\A(\d+)/, 1]&.to_i : nil
+  command = if ps_status.success?
+              ps_output.sub(/\A\d+\s+/, "")
+            else
+              columns.first.to_s
+            end
+
+  {
+    status: "passed",
+    port: port,
+    pid: pid,
+    parent_pid: parent_pid,
+    command: command,
+    executable: command.split(/\s+/, 2).first,
+    error: ps_status.success? ? nil : ps_stderr.strip,
+  }
+rescue StandardError => e
+  {
+    status: "failed",
+    port: nil,
+    pid: nil,
+    parent_pid: nil,
+    command: nil,
+    executable: nil,
+    error: "#{e.class}: #{e.message}",
+  }
+end
+
+def acceptance_evidence(health, token, rotate, listener)
   [
     {
       key: "mac_gateway_health",
       status: health[:status],
       evidence: health[:status] == "passed" ? "Public /mobile/health is reachable." : health[:error].to_s,
+    },
+    {
+      key: "listener_process",
+      status: listener[:status],
+      evidence: if listener[:status] == "passed"
+                  "TCP port #{listener[:port]} is listened by pid #{listener[:pid]} (#{listener[:executable] || "unknown executable"})."
+                else
+                  listener[:error].to_s
+                end,
     },
     {
       key: "desktop_token_file",
@@ -144,12 +204,16 @@ def acceptance_evidence(health, token, rotate)
   ]
 end
 
-def next_actions(health, token, rotate)
+def next_actions(health, token, rotate, listener)
   actions = []
   actions << "Open WillDeep on the Mac, enable Settings > Mobile Gateway, and start the gateway." unless health[:status] == "passed"
   if !EXPECTED_SERVER_VERSION.empty? && health[:server_version] != EXPECTED_SERVER_VERSION
     observed = health[:server_version] || "missing"
-    actions << "Restart WillDeep or rebuild the bundled willdeep-agent so /mobile/health reports #{EXPECTED_SERVER_VERSION} instead of #{observed}."
+    if listener[:pid]
+      actions << "Stop the old listener pid #{listener[:pid]} (#{listener[:executable] || "unknown executable"}) and restart WillDeep so /mobile/health reports #{EXPECTED_SERVER_VERSION} instead of #{observed}."
+    else
+      actions << "Restart WillDeep or rebuild the bundled willdeep-agent so /mobile/health reports #{EXPECTED_SERVER_VERSION} instead of #{observed}."
+    end
   end
   actions << "Keep WillDeep running so it writes the desktop token file for Android live acceptance." unless token[:present]
   actions << "Allow new device pairing in Settings > Mobile Gateway." unless health[:pairing_allowed] == true
@@ -169,6 +233,8 @@ def write_reports(report)
     "- Base URL: `#{report[:base_url]}`",
     "- Desktop token file: `#{report.dig(:desktop_token_file, :present) ? "present" : "missing"}`",
     "- Health reachable: `#{report.dig(:health, :status) == "passed" ? "yes" : "no"}`",
+    "- Listener PID: `#{report.dig(:listener_process, :pid) || "unknown"}`",
+    "- Listener executable: `#{report.dig(:listener_process, :executable) || "unknown"}`",
     "- Expected server version: `#{report[:expected_server_version] || "unknown"}`",
     "- Server version: `#{report.dig(:health, :server_version) || "unknown"}`",
     "- Protocol version: `#{report.dig(:health, :protocol_version) || "unknown"}`",
@@ -196,7 +262,8 @@ end
 health = health_probe
 token = token_probe
 rotate = pairing_rotate_probe(token[:present])
-evidence = acceptance_evidence(health, token, rotate)
+listener = listener_process_probe
+evidence = acceptance_evidence(health, token, rotate, listener)
 status = evidence.all? { |item| item[:status] == "passed" } ? "passed" : "failed"
 report = {
   generated_at: Time.now.utc.iso8601,
@@ -205,10 +272,11 @@ report = {
   expected_protocol: EXPECTED_PROTOCOL,
   expected_server_version: EXPECTED_SERVER_VERSION,
   health: health,
+  listener_process: listener,
   desktop_token_file: token,
   pairing_rotate: rotate,
   acceptance_evidence: evidence,
-  next_actions: next_actions(health, token, rotate),
+  next_actions: next_actions(health, token, rotate, listener),
 }
 
 write_reports(report)

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.78.0-rc23 - 2026-06-15
+
+### Added
+
+- `scripts/mobile_gateway_live_readiness.rb` 新增当前监听端口进程诊断，报告 TCP 端口对应的 PID、父 PID 和可执行路径，便于发现 DerivedData 或旧 app bundle 中残留的旧版 Mobile Gateway。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc23`。
+
 ## 1.78.0-rc22 - 2026-06-15
 
 ### Fixed
