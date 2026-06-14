@@ -414,6 +414,24 @@ struct AgentSession: Identifiable, Codable, Equatable {
     var isPinned: Bool { pinnedAt != nil }
     var isArchived: Bool { archivedAt != nil }
 
+    /// When the AI last produced output in this session — the timestamp the
+    /// sidebar shows and sorts by. Deliberately NOT `updatedAt`: that field
+    /// gets refreshed whenever the session is persisted (including on switch
+    /// away via `persistActiveAgentSession()`), so old chats wrongly read as
+    /// "0m". We instead take the last non-empty assistant message's time,
+    /// which is what the user means by "last activity". Fallbacks keep brand-
+    /// new / pre-first-reply sessions sensible: last message of any role, then
+    /// `updatedAt` for a truly empty session.
+    var lastActivityAt: Date {
+        if let aiTime = messages.last(where: { $0.role == .assistant && !$0.content.isEmpty })?.createdAt {
+            return aiTime
+        }
+        if let lastMessageTime = messages.last?.createdAt {
+            return lastMessageTime
+        }
+        return updatedAt
+    }
+
     var workspaceName: String {
         if let workspaceLocation {
             return workspaceLocation.displayName

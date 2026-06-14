@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.78.0-rc16 - 2026-06-14
+
+### Fixed
+
+- 修复 Agent 会话列表右侧的紧凑时间戳总是显示「0m」的问题：此前显示与排序都用 `session.updatedAt`，而该字段在切换/持久化会话时（`persistActiveAgentSession()`）会被刷新，导致旧会话也被刷成「刚刚」。现在改用新增的 `AgentSession.lastActivityAt`——取**最后一条非空 AI（assistant）消息的时间**（即「AI 最后输出的时间」），并跳过流式开始前的空占位消息；无 AI 回复时回退到最后一条消息（用户提问）时间，空会话才回退 `updatedAt`。
+- 会话列表的**显示时间与排序**统一改用 `lastActivityAt`，避免出现「显示 5m 的会话排在显示 0m 之上」的不一致。
+
+### Tests
+
+- 新增 `lastActivityAt` 的 3 个用例：`updatedAt=now` 但 AI 两小时前回复时显示 2h、跳过空 assistant 占位消息、回退到用户消息/`updatedAt`。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc16`。
+
 ## 1.78.0-rc15 - 2026-06-14
 
 ### Changed
