@@ -124,6 +124,7 @@ struct AgentMobileGatewayToolApprovalSnapshot: Equatable {
     var summary: String
     var toolName: String
     var inputPreview: String
+    var requiresConfirmation: Bool = false
     var sessionID: UUID
 }
 
@@ -793,6 +794,7 @@ enum AgentMobileGatewayCommandRouter {
             "summary": .string(approval.summary),
             "tool_name": .string(approval.toolName),
             "input_preview": .string(approval.inputPreview),
+            "requires_confirmation": .bool(approval.requiresConfirmation),
             "session_id": .string(approval.sessionID.uuidString)
         ]
     }
@@ -1155,6 +1157,7 @@ extension AppState: AgentMobileGatewayControlling {
                         summary: mobileGatewayToolSummary(for: call),
                         toolName: call.toolName,
                         inputPreview: Self.mobileGatewayArgumentsPreview(call.arguments),
+                        requiresConfirmation: call.status == .awaitingConfirm,
                         sessionID: runtime.id
                     )
                 }

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.78.0-rc7 - 2026-06-14
+
+### Added
+
+- Mobile Gateway pending tool snapshots now include `requires_confirmation` for danger-tier approvals so Android can ask for the typed `confirm` gate before sending `tool.decide`.
+
+### Tests
+
+- Updated Mobile Gateway bridge snapshot coverage to assert danger confirmation metadata is serialized for mobile clients.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc7`。
+
 ## 1.78.0-rc6 - 2026-06-14
 
 ### Tests

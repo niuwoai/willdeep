@@ -159,6 +159,7 @@ struct AgentMobileGatewayBridgeTests {
                 summary: "Waiting for approval",
                 toolName: "run_command",
                 inputPreview: "{\"command\":\"make test\"}",
+                requiresConfirmation: true,
                 sessionID: session.id
             )
         ]
@@ -243,6 +244,7 @@ struct AgentMobileGatewayBridgeTests {
             return
         }
         #expect(tool["id"]?.stringValue == "tool-1")
+        #expect(tool["requires_confirmation"]?.boolValue == true)
         #expect(tool["session_id"]?.stringValue == session.id.uuidString)
 
         guard case .array(let patches)? = response.payload["patch_proposals"],
