@@ -13,6 +13,8 @@ READINESS_SCRIPT = File.join(ROOT_DIR, "scripts", "mobile_gateway_live_readiness
 READINESS_REPORT_JSON = File.join(ROOT_DIR, "build", "mobile_gateway_live_readiness", "report.json")
 ANDROID_ACCEPTANCE_SCRIPT = File.join(ANDROID_DIR, "scripts", "mobile_gateway_live_acceptance.rb")
 ANDROID_CONNECTED_SMOKE_SCRIPT = File.join(ANDROID_DIR, "scripts", "android_connected_smoke_test.rb")
+ANDROID_AGENT_ACTIVITY_EVIDENCE = File.join(ANDROID_DIR, "app", "src", "main", "java", "com", "willdeep", "android", "ui", "AgentActivityEvidence.kt")
+ANDROID_AGENT_ACTIVITY_EVIDENCE_TEST = File.join(ANDROID_DIR, "app", "src", "test", "java", "com", "willdeep", "android", "ui", "AgentActivityEvidenceTest.kt")
 ANDROID_ACCEPTANCE_REPORT_JSON = File.join(ANDROID_DIR, "build", "mobile_gateway_live_acceptance", "report.json")
 OUT_DIR = File.join(ROOT_DIR, "build", "mobile_gateway_end_to_end_acceptance")
 REPORT_JSON = File.join(OUT_DIR, "report.json")
@@ -47,6 +49,9 @@ ANDROID_TARGET_FILE_CONTRACT_CHECKS = %w[
   wrapper_sets_expected_target_file
   smoke_requires_target_file_evidence
   smoke_requires_target_file_marker
+  activity_captures_worktree_file_signatures
+  target_file_allows_existing_worktree_signature_change
+  target_file_update_test_present
 ].freeze
 
 def run_command(*command, chdir:)
@@ -150,6 +155,8 @@ end
 def android_acceptance_contract
   live_script = read_text(ANDROID_ACCEPTANCE_SCRIPT)
   smoke_script = read_text(ANDROID_CONNECTED_SMOKE_SCRIPT)
+  activity_source = read_text(ANDROID_AGENT_ACTIVITY_EVIDENCE)
+  activity_test_source = read_text(ANDROID_AGENT_ACTIVITY_EVIDENCE_TEST)
   checks = {
     "live_acceptance_script_present" => File.file?(ANDROID_ACCEPTANCE_SCRIPT),
     "connected_smoke_script_present" => File.file?(ANDROID_CONNECTED_SMOKE_SCRIPT),
@@ -163,6 +170,9 @@ def android_acceptance_contract
     "wrapper_sets_expected_target_file" => live_script.include?("\"MOBILE_GATEWAY_EXPECTED_TARGET_FILE\" => LIVE_ACCEPTANCE_TARGET_FILE"),
     "smoke_requires_target_file_evidence" => smoke_script.include?("mac_target_file_after_send"),
     "smoke_requires_target_file_marker" => smoke_script.include?("Mac target file signal marker is required"),
+    "activity_captures_worktree_file_signatures" => activity_source.include?("worktreeFileSignatures") && activity_source.include?("activitySignature()"),
+    "target_file_allows_existing_worktree_signature_change" => activity_source.include?("file.activitySignature() !in baseline.worktreeFileSignatures"),
+    "target_file_update_test_present" => activity_test_source.include?("targetFileActivityCountsExistingWorktreeFileWhenStatsChange"),
   }
 
   {
@@ -210,7 +220,7 @@ def android_target_file_contract_evidence(contract)
     "key" => "android_target_file_gate",
     "status" => failed.empty? ? "passed" : "failed",
     "evidence" => if failed.empty?
-                    "Android final live acceptance requires #{EXPECTED_ANDROID_LIVE_TARGET_FILE} to appear in Mac patch or worktree activity."
+                    "Android final live acceptance requires #{EXPECTED_ANDROID_LIVE_TARGET_FILE} to appear in Mac patch/worktree activity, including updates to an existing target path."
                   else
                     "Android final live acceptance is missing required target-file checks: #{failed.join(", ")}."
                   end,

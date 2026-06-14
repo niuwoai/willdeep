@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.78.0-rc19 - 2026-06-15
+
+### Tests
+
+- 补强 `scripts/mobile_gateway_end_to_end_acceptance.rb` 的 Android contract 检查：除了要求 Android final wrapper 绑定 `WILLDEEP_ANDROID_LIVE_ACCEPTANCE.md`，现在还静态确认 Android 会记录 worktree 文件签名、把既有目标文件的 kind/diff 统计变化视作有效目标文件活动，并有对应 JVM 单测覆盖。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc19`。
+
 ## 1.78.0-rc18 - 2026-06-14
 
 ### Tests
