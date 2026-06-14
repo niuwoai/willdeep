@@ -52,6 +52,9 @@ enum AgentToolApprovalNotifier {
         content.title = title
         content.body = body
         content.sound = .default
+        if let attachment = AgentNotificationIcon.attachment() {
+            content.attachments = [attachment]
+        }
 
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in
@@ -86,11 +89,16 @@ enum AgentToolApprovalNotifier {
         case .launchFailed: statusWord = "launch failed"
         case .running: return // shouldn't happen — we only fire on finish
         }
-        let shortCommand = truncated(job.command, limit: 90)
         let content = UNMutableNotificationContent()
         content.title = L10n.AgentJobs.notificationTitle
-        content.body = "\(job.displayHandle) (\(statusWord)): \(shortCommand)"
+        // Keep the body short — handle + status is enough to recognize which
+        // job finished. The full command used to be dumped here; users found
+        // it noisy and it leaked long paths into the banner.
+        content.body = "\(job.displayHandle) · \(statusWord)"
         content.sound = .default
+        if let attachment = AgentNotificationIcon.attachment() {
+            content.attachments = [attachment]
+        }
 
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in
@@ -139,11 +147,14 @@ enum AgentToolApprovalNotifier {
         return descriptor(toolName: toolName, arguments: arguments)
     }
 
-    /// Short human-readable summary for the body — same shape the user
-    /// sees on the card so it's recognizable when they flip back.
+    /// Short human-readable summary for the body. Deliberately terse — the
+    /// banner is a "come look" nudge, not the full transcript. For shell
+    /// commands we surface just the program (and its subcommand for wrappers
+    /// like `git`/`go`), never the full argument line, which used to spill
+    /// long paths and flags into the notification.
     private static func descriptor(toolName: String, arguments: [String: AgentJSONValue]) -> String {
         if toolName == "run_command", let command = arguments["command"]?.stringValue() {
-            return truncated(command, limit: 120)
+            return commandSummary(command)
         }
         if toolName == "call_mcp_tool" {
             let server = arguments["server"]?.stringValue() ?? "?"
@@ -151,9 +162,27 @@ enum AgentToolApprovalNotifier {
             return "\(server).\(tool)"
         }
         if let path = arguments["path"]?.stringValue() {
-            return "\(toolName) · \(truncated(path, limit: 100))"
+            // Just the filename, not the whole path.
+            return "\(toolName) · \((path as NSString).lastPathComponent)"
         }
         return toolName
+    }
+
+    /// Condense a shell command to "program" or "program subcommand" so the
+    /// banner stays recognizable without exposing the full command line.
+    /// e.g. `git commit -m "..."` → `git commit`, `mkdir -p a/b/c` → `mkdir`.
+    private static func commandSummary(_ command: String) -> String {
+        let tokens = SafeCommand.tokenize(command)
+        guard let head = tokens.first else { return command.isEmpty ? "命令" : truncated(command, limit: 40) }
+        let wrappers: Set<String> = [
+            "git", "go", "npm", "pnpm", "yarn", "cargo", "make", "swift",
+            "python", "python3", "node", "ruby", "rake", "docker", "kubectl", "brew"
+        ]
+        if wrappers.contains(head.lowercased()),
+           let sub = tokens.dropFirst().first(where: { !$0.hasPrefix("-") }) {
+            return truncated("\(head) \(sub)", limit: 40)
+        }
+        return truncated(head, limit: 40)
     }
 
     private static func truncated(_ text: String, limit: Int) -> String {

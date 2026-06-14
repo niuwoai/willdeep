@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.78.0-rc15 - 2026-06-14
+
+### Changed
+
+- macOS 系统通知现在统一显示 WillDeep 应用图标（作为 `UNNotificationAttachment` 附加运行时 app icon），解决未签名/Xcode 调试构建下横幅图标与 Dock logo 不一致的问题；Agent 工具审批、后台任务完成、自动化流程三处通知都加上该图标。
+- 通知正文不再把命令全文塞进横幅：`run_command` 仅显示程序名（对 `git`/`go`/`npm` 等包装命令显示「程序 子命令」，如 `git commit`、`go build`），后台任务完成通知去掉命令体只保留「句柄 · 状态」，文件类工具只显示文件名而非完整路径。
+
+### Fixed
+
+- `mkdir`、`touch`、`mktemp` 这类只创建、无删除/越权/网络语义的低风险写命令现在自动放行，不再停在确认卡片上等待用户点击；敏感路径（`~/.ssh`、`.env` 等）与工作区外目标仍由沙盒路径检查独立升级。沙盒侧同步把这三个命令头加入 workspace-write 配置，避免被当作只读命令而禁止写盘。
+- 修复只读 git 子命令被误判为 workspace-write 风险的回归：`git diff` / `git status` / `git -C <工作区> diff` 等纯读取命令重新归为 `.read`（只读沙盒），不再因为 `git` 出现在写命令清单里而被整体升级。沙盒的「低风险写」升级判定改为只针对真正会写盘的构建/包管理/创建类命令（go、npm/yarn/pnpm、make、mkdir 等），明确排除 git；`go build`、`npm run build` 仍正确判为 `.write`。
+
+### Tests
+
+- 新增 `mkdir`/`touch`/`mktemp` 自动放行的分类测试，并覆盖「创建命令后接 `rm -rf`」「创建命令重定向到 `/etc/passwd`」仍判危险的边界。
+- 修复后，`run_command classifies cd plus read-only commands as read risk` 与 `run_command allows workspace absolute cd for read-only commands` 两个此前红着的用例恢复全绿（git 只读子命令判 `.read`），XeditTests 443 个用例全部通过。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc15`。
+
+## 1.78.0-rc14 - 2026-06-14
+
+### Added
+
+- Agent mode 左侧会话列表现在在每条会话右侧显示紧凑更新时间，例如 `5m`、`3h`、`2d`；标签每分钟自动刷新，并保留 hover 时的置顶/归档操作。
+
+### Tests
+
+- Added coverage for compact Agent session relative timestamp formatting across minute, hour, day, week, month, year, and future-date boundaries.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc14`。
+
 ## 1.78.0-rc13 - 2026-06-14
 
 ### Tests

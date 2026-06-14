@@ -109,6 +109,20 @@ enum SafeCommand {
         "read", "test", "[", "[[", "seq", "true", "false", "sleep", "expr"
     ]
 
+    /// Low-risk *write* commands that only create things inside the
+    /// workspace — make a directory, touch an empty/temp file. They mutate
+    /// the filesystem (so they're not in `alwaysSafeFirstTokens`), but carry
+    /// no delete / escalate / network semantics, so we auto-approve them to
+    /// stop the agent stalling on a confirm card for `mkdir -p build/`.
+    /// Sensitive paths (`~/.ssh`, `.env`, …) and out-of-workspace targets are
+    /// still gated by AgentSandboxPolicy's path checks, which escalate
+    /// independently of this classifier. NOTE: every token here must also be
+    /// in AgentSandboxPolicy.lowRiskWriteHeads, otherwise the sandbox treats
+    /// the command as read-only and blocks the write. (Added 1.78.0-rc15.)
+    static let safeWorkspaceCreateTokens: Set<String> = [
+        "mkdir", "touch", "mktemp"
+    ]
+
     /// Commands that COULD be safe but whose argument shape matters.
     /// `git`, `find`, `xargs`, etc.: dispatched to a per-tool checker.
     static let conditionalFirstTokens: Set<String> = [
@@ -294,6 +308,9 @@ enum SafeCommand {
         }
 
         if alwaysSafeFirstTokens.contains(firstToken) {
+            return .alwaysSafe
+        }
+        if safeWorkspaceCreateTokens.contains(firstToken) {
             return .alwaysSafe
         }
         if conditionalFirstTokens.contains(firstToken) {

@@ -1970,6 +1970,20 @@ struct WillDeepTests {
         #expect(SafeCommand.classify(command: "ln a b") == .needsJudgment)
     }
 
+    @Test("SafeCommand: low-risk creation commands auto-approve")
+    func testSafeCommandWorkspaceCreate() {
+        // mkdir/touch/mktemp write, but only create — auto-approve so the
+        // agent doesn't stall on `mkdir -p build/`.
+        #expect(SafeCommand.classify(command: "mkdir build") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "mkdir -p src/a/b") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "touch README.md") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "mktemp -d") == .alwaysSafe)
+        // A destructive token anywhere in the pipeline still wins.
+        #expect(SafeCommand.classify(command: "mkdir foo && rm -rf bar") == .alwaysDangerous)
+        // Redirection out of a creation command is still refused.
+        #expect(SafeCommand.classify(command: "touch foo > /etc/passwd") == .alwaysDangerous)
+    }
+
     @Test("SafeCommand: dangerousSubstrings cover token-less shapes")
     func testSafeCommandDangerousSubstrings() {
         // Fork bomb — no whitespace, tokenize returns one giant token,

@@ -123,16 +123,22 @@ final class AgentRoutineScheduler {
     }
 
     private func postNotificationIfAuthorized(routine: AgentRoutine, catchUp: Bool) {
+        // Build the content (and read the app icon for the attachment) here on
+        // the main actor — the getNotificationSettings completion runs on a
+        // background queue where touching NSApp would be unsafe.
+        let content = UNMutableNotificationContent()
+        content.title = L10n.Automation.notificationTitle
+        content.body = catchUp
+            ? L10n.Automation.notificationBodyCatchUp(routine.name)
+            : L10n.Automation.notificationBodyStarted(routine.name)
+        if let attachment = AgentNotificationIcon.attachment() {
+            content.attachments = [attachment]
+        }
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in
             guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
                 return
             }
-            let content = UNMutableNotificationContent()
-            content.title = L10n.Automation.notificationTitle
-            content.body = catchUp
-                ? L10n.Automation.notificationBodyCatchUp(routine.name)
-                : L10n.Automation.notificationBodyStarted(routine.name)
             let request = UNNotificationRequest(
                 identifier: "willdeep.routine.\(routine.id.uuidString).\(Int(Date().timeIntervalSince1970))",
                 content: content,

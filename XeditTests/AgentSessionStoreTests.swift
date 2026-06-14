@@ -152,6 +152,28 @@ struct AgentSessionStoreTests {
         #expect(path.hasSuffix("agent-sessions"))
     }
 
+    // MARK: - compact updated timestamp
+
+    @Test
+    func compactRelativeTimestampUsesMinutesHoursAndDays() {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+
+        #expect(AgentRelativeTimestamp.compactString(since: now, now: now) == "0m")
+        #expect(AgentRelativeTimestamp.compactString(since: now.addingTimeInterval(-5 * 60), now: now) == "5m")
+        #expect(AgentRelativeTimestamp.compactString(since: now.addingTimeInterval(-3 * 60 * 60), now: now) == "3h")
+        #expect(AgentRelativeTimestamp.compactString(since: now.addingTimeInterval(-2 * 24 * 60 * 60), now: now) == "2d")
+    }
+
+    @Test
+    func compactRelativeTimestampUsesLargerUnitsAndClampsFutureDates() {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+
+        #expect(AgentRelativeTimestamp.compactString(since: now.addingTimeInterval(-14 * 24 * 60 * 60), now: now) == "2w")
+        #expect(AgentRelativeTimestamp.compactString(since: now.addingTimeInterval(-60 * 24 * 60 * 60), now: now) == "2mo")
+        #expect(AgentRelativeTimestamp.compactString(since: now.addingTimeInterval(-730 * 24 * 60 * 60), now: now) == "2y")
+        #expect(AgentRelativeTimestamp.compactString(since: now.addingTimeInterval(60), now: now) == "0m")
+    }
+
     // MARK: - titleIsUserSet (LLM auto-summarizer guard)
 
     /// Default for a freshly-constructed session must be `false` so the

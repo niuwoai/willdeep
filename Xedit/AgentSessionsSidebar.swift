@@ -361,6 +361,7 @@ struct AgentSessionsSidebar: View {
                     .truncationMode(.tail)
                 Spacer(minLength: 0)
                 AgentSessionModeBadges(session: session)
+                sessionUpdatedLabel(session)
                 sessionRowTrailingActions(session: session, isHovered: isHovered)
             }
             .padding(.horizontal, 28)
@@ -424,6 +425,23 @@ struct AgentSessionsSidebar: View {
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
         appState.renameAgentSession(id: session.id, to: input.stringValue)
+    }
+
+    @ViewBuilder
+    private func sessionUpdatedLabel(_ session: AgentSession) -> some View {
+        TimelineView(.periodic(from: .now, by: 60)) { timeline in
+            let label = AgentRelativeTimestamp.compactString(
+                since: session.updatedAt,
+                now: timeline.date
+            )
+            Text(label)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .monospacedDigit()
+                .lineLimit(1)
+                .frame(minWidth: 22, alignment: .trailing)
+                .help(L10n.Sidebar.sessionUpdatedTooltip(label))
+        }
     }
 
     /// Trailing icon cluster on each session row — pin & archive
@@ -569,6 +587,38 @@ struct AgentSessionsSidebar: View {
         case (false, false):
             return lhs.updatedAt > rhs.updatedAt
         }
+    }
+}
+
+enum AgentRelativeTimestamp {
+    static func compactString(since date: Date, now: Date = Date()) -> String {
+        let elapsed = max(0, Int(now.timeIntervalSince(date)))
+        let minute = 60
+        let hour = 60 * minute
+        let day = 24 * hour
+        let week = 7 * day
+        let month = 30 * day
+        let year = 365 * day
+
+        if elapsed < minute {
+            return "0m"
+        }
+        if elapsed < hour {
+            return "\(elapsed / minute)m"
+        }
+        if elapsed < day {
+            return "\(elapsed / hour)h"
+        }
+        if elapsed < week {
+            return "\(elapsed / day)d"
+        }
+        if elapsed < month {
+            return "\(elapsed / week)w"
+        }
+        if elapsed < year {
+            return "\(elapsed / month)mo"
+        }
+        return "\(elapsed / year)y"
     }
 }
 

@@ -77,6 +77,23 @@ enum AgentSandboxPolicy {
         "cargo", "npm", "pnpm", "yarn", "ruby", "node", "python", "python3"
     ]
 
+    /// Heads whose SafeCommand `.alwaysSafe` verdict still WRITES inside the
+    /// workspace — build artifacts, package-script output, dir/file creation —
+    /// so a SafeCommand-certified call must run under a workspace-write
+    /// seatbelt, not the read-only one (which would block the very write the
+    /// command exists to make). Deliberately EXCLUDES `git`: SafeCommand only
+    /// certifies read-only git subcommands (diff/log/status/show/…) as
+    /// alwaysSafe, and those genuinely don't write, so they must stay
+    /// `.readOnly`. Pre-1.78.0-rc15 the bump keyed off the whole
+    /// `workspaceWriteHeads` set, which wrongly promoted `git diff` to
+    /// workspace-write. Keep mkdir/touch/mktemp in sync with
+    /// SafeCommand.safeWorkspaceCreateTokens.
+    nonisolated private static let lowRiskWriteHeads: Set<String> = [
+        "apply_patch", "make", "xcodebuild", "swift", "go", "cargo",
+        "npm", "pnpm", "yarn", "ruby", "node", "python", "python3", "rake",
+        "mkdir", "touch", "mktemp"
+    ]
+
     nonisolated private static let networkHeads: Set<String> = [
         "curl", "wget", "ssh", "scp", "rsync", "gh", "brew"
     ]
@@ -241,7 +258,11 @@ enum AgentSandboxPolicy {
             } else {
                 switch SafeCommand.classify(command: segment) {
                 case .alwaysSafe:
-                    if workspaceWriteHeads.contains(head) {
+                    // A SafeCommand-certified call is auto-approvable, but some
+                    // of those still write (go build, npm run build, mkdir).
+                    // Bump only those to workspace-write; read-only certs like
+                    // `git diff` stay read-only. See `lowRiskWriteHeads`.
+                    if lowRiskWriteHeads.contains(head) {
                         needsWorkspaceWrite = true
                         reasons.append("Command `\(head)` is a low-risk workspace build or development operation.")
                     }

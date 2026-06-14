@@ -5432,6 +5432,24 @@
         }
       }
     },
+    "sidebar.session-row.updated-tooltip": {
+      "comment": ".help() for the compact last-updated timestamp on a session row. Placeholder is a compact duration such as 5m or 2d.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updated %1$@ ago"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 前更新"
+          }
+        }
+      }
+    },
     "sidebar.workspace-header": {
       "comment": "section header",
       "extractionState": "manual",
