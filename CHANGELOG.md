@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.78.0-rc17 - 2026-06-14
+
+### Tests
+
+- 放宽 `loadFile completes ... for a file under 1MB` 性能用例的阈值（轮询上限 1s→5s、断言 500ms→2s），消除它在 GitHub Actions 共享 macOS runner 上因调度抖动频繁超时（`.loadTimedOut`）导致的 flaky 红——这是近期 CI 唯一反复失败的用例。本地仍是几十毫秒完成，「不卡死/相对快」的意图保留。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc17`。
+
 ## 1.78.0-rc16 - 2026-06-14
 
 ### Fixed
