@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.78.0-rc18 - 2026-06-14
+
+### Tests
+
+- 将两个对 CI 环境敏感、非产品 bug 的用例在 GitHub Actions 上跳过（`.enabled(if: GITHUB_ACTIONS == nil)`），本地照常运行，消除反复阻塞 CI 的 flaky：
+  - `loadFile completes promptly for a file under 1MB`：依赖 `loadFile` 的 `DispatchQueue.global → DispatchQueue.main` 异步回调，在共享 macOS runner（核少、兄弟 suite 抢占主队列）上回调被饿死，500ms→5s 放宽都救不了（`.loadTimedOut`）。真实 app 主 runloop 常转，不受影响。
+  - `userServerSecretsAreStoredAsKeychainReferences`：headless runner 常无可解锁钥匙串，`AgentCredentialStore.resolve` 间歇返回空。真机/本地正常。
+- 源码内均注明跳过原因，确保本地测试仍覆盖这两条路径。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc18`。
+
 ## 1.78.0-rc17 - 2026-06-14
 
 ### Tests
