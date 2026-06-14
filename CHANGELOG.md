@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.78.0-rc12 - 2026-06-14
+
+### Tests
+
+- Strengthened `scripts/mobile_gateway_end_to_end_acceptance.rb` so the cross-repository final gate verifies the Android live acceptance wrapper defaults to a workspace-edit request targeting `WILLDEEP_ANDROID_LIVE_ACCEPTANCE.md` and fails if the Android report omits that request metadata.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc12`。
+
 ## 1.78.0-rc11 - 2026-06-14
 
 ### Tests
