@@ -218,6 +218,7 @@ func (g *MobileGateway) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /mobile/health", g.handleHealth)
 	mux.HandleFunc("GET /mobile/pairing", g.handlePairingPayload)
+	mux.HandleFunc("POST /mobile/pairing/rotate", g.handlePairingRotate)
 	mux.HandleFunc("GET /mobile/devices", g.handleDevices)
 	mux.HandleFunc("POST /mobile/pair/claim", g.handlePairClaim)
 	mux.HandleFunc("POST /mobile/devices/revoke", g.handleDeviceRevoke)
@@ -251,6 +252,26 @@ func (g *MobileGateway) handlePairingPayload(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusGone, "pairing token expired or already claimed")
 		return
 	}
+	writeOK(w, map[string]any{"pairing_payload": payload})
+}
+
+func (g *MobileGateway) handlePairingRotate(w http.ResponseWriter, r *http.Request) {
+	if !g.isDesktopRequest(r) {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if !g.config.AllowPairing {
+		writeError(w, http.StatusForbidden, "pairing is disabled")
+		return
+	}
+	g.mu.Lock()
+	if err := g.rotatePairingTokenLocked(g.now()); err != nil {
+		g.mu.Unlock()
+		writeError(w, http.StatusInternalServerError, "could not rotate pairing token")
+		return
+	}
+	payload := g.pairingPayloadLocked(g.now())
+	g.mu.Unlock()
 	writeOK(w, map[string]any{"pairing_payload": payload})
 }
 

@@ -284,6 +284,32 @@ def main
     end
     device_token = claim.fetch("device_token")
 
+    recorder.record("desktop rotates pairing payload after claim") do
+      response, body = http_json(
+        :post,
+        "#{base_url}/mobile/pairing/rotate",
+        headers: { "Authorization" => "Bearer #{desktop_token}" },
+        body: {},
+      )
+      raise "rotate status #{response.code}: #{response.body}" unless response.code.to_i == 200
+      rotated = body.dig("data", "pairing_payload") || raise("missing rotated pairing_payload")
+      if rotated.fetch("pairing_token") == pairing.fetch("pairing_token")
+        raise "rotated pairing token did not change"
+      end
+      second_claim_response, second_claim_body = http_json(
+        :post,
+        "#{base_url}/mobile/pair/claim",
+        body: {
+          pairing_token: rotated.fetch("pairing_token"),
+          device_name: "Second Integration Android",
+        },
+      )
+      unless second_claim_response.code.to_i == 200
+        raise "second claim status #{second_claim_response.code}: #{second_claim_response.body}"
+      end
+      second_claim_body.fetch("data").fetch("device_token")
+    end
+
     desktop_ws = recorder.record("desktop websocket connects") do
       MinimalWebSocket.new(ws_url, "Authorization" => "Bearer #{desktop_token}")
     end

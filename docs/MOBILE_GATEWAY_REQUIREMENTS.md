@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-06-14 | Target version: v1.77.0-rc1
+> Last updated: 2026-06-14 | Target version: v1.78.0-rc1
 
 ## Summary
 
@@ -30,7 +30,7 @@ This phase implements the Mac-side Go gateway and records the protocol contract.
 
 The Swift macOS app connects to the gateway as the desktop peer using the desktop bearer token. The first desktop peer bridge is implemented in `AgentMobileGatewayBridge.swift`: it decodes gateway envelopes, routes supported mobile commands back through `AppState`, and publishes state snapshots/events through the gateway. It is the only peer allowed to:
 
-- fetch the current pairing payload;
+- fetch or rotate the current pairing payload;
 - revoke devices;
 - receive mobile commands;
 - publish desktop events such as session snapshots, message deltas, tool states, patch proposals, and worktree updates.
@@ -66,8 +66,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.77.0-rc1`
-- `X-Server-Version: 1.77.0-rc1`
+- `X-App-Version: 1.78.0-rc1`
+- `X-Server-Version: 1.78.0-rc1`
 
 ### `GET /mobile/health`
 
@@ -79,7 +79,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.77.0-rc1",
+    "version": "1.78.0-rc1",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
@@ -111,6 +111,28 @@ Response data:
 ```
 
 The macOS UI should render this payload as a QR code. The pairing token is single-use and defaults to a 2-minute lifetime.
+
+### `POST /mobile/pairing/rotate`
+
+Desktop-only endpoint. Requires `Authorization: Bearer <desktop_token>`.
+
+Rotates the short-lived pairing token without restarting the gateway and returns the new QR payload. This is used by macOS Settings and live Android smoke automation when an old token was claimed or expired.
+
+Response data:
+
+```json
+{
+  "pairing_payload": {
+    "base_url": "http://192.168.1.20:8876",
+    "pairing_token": "new-short-lived-token",
+    "protocol_version": "mobile-gateway.v1",
+    "desktop_name": "Rocky's Mac",
+    "expires_at": "2026-06-13T12:04:00Z"
+  }
+}
+```
+
+The endpoint returns `403` when new device pairing is disabled.
 
 ### `POST /mobile/pair/claim`
 
@@ -291,6 +313,7 @@ The macOS app includes a Mobile Gateway settings section:
 - show the selected LAN address, port, and resolved gateway executable;
 - show protocol version;
 - show QR pairing payload;
+- refresh the short-lived QR pairing payload without restarting the gateway;
 - list paired devices with last connected time;
 - revoke a paired device.
 
@@ -303,6 +326,7 @@ All user-visible SwiftUI text must go through `Localizable.xcstrings` and `L10n.
 - `willdeep-agent serve-mobile` starts a Mobile Gateway.
 - `GET /mobile/health` reports version, protocol, desktop name, and pairing availability with version headers.
 - Desktop-authenticated callers can fetch a QR pairing payload.
+- Desktop-authenticated callers can rotate and fetch a new QR pairing payload without restarting the gateway.
 - A mobile caller can claim a valid pairing token once and receive a device token.
 - A paired device can connect to `/mobile/ws`.
 - A desktop peer can connect to `/mobile/ws`.
@@ -313,6 +337,6 @@ All user-visible SwiftUI text must go through `Localizable.xcstrings` and `L10n.
 
 ## Test Requirements
 
-- Go unit tests must cover pairing token claim, expiration, one-time use, health version headers, WebSocket auth, command forwarding, desktop event broadcast, unknown command errors, and revoke behavior.
+- Go unit tests must cover pairing token claim, expiration, one-time use, desktop-authenticated pairing rotation, health version headers, WebSocket auth, command forwarding, desktop event broadcast, unknown command errors, and revoke behavior.
 - Swift tests should be added when the desktop bridge lands, covering state snapshot conversion and command routing into existing Agent runtime methods.
-- `scripts/mobile_gateway_integration_test.rb` starts a real local gateway, simulates desktop and mobile peers, verifies pairing, command forwarding, ack, event broadcast, and emits JSON plus Markdown reports.
+- `scripts/mobile_gateway_integration_test.rb` starts a real local gateway, simulates desktop and mobile peers, verifies pairing, desktop-authenticated pairing rotation, command forwarding, ack, event broadcast, and emits JSON plus Markdown reports.

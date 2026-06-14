@@ -245,6 +245,23 @@ final class MobileGatewayCoordinator: ObservableObject {
         }
     }
 
+    func rotatePairingPayload() async {
+        guard process != nil else { return }
+        guard let desktopToken = try? MobileGatewaySettingsStore.loadOrCreateDesktopToken() else { return }
+        do {
+            pairingPayload = try await post(
+                path: "/mobile/pairing/rotate",
+                baseURL: Self.desktopBaseURL(for: settings),
+                token: desktopToken,
+                body: EmptyRequest(),
+                as: PairingResponse.self
+            ).pairingPayload
+            await refresh()
+        } catch {
+            fail(error.localizedDescription)
+        }
+    }
+
     private func waitUntilHealthy(baseURL: URL, token: String) async throws {
         var lastError: Error?
         for _ in 0..<20 {
@@ -462,6 +479,8 @@ private struct RevokeRequest: Encodable {
 private struct RevokeResponse: Decodable {
     var revoked: Bool
 }
+
+private struct EmptyRequest: Encodable {}
 
 private enum CoordinatorError: LocalizedError, Equatable {
     case executableNotFound

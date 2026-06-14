@@ -7752,6 +7752,13 @@
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "复制配对 payload" } }
       }
     },
+    "settings.mobile-gateway.refresh-pairing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Refresh pairing QR" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "刷新配对二维码" } }
+      }
+    },
     "settings.mobile-gateway.revoke": {
       "extractionState": "manual",
       "localizations": {
@@ -7804,8 +7811,8 @@
     "settings.mobile-gateway.no-pairing-payload": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Pairing is unavailable. Restart the gateway to rotate a short-lived QR token." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "当前不可配对。重启网关可刷新短期二维码 token。" } }
+        "en": { "stringUnit": { "state": "translated", "value": "Pairing is unavailable. Refresh pairing after enabling new device pairing." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "当前不可配对。启用新设备配对后可刷新配对二维码。" } }
       }
     },
     "settings.mobile-gateway.start-to-pair": {

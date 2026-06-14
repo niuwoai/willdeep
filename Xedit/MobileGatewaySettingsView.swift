@@ -132,9 +132,16 @@ struct MobileGatewaySettingsView: View {
                             LabeledContent(L10n.Settings.MobileGateway.expiresLabel) {
                                 Text(payload.expiresAt, style: .relative)
                             }
-                            Button(L10n.Settings.MobileGateway.copyPayloadButton) {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(payload.qrJSONString, forType: .string)
+                            HStack(spacing: 8) {
+                                Button(L10n.Settings.MobileGateway.copyPayloadButton) {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(payload.qrJSONString, forType: .string)
+                                }
+                                Button {
+                                    Task { await coordinator.rotatePairingPayload() }
+                                } label: {
+                                    Label(L10n.Settings.MobileGateway.refreshPairingButton, systemImage: "arrow.clockwise")
+                                }
                             }
                         }
                     }

@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.78.0-rc1 - 2026-06-14
+
+### Added
+
+- Added desktop-only `POST /mobile/pairing/rotate` so WillDeep can refresh the short-lived Mobile Gateway QR pairing payload without restarting the gateway.
+- Added a Mobile Gateway Settings button to refresh the pairing QR/payload, with localized English and Simplified Chinese text.
+
+### Tests
+
+- Added Go coverage for desktop-authenticated pairing rotation and old-token invalidation.
+- Extended `scripts/mobile_gateway_integration_test.rb` to rotate a pairing payload and claim a second simulated Android device against a real local gateway.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc1`。
+
 ## 1.77.0-rc1 - 2026-06-14
 
 ### Added

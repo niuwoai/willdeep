@@ -124,6 +124,64 @@ func TestMobileGatewayPairingPayloadRequiresDesktopAuth(t *testing.T) {
 	}
 }
 
+func TestMobileGatewayPairingRotateRequiresDesktopAuthAndRefreshesToken(t *testing.T) {
+	gateway := newTestMobileGateway(t)
+	server := httptest.NewServer(gateway.routes())
+	defer server.Close()
+
+	gateway.mu.Lock()
+	oldToken := gateway.pairingToken
+	gateway.mu.Unlock()
+
+	resp, err := http.Post(server.URL+"/mobile/pairing/rotate", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST rotate without auth: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("rotate without auth status = %d, want 401", resp.StatusCode)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, server.URL+"/mobile/pairing/rotate", nil)
+	if err != nil {
+		t.Fatalf("new rotate request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer desktop-secret")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST rotate with desktop auth: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("rotate with auth status = %d, want 200", resp.StatusCode)
+	}
+	var body APIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode rotate response: %v", err)
+	}
+	data, ok := body.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("rotate data = %#v", body.Data)
+	}
+	payload, ok := data["pairing_payload"].(map[string]any)
+	if !ok {
+		t.Fatalf("rotate pairing_payload = %#v", data["pairing_payload"])
+	}
+	newToken, ok := payload["pairing_token"].(string)
+	if !ok || newToken == "" {
+		t.Fatalf("rotated pairing token missing: %#v", payload["pairing_token"])
+	}
+	if newToken == oldToken {
+		t.Fatalf("expected rotate to issue a new pairing token")
+	}
+	if _, _, err := gateway.claimPairingToken(oldToken, "Old token phone"); err == nil {
+		t.Fatalf("expected old pairing token to be rejected after rotate")
+	}
+	if _, _, err := gateway.claimPairingToken(newToken, "New token phone"); err != nil {
+		t.Fatalf("expected rotated pairing token to claim: %v", err)
+	}
+}
+
 func TestMobileGatewayDevicesRequiresDesktopAuthAndRedactsTokens(t *testing.T) {
 	gateway := newTestMobileGateway(t)
 	claimTestDevice(t, gateway, "Pixel")
