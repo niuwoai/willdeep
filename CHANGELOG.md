@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.78.0-rc3 - 2026-06-14
+
+### Added
+
+- Added desktop peer `message.append`, `message.delta`, and `message.done` event generation from Mac-side Agent messages so Android can observe live Agent activity without waiting only on full snapshots.
+
+### Tests
+
+- Added Mobile Gateway message event state coverage for append, streaming delta, done, and duplicate-done suppression.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc3`。
+
 ## 1.78.0-rc2 - 2026-06-14
 
 ### Tests

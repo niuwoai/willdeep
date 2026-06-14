@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-06-14 | Target version: v1.78.0-rc2
+> Last updated: 2026-06-14 | Target version: v1.78.0-rc3
 
 ## Summary
 
@@ -66,8 +66,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.78.0-rc2`
-- `X-Server-Version: 1.78.0-rc2`
+- `X-App-Version: 1.78.0-rc3`
+- `X-Server-Version: 1.78.0-rc3`
 
 ### `GET /mobile/health`
 
@@ -79,7 +79,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.78.0-rc2",
+    "version": "1.78.0-rc3",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
@@ -281,7 +281,7 @@ The desktop app remains responsible for the actual command result and subsequent
 Current desktop bridge behavior:
 
 - `state.snapshot` includes session summaries, pending tool approvals, patch proposals, background jobs, queued message previews, recent conversation messages, and `worktree_changes` summaries.
-- The Swift desktop peer debounces AppState changes and republishes snapshots while connected so mobile clients can follow Agent progress during long turns.
+- The Swift desktop peer emits `message.append`, `message.delta`, and `message.done` from AppState message changes, then debounces and republishes snapshots while connected so mobile clients can follow Agent progress during long turns.
 - `publishSnapshot()` also emits `tool.pending` and `patch.upsert` envelopes for currently blocked work.
 - `tool.decide` resolves `.pendingApproval` tool calls through the same runtime continuation as the Mac UI.
 - `.awaitingConfirm` danger-tier tool calls still require `payload.typed_confirmation == "confirm"`; a mobile approve without that field returns `command.error`.
@@ -338,5 +338,5 @@ All user-visible SwiftUI text must go through `Localizable.xcstrings` and `L10n.
 ## Test Requirements
 
 - Go unit tests must cover pairing token claim, expiration, one-time use, desktop-authenticated pairing rotation, health version headers, WebSocket auth, command forwarding, desktop event broadcast, unknown command errors, and revoke behavior.
-- Swift tests cover state snapshot conversion, command routing into existing Agent runtime methods, `AppState` workspace path guard enforcement for `file.read`, danger-tier typed confirmation enforcement for `tool.decide`, `ask_user` answer enforcement, and patch apply/reject routing through the existing desktop patch state machine.
+- Swift tests cover state snapshot conversion, command routing into existing Agent runtime methods, message append/delta/done event generation, `AppState` workspace path guard enforcement for `file.read`, danger-tier typed confirmation enforcement for `tool.decide`, `ask_user` answer enforcement, and patch apply/reject routing through the existing desktop patch state machine.
 - `scripts/mobile_gateway_integration_test.rb` starts a real local gateway, simulates desktop and mobile peers, verifies pairing, desktop-authenticated pairing rotation, command forwarding, ack, event broadcast, and emits JSON plus Markdown reports.

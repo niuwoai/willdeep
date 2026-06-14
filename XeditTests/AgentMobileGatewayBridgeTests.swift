@@ -271,6 +271,84 @@ struct AgentMobileGatewayBridgeTests {
     }
 
     @Test @MainActor
+    func messageEventStateEmitsAppendDeltaAndDone() {
+        let sessionID = UUID()
+        let messageID = UUID()
+        let createdAt = fixedDate
+        var state = AgentMobileGatewayMessageEventState()
+
+        let first = state.envelopes(
+            for: [
+                AgentMobileGatewayMessageSnapshot(
+                    id: messageID,
+                    role: "assistant",
+                    content: "Working",
+                    createdAt: createdAt,
+                    sessionID: sessionID
+                )
+            ],
+            respondingSessionIDs: [sessionID],
+            now: fixedDate
+        )
+
+        #expect(first.map(\.type) == ["message.append"])
+        #expect(first.first?.sessionID == sessionID.uuidString)
+        #expect(first.first?.payload["id"]?.stringValue == messageID.uuidString)
+        #expect(first.first?.payload["content"]?.stringValue == "Working")
+
+        let delta = state.envelopes(
+            for: [
+                AgentMobileGatewayMessageSnapshot(
+                    id: messageID,
+                    role: "assistant",
+                    content: "Working on Android",
+                    createdAt: createdAt,
+                    sessionID: sessionID
+                )
+            ],
+            respondingSessionIDs: [sessionID],
+            now: fixedDate
+        )
+
+        #expect(delta.map(\.type) == ["message.delta"])
+        #expect(delta.first?.payload["message_id"]?.stringValue == messageID.uuidString)
+        #expect(delta.first?.payload["delta"]?.stringValue == " on Android")
+
+        let done = state.envelopes(
+            for: [
+                AgentMobileGatewayMessageSnapshot(
+                    id: messageID,
+                    role: "assistant",
+                    content: "Working on Android",
+                    createdAt: createdAt,
+                    sessionID: sessionID
+                )
+            ],
+            respondingSessionIDs: [],
+            now: fixedDate
+        )
+
+        #expect(done.map(\.type) == ["message.done"])
+        #expect(done.first?.payload["message_id"]?.stringValue == messageID.uuidString)
+
+        let duplicateDone = state.envelopes(
+            for: [
+                AgentMobileGatewayMessageSnapshot(
+                    id: messageID,
+                    role: "assistant",
+                    content: "Working on Android",
+                    createdAt: createdAt,
+                    sessionID: sessionID
+                )
+            ],
+            respondingSessionIDs: [],
+            now: fixedDate
+        )
+
+        #expect(duplicateDone.isEmpty)
+    }
+
+    @Test @MainActor
     func toolDecideRoutesApprovalToController() {
         let session = AgentSession(title: "Tool approval")
         let controller = FakeMobileGatewayController(sessions: [session], activeSessionID: session.id)

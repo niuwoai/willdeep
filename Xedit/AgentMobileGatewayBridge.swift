@@ -181,6 +181,81 @@ struct AgentMobileGatewayMessageSnapshot: Equatable {
     var sessionID: UUID
 }
 
+struct AgentMobileGatewayMessageEventState {
+    private var contentByMessageID: [UUID: String] = [:]
+    private var doneMessageIDs: Set<UUID> = []
+
+    mutating func reset() {
+        contentByMessageID.removeAll()
+        doneMessageIDs.removeAll()
+    }
+
+    mutating func envelopes(
+        for messages: [AgentMobileGatewayMessageSnapshot],
+        respondingSessionIDs: Set<UUID>,
+        now: Date = Date()
+    ) -> [AgentMobileGatewayEnvelope] {
+        var envelopes: [AgentMobileGatewayEnvelope] = []
+        let orderedMessages = messages.sorted { lhs, rhs in
+            if lhs.createdAt != rhs.createdAt {
+                return lhs.createdAt < rhs.createdAt
+            }
+            return lhs.id.uuidString < rhs.id.uuidString
+        }
+        let liveIDs = Set(orderedMessages.map(\.id))
+        contentByMessageID = contentByMessageID.filter { liveIDs.contains($0.key) }
+        doneMessageIDs = doneMessageIDs.intersection(liveIDs)
+
+        for message in orderedMessages {
+            let previous = contentByMessageID[message.id]
+            let content = message.content
+            guard !content.isEmpty else { continue }
+
+            if let previous {
+                if content != previous {
+                    doneMessageIDs.remove(message.id)
+                    if content.hasPrefix(previous) {
+                        let delta = String(content.dropFirst(previous.count))
+                        if !delta.isEmpty {
+                            envelopes.append(
+                                AgentMobileGatewayCommandRouter.messageDeltaEnvelope(
+                                    messageID: message.id,
+                                    sessionID: message.sessionID,
+                                    delta: delta,
+                                    now: now
+                                )
+                            )
+                        }
+                    } else {
+                        envelopes.append(
+                            AgentMobileGatewayCommandRouter.messageAppendEnvelope(message, now: now)
+                        )
+                    }
+                    contentByMessageID[message.id] = content
+                }
+            } else {
+                envelopes.append(AgentMobileGatewayCommandRouter.messageAppendEnvelope(message, now: now))
+                contentByMessageID[message.id] = content
+            }
+
+            if message.role == AgentRole.assistant.rawValue,
+               !respondingSessionIDs.contains(message.sessionID),
+               !doneMessageIDs.contains(message.id) {
+                envelopes.append(
+                    AgentMobileGatewayCommandRouter.messageDoneEnvelope(
+                        messageID: message.id,
+                        sessionID: message.sessionID,
+                        now: now
+                    )
+                )
+                doneMessageIDs.insert(message.id)
+            }
+        }
+
+        return envelopes
+    }
+}
+
 struct AgentMobileGatewayWorktreeFileSnapshot: Equatable {
     var path: String
     var kind: String
@@ -555,6 +630,48 @@ enum AgentMobileGatewayCommandRouter {
         )
     }
 
+    static func messageAppendEnvelope(
+        _ message: AgentMobileGatewayMessageSnapshot,
+        now: Date = Date()
+    ) -> AgentMobileGatewayEnvelope {
+        AgentMobileGatewayEnvelope(
+            type: "message.append",
+            sessionID: message.sessionID.uuidString,
+            payload: messagePayload(message),
+            timestamp: isoTimestamp(now)
+        )
+    }
+
+    static func messageDeltaEnvelope(
+        messageID: UUID,
+        sessionID: UUID,
+        delta: String,
+        now: Date = Date()
+    ) -> AgentMobileGatewayEnvelope {
+        AgentMobileGatewayEnvelope(
+            type: "message.delta",
+            sessionID: sessionID.uuidString,
+            payload: [
+                "message_id": .string(messageID.uuidString),
+                "delta": .string(delta)
+            ],
+            timestamp: isoTimestamp(now)
+        )
+    }
+
+    static func messageDoneEnvelope(
+        messageID: UUID,
+        sessionID: UUID,
+        now: Date = Date()
+    ) -> AgentMobileGatewayEnvelope {
+        AgentMobileGatewayEnvelope(
+            type: "message.done",
+            sessionID: sessionID.uuidString,
+            payload: ["message_id": .string(messageID.uuidString)],
+            timestamp: isoTimestamp(now)
+        )
+    }
+
     private static func sessionEnvelope(
         type: String,
         id: String?,
@@ -710,13 +827,17 @@ enum AgentMobileGatewayCommandRouter {
     }
 
     private static func messageJSON(_ message: AgentMobileGatewayMessageSnapshot) -> AgentMobileGatewayJSON {
-        .object([
+        .object(messagePayload(message))
+    }
+
+    private static func messagePayload(_ message: AgentMobileGatewayMessageSnapshot) -> [String: AgentMobileGatewayJSON] {
+        [
             "id": .string(message.id.uuidString),
             "role": .string(message.role),
             "content": .string(message.content),
             "created_at": .string(isoTimestamp(message.createdAt)),
             "session_id": .string(message.sessionID.uuidString)
-        ])
+        ]
     }
 
     private static func worktreeJSON(_ worktree: AgentMobileGatewayWorktreeSnapshot) -> AgentMobileGatewayJSON {
@@ -861,6 +982,7 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
     private var webSocketTask: URLSessionWebSocketTask?
     private var appStateCancellable: AnyCancellable?
     private var snapshotTask: Task<Void, Never>?
+    private var messageEventState = AgentMobileGatewayMessageEventState()
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
@@ -895,6 +1017,7 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
     func disconnect() {
         snapshotTask?.cancel()
         snapshotTask = nil
+        messageEventState.reset()
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         isConnected = false
@@ -902,6 +1025,17 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
 
     func publishSnapshot() {
         guard let appState else { return }
+        let respondingSessionIDs = Set(
+            appState.mobileGatewaySessions
+                .filter { appState.mobileGatewayRuntimeIsResponding(sessionID: $0.id) }
+                .map(\.id)
+        )
+        for event in messageEventState.envelopes(
+            for: appState.mobileGatewayRecentMessages,
+            respondingSessionIDs: respondingSessionIDs
+        ) {
+            send(event)
+        }
         send(AgentMobileGatewayCommandRouter.snapshotEnvelope(controller: appState))
         for approval in appState.mobileGatewayPendingToolApprovals {
             send(AgentMobileGatewayCommandRouter.toolPendingEnvelope(approval))
