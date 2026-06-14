@@ -12,6 +12,11 @@ OUT_DIR = File.join(ROOT_DIR, "build", "mobile_gateway_live_readiness")
 REPORT_JSON = File.join(OUT_DIR, "report.json")
 REPORT_MD = File.join(OUT_DIR, "report.md")
 EXPECTED_PROTOCOL = "mobile-gateway.v1"
+VERSION_FILE = File.join(ROOT_DIR, "willdeep-agent", "internal", "agent", "version.go")
+EXPECTED_SERVER_VERSION = ENV.fetch(
+  "MOBILE_GATEWAY_EXPECTED_SERVER_VERSION",
+  File.read(VERSION_FILE)[/const Version = "([^"]+)"/, 1].to_s,
+)
 MAC_BUNDLE_ID = ENV.fetch("MOBILE_GATEWAY_MAC_BUNDLE_ID", "com.willdeep.app")
 BASE_URL = ENV.fetch("MOBILE_GATEWAY_DESKTOP_BASE_URL", "http://127.0.0.1:8877").delete_suffix("/")
 TOKEN_FILE = ENV.fetch(
@@ -122,6 +127,11 @@ def acceptance_evidence(health, token, rotate)
       evidence: rotate[:status] == "passed" ? "Desktop-authenticated pairing rotate produced a fresh payload." : rotate[:error].to_s,
     },
     {
+      key: "server_version",
+      status: health[:server_version] == EXPECTED_SERVER_VERSION ? "passed" : "failed",
+      evidence: "Expected #{EXPECTED_SERVER_VERSION.empty? ? "unknown" : EXPECTED_SERVER_VERSION}, observed #{health[:server_version] || "missing"}.",
+    },
+    {
       key: "protocol_version",
       status: health[:protocol_version] == EXPECTED_PROTOCOL ? "passed" : "failed",
       evidence: "Expected #{EXPECTED_PROTOCOL}, observed #{health[:protocol_version] || "missing"}.",
@@ -137,6 +147,10 @@ end
 def next_actions(health, token, rotate)
   actions = []
   actions << "Open WillDeep on the Mac, enable Settings > Mobile Gateway, and start the gateway." unless health[:status] == "passed"
+  if !EXPECTED_SERVER_VERSION.empty? && health[:server_version] != EXPECTED_SERVER_VERSION
+    observed = health[:server_version] || "missing"
+    actions << "Restart WillDeep or rebuild the bundled willdeep-agent so /mobile/health reports #{EXPECTED_SERVER_VERSION} instead of #{observed}."
+  end
   actions << "Keep WillDeep running so it writes the desktop token file for Android live acceptance." unless token[:present]
   actions << "Allow new device pairing in Settings > Mobile Gateway." unless health[:pairing_allowed] == true
   actions << "Use the Refresh Pairing button if pairing rotate is failing after the gateway is running." unless rotate[:status] == "passed"
@@ -155,6 +169,7 @@ def write_reports(report)
     "- Base URL: `#{report[:base_url]}`",
     "- Desktop token file: `#{report.dig(:desktop_token_file, :present) ? "present" : "missing"}`",
     "- Health reachable: `#{report.dig(:health, :status) == "passed" ? "yes" : "no"}`",
+    "- Expected server version: `#{report[:expected_server_version] || "unknown"}`",
     "- Server version: `#{report.dig(:health, :server_version) || "unknown"}`",
     "- Protocol version: `#{report.dig(:health, :protocol_version) || "unknown"}`",
     "- Pairing allowed: `#{report.dig(:health, :pairing_allowed).nil? ? "unknown" : report.dig(:health, :pairing_allowed)}`",
@@ -188,6 +203,7 @@ report = {
   status: status,
   base_url: BASE_URL,
   expected_protocol: EXPECTED_PROTOCOL,
+  expected_server_version: EXPECTED_SERVER_VERSION,
   health: health,
   desktop_token_file: token,
   pairing_rotate: rotate,

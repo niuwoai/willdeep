@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.78.0-rc22 - 2026-06-15
+
+### Fixed
+
+- `scripts/mobile_gateway_live_readiness.rb` 现在会校验 `/mobile/health` 返回的 server version 是否等于仓库内 `willdeep-agent/internal/agent/version.go`，防止 Android 真机验收误连到旧版 Mac Gateway。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc22`。
+
 ## 1.78.0-rc21 - 2026-06-15
 
 ### Fixed
