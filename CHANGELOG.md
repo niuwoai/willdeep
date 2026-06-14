@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.78.0-rc8 - 2026-06-14
+
+### Added
+
+- Added `scripts/mobile_gateway_live_readiness.rb`, a Mac-side readiness gate for Android live acceptance that probes public health, default desktop-token file presence, desktop-authenticated pairing rotation, protocol compatibility, and pairing availability without printing bearer or pairing tokens.
+
+### Tests
+
+- Verified the readiness script writes JSON/Markdown reports and fails with actionable evidence when the Mac Gateway is not running.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc8`。
+
 ## 1.78.0-rc7 - 2026-06-14
 
 ### Added
