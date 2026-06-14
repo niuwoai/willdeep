@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.78.0-rc21 - 2026-06-15
+
+### Fixed
+
+- 将 `scripts/mobile_gateway_live_readiness.rb` 的默认探测地址从旧端口 `8876` 同步到 Mobile Gateway 新默认端口 `8877`，避免设置页和最终联调脚本找不同端口。
+- 补强 `scripts/mobile_gateway_end_to_end_acceptance.rb` 的 Android contract 检查，要求 Android live acceptance 与 connected smoke 默认桌面端口也对齐 `8877`。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc21`。
+
 ## 1.78.0-rc20 - 2026-06-15
 
 ### Fixed

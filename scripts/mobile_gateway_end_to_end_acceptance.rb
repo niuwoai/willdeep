@@ -53,6 +53,10 @@ ANDROID_TARGET_FILE_CONTRACT_CHECKS = %w[
   target_file_allows_existing_worktree_signature_change
   target_file_update_test_present
 ].freeze
+ANDROID_DEFAULT_PORT_CONTRACT_CHECKS = %w[
+  live_acceptance_defaults_to_8877
+  connected_smoke_defaults_to_8877
+].freeze
 
 def run_command(*command, chdir:)
   stdout, stderr, status = Open3.capture3(*command, chdir: chdir)
@@ -173,6 +177,8 @@ def android_acceptance_contract
     "activity_captures_worktree_file_signatures" => activity_source.include?("worktreeFileSignatures") && activity_source.include?("activitySignature()"),
     "target_file_allows_existing_worktree_signature_change" => activity_source.include?("file.activitySignature() !in baseline.worktreeFileSignatures"),
     "target_file_update_test_present" => activity_test_source.include?("targetFileActivityCountsExistingWorktreeFileWhenStatsChange"),
+    "live_acceptance_defaults_to_8877" => live_script.include?("MOBILE_GATEWAY_DESKTOP_PORT\", \"8877\""),
+    "connected_smoke_defaults_to_8877" => smoke_script.include?("MOBILE_GATEWAY_DESKTOP_PORT\", \"8877\""),
   }
 
   {
@@ -180,6 +186,7 @@ def android_acceptance_contract
     "code_activity_status" => contract_status(checks, ANDROID_CODE_ACTIVITY_CONTRACT_CHECKS),
     "workspace_edit_status" => contract_status(checks, ANDROID_WORKSPACE_EDIT_CONTRACT_CHECKS),
     "target_file_status" => contract_status(checks, ANDROID_TARGET_FILE_CONTRACT_CHECKS),
+    "default_port_status" => contract_status(checks, ANDROID_DEFAULT_PORT_CONTRACT_CHECKS),
     "checks" => checks,
   }
 end
@@ -227,6 +234,19 @@ def android_target_file_contract_evidence(contract)
   }
 end
 
+def android_default_port_contract_evidence(contract)
+  failed = contract.fetch("checks").slice(*ANDROID_DEFAULT_PORT_CONTRACT_CHECKS).select { |_key, value| value != true }.keys
+  {
+    "key" => "android_default_desktop_port",
+    "status" => failed.empty? ? "passed" : "failed",
+    "evidence" => if failed.empty?
+                    "Android live acceptance and connected smoke default to the Mac Mobile Gateway port 8877."
+                  else
+                    "Android live acceptance is missing required default-port checks: #{failed.join(", ")}."
+                  end,
+  }
+end
+
 def android_live_request_metadata_evidence(android)
   profile = android["live_request_profile"]
   target_file = android["live_acceptance_target_file"]
@@ -259,6 +279,7 @@ def build_acceptance_evidence(readiness, android, android_ran, android_preflight
   evidence << android_contract_evidence(android_contract)
   evidence << android_workspace_edit_contract_evidence(android_contract)
   evidence << android_target_file_contract_evidence(android_contract)
+  evidence << android_default_port_contract_evidence(android_contract)
   if android_ran
     evidence.concat(android_live_request_metadata_evidence(android))
     android.fetch("acceptance_evidence", []).each do |item|
@@ -300,6 +321,7 @@ def write_reports(report)
     "- Android final code activity gate: `#{report[:android_final_code_activity_gate_status]}`",
     "- Android default workspace edit request: `#{report[:android_default_workspace_edit_request_status]}`",
     "- Android target file gate: `#{report[:android_target_file_gate_status]}`",
+    "- Android default desktop port: `#{report[:android_default_desktop_port_status]}`",
     "- Android live acceptance: `#{report[:android_live_acceptance_status]}`",
     "- Android ready devices: `#{report[:android_ready_device_count]}`",
     "- Android repo: `#{report[:android_dir]}`",
@@ -374,6 +396,7 @@ report = {
   android_final_code_activity_gate_status: android_contract_report["code_activity_status"],
   android_default_workspace_edit_request_status: android_contract_report["workspace_edit_status"],
   android_target_file_gate_status: android_contract_report["target_file_status"],
+  android_default_desktop_port_status: android_contract_report["default_port_status"],
   android_ready_device_count: android_preflight_report["ready_device_count"],
   android_live_acceptance_status: android_report["status"],
   mac_readiness_report_json: READINESS_REPORT_JSON,

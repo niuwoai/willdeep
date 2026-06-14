@@ -13,7 +13,7 @@ REPORT_JSON = File.join(OUT_DIR, "report.json")
 REPORT_MD = File.join(OUT_DIR, "report.md")
 EXPECTED_PROTOCOL = "mobile-gateway.v1"
 MAC_BUNDLE_ID = ENV.fetch("MOBILE_GATEWAY_MAC_BUNDLE_ID", "com.willdeep.app")
-BASE_URL = ENV.fetch("MOBILE_GATEWAY_DESKTOP_BASE_URL", "http://127.0.0.1:8876").delete_suffix("/")
+BASE_URL = ENV.fetch("MOBILE_GATEWAY_DESKTOP_BASE_URL", "http://127.0.0.1:8877").delete_suffix("/")
 TOKEN_FILE = ENV.fetch(
   "MOBILE_GATEWAY_DESKTOP_TOKEN_FILE",
   File.join(Dir.home, "Library", "Application Support", MAC_BUNDLE_ID, "MobileGateway", "desktop-token"),
