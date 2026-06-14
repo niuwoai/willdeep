@@ -1,5 +1,585 @@
 # Changelog
 
+## 1.78.0-rc15 - 2026-06-14
+
+### Changed
+
+- macOS 系统通知现在统一显示 WillDeep 应用图标（作为 `UNNotificationAttachment` 附加运行时 app icon），解决未签名/Xcode 调试构建下横幅图标与 Dock logo 不一致的问题；Agent 工具审批、后台任务完成、自动化流程三处通知都加上该图标。
+- 通知正文不再把命令全文塞进横幅：`run_command` 仅显示程序名（对 `git`/`go`/`npm` 等包装命令显示「程序 子命令」，如 `git commit`、`go build`），后台任务完成通知去掉命令体只保留「句柄 · 状态」，文件类工具只显示文件名而非完整路径。
+
+### Fixed
+
+- `mkdir`、`touch`、`mktemp` 这类只创建、无删除/越权/网络语义的低风险写命令现在自动放行，不再停在确认卡片上等待用户点击；敏感路径（`~/.ssh`、`.env` 等）与工作区外目标仍由沙盒路径检查独立升级。沙盒侧同步把这三个命令头加入 workspace-write 配置，避免被当作只读命令而禁止写盘。
+- 修复只读 git 子命令被误判为 workspace-write 风险的回归：`git diff` / `git status` / `git -C <工作区> diff` 等纯读取命令重新归为 `.read`（只读沙盒），不再因为 `git` 出现在写命令清单里而被整体升级。沙盒的「低风险写」升级判定改为只针对真正会写盘的构建/包管理/创建类命令（go、npm/yarn/pnpm、make、mkdir 等），明确排除 git；`go build`、`npm run build` 仍正确判为 `.write`。
+
+### Tests
+
+- 新增 `mkdir`/`touch`/`mktemp` 自动放行的分类测试，并覆盖「创建命令后接 `rm -rf`」「创建命令重定向到 `/etc/passwd`」仍判危险的边界。
+- 修复后，`run_command classifies cd plus read-only commands as read risk` 与 `run_command allows workspace absolute cd for read-only commands` 两个此前红着的用例恢复全绿（git 只读子命令判 `.read`），XeditTests 443 个用例全部通过。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc15`。
+
+## 1.78.0-rc14 - 2026-06-14
+
+### Added
+
+- Agent mode 左侧会话列表现在在每条会话右侧显示紧凑更新时间，例如 `5m`、`3h`、`2d`；标签每分钟自动刷新，并保留 hover 时的置顶/归档操作。
+
+### Tests
+
+- Added coverage for compact Agent session relative timestamp formatting across minute, hour, day, week, month, year, and future-date boundaries.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc14`。
+
+## 1.78.0-rc13 - 2026-06-14
+
+### Tests
+
+- Strengthened `scripts/mobile_gateway_end_to_end_acceptance.rb` so the cross-repository final gate requires Android live acceptance to include `mac_target_file_after_send` and verifies the Android runner waits for `WILLDEEP_ANDROID_LIVE_ACCEPTANCE.md` in Mac patch/worktree activity.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc13`。
+
+## 1.78.0-rc12 - 2026-06-14
+
+### Tests
+
+- Strengthened `scripts/mobile_gateway_end_to_end_acceptance.rb` so the cross-repository final gate verifies the Android live acceptance wrapper defaults to a workspace-edit request targeting `WILLDEEP_ANDROID_LIVE_ACCEPTANCE.md` and fails if the Android report omits that request metadata.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc12`。
+
+## 1.78.0-rc11 - 2026-06-14
+
+### Tests
+
+- Strengthened `scripts/mobile_gateway_end_to_end_acceptance.rb` so the cross-repository final gate verifies the Android live acceptance wrapper requires code activity and fails if the Android report omits `mac_code_activity_after_send`.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc11`。
+
+## 1.78.0-rc10 - 2026-06-14
+
+### Tests
+
+- Extended `scripts/mobile_gateway_end_to_end_acceptance.rb` with an Android preflight that always records the Android repository, live acceptance script, and ready `adb devices` count even when Mac Gateway readiness fails.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc10`。
+
+## 1.78.0-rc9 - 2026-06-14
+
+### Added
+
+- Added `scripts/mobile_gateway_end_to_end_acceptance.rb`, a cross-repository final gate that runs Mac Gateway live readiness first, skips Android live acceptance when Mac readiness fails, and runs the Android live acceptance wrapper only after the Mac side is ready.
+
+### Tests
+
+- Verified the end-to-end gate writes combined JSON/Markdown evidence and fails with Mac readiness actions while the Mac Gateway is not running.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc9`。
+
+## 1.78.0-rc8 - 2026-06-14
+
+### Added
+
+- Added `scripts/mobile_gateway_live_readiness.rb`, a Mac-side readiness gate for Android live acceptance that probes public health, default desktop-token file presence, desktop-authenticated pairing rotation, protocol compatibility, and pairing availability without printing bearer or pairing tokens.
+
+### Tests
+
+- Verified the readiness script writes JSON/Markdown reports and fails with actionable evidence when the Mac Gateway is not running.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc8`。
+
+## 1.78.0-rc7 - 2026-06-14
+
+### Added
+
+- Mobile Gateway pending tool snapshots now include `requires_confirmation` for danger-tier approvals so Android can ask for the typed `confirm` gate before sending `tool.decide`.
+
+### Tests
+
+- Updated Mobile Gateway bridge snapshot coverage to assert danger confirmation metadata is serialized for mobile clients.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc7`。
+
+## 1.78.0-rc6 - 2026-06-14
+
+### Tests
+
+- Added a real `AppState.mobileGatewaySendMessage` bridge test proving mobile `message.send` enters the normal `sendAgentMessage()` path, creates the user message, clears composer input, marks the runtime responding, and starts the runtime request task.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc6`。
+
+## 1.78.0-rc5 - 2026-06-14
+
+### Tests
+
+- Extended `scripts/mobile_gateway_integration_test.rb` with acceptance evidence rows for gateway health, pairing, WebSocket auth, `message.send` forwarding/ack, unknown-command errors, desktop event broadcast, worktree broadcast, and revoke-disconnect behavior.
+- Added real local gateway integration coverage for unknown mobile commands returning `error` and desktop device revocation closing the active mobile WebSocket plus rejecting reconnect with the revoked token.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc5`。
+
+## 1.78.0-rc4 - 2026-06-14
+
+### Tests
+
+- Expanded Go Mobile Gateway WebSocket coverage so desktop-originated `message.append`, `message.delta`, and `message.done` events are all verified as allowed and broadcast to paired mobile devices.
+- Extended `scripts/mobile_gateway_integration_test.rb` to verify the real local gateway forwards desktop message stream events to the simulated Android peer in order.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc4`。
+
+## 1.78.0-rc3 - 2026-06-14
+
+### Added
+
+- Added desktop peer `message.append`, `message.delta`, and `message.done` event generation from Mac-side Agent messages so Android can observe live Agent activity without waiting only on full snapshots.
+
+### Tests
+
+- Added Mobile Gateway message event state coverage for append, streaming delta, done, and duplicate-done suppression.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc3`。
+
+## 1.78.0-rc2 - 2026-06-14
+
+### Tests
+
+- Added real `AppState` Mobile Gateway bridge tests covering `file.read` workspace path guard enforcement, danger-tier `tool.decide` typed confirmation, `ask_user` answer requirements, and `patch.decide` routing through the existing patch apply/reject state machine.
+
+### Changed
+
+- Updated the Mobile Gateway requirements and product overview to reflect that Android now lives in the separate `willdeep-android` repository while Mac remains the Agent execution and safety authority.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc2`。
+
+## 1.78.0-rc1 - 2026-06-14
+
+### Added
+
+- Added desktop-only `POST /mobile/pairing/rotate` so WillDeep can refresh the short-lived Mobile Gateway QR pairing payload without restarting the gateway.
+- Added a Mobile Gateway Settings button to refresh the pairing QR/payload, with localized English and Simplified Chinese text.
+
+### Tests
+
+- Added Go coverage for desktop-authenticated pairing rotation and old-token invalidation.
+- Extended `scripts/mobile_gateway_integration_test.rb` to rotate a pairing payload and claim a second simulated Android device against a real local gateway.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc1`。
+
+## 1.77.0-rc1 - 2026-06-14
+
+### Added
+
+- Added `scripts/mobile_gateway_integration_test.rb`, a dependency-free Ruby integration script that starts a real `willdeep-agent serve-mobile`, pairs a simulated Android device, connects desktop and mobile WebSocket peers, forwards `message.send`, receives `ack`, and verifies desktop events including `worktree.updated` broadcast back to mobile.
+- The integration script emits JSON and Markdown reports under `build/mobile_gateway_integration/` for CI and local review.
+
+### Tests
+
+- Verified the Mobile Gateway integration script end-to-end with `ruby scripts/mobile_gateway_integration_test.rb`.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.77.0-rc1`。
+
+## 1.76.0-rc1 - 2026-06-14
+
+### Added
+
+- Mobile Gateway `state.snapshot` now includes desktop-mediated worktree changed-file summaries for each active Agent session.
+- The Swift desktop peer now emits `worktree.updated` envelopes after snapshots so Android can show files changed by Mac-side Agent work.
+
+### Fixed
+
+- Goal 模式激活目标后，每轮助手回复现在必须在结尾做 Goal self-check，明确目标是 complete、in progress 还是 blocked，并始终输出 `goal-check` 块；无清单变化时用 `# no changes`。
+- `goal-check` 解析器现在把 `blocked` 视为未完成状态，可把误勾选或后续验证失败的验收项翻回未完成。
+
+### Tests
+
+- Added Swift Mobile Gateway bridge coverage for worktree changed-file snapshot encoding.
+- Added coverage for Goal 模式系统提示的每轮自检要求，以及 `blocked` 状态回退解析。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.76.0-rc1`。
+
+## 1.75.0-rc1 - 2026-06-14
+
+### Added
+
+- Mobile Gateway `state.snapshot` now includes recent user, assistant, and system messages for Android conversation display.
+- The Swift desktop peer now debounces AppState changes and republishes snapshots while the gateway is connected, so Android can follow Agent progress without manual refresh.
+- Android Mobile Gateway adds a Conversation panel and parses `message.append`, `message.delta`, and `message.done` events.
+
+### Tests
+
+- Added Swift router coverage for message snapshots.
+- Added Android model coverage for message snapshot parsing and streaming message events.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.75.0-rc1`。
+
+## 1.74.0-rc1 - 2026-06-14
+
+### Added
+
+- Mobile Gateway Swift desktop bridge now includes queued Agent messages in `state.snapshot`.
+- Mobile `queue.update` commands now route through the existing macOS Agent queue for adding, removing, clearing, and sending queued requests immediately.
+- Android Mobile Gateway can display queued Mac requests, queue the current composer text, send a queued request now, remove a queued request, or clear the selected session queue.
+
+### Tests
+
+- Added Swift router coverage for queued message snapshots and `queue.update`.
+- Added Android model coverage for queued message parsing and `queue.update` envelope encoding.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.74.0-rc1`。
+
+## 1.73.0-rc1 - 2026-06-14
+
+### Added
+
+- Mobile Gateway Swift desktop bridge now handles `file.read` by resolving paths inside the selected local session workspace and returning text content through an `ack` payload.
+- `file.read` refuses workspace escapes, directories, missing files, and binary files; reads are capped at the same 64 KiB default / 256 KiB hard limit shape as the Agent `read_file` tool.
+- Android Mobile Gateway can request and display workspace files from the selected Mac session.
+
+### Tests
+
+- Added Swift router coverage for `file.read` ack payloads.
+- Added Android model coverage for `file.read` ack parsing and command encoding.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.73.0-rc1`。
+
+## 1.72.0-rc1 - 2026-06-14
+
+### Added
+
+- Mobile Gateway Swift desktop bridge now includes background job snapshots in `state.snapshot` and emits `job.updated` for current Agent background jobs.
+- Mobile `job.kill` commands now route through the existing session-scoped `AgentJobRegistry.kill` path instead of exposing process handles or shell access.
+- Android Mobile Gateway can display Mac background jobs and send kill requests for running jobs.
+
+### Tests
+
+- Added Swift router coverage for job snapshots and `job.kill`.
+- Added Android model coverage for job snapshots, `job.updated`, and `job.kill` envelope encoding.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.72.0-rc1`。
+
+## 1.71.0-rc1 - 2026-06-14
+
+### Added
+
+- Mobile Gateway Swift desktop bridge now handles `diff.get` for pending Agent patch proposals and returns the unified diff in the command `ack` payload.
+- Android Mobile Gateway can request and display patch diffs before approving or rejecting patch proposals.
+
+### Tests
+
+- Added Swift router coverage for `diff.get` ack payloads.
+- Added Android model coverage for parsing `diff.get` ack payloads.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.71.0-rc1`。
+
+## 1.70.0-rc1 - 2026-06-14
+
+### Added
+
+- Agent 工具调用收起态改为 Codex 风格活动摘要：读取文件、浏览目录、搜索代码、查看 Git 状态和运行命令会显示为自然语言摘要，不再默认暴露 tool 名称与参数。
+- SwiftUI 实时 transcript 与 TextKit 历史 transcript 使用同一套摘要口径；展开后仍保留完整 tool 参数、输出、错误和审批记录，方便排查。
+- Mobile Gateway desktop peer 现在会把 pending tool / patch proposal 同步给 Android，并消费 `tool.decide` / `patch.decide` 命令，普通工具审批、补丁应用/拒绝都回到 macOS 既有入口；danger-tier 工具仍要求 typed confirmation，Android 不能绕过安全门。
+
+### Tests
+
+- 更新工具调用历史渲染与分组摘要回归测试，覆盖收起态不泄露底层命令参数、展开态仍可审计细节。
+- 新增 Mobile Gateway bridge 单测，覆盖 pending approval snapshot、`tool.decide` / `patch.decide` 路由，以及非法 decision 拦截。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.70.0-rc1`。
+
+## 1.69.0-rc1 - 2026-06-14
+
+### Added
+
+- Agent composer 的 Workspace 菜单新增 Git worktree 区域，可从当前 Git 仓库创建 sibling worktree、切换已有 worktree、删除当前非主 worktree，并清理 stale worktree。
+- 新建 worktree 会按输入分支名生成安全的 sibling 目录；成功后自动打开该目录，并复用既有“空会话迁移 / 有历史则新建会话”的 workspace 绑定规则。
+- Git root 识别改用 `git rev-parse --show-toplevel` 优先，支持 `.git` 为文件的 worktree 根目录继续显示 branch、diff 和 Agent worktree 变更摘要。
+- Git runner 新增带退出码、stderr 和 timeout 状态的结果类型，创建/删除 worktree 失败时能把真实 Git 错误展示给用户。
+
+### Tests
+
+- 新增 Git worktree parser、默认路径去重和真实临时 Git 仓库创建/list/root-detection 覆盖。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档、Business Model 文档全部同步到 `1.69.0-rc1`。
+
+## 1.68.0-rc2 - 2026-06-13
+
+### Added
+
+- Settings 新增 Mobile Gateway tab，可启停局域网网关、显示 LAN 地址/协议版本/二维码配对 payload、刷新设备列表并撤销已配对设备。
+- macOS 新增 `MobileGatewayCoordinator` 和 `MobileGatewaySettingsStore`，负责启动 `willdeep-agent serve-mobile`、通过 Keychain 管理 desktop token、通过受保护 token 文件传参，并连接 Swift desktop peer。
+- Xcode 主 target 新增 build phase，将 `willdeep-agent` 编译进 app Resources，设置页也保留自定义可执行文件路径兜底。
+- Go Mobile Gateway 新增 desktop-only `GET /mobile/devices`，用于返回已配对设备元数据。
+- `willdeep-agent serve-mobile` 新增 `--desktop-token-file`，避免 desktop bearer token 暴露在进程参数中。
+
+### Tests
+
+- Go Mobile Gateway 单测新增设备列表鉴权与 token 脱敏覆盖。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档、Business Model 文档全部同步到 `1.68.0-rc2`。
+
+## 1.68.0-rc1 - 2026-06-13
+
+### Added
+
+- macOS 侧新增 `AgentMobileGatewayBridge`，可作为 Swift desktop peer 连接 Go Mobile Gateway 的 `/mobile/ws`，解码统一 envelope 并把移动端命令路由回现有 AppState Agent 会话入口。
+- Mobile Gateway desktop peer 现在支持 `session.list`、`session.create`、`session.select`、`message.send` 和 `turn.stop`，让手机端需求能进入 WillDeep 的正常 Agent dispatch 流程。
+- Mobile Gateway 需求文档补充 Swift desktop peer 当前能力边界，明确文件读取、diff、补丁、工具审批和 job 控制仍需后续桌面受控命令接入。
+
+### Tests
+
+- 新增 Mobile Gateway Swift 路由单测，覆盖会话快照、创建会话、向指定会话发送消息和未知命令错误。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档、Business Model 文档全部同步到 `1.68.0-rc1`。
+
+## 1.67.0-rc2 - 2026-06-13
+
+### Added
+
+- Agent memory 现在会真正进入 Agent turn：每轮请求按最近用户消息、当前文件和选中文本检索相关全局/项目记忆，并把紧凑 memory context 注入 system prompt。
+- `AgentMemoryRecord` 新增作用域、项目 fingerprint、topics、confidence、敏感内容标记与 provenance；旧 memory JSON 可兼容解码，保存时会对 token/API key/private key 形态内容脱敏。
+- 回合结束后会从明显的“记住 / must / prefer / 项目规则”等语句里自动抽取长期候选记忆；维护周期新增重复 memory 合并，并继续执行 transient TTL 归档和过期 archive 清理。
+- Settings → Memory 现在支持手动创建/编辑全局或当前项目作用域 memory，并在列表中展示 confidence、topics、敏感脱敏标记、provenance、项目 fingerprint 与最后召回时间，便于审计自动记忆。
+- 新增 `docs/BUSINESS_MODEL.md`，记录 Apache 2.0 + Open Core 模式下的商业化边界、产品分层和阶段路线。
+
+### Tests
+
+- 扩展 Agent memory 单测，覆盖敏感内容脱敏、项目作用域检索、手动项目 memory 访问统计、memory context 生成、自动候选抽取和维护合并。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.67.0-rc2`。
+
+## 1.67.0-rc1 - 2026-06-13
+
+### Added
+
+- 新增 `willdeep-agent serve-mobile`，提供局域网 Mobile Gateway：支持短期二维码配对 payload、一次性 pairing token、设备 token 鉴权、设备撤销、桌面 peer / mobile peer WebSocket 转发。
+- Mobile Gateway HTTP 响应与现有 Go API 统一暴露 `X-App-Version` / `X-Server-Version`，便于排查桌面端和 gateway 版本一致性。
+- 新增 `docs/MOBILE_GATEWAY_REQUIREMENTS.md`，记录 Android 后续接入前的 Mac 端 gateway 需求、协议、边界、安全要求和验收标准。
+
+### Tests
+
+- 新增 Mobile Gateway Go 单测，覆盖 pairing token 生命周期、版本 header、WebSocket 鉴权、移动端命令转发、桌面事件广播、未知命令错误和撤销设备断连。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.67.0-rc1`。
+
+## 1.66.0-rc1 - 2026-06-13
+
+### Added
+
+- Agent memory 现在会真正进入 Agent turn：每轮请求按最近用户消息、当前文件和选中文本检索相关全局/项目记忆，并把紧凑 memory context 注入 system prompt。
+- `AgentMemoryRecord` 新增作用域、项目指纹、topics、confidence、敏感内容标记与 provenance；旧 memory JSON 可兼容解码，保存时会对 token/API key/private key 形态内容脱敏。
+- 回合结束后会从明显的“记住 / must / prefer / 项目规则”等语句里自动抽取长期候选记忆；维护周期新增重复 memory 合并，并继续执行 transient TTL 归档和过期 archive 清理。
+- Settings → Memory 现在支持手动创建/编辑全局或当前项目作用域 memory，并在列表中展示 confidence、topics、敏感脱敏标记、provenance、项目指纹与最后召回时间，便于审计自动记忆。
+
+### Tests
+
+- 扩展 Agent memory 单测，覆盖敏感内容脱敏、项目作用域检索、手动项目 memory 访问统计、memory context 生成、自动候选抽取和维护合并。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.66.0-rc1`。
+
+## 1.65.0-rc4 - 2026-06-13
+
+### Fixed
+
+- `go build` / `go test` 等常见 Go 构建测试命令现在作为低风险 workspace-write 操作自动放行；`go env -w` 等会改全局配置的命令仍需审批。
+- `yarn/npm/pnpm run dev/build/test/lint/typecheck` 等常见前端脚本现在作为低风险 workspace-write 操作自动放行；`npm publish`、安装依赖和未知脚本仍需审批。
+- 修复 `2>&1` 中的 `&` 被 shell tokenizer 误判为复杂控制符，导致 `go build ... 2>&1` 进入 typed confirmation 的问题。
+
+### Tests
+
+- 新增 Go 构建、前端脚本、`2>&1` 解析与静态自动审批的回归覆盖。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.65.0-rc4`。
+
+## 1.65.0-rc3 - 2026-06-13
+
+### Fixed
+
+- `ssh user@host "只读命令"` 现在会按远端命令内容重新分级；例如 `ssh host "time"`、`ssh host "git status"` 可降为 read 风险，远端 `rm` 等危险命令仍进入 typed confirmation。
+- `curl` 的普通公网 GET/HEAD 请求可降为 read 风险；`POST`、`--data`、上传、输出到文件、凭据参数和私网/metadata URL 仍保留审批。
+
+### Tests
+
+- 新增 ssh 远端只读/危险命令、curl GET/HEAD/POST/输出文件/metadata URL 的风险分级回归覆盖。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.65.0-rc3`。
+
+## 1.65.0-rc2 - 2026-06-13
+
+### Fixed
+
+- heredoc 生成代码文件不再被归为 typed confirmation 危险操作；heredoc 正文会从 shell 风险扫描中剥离，头部重定向仍按 workspace write 审批/沙箱处理。
+- Goal 模式下通过公共 URL 校验的 `web_fetch` 网络读取会自动放行；`curl`、`ssh`、凭据访问和破坏性 shell 形态仍保留审批/确认边界。
+
+### Tests
+
+- 新增 heredoc 写文件风险分级回归测试，覆盖正文中包含 `$(` 字样时仍只按写入处理。
+- 新增 Goal 模式网络读取自动放行测试，并确认任意 `curl` shell 命令不会被 Goal 模式误放行。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.65.0-rc2`。
+
+## 1.65.0-rc1 - 2026-06-13
+
+### Added
+
+- 本地 Agent 委派工具新增 `cline_cli`，支持调用本机 Cline CLI 的一次性 headless 任务，默认后台运行并复用 WillDeep 的审批、沙箱、后台作业和日志链路。
+- Settings → Local Agents 新增 Cline CLI 发现项，扫描常见安装路径与 PATH，并标记为可直接委派的 Agent 工具。
+
+### Tests
+
+- 补充 Cline CLI 工具注册、命令行拼接、可执行文件发现、Always Allow 签名和子 agent 禁用面的回归覆盖。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.65.0-rc1`。
+
+## 1.64.0-rc4 - 2026-06-13
+
+### Fixed
+
+- 修复 Agent 会话侧栏工作区分组右键菜单仍引用旧变量导致测试构建失败的问题，统一走 `startNewSession(inWorkspaceGroup:)`。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.64.0-rc4`。
+
+## 1.64.0-rc3 - 2026-06-13
+
+### Fixed
+
+- 修复 SSH / 远端 runtime workspace 会话在左侧侧栏被归到 `No workspace` 的问题；远端会话现在使用稳定的远端 workspace 分组 key，并在组标题中显示 runtime 名称。
+- 远端 workspace 分组右侧的新建会话按钮会继续创建同一远端 workspace 的会话，不再回落为空工作区。
+
+### Tests
+
+- 新增远端 workspace 会话分组 key 回归测试，确保远端会话不会被判定为 `No workspace`。
+- 新增全局 Agent 规则测试，覆盖默认 `~/.willdeep/CLAUDE.md` 路径、`~` 展开、禁用开关、prompt 注入截断以及全局规则先于项目规则注入。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.64.0-rc3`。
+
+## 1.64.0-rc2 - 2026-06-13
+
+### Fixed
+
+- 工具调用组展开后会保留额外顶部留白，避免展开卡片背景与上一条 AI 输出气泡发生视觉重叠。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.64.0-rc2`。
+
+## 1.64.0-rc1 - 2026-06-13
+
+### Added
+
+- Settings 新增 Rules 标签页，支持启用/停用全局 Agent 规则文件、选择文件路径、编辑内容并保存，默认路径为 `~/.willdeep/CLAUDE.md`。
+- Agent system prompt 每轮会注入全局规则文件内容，并继续读取当前工作区的 `AGENTS.md` / `CLAUDE.md` 等项目规则；项目规则保留更具体的仓库级约束。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.64.0-rc1`。
+
+## 1.63.0-rc4 - 2026-06-13
+
+### Fixed
+
+- Composer 中止按钮现在会在取消当前 Agent 输出后立刻发送队首排队消息，并跳过本次停止后的自动压缩等待。
+- 排队消息改为单个紧凑列表展示，多条消息一行一个；每行右侧直接提供发送、删除、编辑图标按钮，不再使用下拉菜单。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.63.0-rc4`。
+
+## 1.63.0-rc3 - 2026-06-13
+
+### Fixed
+
+- Settings → Runtimes 的 SSH / Daemon 表单输入框改为更明显的带边框文本输入，帮助用户识别可点击输入区域。
+- SSH runtime 的端口配置从 Stepper 改为数字输入框，避免从 `22` 改到高位端口时需要反复点击。
+- SSH identity file path 新建时默认使用 `~/.ssh/id_rsa`，实际执行 `/usr/bin/ssh -i` 前会展开 `~` 到当前用户主目录。
+
+### Tests
+
+- 补充 SSH runtime 命令构造测试，覆盖 identity file path 的 `~` 展开行为。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.63.0-rc3`。
+
+## 1.63.0-rc2 - 2026-06-13
+
+### Fixed
+
+- Goal 模式遇到临时网络错误、上游超时、限流或 5xx 时会自动等待 3 秒并重试，最多 5 次；用户仍可点停止取消当前轮次。
+- Agent 底部运行状态现在区分“本轮仍在执行任务”和“本轮已结束但后台任务仍在运行”，避免呼吸动画消失后误判对话是否结束。
+- 排队消息菜单的删除动作从“关闭排队”改为“删除”，语义更直接。
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badge、product-overview.md 全部同步到 `1.63.0-rc2`。
+
 ## 1.63.0-rc1 - 2026-06-13
 
 ### Added

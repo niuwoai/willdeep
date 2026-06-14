@@ -244,7 +244,7 @@ enum AgentWebTools {
     /// Parse + validate: http(s) scheme, non-empty host, host not in a
     /// private / loopback / link-local range. Returns nil when any
     /// check fails. Re-run on every redirect hop by RedirectGuard.
-    static func validatedPublicURL(_ raw: String) -> URL? {
+    nonisolated static func validatedPublicURL(_ raw: String) -> URL? {
         guard let url = URL(string: raw),
               let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https",
@@ -259,7 +259,7 @@ enum AgentWebTools {
     /// this guards against the agent *naming* an internal target, which
     /// is the realistic prompt-injection shape ("fetch http://169.254.
     /// 169.254/latest/meta-data/").
-    static func isBlockedHost(_ rawHost: String) -> Bool {
+    nonisolated static func isBlockedHost(_ rawHost: String) -> Bool {
         var host = rawHost.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         // IPv6 literal brackets from URL authority ("[::1]").
         if host.hasPrefix("["), host.hasSuffix("]") {
@@ -295,7 +295,7 @@ enum AgentWebTools {
         return false
     }
 
-    private static func isBlockedIPv4(_ host: String) -> Bool {
+    nonisolated private static func isBlockedIPv4(_ host: String) -> Bool {
         let octets = host.split(separator: ".").compactMap { UInt8($0) }
         guard octets.count == 4 else { return true }
         switch octets[0] {

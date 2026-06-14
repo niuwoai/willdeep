@@ -22,7 +22,8 @@ enum AgentContextBuilder {
         interactionMode: AgentInteractionMode = .normal,
         approvalMode: AgentApprovalMode = .smart,
         currentPlan: AgentPlan? = nil,
-        currentGoal: AgentGoal? = nil
+        currentGoal: AgentGoal? = nil,
+        globalRules: String? = AgentGlobalRulesStore.loadRules()
     ) -> String {
         var sections: [String] = []
         sections.append("""
@@ -76,9 +77,8 @@ enum AgentContextBuilder {
         }
 
         // Goal mode: first collect/confirm a goal conversationally, then
-        // pin the objective + checklist to every turn and ask the agent
-        // to self-evaluate via a fenced `goal-check` block whenever an
-        // item's status should change.
+        // pin the objective + checklist to every turn and require the
+        // agent to self-evaluate at the end of every reply.
         if interactionMode == .goal, currentGoal == nil || currentGoal?.isEmpty == true {
             sections.append("""
             === GOAL MODE — SETUP ===
@@ -107,18 +107,19 @@ enum AgentContextBuilder {
                 }
                 goalBlock += """
 
-                Acceptance reporting (REQUIRED whenever an item's status should change):
-                At the end of the reply, emit exactly one fenced block tagged `goal-check`. Each line lists a 1-based item index and its new state — only the items you're changing this turn:
+                Turn-end self-check (REQUIRED on every Goal-mode assistant reply after the goal is defined):
+                Before ending the reply, compare the evidence from this turn against the goal and state one concise "Goal self-check" sentence: `complete`, `in progress`, or `blocked`, with the reason.
+                Then emit exactly one fenced block tagged `goal-check`. Each line lists a 1-based item index and its new state — only the items you're changing this turn. If no checklist status changed, emit the block with `# no changes`.
 
                 ```goal-check
                 1: done
                 3: undone
                 ```
 
-                Use `done` only when you have concrete evidence the item is satisfied (file edited, command exited 0, tests passed). Use `undone` to flip a previously-ticked item back if you later discover it isn't actually satisfied. Items you didn't change this turn MUST be omitted. The user can override either direction at any time.
+                Use `done`/`complete` only when you have concrete evidence the item is satisfied (file edited, command exited 0, tests passed). Use `undone`/`incomplete`/`blocked` to flip a previously-ticked item back if you later discover it isn't actually satisfied. Items you didn't change this turn MUST be omitted. The user can override either direction at any time.
                 """
             } else {
-                goalBlock += "\nAt the end of every reply, briefly state what blocks progress on the goal."
+                goalBlock += "\nAt the end of every reply, include a concise Goal self-check sentence saying whether the goal is complete, in progress, or blocked, with the reason."
             }
             sections.append(goalBlock)
         }
@@ -144,6 +145,15 @@ enum AgentContextBuilder {
             - Root: \(rootDirectory.path)
             - Name: \(rootDirectory.lastPathComponent)
             """)
+
+            if let rules = globalRules?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !rules.isEmpty {
+                sections.append("""
+                Global user instructions:
+                These instructions apply to every workspace. Project instructions below are more specific and may add stricter requirements.
+                \(rules)
+                """)
+            }
 
             if let rules = projectRules(in: rootDirectory) {
                 sections.append("""
@@ -476,7 +486,7 @@ enum AgentGoalChecklistParser {
         switch token {
         case "done", "x", "✓", "✔", "checked", "complete", "completed", "yes", "ok":
             return true
-        case "undone", "uncheck", "unchecked", "todo", "pending", "incomplete", "no":
+        case "undone", "uncheck", "unchecked", "todo", "pending", "incomplete", "blocked", "no":
             return false
         default:
             return nil

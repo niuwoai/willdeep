@@ -14,6 +14,7 @@ import AppKit
 struct WillDeepTests {
     private enum TestError: Error {
         case loadTimedOut
+        case gitFailed(String)
     }
 
     /// Wipes the shared `UserDefaults` keys that AppState persists into so
@@ -28,6 +29,13 @@ struct WillDeepTests {
         ]
         for key in keys {
             UserDefaults.standard.removeObject(forKey: key)
+        }
+    }
+
+    private func requireGit(_ arguments: [String], in directory: URL) throws {
+        let result = AppState.runGitCommand(arguments: arguments, in: directory)
+        guard result.succeeded else {
+            throw TestError.gitFailed(result.userMessage)
         }
     }
 
@@ -821,6 +829,80 @@ struct WillDeepTests {
             lineStats: AgentLineChangeStats(added: nil, deleted: nil),
             hasNumstatEntry: false
         ) == true)
+    }
+
+    @Test("git worktree porcelain parser captures branches and prunable rows")
+    func testGitWorktreePorcelainParser() {
+        let worktrees = AppState.parseGitWorktreeListPorcelain(
+            """
+            worktree /tmp/repo
+            HEAD 1111111111111111111111111111111111111111
+            branch refs/heads/main
+
+            worktree /tmp/repo-feature
+            HEAD 2222222222222222222222222222222222222222
+            branch refs/heads/feature/demo
+
+            worktree /tmp/repo-old
+            HEAD 3333333333333333333333333333333333333333
+            detached
+            prunable gitdir file points to non-existent location
+            """
+        )
+
+        #expect(worktrees.count == 3)
+        #expect(worktrees[0].isPrimary == true)
+        #expect(worktrees[0].branch == "main")
+        #expect(worktrees[1].branch == "feature/demo")
+        #expect(worktrees[2].isDetached == true)
+        #expect(worktrees[2].isPrunable == true)
+        #expect(worktrees[2].pruneReason == "gitdir file points to non-existent location")
+    }
+
+    @Test("git worktree names are sanitized and default paths avoid collisions")
+    func testGitWorktreeDefaultNaming() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_worktree_name_\(UUID().uuidString)")
+            .appendingPathComponent("Repo")
+        let existing = root.deletingLastPathComponent().appendingPathComponent("Repo-feature-name")
+        try FileManager.default.createDirectory(at: existing, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+
+        #expect(AppState.sanitizedGitWorktreeName(" feature/name ! ") == "feature-name")
+        let next = AppState.defaultGitWorktreeURL(repositoryRoot: root, branchName: "feature/name !")
+        #expect(next.lastPathComponent == "Repo-feature-name-2")
+    }
+
+    @Test("git worktree creation lists and detects worktree git-file roots")
+    func testGitWorktreeCreateListAndFindRoot() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_worktree_create_\(UUID().uuidString)")
+        let repository = base.appendingPathComponent("main")
+        try FileManager.default.createDirectory(at: repository, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        try requireGit(["init"], in: repository)
+        try requireGit(["config", "user.email", "tests@example.com"], in: repository)
+        try requireGit(["config", "user.name", "WillDeep Tests"], in: repository)
+        try "hello\n".write(to: repository.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+        try requireGit(["add", "README.md"], in: repository)
+        try requireGit(["commit", "-m", "initial"], in: repository)
+
+        let created = AppState.createGitWorktree(from: repository, branchName: "feature test")
+        guard case .success(let result) = created else {
+            Issue.record("Expected worktree creation to succeed")
+            return
+        }
+
+        #expect(result.worktree.branch == "feature-test")
+        #expect(FileManager.default.fileExists(atPath: result.worktree.url.appendingPathComponent(".git").path))
+
+        let detectedRoot = AppState.findGitRepositoryRoot(startingAt: result.worktree.url)
+        #expect(detectedRoot?.standardizedFileURL.path == result.worktree.url.path)
+
+        let worktrees = AppState.listGitWorktrees(for: result.worktree.url)
+        #expect(worktrees.contains { $0.url == repository.standardizedFileURL && $0.isPrimary })
+        #expect(worktrees.contains { $0.url == result.worktree.url && $0.branch == "feature-test" })
     }
 
     @MainActor
@@ -1774,6 +1856,18 @@ struct WillDeepTests {
         // git stash without args (writes) must NOT be auto-approved.
         #expect(SafeCommand.classify(command: "git stash") == .needsJudgment)
         #expect(SafeCommand.classify(command: "git stash list") == .alwaysSafe)
+
+        // Common build/dev commands are low-risk workspace operations:
+        // they may write build artifacts, but should not require a manual
+        // approval click in smart/goal flows.
+        #expect(SafeCommand.classify(command: "go build -o bin/metaserver . 2>&1") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "go test ./...") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "go env -w GOPROXY=https://proxy.golang.org") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "yarn run dev") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "yarn build") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "npm run build") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "pnpm run typecheck") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "npm publish") == .needsJudgment)
     }
 
     @Test("SafeCommand pipelines: every segment must be safe for the chain to auto-approve")
@@ -1808,6 +1902,8 @@ struct WillDeepTests {
         // 控制流关键字本身无负载。
         #expect(SafeCommand.classify(command: "while read line; do echo \"$line\"; done") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "if grep -q TODO a.swift; then echo found; fi") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "time git status") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "time rm -rf /tmp/x") == .alwaysDangerous)
 
         // 关键字剥掉后负载照常受走查约束——危险负载一票否决。
         #expect(SafeCommand.classify(command: "for f in a b; do rm \"$f\"; done") == .alwaysDangerous)
@@ -1872,6 +1968,20 @@ struct WillDeepTests {
         // Plain forms fall through to needsJudgment (not auto-run).
         #expect(SafeCommand.classify(command: "cp foo bar") == .needsJudgment)
         #expect(SafeCommand.classify(command: "ln a b") == .needsJudgment)
+    }
+
+    @Test("SafeCommand: low-risk creation commands auto-approve")
+    func testSafeCommandWorkspaceCreate() {
+        // mkdir/touch/mktemp write, but only create — auto-approve so the
+        // agent doesn't stall on `mkdir -p build/`.
+        #expect(SafeCommand.classify(command: "mkdir build") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "mkdir -p src/a/b") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "touch README.md") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "mktemp -d") == .alwaysSafe)
+        // A destructive token anywhere in the pipeline still wins.
+        #expect(SafeCommand.classify(command: "mkdir foo && rm -rf bar") == .alwaysDangerous)
+        // Redirection out of a creation command is still refused.
+        #expect(SafeCommand.classify(command: "touch foo > /etc/passwd") == .alwaysDangerous)
     }
 
     @Test("SafeCommand: dangerousSubstrings cover token-less shapes")
@@ -1953,7 +2063,7 @@ struct WillDeepTests {
         #expect(segments[1].count == 2)
         #expect(segments[2].kind == .runCommand)
         #expect(segments[2].count == 1)
-        #expect(segments[1].kind.groupTitle(2) == "已探索 2 个文件")
+        #expect(segments[1].title == "已读取 1 个文件 · 已搜索代码")
     }
 
     @Test("AgentToolActivitySummary counts exploration searches and commands")
@@ -1969,11 +2079,13 @@ struct WillDeepTests {
 
         let summary = AgentToolActivitySummary(calls: calls)
 
+        #expect(summary.readFileCount == 1)
+        #expect(summary.listedDirectoryCount == 1)
         #expect(summary.exploredPathCount == 2)
         #expect(summary.searchCount == 1)
         #expect(summary.gitStatusCount == 1)
         #expect(summary.commandCount == 1)
-        #expect(summary.explorationText == "已探索 2 个路径 · 1 次搜索 · 1 次 git 状态")
+        #expect(summary.explorationText == "已读取 1 个文件 · 已浏览 1 个目录 · 已搜索代码 · 已查看 Git 状态")
         #expect(summary.commandText == "已运行 1 条命令")
     }
 
@@ -2162,6 +2274,21 @@ struct WillDeepTests {
             for: "run_command",
             arguments: ["command": .string("cd Xedit && git status 2>/dev/null")]
         )
+        let goBuildRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("cd /Users/rocky/Sites/Xedit && go build -o bin/metaserver . 2>&1")],
+            rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+        )
+        let yarnDevRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("yarn run dev")],
+            rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+        )
+        let npmInstallRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("npm install left-pad")],
+            rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+        )
         let redirectedDecision = AgentSandboxPolicy.commandDecision(
             command: "cd Xedit && git diff > /tmp/out.patch",
             rootDirectory: nil
@@ -2169,6 +2296,24 @@ struct WillDeepTests {
         let harmlessRedirectionDecision = AgentSandboxPolicy.commandDecision(
             command: "cd Xedit && git status 2>/dev/null",
             rootDirectory: nil
+        )
+        let goBuildDecision = AgentSandboxPolicy.commandDecision(
+            command: "cd /Users/rocky/Sites/Xedit && go build -o bin/metaserver . 2>&1",
+            rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+        )
+        let heredocDecision = AgentSandboxPolicy.commandDecision(
+            command: """
+            cat > Sources/App/main.go << 'GOEOF'
+            package main
+
+            import "fmt"
+
+            func main() {
+                fmt.Println("$(literal shell-looking text in generated code)")
+            }
+            GOEOF
+            """,
+            rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-test-workspace")
         )
 
         #expect(gitDiffRisk == .read)
@@ -2179,8 +2324,15 @@ struct WillDeepTests {
         #expect(redirectedDecision.requiresTypedConfirmation == false)
         #expect(harmlessRedirectionDecision.mode == .readOnly)
         #expect(harmlessRedirectionDecision.requiresTypedConfirmation == false)
+        #expect(heredocDecision.mode == .workspaceWrite)
+        #expect(heredocDecision.requiresTypedConfirmation == false)
         #expect(redirectedReadRisk == .write)
         #expect(harmlessRedirectionRisk == .read)
+        #expect(goBuildRisk == .write)
+        #expect(yarnDevRisk == .write)
+        #expect(npmInstallRisk == .write)
+        #expect(goBuildDecision.mode == .workspaceWrite)
+        #expect(goBuildDecision.requiresTypedConfirmation == false)
     }
 
     @Test("run_command allows workspace absolute cd for read-only commands")
@@ -2218,6 +2370,51 @@ struct WillDeepTests {
             arguments: ["command": .string("cat /etc/passwd")],
             rootDirectory: workspace
         )
+        let sshTimeRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string(#"ssh someuser@some-machine "time""#)],
+            rootDirectory: workspace
+        )
+        let sshGitStatusRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string(#"ssh -p 2222 someuser@some-machine "git status --short""#)],
+            rootDirectory: workspace
+        )
+        let sshDangerRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string(#"ssh someuser@some-machine "rm -rf /tmp/build""#)],
+            rootDirectory: workspace
+        )
+        let sshInteractiveRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("ssh someuser@some-machine")],
+            rootDirectory: workspace
+        )
+        let curlGetRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("curl -fsSL https://example.com/install.sh")],
+            rootDirectory: workspace
+        )
+        let curlHeadRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("curl -I https://example.com")],
+            rootDirectory: workspace
+        )
+        let curlPostRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("curl -X POST https://example.com/api")],
+            rootDirectory: workspace
+        )
+        let curlOutputRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("curl -o payload.txt https://example.com")],
+            rootDirectory: workspace
+        )
+        let curlMetadataRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string("curl http://169.254.169.254/latest/meta-data/")],
+            rootDirectory: workspace
+        )
 
         #expect(gitDiffRisk == .read)
         #expect(rgRisk == .read)
@@ -2225,6 +2422,15 @@ struct WillDeepTests {
         #expect(outsideCDRisk == .write)
         #expect(outsideGitDashCRisk == .write)
         #expect(outsideReadRisk == .write)
+        #expect(sshTimeRisk == .read)
+        #expect(sshGitStatusRisk == .read)
+        #expect(sshDangerRisk == .danger)
+        #expect(sshInteractiveRisk == .write)
+        #expect(curlGetRisk == .read)
+        #expect(curlHeadRisk == .read)
+        #expect(curlPostRisk == .write)
+        #expect(curlOutputRisk == .write)
+        #expect(curlMetadataRisk == .write)
     }
 
     @Test("run_command uses home directory when no workspace is bound")
@@ -2723,7 +2929,8 @@ struct WillDeepTests {
             arguments: ["command": .string("swift build")],
             risk: .write,
             rootDirectory: root,
-            interactionMode: .goal
+            interactionMode: .goal,
+            approvalMode: .requestEveryTime
         )
         #expect(writeApproval == .goalMode)
 
@@ -2736,6 +2943,24 @@ struct WillDeepTests {
             interactionMode: .goal
         )
         #expect(dangerApproval == nil)
+
+        let fetchApproval = await appState.autoApprovalSource(
+            toolName: "web_fetch",
+            arguments: ["url": .string("https://example.com/docs")],
+            risk: .write,
+            rootDirectory: root,
+            interactionMode: .goal
+        )
+        #expect(fetchApproval == .goalMode)
+
+        let curlApproval = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("curl -X POST https://example.com/install.sh")],
+            risk: .write,
+            rootDirectory: root,
+            interactionMode: .goal
+        )
+        #expect(curlApproval == nil)
 
         // normal 模式不受影响：没有命中其他自动路径时仍等用户。
         let normalApproval = await appState.autoApprovalSource(
@@ -2795,6 +3020,24 @@ struct WillDeepTests {
             approvalMode: .workspaceAccess
         )
         #expect(untrustedMCP == nil)
+
+        let goBuild = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("go build -o bin/app . 2>&1")],
+            risk: .write,
+            rootDirectory: root,
+            approvalMode: .smart
+        )
+        #expect(goBuild == .staticAllowlist)
+
+        let yarnBuild = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("yarn run build")],
+            risk: .write,
+            rootDirectory: root,
+            approvalMode: .smart
+        )
+        #expect(yarnBuild == .staticAllowlist)
     }
 
     @Test("legacy agent session JSON defaults to smart approval")
@@ -2879,7 +3122,7 @@ struct WillDeepTests {
         #expect(defaultSignature == "claude_code:acceptEdits")
     }
 
-    @Test("codex_cli and cursor_agent tools are registered as write risk")
+    @Test("codex_cli, cursor_agent, and cline_cli tools are registered as write risk")
     func testExternalAgentToolRegistration() {
         let codex = AgentToolRegistry.descriptor(for: "codex_cli")
         #expect(codex != nil)
@@ -2894,6 +3137,13 @@ struct WillDeepTests {
         #expect(cursor?.parameters.first(where: { $0.name == "prompt" })?.required == true)
         #expect(cursor?.parameters.contains(where: { $0.name == "permission_mode" }) == true)
         #expect(!AgentToolRunner.cursorAgentPermissionModes.contains("yolo"))
+
+        let cline = AgentToolRegistry.descriptor(for: "cline_cli")
+        #expect(cline != nil)
+        #expect(cline?.risk == .write)
+        #expect(cline?.parameters.first(where: { $0.name == "prompt" })?.required == true)
+        #expect(cline?.parameters.contains(where: { $0.name == "permission_mode" }) == true)
+        #expect(!AgentToolRunner.clineCLIPermissionModes.contains("yolo"))
     }
 
     @Test("codex_cli command line uses sandboxed non-interactive exec")
@@ -2956,6 +3206,33 @@ struct WillDeepTests {
         #expect(!write.contains("--model"))
     }
 
+    @Test("cline_cli command line uses json one-shot mode and cwd")
+    func testClineCLICommandLineComposition() {
+        let command = AgentToolRunner.clineCLICommandLine(
+            executable: "/usr/local/bin/cline",
+            prompt: "fix O'Brien parser",
+            permissionMode: "plan",
+            model: "anthropic/claude-sonnet-4-6",
+            workspacePath: "/tmp/Work Dir"
+        )
+        #expect(command.hasPrefix("'/usr/local/bin/cline' --json"))
+        #expect(command.contains("--plan"))
+        #expect(command.contains("--cwd '/tmp/Work Dir'"))
+        #expect(command.contains("--model 'anthropic/claude-sonnet-4-6'"))
+        #expect(command.contains("'fix O'\\''Brien parser'"))
+        #expect(!command.contains("--yolo"))
+
+        let act = AgentToolRunner.clineCLICommandLine(
+            executable: "/x/cline",
+            prompt: "implement",
+            permissionMode: "act",
+            model: nil,
+            workspacePath: nil
+        )
+        #expect(!act.contains("--plan"))
+        #expect(!act.contains("--model"))
+    }
+
     @Test("external agent executable discovery and local catalog expose direct tools")
     func testExternalAgentDiscovery() {
         let codex = AgentToolRunner.codexCLIExecutablePath(
@@ -2970,9 +3247,16 @@ struct WillDeepTests {
         )
         #expect(cursor == "/usr/local/bin/cursor")
 
+        let cline = AgentToolRunner.clineCLIExecutablePath(
+            environment: ["PATH": "/usr/local/bin"],
+            isExecutable: { $0 == "/usr/local/bin/cline" }
+        )
+        #expect(cline == "/usr/local/bin/cline")
+
         let entries = LocalAgentCLI.catalog
         #expect(entries.first(where: { $0.id == "codex-cli" })?.integration == .directTool("codex_cli"))
         #expect(entries.first(where: { $0.id == "cursor-cli" })?.integration == .directTool("cursor_agent"))
+        #expect(entries.first(where: { $0.id == "cline-cli" })?.integration == .directTool("cline_cli"))
     }
 
     @Test("external agent always-allow signatures are scoped by permission mode")
@@ -2993,6 +3277,14 @@ struct WillDeepTests {
             toolName: "cursor_agent",
             arguments: [:]
         ) == "cursor_agent:default")
+        #expect(AgentToolAuthorization.signature(
+            toolName: "cline_cli",
+            arguments: ["permission_mode": .string("plan")]
+        ) == "cline_cli:plan")
+        #expect(AgentToolAuthorization.signature(
+            toolName: "cline_cli",
+            arguments: [:]
+        ) == "cline_cli:act")
     }
 
     @Test("subagent tool surface is read-only and cannot nest or ask")
@@ -3003,6 +3295,7 @@ struct WillDeepTests {
         #expect(!allowed.contains("claude_code"))
         #expect(!allowed.contains("codex_cli"))
         #expect(!allowed.contains("cursor_agent"))
+        #expect(!allowed.contains("cline_cli"))
         #expect(!allowed.contains("ask_user"))
         #expect(!allowed.contains("call_mcp_tool"))
         #expect(!allowed.contains("kill_job"))

@@ -195,7 +195,6 @@ struct AgentSessionsSidebar: View {
         let isCollapsed = collapsedWorkspaces.contains(workspace)
         let visible = isExpanded ? activeSessions : Array(activeSessions.prefix(initialRowCount))
         let archivedExpanded = expandedArchivedGroups.contains(workspace)
-        let hasRealWorkspace = workspace != "_no_workspace_"
 
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
@@ -228,7 +227,7 @@ struct AgentSessionsSidebar: View {
                     .truncationMode(.middle)
                 Spacer(minLength: 0)
                 Button {
-                    appState.startNewAgentSession(inWorkspaceAt: hasRealWorkspace ? workspace : nil)
+                    startNewSession(inWorkspaceGroup: workspace)
                 } label: {
                     Image(systemName: "plus.circle")
                         .font(.system(size: 12))
@@ -251,7 +250,7 @@ struct AgentSessionsSidebar: View {
             }
             .contextMenu {
                 Button(L10n.Sidebar.workspaceMenuNewChat) {
-                    appState.startNewAgentSession(inWorkspaceAt: hasRealWorkspace ? workspace : nil)
+                    startNewSession(inWorkspaceGroup: workspace)
                 }
             }
 
@@ -362,6 +361,7 @@ struct AgentSessionsSidebar: View {
                     .truncationMode(.tail)
                 Spacer(minLength: 0)
                 AgentSessionModeBadges(session: session)
+                sessionUpdatedLabel(session)
                 sessionRowTrailingActions(session: session, isHovered: isHovered)
             }
             .padding(.horizontal, 28)
@@ -427,6 +427,23 @@ struct AgentSessionsSidebar: View {
         appState.renameAgentSession(id: session.id, to: input.stringValue)
     }
 
+    @ViewBuilder
+    private func sessionUpdatedLabel(_ session: AgentSession) -> some View {
+        TimelineView(.periodic(from: .now, by: 60)) { timeline in
+            let label = AgentRelativeTimestamp.compactString(
+                since: session.updatedAt,
+                now: timeline.date
+            )
+            Text(label)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .monospacedDigit()
+                .lineLimit(1)
+                .frame(minWidth: 22, alignment: .trailing)
+                .help(L10n.Sidebar.sessionUpdatedTooltip(label))
+        }
+    }
+
     /// Trailing icon cluster on each session row — pin & archive
     /// buttons that fade in on hover, plus a persistent `pin.fill`
     /// badge when the row is pinned so users can see the state at a
@@ -488,7 +505,7 @@ struct AgentSessionsSidebar: View {
             return session.messages.contains(where: { $0.role == .user })
         }
         let groups = Dictionary(grouping: visibleSessions) { session in
-            session.workspaceRootPath ?? "_no_workspace_"
+            session.workspaceSidebarGroupKey
         }
         // Group order rules — fully static, never depends on session
         // updatedAt or on which folder is currently open. The user
@@ -507,8 +524,8 @@ struct AgentSessionsSidebar: View {
             .sorted { lhs, rhs in
                 let lKey = lhs.0
                 let rKey = rhs.0
-                let lIsNoWorkspace = (lKey == "_no_workspace_")
-                let rIsNoWorkspace = (rKey == "_no_workspace_")
+                let lIsNoWorkspace = (lKey == AgentSession.noWorkspaceSidebarGroupKey)
+                let rIsNoWorkspace = (rKey == AgentSession.noWorkspaceSidebarGroupKey)
                 if lIsNoWorkspace != rIsNoWorkspace { return !lIsNoWorkspace }
                 let lName = workspaceDisplayName(lKey)
                 let rName = workspaceDisplayName(rKey)
@@ -517,8 +534,40 @@ struct AgentSessionsSidebar: View {
     }
 
     private func workspaceDisplayName(_ key: String) -> String {
-        if key == "_no_workspace_" { return "No workspace" }
+        if key == AgentSession.noWorkspaceSidebarGroupKey { return "No workspace" }
+        if let remote = remoteWorkspaceGroup(from: key) {
+            let runtimeName = AgentRuntimeStore.descriptor(id: remote.runtimeID)?.displayName ?? "Remote"
+            let folderName = URL(fileURLWithPath: remote.path).lastPathComponent
+            return "\(runtimeName): \(folderName.isEmpty ? remote.path : folderName)"
+        }
         return URL(fileURLWithPath: key).lastPathComponent
+    }
+
+    private func localWorkspacePath(for key: String) -> String? {
+        guard key != AgentSession.noWorkspaceSidebarGroupKey,
+              remoteWorkspaceGroup(from: key) == nil else {
+            return nil
+        }
+        return key
+    }
+
+    private func startNewSession(inWorkspaceGroup key: String) {
+        if let remote = remoteWorkspaceGroup(from: key) {
+            appState.moveActiveAgentSessionToRemoteWorkspace(runtimeID: remote.runtimeID, path: remote.path)
+        } else {
+            appState.startNewAgentSession(inWorkspaceAt: localWorkspacePath(for: key))
+        }
+    }
+
+    private func remoteWorkspaceGroup(from key: String) -> (runtimeID: UUID, path: String)? {
+        let prefix = "remote:"
+        guard key.hasPrefix(prefix) else { return nil }
+        let remainder = String(key.dropFirst(prefix.count))
+        guard let separator = remainder.firstIndex(of: ":") else { return nil }
+        let idPart = String(remainder[..<separator])
+        guard let runtimeID = UUID(uuidString: idPart) else { return nil }
+        let path = String(remainder[remainder.index(after: separator)...])
+        return (runtimeID, path)
     }
 
     /// Within-group ordering:
@@ -538,6 +587,38 @@ struct AgentSessionsSidebar: View {
         case (false, false):
             return lhs.updatedAt > rhs.updatedAt
         }
+    }
+}
+
+enum AgentRelativeTimestamp {
+    static func compactString(since date: Date, now: Date = Date()) -> String {
+        let elapsed = max(0, Int(now.timeIntervalSince(date)))
+        let minute = 60
+        let hour = 60 * minute
+        let day = 24 * hour
+        let week = 7 * day
+        let month = 30 * day
+        let year = 365 * day
+
+        if elapsed < minute {
+            return "0m"
+        }
+        if elapsed < hour {
+            return "\(elapsed / minute)m"
+        }
+        if elapsed < day {
+            return "\(elapsed / hour)h"
+        }
+        if elapsed < week {
+            return "\(elapsed / day)d"
+        }
+        if elapsed < month {
+            return "\(elapsed / week)w"
+        }
+        if elapsed < year {
+            return "\(elapsed / month)mo"
+        }
+        return "\(elapsed / year)y"
     }
 }
 

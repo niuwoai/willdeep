@@ -77,6 +77,23 @@ enum AgentSandboxPolicy {
         "cargo", "npm", "pnpm", "yarn", "ruby", "node", "python", "python3"
     ]
 
+    /// Heads whose SafeCommand `.alwaysSafe` verdict still WRITES inside the
+    /// workspace — build artifacts, package-script output, dir/file creation —
+    /// so a SafeCommand-certified call must run under a workspace-write
+    /// seatbelt, not the read-only one (which would block the very write the
+    /// command exists to make). Deliberately EXCLUDES `git`: SafeCommand only
+    /// certifies read-only git subcommands (diff/log/status/show/…) as
+    /// alwaysSafe, and those genuinely don't write, so they must stay
+    /// `.readOnly`. Pre-1.78.0-rc15 the bump keyed off the whole
+    /// `workspaceWriteHeads` set, which wrongly promoted `git diff` to
+    /// workspace-write. Keep mkdir/touch/mktemp in sync with
+    /// SafeCommand.safeWorkspaceCreateTokens.
+    nonisolated private static let lowRiskWriteHeads: Set<String> = [
+        "apply_patch", "make", "xcodebuild", "swift", "go", "cargo",
+        "npm", "pnpm", "yarn", "ruby", "node", "python", "python3", "rake",
+        "mkdir", "touch", "mktemp"
+    ]
+
     nonisolated private static let networkHeads: Set<String> = [
         "curl", "wget", "ssh", "scp", "rsync", "gh", "brew"
     ]
@@ -123,7 +140,7 @@ enum AgentSandboxPolicy {
                 reason: "Network access to an arbitrary URL requires approval.",
                 prefixRule: nil
             )
-        case "call_mcp_tool", "claude_code", "codex_cli", "cursor_agent", "kill_job":
+        case "call_mcp_tool", "claude_code", "codex_cli", "cursor_agent", "cline_cli", "kill_job":
             return AgentSandboxDecision(
                 mode: .workspaceWrite,
                 requiresUserApproval: true,
@@ -154,7 +171,8 @@ enum AgentSandboxPolicy {
             )
         }
 
-        if containsUnsafeShellExpansion(trimmed) {
+        let policyCommand = commandWithHeredocBodiesRemoved(trimmed)
+        if containsUnsafeShellExpansion(policyCommand) {
             return AgentSandboxDecision(
                 mode: .escalated,
                 requiresUserApproval: true,
@@ -163,9 +181,9 @@ enum AgentSandboxPolicy {
                 prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed)
             )
         }
-        let hasRedirection = containsRedirection(trimmed)
+        let hasRedirection = containsRedirection(policyCommand)
 
-        guard let segments = splitCommandSegments(trimmed), !segments.isEmpty else {
+        guard let segments = splitCommandSegments(policyCommand), !segments.isEmpty else {
             return AgentSandboxDecision(
                 mode: .escalated,
                 requiresUserApproval: true,
@@ -222,12 +240,32 @@ enum AgentSandboxPolicy {
                 needsEscalation = true
                 needsConfirmation = true
                 reasons.append("Destructive or privilege-changing command `\(head)` requires typed confirmation.")
-            } else if networkHeads.contains(head) || credentialHeads.contains(head) {
+            } else if networkHeads.contains(head) {
+                switch classifyNetworkReadOnly(head: head, tokens: tokens) {
+                case .alwaysSafe:
+                    break
+                case .alwaysDangerous:
+                    needsEscalation = true
+                    needsConfirmation = true
+                    reasons.append("Command `\(head)` runs a dangerous remote or network operation.")
+                case .needsJudgment:
+                    needsEscalation = true
+                    reasons.append("Command `\(head)` may use network, credentials, or macOS keychain access.")
+                }
+            } else if credentialHeads.contains(head) {
                 needsEscalation = true
                 reasons.append("Command `\(head)` may use network, credentials, or macOS keychain access.")
             } else {
                 switch SafeCommand.classify(command: segment) {
                 case .alwaysSafe:
+                    // A SafeCommand-certified call is auto-approvable, but some
+                    // of those still write (go build, npm run build, mkdir).
+                    // Bump only those to workspace-write; read-only certs like
+                    // `git diff` stay read-only. See `lowRiskWriteHeads`.
+                    if lowRiskWriteHeads.contains(head) {
+                        needsWorkspaceWrite = true
+                        reasons.append("Command `\(head)` is a low-risk workspace build or development operation.")
+                    }
                     break
                 case .alwaysDangerous:
                     if hasRedirection {
@@ -385,7 +423,48 @@ enum AgentSandboxPolicy {
 
     nonisolated private static func containsUnsafeShellExpansion(_ command: String) -> Bool {
         command.contains("$(") || command.contains("`") || command.contains("<(")
-            || command.contains("<<")
+    }
+
+    nonisolated private static func commandWithHeredocBodiesRemoved(_ command: String) -> String {
+        guard command.contains("<<") else { return command }
+        var keptLines: [String] = []
+        var pendingDelimiter: String?
+
+        for line in command.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+            if let delimiter = pendingDelimiter {
+                if line.trimmingCharacters(in: .whitespacesAndNewlines) == delimiter {
+                    pendingDelimiter = nil
+                }
+                continue
+            }
+            keptLines.append(line)
+            if let delimiter = heredocDelimiter(in: line) {
+                pendingDelimiter = delimiter
+            }
+        }
+
+        return keptLines.joined(separator: "\n")
+    }
+
+    nonisolated private static func heredocDelimiter(in line: String) -> String? {
+        guard let marker = line.range(of: "<<") else { return nil }
+        var tail = String(line[marker.upperBound...])
+        if tail.first == "-" {
+            tail.removeFirst()
+        }
+        tail = tail.trimmingCharacters(in: .whitespaces)
+        guard let first = tail.first else { return nil }
+        if first == "'" || first == "\"" {
+            let quote = first
+            let body = tail.dropFirst()
+            guard let end = body.firstIndex(of: quote) else { return nil }
+            let delimiter = String(body[..<end])
+            return delimiter.isEmpty ? nil : delimiter
+        }
+        let stopCharacters = CharacterSet.whitespaces.union(CharacterSet(charactersIn: "|&;<>"))
+        let delimiter = tail.unicodeScalars.prefix { !stopCharacters.contains($0) }
+        let value = String(String.UnicodeScalarView(delimiter))
+        return value.isEmpty ? nil : value
     }
 
     nonisolated private static func containsRedirection(_ command: String) -> Bool {
@@ -419,6 +498,145 @@ enum AgentSandboxPolicy {
             return args.contains("-f") || args.contains("-fd") || args.contains("-xdf")
         }
         return false
+    }
+
+    nonisolated private static func classifyNetworkReadOnly(head: String, tokens: [String]) -> CommandSafety {
+        switch head {
+        case "curl":
+            return isReadOnlyCurl(tokens) ? .alwaysSafe : .needsJudgment
+        case "ssh":
+            return classifySSHRemoteCommand(tokens)
+        default:
+            return .needsJudgment
+        }
+    }
+
+    nonisolated private static func isReadOnlyCurl(_ tokens: [String]) -> Bool {
+        guard tokens.first?.lowercased() == "curl" else { return false }
+        var requestMethod = "GET"
+        var sawPublicURL = false
+        var index = 1
+        let safeNoArgumentLongFlags: Set<String> = [
+            "--fail", "--fail-with-body", "--silent", "--show-error", "--verbose",
+            "--location", "--location-trusted", "--head", "--include",
+            "--compressed", "--http1.1", "--http2", "--http3", "--ipv4", "--ipv6",
+            "--insecure", "--no-progress-meter"
+        ]
+        let safeArgumentLongFlags: Set<String> = [
+            "--connect-timeout", "--max-time", "--retry", "--retry-delay",
+            "--retry-max-time", "--user-agent", "--referer", "--url",
+            "--cacert", "--capath", "--resolve", "--connect-to"
+        ]
+        let unsafeLongFlagPrefixes = [
+            "--data", "--form", "--upload-file", "--output", "--remote-name",
+            "--dump-header", "--cookie-jar", "--config", "--netrc", "--user",
+            "--proxy-user", "--oauth2-bearer", "--aws-sigv4", "--request-target"
+        ]
+
+        while index < tokens.count {
+            let token = tokens[index]
+            let lower = token.lowercased()
+            if lower == "--" {
+                index += 1
+                continue
+            }
+            if lower == "-x" || lower == "--request" {
+                guard index + 1 < tokens.count else { return false }
+                requestMethod = tokens[index + 1].uppercased()
+                index += 2
+                continue
+            }
+            if lower.hasPrefix("-x") && lower.count > 2 {
+                requestMethod = String(token.dropFirst(2)).uppercased()
+                index += 1
+                continue
+            }
+            if lower.hasPrefix("--request=") {
+                requestMethod = String(token.dropFirst("--request=".count)).uppercased()
+                index += 1
+                continue
+            }
+            if unsafeLongFlagPrefixes.contains(where: { lower == $0 || lower.hasPrefix($0 + "=") }) {
+                return false
+            }
+            if safeNoArgumentLongFlags.contains(lower) {
+                if lower == "--head" { requestMethod = "HEAD" }
+                index += 1
+                continue
+            }
+            if safeArgumentLongFlags.contains(lower) {
+                guard index + 1 < tokens.count else { return false }
+                if lower == "--url" {
+                    sawPublicURL = sawPublicURL || AgentWebTools.validatedPublicURL(tokens[index + 1]) != nil
+                }
+                index += 2
+                continue
+            }
+            if let flagName = lower.split(separator: "=", maxSplits: 1).first,
+               safeArgumentLongFlags.contains(String(flagName)) {
+                if flagName == "--url" {
+                    let rawURL = String(lower.dropFirst("--url=".count))
+                    sawPublicURL = sawPublicURL || AgentWebTools.validatedPublicURL(rawURL) != nil
+                }
+                index += 1
+                continue
+            }
+            if lower.hasPrefix("-") {
+                if lower.contains("o") || lower.contains("O") ||
+                    lower.contains("d") || lower.contains("F") ||
+                    lower.contains("T") || lower.contains("u") {
+                    return false
+                }
+                let safeShortFlags = Set("slivkf")
+                guard lower.dropFirst().allSatisfy({ safeShortFlags.contains($0) }) else {
+                    return false
+                }
+                if lower.contains("I") { requestMethod = "HEAD" }
+                index += 1
+                continue
+            }
+            sawPublicURL = sawPublicURL || AgentWebTools.validatedPublicURL(token) != nil
+            index += 1
+        }
+
+        return sawPublicURL && (requestMethod == "GET" || requestMethod == "HEAD")
+    }
+
+    nonisolated private static func classifySSHRemoteCommand(_ tokens: [String]) -> CommandSafety {
+        guard tokens.first?.lowercased() == "ssh" else { return .needsJudgment }
+        guard let hostIndex = sshHostIndex(tokens) else { return .needsJudgment }
+        let remoteCommandTokens = tokens.dropFirst(hostIndex + 1)
+        guard !remoteCommandTokens.isEmpty else { return .needsJudgment }
+        return SafeCommand.classify(command: remoteCommandTokens.joined(separator: " "))
+    }
+
+    nonisolated private static func sshHostIndex(_ tokens: [String]) -> Int? {
+        var index = 1
+        let optionsWithArgument: Set<String> = [
+            "-b", "-c", "-D", "-E", "-e", "-F", "-i", "-J", "-L", "-l", "-m",
+            "-O", "-o", "-p", "-Q", "-R", "-S", "-W", "-w"
+        ]
+        while index < tokens.count {
+            let token = tokens[index]
+            if token == "--" {
+                index += 1
+                continue
+            }
+            if optionsWithArgument.contains(token) {
+                index += 2
+                continue
+            }
+            if token.hasPrefix("-o") && token.count > 2 {
+                index += 1
+                continue
+            }
+            if token.hasPrefix("-") {
+                index += 1
+                continue
+            }
+            return index
+        }
+        return nil
     }
 
     nonisolated private static func gitSubcommandIndex(tokens: [String]) -> Int? {
@@ -748,6 +966,10 @@ enum AgentCommandAuthorization {
                 continue
             }
             if "|&;".contains(character) {
+                if character == "&", current.last == ">" {
+                    current.append(character)
+                    continue
+                }
                 return nil
             }
             current.append(character)
@@ -807,6 +1029,10 @@ enum AgentToolAuthorization {
             let mode = arguments["permission_mode"]?.stringValue()?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? "default"
             return "cursor_agent:\(mode)"
+        case "cline_cli":
+            let mode = arguments["permission_mode"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? "act"
+            return "cline_cli:\(mode == "default" ? "act" : mode)"
         case "web_fetch":
             // Scope by host: pinning means "I trust this domain", not
             // "exactly this URL". Path/query stay out of the signature.

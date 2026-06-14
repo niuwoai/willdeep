@@ -1024,12 +1024,16 @@ struct AgentToolCallGroup: View {
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
                     }
-                    Text(previewSummary)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if let previewSummary {
+                        Text(previewSummary)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        Spacer(minLength: 0)
+                    }
                     Image(systemName: detailsVisible ? "chevron.up" : "chevron.down")
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(canToggleDetails ? .secondary : Color.clear)
@@ -1039,7 +1043,7 @@ struct AgentToolCallGroup: View {
             }
             .buttonStyle(.plain)
             .disabled(!canToggleDetails)
-            .help(detailsVisible ? "Hide tool calls" : "Show tool calls")
+            .help(detailsVisible ? L10n.ToolCard.collapse : L10n.ToolCard.expand)
 
             if detailsVisible {
                 VStack(alignment: .leading, spacing: 4) {
@@ -1060,12 +1064,16 @@ struct AgentToolCallGroup: View {
             RoundedRectangle(cornerRadius: 6)
                 .stroke(groupBorderColor, lineWidth: 1)
         )
+        // The expanded card paints padding above its title row. Give that
+        // expanded chrome its own external breathing room so it never
+        // visually climbs into the previous assistant bubble.
+        .padding(.top, detailsVisible ? 8 : 0)
     }
 
     private var detailsVisible: Bool {
         // Interactive states (ask_user / pendingApproval / awaitingConfirm)
         // need the user's attention NOW — if the group stayed collapsed
-        // the user would have to first hunt down the "执行了 N 条工具调用 ▾"
+        // the user would have to first hunt down the activity summary
         // header and click it to even see the question / approval prompt.
         // Force-expand whenever any inner call is interactive; respect
         // `isExpanded` otherwise so non-interactive bundles stay tidy.
@@ -1092,7 +1100,13 @@ struct AgentToolCallGroup: View {
 
     private var titleText: String {
         if let headline, !headline.isEmpty { return headline }
-        return "执行了 \(calls.count) 条工具调用"
+        if let activityText = AgentToolActivitySummary(calls: calls).activityText {
+            return activityText
+        }
+        if calls.count == 1, let first = calls.first {
+            return "已调用 \(first.toolName)"
+        }
+        return "已调用 \(calls.count) 个工具"
     }
 
     private var statusSummary: String {
@@ -1107,15 +1121,16 @@ struct AgentToolCallGroup: View {
         if succeeded == calls.count, waiting == 0, running == 0, failed == 0, denied == 0 {
             return ""
         }
-        if waiting > 0 { parts.append("\(waiting) waiting") }
-        if running > 0 { parts.append("\(running) running") }
-        if failed > 0 { parts.append("\(failed) failed") }
-        if denied > 0 { parts.append("\(denied) denied") }
-        if succeeded > 0 { parts.append("\(succeeded) done") }
+        if waiting > 0 { parts.append("\(waiting) 待处理") }
+        if running > 0 { parts.append("\(running) 运行中") }
+        if failed > 0 { parts.append("\(failed) 失败") }
+        if denied > 0 { parts.append("\(denied) 已拒绝") }
+        if succeeded > 0 { parts.append("\(succeeded) 完成") }
         return parts.joined(separator: " · ")
     }
 
-    private var previewSummary: String {
+    private var previewSummary: String? {
+        guard detailsVisible else { return nil }
         let previews = calls.prefix(3).map { call in
             var text = call.toolName
             if let summary = call.result?.summary, !summary.isEmpty {
@@ -1126,7 +1141,8 @@ struct AgentToolCallGroup: View {
             return text
         }
         let suffix = calls.count > previews.count ? " · +\(calls.count - previews.count) more" : ""
-        return previews.joined(separator: " · ") + suffix
+        let summary = previews.joined(separator: " · ") + suffix
+        return summary.isEmpty ? nil : summary
     }
 
     private func compactArguments(for call: AgentToolCall) -> String? {

@@ -82,8 +82,8 @@ struct AgentChatHistoryRendererTests {
 
         let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
 
-        #expect(rendered.string.contains("▸ 执行了 1 条工具调用"))
-        #expect(rendered.string.contains("run_command  command: git status --short"))
+        #expect(rendered.string.contains("▸ 已运行 1 条命令"))
+        #expect(!rendered.string.contains("run_command  command: git status --short"))
         #expect(!rendered.string.contains("Tool calls"))
         #expect(!rendered.string.contains("Assistant"))
     }
@@ -120,7 +120,7 @@ struct AgentChatHistoryRendererTests {
         ]
 
         let collapsed = AgentChatHistoryRenderer.render(messages: messages, isDark: false)
-        #expect(collapsed.string.contains("▸ 执行了 2 条工具调用"))
+        #expect(collapsed.string.contains("▸ 已读取 1 个文件 · 已运行 1 条命令"))
         #expect(!collapsed.string.contains("tool  read_file"))
 
         let groupID = "\(firstID.uuidString):\(secondID.uuidString)"
@@ -129,7 +129,7 @@ struct AgentChatHistoryRendererTests {
             isDark: false,
             expandedToolGroupIDs: [groupID]
         )
-        #expect(expanded.string.contains("▾ 执行了 2 条工具调用"))
+        #expect(expanded.string.contains("▾ 已读取 1 个文件 · 已运行 1 条命令"))
         #expect(expanded.string.contains("tool  run_command  command: ls /Users/rocky/Sites/Teamify && git status --short"))
         #expect(expanded.string.contains("tool  read_file  path: /Users/rocky/Sites/Teamify/README.md"))
     }

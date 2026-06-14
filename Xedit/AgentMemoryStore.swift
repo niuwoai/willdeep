@@ -81,6 +81,12 @@ struct AgentMemoryRecord: Identifiable, Codable, Equatable {
     var content: String
     var source: AgentMemorySource
     var lifetime: AgentMemoryLifetime
+    var scope: AgentMemoryScope
+    var projectFingerprint: String?
+    var topics: [String]
+    var confidence: Double
+    var containsSensitiveContent: Bool
+    var provenance: String?
     var createdAt: Date
     var updatedAt: Date
     var lastAccessedAt: Date?
@@ -92,6 +98,12 @@ struct AgentMemoryRecord: Identifiable, Codable, Equatable {
         content: String,
         source: AgentMemorySource,
         lifetime: AgentMemoryLifetime = .longTerm,
+        scope: AgentMemoryScope = .global,
+        projectFingerprint: String? = nil,
+        topics: [String] = [],
+        confidence: Double = 1.0,
+        containsSensitiveContent: Bool = false,
+        provenance: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         lastAccessedAt: Date? = nil,
@@ -102,6 +114,12 @@ struct AgentMemoryRecord: Identifiable, Codable, Equatable {
         self.content = content
         self.source = source
         self.lifetime = lifetime
+        self.scope = scope
+        self.projectFingerprint = projectFingerprint
+        self.topics = topics
+        self.confidence = confidence
+        self.containsSensitiveContent = containsSensitiveContent
+        self.provenance = provenance
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.lastAccessedAt = lastAccessedAt
@@ -115,7 +133,19 @@ struct AgentMemoryRecord: Identifiable, Codable, Equatable {
 
     var normalized: AgentMemoryRecord {
         var copy = self
-        copy.content = copy.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sanitized = AgentMemorySanitizer.sanitize(copy.content)
+        copy.content = sanitized.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        copy.containsSensitiveContent = copy.containsSensitiveContent || sanitized.redacted
+        copy.projectFingerprint = copy.projectFingerprint?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if copy.projectFingerprint?.isEmpty == true {
+            copy.projectFingerprint = nil
+        }
+        copy.topics = AgentMemoryKeywordExtractor.keywords(from: copy.topics.joined(separator: " ") + " " + copy.content, limit: 8)
+        copy.confidence = max(0, min(1, copy.confidence))
+        copy.provenance = copy.provenance?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if copy.provenance?.isEmpty == true {
+            copy.provenance = nil
+        }
         if copy.updatedAt < copy.createdAt {
             copy.updatedAt = copy.createdAt
         }
@@ -127,6 +157,32 @@ struct AgentMemoryRecord: Identifiable, Codable, Equatable {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return true }
         return content.localizedCaseInsensitiveContains(trimmed)
+            || topics.contains { $0.localizedCaseInsensitiveContains(trimmed) }
+            || scope.displayName.localizedCaseInsensitiveContains(trimmed)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, content, source, lifetime, scope, projectFingerprint, topics, confidence
+        case containsSensitiveContent, provenance, createdAt, updatedAt, lastAccessedAt, accessCount, archivedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        content = try c.decode(String.self, forKey: .content)
+        source = try c.decodeIfPresent(AgentMemorySource.self, forKey: .source) ?? .manual
+        lifetime = try c.decodeIfPresent(AgentMemoryLifetime.self, forKey: .lifetime) ?? .longTerm
+        scope = try c.decodeIfPresent(AgentMemoryScope.self, forKey: .scope) ?? .global
+        projectFingerprint = try c.decodeIfPresent(String.self, forKey: .projectFingerprint)
+        topics = try c.decodeIfPresent([String].self, forKey: .topics) ?? []
+        confidence = try c.decodeIfPresent(Double.self, forKey: .confidence) ?? 1.0
+        containsSensitiveContent = try c.decodeIfPresent(Bool.self, forKey: .containsSensitiveContent) ?? false
+        provenance = try c.decodeIfPresent(String.self, forKey: .provenance)
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        lastAccessedAt = try c.decodeIfPresent(Date.self, forKey: .lastAccessedAt)
+        accessCount = try c.decodeIfPresent(Int.self, forKey: .accessCount) ?? 0
+        archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
     }
 }
 
@@ -159,6 +215,324 @@ enum AgentMemoryLifetime: String, CaseIterable, Codable, Identifiable {
         case .longTerm:
             return "Long-term"
         }
+    }
+}
+
+enum AgentMemoryScope: String, CaseIterable, Codable, Identifiable {
+    case global
+    case project
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .global:
+            return "Global"
+        case .project:
+            return "Project"
+        }
+    }
+}
+
+struct AgentMemoryRetrievalResult: Equatable {
+    var record: AgentMemoryRecord
+    var score: Double
+    var reasons: [String]
+}
+
+enum AgentMemoryKeywordExtractor {
+    private static let stopWords: Set<String> = [
+        "the", "and", "for", "with", "that", "this", "from", "into", "your", "you",
+        "are", "was", "were", "will", "can", "should", "must", "not", "but", "about",
+        "agent", "memory", "project", "willdeep", "使用", "需要", "这个", "那个", "我们",
+        "你要", "不要", "必须", "可以", "如果", "时候", "项目", "记住"
+    ]
+
+    static func keywords(from text: String, limit: Int = 12) -> [String] {
+        var counts: [String: Int] = [:]
+        for token in tokens(from: text) {
+            guard token.count >= 2, !stopWords.contains(token) else { continue }
+            counts[token, default: 0] += 1
+        }
+        return counts
+            .sorted { lhs, rhs in
+                if lhs.value != rhs.value { return lhs.value > rhs.value }
+                return lhs.key < rhs.key
+            }
+            .prefix(limit)
+            .map(\.key)
+    }
+
+    static func tokens(from text: String) -> [String] {
+        let folded = text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        let separators = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_-")).inverted
+        return folded
+            .components(separatedBy: separators)
+            .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "_-")) }
+            .filter { !$0.isEmpty }
+    }
+}
+
+enum AgentMemorySanitizer {
+    private static let patterns: [String] = [
+        #"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{12,}"#,
+        #"(?i)\b(sk|ak|pk|rk)-[A-Za-z0-9_\-]{16,}"#,
+        #"(?i)\b(api[_-]?key|token|secret|password|authorization)\s*[:=]\s*['"]?[^'"\s]{8,}"#,
+        #"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"#
+    ]
+
+    static func sanitize(_ text: String) -> (text: String, redacted: Bool) {
+        var output = text
+        var redacted = false
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(output.startIndex..<output.endIndex, in: output)
+            if regex.firstMatch(in: output, range: range) != nil {
+                redacted = true
+                output = regex.stringByReplacingMatches(
+                    in: output,
+                    range: range,
+                    withTemplate: "[REDACTED_SECRET]"
+                )
+            }
+        }
+        return (output, redacted)
+    }
+}
+
+enum AgentMemoryEngine {
+    static func projectFingerprint(for rootDirectory: URL?) -> String? {
+        guard let path = rootDirectory?.standardizedFileURL.path, !path.isEmpty else { return nil }
+        return fnv1a64(path)
+    }
+
+    static func retrieve(
+        query: String,
+        records: [AgentMemoryRecord],
+        settings: AgentMemorySettings,
+        rootDirectory: URL?,
+        openedFileURL: URL?,
+        selectedText: String = "",
+        now: Date = Date()
+    ) -> [AgentMemoryRetrievalResult] {
+        guard settings.isMemoryEnabled, settings.autoRetrievalEnabled else { return [] }
+        let projectID = projectFingerprint(for: rootDirectory)
+        let queryText = [
+            query,
+            openedFileURL?.lastPathComponent ?? "",
+            openedFileURL?.pathComponents.suffix(3).joined(separator: " ") ?? "",
+            selectedText
+        ].joined(separator: " ")
+        let queryTokens = Set(AgentMemoryKeywordExtractor.tokens(from: queryText))
+        guard !queryTokens.isEmpty else { return [] }
+
+        return records
+            .map(\.normalized)
+            .filter { !$0.isArchived }
+            .filter { applies($0, projectID: projectID) }
+            .compactMap { record -> AgentMemoryRetrievalResult? in
+                let result = score(record, queryTokens: queryTokens, queryText: queryText, now: now)
+                guard result.score >= settings.similarityThreshold else { return nil }
+                return AgentMemoryRetrievalResult(record: record, score: result.score, reasons: result.reasons)
+            }
+            .sorted { lhs, rhs in
+                if lhs.score != rhs.score { return lhs.score > rhs.score }
+                return lhs.record.updatedAt > rhs.record.updatedAt
+            }
+            .prefix(settings.maxRetrievedMemories)
+            .map { $0 }
+    }
+
+    static func contextBlock(for results: [AgentMemoryRetrievalResult]) -> String? {
+        guard !results.isEmpty else { return nil }
+        var lines = [
+            "Relevant long-term Agent memories:",
+            "Use these as durable user/project context. They may be stale; prefer current files and explicit user instructions when they conflict."
+        ]
+        for (index, result) in results.enumerated() {
+            let record = result.record
+            let topics = record.topics.isEmpty ? "" : " topics=\(record.topics.prefix(5).joined(separator: ","))"
+            let sensitive = record.containsSensitiveContent ? " sensitive=redacted" : ""
+            lines.append(
+                "\(index + 1). [\(record.scope.rawValue) score=\(String(format: "%.2f", result.score))\(topics)\(sensitive)] \(record.content)"
+            )
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    static func candidates(
+        fromUser userText: String,
+        assistantText: String,
+        rootDirectory: URL?,
+        now: Date = Date()
+    ) -> [AgentMemoryRecord] {
+        let projectID = projectFingerprint(for: rootDirectory)
+        let chunks = candidateSentences(from: userText) + candidateSentences(from: assistantText)
+        var seen = Set<String>()
+        return chunks.compactMap { raw in
+            let sanitized = AgentMemorySanitizer.sanitize(raw)
+            let content = sanitized.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard content.count >= 18 else { return nil }
+            let key = normalizedKey(content)
+            guard seen.insert(key).inserted else { return nil }
+            let isProjectScoped = projectID != nil && looksProjectScoped(content)
+            return AgentMemoryRecord(
+                content: content,
+                source: .automatic,
+                lifetime: .longTerm,
+                scope: isProjectScoped ? .project : .global,
+                projectFingerprint: isProjectScoped ? projectID : nil,
+                topics: AgentMemoryKeywordExtractor.keywords(from: content, limit: 8),
+                confidence: confidence(for: content),
+                containsSensitiveContent: sanitized.redacted,
+                provenance: "auto-extracted",
+                createdAt: now,
+                updatedAt: now
+            ).normalized
+        }
+    }
+
+    static func mergedRecords(_ records: [AgentMemoryRecord], now: Date = Date()) -> (records: [AgentMemoryRecord], mergedCount: Int) {
+        var buckets: [String: AgentMemoryRecord] = [:]
+        var mergedCount = 0
+        for record in records.map(\.normalized) {
+            let key = mergeKey(for: record)
+            guard var existing = buckets[key] else {
+                buckets[key] = record
+                continue
+            }
+            mergedCount += 1
+            if record.updatedAt > existing.updatedAt || record.confidence > existing.confidence {
+                existing.content = record.content
+            }
+            existing.updatedAt = max(existing.updatedAt, record.updatedAt)
+            existing.createdAt = min(existing.createdAt, record.createdAt)
+            existing.accessCount += record.accessCount
+            existing.lastAccessedAt = [existing.lastAccessedAt, record.lastAccessedAt].compactMap { $0 }.max()
+            existing.confidence = max(existing.confidence, record.confidence)
+            existing.containsSensitiveContent = existing.containsSensitiveContent || record.containsSensitiveContent
+            existing.topics = AgentMemoryKeywordExtractor.keywords(
+                from: (existing.topics + record.topics).joined(separator: " ") + " " + existing.content,
+                limit: 8
+            )
+            if existing.archivedAt != nil || record.archivedAt != nil {
+                existing.archivedAt = existing.archivedAt == nil || record.archivedAt == nil
+                    ? nil
+                    : max(existing.archivedAt!, record.archivedAt!)
+            }
+            existing.updatedAt = max(existing.updatedAt, now)
+            buckets[key] = existing.normalized
+        }
+        let sorted = buckets.values.sorted { lhs, rhs in
+            if lhs.isArchived != rhs.isArchived { return !lhs.isArchived }
+            return lhs.updatedAt > rhs.updatedAt
+        }
+        return (sorted, mergedCount)
+    }
+
+    private static func applies(_ record: AgentMemoryRecord, projectID: String?) -> Bool {
+        switch record.scope {
+        case .global:
+            return true
+        case .project:
+            return record.projectFingerprint != nil && record.projectFingerprint == projectID
+        }
+    }
+
+    private static func score(
+        _ record: AgentMemoryRecord,
+        queryTokens: Set<String>,
+        queryText: String,
+        now: Date
+    ) -> (score: Double, reasons: [String]) {
+        let recordTokens = Set(AgentMemoryKeywordExtractor.tokens(from: record.content + " " + record.topics.joined(separator: " ")))
+        guard !recordTokens.isEmpty else { return (0, []) }
+        let overlap = queryTokens.intersection(recordTokens)
+        let union = queryTokens.union(recordTokens)
+        var score = Double(overlap.count) / Double(max(1, union.count))
+        var reasons: [String] = []
+        if !overlap.isEmpty {
+            reasons.append("matched \(overlap.prefix(4).joined(separator: ","))")
+        }
+        if queryText.localizedCaseInsensitiveContains(record.content) || record.content.localizedCaseInsensitiveContains(queryText) {
+            score += 0.25
+            reasons.append("phrase")
+        }
+        if record.scope == .project {
+            score += 0.08
+            reasons.append("project")
+        }
+        if record.lifetime == .longTerm {
+            score += 0.04
+        }
+        if record.source == .manual {
+            score += 0.06
+            reasons.append("manual")
+        }
+        if record.accessCount > 0 {
+            score += min(0.08, Double(record.accessCount) * 0.01)
+        }
+        let ageDays = max(0, now.timeIntervalSince(record.updatedAt) / 86_400)
+        score += max(0, 0.06 - min(0.06, ageDays / 365.0 * 0.06))
+        score *= max(0.2, record.confidence)
+        return (min(1, score), reasons.isEmpty ? ["semantic"] : reasons)
+    }
+
+    private static func candidateSentences(from text: String) -> [String] {
+        let markers = [
+            "remember", "记住", "以后", "always", "never", "must", "should",
+            "prefer", "use ", "don't", "不要", "必须", "统一", "规则", "约定"
+        ]
+        return text
+            .components(separatedBy: CharacterSet(charactersIn: "\n。.!?；;"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { sentence in
+                let lower = sentence.lowercased()
+                return markers.contains { lower.contains($0) }
+            }
+            .map { sentence in
+                sentence.count > 260 ? String(sentence.prefix(260)) : sentence
+            }
+    }
+
+    private static func looksProjectScoped(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains("repo")
+            || lower.contains("project")
+            || lower.contains("workspace")
+            || lower.contains("仓库")
+            || lower.contains("项目")
+            || lower.contains("版本")
+            || lower.contains("changelog")
+            || lower.contains("测试")
+    }
+
+    private static func confidence(for text: String) -> Double {
+        let lower = text.lowercased()
+        if lower.contains("记住") || lower.contains("remember") { return 0.95 }
+        if lower.contains("must") || lower.contains("必须") || lower.contains("永远") { return 0.88 }
+        if lower.contains("should") || lower.contains("prefer") || lower.contains("尽量") { return 0.74 }
+        return 0.62
+    }
+
+    private static func mergeKey(for record: AgentMemoryRecord) -> String {
+        "\(record.scope.rawValue):\(record.projectFingerprint ?? "_"):\(normalizedKey(record.content))"
+    }
+
+    private static func normalizedKey(_ text: String) -> String {
+        AgentMemoryKeywordExtractor
+            .tokens(from: text)
+            .prefix(16)
+            .joined(separator: " ")
+    }
+
+    private static func fnv1a64(_ text: String) -> String {
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in text.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 0x100000001b3
+        }
+        return String(hash, radix: 16)
     }
 }
 
@@ -233,29 +607,85 @@ final class AgentMemoryState: ObservableObject {
         memories.filter(\.isArchived)
     }
 
-    func addMemory(content: String, source: AgentMemorySource = .manual, lifetime: AgentMemoryLifetime = .longTerm) {
+    func addMemory(
+        content: String,
+        source: AgentMemorySource = .manual,
+        lifetime: AgentMemoryLifetime = .longTerm,
+        scope: AgentMemoryScope = .global,
+        rootDirectory: URL? = nil
+    ) {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let now = Date()
+        let projectID = scope == .project ? AgentMemoryEngine.projectFingerprint(for: rootDirectory) : nil
         memories.insert(
             AgentMemoryRecord(
                 content: trimmed,
                 source: source,
                 lifetime: lifetime,
+                scope: projectID == nil && scope == .project ? .global : scope,
+                projectFingerprint: projectID,
+                topics: AgentMemoryKeywordExtractor.keywords(from: trimmed, limit: 8),
+                confidence: source == .manual ? 1.0 : 0.7,
                 createdAt: now,
                 updatedAt: now
-            ),
+            ).normalized,
             at: 0
         )
     }
 
-    func updateMemory(id: AgentMemoryRecord.ID, content: String, lifetime: AgentMemoryLifetime) {
+    func addMemory(_ record: AgentMemoryRecord) {
+        let normalized = record.normalized
+        guard !normalized.content.isEmpty else { return }
+        memories.insert(normalized, at: 0)
+        mergeDuplicateMemories()
+    }
+
+    func addAutomaticMemories(
+        fromUser userText: String,
+        assistantText: String,
+        rootDirectory: URL?,
+        now: Date = Date()
+    ) {
+        guard settings.normalized.isMemoryEnabled, settings.normalized.autoSummaryEnabled else { return }
+        let candidates = AgentMemoryEngine.candidates(
+            fromUser: userText,
+            assistantText: assistantText,
+            rootDirectory: rootDirectory,
+            now: now
+        )
+        guard !candidates.isEmpty else { return }
+        memories = (candidates + memories).deduplicatedByMemoryID()
+        mergeDuplicateMemories(now: now)
+    }
+
+    func updateMemory(
+        id: AgentMemoryRecord.ID,
+        content: String,
+        lifetime: AgentMemoryLifetime,
+        scope: AgentMemoryScope? = nil,
+        rootDirectory: URL? = nil
+    ) {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
               let index = memories.firstIndex(where: { $0.id == id }) else { return }
         memories[index].content = trimmed
         memories[index].lifetime = lifetime
+        if let scope {
+            memories[index].scope = scope
+            switch scope {
+            case .global:
+                memories[index].projectFingerprint = nil
+            case .project:
+                memories[index].projectFingerprint = AgentMemoryEngine.projectFingerprint(for: rootDirectory)
+                    ?? memories[index].projectFingerprint
+                if memories[index].projectFingerprint == nil {
+                    memories[index].scope = .global
+                }
+            }
+        }
         memories[index].updatedAt = Date()
+        memories[index] = memories[index].normalized
     }
 
     func archiveMemory(id: AgentMemoryRecord.ID) {
@@ -288,6 +718,46 @@ final class AgentMemoryState: ObservableObject {
             .filter { $0.matches(query) }
     }
 
+    func retrieveMemories(
+        query: String,
+        rootDirectory: URL?,
+        openedFileURL: URL?,
+        selectedText: String = "",
+        now: Date = Date()
+    ) -> [AgentMemoryRetrievalResult] {
+        let results = AgentMemoryEngine.retrieve(
+            query: query,
+            records: memories,
+            settings: settings.normalized,
+            rootDirectory: rootDirectory,
+            openedFileURL: openedFileURL,
+            selectedText: selectedText,
+            now: now
+        )
+        markAccessed(ids: results.map(\.record.id), now: now)
+        return results
+    }
+
+    func markAccessed(ids: [AgentMemoryRecord.ID], now: Date = Date()) {
+        guard !ids.isEmpty else { return }
+        let idSet = Set(ids)
+        var changed = false
+        for index in memories.indices where idSet.contains(memories[index].id) {
+            memories[index].lastAccessedAt = now
+            memories[index].accessCount += 1
+            changed = true
+        }
+        if changed {
+            AgentMemorySettingsStore.saveRecords(memories)
+            objectWillChange.send()
+        }
+    }
+
+    func mergeDuplicateMemories(now: Date = Date()) {
+        let merged = AgentMemoryEngine.mergedRecords(memories, now: now)
+        memories = merged.records
+    }
+
     func runMaintenance(preview: Bool = false, now: Date = Date(), calendar: Calendar = .current) {
         let normalizedSettings = settings.normalized
         var nextRecords = memories
@@ -295,6 +765,7 @@ final class AgentMemoryState: ObservableObject {
         let archiveCutoff = calendar.date(byAdding: .day, value: -normalizedSettings.archiveRetentionDays, to: now) ?? now
         var archivedCount = 0
         var removedExpiredCount = 0
+        var mergedCount = 0
 
         if !preview {
             nextRecords = nextRecords.compactMap { record in
@@ -312,6 +783,9 @@ final class AgentMemoryState: ObservableObject {
                 }
                 return copy
             }
+            let merged = AgentMemoryEngine.mergedRecords(nextRecords, now: now)
+            nextRecords = merged.records
+            mergedCount = merged.mergedCount
             memories = nextRecords
         } else {
             archivedCount = nextRecords.filter {
@@ -321,6 +795,7 @@ final class AgentMemoryState: ObservableObject {
                 guard let archivedAt = $0.archivedAt else { return false }
                 return archivedAt < archiveCutoff
             }.count
+            mergedCount = AgentMemoryEngine.mergedRecords(nextRecords, now: now).mergedCount
         }
 
         settings.lastMaintenanceRun = AgentMemoryMaintenanceRun(
@@ -329,9 +804,16 @@ final class AgentMemoryState: ObservableObject {
             inspectedCount: nextRecords.count,
             archivedCount: archivedCount,
             removedExpiredCount: removedExpiredCount,
-            mergedCount: 0,
+            mergedCount: mergedCount,
             inputTokens: 0,
             outputTokens: 0
         )
+    }
+}
+
+private extension Array where Element == AgentMemoryRecord {
+    func deduplicatedByMemoryID() -> [AgentMemoryRecord] {
+        var seen = Set<AgentMemoryRecord.ID>()
+        return filter { seen.insert($0.id).inserted }
     }
 }

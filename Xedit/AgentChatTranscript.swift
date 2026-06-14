@@ -140,7 +140,7 @@ struct AgentChatTranscript: View {
                                     ForEach(segments) { segment in
                                         AgentToolCallGroup(
                                             calls: segment.calls,
-                                            headline: segment.kind.groupTitle(segment.count),
+                                            headline: segment.title,
                                             headlineIcon: segment.kind.groupIcon
                                         )
                                     }
@@ -175,6 +175,7 @@ struct AgentChatTranscript: View {
                         if runningTasks > 0 {
                             AgentRunningTasksRow(
                                 count: runningTasks,
+                                isAgentTurnActive: appState.isAgentResponding,
                                 detail: appState.agentRunningTaskSummary
                             )
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
@@ -184,18 +185,17 @@ struct AgentChatTranscript: View {
                         }
                     }
 
-                    ForEach(Array(appState.agentQueuedMessages.enumerated()), id: \.element.id) { offset, queued in
-                        QueuedMessageRow(
-                            index: offset,
-                            message: queued,
+                    if !appState.agentQueuedMessages.isEmpty {
+                        QueuedMessagesList(
+                            messages: appState.agentQueuedMessages,
                             baseFontSize: appState.agentChatBaseFontSize,
-                            onEdit: {
+                            onEdit: { queued in
                                 appState.editQueuedAgentMessage(id: queued.id)
                             },
-                            onSendNow: {
+                            onSendNow: { queued in
                                 appState.sendQueuedAgentMessageNow(id: queued.id)
                             },
-                            onRemove: {
+                            onRemove: { queued in
                                 appState.removeQueuedAgentMessage(id: queued.id)
                             }
                         )

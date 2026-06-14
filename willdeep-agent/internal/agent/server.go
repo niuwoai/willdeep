@@ -538,8 +538,14 @@ func writeError(w http.ResponseWriter, status int, message string) {
 
 func writeAPI(w http.ResponseWriter, status int, response APIResponse) {
 	w.Header().Set("Content-Type", "application/json")
+	writeVersionHeaders(w)
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(response)
+}
+
+func writeVersionHeaders(w http.ResponseWriter) {
+	w.Header().Set("X-App-Version", Version)
+	w.Header().Set("X-Server-Version", Version)
 }
 
 func writeSSE(w io.Writer, event string, value any) error {

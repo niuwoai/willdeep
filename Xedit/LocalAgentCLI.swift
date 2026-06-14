@@ -116,6 +116,17 @@ struct LocalAgentCLI: Identifiable, Equatable {
             integration: .directTool("cursor_agent")
         ),
         LocalAgentCLI(
+            id: "cline-cli",
+            displayName: "Cline CLI",
+            commandName: "cline",
+            commonPaths: [
+                "\(NSHomeDirectory())/.local/bin/cline",
+                "/opt/homebrew/bin/cline",
+                "/usr/local/bin/cline"
+            ],
+            integration: .directTool("cline_cli")
+        ),
+        LocalAgentCLI(
             id: "goose",
             displayName: "Goose",
             commandName: "goose",

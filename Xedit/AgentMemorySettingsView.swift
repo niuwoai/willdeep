@@ -15,11 +15,13 @@ struct AgentMemorySettingsView: View {
 
     @State private var newMemoryContent = ""
     @State private var newMemoryLifetime: AgentMemoryLifetime = .longTerm
+    @State private var newMemoryScope: AgentMemoryScope = .global
     @State private var searchQuery = ""
     @State private var includeArchived = false
     @State private var editingMemoryID: UUID?
     @State private var editingMemoryContent = ""
     @State private var editingMemoryLifetime: AgentMemoryLifetime = .longTerm
+    @State private var editingMemoryScope: AgentMemoryScope = .global
     @State private var exportStatus = ""
 
     private var visibleMemories: [AgentMemoryRecord] {
@@ -219,21 +221,46 @@ struct AgentMemorySettingsView: View {
                             .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
                     )
 
-                Picker(L10n.Settings.Memory.lifetimeLabel, selection: $newMemoryLifetime) {
-                    ForEach(AgentMemoryLifetime.allCases) { lifetime in
-                        Text(lifetime.displayName).tag(lifetime)
+                HStack {
+                    Picker(L10n.Settings.Memory.lifetimeLabel, selection: $newMemoryLifetime) {
+                        ForEach(AgentMemoryLifetime.allCases) { lifetime in
+                            Text(lifetime.displayName).tag(lifetime)
+                        }
+                    }
+
+                    Picker(L10n.Settings.Memory.scopeLabel, selection: $newMemoryScope) {
+                        ForEach(AgentMemoryScope.allCases) { scope in
+                            Text(scope.displayName)
+                                .tag(scope)
+                                .disabled(scope == .project && appState.rootDirectory == nil)
+                        }
                     }
                 }
 
+                if newMemoryScope == .project, appState.rootDirectory == nil {
+                    Text(L10n.Settings.Memory.projectScopeRequiresWorkspace)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Button {
-                    memoryState.addMemory(content: newMemoryContent, lifetime: newMemoryLifetime)
+                    memoryState.addMemory(
+                        content: newMemoryContent,
+                        lifetime: newMemoryLifetime,
+                        scope: newMemoryScope,
+                        rootDirectory: appState.rootDirectory
+                    )
                     newMemoryContent = ""
                     newMemoryLifetime = .longTerm
+                    newMemoryScope = .global
                 } label: {
                     Label(L10n.Settings.Memory.addMemoryButton, systemImage: "plus")
                         .frame(maxWidth: .infinity)
                 }
-                .disabled(newMemoryContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(
+                    newMemoryContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || (newMemoryScope == .project && appState.rootDirectory == nil)
+                )
             }
 
             Section(L10n.Settings.Memory.searchSection) {
@@ -380,6 +407,15 @@ struct AgentMemorySettingsView: View {
                     }
                     .frame(width: 180)
 
+                    Picker(L10n.Settings.Memory.scopeLabel, selection: $editingMemoryScope) {
+                        ForEach(AgentMemoryScope.allCases) { scope in
+                            Text(scope.displayName)
+                                .tag(scope)
+                                .disabled(scope == .project && appState.rootDirectory == nil && memory.projectFingerprint == nil)
+                        }
+                    }
+                    .frame(width: 180)
+
                     Spacer()
                     Button(L10n.Settings.Memory.cancelButton) {
                         stopEditing()
@@ -388,11 +424,16 @@ struct AgentMemorySettingsView: View {
                         memoryState.updateMemory(
                             id: memory.id,
                             content: editingMemoryContent,
-                            lifetime: editingMemoryLifetime
+                            lifetime: editingMemoryLifetime,
+                            scope: editingMemoryScope,
+                            rootDirectory: appState.rootDirectory
                         )
                         stopEditing()
                     }
-                    .disabled(editingMemoryContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(
+                        editingMemoryContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || (editingMemoryScope == .project && appState.rootDirectory == nil && memory.projectFingerprint == nil)
+                    )
                 }
             } else {
                 HStack(alignment: .top, spacing: 10) {
@@ -402,6 +443,11 @@ struct AgentMemorySettingsView: View {
                         HStack(spacing: 8) {
                             tag(memory.source.displayName)
                             tag(memory.lifetime.displayName)
+                            tag(memory.scope.displayName)
+                            tag(L10n.Settings.Memory.confidenceTag("\(Int(memory.confidence * 100))"))
+                            if memory.containsSensitiveContent {
+                                tag(L10n.Settings.Memory.sensitiveTag)
+                            }
                             Text(formatDate(memory.updatedAt))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -413,6 +459,27 @@ struct AgentMemorySettingsView: View {
                             if memory.isArchived {
                                 tag(L10n.Settings.Memory.archivedTag)
                             }
+                        }
+                        if !memory.topics.isEmpty {
+                            Text(L10n.Settings.Memory.topicsLine(memory.topics.prefix(8).joined(separator: ", ")))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                        if let provenance = memory.provenance {
+                            Text(L10n.Settings.Memory.provenanceLine(provenance))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        if let projectFingerprint = memory.projectFingerprint {
+                            Text(L10n.Settings.Memory.projectFingerprintLine(shortFingerprint(projectFingerprint)))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        if let lastAccessedAt = memory.lastAccessedAt {
+                            Text(L10n.Settings.Memory.lastAccessedLine(formatDate(lastAccessedAt)))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
 
@@ -477,12 +544,14 @@ struct AgentMemorySettingsView: View {
         editingMemoryID = memory.id
         editingMemoryContent = memory.content
         editingMemoryLifetime = memory.lifetime
+        editingMemoryScope = memory.scope
     }
 
     private func stopEditing() {
         editingMemoryID = nil
         editingMemoryContent = ""
         editingMemoryLifetime = .longTerm
+        editingMemoryScope = .global
     }
 
     private func exportMemorySnapshot() {
@@ -534,6 +603,10 @@ struct AgentMemorySettingsView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm"
         return formatter.string(from: date)
+    }
+
+    private func shortFingerprint(_ fingerprint: String) -> String {
+        fingerprint.count > 12 ? String(fingerprint.prefix(12)) : fingerprint
     }
 }
 

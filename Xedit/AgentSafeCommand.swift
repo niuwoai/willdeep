@@ -109,6 +109,20 @@ enum SafeCommand {
         "read", "test", "[", "[[", "seq", "true", "false", "sleep", "expr"
     ]
 
+    /// Low-risk *write* commands that only create things inside the
+    /// workspace — make a directory, touch an empty/temp file. They mutate
+    /// the filesystem (so they're not in `alwaysSafeFirstTokens`), but carry
+    /// no delete / escalate / network semantics, so we auto-approve them to
+    /// stop the agent stalling on a confirm card for `mkdir -p build/`.
+    /// Sensitive paths (`~/.ssh`, `.env`, …) and out-of-workspace targets are
+    /// still gated by AgentSandboxPolicy's path checks, which escalate
+    /// independently of this classifier. NOTE: every token here must also be
+    /// in AgentSandboxPolicy.lowRiskWriteHeads, otherwise the sandbox treats
+    /// the command as read-only and blocks the write. (Added 1.78.0-rc15.)
+    static let safeWorkspaceCreateTokens: Set<String> = [
+        "mkdir", "touch", "mktemp"
+    ]
+
     /// Commands that COULD be safe but whose argument shape matters.
     /// `git`, `find`, `xargs`, etc.: dispatched to a per-tool checker.
     static let conditionalFirstTokens: Set<String> = [
@@ -174,7 +188,7 @@ enum SafeCommand {
     /// 关键字后递归分类剩余部分，让段的判定继承真实命令的判定。
     /// `!`（取反）同理。
     private static let prefixControlKeywords: Set<String> = [
-        "do", "then", "else", "elif", "if", "while", "until", "!"
+        "do", "then", "else", "elif", "if", "while", "until", "time", "!"
     ]
 
     /// 纯块闭合/无负载关键字——出现即整段，没东西可执行。
@@ -296,6 +310,9 @@ enum SafeCommand {
         if alwaysSafeFirstTokens.contains(firstToken) {
             return .alwaysSafe
         }
+        if safeWorkspaceCreateTokens.contains(firstToken) {
+            return .alwaysSafe
+        }
         if conditionalFirstTokens.contains(firstToken) {
             return classifyConditional(firstToken: firstToken, tokens: tokens)
         }
@@ -311,6 +328,10 @@ enum SafeCommand {
             return classifyGit(tokens: tokens)
         case "find":
             return classifyFind(tokens: tokens)
+        case "go":
+            return classifyGo(tokens: tokens)
+        case "npm", "pnpm", "yarn":
+            return classifyPackageManager(firstToken: firstToken, tokens: tokens)
         case "xargs":
             // xargs by itself wraps another command — defer to judgment.
             return .needsJudgment
@@ -395,6 +416,46 @@ enum SafeCommand {
             return .alwaysDangerous
         }
         return .alwaysSafe
+    }
+
+    private static func classifyGo(tokens: [String]) -> CommandSafety {
+        guard tokens.count >= 2 else { return .alwaysSafe } // bare `go` prints help
+        let subcommand = tokens[1].lowercased()
+        let safeWorkspaceCommands: Set<String> = [
+            "build", "test", "run", "list", "vet", "fmt", "generate",
+            "version", "env", "help", "doc"
+        ]
+        guard safeWorkspaceCommands.contains(subcommand) else {
+            return .needsJudgment
+        }
+        if subcommand == "env" {
+            let writeFlags: Set<String> = ["-w", "-u"]
+            if tokens.dropFirst(2).contains(where: { writeFlags.contains($0.lowercased()) }) {
+                return .needsJudgment
+            }
+        }
+        return .alwaysSafe
+    }
+
+    private static func classifyPackageManager(firstToken: String, tokens: [String]) -> CommandSafety {
+        guard tokens.count >= 2 else { return .alwaysSafe } // help/usage
+        let lowered = tokens.map { $0.lowercased() }
+        let safeScripts: Set<String> = [
+            "dev", "build", "test", "start", "preview", "lint",
+            "format", "typecheck", "check"
+        ]
+
+        if firstToken == "yarn" {
+            if lowered.count >= 3, lowered[1] == "run" {
+                return safeScripts.contains(lowered[2]) ? .alwaysSafe : .needsJudgment
+            }
+            return safeScripts.contains(lowered[1]) ? .alwaysSafe : .needsJudgment
+        }
+
+        guard lowered.count >= 3, lowered[1] == "run" else {
+            return .needsJudgment
+        }
+        return safeScripts.contains(lowered[2]) ? .alwaysSafe : .needsJudgment
     }
 
     /// Minimal POSIX-ish tokenizer: splits on whitespace outside quotes.

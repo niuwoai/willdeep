@@ -28,6 +28,18 @@ struct AgentRemoteRuntimeTests {
         #expect(session.workspaceLocation == .local(path: "/tmp/legacy-workspace"))
     }
 
+    @Test("remote workspace sessions get a real sidebar group key")
+    func remoteWorkspaceSessionSidebarGroupKey() {
+        let runtimeID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let session = AgentSession(
+            workspaceLocation: .remote(runtimeID: runtimeID, path: "/srv/apps/xedit/")
+        )
+
+        #expect(session.workspaceRootPath == nil)
+        #expect(session.workspaceSidebarGroupKey == "remote:11111111-1111-1111-1111-111111111111:/srv/apps/xedit")
+        #expect(session.workspaceSidebarGroupKey != AgentSession.noWorkspaceSidebarGroupKey)
+    }
+
     @Test("runtime platform and architecture parsing covers supported remote shapes")
     func platformAndArchParsing() {
         #expect(RuntimePlatform.parse("Darwin") == .macOS)
@@ -69,6 +81,22 @@ struct AgentRemoteRuntimeTests {
         #expect(command.contains("'-i' '/Users/me/.ssh/build key'"))
         #expect(command.contains("'dev@build.example.com'"))
         #expect(command.contains("cd '\\''/srv/my app'\\''"))
+    }
+
+    @Test("ssh backend expands tilde identity file paths before launching ssh")
+    func sshCommandConstructionExpandsTildeIdentityPath() {
+        let runtime = RuntimeDescriptor(
+            displayName: "Build Box",
+            host: "build.example.com",
+            username: "dev",
+            identityFilePath: "~/.ssh/id_rsa",
+            defaultWorkspacePath: "/srv/app"
+        )
+        let backend = SSHRuntimeBackend(descriptor: runtime)
+        let command = backend.sshShellCommand(remoteCommand: "true")
+        let expandedPath = "\(NSHomeDirectory())/.ssh/id_rsa"
+        #expect(command.contains("'-i' '\(expandedPath)'"))
+        #expect(!command.contains("'~/.ssh/id_rsa'"))
     }
 
     @Test("proxy credentials are redacted before persistence")

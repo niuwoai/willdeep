@@ -496,13 +496,22 @@ enum L10n {
     enum QueuedMessage {
         static let actionsButton = String(localized: "queued-message.actions-button", defaultValue: "Queued message actions")
         static let actionsButtonHelp = String(localized: "queued-message.actions-button.help", defaultValue: "Show queued message actions")
-        static let closeQueueButton = String(localized: "queued-message.close-queue-button", defaultValue: "Close queue")
-        static let closeQueueButtonHelp = String(localized: "queued-message.close-queue-button.help", defaultValue: "Remove this message from the queue")
+        static let deleteButton = String(localized: "queued-message.delete-button", defaultValue: "Delete")
+        static let deleteButtonHelp = String(localized: "queued-message.delete-button.help", defaultValue: "Delete this queued message")
         static let editButton = String(localized: "queued-message.edit-button", defaultValue: "Edit queued message")
         static let editButtonHelp = String(localized: "queued-message.edit-button.help", defaultValue: "Edit this queued message in the composer")
+        static let emptyPreview = String(localized: "queued-message.empty-preview", defaultValue: "Queued message")
+        static func imageCount(_ a1: String) -> String {
+            let template = String(localized: "queued-message.image-count", defaultValue: "%@ images")
+            return String(format: template, a1)
+        }
         static let label = String(localized: "queued-message.label", defaultValue: "Queued")
         static let sendNowButton = String(localized: "queued-message.send-now-button", defaultValue: "Send queued message now")
         static let sendNowButtonHelp = String(localized: "queued-message.send-now-button.help", defaultValue: "Send this queued message now")
+        static func textAttachmentCount(_ a1: String) -> String {
+            let template = String(localized: "queued-message.text-attachment-count", defaultValue: "%@ text attachments")
+            return String(format: template, a1)
+        }
     }
 
     enum QuickOpen {
@@ -535,6 +544,10 @@ enum L10n {
         static let sessionRowPinTooltip = String(localized: "sidebar.session-row.pin-tooltip", defaultValue: "Pin")
         static let sessionRowUnarchiveTooltip = String(localized: "sidebar.session-row.unarchive-tooltip", defaultValue: "Unarchive")
         static let sessionRowUnpinTooltip = String(localized: "sidebar.session-row.unpin-tooltip", defaultValue: "Unpin")
+        static func sessionUpdatedTooltip(_ a1: String) -> String {
+            let template = String(localized: "sidebar.session-row.updated-tooltip", defaultValue: "Updated %@ ago")
+            return String(format: template, a1)
+        }
         static let workspaceHeader = String(localized: "sidebar.workspace-header", defaultValue: "Workspaces")
         static let workspaceHeaderOpenTooltip = String(localized: "sidebar.workspace-header.open-tooltip", defaultValue: "Open another folder as a new workspace")
         static let workspaceMenuNewChat = String(localized: "sidebar.workspace-menu.new-chat", defaultValue: "New Chat in this Workspace")
@@ -623,11 +636,13 @@ enum L10n {
         static let tabWorkspace = String(localized: "settings.tab.workspace", defaultValue: "Workspace")
         static let tabAgent = String(localized: "settings.tab.agent", defaultValue: "AI Providers")
         static let tabMemory = String(localized: "settings.tab.memory", defaultValue: "Memory")
+        static let tabRules = String(localized: "settings.tab.rules", defaultValue: "Rules")
         static let tabSkills = String(localized: "settings.tab.skills", defaultValue: "Skills")
         static let tabMcp = String(localized: "settings.tab.mcp", defaultValue: "MCP")
         static let tabTools = String(localized: "settings.tab.tools", defaultValue: "Tools")
         static let tabLocalAgents = String(localized: "settings.tab.local-agents", defaultValue: "Local Agents")
         static let tabRemoteRuntimes = String(localized: "settings.tab.remote-runtimes", defaultValue: "Runtimes")
+        static let tabMobileGateway = String(localized: "settings.tab.mobile-gateway", defaultValue: "Mobile Gateway")
 
         static let sectionTypography = String(localized: "settings.section.typography", defaultValue: "Typography")
         static let sectionColorStyle = String(localized: "settings.section.color-style", defaultValue: "Color Style")
@@ -751,6 +766,64 @@ enum L10n {
             }
         }
 
+        enum MobileGateway {
+            static let controlSection = String(localized: "settings.mobile-gateway.control-section", defaultValue: "LAN Access")
+            static let listenSection = String(localized: "settings.mobile-gateway.listen-section", defaultValue: "Gateway")
+            static let pairingSection = String(localized: "settings.mobile-gateway.pairing-section", defaultValue: "Pairing")
+            static let devicesSection = String(localized: "settings.mobile-gateway.devices-section", defaultValue: "Paired Devices")
+            static let enableToggle = String(localized: "settings.mobile-gateway.enable-toggle", defaultValue: "Enable LAN Mobile Gateway")
+            static let allowPairingToggle = String(localized: "settings.mobile-gateway.allow-pairing-toggle", defaultValue: "Allow new device pairing")
+            static let statusLabel = String(localized: "settings.mobile-gateway.status", defaultValue: "Status")
+            static let addressLabel = String(localized: "settings.mobile-gateway.address", defaultValue: "LAN address")
+            static let protocolLabel = String(localized: "settings.mobile-gateway.protocol", defaultValue: "Protocol")
+            static let desktopPeerLabel = String(localized: "settings.mobile-gateway.desktop-peer", defaultValue: "Desktop peer")
+            static let pairingBaseURLLabel = String(localized: "settings.mobile-gateway.pairing-base-url", defaultValue: "Pairing URL")
+            static let expiresLabel = String(localized: "settings.mobile-gateway.expires", defaultValue: "Expires")
+            static let hostPrompt = String(localized: "settings.mobile-gateway.host-prompt", defaultValue: "0.0.0.0")
+            static let desktopNamePrompt = String(localized: "settings.mobile-gateway.desktop-name-prompt", defaultValue: "Desktop name shown on Android")
+            static let executablePathPrompt = String(localized: "settings.mobile-gateway.executable-path-prompt", defaultValue: "Optional willdeep-agent executable path")
+            static let startButton = String(localized: "settings.mobile-gateway.start", defaultValue: "Start")
+            static let stopButton = String(localized: "settings.mobile-gateway.stop", defaultValue: "Stop")
+            static let restartButton = String(localized: "settings.mobile-gateway.restart", defaultValue: "Apply & Restart")
+            static let refreshButton = String(localized: "settings.mobile-gateway.refresh", defaultValue: "Refresh")
+            static let copyPayloadButton = String(localized: "settings.mobile-gateway.copy-payload", defaultValue: "Copy pairing payload")
+            static let refreshPairingButton = String(localized: "settings.mobile-gateway.refresh-pairing", defaultValue: "Refresh pairing QR")
+            static let revokeButton = String(localized: "settings.mobile-gateway.revoke", defaultValue: "Revoke")
+            static let notRunning = String(localized: "settings.mobile-gateway.not-running", defaultValue: "Not running")
+            static let connected = String(localized: "settings.mobile-gateway.connected", defaultValue: "Connected")
+            static let disconnected = String(localized: "settings.mobile-gateway.disconnected", defaultValue: "Disconnected")
+            static let stopped = String(localized: "settings.mobile-gateway.stopped", defaultValue: "Stopped")
+            static let starting = String(localized: "settings.mobile-gateway.starting", defaultValue: "Starting...")
+            static let running = String(localized: "settings.mobile-gateway.running", defaultValue: "Running")
+            static let noPairingPayload = String(localized: "settings.mobile-gateway.no-pairing-payload", defaultValue: "Pairing is unavailable. Refresh pairing after enabling new device pairing.")
+            static let startToPair = String(localized: "settings.mobile-gateway.start-to-pair", defaultValue: "Start the gateway to show a QR pairing code.")
+            static let noDevices = String(localized: "settings.mobile-gateway.no-devices", defaultValue: "No Android devices are paired yet.")
+            static let revoked = String(localized: "settings.mobile-gateway.revoked", defaultValue: "Revoked")
+            static let qrAccessibilityLabel = String(localized: "settings.mobile-gateway.qr-accessibility-label", defaultValue: "Mobile Gateway pairing QR code")
+            static let qrUnavailable = String(localized: "settings.mobile-gateway.qr-unavailable", defaultValue: "QR code unavailable")
+            static let listenDescription = String(localized: "settings.mobile-gateway.listen-description", defaultValue: "The gateway listens only after you enable it. Android connects over the local network; Agent execution, tools, patches, and file access still run through the Mac app.")
+            static func portLabel(_ a1: String) -> String {
+                let template = String(localized: "settings.mobile-gateway.port", defaultValue: "Port %@")
+                return String(format: template, a1)
+            }
+            static func resolvedExecutable(_ a1: String) -> String {
+                let template = String(localized: "settings.mobile-gateway.resolved-executable", defaultValue: "Using %@")
+                return String(format: template, a1)
+            }
+            static func failed(_ a1: String) -> String {
+                let template = String(localized: "settings.mobile-gateway.failed", defaultValue: "Failed: %@")
+                return String(format: template, a1)
+            }
+            static func lastConnected(_ a1: String) -> String {
+                let template = String(localized: "settings.mobile-gateway.last-connected", defaultValue: "Last connected %@")
+                return String(format: template, a1)
+            }
+            static func createdAt(_ a1: String) -> String {
+                let template = String(localized: "settings.mobile-gateway.created-at", defaultValue: "Paired %@")
+                return String(format: template, a1)
+            }
+        }
+
         enum RemoteRuntimes {
             static let listSection = String(localized: "settings.remote-runtimes.list-section", defaultValue: "Remote Runtimes")
             static let empty = String(localized: "settings.remote-runtimes.empty", defaultValue: "No remote runtimes configured.")
@@ -760,19 +833,28 @@ enum L10n {
             static let newDaemonRuntimeDefaultName = String(localized: "settings.remote-runtimes.new-daemon-default-name", defaultValue: "New Daemon Runtime")
             static let connectionSection = String(localized: "settings.remote-runtimes.connection-section", defaultValue: "SSH Connection")
             static let displayNameLabel = String(localized: "settings.remote-runtimes.display-name", defaultValue: "Display name")
+            static let displayNamePrompt = String(localized: "settings.remote-runtimes.display-name.prompt", defaultValue: "Name shown in the runtime list")
             static let transportLabel = String(localized: "settings.remote-runtimes.transport", defaultValue: "Transport")
             static let sshTransportLabel = String(localized: "settings.remote-runtimes.transport.ssh", defaultValue: "SSH")
             static let daemonTransportLabel = String(localized: "settings.remote-runtimes.transport.daemon", defaultValue: "Daemon")
             static let hostLabel = String(localized: "settings.remote-runtimes.host", defaultValue: "Host")
+            static let hostPrompt = String(localized: "settings.remote-runtimes.host.prompt", defaultValue: "example.com or SSH config host")
             static let usernameLabel = String(localized: "settings.remote-runtimes.username", defaultValue: "Username")
+            static let usernamePrompt = String(localized: "settings.remote-runtimes.username.prompt", defaultValue: "Remote login user")
+            static let portInputLabel = String(localized: "settings.remote-runtimes.port-input", defaultValue: "Port")
+            static let portPrompt = String(localized: "settings.remote-runtimes.port.prompt", defaultValue: "22")
             static func portLabel(_ a1: String) -> String {
                 let template = String(localized: "settings.remote-runtimes.port", defaultValue: "Port %@")
                 return String(format: template, a1)
             }
             static let identityFileLabel = String(localized: "settings.remote-runtimes.identity-file", defaultValue: "SSH identity file path (optional)")
+            static let identityFilePrompt = String(localized: "settings.remote-runtimes.identity-file.prompt", defaultValue: "~/.ssh/id_rsa")
             static let daemonURLLabel = String(localized: "settings.remote-runtimes.daemon-url", defaultValue: "Daemon URL")
+            static let daemonURLPrompt = String(localized: "settings.remote-runtimes.daemon-url.prompt", defaultValue: "http://127.0.0.1:8765")
             static let daemonTokenLabel = String(localized: "settings.remote-runtimes.daemon-token", defaultValue: "Daemon token (stored in Keychain)")
+            static let daemonTokenPrompt = String(localized: "settings.remote-runtimes.daemon-token.prompt", defaultValue: "Paste daemon token")
             static let workspacePathLabel = String(localized: "settings.remote-runtimes.workspace-path", defaultValue: "Remote workspace path")
+            static let workspacePathPrompt = String(localized: "settings.remote-runtimes.workspace-path.prompt", defaultValue: "/path/to/workspace")
             static let sshDescription = String(localized: "settings.remote-runtimes.ssh-description", defaultValue: "Uses the system ssh client with BatchMode authentication. Configure hosts in your normal SSH config or provide an optional identity-file path; WillDeep stores only the path, never private key contents.")
             static let probeSection = String(localized: "settings.remote-runtimes.probe-section", defaultValue: "Probe")
             static let platformLabel = String(localized: "settings.remote-runtimes.platform", defaultValue: "Platform")
@@ -1070,6 +1152,8 @@ enum L10n {
             static let manualLabel = String(localized: "settings.memory.manual", defaultValue: "Manual")
             static let addMemorySection = String(localized: "settings.memory.add-memory-section", defaultValue: "Add Memory")
             static let lifetimeLabel = String(localized: "settings.memory.lifetime", defaultValue: "Lifetime")
+            static let scopeLabel = String(localized: "settings.memory.scope", defaultValue: "Scope")
+            static let projectScopeRequiresWorkspace = String(localized: "settings.memory.project-scope-requires-workspace", defaultValue: "Open a workspace before saving a project-scoped memory.")
             static let addMemoryButton = String(localized: "settings.memory.add-memory", defaultValue: "Add memory")
             static let searchSection = String(localized: "settings.memory.search-section", defaultValue: "Search Memories")
             static let searchPlaceholder = String(localized: "settings.memory.search-placeholder", defaultValue: "Search by text...")
@@ -1104,6 +1188,27 @@ enum L10n {
                 let template = String(localized: "settings.memory.used-x-times", defaultValue: "Used %@x")
                 return String(format: template, a1)
             }
+            static func confidenceTag(_ a1: String) -> String {
+                let template = String(localized: "settings.memory.confidence-tag", defaultValue: "%@%% confidence")
+                return String(format: template, a1)
+            }
+            static let sensitiveTag = String(localized: "settings.memory.sensitive-tag", defaultValue: "Sensitive redacted")
+            static func topicsLine(_ a1: String) -> String {
+                let template = String(localized: "settings.memory.topics-line", defaultValue: "Topics: %@")
+                return String(format: template, a1)
+            }
+            static func provenanceLine(_ a1: String) -> String {
+                let template = String(localized: "settings.memory.provenance-line", defaultValue: "Provenance: %@")
+                return String(format: template, a1)
+            }
+            static func projectFingerprintLine(_ a1: String) -> String {
+                let template = String(localized: "settings.memory.project-fingerprint-line", defaultValue: "Project fingerprint: %@")
+                return String(format: template, a1)
+            }
+            static func lastAccessedLine(_ a1: String) -> String {
+                let template = String(localized: "settings.memory.last-accessed-line", defaultValue: "Last retrieved: %@")
+                return String(format: template, a1)
+            }
             static let archivedTag = String(localized: "settings.memory.archived-tag", defaultValue: "Archived")
             static let editTooltip = String(localized: "settings.memory.edit-tooltip", defaultValue: "Edit memory")
             static let restoreTooltip = String(localized: "settings.memory.restore-tooltip", defaultValue: "Restore memory")
@@ -1114,6 +1219,33 @@ enum L10n {
             static let exportPanelTitle = String(localized: "settings.memory.export-panel-title", defaultValue: "Export Memory Snapshot")
             static func exportedTo(_ a1: String) -> String {
                 let template = String(localized: "settings.memory.exported-to", defaultValue: "Exported to %@.")
+                return String(format: template, a1)
+            }
+        }
+
+        enum GlobalRules {
+            static let fileSection = String(localized: "settings.global-rules.file-section", defaultValue: "Global Rules File")
+            static let enableToggle = String(localized: "settings.global-rules.enable", defaultValue: "Enable global rules")
+            static let filePathLabel = String(localized: "settings.global-rules.file-path", defaultValue: "File")
+            static let reloadButton = String(localized: "settings.global-rules.reload", defaultValue: "Reload")
+            static let description = String(localized: "settings.global-rules.description", defaultValue: "WillDeep reads this Markdown file before every Agent turn. The default is ~/.willdeep/CLAUDE.md, but you can point it at any personal rules file.")
+            static let editorSection = String(localized: "settings.global-rules.editor-section", defaultValue: "Rules Content")
+            static let precedenceNote = String(localized: "settings.global-rules.precedence-note", defaultValue: "Global rules apply across workspaces. Repository AGENTS.md or CLAUDE.md files are still included as project-specific instructions.")
+            static let choosePanelTitle = String(localized: "settings.global-rules.choose-title", defaultValue: "Choose Global Rules File")
+            static func loadedStatus(_ a1: String) -> String {
+                let template = String(localized: "settings.global-rules.loaded-status", defaultValue: "Loaded %@.")
+                return String(format: template, a1)
+            }
+            static func noFileStatus(_ a1: String) -> String {
+                let template = String(localized: "settings.global-rules.no-file-status", defaultValue: "No rules file yet at %@. Save to create it.")
+                return String(format: template, a1)
+            }
+            static func savedStatus(_ a1: String) -> String {
+                let template = String(localized: "settings.global-rules.saved-status", defaultValue: "Saved %@.")
+                return String(format: template, a1)
+            }
+            static func saveFailed(_ a1: String) -> String {
+                let template = String(localized: "settings.global-rules.save-failed", defaultValue: "Save failed: %@")
                 return String(format: template, a1)
             }
         }
@@ -1133,6 +1265,11 @@ enum L10n {
         static let runningTaskOne = String(localized: "transcript.running-tasks.one", defaultValue: "1 running task")
         static func runningTasksMany(_ a1: String) -> String {
             let template = String(localized: "transcript.running-tasks.many", defaultValue: "%@ running tasks")
+            return String(format: template, a1)
+        }
+        static let backgroundTaskOne = String(localized: "transcript.background-tasks.one", defaultValue: "Turn ended · 1 background task running")
+        static func backgroundTasksMany(_ a1: String) -> String {
+            let template = String(localized: "transcript.background-tasks.many", defaultValue: "Turn ended · %@ background tasks running")
             return String(format: template, a1)
         }
         static let runningTasksHelp = String(localized: "transcript.running-tasks.help", defaultValue: "Tasks are still running — output resumes when they finish")

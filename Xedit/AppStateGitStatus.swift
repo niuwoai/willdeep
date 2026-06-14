@@ -150,6 +150,12 @@ extension AppState {
             currentURL.deleteLastPathComponent()
         }
 
+        let topLevel = runGit(arguments: ["rev-parse", "--show-toplevel"], in: currentURL)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !topLevel.isEmpty {
+            return URL(fileURLWithPath: topLevel).standardizedFileURL
+        }
+
         while true {
             if FileManager.default.fileExists(atPath: currentURL.appendingPathComponent(".git").path) {
                 return currentURL
@@ -169,9 +175,24 @@ extension AppState {
         in repositoryRoot: URL,
         allowedExitStatuses: Set<Int32> = [0]
     ) -> String {
+        let result = runGitCommand(
+            arguments: arguments,
+            in: repositoryRoot,
+            allowedExitStatuses: allowedExitStatuses
+        )
+        return result.succeeded ? result.stdout : ""
+    }
+
+    nonisolated static func runGitCommand(
+        arguments: [String],
+        in repositoryRoot: URL,
+        allowedExitStatuses: Set<Int32> = [0]
+    ) -> GitCommandResult {
         let process = Process()
         let stdoutPipe = Pipe()
-        let collector = ProcessOutputCollector(limit: maxGitOutputBytes)
+        let stderrPipe = Pipe()
+        let stdoutCollector = ProcessOutputCollector(limit: maxGitOutputBytes)
+        let stderrCollector = ProcessOutputCollector(limit: maxGitOutputBytes)
         let runState = TimedProcessState()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         process.arguments = arguments
@@ -181,17 +202,22 @@ extension AppState {
             "GIT_TERMINAL_PROMPT": "0"
         ]) { current, _ in current }
         process.standardOutput = stdoutPipe
-        process.standardError = Pipe()
+        process.standardError = stderrPipe
         stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
-            if !data.isEmpty { collector.append(data) }
+            if !data.isEmpty { stdoutCollector.append(data) }
+        }
+        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if !data.isEmpty { stderrCollector.append(data) }
         }
 
         do {
             try process.run()
         } catch {
             stdoutPipe.fileHandleForReading.readabilityHandler = nil
-            return ""
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            return GitCommandResult(status: -1, stdout: "", stderr: error.localizedDescription, timedOut: false)
         }
 
         let timeoutWorkItem = DispatchWorkItem {
@@ -210,12 +236,52 @@ extension AppState {
         process.waitUntilExit()
         timeoutWorkItem.cancel()
         stdoutPipe.fileHandleForReading.readabilityHandler = nil
-        collector.append(stdoutPipe.fileHandleForReading.availableData)
+        stderrPipe.fileHandleForReading.readabilityHandler = nil
+        stdoutCollector.append(stdoutPipe.fileHandleForReading.availableData)
+        stderrCollector.append(stderrPipe.fileHandleForReading.availableData)
 
-        guard !runState.didTimeout else { return "" }
-        guard allowedExitStatuses.contains(process.terminationStatus) else { return "" }
+        return GitCommandResult(
+            status: process.terminationStatus,
+            stdout: stdoutCollector.stringValue,
+            stderr: stderrCollector.stringValue,
+            timedOut: runState.didTimeout,
+            allowedExitStatuses: allowedExitStatuses
+        )
+    }
+}
 
-        return collector.stringValue
+struct GitCommandResult: Equatable {
+    var status: Int32
+    var stdout: String
+    var stderr: String
+    var timedOut: Bool
+    var allowedExitStatuses: Set<Int32>
+
+    nonisolated init(
+        status: Int32,
+        stdout: String,
+        stderr: String,
+        timedOut: Bool,
+        allowedExitStatuses: Set<Int32> = [0]
+    ) {
+        self.status = status
+        self.stdout = stdout
+        self.stderr = stderr
+        self.timedOut = timedOut
+        self.allowedExitStatuses = allowedExitStatuses
+    }
+
+    nonisolated var succeeded: Bool {
+        !timedOut && allowedExitStatuses.contains(status)
+    }
+
+    nonisolated var userMessage: String {
+        if timedOut { return "git command timed out" }
+        let details = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !details.isEmpty { return details }
+        let output = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !output.isEmpty { return output }
+        return "git exited with status \(status)"
     }
 }
 

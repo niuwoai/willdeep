@@ -4141,38 +4141,38 @@
         }
       }
     },
-    "queued-message.close-queue-button": {
-      "comment": "menu item for removing a queued message",
+    "queued-message.delete-button": {
+      "comment": "menu item for deleting a queued message before it is sent",
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Close queue"
+            "value": "Delete"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "关闭排队"
+            "value": "删除"
           }
         }
       }
     },
-    "queued-message.close-queue-button.help": {
-      "comment": "tooltip for removing a queued message",
+    "queued-message.delete-button.help": {
+      "comment": "tooltip for deleting a queued message before it is sent",
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Remove this message from the queue"
+            "value": "Delete this queued message"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "从队列中移除这条消息"
+            "value": "删除这条排队消息"
           }
         }
       }
@@ -4213,6 +4213,42 @@
         }
       }
     },
+    "queued-message.empty-preview": {
+      "comment": "fallback preview text for a queued message with no visible text",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Queued message"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "排队消息"
+          }
+        }
+      }
+    },
+    "queued-message.image-count": {
+      "comment": "queued message preview for image-only messages. Placeholder 1 is the image count.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ images"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 张图片"
+          }
+        }
+      }
+    },
     "queued-message.label": {
       "comment": "label for queued message card",
       "extractionState": "manual",
@@ -4227,6 +4263,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "已排队"
+          }
+        }
+      }
+    },
+    "queued-message.text-attachment-count": {
+      "comment": "queued message preview for text-attachment-only messages. Placeholder 1 is the attachment count.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ text attachments"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 个文本附件"
           }
         }
       }
@@ -4796,6 +4850,23 @@
         }
       }
     },
+    "settings.tab.mobile-gateway": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mobile Gateway"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "手机网关"
+          }
+        }
+      }
+    },
     "settings.tab.skills": {
       "extractionState": "manual",
       "localizations": {
@@ -5357,6 +5428,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "取消置顶"
+          }
+        }
+      }
+    },
+    "sidebar.session-row.updated-tooltip": {
+      "comment": ".help() for the compact last-updated timestamp on a session row. Placeholder is a compact duration such as 5m or 2d.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updated %1$@ ago"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 前更新"
           }
         }
       }
@@ -6626,6 +6715,42 @@
         }
       }
     },
+    "transcript.background-tasks.many": {
+      "comment": "background-tasks status row label after the Agent turn ended, N > 1; %@ is the count",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn ended · %@ background tasks running"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本轮已结束 · %@ 个后台任务运行中"
+          }
+        }
+      }
+    },
+    "transcript.background-tasks.one": {
+      "comment": "background-tasks status row label after the Agent turn ended, exactly one task",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn ended · 1 background task running"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本轮已结束 · 1 个后台任务运行中"
+          }
+        }
+      }
+    },
     "transcript.running-tasks.help": {
       "comment": "tooltip on the running-tasks status row at the bottom of the transcript",
       "extractionState": "manual",
@@ -7505,6 +7630,286 @@
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "可通过 `%@` 直接委派调用。" } }
       }
     },
+    "settings.mobile-gateway.control-section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "LAN Access" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "局域网访问" } }
+      }
+    },
+    "settings.mobile-gateway.listen-section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Gateway" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "网关" } }
+      }
+    },
+    "settings.mobile-gateway.pairing-section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Pairing" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "配对" } }
+      }
+    },
+    "settings.mobile-gateway.devices-section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Paired Devices" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已配对设备" } }
+      }
+    },
+    "settings.mobile-gateway.enable-toggle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Enable LAN Mobile Gateway" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启用局域网手机网关" } }
+      }
+    },
+    "settings.mobile-gateway.allow-pairing-toggle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Allow new device pairing" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "允许新设备配对" } }
+      }
+    },
+    "settings.mobile-gateway.status": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Status" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "状态" } }
+      }
+    },
+    "settings.mobile-gateway.address": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "LAN address" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "局域网地址" } }
+      }
+    },
+    "settings.mobile-gateway.protocol": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Protocol" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "协议" } }
+      }
+    },
+    "settings.mobile-gateway.desktop-peer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Desktop peer" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "桌面 peer" } }
+      }
+    },
+    "settings.mobile-gateway.pairing-base-url": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Pairing URL" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "配对地址" } }
+      }
+    },
+    "settings.mobile-gateway.expires": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Expires" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "过期时间" } }
+      }
+    },
+    "settings.mobile-gateway.host-prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "0.0.0.0" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "0.0.0.0" } }
+      }
+    },
+    "settings.mobile-gateway.desktop-name-prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Desktop name shown on Android" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "Android 上显示的电脑名称" } }
+      }
+    },
+    "settings.mobile-gateway.executable-path-prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Optional willdeep-agent executable path" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "可选 willdeep-agent 可执行文件路径" } }
+      }
+    },
+    "settings.mobile-gateway.start": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Start" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启动" } }
+      }
+    },
+    "settings.mobile-gateway.stop": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Stop" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "停止" } }
+      }
+    },
+    "settings.mobile-gateway.restart": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Apply & Restart" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "应用并重启" } }
+      }
+    },
+    "settings.mobile-gateway.refresh": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Refresh" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "刷新" } }
+      }
+    },
+    "settings.mobile-gateway.copy-payload": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Copy pairing payload" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "复制配对 payload" } }
+      }
+    },
+    "settings.mobile-gateway.refresh-pairing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Refresh pairing QR" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "刷新配对二维码" } }
+      }
+    },
+    "settings.mobile-gateway.revoke": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Revoke" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "撤销" } }
+      }
+    },
+    "settings.mobile-gateway.not-running": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Not running" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "未运行" } }
+      }
+    },
+    "settings.mobile-gateway.connected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Connected" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已连接" } }
+      }
+    },
+    "settings.mobile-gateway.disconnected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Disconnected" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "未连接" } }
+      }
+    },
+    "settings.mobile-gateway.stopped": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Stopped" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已停止" } }
+      }
+    },
+    "settings.mobile-gateway.starting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Starting..." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启动中..." } }
+      }
+    },
+    "settings.mobile-gateway.running": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Running" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "运行中" } }
+      }
+    },
+    "settings.mobile-gateway.no-pairing-payload": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Pairing is unavailable. Refresh pairing after enabling new device pairing." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "当前不可配对。启用新设备配对后可刷新配对二维码。" } }
+      }
+    },
+    "settings.mobile-gateway.start-to-pair": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Start the gateway to show a QR pairing code." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启动网关后显示二维码配对码。" } }
+      }
+    },
+    "settings.mobile-gateway.no-devices": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No Android devices are paired yet." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "还没有已配对的 Android 设备。" } }
+      }
+    },
+    "settings.mobile-gateway.revoked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Revoked" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已撤销" } }
+      }
+    },
+    "settings.mobile-gateway.qr-accessibility-label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Mobile Gateway pairing QR code" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "手机网关配对二维码" } }
+      }
+    },
+    "settings.mobile-gateway.qr-unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "QR code unavailable" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "二维码不可用" } }
+      }
+    },
+    "settings.mobile-gateway.listen-description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The gateway listens only after you enable it. Android connects over the local network; Agent execution, tools, patches, and file access still run through the Mac app." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "只有启用后网关才会监听。Android 通过局域网连接；Agent 执行、工具、补丁和文件访问仍全部经过 Mac 应用。" } }
+      }
+    },
+    "settings.mobile-gateway.port": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Port %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "端口 %@" } }
+      }
+    },
+    "settings.mobile-gateway.resolved-executable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Using %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "使用 %@" } }
+      }
+    },
+    "settings.mobile-gateway.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Failed: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "失败：%@" } }
+      }
+    },
+    "settings.mobile-gateway.last-connected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Last connected %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "最后连接：%@" } }
+      }
+    },
+    "settings.mobile-gateway.created-at": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Paired %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "配对于 %@" } }
+      }
+    },
     "settings.provider.edits-auto-save": {
       "extractionState": "manual",
       "localizations": {
@@ -7545,6 +7950,69 @@
       "localizations": {
         "en": { "stringUnit": { "state": "translated", "value": "Pick a provider on the left, or add one with +" } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "从左侧选一个服务商，或点 + 添加" } }
+      }
+    },
+    "settings.remote-runtimes.display-name.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Name shown in the runtime list" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "显示在 runtime 列表里的名称" } }
+      }
+    },
+    "settings.remote-runtimes.host.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "example.com or SSH config host" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "example.com 或 SSH config 主机名" } }
+      }
+    },
+    "settings.remote-runtimes.username.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Remote login user" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "远端登录用户" } }
+      }
+    },
+    "settings.remote-runtimes.port-input": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Port" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "端口" } }
+      }
+    },
+    "settings.remote-runtimes.port.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "22" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "22" } }
+      }
+    },
+    "settings.remote-runtimes.identity-file.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "~/.ssh/id_rsa" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "~/.ssh/id_rsa" } }
+      }
+    },
+    "settings.remote-runtimes.daemon-url.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "http://127.0.0.1:8765" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "http://127.0.0.1:8765" } }
+      }
+    },
+    "settings.remote-runtimes.daemon-token.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Paste daemon token" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "粘贴 daemon token" } }
+      }
+    },
+    "settings.remote-runtimes.workspace-path.prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "/path/to/workspace" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "/path/to/workspace" } }
       }
     },
     "settings.provider.connection": {

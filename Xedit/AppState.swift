@@ -73,6 +73,7 @@ final class AppState: ObservableObject {
     @Published private(set) var selectedText = ""
     @Published var hasExternalFileChanges = false
     @Published var gitStatus = GitRepositoryStatus()
+    @Published var agentGitWorktrees: [AgentGitWorktree] = []
     @Published var isAgentPanelVisible = false
     @Published var agentComposerFocusRevision = 0
     @Published var agentConfiguration: AgentConfiguration {
@@ -381,6 +382,13 @@ final class AppState: ObservableObject {
     /// finishes / streams output. Views that need finer-grained
     /// updates can `@ObservedObject` the registry directly.
     private var jobRegistrySubscription: AnyCancellable?
+    /// Desktop peer for the LAN Mobile Gateway. The Go gateway handles
+    /// pairing/device auth; this bridge translates authorized mobile
+    /// commands back into normal AppState Agent operations.
+    lazy var mobileGatewayDesktopPeer = AgentMobileGatewayDesktopPeer(appState: self)
+    /// Starts/stops the local Go Mobile Gateway process and feeds
+    /// desktop-authenticated state into Settings.
+    lazy var mobileGatewayCoordinator = MobileGatewayCoordinator(appState: self)
     // A 方案删除了 cfg → library 的回灌方向，此前的 reentrancy 守卫
     // (`isReconcilingProviderLibrary`) 不再需要。
 
@@ -495,6 +503,7 @@ final class AppState: ObservableObject {
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
             }
+        mobileGatewayCoordinator.startIfEnabled()
     }
 
     deinit {
@@ -835,6 +844,7 @@ final class AppState: ObservableObject {
             registerRecentFolder(fileURL)
             setRootDirectory(fileURL)
             refreshGitStatus()
+            refreshAgentGitWorktrees()
             persistSession()
             return
         }
@@ -860,6 +870,7 @@ final class AppState: ObservableObject {
 
         setRootDirectory(url)
         refreshGitStatus()
+        refreshAgentGitWorktrees()
         persistSession()
     }
 

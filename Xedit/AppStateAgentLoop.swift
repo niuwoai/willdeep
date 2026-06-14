@@ -107,6 +107,8 @@ private final class AgentStreamingMessageBuffer {
 }
 
 extension AppState {
+    private static let maxGoalTransientNetworkRetries = 5
+    private static let goalTransientNetworkRetryDelayNanoseconds: UInt64 = 3_000_000_000
 
     func dispatchAgentMessage(
         for runtime: AgentRuntime,
@@ -410,7 +412,7 @@ extension AppState {
     }
 
     var estimatedAgentRequestMessages: [AgentMessage] {
-        let systemPrompt = AgentContextBuilder.systemPrompt(
+        var systemPrompt = AgentContextBuilder.systemPrompt(
             rootDirectory: rootDirectory,
             openedFileURL: openedFileURL,
             fileContent: fileContent,
@@ -422,6 +424,22 @@ extension AppState {
             currentPlan: agentCurrentPlan,
             currentGoal: agentCurrentGoal
         )
+        let settings = AgentMemorySettingsStore.loadSettings()
+        let memoryResults = AgentMemoryEngine.retrieve(
+            query: Self.memoryRetrievalQuery(
+                messages: agentMessages,
+                openedFileURL: openedFileURL,
+                selectedText: selectedText
+            ),
+            records: AgentMemorySettingsStore.loadRecords(),
+            settings: settings,
+            rootDirectory: rootDirectory,
+            openedFileURL: openedFileURL,
+            selectedText: selectedText
+        )
+        if let memoryContext = AgentMemoryEngine.contextBlock(for: memoryResults) {
+            systemPrompt += "\n\n\(memoryContext)"
+        }
         let collapsedHistory = Self.collapseOldToolResults(in: agentMessages)
         return AgentClient.providerReadyMessages([
             AgentMessage(role: .system, content: systemPrompt)
@@ -619,29 +637,22 @@ extension AppState {
     ) async -> AgentToolApprovalSource? {
         guard risk == .write else { return nil }
 
-        if approvalMode == .requestEveryTime {
-            return nil
-        }
-
         let sandboxDecision = AgentSandboxPolicy.decision(
             toolName: toolName,
             arguments: arguments,
             rootDirectory: rootDirectory
         )
-        if sandboxDecision.mode == .escalated {
-            if isAgentToolCallAlwaysAllowed(toolName: toolName, arguments: arguments, risk: risk) {
-                return .alwaysAllowList
-            }
-            return nil
-        }
-
         // 0. Goal mode: the whole point is running to the goal without
         //    babysitting, so write-tier calls auto-approve. Two things
         //    deliberately stay out of this fast path: danger-tier calls
         //    never reach this function (risk guard above) and keep their
         //    explicit Confirm gate, and MCP tools on servers the user
         //    marked untrusted still fall through to per-call approval.
-        if interactionMode == .goal {
+        //    Public network reads such as web_fetch are a narrow escalated
+        //    exception: they touch the network, but do not mutate local
+        //    state and still pass the tool's SSRF guard before execution.
+        if interactionMode == .goal,
+           sandboxDecision.mode != .escalated || goalModeCanAutoApproveEscalated(toolName: toolName, arguments: arguments) {
             if toolName == "call_mcp_tool" {
                 if let server = arguments["server"]?.stringValue(),
                    AgentMCPSettingsStore.isServerTrusted(name: server) {
@@ -651,6 +662,17 @@ extension AppState {
             } else {
                 return .goalMode
             }
+        }
+
+        if approvalMode == .requestEveryTime {
+            return nil
+        }
+
+        if sandboxDecision.mode == .escalated {
+            if isAgentToolCallAlwaysAllowed(toolName: toolName, arguments: arguments, risk: risk) {
+                return .alwaysAllowList
+            }
+            return nil
         }
 
         if approvalMode == .workspaceAccess,
@@ -747,12 +769,24 @@ extension AppState {
         return safe ? .llmJudge : nil
     }
 
+    private func goalModeCanAutoApproveEscalated(
+        toolName: String,
+        arguments: [String: AgentJSONValue]
+    ) -> Bool {
+        switch toolName {
+        case "web_fetch":
+            return arguments["url"]?.stringValue().flatMap(AgentWebTools.validatedPublicURL(_:)) != nil
+        default:
+            return false
+        }
+    }
+
     private func workspaceAccessCanAutoApprove(
         toolName: String,
         arguments: [String: AgentJSONValue]
     ) -> Bool {
         switch toolName {
-        case "run_command", "kill_job", "claude_code", "codex_cli", "cursor_agent", "web_fetch":
+        case "run_command", "kill_job", "claude_code", "codex_cli", "cursor_agent", "cline_cli", "web_fetch":
             return true
         case "call_mcp_tool":
             guard let server = arguments["server"]?.stringValue() else {
@@ -819,14 +853,18 @@ extension AppState {
     @MainActor
     func runAgentLoop(for runtime: AgentRuntime, configuration: AgentConfiguration) async {
         defer {
+            let shouldConsumeQueueAfterStop = runtime.shouldConsumeQueueAfterStop
             runtime.isResponding = false
             runtime.turnStartedAt = nil
             runtime.requestTask = nil
+            runtime.shouldConsumeQueueAfterStop = false
             captureAgentPlanFromLatestMessage(for: runtime)
             captureAgentGoalDefinitionFromLatestMessage(for: runtime)
             captureAgentGoalEvaluationFromLatestMessage(for: runtime)
             persistAgentSession(runtime: runtime)
-            maybeAutoCompressContext(for: runtime)
+            if !shouldConsumeQueueAfterStop {
+                maybeAutoCompressContext(for: runtime)
+            }
             consumeNextQueuedMessageIfNeeded(for: runtime)
             // Always release the provider slot last so the queue drain
             // sees a fully cleared `isResponding` and won't refuse to
@@ -850,6 +888,19 @@ extension AppState {
         if workspaceURL != nil {
             runtime.worktreeChanges = turnBaselineChanges
         }
+        let memoryState = AgentMemoryState()
+        let memoryQuery = Self.memoryRetrievalQuery(
+            messages: runtime.messages,
+            openedFileURL: openedFileURL,
+            selectedText: selectedText
+        )
+        let retrievedMemories = memoryState.retrieveMemories(
+            query: memoryQuery,
+            rootDirectory: workspaceURL,
+            openedFileURL: openedFileURL,
+            selectedText: selectedText
+        )
+        let memoryContextBlock = AgentMemoryEngine.contextBlock(for: retrievedMemories)
 
         for _ in 0..<Self.maxAgentToolRounds {
             // Background-job completion notices. Pulled at the top of
@@ -922,6 +973,9 @@ extension AppState {
                 - Tools and shell commands execute on the remote runtime through SSH. Tell the user when a command is remote if it matters.
                 """
             }
+            if let memoryContextBlock {
+                systemPrompt += "\n\n\(memoryContextBlock)"
+            }
             let history = runtime.messages.filter { $0.id != assistantID }
             let collapsedHistory = Self.collapseOldToolResults(in: history)
             let requestMessages = [AgentMessage(role: .system, content: systemPrompt)] + collapsedHistory
@@ -931,36 +985,56 @@ extension AppState {
             let streamBuffer = AgentStreamingMessageBuffer(runtime: runtime, assistantID: assistantID)
 
             do {
-                try await client.streamChat(
-                    messages: requestMessages,
-                    tools: AgentToolRegistry.all
-                ) { event in
-                    await MainActor.run { [weak runtime] in
-                        guard let runtime,
-                              let index = runtime.messages.firstIndex(where: { $0.id == assistantID }) else {
-                            return
+                var retryCount = 0
+                while true {
+                    do {
+                        try await client.streamChat(
+                            messages: requestMessages,
+                            tools: AgentToolRegistry.all
+                        ) { event in
+                            await MainActor.run { [weak runtime] in
+                                guard let runtime,
+                                      let index = runtime.messages.firstIndex(where: { $0.id == assistantID }) else {
+                                    return
+                                }
+                                switch event {
+                                case .textDelta(let delta):
+                                    streamBuffer.appendTextDelta(delta)
+                                case .reasoningDelta(let delta):
+                                    streamBuffer.appendReasoningDelta(delta)
+                                case .toolCallsUpdated(let calls):
+                                    streamBuffer.flushPending()
+                                    runtime.messages[index].toolCalls = calls
+                                    latestToolCalls = calls
+                                case .finishedTurn(let reason):
+                                    streamBuffer.flushPending()
+                                    finishReason = reason
+                                case .usageReported(let prompt, let completion, let total, let cachedPrompt, let cacheWritePrompt, let reasoning):
+                                    streamBuffer.flushPending()
+                                    runtime.messages[index].usageTokens = total
+                                    runtime.messages[index].promptTokens = prompt > 0 ? prompt : nil
+                                    runtime.messages[index].completionTokens = completion > 0 ? completion : nil
+                                    runtime.messages[index].cachedPromptTokens = cachedPrompt > 0 ? cachedPrompt : nil
+                                    runtime.messages[index].cacheWritePromptTokens = cacheWritePrompt > 0 ? cacheWritePrompt : nil
+                                    runtime.messages[index].reasoningTokens = reasoning > 0 ? reasoning : nil
+                                }
+                            }
                         }
-                        switch event {
-                        case .textDelta(let delta):
-                            streamBuffer.appendTextDelta(delta)
-                        case .reasoningDelta(let delta):
-                            streamBuffer.appendReasoningDelta(delta)
-                        case .toolCallsUpdated(let calls):
-                            streamBuffer.flushPending()
-                            runtime.messages[index].toolCalls = calls
-                            latestToolCalls = calls
-                        case .finishedTurn(let reason):
-                            streamBuffer.flushPending()
-                            finishReason = reason
-                        case .usageReported(let prompt, let completion, let total, let cachedPrompt, let cacheWritePrompt, let reasoning):
-                            streamBuffer.flushPending()
-                            runtime.messages[index].usageTokens = total
-                            runtime.messages[index].promptTokens = prompt > 0 ? prompt : nil
-                            runtime.messages[index].completionTokens = completion > 0 ? completion : nil
-                            runtime.messages[index].cachedPromptTokens = cachedPrompt > 0 ? cachedPrompt : nil
-                            runtime.messages[index].cacheWritePromptTokens = cacheWritePrompt > 0 ? cacheWritePrompt : nil
-                            runtime.messages[index].reasoningTokens = reasoning > 0 ? reasoning : nil
+                        break
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        streamBuffer.flushPending()
+                        guard shouldRetryTransientGoalNetworkError(
+                            error,
+                            for: runtime,
+                            assistantID: assistantID,
+                            retryCount: retryCount
+                        ) else {
+                            throw error
                         }
+                        retryCount += 1
+                        try await Task.sleep(nanoseconds: Self.goalTransientNetworkRetryDelayNanoseconds)
                     }
                 }
                 streamBuffer.flushPending()
@@ -998,6 +1072,12 @@ extension AppState {
             // No tool calls → assistant finished talking. Capture patches and return.
             guard !latestToolCalls.isEmpty else {
                 captureAgentPatchProposals(for: runtime, fromMessageID: assistantID)
+                captureAutomaticMemories(
+                    for: runtime,
+                    assistantID: assistantID,
+                    memoryState: memoryState,
+                    workspaceURL: workspaceURL
+                )
                 // A stream can end "successfully" having produced nothing
                 // (provider hiccup, content filter, empty stop). Drop the
                 // placeholder like the error/cancel paths do — if it stays
@@ -1295,6 +1375,46 @@ extension AppState {
         runtime.errorDetails = nil
     }
 
+    private static func memoryRetrievalQuery(
+        messages: [AgentMessage],
+        openedFileURL: URL?,
+        selectedText: String
+    ) -> String {
+        let recentUserText = messages
+            .reversed()
+            .filter { $0.role == .user }
+            .prefix(3)
+            .map(\.modelContent)
+            .reversed()
+            .joined(separator: "\n\n")
+        return [
+            recentUserText,
+            openedFileURL?.path ?? "",
+            selectedText
+        ]
+        .joined(separator: "\n\n")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func captureAutomaticMemories(
+        for runtime: AgentRuntime,
+        assistantID: AgentMessage.ID,
+        memoryState: AgentMemoryState,
+        workspaceURL: URL?
+    ) {
+        guard memoryState.settings.normalized.isMemoryEnabled,
+              memoryState.settings.normalized.autoSummaryEnabled,
+              let assistant = runtime.messages.first(where: { $0.id == assistantID }) else {
+            return
+        }
+        let latestUser = runtime.messages.last { $0.role == .user }
+        memoryState.addAutomaticMemories(
+            fromUser: latestUser?.modelContent ?? "",
+            assistantText: assistant.modelContent,
+            rootDirectory: workspaceURL
+        )
+    }
+
     func setAgentError(_ error: Error, for runtime: AgentRuntime) {
         runtime.errorMessage = Self.friendlyMessage(for: error)
         runtime.errorDetails = Self.details(for: error)
@@ -1477,6 +1597,44 @@ extension AppState {
                     waiter.resume(returning: .denied(reason: "Cancelled"))
                 }
             }
+        }
+    }
+
+    private func shouldRetryTransientGoalNetworkError(
+        _ error: Error,
+        for runtime: AgentRuntime,
+        assistantID: AgentMessage.ID,
+        retryCount: Int
+    ) -> Bool {
+        guard runtime.interactionMode == .goal else { return false }
+        guard retryCount < Self.maxGoalTransientNetworkRetries else { return false }
+        guard isTransientAgentNetworkError(error) else { return false }
+        guard let index = runtime.messages.firstIndex(where: { $0.id == assistantID }) else { return false }
+        let message = runtime.messages[index]
+        return message.content.isEmpty
+            && message.toolCalls.isEmpty
+            && (message.reasoningContent ?? "").isEmpty
+    }
+
+    private func isTransientAgentNetworkError(_ error: Error) -> Bool {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut, .networkConnectionLost, .notConnectedToInternet,
+                 .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed,
+                 .internationalRoamingOff, .callIsActive, .dataNotAllowed:
+                return true
+            default:
+                return false
+            }
+        }
+        guard case AgentClientError.serverStatus(let providerError) = error else {
+            return false
+        }
+        switch providerError.statusCode {
+        case 408, 429, 500...599:
+            return true
+        default:
+            return false
         }
     }
 
