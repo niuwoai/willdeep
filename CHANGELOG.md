@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.78.0-rc10 - 2026-06-14
+
+### Tests
+
+- Extended `scripts/mobile_gateway_end_to_end_acceptance.rb` with an Android preflight that always records the Android repository, live acceptance script, and ready `adb devices` count even when Mac Gateway readiness fails.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc10`。
+
 ## 1.78.0-rc9 - 2026-06-14
 
 ### Added

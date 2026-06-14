@@ -43,12 +43,79 @@ def evidence_status(report)
   report.fetch("acceptance_evidence", []).map { |item| item["status"] }.uniq
 end
 
-def build_acceptance_evidence(readiness, android, android_ran)
+def parse_adb_devices(output)
+  output.lines.drop(1).filter_map do |line|
+    serial, state = line.strip.split(/\s+/, 2)
+    next if serial.to_s.empty?
+
+    {
+      "serial" => serial,
+      "state" => state.to_s,
+    }
+  end
+end
+
+def android_preflight
+  repo_present = Dir.exist?(ANDROID_DIR)
+  script_present = File.file?(ANDROID_ACCEPTANCE_SCRIPT)
+  adb_run = run_command("adb", "devices", chdir: repo_present ? ANDROID_DIR : ROOT_DIR)
+  devices = adb_run[:exit_code].zero? ? parse_adb_devices(adb_run[:stdout]) : []
+  ready_devices = devices.select { |device| device["state"] == "device" }
+  status = repo_present && script_present && ready_devices.any? ? "passed" : "failed"
+
+  {
+    "status" => status,
+    "repo_present" => repo_present,
+    "acceptance_script_present" => script_present,
+    "adb_exit_code" => adb_run[:exit_code],
+    "ready_device_count" => ready_devices.size,
+    "devices" => devices,
+    "command_run" => adb_run,
+  }
+rescue Errno::ENOENT => e
+  {
+    "status" => "failed",
+    "repo_present" => Dir.exist?(ANDROID_DIR),
+    "acceptance_script_present" => File.file?(ANDROID_ACCEPTANCE_SCRIPT),
+    "adb_exit_code" => 127,
+    "ready_device_count" => 0,
+    "devices" => [],
+    "error" => e.message,
+    "command_run" => {
+      command: "adb devices",
+      cwd: Dir.exist?(ANDROID_DIR) ? ANDROID_DIR : ROOT_DIR,
+      exit_code: 127,
+      stdout: "",
+      stderr: e.message,
+    },
+  }
+end
+
+def android_preflight_evidence(preflight)
+  repo_status = preflight.fetch("repo_present") && preflight.fetch("acceptance_script_present") ? "passed" : "failed"
+  device_count = preflight.fetch("ready_device_count")
+
+  [
+    {
+      "key" => "android_repo",
+      "status" => repo_status,
+      "evidence" => repo_status == "passed" ? "Android repo and live acceptance script found at #{ANDROID_DIR}." : "Android repo or live acceptance script is missing at #{ANDROID_DIR}.",
+    },
+    {
+      "key" => "android_device",
+      "status" => device_count.positive? ? "passed" : "failed",
+      "evidence" => "#{device_count} ready Android device(s) reported by adb.",
+    },
+  ]
+end
+
+def build_acceptance_evidence(readiness, android, android_ran, android_preflight_report)
   evidence = []
   readiness.fetch("acceptance_evidence", []).each do |item|
     key = item.fetch("key")
     evidence << item.merge("key" => key.start_with?("mac_") ? key : "mac_#{key}")
   end
+  evidence.concat(android_preflight_evidence(android_preflight_report))
   if android_ran
     android.fetch("acceptance_evidence", []).each do |item|
       evidence << item.merge("key" => "android_#{item.fetch("key")}")
@@ -78,7 +145,9 @@ def write_reports(report)
     "- Generated at: `#{report[:generated_at]}`",
     "- Status: `#{report[:status]}`",
     "- Mac readiness: `#{report[:mac_readiness_status]}`",
+    "- Android preflight: `#{report[:android_preflight_status]}`",
     "- Android live acceptance: `#{report[:android_live_acceptance_status]}`",
+    "- Android ready devices: `#{report[:android_ready_device_count]}`",
     "- Android repo: `#{report[:android_dir]}`",
     "",
     "## Acceptance Evidence",
@@ -101,6 +170,7 @@ end
 
 readiness_run = run_command("ruby", READINESS_SCRIPT, chdir: ROOT_DIR)
 readiness_report = read_json(READINESS_REPORT_JSON)
+android_preflight_report = android_preflight
 android_ran = readiness_report["status"] == "passed"
 android_run = nil
 android_report = nil
@@ -132,18 +202,22 @@ else
   }
 end
 
-acceptance_evidence = build_acceptance_evidence(readiness_report, android_report, android_ran)
+acceptance_evidence = build_acceptance_evidence(readiness_report, android_report, android_ran, android_preflight_report)
 status = acceptance_evidence.all? { |item| item["status"] == "passed" } ? "passed" : "failed"
 report = {
   generated_at: Time.now.utc.iso8601,
   status: status,
   android_dir: ANDROID_DIR,
   mac_readiness_status: readiness_report["status"],
+  android_preflight_status: android_preflight_report["status"],
+  android_ready_device_count: android_preflight_report["ready_device_count"],
   android_live_acceptance_status: android_report["status"],
   mac_readiness_report_json: READINESS_REPORT_JSON,
   android_live_acceptance_report_json: android_ran ? ANDROID_ACCEPTANCE_REPORT_JSON : nil,
+  android_preflight: android_preflight_report,
   command_runs: {
     mac_readiness: readiness_run,
+    android_preflight: android_preflight_report["command_run"],
     android_live_acceptance: android_run,
   },
   mac_readiness_evidence_statuses: evidence_status(readiness_report),
