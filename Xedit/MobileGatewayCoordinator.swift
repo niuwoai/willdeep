@@ -450,10 +450,23 @@ final class MobileGatewayCoordinator: ObservableObject {
     }
 }
 
-private struct APIEnvelope<T: Decodable>: Decodable {
+struct APIEnvelope<T: Decodable>: Decodable {
     var ok: Bool
     var error: String
     var data: T?
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case error
+        case data
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ok = try container.decodeIfPresent(Bool.self, forKey: .ok) ?? false
+        error = try container.decodeIfPresent(String.self, forKey: .error) ?? ""
+        data = try container.decodeIfPresent(T.self, forKey: .data)
+    }
 }
 
 private struct PairingResponse: Decodable {

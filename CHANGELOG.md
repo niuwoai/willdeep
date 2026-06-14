@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.78.0-rc20 - 2026-06-15
+
+### Fixed
+
+- 修复 Mobile Gateway 启动时 Swift 解码 Go 成功响应缺省 `error` 字段导致的“未能读取数据，因类数据丢失”失败。
+- Mobile Gateway 设置读取兼容旧版缺字段数据，避免新增字段后旧设置解码失败。
+
+### Changed
+
+- Mobile Gateway 默认端口统一改为 `8877`，`willdeep-agent serve-mobile` 的 CLI 默认值同步更新。
+- Settings → Mobile Gateway 的端口控件由 Stepper 改为仅接受数字的文本输入框。
+
+### Tests
+
+- 新增设置兼容解码、默认端口和成功响应缺省 `error` 字段的测试覆盖。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc20`。
+
 ## 1.78.0-rc19 - 2026-06-15
 
 ### Tests

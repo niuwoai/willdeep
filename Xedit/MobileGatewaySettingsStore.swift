@@ -21,14 +21,50 @@ struct MobileGatewaySettings: Codable, Equatable {
     var executablePath: String
     var allowPairing: Bool
 
+    enum CodingKeys: String, CodingKey {
+        case isEnabled
+        case host
+        case port
+        case desktopName
+        case executablePath
+        case allowPairing
+    }
+
     static let `default` = MobileGatewaySettings(
         isEnabled: false,
         host: "0.0.0.0",
-        port: 8876,
+        port: 8877,
         desktopName: Host.current().localizedName ?? "WillDeep Mac",
         executablePath: "",
         allowPairing: true
     )
+
+    init(
+        isEnabled: Bool,
+        host: String,
+        port: Int,
+        desktopName: String,
+        executablePath: String,
+        allowPairing: Bool
+    ) {
+        self.isEnabled = isEnabled
+        self.host = host
+        self.port = port
+        self.desktopName = desktopName
+        self.executablePath = executablePath
+        self.allowPairing = allowPairing
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = Self.default
+        isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? fallback.isEnabled
+        host = try container.decodeIfPresent(String.self, forKey: .host) ?? fallback.host
+        port = try container.decodeIfPresent(Int.self, forKey: .port) ?? fallback.port
+        desktopName = try container.decodeIfPresent(String.self, forKey: .desktopName) ?? fallback.desktopName
+        executablePath = try container.decodeIfPresent(String.self, forKey: .executablePath) ?? fallback.executablePath
+        allowPairing = try container.decodeIfPresent(Bool.self, forKey: .allowPairing) ?? fallback.allowPairing
+    }
 
     var normalized: MobileGatewaySettings {
         MobileGatewaySettings(
