@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-06-14 | Target version: v1.78.0-rc4
+> Last updated: 2026-06-14 | Target version: v1.78.0-rc5
 
 ## Summary
 
@@ -66,8 +66,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.78.0-rc4`
-- `X-Server-Version: 1.78.0-rc4`
+- `X-App-Version: 1.78.0-rc5`
+- `X-Server-Version: 1.78.0-rc5`
 
 ### `GET /mobile/health`
 
@@ -79,7 +79,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.78.0-rc4",
+    "version": "1.78.0-rc5",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
@@ -339,4 +339,4 @@ All user-visible SwiftUI text must go through `Localizable.xcstrings` and `L10n.
 
 - Go unit tests must cover pairing token claim, expiration, one-time use, desktop-authenticated pairing rotation, health version headers, WebSocket auth, command forwarding, desktop event broadcast including `message.append`, `message.delta`, and `message.done`, unknown command errors, and revoke behavior.
 - Swift tests cover state snapshot conversion, command routing into existing Agent runtime methods, message append/delta/done event generation, `AppState` workspace path guard enforcement for `file.read`, danger-tier typed confirmation enforcement for `tool.decide`, `ask_user` answer enforcement, and patch apply/reject routing through the existing desktop patch state machine.
-- `scripts/mobile_gateway_integration_test.rb` starts a real local gateway, simulates desktop and mobile peers, verifies pairing, desktop-authenticated pairing rotation, command forwarding, ack, ordered message stream event broadcast, worktree event broadcast, and emits JSON plus Markdown reports.
+- `scripts/mobile_gateway_integration_test.rb` starts a real local gateway, simulates desktop and mobile peers, verifies pairing, desktop-authenticated pairing rotation, command forwarding, ack, unknown-command errors, ordered message stream event broadcast, worktree event broadcast, device revocation disconnect/reconnect rejection, and emits JSON plus Markdown reports with acceptance evidence.

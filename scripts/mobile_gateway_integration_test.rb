@@ -201,6 +201,18 @@ def write_reports(result)
     "- Base URL: `#{result[:base_url]}`",
     "- Generated at: #{result[:generated_at]}",
     "",
+    "## Acceptance Evidence",
+    "",
+    "| Requirement | Status | Evidence |",
+    "| --- | --- | --- |",
+  ]
+  result[:acceptance_evidence].each do |item|
+    lines << "| `#{item[:key]}` | `#{item[:status]}` | #{item[:evidence].gsub("|", "\\|")} |"
+  end
+  lines.concat [
+    "",
+    "## Steps",
+    "",
     "| Step | Status | Duration |",
     "| --- | --- | --- |",
   ]
@@ -215,6 +227,88 @@ def write_reports(result)
     failures.each { |step| lines << "- #{step[:name]}: #{step[:error]}" }
   end
   File.write(REPORT_MD, lines.join("\n") + "\n")
+end
+
+def step_passed?(result, name)
+  result[:steps].any? { |step| step[:name] == name && step[:status] == "passed" }
+end
+
+def acceptance_evidence(result)
+  [
+    {
+      key: "gateway_health",
+      step: "health endpoint",
+      passed: "Health endpoint returned version, protocol, and ok=true.",
+      failed: "Health endpoint did not return a valid response.",
+    },
+    {
+      key: "pairing_payload",
+      step: "desktop pairing payload",
+      passed: "Desktop-authenticated caller fetched a QR pairing payload.",
+      failed: "Desktop pairing payload fetch failed.",
+    },
+    {
+      key: "pairing_claim",
+      step: "mobile pairing claim",
+      passed: "Mobile caller claimed a valid pairing token and received a device token.",
+      failed: "Mobile pairing claim failed.",
+    },
+    {
+      key: "pairing_rotate",
+      step: "desktop rotates pairing payload after claim",
+      passed: "Desktop pairing rotation produced a fresh claimable pairing token.",
+      failed: "Desktop pairing rotation failed.",
+    },
+    {
+      key: "desktop_websocket",
+      step: "desktop websocket connects",
+      passed: "Desktop peer connected with the desktop bearer token.",
+      failed: "Desktop peer WebSocket authentication failed.",
+    },
+    {
+      key: "mobile_websocket",
+      step: "mobile websocket connects",
+      passed: "Paired mobile peer connected with the device bearer token.",
+      failed: "Mobile peer WebSocket authentication failed.",
+    },
+    {
+      key: "message_send_forward_ack",
+      step: "mobile command forwards to desktop and acks",
+      passed: "Mobile message.send was forwarded to the desktop peer with device metadata and acked to mobile.",
+      failed: "message.send forwarding or ack failed.",
+    },
+    {
+      key: "unknown_command_error",
+      step: "unknown mobile command returns error",
+      passed: "Unsupported mobile command returned an error envelope instead of hanging.",
+      failed: "Unknown mobile command handling failed.",
+    },
+    {
+      key: "message_stream_broadcast",
+      step: "desktop message stream events broadcast to mobile",
+      passed: "Desktop message.append, message.delta, and message.done events reached the mobile peer in order.",
+      failed: "Desktop message stream broadcast failed.",
+    },
+    {
+      key: "worktree_broadcast",
+      step: "worktree update broadcasts to mobile",
+      passed: "Desktop worktree.updated event reached the mobile peer.",
+      failed: "Worktree update broadcast failed.",
+    },
+    {
+      key: "device_revoke_disconnect",
+      step: "desktop revoke disconnects mobile websocket",
+      passed: "Desktop revocation closed the active mobile WebSocket and rejected reconnect with the old token.",
+      failed: "Device revocation did not fully invalidate the mobile connection.",
+    },
+  ].map do |item|
+    passed = step_passed?(result, item.fetch(:step))
+    {
+      key: item.fetch(:key),
+      status: passed ? "passed" : "failed",
+      evidence: passed ? item.fetch(:passed) : item.fetch(:failed),
+    }
+  end
 end
 
 def main
@@ -283,6 +377,7 @@ def main
       body.fetch("data")
     end
     device_token = claim.fetch("device_token")
+    device_id = claim.fetch("device").fetch("id")
 
     recorder.record("desktop rotates pairing payload after claim") do
       response, body = http_json(
@@ -331,6 +426,20 @@ def main
       ack = mobile_ws.read_json
       raise "ack type #{ack["type"]}" unless ack["type"] == "ack"
       raise "ack command #{ack.dig("payload", "type")}" unless ack.dig("payload", "type") == "message.send"
+    end
+
+    recorder.record("unknown mobile command returns error") do
+      command = {
+        id: "cmd-unknown",
+        type: "workspace.destroy",
+        session_id: "session-1",
+        payload: {},
+      }
+      mobile_ws.write_json(command)
+      error = mobile_ws.read_json
+      raise "error type #{error["type"]}" unless error["type"] == "error"
+      raise "error id #{error["id"]}" unless error["id"] == "cmd-unknown"
+      raise "error command #{error.dig("payload", "type")}" unless error.dig("payload", "type") == "workspace.destroy"
     end
 
     recorder.record("desktop message stream events broadcast to mobile") do
@@ -393,8 +502,33 @@ def main
       raise "file_count mismatch" unless event.dig("payload", "file_count") == 1
     end
 
+    recorder.record("desktop revoke disconnects mobile websocket") do
+      response, = http_json(
+        :post,
+        "#{base_url}/mobile/devices/revoke",
+        headers: { "Authorization" => "Bearer #{desktop_token}" },
+        body: { device_id: device_id },
+      )
+      raise "revoke status #{response.code}" unless response.code.to_i == 200
+      begin
+        mobile_ws.read_json(timeout: 3)
+        raise "revoked websocket remained readable"
+      rescue EOFError
+        # The gateway may close the TCP stream before a WebSocket close frame is read.
+      rescue RuntimeError => e
+        raise unless e.message == "websocket closed"
+      end
+      begin
+        MinimalWebSocket.new(ws_url, "Authorization" => "Bearer #{device_token}")
+        raise "revoked device token reconnected"
+      rescue RuntimeError => e
+        raise unless e.message.start_with?("websocket upgrade failed:")
+      end
+    end
+
     result[:status] = "passed"
   ensure
+    result[:acceptance_evidence] = acceptance_evidence(result)
     desktop_ws&.close
     mobile_ws&.close
     Process.kill("TERM", pid) rescue nil

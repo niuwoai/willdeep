@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.78.0-rc5 - 2026-06-14
+
+### Tests
+
+- Extended `scripts/mobile_gateway_integration_test.rb` with acceptance evidence rows for gateway health, pairing, WebSocket auth, `message.send` forwarding/ack, unknown-command errors, desktop event broadcast, worktree broadcast, and revoke-disconnect behavior.
+- Added real local gateway integration coverage for unknown mobile commands returning `error` and desktop device revocation closing the active mobile WebSocket plus rejecting reconnect with the revoked token.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc5`。
+
 ## 1.78.0-rc4 - 2026-06-14
 
 ### Tests
