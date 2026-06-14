@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.78.0-rc13 - 2026-06-14
+
+### Tests
+
+- Strengthened `scripts/mobile_gateway_end_to_end_acceptance.rb` so the cross-repository final gate requires Android live acceptance to include `mac_target_file_after_send` and verifies the Android runner waits for `WILLDEEP_ANDROID_LIVE_ACCEPTANCE.md` in Mac patch/worktree activity.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc13`。
+
 ## 1.78.0-rc12 - 2026-06-14
 
 ### Tests

@@ -8,7 +8,7 @@
 
 [![macOS](https://img.shields.io/badge/macOS-14.6%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.78.0--rc12-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.78.0--rc13-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *No Electron. No 800MB Helper processes. No "loading workspace…" spinner that eats your afternoon.*
@@ -184,7 +184,7 @@ The WillDeep name, logo, official signed builds, hosted services, cloud sync, ma
 
 [![macOS](https://img.shields.io/badge/macOS-14.6%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.78.0--rc12-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.78.0--rc13-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *不靠 Electron。没有 800MB 的 Helper 子进程。没有那种让你怀疑人生的 "loading workspace…"。*

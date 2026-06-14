@@ -26,6 +26,7 @@ ANDROID_REQUIRED_FINAL_EVIDENCE = %w[
   mobile_message_send_ack
   mac_agent_activity_after_send
   mac_code_activity_after_send
+  mac_target_file_after_send
 ].freeze
 EXPECTED_ANDROID_LIVE_REQUEST_PROFILE = "default_workspace_file_edit"
 EXPECTED_ANDROID_LIVE_TARGET_FILE = "WILLDEEP_ANDROID_LIVE_ACCEPTANCE.md"
@@ -41,6 +42,11 @@ ANDROID_WORKSPACE_EDIT_CONTRACT_CHECKS = %w[
   wrapper_uses_default_workspace_edit_profile
   wrapper_reports_live_request_profile
   wrapper_reports_live_target_file
+].freeze
+ANDROID_TARGET_FILE_CONTRACT_CHECKS = %w[
+  wrapper_sets_expected_target_file
+  smoke_requires_target_file_evidence
+  smoke_requires_target_file_marker
 ].freeze
 
 def run_command(*command, chdir:)
@@ -154,12 +160,16 @@ def android_acceptance_contract
     "wrapper_uses_default_workspace_edit_profile" => live_script.include?("\"#{EXPECTED_ANDROID_LIVE_REQUEST_PROFILE}\""),
     "wrapper_reports_live_request_profile" => live_script.include?("live_request_profile: live_request_profile") && live_script.include?("Live request profile"),
     "wrapper_reports_live_target_file" => live_script.include?("live_acceptance_target_file: LIVE_ACCEPTANCE_TARGET_FILE") && live_script.include?("Live acceptance target file"),
+    "wrapper_sets_expected_target_file" => live_script.include?("\"MOBILE_GATEWAY_EXPECTED_TARGET_FILE\" => LIVE_ACCEPTANCE_TARGET_FILE"),
+    "smoke_requires_target_file_evidence" => smoke_script.include?("mac_target_file_after_send"),
+    "smoke_requires_target_file_marker" => smoke_script.include?("Mac target file signal marker is required"),
   }
 
   {
     "status" => checks.values.all? ? "passed" : "failed",
     "code_activity_status" => contract_status(checks, ANDROID_CODE_ACTIVITY_CONTRACT_CHECKS),
     "workspace_edit_status" => contract_status(checks, ANDROID_WORKSPACE_EDIT_CONTRACT_CHECKS),
+    "target_file_status" => contract_status(checks, ANDROID_TARGET_FILE_CONTRACT_CHECKS),
     "checks" => checks,
   }
 end
@@ -190,6 +200,19 @@ def android_workspace_edit_contract_evidence(contract)
                     "Android final live acceptance defaults to #{EXPECTED_ANDROID_LIVE_REQUEST_PROFILE} targeting #{EXPECTED_ANDROID_LIVE_TARGET_FILE}."
                   else
                     "Android final live acceptance is missing required workspace-edit request checks: #{failed.join(", ")}."
+                  end,
+  }
+end
+
+def android_target_file_contract_evidence(contract)
+  failed = contract.fetch("checks").slice(*ANDROID_TARGET_FILE_CONTRACT_CHECKS).select { |_key, value| value != true }.keys
+  {
+    "key" => "android_target_file_gate",
+    "status" => failed.empty? ? "passed" : "failed",
+    "evidence" => if failed.empty?
+                    "Android final live acceptance requires #{EXPECTED_ANDROID_LIVE_TARGET_FILE} to appear in Mac patch or worktree activity."
+                  else
+                    "Android final live acceptance is missing required target-file checks: #{failed.join(", ")}."
                   end,
   }
 end
@@ -225,6 +248,7 @@ def build_acceptance_evidence(readiness, android, android_ran, android_preflight
   evidence.concat(android_preflight_evidence(android_preflight_report))
   evidence << android_contract_evidence(android_contract)
   evidence << android_workspace_edit_contract_evidence(android_contract)
+  evidence << android_target_file_contract_evidence(android_contract)
   if android_ran
     evidence.concat(android_live_request_metadata_evidence(android))
     android.fetch("acceptance_evidence", []).each do |item|
@@ -265,6 +289,7 @@ def write_reports(report)
     "- Android preflight: `#{report[:android_preflight_status]}`",
     "- Android final code activity gate: `#{report[:android_final_code_activity_gate_status]}`",
     "- Android default workspace edit request: `#{report[:android_default_workspace_edit_request_status]}`",
+    "- Android target file gate: `#{report[:android_target_file_gate_status]}`",
     "- Android live acceptance: `#{report[:android_live_acceptance_status]}`",
     "- Android ready devices: `#{report[:android_ready_device_count]}`",
     "- Android repo: `#{report[:android_dir]}`",
@@ -338,6 +363,7 @@ report = {
   android_preflight_status: android_preflight_report["status"],
   android_final_code_activity_gate_status: android_contract_report["code_activity_status"],
   android_default_workspace_edit_request_status: android_contract_report["workspace_edit_status"],
+  android_target_file_gate_status: android_contract_report["target_file_status"],
   android_ready_device_count: android_preflight_report["ready_device_count"],
   android_live_acceptance_status: android_report["status"],
   mac_readiness_report_json: READINESS_REPORT_JSON,
