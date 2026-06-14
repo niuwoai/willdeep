@@ -1,12 +1,12 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-06-14 | Target version: v1.78.0-rc1
+> Last updated: 2026-06-14 | Target version: v1.78.0-rc2
 
 ## Summary
 
-Mobile Gateway lets a future Android client connect to WillDeep over the local network. The phone is a display and control surface; the Mac remains the authority for Agent execution, tool approval, patch application, workspace access, and safety gates.
+Mobile Gateway lets an Android client connect to WillDeep over the local network. The phone is a display and control surface; the Mac remains the authority for Agent execution, tool approval, patch application, workspace access, and safety gates.
 
-This phase implements the Mac-side Go gateway and records the protocol contract. It does not ship an Android app, cloud relay, public tunnel, push notifications, or direct mobile access to filesystem and shell APIs.
+This Mac repository implements the Go gateway, Swift desktop peer, and protocol contract. The Android client is developed in the separate `willdeep-android` repository; this repository does not ship cloud relay, public tunnel, push notifications, or direct mobile access to filesystem and shell APIs.
 
 ## Product Goals
 
@@ -66,8 +66,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.78.0-rc1`
-- `X-Server-Version: 1.78.0-rc1`
+- `X-App-Version: 1.78.0-rc2`
+- `X-Server-Version: 1.78.0-rc2`
 
 ### `GET /mobile/health`
 
@@ -79,7 +79,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.78.0-rc1",
+    "version": "1.78.0-rc2",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
@@ -338,5 +338,5 @@ All user-visible SwiftUI text must go through `Localizable.xcstrings` and `L10n.
 ## Test Requirements
 
 - Go unit tests must cover pairing token claim, expiration, one-time use, desktop-authenticated pairing rotation, health version headers, WebSocket auth, command forwarding, desktop event broadcast, unknown command errors, and revoke behavior.
-- Swift tests should be added when the desktop bridge lands, covering state snapshot conversion and command routing into existing Agent runtime methods.
+- Swift tests cover state snapshot conversion, command routing into existing Agent runtime methods, `AppState` workspace path guard enforcement for `file.read`, danger-tier typed confirmation enforcement for `tool.decide`, `ask_user` answer enforcement, and patch apply/reject routing through the existing desktop patch state machine.
 - `scripts/mobile_gateway_integration_test.rb` starts a real local gateway, simulates desktop and mobile peers, verifies pairing, desktop-authenticated pairing rotation, command forwarding, ack, event broadcast, and emits JSON plus Markdown reports.

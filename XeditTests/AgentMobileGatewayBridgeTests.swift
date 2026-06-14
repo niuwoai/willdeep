@@ -439,6 +439,186 @@ struct AgentMobileGatewayBridgeTests {
         ])
     }
 
+    @Test @MainActor
+    func appStateFileReadUsesWorkspacePathGuard() throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_mobile_gateway_workspace_\(UUID().uuidString)")
+        let outside = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_mobile_gateway_outside_\(UUID().uuidString).txt")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        try "inside\n".write(to: workspace.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+        try "outside\n".write(to: outside, atomically: true, encoding: .utf8)
+        defer {
+            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: outside)
+        }
+
+        let appState = AppState(rootDirectory: workspace)
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        let session = appState.startNewAgentSession()
+        defer { deleteSessionsCreatedByTest(appState, existingIDs: existingIDs) }
+
+        let file = try appState.mobileGatewayReadFile(
+            sessionID: session.id,
+            path: "README.md",
+            maxBytes: 1024
+        )
+        #expect(file.path == "README.md")
+        #expect(file.content == "inside\n")
+
+        do {
+            _ = try appState.mobileGatewayReadFile(
+                sessionID: session.id,
+                path: outside.path,
+                maxBytes: 1024
+            )
+            Issue.record("Expected absolute path outside workspace to be rejected")
+        } catch AgentMobileGatewayCommandError.pathOutsideWorkspace(let path) {
+            #expect(path == outside.path)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
+    @Test @MainActor
+    func appStateToolDecideKeepsConfirmAndAnswerGates() throws {
+        let appState = AppState()
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        let session = appState.startNewAgentSession()
+        defer { deleteSessionsCreatedByTest(appState, existingIDs: existingIDs) }
+
+        let confirmCall = AgentToolCall(
+            messageID: UUID(),
+            externalID: "call-danger",
+            toolName: "run_command",
+            arguments: ["command": .string("rm -rf /tmp/example")],
+            risk: .danger,
+            status: .awaitingConfirm
+        )
+        appState.agentToolCalls = [confirmCall]
+
+        do {
+            _ = try appState.mobileGatewayDecideTool(
+                sessionID: session.id,
+                toolID: confirmCall.id.uuidString,
+                approved: true,
+                typedConfirmation: nil,
+                answer: nil
+            )
+            Issue.record("Expected mobile approval without typed confirm to be rejected")
+        } catch AgentMobileGatewayCommandError.confirmationRequired(let id) {
+            #expect(id == confirmCall.id.uuidString)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+
+        let confirmResult = try appState.mobileGatewayDecideTool(
+            sessionID: session.id,
+            toolID: confirmCall.externalID,
+            approved: true,
+            typedConfirmation: " confirm ",
+            answer: nil
+        )
+        #expect(confirmResult.sessionID == session.id)
+
+        let askCall = AgentToolCall(
+            messageID: UUID(),
+            externalID: "call-ask-user",
+            toolName: "ask_user",
+            arguments: ["question": .string("Which branch should I use?")],
+            risk: .userInput,
+            status: .awaitingUserAnswer
+        )
+        appState.agentToolCalls = [askCall]
+
+        do {
+            _ = try appState.mobileGatewayDecideTool(
+                sessionID: session.id,
+                toolID: askCall.externalID,
+                approved: true,
+                typedConfirmation: nil,
+                answer: "   "
+            )
+            Issue.record("Expected ask_user approval without an answer to be rejected")
+        } catch AgentMobileGatewayCommandError.missingAnswer {
+            #expect(true)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+
+        let answerResult = try appState.mobileGatewayDecideTool(
+            sessionID: session.id,
+            toolID: askCall.id.uuidString,
+            approved: true,
+            typedConfirmation: nil,
+            answer: "Use the current branch"
+        )
+        #expect(answerResult.sessionID == session.id)
+    }
+
+    @Test @MainActor
+    func appStatePatchDecideUsesExistingPatchApplyAndReject() throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_mobile_gateway_patch_\(UUID().uuidString)")
+        let readme = workspace.appendingPathComponent("README.md")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        try "hello\n".write(to: readme, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState(rootDirectory: workspace)
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        let session = appState.startNewAgentSession()
+        defer { deleteSessionsCreatedByTest(appState, existingIDs: existingIDs) }
+
+        let applyProposal = AgentPatchProposal(
+            messageID: UUID(),
+            title: "Update README",
+            diff: """
+            diff --git a/README.md b/README.md
+            --- a/README.md
+            +++ b/README.md
+            @@ -1 +1 @@
+            -hello
+            +hello from Android
+            """
+        )
+        appState.agentPatchProposals = [applyProposal]
+
+        let applyResult = try appState.mobileGatewayDecidePatch(
+            sessionID: session.id,
+            patchID: applyProposal.id,
+            approved: true
+        )
+
+        #expect(applyResult.sessionID == session.id)
+        #expect(appState.agentPatchProposals.first?.status == .applied)
+        #expect(try String(contentsOf: readme, encoding: .utf8) == "hello from Android\n")
+
+        let rejectProposal = AgentPatchProposal(
+            messageID: UUID(),
+            title: "Rejected README update",
+            diff: """
+            diff --git a/README.md b/README.md
+            --- a/README.md
+            +++ b/README.md
+            @@ -1 +1 @@
+            -hello from Android
+            +rejected content
+            """
+        )
+        appState.agentPatchProposals = [rejectProposal]
+
+        let rejectResult = try appState.mobileGatewayDecidePatch(
+            sessionID: session.id,
+            patchID: rejectProposal.id,
+            approved: false
+        )
+
+        #expect(rejectResult.sessionID == session.id)
+        #expect(appState.agentPatchProposals.first?.status == .rejected)
+        #expect(try String(contentsOf: readme, encoding: .utf8) == "hello from Android\n")
+    }
+
     private var fixedDate: Date {
         DateComponents(
             calendar: Calendar(identifier: .gregorian),
@@ -448,6 +628,13 @@ struct AgentMobileGatewayBridgeTests {
             day: 13,
             hour: 12
         ).date ?? Date(timeIntervalSince1970: 0)
+    }
+
+    @MainActor
+    private func deleteSessionsCreatedByTest(_ appState: AppState, existingIDs: Set<AgentSession.ID>) {
+        for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
+            AgentSessionStore.delete(id: id)
+        }
     }
 }
 

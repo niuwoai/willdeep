@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.78.0-rc2 - 2026-06-14
+
+### Tests
+
+- Added real `AppState` Mobile Gateway bridge tests covering `file.read` workspace path guard enforcement, danger-tier `tool.decide` typed confirmation, `ask_user` answer requirements, and `patch.decide` routing through the existing patch apply/reject state machine.
+
+### Changed
+
+- Updated the Mobile Gateway requirements and product overview to reflect that Android now lives in the separate `willdeep-android` repository while Mac remains the Agent execution and safety authority.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc2`。
+
 ## 1.78.0-rc1 - 2026-06-14
 
 ### Added
