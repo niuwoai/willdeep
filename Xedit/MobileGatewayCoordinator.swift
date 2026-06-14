@@ -59,7 +59,7 @@ struct MobileGatewayHealth: Codable, Equatable {
     struct VersionInfo: Codable, Equatable {
         var name: String
         var version: String
-        var protocolVersion: String
+        var protocolVersion: String?
 
         enum CodingKeys: String, CodingKey {
             case name
@@ -72,12 +72,14 @@ struct MobileGatewayHealth: Codable, Equatable {
     var protocolVersion: String
     var desktopName: String
     var pairingAllowed: Bool
+    var desktopPeerConnected: Bool?
 
     enum CodingKeys: String, CodingKey {
         case version
         case protocolVersion = "protocol_version"
         case desktopName = "desktop_name"
         case pairingAllowed = "pairing_allowed"
+        case desktopPeerConnected = "desktop_peer_connected"
     }
 }
 
@@ -117,7 +119,6 @@ final class MobileGatewayCoordinator: ObservableObject {
     deinit {
         monitorTask?.cancel()
         process?.terminate()
-        try? tokenFileURL.map { try FileManager.default.removeItem(at: $0) }
     }
 
     var isRunning: Bool {
@@ -325,10 +326,6 @@ final class MobileGatewayCoordinator: ObservableObject {
         guard process === finishedProcess else { return }
         process = nil
         appState?.mobileGatewayDesktopPeer.disconnect()
-        if let tokenFileURL {
-            try? FileManager.default.removeItem(at: tokenFileURL)
-            self.tokenFileURL = nil
-        }
         if finishedProcess.terminationStatus == 0 {
             state = .stopped
         } else {
@@ -340,10 +337,6 @@ final class MobileGatewayCoordinator: ObservableObject {
         appState?.mobileGatewayDesktopPeer.disconnect()
         process?.terminate()
         process = nil
-        if let tokenFileURL {
-            try? FileManager.default.removeItem(at: tokenFileURL)
-            self.tokenFileURL = nil
-        }
         state = .failed(message)
     }
 

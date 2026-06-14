@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.78.0-rc24 - 2026-06-15
+
+### Added
+
+- `/mobile/health` 新增 `desktop_peer_connected`，用于区分单独运行的 Go gateway 和已经连接 Swift desktop peer 的完整 Mac Mobile Gateway。
+- `scripts/mobile_gateway_live_readiness.rb` 新增 desktop peer 在线验收项，避免 Android live acceptance 在没有 Mac Agent bridge 的 gateway 上假绿。
+
+### Fixed
+
+- Swift Mobile Gateway health 解码兼容 Go `version` 对象不包含 nested `protocol_version` 的实际响应，避免启动 gateway 后因健康检查解码失败而立即停止。
+- `MobileGatewayCoordinator` 的析构、失败和子进程退出路径不再删除共享 desktop token handoff 文件，避免 SwiftUI 临时 coordinator 生命周期把正在运行的 gateway 的认证文件删掉；用户显式 Stop 仍会清理。
+- `AgentMobileGatewayDesktopPeer` 在 WebSocket 被测试宿主或网络瞬断关闭后会自动重连，避免网关仍运行但 `desktop_peer_connected=false` 需要手动重启。
+
+### Tests
+
+- 新增 Go 单测覆盖 health 在 desktop peer WebSocket 连接前后返回的 `desktop_peer_connected` 状态。
+- 新增 Swift 单测覆盖 Go health 响应缺少 nested `version.protocol_version` 时仍可解码。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc24`。
+
 ## 1.78.0-rc23 - 2026-06-15
 
 ### Added

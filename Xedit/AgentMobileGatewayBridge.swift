@@ -982,6 +982,11 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
 
     private weak var appState: AppState?
     private var webSocketTask: URLSessionWebSocketTask?
+    private var reconnectTask: Task<Void, Never>?
+    private var reconnectBaseURL: URL?
+    private var reconnectDesktopToken: String?
+    private var reconnectSession: URLSession = .shared
+    private var shouldReconnect = false
     private var appStateCancellable: AnyCancellable?
     private var snapshotTask: Task<Void, Never>?
     private var messageEventState = AgentMobileGatewayMessageEventState()
@@ -1001,6 +1006,14 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
 
     func connect(baseURL: URL, desktopToken: String, session: URLSession = .shared) {
         disconnect()
+        shouldReconnect = true
+        reconnectBaseURL = baseURL
+        reconnectDesktopToken = desktopToken
+        reconnectSession = session
+        open(baseURL: baseURL, desktopToken: desktopToken, session: session)
+    }
+
+    private func open(baseURL: URL, desktopToken: String, session: URLSession) {
         guard let url = websocketURL(from: baseURL) else {
             lastErrorMessage = "Invalid Mobile Gateway URL."
             return
@@ -1017,12 +1030,18 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
     }
 
     func disconnect() {
+        shouldReconnect = false
+        reconnectTask?.cancel()
+        reconnectTask = nil
         snapshotTask?.cancel()
         snapshotTask = nil
         messageEventState.reset()
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         isConnected = false
+        reconnectBaseURL = nil
+        reconnectDesktopToken = nil
+        reconnectSession = .shared
     }
 
     func publishSnapshot() {
@@ -1076,6 +1095,7 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
                     self.isConnected = false
                     self.lastErrorMessage = error.localizedDescription
                     self.webSocketTask = nil
+                    self.scheduleReconnect()
                 }
             }
         }
@@ -1114,10 +1134,27 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
                 Task { @MainActor [weak self] in
                     self?.lastErrorMessage = error.localizedDescription
                     self?.isConnected = false
+                    self?.webSocketTask = nil
+                    self?.scheduleReconnect()
                 }
             }
         } catch {
             lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func scheduleReconnect() {
+        guard shouldReconnect,
+              reconnectTask == nil,
+              let baseURL = reconnectBaseURL,
+              let desktopToken = reconnectDesktopToken else {
+            return
+        }
+        reconnectTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 750_000_000)
+            guard let self, !Task.isCancelled, self.shouldReconnect else { return }
+            self.reconnectTask = nil
+            self.open(baseURL: baseURL, desktopToken: desktopToken, session: self.reconnectSession)
         }
     }
 

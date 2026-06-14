@@ -55,6 +55,7 @@ def health_probe
     protocol_version: data["protocol_version"],
     desktop_name: data["desktop_name"],
     pairing_allowed: data["pairing_allowed"],
+    desktop_peer_connected: data["desktop_peer_connected"],
     error: body["error"],
   }
 rescue StandardError => e
@@ -65,6 +66,7 @@ rescue StandardError => e
     protocol_version: nil,
     desktop_name: nil,
     pairing_allowed: nil,
+    desktop_peer_connected: nil,
     error: "#{e.class}: #{e.message}",
   }
 end
@@ -201,6 +203,11 @@ def acceptance_evidence(health, token, rotate, listener)
       status: health[:pairing_allowed] == true ? "passed" : "failed",
       evidence: "pairing_allowed=#{health[:pairing_allowed].nil? ? "missing" : health[:pairing_allowed]}.",
     },
+    {
+      key: "desktop_peer_connected",
+      status: health[:desktop_peer_connected] == true ? "passed" : "failed",
+      evidence: "desktop_peer_connected=#{health[:desktop_peer_connected].nil? ? "missing" : health[:desktop_peer_connected]}.",
+    },
   ]
 end
 
@@ -217,6 +224,7 @@ def next_actions(health, token, rotate, listener)
   end
   actions << "Keep WillDeep running so it writes the desktop token file for Android live acceptance." unless token[:present]
   actions << "Allow new device pairing in Settings > Mobile Gateway." unless health[:pairing_allowed] == true
+  actions << "Keep the WillDeep macOS app running until the Swift desktop peer connects to the gateway." unless health[:desktop_peer_connected] == true
   actions << "Use the Refresh Pairing button if pairing rotate is failing after the gateway is running." unless rotate[:status] == "passed"
   actions << "Run `ruby scripts/mobile_gateway_live_readiness.rb` again, then run Android `ruby scripts/mobile_gateway_live_acceptance.rb`." if actions.any?
   actions
@@ -239,6 +247,7 @@ def write_reports(report)
     "- Server version: `#{report.dig(:health, :server_version) || "unknown"}`",
     "- Protocol version: `#{report.dig(:health, :protocol_version) || "unknown"}`",
     "- Pairing allowed: `#{report.dig(:health, :pairing_allowed).nil? ? "unknown" : report.dig(:health, :pairing_allowed)}`",
+    "- Desktop peer connected: `#{report.dig(:health, :desktop_peer_connected).nil? ? "unknown" : report.dig(:health, :desktop_peer_connected)}`",
     "- Pairing rotate: `#{report.dig(:pairing_rotate, :status)}`",
     "",
     "## Acceptance Evidence",

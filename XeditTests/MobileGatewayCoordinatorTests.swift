@@ -107,7 +107,8 @@ struct MobileGatewayCoordinatorTests {
             },
             "protocol_version": "mobile-gateway.v1",
             "desktop_name": "Mac",
-            "pairing_allowed": true
+            "pairing_allowed": true,
+            "desktop_peer_connected": true
           }
         }
         """
@@ -118,5 +119,36 @@ struct MobileGatewayCoordinatorTests {
         #expect(envelope.error == "")
         #expect(envelope.data?.desktopName == "Mac")
         #expect(envelope.data?.pairingAllowed == true)
+        #expect(envelope.data?.desktopPeerConnected == true)
+    }
+
+    @Test
+    func healthDecodeToleratesGoVersionInfoWithoutNestedProtocolVersion() throws {
+        let json = """
+        {
+          "ok": true,
+          "data": {
+            "version": {
+              "name": "willdeep-agent",
+              "version": "1.78.0-rc24",
+              "go_version": "go1.23.x",
+              "os": "darwin",
+              "arch": "arm64"
+            },
+            "protocol_version": "mobile-gateway.v1",
+            "desktop_name": "Mac",
+            "pairing_allowed": true,
+            "desktop_peer_connected": false
+          }
+        }
+        """
+        let data = try #require(json.data(using: .utf8))
+        let envelope = try JSONDecoder().decode(APIEnvelope<MobileGatewayHealth>.self, from: data)
+
+        #expect(envelope.ok)
+        #expect(envelope.data?.version.version == "1.78.0-rc24")
+        #expect(envelope.data?.version.protocolVersion == nil)
+        #expect(envelope.data?.protocolVersion == "mobile-gateway.v1")
+        #expect(envelope.data?.desktopPeerConnected == false)
     }
 }

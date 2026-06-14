@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-06-15 | Target version: v1.78.0-rc23
+> Last updated: 2026-06-15 | Target version: v1.78.0-rc24
 
 ## Summary
 
@@ -66,8 +66,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.78.0-rc23`
-- `X-Server-Version: 1.78.0-rc23`
+- `X-App-Version: 1.78.0-rc24`
+- `X-Server-Version: 1.78.0-rc24`
 
 ### `GET /mobile/health`
 
@@ -79,18 +79,19 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.78.0-rc23",
+    "version": "1.78.0-rc24",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
   },
   "protocol_version": "mobile-gateway.v1",
   "desktop_name": "Rocky's Mac",
-  "pairing_allowed": true
+  "pairing_allowed": true,
+  "desktop_peer_connected": true
 }
 ```
 
-The public health response must not include the pairing token.
+The public health response must not include the pairing token. `desktop_peer_connected` is required for live Android acceptance because a standalone Go gateway can accept pairing but cannot forward `session.list` or `message.send` to the macOS Agent runtime.
 
 ### `GET /mobile/pairing`
 
