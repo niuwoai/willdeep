@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.78.0-rc6 - 2026-06-14
+
+### Tests
+
+- Added a real `AppState.mobileGatewaySendMessage` bridge test proving mobile `message.send` enters the normal `sendAgentMessage()` path, creates the user message, clears composer input, marks the runtime responding, and starts the runtime request task.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc6`。
+
 ## 1.78.0-rc5 - 2026-06-14
 
 ### Tests

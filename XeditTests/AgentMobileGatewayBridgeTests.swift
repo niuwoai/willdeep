@@ -60,6 +60,34 @@ struct AgentMobileGatewayBridgeTests {
     }
 
     @Test @MainActor
+    func appStateMessageSendDispatchesIntoAgentRuntime() throws {
+        let appState = AppState()
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        let session = appState.startNewAgentSession()
+        defer {
+            appState.stopAgentResponse()
+            deleteSessionsCreatedByTest(appState, existingIDs: existingIDs)
+        }
+
+        let result = try appState.mobileGatewaySendMessage(
+            sessionID: session.id,
+            text: "Implement the Android live acceptance gate"
+        )
+
+        #expect(result.sessionID == session.id)
+        #expect(appState.activeAgentSessionID == session.id)
+        guard let runtime = appState.activeRuntime else {
+            Issue.record("Expected active runtime after mobile message send")
+            return
+        }
+        #expect(runtime.input.isEmpty)
+        #expect(runtime.isResponding == true)
+        #expect(runtime.messages.last?.role == .user)
+        #expect(runtime.messages.last?.content == "Implement the Android live acceptance gate")
+        #expect(runtime.requestTask != nil)
+    }
+
+    @Test @MainActor
     func sessionCreateCallsControllerAndReturnsUpsert() {
         let controller = FakeMobileGatewayController(sessions: [], activeSessionID: nil)
         let response = AgentMobileGatewayCommandRouter.handle(
