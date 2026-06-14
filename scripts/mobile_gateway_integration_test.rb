@@ -333,16 +333,38 @@ def main
       raise "ack command #{ack.dig("payload", "type")}" unless ack.dig("payload", "type") == "message.send"
     end
 
-    recorder.record("desktop events broadcast to mobile") do
-      desktop_ws.write_json(
-        id: "evt-1",
-        type: "message.delta",
-        session_id: "session-1",
-        payload: { message_id: "m1", delta: "Editing files on the Mac..." },
-      )
-      event = mobile_ws.read_json
-      raise "event type #{event["type"]}" unless event["type"] == "message.delta"
-      raise "event delta missing" unless event.dig("payload", "delta").include?("Mac")
+    recorder.record("desktop message stream events broadcast to mobile") do
+      events = [
+        {
+          id: "evt-message-append",
+          type: "message.append",
+          session_id: "session-1",
+          payload: {
+            id: "m1",
+            role: "assistant",
+            content: "Editing",
+            created_at: "2026-06-14T12:00:00Z",
+          },
+        },
+        {
+          id: "evt-message-delta",
+          type: "message.delta",
+          session_id: "session-1",
+          payload: { message_id: "m1", delta: " files on the Mac..." },
+        },
+        {
+          id: "evt-message-done",
+          type: "message.done",
+          session_id: "session-1",
+          payload: { message_id: "m1" },
+        },
+      ]
+      events.each do |event|
+        desktop_ws.write_json(event)
+        received = mobile_ws.read_json
+        raise "event type #{received["type"]}" unless received["type"] == event.fetch(:type)
+        raise "event id #{received["id"]}" unless received["id"] == event.fetch(:id)
+      end
     end
 
     recorder.record("worktree update broadcasts to mobile") do

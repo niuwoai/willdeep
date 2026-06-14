@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.78.0-rc4 - 2026-06-14
+
+### Tests
+
+- Expanded Go Mobile Gateway WebSocket coverage so desktop-originated `message.append`, `message.delta`, and `message.done` events are all verified as allowed and broadcast to paired mobile devices.
+- Extended `scripts/mobile_gateway_integration_test.rb` to verify the real local gateway forwards desktop message stream events to the simulated Android peer in order.
+
+### 版本
+
+- Go agent version、pbxproj × 6 个 target、Help bundle Info.plist、README badges、product-overview.md、Mobile Gateway 需求文档全部同步到 `1.78.0-rc4`。
+
 ## 1.78.0-rc3 - 2026-06-14
 
 ### Added

@@ -290,21 +290,41 @@ func TestMobileGatewayWebSocketAuthAndForwarding(t *testing.T) {
 		t.Fatalf("ack = %#v", ack)
 	}
 
-	event := MobileEnvelope{
-		ID:        "evt-1",
-		Type:      "message.delta",
-		SessionID: "session-1",
-		Payload:   map[string]any{"delta": "world"},
+	events := []MobileEnvelope{
+		{
+			ID:        "evt-append",
+			Type:      "message.append",
+			SessionID: "session-1",
+			Payload: map[string]any{
+				"id":      "m1",
+				"role":    "assistant",
+				"content": "Editing",
+			},
+		},
+		{
+			ID:        "evt-delta",
+			Type:      "message.delta",
+			SessionID: "session-1",
+			Payload:   map[string]any{"message_id": "m1", "delta": " files"},
+		},
+		{
+			ID:        "evt-done",
+			Type:      "message.done",
+			SessionID: "session-1",
+			Payload:   map[string]any{"message_id": "m1"},
+		},
 	}
-	if err := desktopConn.WriteJSON(event); err != nil {
-		t.Fatalf("write desktop event: %v", err)
-	}
-	var received MobileEnvelope
-	if err := deviceConn.ReadJSON(&received); err != nil {
-		t.Fatalf("device read desktop event: %v", err)
-	}
-	if received.Type != event.Type || received.ID != event.ID {
-		t.Fatalf("desktop event = %#v", received)
+	for _, event := range events {
+		if err := desktopConn.WriteJSON(event); err != nil {
+			t.Fatalf("write desktop event %s: %v", event.Type, err)
+		}
+		var received MobileEnvelope
+		if err := deviceConn.ReadJSON(&received); err != nil {
+			t.Fatalf("device read desktop event %s: %v", event.Type, err)
+		}
+		if received.Type != event.Type || received.ID != event.ID {
+			t.Fatalf("desktop event = %#v, want %#v", received, event)
+		}
 	}
 }
 
