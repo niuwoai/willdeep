@@ -288,9 +288,9 @@ protocol AgentMobileGatewayControlling: AnyObject {
     var mobileGatewayActiveSessionID: UUID? { get }
 
     func mobileGatewayRuntimeIsResponding(sessionID: UUID) -> Bool
-    func mobileGatewayStartSession() -> AgentSession
+    func mobileGatewayStartSession(workspacePath: String?) -> AgentSession
     func mobileGatewaySelectSession(id: UUID) -> Bool
-    func mobileGatewaySendMessage(sessionID: UUID?, text: String) throws -> AgentMobileGatewayCommandResult
+    func mobileGatewaySendMessage(sessionID: UUID?, text: String, workspacePath: String?) throws -> AgentMobileGatewayCommandResult
     func mobileGatewayStopTurn(sessionID: UUID?) throws -> AgentMobileGatewayCommandResult
     var mobileGatewayPendingToolApprovals: [AgentMobileGatewayToolApprovalSnapshot] { get }
     var mobileGatewayPendingPatchProposals: [AgentMobileGatewayPatchSnapshot] { get }
@@ -421,7 +421,9 @@ enum AgentMobileGatewayCommandRouter {
                     now: now
                 )
             case "session.create":
-                let session = controller.mobileGatewayStartSession()
+                let session = controller.mobileGatewayStartSession(
+                    workspacePath: envelope.payload["workspace_path"]?.stringValue
+                )
                 return sessionEnvelope(
                     type: "session.upsert",
                     id: envelope.id,
@@ -442,7 +444,8 @@ enum AgentMobileGatewayCommandRouter {
                 guard !text.isEmpty else { throw AgentMobileGatewayCommandError.missingText }
                 let result = try controller.mobileGatewaySendMessage(
                     sessionID: try optionalSessionID(from: envelope),
-                    text: text
+                    text: text,
+                    workspacePath: envelope.payload["workspace_path"]?.stringValue
                 )
                 return ackEnvelope(
                     for: envelope,
@@ -1317,8 +1320,8 @@ extension AppState: AgentMobileGatewayControlling {
         agentRuntimes[sessionID]?.isResponding ?? false
     }
 
-    func mobileGatewayStartSession() -> AgentSession {
-        startNewAgentSession()
+    func mobileGatewayStartSession(workspacePath: String?) -> AgentSession {
+        startNewAgentSession(inWorkspaceAt: workspacePath)
     }
 
     func mobileGatewaySelectSession(id: UUID) -> Bool {
@@ -1327,17 +1330,28 @@ extension AppState: AgentMobileGatewayControlling {
         return true
     }
 
-    func mobileGatewaySendMessage(sessionID: UUID?, text: String) throws -> AgentMobileGatewayCommandResult {
+    func mobileGatewaySendMessage(
+        sessionID: UUID?,
+        text: String,
+        workspacePath: String?
+    ) throws -> AgentMobileGatewayCommandResult {
         if let sessionID {
             guard mobileGatewaySelectSession(id: sessionID) else {
                 throw AgentMobileGatewayCommandError.sessionNotFound(sessionID)
+            }
+        } else if let workspacePath, !workspacePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let url = URL(fileURLWithPath: workspacePath).standardizedFileURL
+            if let runtime = activeRuntime, runtime.isEmpty, !runtime.isResponding {
+                runtime.rebindWorkspace(to: url.path)
+            } else if activeRuntime?.workspaceRootPath != url.path || activeRuntime?.isResponding == true {
+                _ = startNewAgentSession(inWorkspaceAt: url.path)
             }
         } else if activeRuntime == nil {
             _ = startNewAgentSession()
         }
         guard let runtime = activeRuntime else {
             let session = startNewAgentSession()
-            return try mobileGatewaySendMessage(sessionID: session.id, text: text)
+            return try mobileGatewaySendMessage(sessionID: session.id, text: text, workspacePath: nil)
         }
         runtime.input = text
         sendAgentMessage()

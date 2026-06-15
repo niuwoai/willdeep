@@ -1,5 +1,51 @@
 # Changelog
 
+## 1.78.0-rc27 - 2026-06-15
+
+### Fixed
+
+- Android `message.send` 携带 `workspace_path` 且当前同 workspace 会话正在响应或等待审批时，Swift desktop peer 会新建 workspace-bound Agent 会话，避免复用旧 pending session 导致新的手机请求卡住。
+
+### Tests
+
+- Re-run Mobile Gateway bridge/coordinator targeted tests after the responding-session workspace routing fix.
+- Verified live Mobile Gateway readiness on port `8877` with `desktop_peer_connected=true`.
+- Ran the full Android-to-Mac end-to-end acceptance wrapper; all Mac readiness and Android live acceptance evidence passed.
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc27`。
+
+## 1.78.0-rc26 - 2026-06-15
+
+### Fixed
+
+- Mobile Gateway 启动健康检查不再强依赖 `/mobile/pairing` payload 解码；gateway 已健康时即进入运行状态，配对二维码读取失败只影响配对区域，避免启动时报“未能读取数据，因为数据丢失”。
+- Mobile Gateway 设置页端口改为明确的纯文本输入行，输入时只保留数字，提交空值或越界值时回落到默认 `8877` / 合法端口范围。
+
+### Changed
+
+- `message.send` / `session.create` 可携带 `workspace_path`，Swift desktop peer 会把 Android 发来的工作区路径绑定到新的或空的 Agent 会话，让手机端发起的写代码需求落到目标 Mac workspace。
+
+### Tests
+
+- 新增 Mobile Gateway 设置坏数据回退和空 pairing payload 解码回归测试。
+- 扩展 Mobile Gateway bridge 测试，覆盖 `workspace_path` 从 command payload 到 Swift controller 的转发。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc26`。
+
+## 1.78.0-rc25 - 2026-06-15
+
+### Fixed
+
+- `scripts/mobile_gateway_live_readiness.rb` 在 desktop-authenticated pairing rotate 成功后会重新读取 `/mobile/health`，用刷新后的短期 pairing token 状态判定 `pairing_allowed`，避免旧 token 已被 claim/过期时误挡 Android live acceptance。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc25`。
+
 ## 1.78.0-rc24 - 2026-06-15
 
 ### Added

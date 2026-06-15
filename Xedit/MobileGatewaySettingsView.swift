@@ -12,6 +12,7 @@ struct MobileGatewaySettingsView: View {
     @EnvironmentObject private var appState: AppState
     @State private var draft = MobileGatewaySettingsStore.load()
     @State private var portText = String(MobileGatewaySettingsStore.load().port)
+    @FocusState private var portFieldFocused: Bool
 
     private var coordinator: MobileGatewayCoordinator {
         appState.mobileGatewayCoordinator
@@ -84,7 +85,9 @@ struct MobileGatewaySettingsView: View {
                 ))
                 .textFieldStyle(.roundedBorder)
 
-                LabeledContent(L10n.Settings.MobileGateway.portInputLabel) {
+                HStack {
+                    Text(L10n.Settings.MobileGateway.portInputLabel)
+                    Spacer()
                     TextField(L10n.Settings.MobileGateway.portPrompt, text: Binding(
                         get: { portText },
                         set: { updatePortText($0) }
@@ -92,8 +95,14 @@ struct MobileGatewaySettingsView: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 160)
                     .multilineTextAlignment(.trailing)
+                    .focused($portFieldFocused)
                     .onSubmit {
                         commitPortText()
+                    }
+                    .onChange(of: portFieldFocused) { isFocused in
+                        if !isFocused {
+                            commitPortText()
+                        }
                     }
                 }
 
@@ -235,7 +244,7 @@ struct MobileGatewaySettingsView: View {
     private func updatePortText(_ value: String) {
         let digits = String(value.filter { $0.isNumber }.prefix(5))
         portText = digits
-        guard let port = Int(digits) else {
+        guard let port = Int(digits), mobileGatewayPortRange.contains(port) else {
             return
         }
         draft.port = port

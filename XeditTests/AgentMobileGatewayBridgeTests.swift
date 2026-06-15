@@ -55,7 +55,11 @@ struct AgentMobileGatewayBridgeTests {
         #expect(response.sessionID == session.id.uuidString)
         #expect(controller.selectedSessionIDs == [session.id])
         #expect(controller.sentMessages == [
-            FakeMobileGatewayController.SentMessage(sessionID: session.id, text: "Implement the Android bridge")
+            FakeMobileGatewayController.SentMessage(
+                sessionID: session.id,
+                text: "Implement the Android bridge",
+                workspacePath: nil
+            )
         ])
     }
 
@@ -71,7 +75,8 @@ struct AgentMobileGatewayBridgeTests {
 
         let result = try appState.mobileGatewaySendMessage(
             sessionID: session.id,
-            text: "Implement the Android live acceptance gate"
+            text: "Implement the Android live acceptance gate",
+            workspacePath: nil
         )
 
         #expect(result.sessionID == session.id)
@@ -99,6 +104,27 @@ struct AgentMobileGatewayBridgeTests {
         #expect(response.type == "session.upsert")
         #expect(controller.createdSessionCount == 1)
         #expect(response.sessionID == controller.sessions.first?.id.uuidString)
+    }
+
+    @Test @MainActor
+    func messageSendRoutesWorkspacePathToController() {
+        let controller = FakeMobileGatewayController(sessions: [], activeSessionID: nil)
+        let response = AgentMobileGatewayCommandRouter.handle(
+            AgentMobileGatewayEnvelope(
+                id: "cmd-workspace",
+                type: "message.send",
+                payload: [
+                    "text": .string("Create the live acceptance marker"),
+                    "workspace_path": .string("/tmp/willdeep-live")
+                ]
+            ),
+            controller: controller,
+            now: fixedDate
+        )
+
+        #expect(response.type == "ack")
+        #expect(controller.sentMessages.last?.text == "Create the live acceptance marker")
+        #expect(controller.sentMessages.last?.workspacePath == "/tmp/willdeep-live")
     }
 
     @Test @MainActor
@@ -751,6 +777,7 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
     struct SentMessage: Equatable {
         var sessionID: UUID?
         var text: String
+        var workspacePath: String?
     }
 
     var sessions: [AgentSession]
@@ -823,9 +850,9 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
         false
     }
 
-    func mobileGatewayStartSession() -> AgentSession {
+    func mobileGatewayStartSession(workspacePath: String?) -> AgentSession {
         createdSessionCount += 1
-        let session = AgentSession(title: "New mobile chat")
+        let session = AgentSession(title: "New mobile chat", workspaceRootPath: workspacePath)
         sessions.insert(session, at: 0)
         activeSessionID = session.id
         return session
@@ -838,13 +865,17 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
         return true
     }
 
-    func mobileGatewaySendMessage(sessionID: UUID?, text: String) throws -> AgentMobileGatewayCommandResult {
+    func mobileGatewaySendMessage(
+        sessionID: UUID?,
+        text: String,
+        workspacePath: String?
+    ) throws -> AgentMobileGatewayCommandResult {
         if let sessionID {
             guard mobileGatewaySelectSession(id: sessionID) else {
                 throw AgentMobileGatewayCommandError.sessionNotFound(sessionID)
             }
         }
-        sentMessages.append(SentMessage(sessionID: sessionID, text: text))
+        sentMessages.append(SentMessage(sessionID: sessionID, text: text, workspacePath: workspacePath))
         return .ok(sessionID: sessionID ?? activeSessionID)
     }
 

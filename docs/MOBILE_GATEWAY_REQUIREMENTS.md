@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-06-15 | Target version: v1.78.0-rc24
+> Last updated: 2026-06-15 | Target version: v1.78.0-rc27
 
 ## Summary
 
@@ -66,8 +66,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.78.0-rc24`
-- `X-Server-Version: 1.78.0-rc24`
+- `X-App-Version: 1.78.0-rc27`
+- `X-Server-Version: 1.78.0-rc27`
 
 ### `GET /mobile/health`
 
@@ -79,7 +79,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.78.0-rc24",
+    "version": "1.78.0-rc27",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
@@ -233,7 +233,6 @@ Fields:
 - `session_id`: optional Agent session id.
 - `payload`: optional object payload.
 - `ts`: optional ISO-8601 timestamp; the gateway fills it when missing.
-
 ## Desktop Events
 
 The desktop peer may broadcast:
@@ -279,6 +278,8 @@ Gateway behavior:
 
 The desktop app remains responsible for the actual command result and subsequent state events.
 
+`session.create` and `message.send` may include `payload.workspace_path`. When present, Swift routes the command into a local Mac Agent session bound to that workspace path. Android live acceptance uses this field to make phone-originated coding requests land in the intended Mac repository instead of a generic "No workspace" session.
+
 Current desktop bridge behavior:
 
 - `state.snapshot` includes session summaries, pending tool approvals, patch proposals, background jobs, queued message previews, recent conversation messages, and `worktree_changes` summaries.
@@ -313,6 +314,7 @@ The macOS app includes a Mobile Gateway settings section:
 - enable or disable LAN access;
 - start or stop `willdeep-agent serve-mobile`;
 - show the selected LAN address, port, and resolved gateway executable;
+- edit the port with a numeric-only text input, defaulting to `8877`;
 - show protocol version;
 - show QR pairing payload;
 - refresh the short-lived QR pairing payload without restarting the gateway;

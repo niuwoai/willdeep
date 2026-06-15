@@ -268,9 +268,10 @@ def write_reports(report)
   File.write(REPORT_MD, lines.join("\n"))
 end
 
-health = health_probe
+initial_health = health_probe
 token = token_probe
 rotate = pairing_rotate_probe(token[:present])
+health = rotate[:status] == "passed" ? health_probe : initial_health
 listener = listener_process_probe
 evidence = acceptance_evidence(health, token, rotate, listener)
 status = evidence.all? { |item| item[:status] == "passed" } ? "passed" : "failed"
@@ -280,6 +281,7 @@ report = {
   base_url: BASE_URL,
   expected_protocol: EXPECTED_PROTOCOL,
   expected_server_version: EXPECTED_SERVER_VERSION,
+  initial_health: initial_health,
   health: health,
   listener_process: listener,
   desktop_token_file: token,

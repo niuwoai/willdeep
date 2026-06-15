@@ -195,7 +195,7 @@ final class MobileGatewayCoordinator: ObservableObject {
             process = gatewayProcess
             drain(pipe: outputPipe)
 
-            try await waitUntilHealthy(baseURL: desktopBaseURL, token: desktopToken)
+            try await waitUntilHealthy(baseURL: desktopBaseURL)
             appState?.mobileGatewayDesktopPeer.connect(baseURL: desktopBaseURL, desktopToken: desktopToken)
             state = .running
             await refresh()
@@ -226,7 +226,7 @@ final class MobileGatewayCoordinator: ObservableObject {
         let baseURL = Self.desktopBaseURL(for: settings)
         displayBaseURL = Self.pairingBaseURL(for: settings)
         health = try? await get(path: "/mobile/health", baseURL: baseURL, token: nil, as: MobileGatewayHealth.self)
-        pairingPayload = try? await get(path: "/mobile/pairing", baseURL: baseURL, token: desktopToken, as: PairingResponse.self).pairingPayload
+        pairingPayload = try? await get(path: "/mobile/pairing", baseURL: baseURL, token: desktopToken, as: MobileGatewayPairingResponse.self).pairingPayload
         devices = (try? await get(path: "/mobile/devices", baseURL: baseURL, token: desktopToken, as: DevicesResponse.self).devices) ?? devices
     }
 
@@ -255,7 +255,7 @@ final class MobileGatewayCoordinator: ObservableObject {
                 baseURL: Self.desktopBaseURL(for: settings),
                 token: desktopToken,
                 body: EmptyRequest(),
-                as: PairingResponse.self
+                as: MobileGatewayPairingResponse.self
             ).pairingPayload
             await refresh()
         } catch {
@@ -263,12 +263,11 @@ final class MobileGatewayCoordinator: ObservableObject {
         }
     }
 
-    private func waitUntilHealthy(baseURL: URL, token: String) async throws {
+    private func waitUntilHealthy(baseURL: URL) async throws {
         var lastError: Error?
         for _ in 0..<20 {
             do {
                 health = try await get(path: "/mobile/health", baseURL: baseURL, token: nil, as: MobileGatewayHealth.self)
-                _ = try await get(path: "/mobile/pairing", baseURL: baseURL, token: token, as: PairingResponse.self)
                 return
             } catch {
                 lastError = error
@@ -462,8 +461,8 @@ struct APIEnvelope<T: Decodable>: Decodable {
     }
 }
 
-private struct PairingResponse: Decodable {
-    var pairingPayload: MobileGatewayPairingPayload
+struct MobileGatewayPairingResponse: Decodable {
+    var pairingPayload: MobileGatewayPairingPayload?
 
     enum CodingKeys: String, CodingKey {
         case pairingPayload = "pairing_payload"
