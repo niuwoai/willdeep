@@ -3056,6 +3056,33 @@ struct WillDeepTests {
             approvalMode: .smart
         )
         #expect(yarnBuild == .staticAllowlist)
+
+        let heredocGeneration = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("""
+            cd /tmp/willdeep-test-workspace && python3 << 'PYEOF'
+            from pathlib import Path
+            Path("Generated.swift").write_text("let value = 1\\n")
+            PYEOF
+            """)],
+            risk: .write,
+            rootDirectory: root,
+            approvalMode: .smart
+        )
+        #expect(heredocGeneration == .staticAllowlist)
+
+        let outsideWorkspaceGeneration = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("""
+            cd /tmp/willdeep-test-workspace && cat > /tmp/outside.txt << 'EOF'
+            generated
+            EOF
+            """)],
+            risk: .write,
+            rootDirectory: root,
+            approvalMode: .smart
+        )
+        #expect(outsideWorkspaceGeneration == nil)
     }
 
     @Test("legacy agent session JSON defaults to smart approval")

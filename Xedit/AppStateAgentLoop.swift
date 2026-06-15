@@ -751,6 +751,13 @@ extension AppState {
             return nil
         }
 
+        if AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
+            command: command,
+            rootDirectory: rootDirectory
+        ) {
+            return .staticAllowlist
+        }
+
         // 2. Static read-only allowlist (zero latency, zero cost).
         switch SafeCommand.classify(command: command) {
         case .alwaysSafe:

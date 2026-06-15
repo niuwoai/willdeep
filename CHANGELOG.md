@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.78.0-rc30 - 2026-06-15
+
+### Fixed
+
+- 智能审批会自动放行被 workspace-write sandbox 限定在当前 workspace 内的低风险生成/编辑命令，包括 heredoc 包装的脚本，避免正常代码生成频繁弹出审批卡。
+- 保持危险命令、敏感路径、网络/凭据命令和显式越界路径的审批或确认门禁。
+
+### Tests
+
+- 新增回归测试，覆盖 heredoc 脚本生成 workspace 内文件自动通过，以及写到 workspace 外路径仍需人工处理。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc30`。
+
 ## 1.78.0-rc29 - 2026-06-15
 
 ### Fixed

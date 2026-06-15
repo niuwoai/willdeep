@@ -333,6 +333,78 @@ enum AgentSandboxPolicy {
         )
     }
 
+    nonisolated static func canAutoApproveWorkspaceWriteCommand(command: String, rootDirectory: URL?) -> Bool {
+        guard let rootDirectory else { return false }
+
+        let decision = commandDecision(command: command, rootDirectory: rootDirectory)
+        guard decision.mode == .workspaceWrite,
+              decision.requiresUserApproval,
+              !decision.requiresTypedConfirmation else {
+            return false
+        }
+
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        let policyCommand = commandWithHeredocBodiesRemoved(trimmed)
+        guard !containsUnsafeShellExpansion(policyCommand),
+              let segments = splitCommandSegments(policyCommand),
+              !segments.isEmpty else {
+            return false
+        }
+
+        let root = rootDirectory.standardizedFileURL
+        var workingDirectory: URL? = root
+
+        for segment in segments {
+            guard let tokens = AgentCommandAuthorization.shellTokens(from: segment),
+                  let head = tokens.first?.lowercased() else {
+                return false
+            }
+
+            if forcefulGitMutation(tokens) ||
+                destructiveHeads.contains(head) ||
+                credentialHeads.contains(head) {
+                return false
+            }
+
+            if networkHeads.contains(head) {
+                switch classifyNetworkReadOnly(head: head, tokens: tokens) {
+                case .alwaysSafe:
+                    break
+                case .alwaysDangerous, .needsJudgment:
+                    return false
+                }
+            }
+
+            if head == "cd" {
+                if let next = tokens.dropFirst().first {
+                    guard let resolved = resolvePath(next, workingDirectory: workingDirectory, rootDirectory: root),
+                          isInsideWorkspace(resolved, rootDirectory: root) else {
+                        return false
+                    }
+                    workingDirectory = resolved
+                } else {
+                    workingDirectory = root
+                }
+                continue
+            }
+
+            for token in tokens.dropFirst() {
+                if referencesSensitivePath(token) {
+                    return false
+                }
+                guard looksLikePath(token),
+                      let resolved = resolvePath(token, workingDirectory: workingDirectory, rootDirectory: root) else {
+                    continue
+                }
+                if !isInsideWorkspace(resolved, rootDirectory: root) {
+                    return false
+                }
+            }
+        }
+
+        return true
+    }
+
     nonisolated static func sandboxedEnvironment(
         mode: AgentSandboxMode,
         rootDirectory: URL?,
