@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.78.0-rc32 - 2026-06-15
+
+### Fixed
+
+- 人工审批、破坏性确认和人工回答的操作按钮靠右展示，避免和命令正文挤在左侧。
+- `ask_user` 选项改为一行一个的整行选择项，多选项也增加行级背景和边框，提升可读性和点击区域。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc32`。
+
+## 1.78.0-rc31 - 2026-06-15
+
+### Fixed
+
+- 破坏性命令确认卡不再使用高饱和红色实心按钮；改为透明背景、低饱和红色描边按钮，并把确认卡边框和提示文案调整得更克制。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc31`。
+
 ## 1.78.0-rc30 - 2026-06-15
 
 ### Fixed

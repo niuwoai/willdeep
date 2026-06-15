@@ -1275,13 +1275,13 @@ struct AgentToolCallCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     approvalCommandBlock
                     HStack {
+                        Spacer(minLength: 0)
                         Button(L10n.ToolCard.allow) { appState.approveAgentToolCall(id: call.id) }
                         if let signature = alwaysAllowSignature {
                             Button(L10n.ToolCard.alwaysAllow) { appState.alwaysAllowAgentToolCall(id: call.id) }
                                 .help(L10n.ToolCard.alwaysAllowHelp(signature))
                         }
                         Button(L10n.ToolCard.deny) { appState.denyAgentToolCall(id: call.id) }
-                        Spacer(minLength: 0)
                     }
                     .font(.caption)
                 }
@@ -1290,17 +1290,27 @@ struct AgentToolCallCard: View {
                     approvalCommandBlock
                     Text(L10n.ToolCard.destructiveWarning)
                         .font(.caption2)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(destructiveAccentColor)
                     HStack {
-                        Button(L10n.ToolCard.confirmRun) {
+                        Spacer(minLength: 0)
+                        Button {
                             _ = appState.confirmAgentToolCall(id: call.id, typedConfirmation: "confirm")
+                        } label: {
+                            Text(L10n.ToolCard.confirmRun)
+                                .font(.caption.weight(.semibold))
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 4)
+                                .foregroundStyle(destructiveAccentColor)
+                                .background(Color.clear)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .stroke(destructiveAccentColor.opacity(0.62), lineWidth: 1)
+                                )
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.red)
+                        .buttonStyle(.plain)
                         Button(L10n.ToolCard.deny) {
                             appState.denyAgentToolCall(id: call.id)
                         }
-                        Spacer(minLength: 0)
                     }
                     .font(.caption)
                 }
@@ -1377,6 +1387,7 @@ struct AgentToolCallCard: View {
                 .lineLimit(1...4)
 
             HStack(spacing: 6) {
+                Spacer(minLength: 0)
                 Button("Send") {
                     submitAnswer(options: options, isMultiSelect: isMultiSelect)
                 }
@@ -1385,36 +1396,38 @@ struct AgentToolCallCard: View {
                     appState.denyAgentToolCall(id: call.id)
                     resetAskUserInputs()
                 }
-                Spacer(minLength: 0)
             }
             .font(.caption)
         }
     }
 
     private func singleSelectChoices(_ options: [String]) -> some View {
-        // An adaptive grid gives us wrapping like a flow layout without
-        // dragging in a third-party Layout implementation. Min item
-        // width is generous so short options sit two-per-row at typical
-        // panel widths.
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 6)], alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
             ForEach(options, id: \.self) { option in
                 Button {
                     appState.answerAgentToolCall(id: call.id, answer: option)
                     resetAskUserInputs()
                 } label: {
-                    Text(option)
-                        .font(.system(size: 12))
-                        .lineLimit(2)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.purple.opacity(0.12))
-                        .foregroundStyle(.primary)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color.purple.opacity(0.35), lineWidth: 1)
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                    HStack(spacing: 8) {
+                        Text(option)
+                            .font(.system(size: 12, weight: .medium))
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 8)
+                        Image(systemName: "arrow.turn.down.left")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Color.purple.opacity(0.65))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .foregroundStyle(.primary)
+                    .background(Color.purple.opacity(0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(Color.purple.opacity(0.28), lineWidth: 1)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
@@ -1422,7 +1435,7 @@ struct AgentToolCallCard: View {
     }
 
     private func multiSelectChoices(_ options: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             ForEach(options, id: \.self) { option in
                 Toggle(isOn: Binding(
                     get: { selectedOptions.contains(option) },
@@ -1431,9 +1444,21 @@ struct AgentToolCallCard: View {
                         else { selectedOptions.remove(option) }
                     }
                 )) {
-                    Text(option).font(.system(size: 12))
+                    Text(option)
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .toggleStyle(.checkbox)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(selectedOptions.contains(option) ? Color.purple.opacity(0.10) : Color(nsColor: .textBackgroundColor).opacity(0.58))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(selectedOptions.contains(option) ? Color.purple.opacity(0.32) : Color.primary.opacity(0.08), lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
         }
     }
@@ -1529,7 +1554,8 @@ struct AgentToolCallCard: View {
 
     private var iconColor: Color {
         switch call.status {
-        case .pendingApproval, .awaitingConfirm: return .blue
+        case .pendingApproval: return .blue
+        case .awaitingConfirm: return destructiveAccentColor
         case .awaitingUserAnswer: return .purple
         case .running: return .secondary
         case .succeeded: return .secondary
@@ -1540,7 +1566,8 @@ struct AgentToolCallCard: View {
 
     private var statusColor: Color {
         switch call.status {
-        case .pendingApproval, .awaitingConfirm: return .blue
+        case .pendingApproval: return .blue
+        case .awaitingConfirm: return destructiveAccentColor
         case .awaitingUserAnswer: return .purple
         case .failed: return .orange
         case .running, .succeeded, .denied: return .secondary
@@ -1638,12 +1665,17 @@ struct AgentToolCallCard: View {
 
     private var borderColor: Color {
         switch call.status {
-        case .pendingApproval, .awaitingConfirm: return Color.blue.opacity(0.4)
+        case .pendingApproval: return Color.blue.opacity(0.4)
+        case .awaitingConfirm: return destructiveAccentColor.opacity(0.42)
         case .awaitingUserAnswer: return Color.purple.opacity(0.4)
         case .failed: return Color.orange.opacity(0.4)
         case .denied: return Color.secondary.opacity(0.3)
         default: return Color.clear
         }
+    }
+
+    private var destructiveAccentColor: Color {
+        Color(red: 0.68, green: 0.16, blue: 0.16)
     }
 }
 
