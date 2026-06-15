@@ -3,16 +3,13 @@
 //  WillDeep
 //
 //  Title bar for the active agent session, split out of AgentModeView.swift
-//  in rc42. Three pieces sit in one row at the top of the chat pane:
-//  the session title (single-line, middle-truncated) with a copy-title
-//  glyph next to it, plus a right-aligned action cluster — new chat
-//  and "switch to editor" — that bridges back to the rest of the app.
+//  in rc42. Keeps the session title readable and exposes one right-aligned
+//  escape hatch back to the editor.
 //
 //  Previously `private struct` inside the main file; now internal so
 //  `AgentModeView`'s body can compose it across the file boundary.
 //
 
-import AppKit
 import SwiftUI
 
 struct AgentChatHeader: View {
@@ -25,39 +22,17 @@ struct AgentChatHeader: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
 
+            Spacer(minLength: 8)
+
             Button {
-                copyTitle()
+                appState.setAppMode(.editor)
             } label: {
-                Image(systemName: "square.on.square")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                Image(systemName: "rectangle.split.2x1")
             }
             .buttonStyle(.plain)
             .focusable(false)
-            .help(L10n.Header.copyTitle)
-
-            Spacer(minLength: 8)
-
-            HStack(spacing: 12) {
-                Button {
-                    appState.startNewAgentSession()
-                } label: {
-                    Image(systemName: "plus.bubble")
-                }
-                .buttonStyle(.plain)
-                .focusable(false)
-                .help(L10n.Header.newChat)
-
-                Button {
-                    appState.setAppMode(.editor)
-                } label: {
-                    Image(systemName: "rectangle.split.2x1")
-                }
-                .buttonStyle(.plain)
-                .focusable(false)
-                .help(L10n.Header.switchToEditor)
-            }
             .foregroundStyle(.secondary)
+            .help(L10n.Header.switchToEditor)
         }
         .padding(.horizontal, 18)
         .frame(height: AgentDesign.headerHeight)
@@ -66,13 +41,8 @@ struct AgentChatHeader: View {
     private var title: String {
         guard let id = appState.activeAgentSessionID,
               let session = appState.agentSessions.first(where: { $0.id == id }) else {
-            return "New Chat"
+            return L10n.Header.newChat
         }
         return session.title
-    }
-
-    private func copyTitle() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(title, forType: .string)
     }
 }

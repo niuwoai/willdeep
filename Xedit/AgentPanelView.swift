@@ -829,19 +829,20 @@ struct AgentTurnFileActivityCard: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
     let calls: [AgentToolCall]
+    var showsToolActivity = true
 
     var body: some View {
         let summary = AgentToolActivitySummary(calls: calls)
-        if summary.hasActivity || shouldShowEditingRow {
+        if (showsToolActivity && summary.hasActivity) || shouldShowEditingRow {
             VStack(alignment: .leading, spacing: 5) {
-                if let explorationText = summary.explorationText {
+                if showsToolActivity, let explorationText = summary.explorationText {
                     activityRow(
                         icon: "doc.text.magnifyingglass",
                         text: explorationText,
                         trailing: nil
                     )
                 }
-                if let commandText = summary.commandText {
+                if showsToolActivity, let commandText = summary.commandText {
                     activityRow(
                         icon: "terminal",
                         text: commandText,

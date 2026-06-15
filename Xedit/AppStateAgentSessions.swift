@@ -955,7 +955,28 @@ extension AppState {
             let session = runtime.session
             let routedModel = agentConfiguration.normalized.model(for: .interactive)
             runtime.sessionModelOverride = session.modelID == routedModel ? nil : session.modelID
+            syncWorkspaceContext(for: session)
         }
+    }
+
+    /// Selecting a historical session should restore the workspace it was
+    /// created under. Local sessions switch the window's root folder so
+    /// file tools, git status, quick-open, and the composer picker all
+    /// point at the selected chat's project. Remote sessions keep the
+    /// local window root untouched; their binding lives on
+    /// `workspaceLocation` and is rendered explicitly by the composer.
+    private func syncWorkspaceContext(for session: AgentSession) {
+        let location = session.workspaceLocation ?? session.workspaceRootPath.map { .local(path: $0) }
+        guard case .local(let path) = location, !path.isEmpty else {
+            return
+        }
+
+        let url = URL(fileURLWithPath: path).standardizedFileURL
+        guard Self.isExistingDirectory(url),
+              rootDirectory?.standardizedFileURL.path != url.path else {
+            return
+        }
+        openFolderURL(url)
     }
 
     /// Drop sessions that never received a user message — they're

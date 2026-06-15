@@ -195,6 +195,7 @@ struct AgentSessionsSidebar: View {
         let isCollapsed = collapsedWorkspaces.contains(workspace)
         let visible = isExpanded ? activeSessions : Array(activeSessions.prefix(initialRowCount))
         let archivedExpanded = expandedArchivedGroups.contains(workspace)
+        let remoteWorkspace = remoteWorkspaceGroup(from: workspace)
 
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
@@ -213,9 +214,9 @@ struct AgentSessionsSidebar: View {
                         }
                     }
                 } label: {
-                    Image(systemName: isCollapsed ? "folder.fill" : "folder")
+                    Image(systemName: remoteWorkspace == nil ? (isCollapsed ? "folder.fill" : "folder") : "globe")
                         .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(remoteWorkspace == nil ? Color.secondary : Color.accentColor)
                         .frame(width: 14, height: 14)
                         .contentShape(Rectangle())
                 }

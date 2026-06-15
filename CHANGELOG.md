@@ -1,5 +1,66 @@
 # Changelog
 
+## 1.78.0-rc37 - 2026-06-15
+
+### Fixed
+
+- 实时 transcript 不再同时展示工具活动摘要和同内容的工具组卡片，避免文件读取类工具出现两条几乎相同的“已读取 N 个文件”提示。
+- `AgentTurnFileActivityCard` 保留编辑状态展示能力，但在工具组已渲染时隐藏工具活动摘要。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc37`。
+
+## 1.78.0-rc36 - 2026-06-15
+
+### Changed
+
+- 设置页前三个标签整理为“字体 / 格式 / 工作区”：字体页同时承载编辑器正文和工作区列表文字设置，避免原字体页内容过薄。
+- 工作区列表字号/行高仍使用独立设置，不和编辑器字体、字号、行高混用。
+- 工作区页移除字体相关控件，聚焦检查器默认视图、视图顺序和保存行为；格式页继续聚合主题、背景、行号、高亮和玻璃效果。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc36`。
+
+## 1.78.0-rc35 - 2026-06-15
+
+### Fixed
+
+- Agent mode 顶部会话标题不再显示复制标题按钮，减少标题栏无提示图标。
+- 顶部右侧操作区移除“新聊天”图标，只保留切换回 Editor 模式的单一入口，避免两个相邻图标语义不清。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc35`。
+
+## 1.78.0-rc34 - 2026-06-15
+
+### Fixed
+
+- 选中带本地 workspace 绑定的历史会话时，会自动把窗口根目录切回该会话所在目录，避免 composer 继续显示 “Pick folder”。
+- Composer 的 workspace picker、状态栏和 `@workspace` 入口改为按当前会话的 `workspaceLocation` 判断，避免远端或无 workspace 会话误用上一个本地目录。
+- 远端 runtime workspace 在侧边栏和 composer/status 显示为带强调色的 globe 图标，让用户能一眼区分 SSH/远端运行环境。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc34`。
+
+## 1.78.0-rc33 - 2026-06-15
+
+### Fixed
+
+- Agent 聊天历史里的 Markdown 表格现在会在表格下方显示明确的“在独立窗口打开表格”链接，避免用户只能靠误点表格正文发现独立窗口视图。
+- 保留原有点击表格正文打开独立表格窗口的行为，兼容已有交互习惯。
+
+### Tests
+
+- 扩展 Agent 聊天历史渲染测试，覆盖表格下方显式打开链接及其表格 payload。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc33`。
+
 ## 1.78.0-rc32 - 2026-06-15
 
 ### Fixed

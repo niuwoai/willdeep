@@ -62,7 +62,7 @@ struct EditorSettingsView: View {
 
             appearanceSettings
                 .tabItem {
-                    Label(L10n.Settings.tabAppearance, systemImage: "paintpalette")
+                    Label(L10n.Settings.tabAppearance, systemImage: "slider.horizontal.3")
                 }
 
             workspaceSettings
@@ -134,7 +134,7 @@ struct EditorSettingsView: View {
 
     private var typographySettings: some View {
         Form {
-            Section(L10n.Settings.sectionTypography) {
+            Section(L10n.Settings.sectionEditorText) {
                 Picker(L10n.Settings.labelFont, selection: setting(\.fontID)) {
                     ForEach(EditorFontChoice.allCases) { font in
                         Text(font.displayName).tag(font.id)
@@ -155,117 +155,8 @@ struct EditorSettingsView: View {
                         .frame(width: 56, alignment: .trailing)
                 }
             }
-        }
-        .formStyle(.grouped)
-    }
 
-    private var appearanceSettings: some View {
-        Form {
-            Section(L10n.Settings.sectionColorStyle) {
-                Picker(L10n.Settings.labelTheme, selection: setting(\.themeID)) {
-                    ForEach(EditorTheme.all) { theme in
-                        Text(theme.displayName).tag(theme.id)
-                    }
-                }
-
-                HStack(spacing: 8) {
-                    ForEach(EditorTheme.all) { theme in
-                        Button {
-                            update(\.themeID, theme.id)
-                        } label: {
-                            ThemeSwatch(theme: theme)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(theme.displayName)
-                    }
-                }
-                .padding(.vertical, 4)
-            }
-
-            Section(L10n.Settings.sectionEditorBackground) {
-                LabeledContent(L10n.Settings.labelImage) {
-                    HStack {
-                        Text(backgroundImageLabel)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .foregroundStyle(appState.editorSettings.windowBackgroundImagePath == nil ? .secondary : .primary)
-                        Spacer(minLength: 8)
-                        Button(L10n.Settings.buttonChoose) {
-                            chooseBackgroundImage()
-                        }
-                        Button(L10n.Settings.buttonClear) {
-                            update(\.windowBackgroundImagePath, nil)
-                        }
-                        .disabled(appState.editorSettings.windowBackgroundImagePath == nil)
-                    }
-                }
-
-                Picker(L10n.Settings.labelImageMode, selection: setting(\.windowBackgroundImageMode)) {
-                    ForEach(EditorBackgroundImageMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                .disabled(appState.editorSettings.windowBackgroundImagePath == nil)
-
-                LabeledContent(L10n.Settings.labelImageSize) {
-                    HStack {
-                        Slider(value: setting(\.windowBackgroundImageScale), in: 0.25...3, step: 0.05)
-                        Text("\(Int(appState.editorSettings.windowBackgroundImageScale * 100))%")
-                            .monospacedDigit()
-                            .frame(width: 48, alignment: .trailing)
-                    }
-                }
-                .disabled(appState.editorSettings.windowBackgroundImagePath == nil)
-
-                LabeledContent(L10n.Settings.labelImageOpacity) {
-                    HStack {
-                        Slider(value: setting(\.windowBackgroundImageOpacity), in: 0...1, step: 0.05)
-                        Text("\(Int(appState.editorSettings.windowBackgroundImageOpacity * 100))%")
-                            .monospacedDigit()
-                            .frame(width: 44, alignment: .trailing)
-                    }
-                }
-            }
-
-            Section(L10n.Settings.sectionEditor) {
-                Toggle(L10n.Settings.toggleShowLineNumbers, isOn: setting(\.showsLineNumbers))
-                Toggle(L10n.Settings.toggleHighlightCurrentLine, isOn: setting(\.highlightsCurrentLine))
-                Toggle(L10n.Settings.toggleGlassEditorBackground, isOn: setting(\.editorGlassEnabled))
-
-                Picker(L10n.Settings.labelGlassMaterial, selection: setting(\.editorGlassMaterial)) {
-                    ForEach(EditorGlassMaterial.allCases) { material in
-                        Text(material.displayName).tag(material)
-                    }
-                }
-                .disabled(!appState.editorSettings.editorGlassEnabled)
-
-                LabeledContent(L10n.Settings.labelGlassStrength) {
-                    HStack {
-                        Slider(value: setting(\.editorGlassOpacity), in: 0...1, step: 0.05)
-                        Text("\(Int(appState.editorSettings.editorGlassOpacity * 100))%")
-                            .monospacedDigit()
-                            .frame(width: 44, alignment: .trailing)
-                    }
-                }
-                .disabled(!appState.editorSettings.editorGlassEnabled)
-
-                LabeledContent(L10n.Settings.labelEditorSurface) {
-                    HStack {
-                        Slider(value: setting(\.editorSurfaceOpacity), in: 0.25...1, step: 0.05)
-                        Text("\(Int(appState.editorSettings.editorSurfaceOpacity * 100))%")
-                            .monospacedDigit()
-                            .frame(width: 44, alignment: .trailing)
-                    }
-                }
-                .disabled(!appState.editorSettings.editorGlassEnabled)
-            }
-        }
-        .formStyle(.grouped)
-    }
-
-    private var workspaceSettings: some View {
-        Form {
-            Section(L10n.Settings.sectionSidebar) {
+            Section(L10n.Settings.sectionWorkspaceText) {
                 LabeledContent(L10n.Settings.labelTextSize) {
                     HStack {
                         Slider(value: setting(\.fileTreeFontSize), in: 10...16, step: 1)
@@ -284,7 +175,121 @@ struct EditorSettingsView: View {
                     }
                 }
             }
+        }
+        .formStyle(.grouped)
+    }
 
+    private var appearanceSettings: some View {
+        Form {
+            editorFormatSections
+        }
+        .formStyle(.grouped)
+    }
+
+    @ViewBuilder
+    private var editorFormatSections: some View {
+        Section(L10n.Settings.sectionColorStyle) {
+            Picker(L10n.Settings.labelTheme, selection: setting(\.themeID)) {
+                ForEach(EditorTheme.all) { theme in
+                    Text(theme.displayName).tag(theme.id)
+                }
+            }
+
+            HStack(spacing: 8) {
+                ForEach(EditorTheme.all) { theme in
+                    Button {
+                        update(\.themeID, theme.id)
+                    } label: {
+                        ThemeSwatch(theme: theme)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(theme.displayName)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+
+        Section(L10n.Settings.sectionEditorBackground) {
+            LabeledContent(L10n.Settings.labelImage) {
+                HStack {
+                    Text(backgroundImageLabel)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .foregroundStyle(appState.editorSettings.windowBackgroundImagePath == nil ? .secondary : .primary)
+                    Spacer(minLength: 8)
+                    Button(L10n.Settings.buttonChoose) {
+                        chooseBackgroundImage()
+                    }
+                    Button(L10n.Settings.buttonClear) {
+                        update(\.windowBackgroundImagePath, nil)
+                    }
+                    .disabled(appState.editorSettings.windowBackgroundImagePath == nil)
+                }
+            }
+
+            Picker(L10n.Settings.labelImageMode, selection: setting(\.windowBackgroundImageMode)) {
+                ForEach(EditorBackgroundImageMode.allCases) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+            .disabled(appState.editorSettings.windowBackgroundImagePath == nil)
+
+            LabeledContent(L10n.Settings.labelImageSize) {
+                HStack {
+                    Slider(value: setting(\.windowBackgroundImageScale), in: 0.25...3, step: 0.05)
+                    Text("\(Int(appState.editorSettings.windowBackgroundImageScale * 100))%")
+                        .monospacedDigit()
+                        .frame(width: 48, alignment: .trailing)
+                }
+            }
+            .disabled(appState.editorSettings.windowBackgroundImagePath == nil)
+
+            LabeledContent(L10n.Settings.labelImageOpacity) {
+                HStack {
+                    Slider(value: setting(\.windowBackgroundImageOpacity), in: 0...1, step: 0.05)
+                    Text("\(Int(appState.editorSettings.windowBackgroundImageOpacity * 100))%")
+                        .monospacedDigit()
+                        .frame(width: 44, alignment: .trailing)
+                }
+            }
+        }
+
+        Section(L10n.Settings.sectionEditor) {
+            Toggle(L10n.Settings.toggleShowLineNumbers, isOn: setting(\.showsLineNumbers))
+            Toggle(L10n.Settings.toggleHighlightCurrentLine, isOn: setting(\.highlightsCurrentLine))
+            Toggle(L10n.Settings.toggleGlassEditorBackground, isOn: setting(\.editorGlassEnabled))
+
+            Picker(L10n.Settings.labelGlassMaterial, selection: setting(\.editorGlassMaterial)) {
+                ForEach(EditorGlassMaterial.allCases) { material in
+                    Text(material.displayName).tag(material)
+                }
+            }
+            .disabled(!appState.editorSettings.editorGlassEnabled)
+
+            LabeledContent(L10n.Settings.labelGlassStrength) {
+                HStack {
+                    Slider(value: setting(\.editorGlassOpacity), in: 0...1, step: 0.05)
+                    Text("\(Int(appState.editorSettings.editorGlassOpacity * 100))%")
+                        .monospacedDigit()
+                        .frame(width: 44, alignment: .trailing)
+                }
+            }
+            .disabled(!appState.editorSettings.editorGlassEnabled)
+
+            LabeledContent(L10n.Settings.labelEditorSurface) {
+                HStack {
+                    Slider(value: setting(\.editorSurfaceOpacity), in: 0.25...1, step: 0.05)
+                    Text("\(Int(appState.editorSettings.editorSurfaceOpacity * 100))%")
+                        .monospacedDigit()
+                        .frame(width: 44, alignment: .trailing)
+                }
+            }
+            .disabled(!appState.editorSettings.editorGlassEnabled)
+        }
+    }
+
+    private var workspaceSettings: some View {
+        Form {
             Section(L10n.Settings.sectionInspector) {
                 Picker(L10n.Settings.labelDefaultView, selection: setting(\.preferredInspectorMode)) {
                     ForEach(EditorInspectorMode.allCases) { mode in

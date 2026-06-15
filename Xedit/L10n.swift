@@ -342,7 +342,6 @@ enum L10n {
     }
 
     enum Header {
-        static let copyTitle = String(localized: "header.copy-title", defaultValue: "Copy title")
         static let newChat = String(localized: "header.new-chat", defaultValue: "New Chat")
         static let switchToEditor = String(localized: "header.switch-to-editor", defaultValue: "Switch to Editor Mode")
     }
@@ -631,8 +630,8 @@ enum L10n {
 
     enum Settings {
         static let windowTitle = String(localized: "settings.window.title", defaultValue: "Settings")
-        static let tabTypography = String(localized: "settings.tab.typography", defaultValue: "Typography")
-        static let tabAppearance = String(localized: "settings.tab.appearance", defaultValue: "Appearance")
+        static let tabTypography = String(localized: "settings.tab.typography", defaultValue: "Font")
+        static let tabAppearance = String(localized: "settings.tab.appearance", defaultValue: "Format")
         static let tabWorkspace = String(localized: "settings.tab.workspace", defaultValue: "Workspace")
         static let tabAgent = String(localized: "settings.tab.agent", defaultValue: "AI Providers")
         static let tabMemory = String(localized: "settings.tab.memory", defaultValue: "Memory")
@@ -645,6 +644,8 @@ enum L10n {
         static let tabMobileGateway = String(localized: "settings.tab.mobile-gateway", defaultValue: "Mobile Gateway")
 
         static let sectionTypography = String(localized: "settings.section.typography", defaultValue: "Typography")
+        static let sectionEditorText = String(localized: "settings.section.editor-text", defaultValue: "Editor Text")
+        static let sectionWorkspaceText = String(localized: "settings.section.workspace-text", defaultValue: "Workspace List")
         static let sectionColorStyle = String(localized: "settings.section.color-style", defaultValue: "Color Style")
         static let sectionEditorBackground = String(localized: "settings.section.editor-background", defaultValue: "Editor Background")
         static let sectionEditor = String(localized: "settings.section.editor", defaultValue: "Editor")

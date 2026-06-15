@@ -238,7 +238,7 @@ private struct ComposerCard: View {
 
         // Workspace shortcut — only shows when a folder is open, and
         // either the query is empty or matches "workspace".
-        if appState.rootDirectory != nil,
+        if appState.activeRuntime?.workspaceLocation?.localPath != nil,
            q.isEmpty || "workspace".contains(q) {
             entries.append(.workspace)
         }
@@ -256,7 +256,7 @@ private struct ComposerCard: View {
         // relative path. Files already attached are filtered out so
         // the user can't double-add.
         let alreadyAttached = Set(appState.agentPendingFiles.map(\.url.standardizedFileURL.path))
-        if let root = appState.rootDirectory?.standardizedFileURL.path {
+        if let root = appState.activeRuntime?.workspaceLocation?.localPath {
             let files = appState.quickOpenFiles.lazy
                 .filter { !alreadyAttached.contains($0.standardizedFileURL.path) }
                 .filter { url in
@@ -524,7 +524,7 @@ struct AgentChatStatusBar: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            if let branch = appState.gitStatus.branchName {
+            if activeRemoteWorkspaceLabel == nil, let branch = appState.gitStatus.branchName {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.triangle.branch")
                         .font(.system(size: 9))
@@ -533,11 +533,21 @@ struct AgentChatStatusBar: View {
                         .truncationMode(.middle)
                 }
             }
-            if let root = appState.rootDirectory {
+            if let remote = activeRemoteWorkspaceLabel {
+                HStack(spacing: 4) {
+                    Image(systemName: "globe")
+                        .font(.system(size: 9))
+                        .foregroundStyle(Color.accentColor)
+                    Text(remote)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            } else if let localPath = appState.activeRuntime?.workspaceLocation?.localPath {
+                let root = URL(fileURLWithPath: localPath)
                 HStack(spacing: 4) {
                     Image(systemName: "folder")
                         .font(.system(size: 9))
-                    Text(root.lastPathComponent)
+                    Text(root.lastPathComponent.isEmpty ? localPath : root.lastPathComponent)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -560,6 +570,15 @@ struct AgentChatStatusBar: View {
         .frame(height: AgentDesign.statusBarHeight)
         .background(AgentDesign.statusBarBackground)
         .overlay(Divider(), alignment: .top)
+    }
+
+    private var activeRemoteWorkspaceLabel: String? {
+        guard case .remote(let runtimeID, let path) = appState.activeRuntime?.workspaceLocation else {
+            return nil
+        }
+        let runtimeName = AgentRuntimeStore.descriptor(id: runtimeID)?.displayName ?? "Remote"
+        let folderName = URL(fileURLWithPath: path).lastPathComponent
+        return "\(runtimeName): \(folderName.isEmpty ? path : folderName)"
     }
 }
 

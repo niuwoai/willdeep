@@ -50,8 +50,9 @@ struct WorkspacePickerPill: View {
             menuContent
         } label: {
             HStack(spacing: 3) {
-                Image(systemName: "folder")
+                Image(systemName: activeRemoteRuntime == nil ? "folder" : "globe")
                     .font(.system(size: 10))
+                    .foregroundStyle(activeRemoteRuntime == nil ? Color.secondary : Color.accentColor)
                 Text(label)
                     .font(AgentDesign.secondaryFont)
                     .lineLimit(1)
@@ -81,8 +82,9 @@ struct WorkspacePickerPill: View {
         if let remote = activeRemoteWorkspaceLabel {
             return remote
         }
-        if let root = appState.rootDirectory {
-            return root.lastPathComponent
+        if let localPath = appState.activeRuntime?.workspaceLocation?.localPath {
+            let root = URL(fileURLWithPath: localPath)
+            return root.lastPathComponent.isEmpty ? localPath : root.lastPathComponent
         }
         return "Pick folder"
     }
@@ -92,7 +94,10 @@ struct WorkspacePickerPill: View {
            case .remote(_, let path) = appState.activeRuntime?.workspaceLocation {
             return "\(runtime.displayName): \(path)"
         }
-        if let root = appState.rootDirectory {
+        if let localPath = appState.activeRuntime?.workspaceLocation?.localPath {
+            return localPath
+        }
+        if appState.activeRuntime == nil, let root = appState.rootDirectory {
             return root.path
         }
         return "Choose a workspace for this chat"
@@ -101,7 +106,7 @@ struct WorkspacePickerPill: View {
     @ViewBuilder
     private var menuContent: some View {
         // Section 1 — the "current folder" affordances (only if one is set).
-        if let root = appState.rootDirectory {
+        if let root = activeLocalWorkspaceURL {
             Section(root.lastPathComponent) {
                 Button {
                     appState.revealInFinder(root)
@@ -183,7 +188,7 @@ struct WorkspacePickerPill: View {
                     } label: {
                         HStack {
                             Text(url.lastPathComponent)
-                            if appState.rootDirectory?.standardizedFileURL == url.standardizedFileURL {
+                            if activeLocalWorkspaceURL?.standardizedFileURL == url.standardizedFileURL {
                                 Image(systemName: "checkmark")
                             }
                         }
@@ -235,6 +240,13 @@ struct WorkspacePickerPill: View {
         return AgentRuntimeStore.descriptor(id: runtimeID)
     }
 
+    private var activeLocalWorkspaceURL: URL? {
+        guard let path = appState.activeRuntime?.workspaceLocation?.localPath, !path.isEmpty else {
+            return nil
+        }
+        return URL(fileURLWithPath: path).standardizedFileURL
+    }
+
     private var activeRemovableWorktree: AgentGitWorktree? {
         appState.agentGitWorktrees.first { worktree in
             isActiveWorktree(worktree) && !worktree.isPrimary && !worktree.isBare
@@ -242,7 +254,7 @@ struct WorkspacePickerPill: View {
     }
 
     private func isActiveWorktree(_ worktree: AgentGitWorktree) -> Bool {
-        appState.rootDirectory?.standardizedFileURL.path == worktree.url.path
+        activeLocalWorkspaceURL?.path == worktree.url.path
     }
 
     private var activeRemoteWorkspaceLabel: String? {

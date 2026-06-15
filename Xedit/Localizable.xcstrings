@@ -30,6 +30,14 @@
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "需要 macOS %@ 或更高版本。" } }
       }
     },
+    "agent.markdown-table.open-link": {
+      "comment": "Clickable link below a rendered Markdown table in Agent chat history",
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Open table in standalone window" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在独立窗口打开表格" } }
+      }
+    },
     "app-update.release-notes": {
       "comment": "Secondary button in the app update alert",
       "localizations": {
@@ -2751,24 +2759,6 @@
         }
       }
     },
-    "header.copy-title": {
-      "comment": "tooltip for copy button",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Copy title"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "复制标题"
-          }
-        }
-      }
-    },
     "header.new-chat": {
       "comment": "button tooltip",
       "extractionState": "manual",
@@ -4595,6 +4585,23 @@
         }
       }
     },
+    "settings.section.editor-text": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editor Text"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑器文字"
+          }
+        }
+      }
+    },
     "settings.section.editor-background": {
       "extractionState": "manual",
       "localizations": {
@@ -4676,6 +4683,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "侧边栏"
+          }
+        }
+      }
+    },
+    "settings.section.workspace-text": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace List"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作区列表"
           }
         }
       }
@@ -4805,13 +4829,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Appearance"
+            "value": "Format"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "外观"
+            "value": "格式"
           }
         }
       }

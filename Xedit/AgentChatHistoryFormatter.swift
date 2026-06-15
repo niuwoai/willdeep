@@ -1559,6 +1559,25 @@ enum AgentChatHistoryRenderer {
                                 value: AgentChatHistoryTableLink.value,
                                 range: tableRange
                             )
+                            let linkStart = result.length
+                            result.append(NSAttributedString(
+                                string: "\n" + String(
+                                    localized: "agent.markdown-table.open-link",
+                                    defaultValue: "Open table in standalone window"
+                                ),
+                                attributes: [
+                                    .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+                                    .foregroundColor: NSColor.linkColor,
+                                    .link: AgentChatHistoryTableLink.value,
+                                    .cursor: NSCursor.pointingHand,
+                                ]
+                            ))
+                            let linkRange = NSRange(location: linkStart, length: result.length - linkStart)
+                            result.addAttribute(
+                                .agentChatHistoryTablePayload,
+                                value: AgentMarkdownTablePayload(headers: headers, rows: rows),
+                                range: linkRange
+                            )
                         }
                     }
                 }
