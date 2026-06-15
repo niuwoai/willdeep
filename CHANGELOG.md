@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.78.0-rc29 - 2026-06-15
+
+### Fixed
+
+- 用户发出新消息时会自动拒绝同一 Agent 会话中仍处于 pending 的旧 patch 提案，避免过期 diff 继续挂起并在后续 diff 出现后误导操作。
+
+### Tests
+
+- 新增回归测试，覆盖 pending patch 被新消息取代时自动 rejected，同时保留 failed patch 原错误状态。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc29`。
+
 ## 1.78.0-rc27 - 2026-06-15
 
 ### Fixed

@@ -116,6 +116,11 @@ extension AppState {
         images: [AgentImageAttachment],
         textAttachments: [AgentTextAttachment] = []
     ) {
+        rejectPendingAgentPatchProposals(
+            for: runtime,
+            statusMessage: "Superseded by a newer message."
+        )
+
         let configuration = configurationForCurrentTurn(for: runtime)
         let providerID = configuration.providerID
 
@@ -2010,6 +2015,23 @@ extension AppState {
         guard let index = agentPatchProposals.firstIndex(where: { $0.id == id }) else { return }
         agentPatchProposals[index].status = .rejected
         agentPatchProposals[index].statusMessage = "Rejected"
+    }
+
+    @discardableResult
+    func rejectPendingAgentPatchProposals(
+        for runtime: AgentRuntime,
+        statusMessage: String
+    ) -> Int {
+        var rejectedCount = 0
+        for index in runtime.patchProposals.indices where runtime.patchProposals[index].status == .pending {
+            runtime.patchProposals[index].status = .rejected
+            runtime.patchProposals[index].statusMessage = statusMessage
+            rejectedCount += 1
+        }
+        if rejectedCount > 0 {
+            persistAgentSession(runtime: runtime)
+        }
+        return rejectedCount
     }
 
     func applyAgentPatchProposal(id: AgentPatchProposal.ID) {

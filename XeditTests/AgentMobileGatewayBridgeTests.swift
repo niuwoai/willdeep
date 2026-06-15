@@ -753,6 +753,51 @@ struct AgentMobileGatewayBridgeTests {
         #expect(try String(contentsOf: readme, encoding: .utf8) == "hello from Android\n")
     }
 
+    @Test @MainActor
+    func appStateRejectsPendingPatchProposalsWhenMessageSupersedesThem() {
+        let appState = AppState()
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        let session = appState.startNewAgentSession()
+        defer { deleteSessionsCreatedByTest(appState, existingIDs: existingIDs) }
+
+        guard let runtime = appState.agentRuntimes[session.id] else {
+            Issue.record("Expected runtime for new session")
+            return
+        }
+
+        let pendingProposal = AgentPatchProposal(
+            messageID: UUID(),
+            title: "Pending patch",
+            diff: """
+            diff --git a/README.md b/README.md
+            --- a/README.md
+            +++ b/README.md
+            @@ -1 +1 @@
+            -old
+            +new
+            """
+        )
+        let failedProposal = AgentPatchProposal(
+            messageID: UUID(),
+            title: "Failed patch",
+            diff: "not a unified diff",
+            status: .failed,
+            statusMessage: "The diff format is not supported yet."
+        )
+        runtime.patchProposals = [pendingProposal, failedProposal]
+
+        let rejectedCount = appState.rejectPendingAgentPatchProposals(
+            for: runtime,
+            statusMessage: "Superseded by a newer message."
+        )
+
+        #expect(rejectedCount == 1)
+        #expect(runtime.patchProposals[0].status == .rejected)
+        #expect(runtime.patchProposals[0].statusMessage == "Superseded by a newer message.")
+        #expect(runtime.patchProposals[1].status == .failed)
+        #expect(runtime.patchProposals[1].statusMessage == "The diff format is not supported yet.")
+    }
+
     private var fixedDate: Date {
         DateComponents(
             calendar: Calendar(identifier: .gregorian),

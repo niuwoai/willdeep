@@ -8,7 +8,7 @@
 
 [![macOS](https://img.shields.io/badge/macOS-14.6%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.78.0--rc27-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.78.0--rc29-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *No Electron. No 800MB Helper processes. No "loading workspace…" spinner that eats your afternoon.*
