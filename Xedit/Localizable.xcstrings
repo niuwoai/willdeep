@@ -7875,11 +7875,18 @@
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "只有启用后网关才会监听。Android 通过局域网连接；Agent 执行、工具、补丁和文件访问仍全部经过 Mac 应用。" } }
       }
     },
-    "settings.mobile-gateway.port": {
+    "settings.mobile-gateway.port-input": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Port %@" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "端口 %@" } }
+        "en": { "stringUnit": { "state": "translated", "value": "Port" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "端口" } }
+      }
+    },
+    "settings.mobile-gateway.port-prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "8877" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "8877" } }
       }
     },
     "settings.mobile-gateway.resolved-executable": {

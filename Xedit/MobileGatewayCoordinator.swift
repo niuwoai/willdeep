@@ -59,7 +59,7 @@ struct MobileGatewayHealth: Codable, Equatable {
     struct VersionInfo: Codable, Equatable {
         var name: String
         var version: String
-        var protocolVersion: String
+        var protocolVersion: String?
 
         enum CodingKeys: String, CodingKey {
             case name
@@ -72,12 +72,14 @@ struct MobileGatewayHealth: Codable, Equatable {
     var protocolVersion: String
     var desktopName: String
     var pairingAllowed: Bool
+    var desktopPeerConnected: Bool?
 
     enum CodingKeys: String, CodingKey {
         case version
         case protocolVersion = "protocol_version"
         case desktopName = "desktop_name"
         case pairingAllowed = "pairing_allowed"
+        case desktopPeerConnected = "desktop_peer_connected"
     }
 }
 
@@ -117,7 +119,6 @@ final class MobileGatewayCoordinator: ObservableObject {
     deinit {
         monitorTask?.cancel()
         process?.terminate()
-        try? tokenFileURL.map { try FileManager.default.removeItem(at: $0) }
     }
 
     var isRunning: Bool {
@@ -194,7 +195,7 @@ final class MobileGatewayCoordinator: ObservableObject {
             process = gatewayProcess
             drain(pipe: outputPipe)
 
-            try await waitUntilHealthy(baseURL: desktopBaseURL, token: desktopToken)
+            try await waitUntilHealthy(baseURL: desktopBaseURL)
             appState?.mobileGatewayDesktopPeer.connect(baseURL: desktopBaseURL, desktopToken: desktopToken)
             state = .running
             await refresh()
@@ -225,7 +226,7 @@ final class MobileGatewayCoordinator: ObservableObject {
         let baseURL = Self.desktopBaseURL(for: settings)
         displayBaseURL = Self.pairingBaseURL(for: settings)
         health = try? await get(path: "/mobile/health", baseURL: baseURL, token: nil, as: MobileGatewayHealth.self)
-        pairingPayload = try? await get(path: "/mobile/pairing", baseURL: baseURL, token: desktopToken, as: PairingResponse.self).pairingPayload
+        pairingPayload = try? await get(path: "/mobile/pairing", baseURL: baseURL, token: desktopToken, as: MobileGatewayPairingResponse.self).pairingPayload
         devices = (try? await get(path: "/mobile/devices", baseURL: baseURL, token: desktopToken, as: DevicesResponse.self).devices) ?? devices
     }
 
@@ -254,7 +255,7 @@ final class MobileGatewayCoordinator: ObservableObject {
                 baseURL: Self.desktopBaseURL(for: settings),
                 token: desktopToken,
                 body: EmptyRequest(),
-                as: PairingResponse.self
+                as: MobileGatewayPairingResponse.self
             ).pairingPayload
             await refresh()
         } catch {
@@ -262,12 +263,11 @@ final class MobileGatewayCoordinator: ObservableObject {
         }
     }
 
-    private func waitUntilHealthy(baseURL: URL, token: String) async throws {
+    private func waitUntilHealthy(baseURL: URL) async throws {
         var lastError: Error?
         for _ in 0..<20 {
             do {
                 health = try await get(path: "/mobile/health", baseURL: baseURL, token: nil, as: MobileGatewayHealth.self)
-                _ = try await get(path: "/mobile/pairing", baseURL: baseURL, token: token, as: PairingResponse.self)
                 return
             } catch {
                 lastError = error
@@ -325,10 +325,6 @@ final class MobileGatewayCoordinator: ObservableObject {
         guard process === finishedProcess else { return }
         process = nil
         appState?.mobileGatewayDesktopPeer.disconnect()
-        if let tokenFileURL {
-            try? FileManager.default.removeItem(at: tokenFileURL)
-            self.tokenFileURL = nil
-        }
         if finishedProcess.terminationStatus == 0 {
             state = .stopped
         } else {
@@ -340,10 +336,6 @@ final class MobileGatewayCoordinator: ObservableObject {
         appState?.mobileGatewayDesktopPeer.disconnect()
         process?.terminate()
         process = nil
-        if let tokenFileURL {
-            try? FileManager.default.removeItem(at: tokenFileURL)
-            self.tokenFileURL = nil
-        }
         state = .failed(message)
     }
 
@@ -450,14 +442,27 @@ final class MobileGatewayCoordinator: ObservableObject {
     }
 }
 
-private struct APIEnvelope<T: Decodable>: Decodable {
+struct APIEnvelope<T: Decodable>: Decodable {
     var ok: Bool
     var error: String
     var data: T?
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case error
+        case data
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ok = try container.decodeIfPresent(Bool.self, forKey: .ok) ?? false
+        error = try container.decodeIfPresent(String.self, forKey: .error) ?? ""
+        data = try container.decodeIfPresent(T.self, forKey: .data)
+    }
 }
 
-private struct PairingResponse: Decodable {
-    var pairingPayload: MobileGatewayPairingPayload
+struct MobileGatewayPairingResponse: Decodable {
+    var pairingPayload: MobileGatewayPairingPayload?
 
     enum CodingKeys: String, CodingKey {
         case pairingPayload = "pairing_payload"

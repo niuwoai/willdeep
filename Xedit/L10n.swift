@@ -780,6 +780,8 @@ enum L10n {
             static let pairingBaseURLLabel = String(localized: "settings.mobile-gateway.pairing-base-url", defaultValue: "Pairing URL")
             static let expiresLabel = String(localized: "settings.mobile-gateway.expires", defaultValue: "Expires")
             static let hostPrompt = String(localized: "settings.mobile-gateway.host-prompt", defaultValue: "0.0.0.0")
+            static let portInputLabel = String(localized: "settings.mobile-gateway.port-input", defaultValue: "Port")
+            static let portPrompt = String(localized: "settings.mobile-gateway.port-prompt", defaultValue: "8877")
             static let desktopNamePrompt = String(localized: "settings.mobile-gateway.desktop-name-prompt", defaultValue: "Desktop name shown on Android")
             static let executablePathPrompt = String(localized: "settings.mobile-gateway.executable-path-prompt", defaultValue: "Optional willdeep-agent executable path")
             static let startButton = String(localized: "settings.mobile-gateway.start", defaultValue: "Start")
@@ -802,10 +804,6 @@ enum L10n {
             static let qrAccessibilityLabel = String(localized: "settings.mobile-gateway.qr-accessibility-label", defaultValue: "Mobile Gateway pairing QR code")
             static let qrUnavailable = String(localized: "settings.mobile-gateway.qr-unavailable", defaultValue: "QR code unavailable")
             static let listenDescription = String(localized: "settings.mobile-gateway.listen-description", defaultValue: "The gateway listens only after you enable it. Android connects over the local network; Agent execution, tools, patches, and file access still run through the Mac app.")
-            static func portLabel(_ a1: String) -> String {
-                let template = String(localized: "settings.mobile-gateway.port", defaultValue: "Port %@")
-                return String(format: template, a1)
-            }
             static func resolvedExecutable(_ a1: String) -> String {
                 let template = String(localized: "settings.mobile-gateway.resolved-executable", defaultValue: "Using %@")
                 return String(format: template, a1)

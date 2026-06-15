@@ -81,7 +81,13 @@ struct AgentMCPServerDirectoryTests {
         #expect(!agentList.contains { $0.id == "user:local-test-mcp" })
     }
 
-    @Test
+    // CI-skipped: writes a secret to the login keychain and reads it back.
+    // GitHub's shared macOS runners often have no unlocked keychain in the
+    // headless session, so `AgentCredentialStore.resolve` intermittently
+    // returns "" and this flakes. The credential-reference logic is exercised
+    // fully on a real machine (and locally). Not a product bug. Gate on
+    // GITHUB_ACTIONS so it still runs in every developer's local test pass.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == nil))
     func userServerSecretsAreStoredAsKeychainReferences() throws {
         let suiteName = "willdeep-mcp-credentials-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))

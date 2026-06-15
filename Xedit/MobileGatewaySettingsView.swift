@@ -11,6 +11,8 @@ import SwiftUI
 struct MobileGatewaySettingsView: View {
     @EnvironmentObject private var appState: AppState
     @State private var draft = MobileGatewaySettingsStore.load()
+    @State private var portText = String(MobileGatewaySettingsStore.load().port)
+    @FocusState private var portFieldFocused: Bool
 
     private var coordinator: MobileGatewayCoordinator {
         appState.mobileGatewayCoordinator
@@ -83,11 +85,25 @@ struct MobileGatewaySettingsView: View {
                 ))
                 .textFieldStyle(.roundedBorder)
 
-                Stepper(value: Binding(
-                    get: { draft.port },
-                    set: { draft.port = $0; saveDraft() }
-                ), in: mobileGatewayPortRange) {
-                    Text(L10n.Settings.MobileGateway.portLabel(String(draft.port)))
+                HStack {
+                    Text(L10n.Settings.MobileGateway.portInputLabel)
+                    Spacer()
+                    TextField(L10n.Settings.MobileGateway.portPrompt, text: Binding(
+                        get: { portText },
+                        set: { updatePortText($0) }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 160)
+                    .multilineTextAlignment(.trailing)
+                    .focused($portFieldFocused)
+                    .onSubmit {
+                        commitPortText()
+                    }
+                    .onChange(of: portFieldFocused) { isFocused in
+                        if !isFocused {
+                            commitPortText()
+                        }
+                    }
                 }
 
                 TextField(L10n.Settings.MobileGateway.desktopNamePrompt, text: Binding(
@@ -185,6 +201,7 @@ struct MobileGatewaySettingsView: View {
         .formStyle(.grouped)
         .onAppear {
             draft = coordinator.settings
+            portText = String(draft.port)
             Task { await coordinator.refresh() }
         }
     }
@@ -215,10 +232,33 @@ struct MobileGatewaySettingsView: View {
         }
     }
 
-    private func saveDraft() {
+    private func saveDraft(syncPortText: Bool = true) {
         let normalized = draft.normalized
         draft = normalized
+        if syncPortText {
+            portText = String(normalized.port)
+        }
         coordinator.updateSettings(normalized)
+    }
+
+    private func updatePortText(_ value: String) {
+        let digits = String(value.filter { $0.isNumber }.prefix(5))
+        portText = digits
+        guard let port = Int(digits), mobileGatewayPortRange.contains(port) else {
+            return
+        }
+        draft.port = port
+        saveDraft(syncPortText: false)
+    }
+
+    private func commitPortText() {
+        guard let port = Int(portText) else {
+            draft.port = MobileGatewaySettings.default.port
+            saveDraft()
+            return
+        }
+        draft.port = port
+        saveDraft()
     }
 
     private func deviceSubtitle(_ device: MobileGatewayDevice) -> String {

@@ -82,6 +82,44 @@ func TestMobileGatewayHealthIncludesVersionHeaders(t *testing.T) {
 	if !body.OK {
 		t.Fatalf("health response not ok: %#v", body)
 	}
+	data, ok := body.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("health data = %#v", body.Data)
+	}
+	if data["desktop_peer_connected"] != false {
+		t.Fatalf("desktop_peer_connected = %#v, want false before desktop websocket connects", data["desktop_peer_connected"])
+	}
+}
+
+func TestMobileGatewayHealthReportsDesktopPeerConnection(t *testing.T) {
+	gateway := newTestMobileGateway(t)
+	server := httptest.NewServer(gateway.routes())
+	defer server.Close()
+
+	desktopHeader := http.Header{}
+	desktopHeader.Set("Authorization", "Bearer desktop-secret")
+	desktopConn, _, err := websocket.DefaultDialer.Dial(mobileTestWSURL(server.URL)+"/mobile/ws", desktopHeader)
+	if err != nil {
+		t.Fatalf("dial desktop websocket: %v", err)
+	}
+	defer desktopConn.Close()
+
+	resp, err := http.Get(server.URL + "/mobile/health")
+	if err != nil {
+		t.Fatalf("GET health: %v", err)
+	}
+	defer resp.Body.Close()
+	var body APIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode health: %v", err)
+	}
+	data, ok := body.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("health data = %#v", body.Data)
+	}
+	if data["desktop_peer_connected"] != true {
+		t.Fatalf("desktop_peer_connected = %#v, want true after desktop websocket connects", data["desktop_peer_connected"])
+	}
 }
 
 func TestMobileGatewayPairingPayloadRequiresDesktopAuth(t *testing.T) {

@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-06-14 | Target version: v1.78.0-rc15
+> Last updated: 2026-06-15 | Target version: v1.78.0-rc27
 
 ## Summary
 
@@ -66,8 +66,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.78.0-rc15`
-- `X-Server-Version: 1.78.0-rc15`
+- `X-App-Version: 1.78.0-rc27`
+- `X-Server-Version: 1.78.0-rc27`
 
 ### `GET /mobile/health`
 
@@ -79,18 +79,19 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.78.0-rc15",
+    "version": "1.78.0-rc27",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
   },
   "protocol_version": "mobile-gateway.v1",
   "desktop_name": "Rocky's Mac",
-  "pairing_allowed": true
+  "pairing_allowed": true,
+  "desktop_peer_connected": true
 }
 ```
 
-The public health response must not include the pairing token.
+The public health response must not include the pairing token. `desktop_peer_connected` is required for live Android acceptance because a standalone Go gateway can accept pairing but cannot forward `session.list` or `message.send` to the macOS Agent runtime.
 
 ### `GET /mobile/pairing`
 
@@ -101,7 +102,7 @@ Response data:
 ```json
 {
   "pairing_payload": {
-    "base_url": "http://192.168.1.20:8876",
+    "base_url": "http://192.168.1.20:8877",
     "pairing_token": "short-lived-token",
     "protocol_version": "mobile-gateway.v1",
     "desktop_name": "Rocky's Mac",
@@ -123,7 +124,7 @@ Response data:
 ```json
 {
   "pairing_payload": {
-    "base_url": "http://192.168.1.20:8876",
+    "base_url": "http://192.168.1.20:8877",
     "pairing_token": "new-short-lived-token",
     "protocol_version": "mobile-gateway.v1",
     "desktop_name": "Rocky's Mac",
@@ -232,7 +233,6 @@ Fields:
 - `session_id`: optional Agent session id.
 - `payload`: optional object payload.
 - `ts`: optional ISO-8601 timestamp; the gateway fills it when missing.
-
 ## Desktop Events
 
 The desktop peer may broadcast:
@@ -278,6 +278,8 @@ Gateway behavior:
 
 The desktop app remains responsible for the actual command result and subsequent state events.
 
+`session.create` and `message.send` may include `payload.workspace_path`. When present, Swift routes the command into a local Mac Agent session bound to that workspace path. Android live acceptance uses this field to make phone-originated coding requests land in the intended Mac repository instead of a generic "No workspace" session.
+
 Current desktop bridge behavior:
 
 - `state.snapshot` includes session summaries, pending tool approvals, patch proposals, background jobs, queued message previews, recent conversation messages, and `worktree_changes` summaries.
@@ -312,6 +314,7 @@ The macOS app includes a Mobile Gateway settings section:
 - enable or disable LAN access;
 - start or stop `willdeep-agent serve-mobile`;
 - show the selected LAN address, port, and resolved gateway executable;
+- edit the port with a numeric-only text input, defaulting to `8877`;
 - show protocol version;
 - show QR pairing payload;
 - refresh the short-lived QR pairing payload without restarting the gateway;
@@ -341,5 +344,5 @@ All user-visible SwiftUI text must go through `Localizable.xcstrings` and `L10n.
 - Go unit tests must cover pairing token claim, expiration, one-time use, desktop-authenticated pairing rotation, health version headers, WebSocket auth, command forwarding, desktop event broadcast including `message.append`, `message.delta`, and `message.done`, unknown command errors, and revoke behavior.
 - Swift tests cover state snapshot conversion, command routing into existing Agent runtime methods, real `AppState.mobileGatewaySendMessage` dispatch into `sendAgentMessage()`, message append/delta/done event generation, `AppState` workspace path guard enforcement for `file.read`, danger-tier typed confirmation enforcement for `tool.decide`, `ask_user` answer enforcement, and patch apply/reject routing through the existing desktop patch state machine.
 - `scripts/mobile_gateway_integration_test.rb` starts a real local gateway, simulates desktop and mobile peers, verifies pairing, desktop-authenticated pairing rotation, command forwarding, ack, unknown-command errors, ordered message stream event broadcast, worktree event broadcast, device revocation disconnect/reconnect rejection, and emits JSON plus Markdown reports with acceptance evidence.
-- `scripts/mobile_gateway_live_readiness.rb` checks a running Mac Gateway before Android live acceptance by probing public health, verifying the default desktop-token file exists, rotating a pairing payload through desktop auth, and writing JSON plus Markdown readiness reports without printing bearer or pairing tokens.
-- `scripts/mobile_gateway_end_to_end_acceptance.rb` is the final cross-repository gate: it runs Mac live readiness first, skips Android live acceptance when Mac readiness fails, runs the Android live acceptance wrapper when Mac readiness passes, and writes JSON plus Markdown combined evidence.
+- `scripts/mobile_gateway_live_readiness.rb` checks a running Mac Gateway before Android live acceptance by probing public health, verifying the live server version matches the repository Go agent version, verifying the default desktop-token file exists, rotating a pairing payload through desktop auth, and writing JSON plus Markdown readiness reports without printing bearer or pairing tokens.
+- `scripts/mobile_gateway_end_to_end_acceptance.rb` is the final cross-repository gate: it runs Mac live readiness first, skips Android live acceptance when Mac readiness fails, runs the Android live acceptance wrapper when Mac readiness passes, checks that Android requires the target file even when an existing path is updated rather than newly added, verifies Android live scripts default to desktop port `8877`, and writes JSON plus Markdown combined evidence.

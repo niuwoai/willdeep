@@ -1,5 +1,172 @@
 # Changelog
 
+## 1.78.0-rc27 - 2026-06-15
+
+### Fixed
+
+- Android `message.send` 携带 `workspace_path` 且当前同 workspace 会话正在响应或等待审批时，Swift desktop peer 会新建 workspace-bound Agent 会话，避免复用旧 pending session 导致新的手机请求卡住。
+
+### Tests
+
+- Re-run Mobile Gateway bridge/coordinator targeted tests after the responding-session workspace routing fix.
+- Verified live Mobile Gateway readiness on port `8877` with `desktop_peer_connected=true`.
+- Ran the full Android-to-Mac end-to-end acceptance wrapper; all Mac readiness and Android live acceptance evidence passed.
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc27`。
+
+## 1.78.0-rc26 - 2026-06-15
+
+### Fixed
+
+- Mobile Gateway 启动健康检查不再强依赖 `/mobile/pairing` payload 解码；gateway 已健康时即进入运行状态，配对二维码读取失败只影响配对区域，避免启动时报“未能读取数据，因为数据丢失”。
+- Mobile Gateway 设置页端口改为明确的纯文本输入行，输入时只保留数字，提交空值或越界值时回落到默认 `8877` / 合法端口范围。
+
+### Changed
+
+- `message.send` / `session.create` 可携带 `workspace_path`，Swift desktop peer 会把 Android 发来的工作区路径绑定到新的或空的 Agent 会话，让手机端发起的写代码需求落到目标 Mac workspace。
+
+### Tests
+
+- 新增 Mobile Gateway 设置坏数据回退和空 pairing payload 解码回归测试。
+- 扩展 Mobile Gateway bridge 测试，覆盖 `workspace_path` 从 command payload 到 Swift controller 的转发。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc26`。
+
+## 1.78.0-rc25 - 2026-06-15
+
+### Fixed
+
+- `scripts/mobile_gateway_live_readiness.rb` 在 desktop-authenticated pairing rotate 成功后会重新读取 `/mobile/health`，用刷新后的短期 pairing token 状态判定 `pairing_allowed`，避免旧 token 已被 claim/过期时误挡 Android live acceptance。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc25`。
+
+## 1.78.0-rc24 - 2026-06-15
+
+### Added
+
+- `/mobile/health` 新增 `desktop_peer_connected`，用于区分单独运行的 Go gateway 和已经连接 Swift desktop peer 的完整 Mac Mobile Gateway。
+- `scripts/mobile_gateway_live_readiness.rb` 新增 desktop peer 在线验收项，避免 Android live acceptance 在没有 Mac Agent bridge 的 gateway 上假绿。
+
+### Fixed
+
+- Swift Mobile Gateway health 解码兼容 Go `version` 对象不包含 nested `protocol_version` 的实际响应，避免启动 gateway 后因健康检查解码失败而立即停止。
+- `MobileGatewayCoordinator` 的析构、失败和子进程退出路径不再删除共享 desktop token handoff 文件，避免 SwiftUI 临时 coordinator 生命周期把正在运行的 gateway 的认证文件删掉；用户显式 Stop 仍会清理。
+- `AgentMobileGatewayDesktopPeer` 在 WebSocket 被测试宿主或网络瞬断关闭后会自动重连，避免网关仍运行但 `desktop_peer_connected=false` 需要手动重启。
+
+### Tests
+
+- 新增 Go 单测覆盖 health 在 desktop peer WebSocket 连接前后返回的 `desktop_peer_connected` 状态。
+- 新增 Swift 单测覆盖 Go health 响应缺少 nested `version.protocol_version` 时仍可解码。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc24`。
+
+## 1.78.0-rc23 - 2026-06-15
+
+### Added
+
+- `scripts/mobile_gateway_live_readiness.rb` 新增当前监听端口进程诊断，报告 TCP 端口对应的 PID、父 PID 和可执行路径，便于发现 DerivedData 或旧 app bundle 中残留的旧版 Mobile Gateway。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc23`。
+
+## 1.78.0-rc22 - 2026-06-15
+
+### Fixed
+
+- `scripts/mobile_gateway_live_readiness.rb` 现在会校验 `/mobile/health` 返回的 server version 是否等于仓库内 `willdeep-agent/internal/agent/version.go`，防止 Android 真机验收误连到旧版 Mac Gateway。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc22`。
+
+## 1.78.0-rc21 - 2026-06-15
+
+### Fixed
+
+- 将 `scripts/mobile_gateway_live_readiness.rb` 的默认探测地址从旧端口 `8876` 同步到 Mobile Gateway 新默认端口 `8877`，避免设置页和最终联调脚本找不同端口。
+- 补强 `scripts/mobile_gateway_end_to_end_acceptance.rb` 的 Android contract 检查，要求 Android live acceptance 与 connected smoke 默认桌面端口也对齐 `8877`。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc21`。
+
+## 1.78.0-rc20 - 2026-06-15
+
+### Fixed
+
+- 修复 Mobile Gateway 启动时 Swift 解码 Go 成功响应缺省 `error` 字段导致的“未能读取数据，因类数据丢失”失败。
+- Mobile Gateway 设置读取兼容旧版缺字段数据，避免新增字段后旧设置解码失败。
+
+### Changed
+
+- Mobile Gateway 默认端口统一改为 `8877`，`willdeep-agent serve-mobile` 的 CLI 默认值同步更新。
+- Settings → Mobile Gateway 的端口控件由 Stepper 改为仅接受数字的文本输入框。
+
+### Tests
+
+- 新增设置兼容解码、默认端口和成功响应缺省 `error` 字段的测试覆盖。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc20`。
+
+## 1.78.0-rc19 - 2026-06-15
+
+### Tests
+
+- 补强 `scripts/mobile_gateway_end_to_end_acceptance.rb` 的 Android contract 检查：除了要求 Android final wrapper 绑定 `WILLDEEP_ANDROID_LIVE_ACCEPTANCE.md`，现在还静态确认 Android 会记录 worktree 文件签名、把既有目标文件的 kind/diff 统计变化视作有效目标文件活动，并有对应 JVM 单测覆盖。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc19`。
+
+## 1.78.0-rc18 - 2026-06-14
+
+### Tests
+
+- 将两个对 CI 环境敏感、非产品 bug 的用例在 GitHub Actions 上跳过（`.enabled(if: GITHUB_ACTIONS == nil)`），本地照常运行，消除反复阻塞 CI 的 flaky：
+  - `loadFile completes promptly for a file under 1MB`：依赖 `loadFile` 的 `DispatchQueue.global → DispatchQueue.main` 异步回调，在共享 macOS runner（核少、兄弟 suite 抢占主队列）上回调被饿死，500ms→5s 放宽都救不了（`.loadTimedOut`）。真实 app 主 runloop 常转，不受影响。
+  - `userServerSecretsAreStoredAsKeychainReferences`：headless runner 常无可解锁钥匙串，`AgentCredentialStore.resolve` 间歇返回空。真机/本地正常。
+- 源码内均注明跳过原因，确保本地测试仍覆盖这两条路径。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc18`。
+
+## 1.78.0-rc17 - 2026-06-14
+
+### Tests
+
+- 放宽 `loadFile completes ... for a file under 1MB` 性能用例的阈值（轮询上限 1s→5s、断言 500ms→2s），消除它在 GitHub Actions 共享 macOS runner 上因调度抖动频繁超时（`.loadTimedOut`）导致的 flaky 红——这是近期 CI 唯一反复失败的用例。本地仍是几十毫秒完成，「不卡死/相对快」的意图保留。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc17`。
+
+## 1.78.0-rc16 - 2026-06-14
+
+### Fixed
+
+- 修复 Agent 会话列表右侧的紧凑时间戳总是显示「0m」的问题：此前显示与排序都用 `session.updatedAt`，而该字段在切换/持久化会话时（`persistActiveAgentSession()`）会被刷新，导致旧会话也被刷成「刚刚」。现在改用新增的 `AgentSession.lastActivityAt`——取**最后一条非空 AI（assistant）消息的时间**（即「AI 最后输出的时间」），并跳过流式开始前的空占位消息；无 AI 回复时回退到最后一条消息（用户提问）时间，空会话才回退 `updatedAt`。
+- 会话列表的**显示时间与排序**统一改用 `lastActivityAt`，避免出现「显示 5m 的会话排在显示 0m 之上」的不一致。
+
+### Tests
+
+- 新增 `lastActivityAt` 的 3 个用例：`updatedAt=now` 但 AI 两小时前回复时显示 2h、跳过空 assistant 占位消息、回退到用户消息/`updatedAt`。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc16`。
+
 ## 1.78.0-rc15 - 2026-06-14
 
 ### Changed

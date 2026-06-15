@@ -13,6 +13,8 @@ READINESS_SCRIPT = File.join(ROOT_DIR, "scripts", "mobile_gateway_live_readiness
 READINESS_REPORT_JSON = File.join(ROOT_DIR, "build", "mobile_gateway_live_readiness", "report.json")
 ANDROID_ACCEPTANCE_SCRIPT = File.join(ANDROID_DIR, "scripts", "mobile_gateway_live_acceptance.rb")
 ANDROID_CONNECTED_SMOKE_SCRIPT = File.join(ANDROID_DIR, "scripts", "android_connected_smoke_test.rb")
+ANDROID_AGENT_ACTIVITY_EVIDENCE = File.join(ANDROID_DIR, "app", "src", "main", "java", "com", "willdeep", "android", "ui", "AgentActivityEvidence.kt")
+ANDROID_AGENT_ACTIVITY_EVIDENCE_TEST = File.join(ANDROID_DIR, "app", "src", "test", "java", "com", "willdeep", "android", "ui", "AgentActivityEvidenceTest.kt")
 ANDROID_ACCEPTANCE_REPORT_JSON = File.join(ANDROID_DIR, "build", "mobile_gateway_live_acceptance", "report.json")
 OUT_DIR = File.join(ROOT_DIR, "build", "mobile_gateway_end_to_end_acceptance")
 REPORT_JSON = File.join(OUT_DIR, "report.json")
@@ -47,6 +49,13 @@ ANDROID_TARGET_FILE_CONTRACT_CHECKS = %w[
   wrapper_sets_expected_target_file
   smoke_requires_target_file_evidence
   smoke_requires_target_file_marker
+  activity_captures_worktree_file_signatures
+  target_file_allows_existing_worktree_signature_change
+  target_file_update_test_present
+].freeze
+ANDROID_DEFAULT_PORT_CONTRACT_CHECKS = %w[
+  live_acceptance_defaults_to_8877
+  connected_smoke_defaults_to_8877
 ].freeze
 
 def run_command(*command, chdir:)
@@ -150,6 +159,8 @@ end
 def android_acceptance_contract
   live_script = read_text(ANDROID_ACCEPTANCE_SCRIPT)
   smoke_script = read_text(ANDROID_CONNECTED_SMOKE_SCRIPT)
+  activity_source = read_text(ANDROID_AGENT_ACTIVITY_EVIDENCE)
+  activity_test_source = read_text(ANDROID_AGENT_ACTIVITY_EVIDENCE_TEST)
   checks = {
     "live_acceptance_script_present" => File.file?(ANDROID_ACCEPTANCE_SCRIPT),
     "connected_smoke_script_present" => File.file?(ANDROID_CONNECTED_SMOKE_SCRIPT),
@@ -163,6 +174,11 @@ def android_acceptance_contract
     "wrapper_sets_expected_target_file" => live_script.include?("\"MOBILE_GATEWAY_EXPECTED_TARGET_FILE\" => LIVE_ACCEPTANCE_TARGET_FILE"),
     "smoke_requires_target_file_evidence" => smoke_script.include?("mac_target_file_after_send"),
     "smoke_requires_target_file_marker" => smoke_script.include?("Mac target file signal marker is required"),
+    "activity_captures_worktree_file_signatures" => activity_source.include?("worktreeFileSignatures") && activity_source.include?("activitySignature()"),
+    "target_file_allows_existing_worktree_signature_change" => activity_source.include?("file.activitySignature() !in baseline.worktreeFileSignatures"),
+    "target_file_update_test_present" => activity_test_source.include?("targetFileActivityCountsExistingWorktreeFileWhenStatsChange"),
+    "live_acceptance_defaults_to_8877" => live_script.include?("MOBILE_GATEWAY_DESKTOP_PORT\", \"8877\""),
+    "connected_smoke_defaults_to_8877" => smoke_script.include?("MOBILE_GATEWAY_DESKTOP_PORT\", \"8877\""),
   }
 
   {
@@ -170,6 +186,7 @@ def android_acceptance_contract
     "code_activity_status" => contract_status(checks, ANDROID_CODE_ACTIVITY_CONTRACT_CHECKS),
     "workspace_edit_status" => contract_status(checks, ANDROID_WORKSPACE_EDIT_CONTRACT_CHECKS),
     "target_file_status" => contract_status(checks, ANDROID_TARGET_FILE_CONTRACT_CHECKS),
+    "default_port_status" => contract_status(checks, ANDROID_DEFAULT_PORT_CONTRACT_CHECKS),
     "checks" => checks,
   }
 end
@@ -210,9 +227,22 @@ def android_target_file_contract_evidence(contract)
     "key" => "android_target_file_gate",
     "status" => failed.empty? ? "passed" : "failed",
     "evidence" => if failed.empty?
-                    "Android final live acceptance requires #{EXPECTED_ANDROID_LIVE_TARGET_FILE} to appear in Mac patch or worktree activity."
+                    "Android final live acceptance requires #{EXPECTED_ANDROID_LIVE_TARGET_FILE} to appear in Mac patch/worktree activity, including updates to an existing target path."
                   else
                     "Android final live acceptance is missing required target-file checks: #{failed.join(", ")}."
+                  end,
+  }
+end
+
+def android_default_port_contract_evidence(contract)
+  failed = contract.fetch("checks").slice(*ANDROID_DEFAULT_PORT_CONTRACT_CHECKS).select { |_key, value| value != true }.keys
+  {
+    "key" => "android_default_desktop_port",
+    "status" => failed.empty? ? "passed" : "failed",
+    "evidence" => if failed.empty?
+                    "Android live acceptance and connected smoke default to the Mac Mobile Gateway port 8877."
+                  else
+                    "Android live acceptance is missing required default-port checks: #{failed.join(", ")}."
                   end,
   }
 end
@@ -249,6 +279,7 @@ def build_acceptance_evidence(readiness, android, android_ran, android_preflight
   evidence << android_contract_evidence(android_contract)
   evidence << android_workspace_edit_contract_evidence(android_contract)
   evidence << android_target_file_contract_evidence(android_contract)
+  evidence << android_default_port_contract_evidence(android_contract)
   if android_ran
     evidence.concat(android_live_request_metadata_evidence(android))
     android.fetch("acceptance_evidence", []).each do |item|
@@ -290,6 +321,7 @@ def write_reports(report)
     "- Android final code activity gate: `#{report[:android_final_code_activity_gate_status]}`",
     "- Android default workspace edit request: `#{report[:android_default_workspace_edit_request_status]}`",
     "- Android target file gate: `#{report[:android_target_file_gate_status]}`",
+    "- Android default desktop port: `#{report[:android_default_desktop_port_status]}`",
     "- Android live acceptance: `#{report[:android_live_acceptance_status]}`",
     "- Android ready devices: `#{report[:android_ready_device_count]}`",
     "- Android repo: `#{report[:android_dir]}`",
@@ -364,6 +396,7 @@ report = {
   android_final_code_activity_gate_status: android_contract_report["code_activity_status"],
   android_default_workspace_edit_request_status: android_contract_report["workspace_edit_status"],
   android_target_file_gate_status: android_contract_report["target_file_status"],
+  android_default_desktop_port_status: android_contract_report["default_port_status"],
   android_ready_device_count: android_preflight_report["ready_device_count"],
   android_live_acceptance_status: android_report["status"],
   mac_readiness_report_json: READINESS_REPORT_JSON,

@@ -113,7 +113,7 @@ func newServeMobileCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&host, "host", "127.0.0.1", "listen host")
-	cmd.Flags().IntVar(&port, "port", 8876, "listen port")
+	cmd.Flags().IntVar(&port, "port", 8877, "listen port")
 	cmd.Flags().StringVar(&desktopName, "desktop-name", "", "desktop name shown in pairing payload")
 	cmd.Flags().StringVar(&desktopToken, "desktop-token", "", "desktop peer bearer token; generated if empty")
 	cmd.Flags().StringVar(&desktopTokenFile, "desktop-token-file", "", "file containing desktop peer bearer token")

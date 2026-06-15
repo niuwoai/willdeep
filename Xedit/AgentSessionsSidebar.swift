@@ -431,7 +431,7 @@ struct AgentSessionsSidebar: View {
     private func sessionUpdatedLabel(_ session: AgentSession) -> some View {
         TimelineView(.periodic(from: .now, by: 60)) { timeline in
             let label = AgentRelativeTimestamp.compactString(
-                since: session.updatedAt,
+                since: session.lastActivityAt,
                 now: timeline.date
             )
             Text(label)
@@ -574,10 +574,12 @@ struct AgentSessionsSidebar: View {
     ///   1. Pinned rows first, most-recently-pinned at the top of the
     ///      pinned block (`pinnedAt` desc) — re-pinning therefore
     ///      bubbles a chat back to the very top.
-    ///   2. Non-pinned rows after, by recency (`updatedAt` desc).
+    ///   2. Non-pinned rows after, by recency (`lastActivityAt` desc) so the
+    ///      displayed timestamp and the row order agree — a chat showing "5m"
+    ///      never sits above one showing "0m".
     /// Archived rows still flow through this comparator; `workspaceGroup`
     /// splits them off into the disclosure section after sorting, so the
-    /// archived disclosure stays in updatedAt-desc order too.
+    /// archived disclosure stays in recency-desc order too.
     private func sessionOrder(_ lhs: AgentSession, _ rhs: AgentSession) -> Bool {
         switch (lhs.isPinned, rhs.isPinned) {
         case (true, false): return true
@@ -585,7 +587,7 @@ struct AgentSessionsSidebar: View {
         case (true, true):
             return (lhs.pinnedAt ?? .distantPast) > (rhs.pinnedAt ?? .distantPast)
         case (false, false):
-            return lhs.updatedAt > rhs.updatedAt
+            return lhs.lastActivityAt > rhs.lastActivityAt
         }
     }
 }

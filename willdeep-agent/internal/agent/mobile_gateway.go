@@ -233,10 +233,11 @@ func (g *MobileGateway) handleHealth(w http.ResponseWriter, r *http.Request) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	writeOK(w, map[string]any{
-		"version":          VersionInfo(),
-		"protocol_version": MobileGatewayProtocolVersion,
-		"desktop_name":     g.config.DesktopName,
-		"pairing_allowed":  g.pairingAvailableLocked(g.now()),
+		"version":                VersionInfo(),
+		"protocol_version":       MobileGatewayProtocolVersion,
+		"desktop_name":           g.config.DesktopName,
+		"pairing_allowed":        g.pairingAvailableLocked(g.now()),
+		"desktop_peer_connected": g.desktop != nil,
 	})
 }
 

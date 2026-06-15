@@ -174,6 +174,61 @@ struct AgentSessionStoreTests {
         #expect(AgentRelativeTimestamp.compactString(since: now.addingTimeInterval(60), now: now) == "0m")
     }
 
+    // MARK: - lastActivityAt (sidebar timestamp source)
+
+    /// The sidebar timestamp must reflect when the AI last replied, NOT
+    /// `updatedAt` (which gets bumped on persist/switch and would read "0m"
+    /// for old chats). A session persisted "now" but whose last assistant
+    /// reply was 2h ago should report the 2h-ago time.
+    @Test
+    func lastActivityUsesLastAssistantMessageNotUpdatedAt() {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let twoHoursAgo = now.addingTimeInterval(-2 * 60 * 60)
+        let threeHoursAgo = now.addingTimeInterval(-3 * 60 * 60)
+        let session = AgentSession(
+            updatedAt: now, // persisted "just now"
+            messages: [
+                AgentMessage(role: .user, content: "hi", createdAt: threeHoursAgo),
+                AgentMessage(role: .assistant, content: "hello", createdAt: twoHoursAgo)
+            ]
+        )
+        #expect(session.lastActivityAt == twoHoursAgo)
+    }
+
+    /// Empty assistant turns (placeholder rows before streaming starts) are
+    /// skipped — we want the last turn that actually said something.
+    @Test
+    func lastActivitySkipsEmptyAssistantMessages() {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let realReply = now.addingTimeInterval(-30 * 60)
+        let emptyPlaceholder = now.addingTimeInterval(-1 * 60)
+        let session = AgentSession(
+            updatedAt: now,
+            messages: [
+                AgentMessage(role: .assistant, content: "the real answer", createdAt: realReply),
+                AgentMessage(role: .assistant, content: "", createdAt: emptyPlaceholder)
+            ]
+        )
+        #expect(session.lastActivityAt == realReply)
+    }
+
+    /// Before the first AI reply, fall back to the last message of any role
+    /// (the user's prompt) so a brand-new chat still shows a real time.
+    @Test
+    func lastActivityFallsBackToLastMessageThenUpdatedAt() {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let userTime = now.addingTimeInterval(-10 * 60)
+        let userOnly = AgentSession(
+            updatedAt: now,
+            messages: [AgentMessage(role: .user, content: "do a thing", createdAt: userTime)]
+        )
+        #expect(userOnly.lastActivityAt == userTime)
+
+        // Truly empty session → updatedAt is the only signal available.
+        let empty = AgentSession(updatedAt: now, messages: [])
+        #expect(empty.lastActivityAt == now)
+    }
+
     // MARK: - titleIsUserSet (LLM auto-summarizer guard)
 
     /// Default for a freshly-constructed session must be `false` so the
