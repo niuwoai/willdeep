@@ -98,6 +98,9 @@ private struct AgentLearningEventRow: View {
                     Text(statusLabel)
                         .font(AgentDesign.captionFont)
                         .foregroundStyle(.secondary)
+                    Text(AgentLearningActionPresentation.confidence(for: event).label)
+                        .font(AgentDesign.captionFont)
+                        .foregroundStyle(confidenceTint)
                     Spacer(minLength: 0)
                 }
 
@@ -114,8 +117,8 @@ private struct AgentLearningEventRow: View {
                         .textSelection(.enabled)
                 }
 
-                if let action = event.action {
-                    AgentLearningActionSummary(action: action)
+                if event.action != nil {
+                    AgentLearningActionSummary(event: event)
                 }
             }
 
@@ -179,20 +182,33 @@ private struct AgentLearningEventRow: View {
             return L10n.Transcript.learningStatusFailed
         }
     }
+
+    private var confidenceTint: Color {
+        switch AgentLearningActionPresentation.confidence(for: event) {
+        case .low:
+            return .orange
+        case .medium:
+            return .secondary
+        case .high:
+            return .green
+        }
+    }
 }
 
 private struct AgentLearningActionSummary: View {
-    let action: AgentLearningAction
+    let event: AgentLearningEvent
+
+    private var action: AgentLearningAction? { event.action }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 5) {
                 Image(systemName: actionIcon)
                     .font(.system(size: 10, weight: .semibold))
-                Text(AgentLearningActionPresentation.label(for: action.kind))
+                Text(AgentLearningActionPresentation.label(for: action?.kind ?? .saveMemory))
                     .font(AgentDesign.captionFont)
                     .fontWeight(.medium)
-                if action.requiresUserConfirmation {
+                if action?.requiresUserConfirmation == true {
                     Text(L10n.Transcript.learningActionNeedsConfirmation)
                         .font(AgentDesign.captionFont)
                         .foregroundStyle(.orange)
@@ -212,13 +228,14 @@ private struct AgentLearningActionSummary: View {
     }
 
     private var secondaryLines: [String] {
-        AgentLearningActionPresentation.summaryLines(for: action)
+        guard action != nil else { return [] }
+        return AgentLearningActionPresentation.summaryLines(for: event)
             .dropFirst()
             .filter { $0 != L10n.Transcript.learningActionNeedsConfirmation }
     }
 
     private var actionIcon: String {
-        switch action.kind {
+        switch action?.kind ?? .saveMemory {
         case .saveMemory:
             return "text.badge.plus"
         case .createSkill, .proposeSkill:

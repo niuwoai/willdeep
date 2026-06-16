@@ -43,11 +43,27 @@ enum AgentLearningActionKind: String, Codable, Equatable {
     case suggestMCPInstall
 }
 
+struct AgentLearningSkillDraft: Codable, Equatable {
+    var name: String
+    var description: String
+    var body: String
+}
+
+struct AgentLearningMCPDraft: Codable, Equatable {
+    var capability: String
+    var serverName: String
+    var installHint: String?
+    var searchQuery: String?
+    var reason: String
+}
+
 struct AgentLearningAction: Codable, Equatable {
     var kind: AgentLearningActionKind
     var commandName: String?
     var target: String?
     var searchQuery: String?
+    var skillDraft: AgentLearningSkillDraft?
+    var mcpDraft: AgentLearningMCPDraft?
     var reason: String
     var nextStep: String?
     var requiresUserConfirmation: Bool
@@ -57,6 +73,8 @@ struct AgentLearningAction: Codable, Equatable {
         commandName: String? = nil,
         target: String? = nil,
         searchQuery: String? = nil,
+        skillDraft: AgentLearningSkillDraft? = nil,
+        mcpDraft: AgentLearningMCPDraft? = nil,
         reason: String,
         nextStep: String? = nil,
         requiresUserConfirmation: Bool = false
@@ -65,6 +83,8 @@ struct AgentLearningAction: Codable, Equatable {
         self.commandName = commandName
         self.target = target
         self.searchQuery = searchQuery
+        self.skillDraft = skillDraft
+        self.mcpDraft = mcpDraft
         self.reason = reason
         self.nextStep = nextStep
         self.requiresUserConfirmation = requiresUserConfirmation
@@ -106,6 +126,8 @@ struct AgentSelfLearningAudit: Equatable {
     var mcpSuggestion: AgentSelfLearningMCPSuggestion?
     var skillCandidate: AgentSelfLearningSkillCandidate?
     var relevantToolCallCount: Int
+    var relevantToolNames: [String]
+    var explicitSkillDirective: Bool
 }
 
 enum AgentSelfLearning {
@@ -191,6 +213,7 @@ enum AgentSelfLearning {
         let calls = runtime.toolCalls.filter { relevantAssistantIDs.contains($0.messageID) }
         let memoryContents = automaticSelfLearningMemories(from: evidenceText)
         let mcpSuggestion = automaticMCPSuggestion(from: evidenceText)
+        let explicitSkillDirective = containsExplicitSkillCreationSignal(evidenceText)
         let skillCandidate = automaticSkillCandidate(
             userText: latestUser.modelContent,
             assistantText: recentAssistantText,
@@ -208,7 +231,9 @@ enum AgentSelfLearning {
             memoryContents: memoryContents,
             mcpSuggestion: mcpSuggestion,
             skillCandidate: skillCandidate,
-            relevantToolCallCount: calls.count
+            relevantToolCallCount: calls.count,
+            relevantToolNames: relevantToolNames(from: calls),
+            explicitSkillDirective: explicitSkillDirective
         )
     }
 
@@ -358,6 +383,7 @@ enum AgentSelfLearning {
                 detail: [
                     "Search query: \(mcpSuggestion.searchQuery)",
                     "Reason: \(mcpSuggestion.reason)",
+                    "Source: \(mcpSourceSummary(for: audit, capability: mcpSuggestion.capability))",
                     "Install/configuration still needs explicit user confirmation."
                 ].joined(separator: "\n"),
                 action: AgentLearningAction(
@@ -365,6 +391,13 @@ enum AgentSelfLearning {
                     commandName: "suggest_mcp_server",
                     target: mcpSuggestion.capability,
                     searchQuery: mcpSuggestion.searchQuery,
+                    mcpDraft: AgentLearningMCPDraft(
+                        capability: mcpSuggestion.capability,
+                        serverName: suggestedMCPServerName(for: mcpSuggestion),
+                        installHint: "Review candidates from search_mcp_servers before adding transport details or credentials.",
+                        searchQuery: mcpSuggestion.searchQuery,
+                        reason: mcpSuggestion.reason
+                    ),
                     reason: mcpSuggestion.reason,
                     nextStep: "Run search_mcp_servers, review candidates, then ask the user before installing or adding credentials.",
                     requiresUserConfirmation: true
@@ -390,15 +423,30 @@ enum AgentSelfLearning {
             || audit.memoryContents.contains(where: { $0.contains("create_user_skill") })
         guard hasSkillSignal else { return [] }
         guard settings.autoExtractionEnabled else {
+            let draft = audit.skillCandidate.map {
+                AgentLearningSkillDraft(
+                    name: $0.name,
+                    description: $0.description,
+                    body: $0.body
+                )
+            }
             return [
                 AgentLearningEvent(
                     kind: .skill,
                     status: .skipped,
                     title: "Skipped automatic skill extraction",
-                    detail: "Automatic skill extraction is disabled in Settings.",
+                    detail: [
+                        "Automatic skill extraction is disabled in Settings.",
+                        "Source: \(skillSourceSummary(for: audit))",
+                        draft.map { "Draft skill: \($0.name)" }
+                    ]
+                    .compactMap { $0 }
+                    .joined(separator: "\n"),
                     action: AgentLearningAction(
                         kind: .proposeSkill,
                         commandName: "create_user_skill",
+                        target: draft?.name,
+                        skillDraft: draft,
                         reason: "The turn had reusable workflow signal, but automatic skill extraction is disabled.",
                         nextStep: "Enable automatic skill extraction in Settings before creating skills from turn evidence.",
                         requiresUserConfirmation: true
@@ -412,7 +460,10 @@ enum AgentSelfLearning {
                     kind: .skill,
                     status: .skipped,
                     title: "Skipped automatic skill creation",
-                    detail: "Reusable-workflow signal was present, but this turn only had \(audit.relevantToolCallCount) relevant tool call(s). Minimum required: \(settings.minimumToolCallCount).",
+                    detail: [
+                        "Reusable-workflow signal was present, but this turn only had \(audit.relevantToolCallCount) relevant tool call(s). Minimum required: \(settings.minimumToolCallCount).",
+                        "Source: \(skillSourceSummary(for: audit))"
+                    ].joined(separator: "\n"),
                     action: AgentLearningAction(
                         kind: .proposeSkill,
                         commandName: "create_user_skill",
@@ -436,12 +487,18 @@ enum AgentSelfLearning {
                     title: "Created user skill \(url.deletingLastPathComponent().lastPathComponent)",
                     detail: [
                         candidate.reason,
+                        "Source: \(skillSourceSummary(for: audit))",
                         "Path: \(url.path)"
                     ].joined(separator: "\n"),
                     action: AgentLearningAction(
                         kind: .createSkill,
                         commandName: "create_user_skill",
                         target: url.deletingLastPathComponent().lastPathComponent,
+                        skillDraft: AgentLearningSkillDraft(
+                            name: candidate.name,
+                            description: candidate.description,
+                            body: candidate.body
+                        ),
                         reason: candidate.reason,
                         nextStep: "Future turns can discover this skill through list_skills or attach it from the skill picker."
                     )
@@ -453,11 +510,20 @@ enum AgentSelfLearning {
                     kind: .skill,
                     status: .skipped,
                     title: "Skipped existing user skill \(slug)",
-                    detail: "A skill with the same generated name already exists; the existing skill was left untouched.",
+                    detail: [
+                        "A skill with the same generated name already exists; the existing skill was left untouched.",
+                        "Source: \(skillSourceSummary(for: audit))",
+                        "Draft skill: \(candidate.name)"
+                    ].joined(separator: "\n"),
                     action: AgentLearningAction(
                         kind: .proposeSkill,
                         commandName: "create_user_skill",
                         target: slug,
+                        skillDraft: AgentLearningSkillDraft(
+                            name: candidate.name,
+                            description: candidate.description,
+                            body: candidate.body
+                        ),
                         reason: "A reusable workflow was detected, but the matching skill already exists.",
                         nextStep: "Reuse or manually edit the existing skill instead of overwriting it."
                     )
@@ -469,10 +535,20 @@ enum AgentSelfLearning {
                     kind: .skill,
                     status: .failed,
                     title: "Automatic skill creation failed",
-                    detail: error.localizedDescription,
+                    detail: [
+                        error.localizedDescription,
+                        "Source: \(skillSourceSummary(for: audit))",
+                        "Draft skill: \(candidate.name)"
+                    ].joined(separator: "\n"),
                     action: AgentLearningAction(
                         kind: .createSkill,
                         commandName: "create_user_skill",
+                        target: candidate.name,
+                        skillDraft: AgentLearningSkillDraft(
+                            name: candidate.name,
+                            description: candidate.description,
+                            body: candidate.body
+                        ),
                         reason: "A reusable workflow was detected, but writing the user skill failed.",
                         nextStep: "Review the error, fix local skill storage access, then retry if the workflow is still useful.",
                         requiresUserConfirmation: true
@@ -734,9 +810,39 @@ enum AgentSelfLearning {
         let tokens = AgentMemoryKeywordExtractor
             .tokens(from: text)
             .filter { $0.count >= 3 }
-            .prefix(4)
+        .prefix(4)
         let suffix = tokens.isEmpty ? "workflow" : tokens.joined(separator: "-")
         return "auto-\(suffix)"
+    }
+
+    private static func relevantToolNames(from calls: [AgentToolCall]) -> [String] {
+        var seen = Set<String>()
+        return calls.compactMap { call in
+            let name = oneLine(call.toolName, limit: 60)
+            guard seen.insert(name).inserted else { return nil }
+            return name
+        }
+    }
+
+    private static func skillSourceSummary(for audit: AgentSelfLearningAudit) -> String {
+        let trigger = audit.explicitSkillDirective
+            ? "explicit user request to create/save a skill"
+            : "reusable workflow signal in the turn"
+        let tools = audit.relevantToolNames.prefix(4).joined(separator: ", ")
+        if tools.isEmpty {
+            return "\(trigger); no relevant tool executions were captured."
+        }
+        return "\(trigger); relevant tools: \(tools) (\(audit.relevantToolCallCount) call\(audit.relevantToolCallCount == 1 ? "" : "s"))."
+    }
+
+    private static func mcpSourceSummary(for audit: AgentSelfLearningAudit, capability: String) -> String {
+        if audit.evidenceText.lowercased().contains("not configured")
+            || audit.evidenceText.contains("未配置")
+            || audit.evidenceText.contains("没有配置")
+            || audit.evidenceText.contains("缺少") {
+            return "turn evidence indicated \(capability) access was needed but no configured integration was available."
+        }
+        return "turn evidence asked the Agent to proactively search and suggest MCP options when an external capability is missing."
     }
 
     private static func detectedExternalCapability(in lower: String) -> String? {
@@ -757,6 +863,14 @@ enum AgentSelfLearning {
         (["browser", "chrome", "网页", "浏览器"], "browser automation"),
         (["erp", "kingdee", "金蝶", "wangdiantong", "旺店通"], "ERP data")
     ]
+
+    private static func suggestedMCPServerName(for suggestion: AgentSelfLearningMCPSuggestion) -> String {
+        let tokens = AgentMemoryKeywordExtractor.tokens(from: suggestion.capability)
+            .filter { $0.count >= 2 }
+            .prefix(3)
+        let prefix = tokens.isEmpty ? "suggested" : tokens.joined(separator: "-")
+        return "\(prefix)-mcp"
+    }
 
     private static func appendUnique(_ value: String, to values: inout [String]) {
         let normalized = value

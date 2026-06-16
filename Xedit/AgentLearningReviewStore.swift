@@ -107,6 +107,21 @@ enum AgentLearningReviewStore {
         save(items)
     }
 
+    static func updateSkillDraft(id: UUID, draft: AgentLearningSkillDraft) {
+        var items = load()
+        guard let index = items.firstIndex(where: { $0.id == id }),
+              items[index].event.action?.skillDraft != nil else {
+            return
+        }
+
+        let now = Date()
+        items[index].event.action?.skillDraft = draft
+        items[index].event.action?.target = draft.name
+        items[index].event.detail = updatedSkillDraftDetail(from: items[index].event.detail, draftName: draft.name)
+        items[index].updatedAt = now
+        save(items)
+    }
+
     static func clearReviewed() {
         save(load().filter { $0.decision == .pending })
     }
@@ -145,6 +160,30 @@ enum AgentLearningReviewStore {
             .joined(separator: " ")
             .lowercased()
     }
+
+    nonisolated private static func updatedSkillDraftDetail(from detail: String, draftName: String) -> String {
+        let lines = detail
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map(String.init)
+        var replaced = false
+        let updatedLines = lines.map { line -> String in
+            if line.hasPrefix("Draft skill: ") {
+                replaced = true
+                return "Draft skill: \(draftName)"
+            }
+            return line
+        }
+
+        if replaced {
+            return updatedLines.joined(separator: "\n")
+        }
+
+        if detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Draft skill: \(draftName)"
+        }
+
+        return detail + "\nDraft skill: \(draftName)"
+    }
 }
 
 @MainActor
@@ -174,6 +213,11 @@ final class AgentLearningReviewState: ObservableObject {
 
     func dismiss(id: UUID) {
         AgentLearningReviewStore.mark(id: id, decision: .dismissed)
+        refresh()
+    }
+
+    func updateSkillDraft(id: UUID, draft: AgentLearningSkillDraft) {
+        AgentLearningReviewStore.updateSkillDraft(id: id, draft: draft)
         refresh()
     }
 

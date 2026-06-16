@@ -9,6 +9,7 @@
 
 import SwiftUI
 import AppKit
+import Combine
 
 enum EditorSettingsTab: Hashable {
     case typography

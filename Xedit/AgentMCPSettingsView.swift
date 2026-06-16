@@ -7,8 +7,41 @@
 
 import SwiftUI
 import AppKit
+import Combine
+
+@MainActor
+final class AgentMCPServerCreationCoordinator: ObservableObject {
+    static let shared = AgentMCPServerCreationCoordinator()
+
+    @Published var draft: AgentLearningMCPDraft?
+    @Published private(set) var reviewItemID: UUID?
+
+    private init() {}
+
+    func open(with draft: AgentLearningMCPDraft, reviewItemID: UUID? = nil) {
+        self.draft = draft
+        self.reviewItemID = reviewItemID
+        EditorSettingsNavigation.shared.open(.mcp)
+    }
+
+    func consumeDraft() -> AgentLearningMCPDraft? {
+        defer { draft = nil }
+        return draft
+    }
+
+    func markReviewItemReviewedIfNeeded() {
+        guard let reviewItemID else { return }
+        AgentLearningReviewStore.mark(id: reviewItemID, decision: .reviewed)
+        self.reviewItemID = nil
+    }
+
+    func clearPendingReviewItem() {
+        reviewItemID = nil
+    }
+}
 
 struct AgentMCPSettingsView: View {
+    @ObservedObject private var creationCoordinator = AgentMCPServerCreationCoordinator.shared
     @State private var settings = AgentMCPSettingsStore.load()
     @State private var servers = AgentMCPServerDirectory.list(includeDisabled: true)
     @State private var toolCounts: [String: Int] = [:]
@@ -73,13 +106,23 @@ struct AgentMCPSettingsView: View {
             .background(.bar)
         }
         .sheet(isPresented: $isCreatingServer) {
-            AgentMCPServerCreationSheet { server in
+            AgentMCPServerCreationSheet(initialDraft: creationCoordinator.consumeDraft()) { server in
                 AgentMCPSettingsStore.upsertUserServer(server)
                 isCreatingServer = false
                 refreshServers()
+                creationCoordinator.markReviewItemReviewedIfNeeded()
                 statusMessage = L10n.Settings.MCP.createdServer(server.name)
+                if server.isEnabled {
+                    refreshTools(for: server)
+                }
             } onCancel: {
                 isCreatingServer = false
+                creationCoordinator.clearPendingReviewItem()
+            }
+        }
+        .onChange(of: creationCoordinator.draft?.serverName) { _, newValue in
+            if newValue != nil {
+                isCreatingServer = true
             }
         }
     }
@@ -330,6 +373,7 @@ private struct AgentMCPServerCreationSheet: View {
     @State private var headerLines = ""
     @State private var timeout = 30.0
     @State private var errorMessage = ""
+    let initialDraft: AgentLearningMCPDraft?
 
     let onCreate: (AgentMCPServerConfig) -> Void
     let onCancel: () -> Void
@@ -342,6 +386,28 @@ private struct AgentMCPServerCreationSheet: View {
 
             TextField(L10n.Settings.MCP.serverNamePlaceholder, text: $name)
                 .textFieldStyle(.roundedBorder)
+
+            if let initialDraft {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(initialDraft.capability)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if let installHint = initialDraft.installHint,
+                       !installHint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(installHint)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let searchQuery = initialDraft.searchQuery,
+                       !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("Search query: \(searchQuery)")
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
 
             Picker(L10n.Settings.MCP.transportLabel, selection: $transport) {
                 ForEach(AgentMCPTransport.allCases) { transport in
@@ -410,6 +476,9 @@ private struct AgentMCPServerCreationSheet: View {
         }
         .padding(20)
         .frame(width: 560)
+        .onAppear {
+            applyInitialDraftIfNeeded()
+        }
     }
 
     private func createServer() {
@@ -463,5 +532,33 @@ private struct AgentMCPServerCreationSheet: View {
             }
         }
         return result
+    }
+
+    private func applyInitialDraftIfNeeded() {
+        guard let initialDraft else { return }
+        if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            name = initialDraft.serverName
+        }
+        if let suggestedURL = suggestedURL(from: initialDraft),
+           url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            transport = .streamableHTTP
+            url = suggestedURL
+        }
+    }
+
+    private func suggestedURL(from draft: AgentLearningMCPDraft) -> String? {
+        let candidates = [draft.installHint, draft.searchQuery].compactMap { $0 }
+        for candidate in candidates {
+            for token in candidate.split(whereSeparator: \.isWhitespace) {
+                let value = String(token)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "(),.;"))
+                if let url = URL(string: value),
+                   let scheme = url.scheme?.lowercased(),
+                   scheme == "http" || scheme == "https" {
+                    return url.absoluteString
+                }
+            }
+        }
+        return nil
     }
 }

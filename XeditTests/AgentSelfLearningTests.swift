@@ -131,7 +131,10 @@ struct AgentSelfLearningTests {
         let mcpEvent = try #require(events.first { $0.kind == .mcpSuggestion })
         #expect(mcpEvent.action?.kind == .suggestMCPInstall)
         #expect(mcpEvent.action?.commandName == "suggest_mcp_server")
+        #expect(mcpEvent.action?.mcpDraft?.serverName.contains("mcp") == true)
+        #expect(mcpEvent.action?.mcpDraft?.searchQuery == mcpEvent.action?.searchQuery)
         #expect(mcpEvent.action?.requiresUserConfirmation == true)
+        #expect(mcpEvent.detail.contains("Source:"))
     }
 
     @Test
@@ -273,6 +276,8 @@ struct AgentSelfLearningTests {
         #expect(audit.mcpSuggestion?.searchQuery.contains("Model Context Protocol") == true)
         #expect(audit.skillCandidate?.body.contains("Observed tool sequence") == true)
         #expect(audit.relevantToolCallCount == 3)
+        #expect(audit.relevantToolNames == ["grep_files", "run_command"])
+        #expect(audit.explicitSkillDirective)
     }
 
     @Test
@@ -334,6 +339,8 @@ struct AgentSelfLearningTests {
         #expect(skillEvent.action?.kind == .createSkill)
         #expect(skillEvent.action?.commandName == "create_user_skill")
         #expect(skillEvent.action?.target?.hasPrefix("auto-") == true)
+        #expect(skillEvent.detail.contains("Source:"))
+        #expect(skillEvent.detail.contains("read_file"))
     }
 
     @Test
@@ -479,6 +486,63 @@ struct AgentSelfLearningTests {
     }
 
     @Test
+    func disabledAutomaticSkillExtractionPreservesSkillDraft() throws {
+        let defaults = UserDefaults.standard
+        let settingsKey = "com.willdeep.agentSkillSettings.v1"
+        let previous = defaults.data(forKey: settingsKey)
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: settingsKey)
+            } else {
+                defaults.removeObject(forKey: settingsKey)
+            }
+        }
+
+        let disabled = AgentSkillSettings(
+            autoExtractionEnabled: false,
+            minimumToolCallCount: 2,
+            disabledSkillIdentifiers: []
+        )
+        defaults.set(try JSONEncoder().encode(disabled), forKey: settingsKey)
+
+        let user = AgentMessage(role: .user, content: "以后把这个发布流程沉淀成一个 skill。")
+        let assistant = AgentMessage(role: .assistant, content: "我先跑测试，再检查产物，再准备发布说明。")
+        let session = AgentSession(messages: [user, assistant])
+        let runtime = AgentRuntime(session: session)
+        let assistantID = try #require(runtime.messages.last { $0.role == .assistant }?.id)
+        runtime.toolCalls = [
+            AgentToolCall(
+                messageID: assistantID,
+                externalID: "tool-1",
+                toolName: "run_command",
+                arguments: [:],
+                risk: .read,
+                status: .succeeded,
+                result: AgentToolResult(summary: "ran tests", payload: "")
+            ),
+            AgentToolCall(
+                messageID: assistantID,
+                externalID: "tool-2",
+                toolName: "read_file",
+                arguments: [:],
+                risk: .read,
+                status: .succeeded,
+                result: AgentToolResult(summary: "checked artifacts", payload: "")
+            )
+        ]
+
+        let events = AgentSelfLearning.captureAutomaticSkillCandidate(
+            for: runtime,
+            workspaceURL: URL(fileURLWithPath: "/tmp/WillDeepProject")
+        )
+
+        let event = try #require(events.first)
+        #expect(event.status == .skipped)
+        #expect(event.action?.skillDraft?.name.contains("auto-") == true)
+        #expect(event.action?.skillDraft?.body.contains("Observed tool sequence") == true)
+    }
+
+    @Test
     func sessionPersistsLearningEvents() throws {
         let event = AgentLearningEvent(
             kind: .mcpSuggestion,
@@ -490,6 +554,13 @@ struct AgentSelfLearningTests {
                 commandName: "suggest_mcp_server",
                 target: "GitHub",
                 searchQuery: "GitHub MCP server",
+                mcpDraft: AgentLearningMCPDraft(
+                    capability: "GitHub",
+                    serverName: "github-mcp",
+                    installHint: "https://example.com/mcp/github",
+                    searchQuery: "GitHub MCP server",
+                    reason: "Need GitHub review thread access."
+                ),
                 reason: "Need GitHub review thread access.",
                 nextStep: "Ask before installing.",
                 requiresUserConfirmation: true
@@ -591,6 +662,52 @@ struct AgentSelfLearningTests {
 
         AgentLearningReviewStore.clearReviewed()
         #expect(AgentLearningReviewStore.load().isEmpty)
+    }
+
+    @Test
+    func learningReviewStoreUpdatesSkillDraftContent() throws {
+        let suiteName = "com.willdeep.tests.learningReview.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        AgentLearningReviewStore._setTestDefaultsOverride(defaults)
+        defer {
+            AgentLearningReviewStore._setTestDefaultsOverride(nil)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let event = AgentLearningEvent(
+            kind: .skill,
+            status: .suggested,
+            title: "Skill candidate",
+            detail: "Reusable workflow candidate.\nDraft skill: release-checklist",
+            action: AgentLearningAction(
+                kind: .proposeSkill,
+                commandName: "create_user_skill",
+                target: "release-checklist",
+                skillDraft: AgentLearningSkillDraft(
+                    name: "release-checklist",
+                    description: "Use before shipping a release.",
+                    body: "Run tests and verify artifacts."
+                ),
+                reason: "The workflow repeated across multiple tool calls."
+            )
+        )
+
+        AgentLearningReviewStore.enqueue(events: [event], sessionID: nil)
+        AgentLearningReviewStore.updateSkillDraft(
+            id: event.id,
+            draft: AgentLearningSkillDraft(
+                name: "release-ready-checklist",
+                description: "Use before cutting a release.",
+                body: "Run tests, verify artifacts, and confirm changelog updates."
+            )
+        )
+
+        let item = try #require(AgentLearningReviewStore.load().first)
+        #expect(item.event.action?.target == "release-ready-checklist")
+        #expect(item.event.action?.skillDraft?.name == "release-ready-checklist")
+        #expect(item.event.action?.skillDraft?.description == "Use before cutting a release.")
+        #expect(item.event.action?.skillDraft?.body.contains("confirm changelog updates") == true)
+        #expect(item.event.detail.contains("Draft skill: release-ready-checklist"))
     }
 
     private func temporarySkillRoot() throws -> URL {

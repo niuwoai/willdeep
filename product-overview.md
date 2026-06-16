@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-16 | Current version: v1.78.0-rc98
+> Last updated: 2026-06-16 | Current version: v1.78.0-rc105
 
 ## Positioning
 
@@ -63,7 +63,14 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **版本一致性与 Go CI（1.78.0-rc91）** — 新增 `scripts/version_consistency.rb`，校验 Xcode / Go agent / Help / README / product overview / Mobile Gateway / harness priorities / CHANGELOG 顶部版本一致性并输出 Markdown + JSON 报告；本地 `scripts/run_tests.sh` 和 GitHub Actions `Tests` workflow 都会执行该检查，CI 同时补跑 `willdeep-agent` 的 `go test ./...`。
 - **Agent turn report（1.78.0-rc93）** — 新增 `AgentTurnReport.swift` 和 `AgentTurnReportView.swift`，transcript 底部会展示最近一轮 Agent 的模型/provider、交互与审批模式、耗时、token、工具状态、风险分布、审批来源、sandbox mode 和自学习动作，并支持复制报告文本。
 - **Agent 自学习动作元数据（1.78.0-rc95）** — 新增 `AgentLearningAction` 与 `AgentLearningActionPresentation`：自动 memory、skill 创建/跳过/失败和 MCP 建议都会结构化记录工具名、目标、搜索词、原因、下一步和是否需要用户确认；transcript 学习卡、Settings review 队列和 turn report 都能显示“已自动执行”与“待用户确认”的差异。
-- **Agent 召回来源可见化（1.78.0-rc98）** — 新增 `AgentTurnRecall.swift`；发送链路、queued message 和 provider 并发队列会保留 `attachedSkills` 元信息，turn loop 会把本轮命中的 memory 检索结果与 attached skills 记成 `latestTurnRecall` 并持久化到 session。turn report 现在单独显示 `Recall`，区分“本轮用了哪些 memory / skill”与“本轮学到了哪些新规则”。
+- **学习来源可见（1.78.0-rc105）** — skill / MCP 自学习事件现在会补充 `Source:` 线索，把显式用户要求、复用工作流信号、相关工具序列和“缺少已配置集成”的能力缺口直接写进 detail，让 review 队列和 transcript 不只知道“建议了什么”，也知道“为什么是它”。
+- **学习结果可解释（1.78.0-rc104）** — Learning Review 和 transcript 学习卡现在会展示 `Low / Medium / High confidence`，并补充 `Reason / Why` 解释，帮助判断一条 memory、skill 或 MCP 建议到底是“已经自动完成”、 “建议待确认”，还是“证据还偏弱”。
+- **Skill 草稿可编辑（1.78.0-rc103）** — Learning Review 里的 skill 候选现在可以先编辑名称、描述和正文，再保存回 review 队列；后续从队列直接创建 skill 时，会沿用整理后的草稿内容，而不是强迫用户先落盘再返工。
+- **MCP 建议自动收口（1.78.0-rc102）** — 从 review 队列触发 MCP 建议预填后，用户一旦创建服务器，对应 review 项会自动标记为已审核；设置页还会立刻尝试刷新工具列表，把“建议 -> 配置 -> 初步验证”串起来。
+- **MCP 建议预填配置（1.78.0-rc101）** — 自动学习里的 MCP 建议现在会保留结构化草稿，并可从 review 队列直接把建议名称、能力说明、install hint 和搜索词带进 MCP 新建服务器表单，少走一截手工复制。
+- **Skill 候选草稿可执行（1.78.0-rc100）** — 自动学习里的 skill 候选现在会保留结构化草稿（名称、描述、正文），review 队列在有草稿时可直接创建本地用户 skill，而不是只把人送去设置页自己重填一遍。
+- **Learning Review 快捷闭环（1.78.0-rc99）** — review 队列里的 skill / MCP 项现在可以直接跳到 `Skills` / `MCP` 设置标签，也能一键打开用户 skills 目录或复制 MCP 搜索词，减少“建议有了、入口还得自己翻”的断点。
+- **Agent 召回来源可见化（1.78.0-rc99）** — 新增 `AgentTurnRecall.swift`；发送链路、queued message 和 provider 并发队列会保留 `attachedSkills` 元信息，turn loop 会把本轮命中的 memory 检索结果与 attached skills 记成 `latestTurnRecall` 并持久化到 session。turn report 现在单独显示 `Recall`，区分“本轮用了哪些 memory / skill”与“本轮学到了哪些新规则”。
 - **Agent panel 复杂度治理（1.78.0-rc53）** — 新增 `AgentPanelCards.swift`，将右侧 Agent panel 的 patch proposal 卡片、空状态和消息气泡从 `AgentPanelView.swift` 拆出；panel 主文件降到约 1681 行。
 - **Swift 6 诊断收口（1.78.0-rc54）** — Markdown parser 测试 suite 显式 `@MainActor`，`KeychainSandbox` 清理路径在主 actor 内复位测试 Keychain/UserDefaults，`EditorOutlineExtractor` 标为非隔离纯解析工具，减少 actor isolation warning 噪音。
 - **Swift 6 诊断收口（1.78.0-rc55）** — `AgentTools` 本地目录枚举改用 `nextObject()`，Quick Open 缓存回填去掉无意义 `await`，Mobile Gateway 设置页端口焦点监听更新为新版 `onChange` 签名。

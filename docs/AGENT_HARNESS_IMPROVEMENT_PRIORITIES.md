@@ -1,6 +1,6 @@
 # Agent Harness Improvement Priorities
 
-> Last updated: 2026-06-16 | Current version: v1.78.0-rc98
+> Last updated: 2026-06-16 | Current version: v1.78.0-rc105
 
 这份文档用于回答一个核心问题：一个 harness 级 Agent 要继续变强，哪些问题必须优先解决。
 
@@ -35,13 +35,13 @@
 
 ## P1：自学习
 
-当前状态：rc71 起有 `add_memory`、`create_user_skill`、`suggest_mcp_server`，并在回合结束时尝试自动 memory 捕获和 skill 候选提取；rc75 起新增 `search_mcp_servers`；rc82 起 system prompt 把 meaningful task 的 learning checkpoint 写成必经路径，同一句“自动 memory / skill / MCP 建议”会拆成具体 memory、skill 和 MCP discovery 策略。rc85 起新增 `AgentSelfLearningAudit`，把本轮 memory、skill 候选、MCP 建议和工具证据数量结构化，MCP 缺口记忆会带具体 `Search query`，默认 skill 沉淀门槛降为 3 次工具调用。rc88 起 `AgentLearningEvent` 会把自动 memory、skill 创建/跳过/失败和 MCP discovery 建议持久化到 session，并在 transcript 底部展示最近学习记录。rc89 起新增持久 review 队列，在 Memory 设置页集中处理待审核学习项，支持复制、标记已审核、忽略和清理已审核记录。rc95 起 `AgentLearningAction` 会给每条自动学习事件附上结构化下一步：工具名、目标、搜索词、原因、下一步、是否需要用户确认；transcript、review 队列和 turn report 都能展示“已经自动保存/创建”和“建议用户确认”的差异。rc98 起 turn report 会额外展示 `Recall`：本轮检索命中的 memories 和随消息注入的 attached skills 会持久化成 `latestTurnRecall`，避免“学到了什么”和“用了什么上下文”继续混在一起。
+当前状态：rc71 起有 `add_memory`、`create_user_skill`、`suggest_mcp_server`，并在回合结束时尝试自动 memory 捕获和 skill 候选提取；rc75 起新增 `search_mcp_servers`；rc82 起 system prompt 把 meaningful task 的 learning checkpoint 写成必经路径，同一句“自动 memory / skill / MCP 建议”会拆成具体 memory、skill 和 MCP discovery 策略。rc85 起新增 `AgentSelfLearningAudit`，把本轮 memory、skill 候选、MCP 建议和工具证据数量结构化，MCP 缺口记忆会带具体 `Search query`，默认 skill 沉淀门槛降为 3 次工具调用。rc88 起 `AgentLearningEvent` 会把自动 memory、skill 创建/跳过/失败和 MCP discovery 建议持久化到 session，并在 transcript 底部展示最近学习记录。rc89 起新增持久 review 队列，在 Memory 设置页集中处理待审核学习项，支持复制、标记已审核、忽略和清理已审核记录。rc95 起 `AgentLearningAction` 会给每条自动学习事件附上结构化下一步：工具名、目标、搜索词、原因、下一步、是否需要用户确认；transcript、review 队列和 turn report 都能展示“已经自动保存/创建”和“建议用户确认”的差异。rc98 起 turn report 会额外展示 `Recall`：本轮检索命中的 memories 和随消息注入的 attached skills 会持久化成 `latestTurnRecall`，避免“学到了什么”和“用了什么上下文”继续混在一起。rc99 起 review 队列里的 skill / MCP 项已经能直接跳到对应设置标签、打开用户 skills 目录或复制 MCP 搜索词，开始从“可见”走向“可执行”。rc100 起 skill 候选草稿会结构化保留在 learning action 里，review 队列可直接落盘创建用户 skill，开始从“可执行入口”走向“真正闭环执行”。rc101 起 MCP 建议草稿也会结构化保留，并能直接预填 MCP 新建服务器表单，开始补上外部能力建议的半闭环。rc102 起 MCP 建议在创建成功后会自动收口 review 项，并立刻尝试刷新工具列表，开始从“预填配置”迈向“配置后初步验证”。rc103 起 review 队列里的 skill 候选也支持先编辑草稿再保存，补上从“自动提议”到“人工整理后落盘”的最后一截。rc104 起 learning event 会额外展示 `Confidence / Why`，开始从“有结果”走向“解释得清为什么这样学”。rc105 起 skill / MCP 事件 detail 进一步补上 `Source:`，把工具序列、显式用户要求和外部能力缺口直接暴露出来。
 
-仍然不好：学习结果已经结构化、可见且可审核，turn report 也开始展示 memory / attached skill 召回来源，但还缺少候选编辑、低置信度解释，以及更完整的召回可观测性，例如自动 skill 发现来源、MCP 建议命中来源和“为什么没有命中”的跳过理由。MCP 建议已经带 action metadata 和用户确认边界，但还没有进入一键确认安装、凭据配置和安装后验证闭环。
+仍然不好：学习结果已经结构化、可见且可审核，turn report 也开始展示 memory / attached skill 召回来源，review 队列也有了第一批快捷动作，并能直接编辑或落盘 skill 草稿、预填 MCP 表单、自动收口 review 项；低置信度解释和 `Source:` 已经有了第一层，但还缺少更完整的召回可观测性，例如自动 skill 发现来源、MCP 建议命中来源和“为什么没有命中”的跳过理由。MCP 建议已经带 action metadata 和用户确认边界，也开始做创建后的工具列表探测，但还没有进入一键确认安装、凭据配置和安装后验证闭环。
 
 下一步顺序：
 
-1. 给 review 队列补候选编辑和更明确的低置信度解释。
+1. 在 transcript 或 debug 面板继续补 recall 命中项与 learning 建议之间的显式关联。
 2. 在 transcript 或 debug 面板展示本轮命中的 memory/skill/MCP 建议、跳过原因和召回来源。
 3. 对重复、过期、低置信度 skill/memory 做维护任务。
 

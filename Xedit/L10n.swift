@@ -703,6 +703,11 @@ enum L10n {
             static let empty = String(localized: "settings.learning-review.empty", defaultValue: "No pending learning items.")
             static let copy = String(localized: "settings.learning-review.copy", defaultValue: "Copy details")
             static let copied = String(localized: "settings.learning-review.copied", defaultValue: "Copied")
+            static let editSkillDraft = String(localized: "settings.learning-review.edit-skill-draft", defaultValue: "Edit skill draft")
+            static let editSkillDraftTitle = String(localized: "settings.learning-review.edit-skill-draft-title", defaultValue: "Edit Skill Draft")
+            static let createSkillFromDraft = String(localized: "settings.learning-review.create-skill-from-draft", defaultValue: "Create skill from draft")
+            static let configureMCPFromDraft = String(localized: "settings.learning-review.configure-mcp-from-draft", defaultValue: "Configure MCP suggestion")
+            static let saveSkillDraft = String(localized: "settings.learning-review.save-skill-draft", defaultValue: "Save Draft")
             static let markReviewed = String(localized: "settings.learning-review.mark-reviewed", defaultValue: "Mark reviewed")
             static let dismiss = String(localized: "settings.learning-review.dismiss", defaultValue: "Dismiss")
             static let clearReviewed = String(localized: "settings.learning-review.clear-reviewed", defaultValue: "Clear reviewed")
@@ -1374,6 +1379,18 @@ enum L10n {
         static let learningActionSearchMCP = String(localized: "transcript.learning.action.search-mcp", defaultValue: "Search MCP")
         static let learningActionSuggestMCPInstall = String(localized: "transcript.learning.action.suggest-mcp-install", defaultValue: "Suggest MCP install")
         static let learningActionNeedsConfirmation = String(localized: "transcript.learning.action.needs-confirmation", defaultValue: "Needs user confirmation")
+        static let learningConfidenceLow = String(localized: "transcript.learning.confidence.low", defaultValue: "Low confidence")
+        static let learningConfidenceMedium = String(localized: "transcript.learning.confidence.medium", defaultValue: "Medium confidence")
+        static let learningConfidenceHigh = String(localized: "transcript.learning.confidence.high", defaultValue: "High confidence")
+        static let learningExplanationCompleted = String(localized: "transcript.learning.explanation.completed", defaultValue: "This learning event was completed automatically and persisted successfully.")
+        static let learningExplanationNeedsReview = String(localized: "transcript.learning.explanation.needs-review", defaultValue: "The turn produced a visible suggestion, but it still expects user review before anything changes.")
+        static let learningExplanationCouldNotFinish = String(localized: "transcript.learning.explanation.could-not-finish", defaultValue: "The system recorded the signal, but it could not safely finish the intended learning step.")
+        static let learningExplanationAutomaticStepFailed = String(localized: "transcript.learning.explanation.automatic-step-failed", defaultValue: "A reusable candidate was detected, but the automatic write or configuration step failed.")
+        static let learningExplanationNotEnoughEvidence = String(localized: "transcript.learning.explanation.not-enough-evidence", defaultValue: "The turn mentioned a reusable workflow, but there was not enough executed tool evidence to safely act on it.")
+        static let learningExplanationCompletedFromDirectEvidence = String(localized: "transcript.learning.explanation.completed-from-direct-evidence", defaultValue: "The turn had direct evidence and the learning action already completed automatically.")
+        static let learningExplanationDraftNeedsReview = String(localized: "transcript.learning.explanation.draft-needs-review", defaultValue: "A reusable workflow was detected strongly enough to draft a skill, but the final wording is left for review.")
+        static let learningExplanationSignalTooThin = String(localized: "transcript.learning.explanation.signal-too-thin", defaultValue: "A possible skill signal was noticed, but the evidence was too thin to produce a structured draft.")
+        static let learningExplanationMCPNeedsConfirmation = String(localized: "transcript.learning.explanation.mcp-needs-confirmation", defaultValue: "An external capability gap matched MCP discovery rules, but installation and credentials still require user confirmation.")
         static func learningActionCommand(_ a1: String) -> String {
             let template = String(localized: "transcript.learning.action.command", defaultValue: "Tool: %@")
             return String(format: template, a1)
@@ -1388,6 +1405,18 @@ enum L10n {
         }
         static func learningActionNextStep(_ a1: String) -> String {
             let template = String(localized: "transcript.learning.action.next-step", defaultValue: "Next: %@")
+            return String(format: template, a1)
+        }
+        static func learningActionReason(_ a1: String) -> String {
+            let template = String(localized: "transcript.learning.action.reason", defaultValue: "Reason: %@")
+            return String(format: template, a1)
+        }
+        static func learningActionConfidence(_ a1: String) -> String {
+            let template = String(localized: "transcript.learning.action.confidence", defaultValue: "Confidence: %@")
+            return String(format: template, a1)
+        }
+        static func learningActionWhy(_ a1: String) -> String {
+            let template = String(localized: "transcript.learning.action.why", defaultValue: "Why: %@")
             return String(format: template, a1)
         }
         static let learningCopyHelp = String(localized: "transcript.learning.copy-help", defaultValue: "Copy learning event details")

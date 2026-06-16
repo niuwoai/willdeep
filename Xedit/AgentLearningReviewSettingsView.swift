@@ -12,6 +12,10 @@ struct AgentLearningReviewSettingsSection: View {
     @StateObject private var reviewState = AgentLearningReviewState()
     @State private var copiedItemID: AgentLearningReviewItem.ID?
     @State private var copiedSearchQueryItemID: AgentLearningReviewItem.ID?
+    @State private var editedSkillItemID: AgentLearningReviewItem.ID?
+    @State private var createdSkillItemID: AgentLearningReviewItem.ID?
+    @State private var configuredMCPItemID: AgentLearningReviewItem.ID?
+    @State private var editingSkillDraftContext: SkillDraftEditorContext?
 
     private var visiblePendingItems: [AgentLearningReviewItem] {
         Array(reviewState.pendingItems.prefix(8))
@@ -78,6 +82,25 @@ struct AgentLearningReviewSettingsSection: View {
         } header: {
             Label(L10n.Settings.LearningReview.section, systemImage: "checklist.checked")
         }
+        .sheet(item: $editingSkillDraftContext) { context in
+            AgentLearningReviewSkillDraftSheet(
+                draft: context.draft,
+                onSave: { draft in
+                    reviewState.updateSkillDraft(id: context.itemID, draft: draft)
+                    editingSkillDraftContext = nil
+                    editedSkillItemID = context.itemID
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 1_200_000_000)
+                        if editedSkillItemID == context.itemID {
+                            editedSkillItemID = nil
+                        }
+                    }
+                },
+                onCancel: {
+                    editingSkillDraftContext = nil
+                }
+            )
+        }
         .onAppear {
             reviewState.refresh()
         }
@@ -94,6 +117,10 @@ struct AgentLearningReviewSettingsSection: View {
                 HStack(spacing: 6) {
                     tag(kindLabel(for: item.event), color: tint(for: item.event))
                     tag(statusLabel(for: item.event), color: .secondary)
+                    tag(
+                        AgentLearningActionPresentation.confidence(for: item.event).label,
+                        color: confidenceColor(for: item.event)
+                    )
                     if item.decision != .pending {
                         tag(decisionLabel(for: item.decision), color: .secondary)
                     }
@@ -130,7 +157,7 @@ struct AgentLearningReviewSettingsSection: View {
                         }
                         .foregroundStyle(.secondary)
 
-                        ForEach(actionDetailLines(for: action), id: \.self) { line in
+                        ForEach(actionDetailLines(for: item.event), id: \.self) { line in
                             Text(line)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
@@ -226,7 +253,33 @@ struct AgentLearningReviewSettingsSection: View {
     }
 
     private func performQuickAction(_ quickAction: AgentLearningReviewQuickAction, for item: AgentLearningReviewItem) {
+        if quickAction == .editSkillDraft {
+            guard let draft = item.event.action?.skillDraft else { return }
+            editingSkillDraftContext = SkillDraftEditorContext(itemID: item.id, draft: draft)
+            return
+        }
         guard AgentLearningReviewActionPlanner.perform(quickAction, for: item) else { return }
+        if quickAction == .createSkillFromDraft {
+            reviewState.markReviewed(id: item.id)
+            createdSkillItemID = item.id
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
+                if createdSkillItemID == item.id {
+                    createdSkillItemID = nil
+                }
+            }
+            return
+        }
+        if quickAction == .configureMCPFromDraft {
+            configuredMCPItemID = item.id
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
+                if configuredMCPItemID == item.id {
+                    configuredMCPItemID = nil
+                }
+            }
+            return
+        }
         if quickAction == .copySearchQuery {
             copiedSearchQueryItemID = item.id
             Task { @MainActor in
@@ -240,6 +293,12 @@ struct AgentLearningReviewSettingsSection: View {
 
     private func iconName(for quickAction: AgentLearningReviewQuickAction, item: AgentLearningReviewItem) -> String {
         switch quickAction {
+        case .editSkillDraft:
+            return editedSkillItemID == item.id ? "checkmark" : "square.and.pencil"
+        case .createSkillFromDraft:
+            return createdSkillItemID == item.id ? "checkmark" : "plus.square.on.square"
+        case .configureMCPFromDraft:
+            return configuredMCPItemID == item.id ? "checkmark" : "plus.rectangle.on.folder"
         case .openSkillsTab:
             return "wand.and.stars"
         case .openSkillsFolder:
@@ -253,6 +312,18 @@ struct AgentLearningReviewSettingsSection: View {
 
     private func helpText(for quickAction: AgentLearningReviewQuickAction, item: AgentLearningReviewItem) -> String {
         switch quickAction {
+        case .editSkillDraft:
+            return editedSkillItemID == item.id
+                ? L10n.Settings.LearningReview.copied
+                : L10n.Settings.LearningReview.editSkillDraft
+        case .createSkillFromDraft:
+            return createdSkillItemID == item.id
+                ? L10n.Settings.LearningReview.copied
+                : L10n.Settings.LearningReview.createSkillFromDraft
+        case .configureMCPFromDraft:
+            return configuredMCPItemID == item.id
+                ? L10n.Settings.LearningReview.copied
+                : L10n.Settings.LearningReview.configureMCPFromDraft
         case .openSkillsTab:
             return L10n.Settings.tabSkills
         case .openSkillsFolder:
@@ -268,11 +339,14 @@ struct AgentLearningReviewSettingsSection: View {
     }
 
     private func highlightedQuickActionID(_ quickAction: AgentLearningReviewQuickAction, item: AgentLearningReviewItem) -> Bool {
-        quickAction == .copySearchQuery && copiedSearchQueryItemID == item.id
+        (quickAction == .copySearchQuery && copiedSearchQueryItemID == item.id)
+            || (quickAction == .editSkillDraft && editedSkillItemID == item.id)
+            || (quickAction == .createSkillFromDraft && createdSkillItemID == item.id)
+            || (quickAction == .configureMCPFromDraft && configuredMCPItemID == item.id)
     }
 
-    private func actionDetailLines(for action: AgentLearningAction) -> [String] {
-        AgentLearningActionPresentation.summaryLines(for: action)
+    private func actionDetailLines(for event: AgentLearningEvent) -> [String] {
+        AgentLearningActionPresentation.summaryLines(for: event)
             .dropFirst()
             .filter { $0 != L10n.Transcript.learningActionNeedsConfirmation }
     }
@@ -307,6 +381,17 @@ struct AgentLearningReviewSettingsSection: View {
             return .purple
         case .mcpSuggestion:
             return .orange
+        }
+    }
+
+    private func confidenceColor(for event: AgentLearningEvent) -> Color {
+        switch AgentLearningActionPresentation.confidence(for: event) {
+        case .low:
+            return .orange
+        case .medium:
+            return .secondary
+        case .high:
+            return .green
         }
     }
 
@@ -351,5 +436,83 @@ struct AgentLearningReviewSettingsSection: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm"
         return formatter.string(from: date)
+    }
+}
+
+private struct SkillDraftEditorContext: Identifiable {
+    let itemID: AgentLearningReviewItem.ID
+    let draft: AgentLearningSkillDraft
+
+    var id: AgentLearningReviewItem.ID { itemID }
+}
+
+private struct AgentLearningReviewSkillDraftSheet: View {
+    @State private var name: String
+    @State private var description: String
+    @State private var skillBody: String
+
+    let onSave: (AgentLearningSkillDraft) -> Void
+    let onCancel: () -> Void
+
+    init(
+        draft: AgentLearningSkillDraft,
+        onSave: @escaping (AgentLearningSkillDraft) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        _name = State(initialValue: draft.name)
+        _description = State(initialValue: draft.description)
+        _skillBody = State(initialValue: draft.body)
+        self.onSave = onSave
+        self.onCancel = onCancel
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(L10n.Settings.LearningReview.editSkillDraftTitle)
+                .font(.title3)
+                .fontWeight(.semibold)
+
+            TextField(L10n.Settings.Skill.skillNamePlaceholder, text: $name)
+                .textFieldStyle(.roundedBorder)
+
+            TextField(L10n.Settings.Skill.descriptionPlaceholder, text: $description)
+                .textFieldStyle(.roundedBorder)
+
+            TextEditor(text: $skillBody)
+                .frame(minHeight: 180)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                )
+
+            HStack {
+                Spacer()
+                Button(L10n.Settings.Skill.cancelButton) {
+                    onCancel()
+                }
+                Button(L10n.Settings.LearningReview.saveSkillDraft) {
+                    onSave(
+                        AgentLearningSkillDraft(
+                            name: normalized(name),
+                            description: normalized(description),
+                            body: normalizedBody(skillBody)
+                        )
+                    )
+                }
+                .keyboardShortcut(.return, modifiers: [.command])
+                .disabled(normalized(name).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 560)
+    }
+
+    private func normalized(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func normalizedBody(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? L10n.Settings.Skill.defaultBody : trimmed
     }
 }

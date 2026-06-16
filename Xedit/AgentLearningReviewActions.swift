@@ -9,6 +9,9 @@ import AppKit
 import Foundation
 
 enum AgentLearningReviewQuickAction: String, Equatable, CaseIterable, Identifiable {
+    case editSkillDraft
+    case createSkillFromDraft
+    case configureMCPFromDraft
     case openSkillsTab
     case openSkillsFolder
     case openMCPTab
@@ -35,9 +38,16 @@ enum AgentLearningReviewActionPlanner {
         case .saveMemory:
             break
         case .createSkill, .proposeSkill:
+            if action.skillDraft != nil, item.event.status != .created {
+                planned.append(.editSkillDraft)
+                planned.append(.createSkillFromDraft)
+            }
             planned.append(.openSkillsTab)
             planned.append(.openSkillsFolder)
         case .searchMCP, .suggestMCPInstall:
+            if action.mcpDraft != nil {
+                planned.append(.configureMCPFromDraft)
+            }
             planned.append(.openMCPTab)
             if compact(action.searchQuery) != nil {
                 planned.append(.copySearchQuery)
@@ -48,8 +58,32 @@ enum AgentLearningReviewActionPlanner {
 
     @discardableResult
     @MainActor
-    static func perform(_ quickAction: AgentLearningReviewQuickAction, for item: AgentLearningReviewItem) -> Bool {
+    static func perform(
+        _ quickAction: AgentLearningReviewQuickAction,
+        for item: AgentLearningReviewItem,
+        skillRoot: URL? = nil
+    ) -> Bool {
+        let resolvedSkillRoot = skillRoot ?? AgentSkillFileManager.userSkillsRoot
         switch quickAction {
+        case .editSkillDraft:
+            return false
+        case .createSkillFromDraft:
+            guard let draft = item.event.action?.skillDraft else { return false }
+            do {
+                _ = try AgentSkillFileManager.createUserSkill(
+                    name: draft.name,
+                    description: draft.description,
+                    body: draft.body,
+                    root: resolvedSkillRoot
+                )
+                return true
+            } catch {
+                return false
+            }
+        case .configureMCPFromDraft:
+            guard let draft = item.event.action?.mcpDraft else { return false }
+            AgentMCPServerCreationCoordinator.shared.open(with: draft, reviewItemID: item.id)
+            return true
         case .openSkillsTab:
             EditorSettingsNavigation.shared.open(.skills)
             return true

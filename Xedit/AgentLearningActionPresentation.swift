@@ -8,6 +8,23 @@
 import Foundation
 
 enum AgentLearningActionPresentation {
+    enum Confidence: String {
+        case low
+        case medium
+        case high
+
+        var label: String {
+            switch self {
+            case .low:
+                return L10n.Transcript.learningConfidenceLow
+            case .medium:
+                return L10n.Transcript.learningConfidenceMedium
+            case .high:
+                return L10n.Transcript.learningConfidenceHigh
+            }
+        }
+    }
+
     static func label(for kind: AgentLearningActionKind) -> String {
         switch kind {
         case .saveMemory:
@@ -43,16 +60,68 @@ enum AgentLearningActionPresentation {
         return lines
     }
 
+    static func summaryLines(for event: AgentLearningEvent) -> [String] {
+        guard let action = event.action else { return [] }
+
+        var lines = summaryLines(for: action)
+        if let reason = compact(action.reason) {
+            lines.append(L10n.Transcript.learningActionReason(reason))
+        }
+        let explanation = explanation(for: event)
+        lines.append(L10n.Transcript.learningActionConfidence(explanation.confidence.label))
+        lines.append(L10n.Transcript.learningActionWhy(explanation.rationale))
+        return lines
+    }
+
+    static func confidence(for event: AgentLearningEvent) -> Confidence {
+        explanation(for: event).confidence
+    }
+
     static func copyText(for event: AgentLearningEvent) -> String {
         var sections = [event.title]
         let detail = event.detail.trimmingCharacters(in: .whitespacesAndNewlines)
         if !detail.isEmpty {
             sections.append(detail)
         }
-        if let action = event.action {
-            sections.append(summaryLines(for: action).joined(separator: "\n"))
+        let actionLines = summaryLines(for: event)
+        if !actionLines.isEmpty {
+            sections.append(actionLines.joined(separator: "\n"))
         }
         return sections.joined(separator: "\n\n")
+    }
+
+    static func explanation(for event: AgentLearningEvent) -> (confidence: Confidence, rationale: String) {
+        guard let action = event.action else {
+            switch event.status {
+            case .saved, .created:
+                return (.high, L10n.Transcript.learningExplanationCompleted)
+            case .suggested:
+                return (.medium, L10n.Transcript.learningExplanationNeedsReview)
+            case .skipped, .failed:
+                return (.low, L10n.Transcript.learningExplanationCouldNotFinish)
+            }
+        }
+
+        if event.status == .failed {
+            return (.low, L10n.Transcript.learningExplanationAutomaticStepFailed)
+        }
+
+        if let reason = compact(action.reason)?.lowercased(),
+           reason.contains("not enough executed tool evidence") {
+            return (.low, L10n.Transcript.learningExplanationNotEnoughEvidence)
+        }
+
+        switch action.kind {
+        case .saveMemory, .createSkill:
+            return (.high, L10n.Transcript.learningExplanationCompletedFromDirectEvidence)
+        case .proposeSkill:
+            if action.skillDraft != nil {
+                return (.medium, L10n.Transcript.learningExplanationDraftNeedsReview)
+            }
+            return (.low, L10n.Transcript.learningExplanationSignalTooThin)
+        case .searchMCP, .suggestMCPInstall:
+            return (.medium, L10n.Transcript.learningExplanationMCPNeedsConfirmation)
+        }
     }
 
     private static func compact(_ value: String?) -> String? {

@@ -1,5 +1,89 @@
 # Changelog
 
+## 1.78.0-rc105 - 2026-06-16
+
+### Changed
+
+- skill / MCP 自学习事件的 detail 新增 `Source:` 线索，明确显示建议来自显式用户要求、复用工作流信号，还是“缺少已配置集成”的能力缺口。
+- `AgentSelfLearningAudit` 现在会保留相关 tool 名称与是否存在显式 skill 指令，供 Learning Review、transcript 和复制文本复用。
+- 新增来源线索测试，覆盖 audit 元数据、skill 建议 detail 和 MCP 建议 detail。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc105`。
+
+## 1.78.0-rc104 - 2026-06-16
+
+### Changed
+
+- Learning Review 和 transcript 学习卡现在会显示 `Low / Medium / High confidence` 标签，帮助区分“已经自动完成”“建议待确认”和“证据偏弱”的学习结果。
+- 自学习动作展示新增 `Reason`、`Confidence` 和 `Why` 说明，复制学习事件时也会一起带出解释文本。
+- 新增 `AgentLearningActionPresentationTests`，覆盖 skill 草稿建议、轻证据跳过和自动 memory 保存的解释渲染。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc104`。
+
+## 1.78.0-rc103 - 2026-06-16
+
+### Changed
+
+- Learning Review 里的 skill 候选新增“编辑草稿”快捷动作，用户可以先修改名称、描述和正文，再决定是否创建本地 skill。
+- 编辑后的 skill 草稿会回写到持久 review 队列，后续创建 skill 时会直接使用更新后的内容，不再丢失整理结果。
+- 新增 review 队列 skill 草稿更新测试，覆盖动作顺序与草稿持久化更新。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc103`。
+
+## 1.78.0-rc102 - 2026-06-16
+
+### Changed
+
+- 从 Learning Review 触发 MCP 建议预填后，如果用户成功创建服务器，相关 review 项会自动标记为已审核，不再需要再回到队列手动收口。
+- 新建 MCP 服务器成功后，设置页会立刻尝试刷新工具列表，把“创建成功”和“能不能真的列出工具”连到同一条操作链路里。
+- 新增 coordinator review-item 传递与收口覆盖，验证 MCP 草稿动作会携带 review item id。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc102`。
+
+## 1.78.0-rc101 - 2026-06-16
+
+### Changed
+
+- MCP 建议现在会保留结构化草稿（capability、建议 server 名、install hint、search query、reason），review 队列可直接把它送进 MCP 设置页的新建服务器表单。
+- MCP 设置页新增共享 creation coordinator；从 Learning Review 触发后，会自动切到 `MCP` 标签并弹出带预填名称/说明的新建表单，减少从建议到配置的手工搬运。
+- 新增 `configureMCPFromDraftPublishesCoordinatorDraft` 与 `mcpDraft` 持久化覆盖，验证 MCP 草稿能穿过 learning action 与 review 队列动作。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc101`。
+
+## 1.78.0-rc100 - 2026-06-16
+
+### Changed
+
+- Skill 候选草稿现在会结构化保存在 learning action 里（`name / description / body`），不再只剩“去 Skills 看看”的轻提示。
+- Learning Review 遇到带草稿的 skill 候选时，可以直接从 review 队列创建用户 skill；创建成功后会自动标记该项已审核。
+- 新增 `disabledAutomaticSkillExtractionPreservesSkillDraft` 与 `createSkillFromDraftWritesUserSkillFile` 测试，覆盖草稿保留与从 review 队列落盘创建 skill。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc100`。
+
+## 1.78.0-rc99 - 2026-06-16
+
+### Changed
+
+- Learning Review 队列现在会为 skill / MCP 项给出可执行快捷动作：可一键跳到 `Skills` / `MCP` 设置页，或直接打开用户 skills 目录、复制 MCP 搜索词，不再只停留在“看见建议但还得自己找入口”。
+- Settings 新增轻量 tab 导航状态，后续 transcript / review / 建议面板都可以把用户直接带到对应设置页，而不是让人自己在标签里翻。
+- 新增 `AgentLearningReviewActionPlannerTests`，覆盖 skill 候选与 MCP 建议的快捷动作规划。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc99`。
+
 ## 1.78.0-rc98 - 2026-06-16
 
 ### Fixed
