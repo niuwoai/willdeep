@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.78.0-rc114 - 2026-06-16
+
+### Fixed
+
+- 修复 AI 服务商设置的两个串台问题：① 编辑某个服务商的显示名/字段会"传染"到列表里的其它条目；② 新加的服务商在 composer 里选不出来。根因是右侧编辑表单 `AgentProviderEntryEditor` 没有绑定 `.id(entry.id)`，SwiftUI 在不同条目间复用同一个编辑器实例、本地 `@State` 缓冲互相泄漏，导致改一个写串到另一个、新建条目拿不到独立状态。修复：编辑器按 `entry.id` 绑定身份（切换条目即重建 + 重新载入），并在 `commit()` 加 guard 只在内容真正变化时写回，挡掉 `loadFromEntry` 批量重置触发的冗余/串台写入。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc114`。
+
 ## 1.78.0-rc113 - 2026-06-16
 
 ### Fixed

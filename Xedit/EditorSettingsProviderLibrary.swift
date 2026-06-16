@@ -165,6 +165,13 @@ struct AgentProviderLibrarySection: View {
                     appState.upsertProviderLibraryEntry(updated)
                 }
             )
+            // Bind the editor's identity to the selected entry. Without
+            // this SwiftUI reuses one editor instance across entries and
+            // its local @State buffers leak between them — editing one
+            // entry's display name bled into another (and a freshly added
+            // entry never got its own independent state). `.id` forces a
+            // clean rebuild + reload whenever the selection changes.
+            .id(entry.id)
         } else {
             Text(L10n.Settings.Provider.emptySelection)
                 .font(.caption)
@@ -727,6 +734,12 @@ private struct AgentProviderEntryEditor: View {
             routingMode: routingMode,
             customKindOverride: customKindOverride
         )
+        // Skip no-op writes. Every `.onChange(of:)` field fires `commit`,
+        // including the bulk reset inside `loadFromEntry` when the editor
+        // (re)loads an entry — without this guard that reload would write
+        // the just-loaded values straight back, which under instance reuse
+        // could clobber a different entry. Only persist a genuine edit.
+        guard updated != entry else { return }
         onChange(updated)
     }
 
