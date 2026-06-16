@@ -74,6 +74,22 @@ struct MobileGatewaySettingsView: View {
                 }
             }
 
+            // Gateway log — the child's own stdout/stderr. Shown whenever
+            // there's output so the user can see "listening on …" or the
+            // real failure reason instead of a silent "Starting…".
+            if !coordinator.recentOutput.isEmpty {
+                Section(L10n.Settings.MobileGateway.logSection) {
+                    ScrollView {
+                        Text(coordinator.recentOutput)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 140)
+                }
+            }
+
             // QR code is the star: a phone scans it to pair. Everything
             // else (IP / port / executable) is diagnostics, tucked behind
             // the advanced toggle below.

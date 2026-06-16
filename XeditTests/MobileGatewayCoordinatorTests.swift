@@ -228,4 +228,15 @@ struct MobileGatewayCoordinatorTests {
             #expect(port <= mobileGatewayPortRange.upperBound)
         }
     }
+
+    /// The loopback session used for gateway probes must disable proxies —
+    /// a system HTTP/SOCKS proxy intercepting 127.0.0.1 was exactly what
+    /// stranded the gateway on "Starting…".
+    @Test
+    func loopbackSessionDisablesProxies() {
+        let proxies = AgentNetworkSupport.loopbackSession().configuration.connectionProxyDictionary
+        #expect(proxies?["HTTPEnable"] as? Int == 0)
+        #expect(proxies?["HTTPSEnable"] as? Int == 0)
+        #expect(proxies?["SOCKSEnable"] as? Int == 0)
+    }
 }

@@ -37,6 +37,29 @@ enum AgentNetworkSupport {
         return URLSession(configuration: configuration)
     }
 
+    /// Session for talking to a process on this Mac's loopback interface
+    /// (the local Mobile Gateway). Forces proxies OFF: a configured system
+    /// HTTP/HTTPS/SOCKS proxy (Clash, Surge, a corporate PAC…) must never
+    /// intercept 127.0.0.1 traffic — otherwise the gateway health probe is
+    /// routed into the proxy, never completes, and the settings UI is
+    /// stranded on "Starting…" (command-line curl bypasses proxies for
+    /// localhost, which is why the gateway looked healthy from a shell but
+    /// not from the app). Short timeouts so a dead gateway fails fast.
+    static func loopbackSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 5
+        configuration.timeoutIntervalForResource = 10
+        configuration.waitsForConnectivity = false
+        // Documented CFProxySupport dictionary keys; setting the *Enable
+        // flags to 0 disables each proxy type for this session only.
+        configuration.connectionProxyDictionary = [
+            "HTTPEnable": 0,
+            "HTTPSEnable": 0,
+            "SOCKSEnable": 0,
+        ]
+        return URLSession(configuration: configuration)
+    }
+
     /// Stamp every outgoing adapter request with shared metadata
     /// (`X-App-Version` + `User-Agent`). Auth headers and Content-Type
     /// are per-adapter — see each adapter's `applyAuthenticationHeaders`.

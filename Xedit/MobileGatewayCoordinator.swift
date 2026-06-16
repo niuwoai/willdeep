@@ -105,9 +105,11 @@ final class MobileGatewayCoordinator: ObservableObject {
     private var monitorTask: Task<Void, Never>?
     private var tokenFileURL: URL?
     private let session: URLSession
-    /// Tail (~4KB) of the child's stdout/stderr, kept only so a non-zero
-    /// exit can surface the real reason instead of a bare status code.
-    private var recentOutput = ""
+    /// Tail (~4KB) of the child's stdout/stderr. Surfaced live in the
+    /// settings "Gateway log" panel so the user can see the gateway's own
+    /// output (e.g. "listening on …" or a bind error) instead of a silent
+    /// "Starting…". Also appended to the failure message on non-zero exit.
+    @Published private(set) var recentOutput = ""
 
     init(
         appState: AppState,
@@ -116,7 +118,9 @@ final class MobileGatewayCoordinator: ObservableObject {
     ) {
         self.appState = appState
         self.settings = (settings ?? MobileGatewaySettingsStore.load()).normalized
-        self.session = session ?? AgentNetworkSupport.defaultSession()
+        // Loopback session: the gateway always lives on 127.0.0.1, so a
+        // configured system proxy must not intercept these probes.
+        self.session = session ?? AgentNetworkSupport.loopbackSession()
     }
 
     deinit {
@@ -275,22 +279,28 @@ final class MobileGatewayCoordinator: ObservableObject {
     }
 
     private func waitUntilHealthy(baseURL: URL) async throws {
+        // Bounded by a wall-clock deadline with a short per-request timeout
+        // so a hung health probe can't strand the UI on "Starting…"
+        // indefinitely — if the gateway isn't healthy within the window we
+        // fail fast and surface recentOutput in the failure message.
         var lastError: Error?
-        for _ in 0..<20 {
+        let deadline = Date().addingTimeInterval(8)
+        while Date() < deadline {
             do {
-                health = try await get(path: "/mobile/health", baseURL: baseURL, token: nil, as: MobileGatewayHealth.self)
+                health = try await get(path: "/mobile/health", baseURL: baseURL, token: nil, timeout: 2, as: MobileGatewayHealth.self)
                 return
             } catch {
                 lastError = error
-                try await Task.sleep(nanoseconds: 150_000_000)
+                try await Task.sleep(nanoseconds: 200_000_000)
             }
         }
         throw lastError ?? CoordinatorError.gatewayDidNotBecomeHealthy
     }
 
-    private func get<T: Decodable>(path: String, baseURL: URL, token: String?, as type: T.Type) async throws -> T {
+    private func get<T: Decodable>(path: String, baseURL: URL, token: String?, timeout: TimeInterval? = nil, as type: T.Type) async throws -> T {
         var request = URLRequest(url: baseURL.appendingPathComponent(path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))))
         request.httpMethod = "GET"
+        if let timeout { request.timeoutInterval = timeout }
         applyHeaders(to: &request, token: token)
         let (data, response) = try await session.data(for: request)
         return try decode(data: data, response: response, as: type)

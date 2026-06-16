@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.78.0-rc115 - 2026-06-16
+
+### Fixed
+
+- 修复手机网关一直卡在「启动中…」、且看不到任何日志的问题。根因是 app 连接本机网关(`127.0.0.1`)的 health 探测走的是默认 `URLSession`,会**继承系统 HTTP/SOCKS 代理**(Clash/Surge 这类);代理拦截 loopback 流量后探测永不完成,UI 一直停在 starting(命令行 `curl` 因为对 localhost 默认绕过代理,所以网关看着是好的)。修复:
+  - 新增 `AgentNetworkSupport.loopbackSession()`(禁用 HTTP/HTTPS/SOCKS 代理 + 短超时),网关 coordinator 改用它连本机进程,代理不再拦截。
+  - `waitUntilHealthy` 改为 8s 墙钟 deadline + 单次 2s 超时,探测挂死时快速失败而不是无限 starting。
+  - 网关子进程的 stdout/stderr(此前只在失败时拼进状态文字)现在实时显示在设置页新增的「Gateway log」面板,启动/失败都能看到网关自己的日志(如 `listening on …` 或 bind 错误)。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc115`。
+
 ## 1.78.0-rc114 - 2026-06-16
 
 ### Fixed

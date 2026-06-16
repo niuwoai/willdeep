@@ -846,6 +846,7 @@ enum L10n {
             static let qrUnavailable = String(localized: "settings.mobile-gateway.qr-unavailable", defaultValue: "QR code unavailable")
             static let listenDescription = String(localized: "settings.mobile-gateway.listen-description", defaultValue: "The gateway listens only after you enable it. Android connects over the local network; Agent execution, tools, patches, and file access still run through the Mac app.")
             static let advancedToggle = String(localized: "settings.mobile-gateway.advanced-toggle", defaultValue: "Show advanced info (IP / port / executable)")
+            static let logSection = String(localized: "settings.mobile-gateway.log-section", defaultValue: "Gateway log")
             static let scanHint = String(localized: "settings.mobile-gateway.scan-hint", defaultValue: "Scan this QR code with the WillDeep Android app to pair over your local network.")
             static func resolvedExecutable(_ a1: String) -> String {
                 let template = String(localized: "settings.mobile-gateway.resolved-executable", defaultValue: "Using %@")
