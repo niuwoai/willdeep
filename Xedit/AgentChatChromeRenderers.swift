@@ -149,10 +149,31 @@ enum AgentChatHistoryFooterChrome {
 }
 
 private func copySymbolString(pointSize: CGFloat, color: NSColor) -> NSAttributedString {
+    symbolAttachmentString(named: "square.on.square", fallback: "⧉", pointSize: pointSize, color: color)
+}
+
+/// Footer chrome for rendered Markdown tables in the history NSTextView.
+/// The "open the table in a standalone window" affordance is a small icon
+/// (no text label), tinted to match the link color, carrying the same
+/// `.link` tap target the delegate already routes to the detail window.
+enum AgentChatHistoryTableChrome {
+    static func openInWindowIcon(pointSize: CGFloat, color: NSColor) -> NSAttributedString {
+        symbolAttachmentString(named: "arrow.up.right.square", fallback: "⤢", pointSize: pointSize, color: color)
+    }
+}
+
+/// Render an SF Symbol as a color-tinted inline text attachment, with a
+/// unicode glyph fallback if the symbol is unavailable.
+private func symbolAttachmentString(
+    named name: String,
+    fallback: String,
+    pointSize: CGFloat,
+    color: NSColor
+) -> NSAttributedString {
     let configuration = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .regular)
-    guard let image = NSImage(systemSymbolName: "square.on.square", accessibilityDescription: nil)?
+    guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
         .withSymbolConfiguration(configuration) else {
-        return NSAttributedString(string: "⧉", attributes: [
+        return NSAttributedString(string: fallback, attributes: [
             .font: NSFont.systemFont(ofSize: pointSize, weight: .regular),
             .foregroundColor: color,
             .underlineStyle: 0,

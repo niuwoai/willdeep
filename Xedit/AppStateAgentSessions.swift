@@ -679,7 +679,22 @@ extension AppState {
             let routedModel = agentConfiguration.normalized.model(for: .interactive)
             runtime.sessionModelOverride = session.modelID == routedModel ? nil : session.modelID
             syncWorkspaceContext(for: session)
+            autoSummarizeTitleIfPlaceholder(runtime)
         }
+    }
+
+    /// When the user opens a session still carrying a generic placeholder
+    /// title ("New Chat" / "新对话" / "Chat"), kick off a one-shot LLM title
+    /// summary so the sidebar stops showing the placeholder. The summarizer
+    /// self-gates: it no-ops unless there's a finished user→assistant
+    /// exchange, a usable provider, and no summary already in flight — so an
+    /// empty new chat won't trigger a request. `force` bypasses the
+    /// "only on the first assistant turn" gate so older multi-turn sessions
+    /// still get titled on reopen. User-renamed titles are left alone.
+    private func autoSummarizeTitleIfPlaceholder(_ runtime: AgentRuntime) {
+        guard !runtime.session.titleIsUserSet,
+              AgentSessionStore.isPlaceholderTitle(runtime.session.title) else { return }
+        summarizeAgentSessionTitleIfNeeded(runtime: runtime, force: true)
     }
 
     /// Selecting a historical session should restore the workspace it was

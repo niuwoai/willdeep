@@ -27,7 +27,18 @@ struct AgentSessionStoreTests {
     @Test
     func deriveTitleWithNoMessagesReturnsFallback() {
         let title = AgentSessionStore.deriveTitle(from: [])
-        #expect(title == "New Chat")
+        #expect(title == AgentSessionStore.defaultTitle)
+    }
+
+    @Test
+    func placeholderTitleDetectorRecognizesDefaultsAndRealTitles() {
+        #expect(AgentSessionStore.isPlaceholderTitle(AgentSessionStore.defaultTitle))
+        #expect(AgentSessionStore.isPlaceholderTitle("New Chat"))
+        #expect(AgentSessionStore.isPlaceholderTitle("新对话"))
+        #expect(AgentSessionStore.isPlaceholderTitle("Chat"))
+        #expect(AgentSessionStore.isPlaceholderTitle("   "))
+        #expect(!AgentSessionStore.isPlaceholderTitle("Refactor AppState"))
+        #expect(!AgentSessionStore.isPlaceholderTitle("排查 CPU 负载"))
     }
 
     /// Skip non-user roles when picking the title source.
@@ -48,7 +59,7 @@ struct AgentSessionStoreTests {
         let messages: [AgentMessage] = [
             AgentMessage(role: .user, content: "   \n\t  ")
         ]
-        #expect(AgentSessionStore.deriveTitle(from: messages) == "New Chat")
+        #expect(AgentSessionStore.deriveTitle(from: messages) == AgentSessionStore.defaultTitle)
     }
 
     /// 40 chars or fewer → returned verbatim. The boundary is inclusive

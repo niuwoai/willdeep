@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.78.0-rc111 - 2026-06-16
+
+### Added
+
+- 会话列表里**双击标题**即可打开重命名对话框（与右键菜单 “Rename” 同一个 dialog）。
+- 新会话的占位标题现在走本地化：中文环境显示 **“新对话”** 而不是 “New Chat/Chat”（新增 `sidebar.default-session-title` 字符串目录条目，`deriveTitle` 与 `AgentSession` 默认标题都改走它）。
+- 打开一个标题仍是占位符（“新对话/New Chat/Chat”）且未被用户手动命名的会话时，会**自动摘要一次**并更新标题；摘要器自带门控（需有完整的 user→assistant 往返、可用 provider、无并发摘要），所以空会话和用户已命名的标题不会被触发。
+
+### Changed
+
+- Agent turn report 卡片默认**折叠成一行**（图标 + 标题 + `N tools · 27.0s · Normal` 概要 + 展开箭头），点击展开，和工具调用分组一致，少占地方。
+- 渲染表格底部的“在独立窗口打开”从文字链接改为一个小图标（`arrow.up.right.square`），点击目标与提示不变。
+- 用户消息气泡背景更淡（历史 NSTextView 0.07→0.045，SwiftUI 0.026→0.018），且**时间默认常显**、不再需要 hover 才出现（复制按钮在历史路径仍 hover 才显）。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc111`。
+
 ## 1.78.0-rc110 - 2026-06-16
 
 ### Added

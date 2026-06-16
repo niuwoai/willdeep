@@ -339,10 +339,10 @@ struct AgentChatHistoryRendererTests {
         #expect(rendered.string.contains("时间"))
         #expect(rendered.string.contains("作者"))
         #expect(rendered.string.contains("─┼─"))
-        let openLinkLabel = rendered.string.contains("Open table in standalone window")
-            ? "Open table in standalone window"
-            : "在独立窗口打开表格"
-        #expect(rendered.string.contains(openLinkLabel))
+        // The "open in standalone window" affordance is now a trailing icon
+        // attachment (no text label), shown via the attachment character.
+        let iconRange = (rendered.string as NSString).range(of: "\u{FFFC}")
+        #expect(iconRange.location != NSNotFound)
 
         let tableRange = (rendered.string as NSString).range(of: "时间")
         #expect(tableRange.location != NSNotFound)
@@ -363,12 +363,10 @@ struct AgentChatHistoryRendererTests {
         #expect(payload.rows[0][1] == "`1633595`")
         #expect(rendered.attribute(.link, at: tableRange.location, effectiveRange: nil) as? String == AgentChatHistoryTableLink.value)
 
-        let linkRange = (rendered.string as NSString).range(of: openLinkLabel)
-        #expect(linkRange.location != NSNotFound)
-        #expect(rendered.attribute(.link, at: linkRange.location, effectiveRange: nil) as? String == AgentChatHistoryTableLink.value)
+        #expect(rendered.attribute(.link, at: iconRange.location, effectiveRange: nil) as? String == AgentChatHistoryTableLink.value)
         let linkPayload = try #require(rendered.attribute(
             .agentChatHistoryTablePayload,
-            at: linkRange.location,
+            at: iconRange.location,
             effectiveRange: nil
         ) as? AgentMarkdownTablePayload)
         #expect(linkPayload.headers == payload.headers)

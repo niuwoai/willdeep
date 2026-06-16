@@ -786,23 +786,29 @@ enum AgentChatHistoryRenderer {
                                 value: AgentChatHistoryTableLink.value,
                                 range: tableRange
                             )
+                            // A small "open in standalone window" icon at the
+                            // table's bottom-right, instead of a text link.
+                            // Same tap target + payload as before; the leading
+                            // newline keeps it on its own line under the table.
                             let linkStart = result.length
-                            result.append(NSAttributedString(
-                                string: "\n" + String(
-                                    localized: "agent.markdown-table.open-link",
-                                    defaultValue: "Open table in standalone window"
-                                ),
-                                attributes: [
-                                    .font: NSFont.systemFont(ofSize: 12, weight: .medium),
-                                    .foregroundColor: NSColor.linkColor,
-                                    .link: AgentChatHistoryTableLink.value,
-                                    .cursor: NSCursor.pointingHand,
-                                ]
+                            result.append(NSAttributedString(string: "\n", attributes: [
+                                .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+                            ]))
+                            result.append(AgentChatHistoryTableChrome.openInWindowIcon(
+                                pointSize: 12,
+                                color: NSColor.linkColor
                             ))
                             let linkRange = NSRange(location: linkStart, length: result.length - linkStart)
-                            result.addAttribute(
-                                .agentChatHistoryTablePayload,
-                                value: AgentMarkdownTablePayload(headers: headers, rows: rows),
+                            result.addAttributes(
+                                [
+                                    .link: AgentChatHistoryTableLink.value,
+                                    .cursor: NSCursor.pointingHand,
+                                    .agentChatHistoryTablePayload: AgentMarkdownTablePayload(headers: headers, rows: rows),
+                                    .toolTip: String(
+                                        localized: "agent.markdown-table.open-link",
+                                        defaultValue: "Open table in standalone window"
+                                    ),
+                                ],
                                 range: linkRange
                             )
                         }

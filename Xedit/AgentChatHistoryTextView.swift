@@ -702,7 +702,9 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
     private func bubbleColor(for kind: AgentChatHistoryBubbleKind) -> NSColor {
         switch kind {
         case .user:
-            return NSColor.quaternaryLabelColor.withAlphaComponent(0.07)
+            // Deliberately faint — the user's own messages don't need a
+            // prominent fill, just enough to set them apart from assistant text.
+            return NSColor.quaternaryLabelColor.withAlphaComponent(0.045)
         case .assistant:
             return NSColor.quaternaryLabelColor.withAlphaComponent(0.06)
         case .system:

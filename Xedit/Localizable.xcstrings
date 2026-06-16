@@ -5132,6 +5132,24 @@
         }
       }
     },
+    "sidebar.default-session-title": {
+      "comment": "placeholder title for a session with no derived/summarized title yet",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Chat"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新对话"
+          }
+        }
+      }
+    },
     "sidebar.new-chat-action": {
       "comment": "button label in primary actions row",
       "extractionState": "manual",

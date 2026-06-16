@@ -372,6 +372,11 @@ struct AgentSessionsSidebar: View {
                     .foregroundStyle(isActive ? .primary : .secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    // Double-click the title to rename — same dialog as the
+                    // context-menu "Rename". Takes priority over the row
+                    // button's single-click select for two-tap sequences.
+                    .onTapGesture(count: 2) { presentRenameAlert(for: session) }
+                    .help(L10n.Sidebar.sessionMenuRename)
                 Spacer(minLength: 0)
                 AgentSessionModeBadges(session: session)
                 sessionUpdatedLabel(session)

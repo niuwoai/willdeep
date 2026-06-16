@@ -82,7 +82,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
 
     init(
         id: UUID = UUID(),
-        title: String = "New Chat",
+        title: String = AgentSessionStore.defaultTitle,
         workspaceRootPath: String? = nil,
         workspaceLocation: WorkspaceLocation? = nil,
         modelID: String? = nil,

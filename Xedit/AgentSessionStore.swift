@@ -95,16 +95,34 @@ enum AgentSessionStore {
         }
     }
 
+    /// Localized placeholder title for a session that has no derived or
+    /// summarized title yet ("New Chat" / "新对话").
+    static var defaultTitle: String { L10n.Sidebar.defaultSessionTitle }
+
+    /// Whether `title` is a generic placeholder (the localized default, an
+    /// older hardcoded variant, or empty) rather than a real, content-
+    /// derived or user-set title. Used to decide when opening a session
+    /// should kick off a one-shot title summary.
+    static func isPlaceholderTitle(_ title: String) -> Bool {
+        let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized.isEmpty { return true }
+        let placeholders: Set<String> = [
+            defaultTitle.lowercased(),
+            "new chat", "chat", "新对话", "新聊天", "新会话", "新的对话",
+        ]
+        return placeholders.contains(normalized)
+    }
+
     /// Derive a short, human-readable title from the first user message.
     static func deriveTitle(from messages: [AgentMessage]) -> String {
         guard let firstUser = messages.first(where: { $0.role == .user }) else {
-            return "New Chat"
+            return defaultTitle
         }
         let text = firstUser.content.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty, let firstAttachment = firstUser.textAttachments.first {
             return firstAttachment.displayName
         }
-        guard !text.isEmpty else { return "New Chat" }
+        guard !text.isEmpty else { return defaultTitle }
         let oneLine = text.replacingOccurrences(of: "\n", with: " ")
         if oneLine.count <= 40 { return oneLine }
         return String(oneLine.prefix(40)) + "…"

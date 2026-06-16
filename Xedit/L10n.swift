@@ -526,6 +526,7 @@ enum L10n {
         static let chatsHeader = String(localized: "sidebar.chats-header", defaultValue: "Chats")
         static let emptyState = String(localized: "sidebar.empty-state", defaultValue: "Sessions you start will appear here.")
         static let newChatAction = String(localized: "sidebar.new-chat-action", defaultValue: "New Chat")
+        static let defaultSessionTitle = String(localized: "sidebar.default-session-title", defaultValue: "New Chat")
         static let sessionListSeeMore = String(localized: "sidebar.session-list.see-more", defaultValue: "See more")
         static let sessionListShowLess = String(localized: "sidebar.session-list.show-less", defaultValue: "Show less")
         static let sessionMenuArchive = String(localized: "sidebar.session-menu.archive", defaultValue: "Archive")
@@ -1299,6 +1300,10 @@ enum L10n {
         static let turnReportMode = String(localized: "transcript.turn-report.mode", defaultValue: "Mode")
         static let turnReportApprovalMode = String(localized: "transcript.turn-report.approval-mode", defaultValue: "Approval mode")
         static let turnReportTools = String(localized: "transcript.turn-report.tools", defaultValue: "Tools")
+        static func turnReportToolsInline(_ a1: String) -> String {
+            let template = String(localized: "transcript.turn-report.tools-inline", defaultValue: "%@ tools")
+            return String(format: template, a1)
+        }
         static let turnReportApprovals = String(localized: "transcript.turn-report.approvals", defaultValue: "Approvals")
         static let turnReportLearning = String(localized: "transcript.turn-report.learning", defaultValue: "Learning")
         static let turnReportElapsed = String(localized: "transcript.turn-report.elapsed", defaultValue: "Elapsed")

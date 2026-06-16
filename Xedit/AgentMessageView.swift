@@ -140,10 +140,10 @@ struct AgentModeMessageView: View {
                     }
                 }
                 if !message.content.isEmpty || !message.textAttachments.isEmpty {
+                    // Footer (timestamp + copy) is always shown — no longer
+                    // hover-gated — so the send time is visible at rest.
                     AgentMessageFooter(message: message, alignment: .trailing, showsUserTimestamp: true)
                         .padding(.top, 2)
-                        .opacity(isHoveringUser ? 1 : 0)
-                        .allowsHitTesting(isHoveringUser)
                 }
             }
             .padding(.horizontal, 14)
@@ -151,11 +151,11 @@ struct AgentModeMessageView: View {
             .padding(.bottom, 14)
             .background(
                 RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                    .fill(Color.primary.opacity(isHoveringUser ? 0.04 : 0.026))
+                    .fill(Color.primary.opacity(isHoveringUser ? 0.03 : 0.018))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                    .stroke(Color.primary.opacity(isHoveringUser ? 0.032 : 0.018), lineWidth: 1)
+                    .stroke(Color.primary.opacity(isHoveringUser ? 0.026 : 0.014), lineWidth: 1)
             )
             .frame(maxWidth: AgentDesign.chatMaxContentWidth * AgentDesign.userMessageMaxWidthRatio, alignment: .leading)
             .onHover { isHoveringUser = $0 }

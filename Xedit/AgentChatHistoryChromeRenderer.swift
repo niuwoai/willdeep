@@ -286,8 +286,13 @@ extension AgentChatHistoryRenderer {
         to result: NSMutableAttributedString
     ) {
         let start = result.length
+        // For user messages the timestamp is always visible (it's a cheap,
+        // useful anchor); only the interactive chrome below is hover-gated.
+        // `hideStart` marks where the hover-gated region begins.
+        var hideStart = start
         if message.role == .user {
             result.append(AgentChatHistoryFooterChrome.label(formatTimestamp(message.createdAt)))
+            hideStart = result.length
             result.append(AgentChatHistoryFooterChrome.separator)
         }
         result.append(AgentChatHistoryFooterChrome.copyButton(copied: false, message: message.copyableContent))
@@ -308,7 +313,7 @@ extension AgentChatHistoryRenderer {
         }
 
         if !isVisible {
-            let footerRange = NSRange(location: start, length: result.length - start)
+            let footerRange = NSRange(location: hideStart, length: result.length - hideStart)
             result.removeAttribute(.link, range: footerRange)
             result.removeAttribute(.agentChatHistoryMessageCopyText, range: footerRange)
             result.removeAttribute(.agentChatHistoryRetryLastTurn, range: footerRange)

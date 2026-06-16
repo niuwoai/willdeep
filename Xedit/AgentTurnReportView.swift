@@ -11,23 +11,29 @@ import SwiftUI
 struct AgentTurnReportCard: View {
     let report: AgentTurnReport
     @State private var didCopy = false
+    // Collapsed by default — the report is reference detail, not something
+    // the user needs in their face every turn. One line until clicked,
+    // same affordance as a collapsed tool-call group.
+    @State private var isExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: isExpanded ? 10 : 0) {
             header
-            summaryGrid
-            if report.recallSnapshot?.hasUsefulContent == true {
-                recallSection
-            }
-            if report.toolSummary.total > 0 {
-                toolSection
-            }
-            if !report.learningEvents.isEmpty {
-                learningSection
+            if isExpanded {
+                summaryGrid
+                if report.recallSnapshot?.hasUsefulContent == true {
+                    recallSection
+                }
+                if report.toolSummary.total > 0 {
+                    toolSection
+                }
+                if !report.learningEvents.isEmpty {
+                    learningSection
+                }
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.vertical, isExpanded ? 10 : 7)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color(nsColor: .controlBackgroundColor).opacity(0.55))
@@ -40,13 +46,19 @@ struct AgentTurnReportCard: View {
 
     private var header: some View {
         HStack(spacing: 8) {
+            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 10)
             Image(systemName: "list.bullet.clipboard")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.blue)
             VStack(alignment: .leading, spacing: 2) {
                 Text(L10n.Transcript.turnReportTitle)
                     .font(AgentDesign.titleFont)
-                Text(L10n.Transcript.turnReportSubtitle(report.modelID, report.providerName))
+                Text(isExpanded
+                    ? L10n.Transcript.turnReportSubtitle(report.modelID, report.providerName)
+                    : collapsedSummary)
                     .font(AgentDesign.secondaryFont)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -63,6 +75,19 @@ struct AgentTurnReportCard: View {
             .buttonStyle(.plain)
             .help(didCopy ? L10n.Transcript.turnReportCopied : L10n.Transcript.turnReportCopyHelp)
         }
+        .contentShape(Rectangle())
+        .onTapGesture { withAnimation(.easeInOut(duration: 0.12)) { isExpanded.toggle() } }
+    }
+
+    /// Compact one-line metrics shown when the card is collapsed: enough
+    /// to glance the turn's shape without expanding.
+    private var collapsedSummary: String {
+        var parts = [L10n.Transcript.turnReportToolsInline("\(report.toolSummary.total)")]
+        if let elapsed = report.elapsedSeconds {
+            parts.append(String(format: "%.1fs", elapsed))
+        }
+        parts.append(report.interactionMode.displayName)
+        return parts.joined(separator: " · ")
     }
 
     private var summaryGrid: some View {
