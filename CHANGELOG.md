@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.78.0-rc97 - 2026-06-16
+
+### Fixed
+
+- 修复 CI：macos-26 runner 默认不带 Go toolchain，`Run Go agent tests` 步骤一直 `go: command not found`（exit 127），导致 Tests workflow 从加入 Go 测试起持续失败、连带后面的 XeditTests 没机会跑。在该步骤前补 `actions/setup-go`（按 `willdeep-agent/go.mod` 锁定 Go 1.23）。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc97`。
+
 ## 1.78.0-rc96 - 2026-06-16
 
 ### Fixed

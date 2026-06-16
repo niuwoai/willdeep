@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-16 | Current version: v1.78.0-rc96
+> Last updated: 2026-06-16 | Current version: v1.78.0-rc97
 
 ## Positioning
 
@@ -62,7 +62,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **复杂度自动守门（1.78.0-rc90）** — 新增 `scripts/complexity_guard.rb`，按 2000 行软阈值和 3000 行硬阈值扫描 Swift / Go / Ruby / Shell / workflow 源文件，输出 Markdown + JSON 报告；本地 `scripts/run_tests.sh` 和 GitHub Actions `Tests` workflow 都会在测试前执行该守门。
 - **版本一致性与 Go CI（1.78.0-rc91）** — 新增 `scripts/version_consistency.rb`，校验 Xcode / Go agent / Help / README / product overview / Mobile Gateway / harness priorities / CHANGELOG 顶部版本一致性并输出 Markdown + JSON 报告；本地 `scripts/run_tests.sh` 和 GitHub Actions `Tests` workflow 都会执行该检查，CI 同时补跑 `willdeep-agent` 的 `go test ./...`。
 - **Agent turn report（1.78.0-rc93）** — 新增 `AgentTurnReport.swift` 和 `AgentTurnReportView.swift`，transcript 底部会展示最近一轮 Agent 的模型/provider、交互与审批模式、耗时、token、工具状态、风险分布、审批来源、sandbox mode 和自学习动作，并支持复制报告文本。
-- **Agent 自学习动作元数据（1.78.0-rc96）** — 新增 `AgentLearningAction` 与 `AgentLearningActionPresentation`：自动 memory、skill 创建/跳过/失败和 MCP 建议都会结构化记录工具名、目标、搜索词、原因、下一步和是否需要用户确认；transcript 学习卡、Settings review 队列和 turn report 都能显示“已自动执行”与“待用户确认”的差异。
+- **Agent 自学习动作元数据（1.78.0-rc97）** — 新增 `AgentLearningAction` 与 `AgentLearningActionPresentation`：自动 memory、skill 创建/跳过/失败和 MCP 建议都会结构化记录工具名、目标、搜索词、原因、下一步和是否需要用户确认；transcript 学习卡、Settings review 队列和 turn report 都能显示“已自动执行”与“待用户确认”的差异。
 - **Agent panel 复杂度治理（1.78.0-rc53）** — 新增 `AgentPanelCards.swift`，将右侧 Agent panel 的 patch proposal 卡片、空状态和消息气泡从 `AgentPanelView.swift` 拆出；panel 主文件降到约 1681 行。
 - **Swift 6 诊断收口（1.78.0-rc54）** — Markdown parser 测试 suite 显式 `@MainActor`，`KeychainSandbox` 清理路径在主 actor 内复位测试 Keychain/UserDefaults，`EditorOutlineExtractor` 标为非隔离纯解析工具，减少 actor isolation warning 噪音。
 - **Swift 6 诊断收口（1.78.0-rc55）** — `AgentTools` 本地目录枚举改用 `nextObject()`，Quick Open 缓存回填去掉无意义 `await`，Mobile Gateway 设置页端口焦点监听更新为新版 `onChange` 签名。
