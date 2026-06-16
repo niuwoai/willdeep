@@ -98,14 +98,45 @@ struct AgentLearningAction: Codable, Equatable {
 /// `title`/`kind` are duplicated so the event is self-contained for
 /// display and copy without cross-referencing the snapshot.
 struct AgentLearningRecallLink: Identifiable, Codable, Equatable {
+    /// Qualitative association strength, derived from the numeric score.
+    enum Strength: String, Codable, Equatable {
+        case strong
+        case related
+        case weak
+    }
+
     var id: UUID
     var kind: AgentTurnRecallKind
     var title: String
+    /// 0–1 relevance of this recall hit to the learning event. Optional in
+    /// storage so links persisted before scoring existed still decode.
+    var score: Double?
+    /// Human-readable "why linked" explanation (e.g. shared keywords or a
+    /// verbatim title match). Optional for the same backward-compat reason.
+    var reason: String?
 
-    init(id: UUID, kind: AgentTurnRecallKind, title: String) {
+    /// Banded view of `score` for compact display. `nil` score (legacy
+    /// links) reads as `.related` so the UI still renders sensibly.
+    var strength: Strength {
+        switch score ?? 0.6 {
+        case 0.8...: return .strong
+        case 0.5...: return .related
+        default: return .weak
+        }
+    }
+
+    init(
+        id: UUID,
+        kind: AgentTurnRecallKind,
+        title: String,
+        score: Double? = nil,
+        reason: String? = nil
+    ) {
         self.id = id
         self.kind = kind
         self.title = title
+        self.score = score
+        self.reason = reason
     }
 }
 
@@ -991,11 +1022,42 @@ enum AgentSelfLearning {
                 && eventText.localizedCaseInsensitiveContains(item.title)
             let itemText = ([item.title, item.detail] + item.reasons).joined(separator: " ")
             let shared = eventTokens.intersection(significantTokens(itemText))
-            if titleHit || shared.count >= 2 {
-                links.append(AgentLearningRecallLink(id: item.id, kind: item.kind, title: item.title))
-            }
+            guard titleHit || shared.count >= 2 else { continue }
+
+            // Score the association so the UI can rank and band it. A
+            // verbatim title match is the strongest signal; keyword
+            // overlap scales with how many significant words are shared.
+            let keywordScore = min(0.9, Double(shared.count) * 0.25)
+            let score = max(titleHit ? 0.9 : 0, keywordScore)
+            let reason = recallLinkReason(
+                titleHit: titleHit,
+                title: item.title,
+                shared: shared
+            )
+            links.append(AgentLearningRecallLink(
+                id: item.id,
+                kind: item.kind,
+                title: item.title,
+                score: (score * 100).rounded() / 100,
+                reason: reason
+            ))
         }
-        return links
+        // Strongest associations first so truncated displays keep the
+        // most relevant hits.
+        return links.sorted { ($0.score ?? 0) > ($1.score ?? 0) }
+    }
+
+    /// Build the "why linked" explanation for a recall association.
+    private static func recallLinkReason(
+        titleHit: Bool,
+        title: String,
+        shared: Set<String>
+    ) -> String {
+        if titleHit {
+            return L10n.Transcript.learningRecallReasonTitle(title)
+        }
+        let keywords = shared.sorted().prefix(4).joined(separator: ", ")
+        return L10n.Transcript.learningRecallReasonKeywords(keywords)
     }
 
     /// The user-meaningful text of a learning event used for recall

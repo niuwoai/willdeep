@@ -79,16 +79,43 @@ enum AgentLearningActionPresentation {
 
     /// One-line "Related recall: …" summary of the turn-recall hits a
     /// learning event was cross-linked to, or nil when there are none.
-    /// Titles are clipped and capped so the line stays readable.
+    /// Each hit is tagged with its association strength; titles are
+    /// clipped and the list capped so the line stays readable.
     static func relatedRecallSummary(for event: AgentLearningEvent) -> String? {
         let links = event.recallLinks
         guard !links.isEmpty else { return nil }
-        let titles = links.prefix(3).map { clip($0.title, limit: 48) }
-        var summary = titles.joined(separator: "; ")
-        if links.count > titles.count {
-            summary += " (+\(links.count - titles.count))"
+        let shown = links.prefix(3).map { link in
+            "\(clip(link.title, limit: 40)) (\(strengthLabel(link.strength)))"
+        }
+        var summary = shown.joined(separator: "; ")
+        if links.count > shown.count {
+            summary += " (+\(links.count - shown.count))"
         }
         return L10n.Transcript.learningRelatedRecall(summary)
+    }
+
+    /// Per-link "title — why (strength)" lines for the copy payload, where
+    /// the full explanation is worth carrying. Empty when no recall links.
+    static func relatedRecallDetailLines(for event: AgentLearningEvent) -> [String] {
+        event.recallLinks.map { link in
+            let reason = compact(link.reason)
+            let strength = strengthLabel(link.strength)
+            if let reason {
+                return "- \(link.title) — \(reason) (\(strength))"
+            }
+            return "- \(link.title) (\(strength))"
+        }
+    }
+
+    static func strengthLabel(_ strength: AgentLearningRecallLink.Strength) -> String {
+        switch strength {
+        case .strong:
+            return L10n.Transcript.learningRecallStrengthStrong
+        case .related:
+            return L10n.Transcript.learningRecallStrengthRelated
+        case .weak:
+            return L10n.Transcript.learningRecallStrengthWeak
+        }
     }
 
     private static func clip(_ text: String, limit: Int) -> String {
@@ -107,8 +134,11 @@ enum AgentLearningActionPresentation {
         if !actionLines.isEmpty {
             sections.append(actionLines.joined(separator: "\n"))
         }
-        if let recall = relatedRecallSummary(for: event) {
-            sections.append(recall)
+        let recallDetail = relatedRecallDetailLines(for: event)
+        if !recallDetail.isEmpty {
+            let header = L10n.Transcript.learningRelatedRecall("")
+                .trimmingCharacters(in: .whitespaces)
+            sections.append(([header] + recallDetail).joined(separator: "\n"))
         }
         return sections.joined(separator: "\n\n")
     }

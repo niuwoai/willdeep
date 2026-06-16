@@ -1423,6 +1423,17 @@ enum L10n {
             let template = String(localized: "transcript.learning.related-recall", defaultValue: "Related recall: %@")
             return String(format: template, a1)
         }
+        static func learningRecallReasonTitle(_ a1: String) -> String {
+            let template = String(localized: "transcript.learning.recall-reason.title", defaultValue: "matched “%@” by name")
+            return String(format: template, a1)
+        }
+        static func learningRecallReasonKeywords(_ a1: String) -> String {
+            let template = String(localized: "transcript.learning.recall-reason.keywords", defaultValue: "shared keywords: %@")
+            return String(format: template, a1)
+        }
+        static let learningRecallStrengthStrong = String(localized: "transcript.learning.recall-strength.strong", defaultValue: "strong")
+        static let learningRecallStrengthRelated = String(localized: "transcript.learning.recall-strength.related", defaultValue: "related")
+        static let learningRecallStrengthWeak = String(localized: "transcript.learning.recall-strength.weak", defaultValue: "weak")
         static let learningCopyHelp = String(localized: "transcript.learning.copy-help", defaultValue: "Copy learning event details")
         static let learningCopied = String(localized: "transcript.learning.copied", defaultValue: "Copied")
         static let messageTruncatedHelp = String(localized: "transcript.message-truncated.help", defaultValue: "Open in standalone window to view full message content")

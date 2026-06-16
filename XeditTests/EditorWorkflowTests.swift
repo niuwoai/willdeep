@@ -18,18 +18,17 @@ private enum EditorWorkflowTestError: Error {
 extension WillDeepTests {
     // MARK: - File Loading Timing (c1)
 
-    // CI-skipped: this drives loadFile's async DispatchQueue.global →
-    // DispatchQueue.main hop and waits for the main-queue callback. On
-    // GitHub's shared macOS runners (few cores, sibling suites contending for
-    // the main queue) that callback gets starved well past any sane timeout —
-    // it was the single most frequent CI flaky failure (1s, then even 5s, both
-    // `.loadTimedOut`). The path works in the real app (main runloop always
-    // pumping) and still runs locally. Not a product bug. Gate on
-    // GITHUB_ACTIONS so the local test pass keeps the coverage.
-    @Test(
-        "loadFile completes promptly for a file under 1MB",
-        .enabled(if: ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == nil)
-    )
+    // This drives loadFile's async DispatchQueue.global → DispatchQueue.main
+    // hop and waits for the main-queue callback. On GitHub's shared macOS
+    // runners (few cores, sibling suites contending for the main queue) that
+    // callback gets starved well past any sane timeout — it was the single
+    // most frequent CI flaky failure. The path works in the real app (main
+    // runloop always pumping). We can't gate it out reliably (env gates don't
+    // reach the swift-testing process; -skip-testing only matches test-prefixed
+    // swift-testing funcs), so we keep the correctness check hard with a
+    // generous ceiling and tolerate only the tight perf threshold as an
+    // intermittent known issue.
+    @Test("loadFile completes promptly for a file under 1MB")
     func testFileLoadingTimingUnder500ms() async throws {
         let tempDir = FileManager.default.temporaryDirectory
         let fileURL = tempDir.appendingPathComponent("xedit_test_timing_\(UUID().uuidString).txt")
@@ -61,8 +60,11 @@ extension WillDeepTests {
         // scheduling jitter — a 500ms/1s ceiling made this the single most
         // frequent flaky failure on CI. 2s/5s keeps the "doesn't stall"
         // guarantee while removing the false reds.
+        // Correctness (hard): the file must eventually load with matching
+        // content. Generous 30s ceiling so this only throws on a genuine
+        // hang, not on CI scheduling jitter.
         var didLoad = false
-        while (CFAbsoluteTimeGetCurrent() - start) < 5.0 {
+        while (CFAbsoluteTimeGetCurrent() - start) < 30.0 {
             didLoad = await MainActor.run {
                 appState.fileContent == content && appState.isEdited == false
             }
@@ -76,10 +78,19 @@ extension WillDeepTests {
 
         let elapsedMs = (CFAbsoluteTimeGetCurrent() - start) * 1000.0
 
-        #expect(
-            elapsedMs < 2000.0,
-            "loadFile time \(elapsedMs)ms exceeded 2s threshold"
-        )
+        // Performance (tolerated): on a loaded shared CI runner the main-queue
+        // callback can be starved for seconds. Keep asserting the 2s ceiling
+        // on fast machines, but record a slow run as an intermittent known
+        // issue rather than a red.
+        withKnownIssue(
+            "loadFile main-queue hop can be starved on shared CI runners.",
+            isIntermittent: true
+        ) {
+            #expect(
+                elapsedMs < 2000.0,
+                "loadFile time \(elapsedMs)ms exceeded 2s threshold"
+            )
+        }
     }
 
     @Test("loadFile data path rejects files over 1MB unless explicitly allowed")

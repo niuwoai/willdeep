@@ -733,8 +733,13 @@ struct AgentSelfLearningTests {
 
         let links = AgentSelfLearning.relatedRecallLinks(for: event, in: snapshot)
         #expect(links.count == 1)
-        #expect(links.first?.id == memoryItem.id)
-        #expect(links.first?.kind == .memory)
+        let link = try? #require(links.first)
+        #expect(link?.id == memoryItem.id)
+        #expect(link?.kind == .memory)
+        // 2 shared keywords → 0.5 → "related" band, reason names them.
+        #expect(link?.score == 0.5)
+        #expect(link?.strength == .related)
+        #expect(link?.reason?.contains("deployment") == true)
     }
 
     @Test
@@ -761,6 +766,36 @@ struct AgentSelfLearningTests {
 
         let links = AgentSelfLearning.relatedRecallLinks(for: event, in: snapshot)
         #expect(links.map(\.id) == [skillItem.id])
+        // Verbatim title match is the strongest signal.
+        #expect(links.first?.score == 0.9)
+        #expect(links.first?.strength == .strong)
+        #expect(links.first?.reason?.contains("by name") == true)
+    }
+
+    @Test
+    func relatedRecallLinksSortStrongestFirst() {
+        let skillItem = AgentTurnRecallItem(kind: .skill, title: "deep-research", detail: "Web research harness.")
+        let memoryItem = AgentTurnRecallItem(kind: .memory, title: "Deployment rollback safety net", detail: "Project memory")
+        let snapshot = AgentTurnRecallSnapshot(
+            createdAt: Date(),
+            query: "research",
+            items: [memoryItem, skillItem]
+        )
+        // Verbatim "deep-research" (strong) + deployment/rollback keyword
+        // overlap with the memory item (related).
+        let event = AgentLearningEvent(
+            kind: .skill,
+            status: .suggested,
+            title: "Proposed deep-research skill after deployment rollback work",
+            detail: ""
+        )
+
+        let links = AgentSelfLearning.relatedRecallLinks(for: event, in: snapshot)
+        #expect(links.count == 2)
+        #expect(links.first?.id == skillItem.id)
+        #expect(links.first?.strength == .strong)
+        #expect(links.last?.id == memoryItem.id)
+        #expect((links.first?.score ?? 0) > (links.last?.score ?? 0))
     }
 
     @Test
