@@ -288,16 +288,19 @@ struct AgentQueuedMessage: Identifiable, Equatable {
     var text: String
     var images: [AgentImageAttachment]
     var textAttachments: [AgentTextAttachment]
+    var attachedSkills: [AgentSkillEntry]
 
     init(
         id: UUID = UUID(),
         text: String,
         images: [AgentImageAttachment] = [],
-        textAttachments: [AgentTextAttachment] = []
+        textAttachments: [AgentTextAttachment] = [],
+        attachedSkills: [AgentSkillEntry] = []
     ) {
         self.id = id
         self.text = text
         self.images = images
         self.textAttachments = textAttachments
+        self.attachedSkills = attachedSkills
     }
 }

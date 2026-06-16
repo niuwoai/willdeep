@@ -1298,6 +1298,18 @@ enum L10n {
         static let turnReportLearning = String(localized: "transcript.turn-report.learning", defaultValue: "Learning")
         static let turnReportElapsed = String(localized: "transcript.turn-report.elapsed", defaultValue: "Elapsed")
         static let turnReportTokens = String(localized: "transcript.turn-report.tokens", defaultValue: "Tokens")
+        static let turnReportRecall = String(localized: "transcript.turn-report.recall", defaultValue: "Recall")
+        static let turnReportRecallSection = String(localized: "transcript.turn-report.recall-section", defaultValue: "Recalled context")
+        static func turnReportRecallSummary(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "transcript.turn-report.recall-summary", defaultValue: "%1$@ memories · %2$@ skills")
+            return String(format: template, a1, a2)
+        }
+        static let turnReportRecallMemory = String(localized: "transcript.turn-report.recall.memory", defaultValue: "Memory")
+        static let turnReportRecallSkill = String(localized: "transcript.turn-report.recall.skill", defaultValue: "Skill")
+        static func turnReportRecallScore(_ a1: String) -> String {
+            let template = String(localized: "transcript.turn-report.recall.score", defaultValue: "Score %@")
+            return String(format: template, a1)
+        }
         static let turnReportLearningSection = String(localized: "transcript.turn-report.learning-section", defaultValue: "Learning actions")
         static func turnReportApprovalSummary(_ a1: String, _ a2: String) -> String {
             let template = String(localized: "transcript.turn-report.approval-summary", defaultValue: "%1$@ auto / %2$@ user")

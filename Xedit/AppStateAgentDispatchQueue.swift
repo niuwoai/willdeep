@@ -60,7 +60,8 @@ extension AppState {
                 for: runtime,
                 text: entry.text,
                 images: entry.images,
-                textAttachments: entry.textAttachments
+                textAttachments: entry.textAttachments,
+                attachedSkills: entry.attachedSkills
             )
         }
         pendingDispatchQueue = remaining

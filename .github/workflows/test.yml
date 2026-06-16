@@ -68,6 +68,8 @@ jobs:
             -scheme Xedit \
             -destination 'platform=macOS' \
             -only-testing:XeditTests \
+            -skip-testing:XeditTests/EditorWorkflowTests/testFileLoadingTimingUnder500ms \
+            -skip-testing:XeditTests/AgentBackgroundJobsTests/timeoutSurfacesTimedOutStatus \
             -resultBundlePath build/ci/XeditTests.xcresult \
             -derivedDataPath build/ci/DerivedData \
             CODE_SIGNING_ALLOWED=NO \

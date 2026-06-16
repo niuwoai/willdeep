@@ -11,6 +11,7 @@ import SwiftUI
 struct AgentLearningReviewSettingsSection: View {
     @StateObject private var reviewState = AgentLearningReviewState()
     @State private var copiedItemID: AgentLearningReviewItem.ID?
+    @State private var copiedSearchQueryItemID: AgentLearningReviewItem.ID?
 
     private var visiblePendingItems: [AgentLearningReviewItem] {
         Array(reviewState.pendingItems.prefix(8))
@@ -139,6 +140,16 @@ struct AgentLearningReviewSettingsSection: View {
                     }
                     .padding(.top, 2)
                 }
+
+                let quickActions = AgentLearningReviewActionPlanner.actions(for: item)
+                if !quickActions.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(quickActions) { quickAction in
+                            quickActionButton(quickAction, for: item)
+                        }
+                    }
+                    .padding(.top, 2)
+                }
             }
 
             VStack(spacing: 8) {
@@ -200,6 +211,64 @@ struct AgentLearningReviewSettingsSection: View {
                 copiedItemID = nil
             }
         }
+    }
+
+    @ViewBuilder
+    private func quickActionButton(_ quickAction: AgentLearningReviewQuickAction, for item: AgentLearningReviewItem) -> some View {
+        Button {
+            performQuickAction(quickAction, for: item)
+        } label: {
+            Image(systemName: iconName(for: quickAction, item: item))
+        }
+        .buttonStyle(.borderless)
+        .help(helpText(for: quickAction, item: item))
+        .foregroundStyle(highlightedQuickActionID(quickAction, item: item) ? Color.accentColor : Color.secondary)
+    }
+
+    private func performQuickAction(_ quickAction: AgentLearningReviewQuickAction, for item: AgentLearningReviewItem) {
+        guard AgentLearningReviewActionPlanner.perform(quickAction, for: item) else { return }
+        if quickAction == .copySearchQuery {
+            copiedSearchQueryItemID = item.id
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
+                if copiedSearchQueryItemID == item.id {
+                    copiedSearchQueryItemID = nil
+                }
+            }
+        }
+    }
+
+    private func iconName(for quickAction: AgentLearningReviewQuickAction, item: AgentLearningReviewItem) -> String {
+        switch quickAction {
+        case .openSkillsTab:
+            return "wand.and.stars"
+        case .openSkillsFolder:
+            return "folder"
+        case .openMCPTab:
+            return "globe"
+        case .copySearchQuery:
+            return copiedSearchQueryItemID == item.id ? "checkmark" : "magnifyingglass"
+        }
+    }
+
+    private func helpText(for quickAction: AgentLearningReviewQuickAction, item: AgentLearningReviewItem) -> String {
+        switch quickAction {
+        case .openSkillsTab:
+            return L10n.Settings.tabSkills
+        case .openSkillsFolder:
+            return L10n.Settings.Skill.openFolder
+        case .openMCPTab:
+            return L10n.Settings.tabMcp
+        case .copySearchQuery:
+            if copiedSearchQueryItemID == item.id {
+                return L10n.Settings.LearningReview.copied
+            }
+            return L10n.Transcript.learningActionSearchMCP
+        }
+    }
+
+    private func highlightedQuickActionID(_ quickAction: AgentLearningReviewQuickAction, item: AgentLearningReviewItem) -> Bool {
+        quickAction == .copySearchQuery && copiedSearchQueryItemID == item.id
     }
 
     private func actionDetailLines(for action: AgentLearningAction) -> [String] {

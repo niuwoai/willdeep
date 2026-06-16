@@ -29,6 +29,37 @@ extension AppState {
         .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    static func buildTurnRecallSnapshot(
+        query: String,
+        retrievedMemories: [AgentMemoryRetrievalResult],
+        attachedSkills: [AgentSkillEntry],
+        createdAt: Date = Date()
+    ) -> AgentTurnRecallSnapshot? {
+        var items: [AgentTurnRecallItem] = retrievedMemories.map { result in
+            AgentTurnRecallItem(
+                kind: .memory,
+                title: oneLine(result.record.content, limit: 140),
+                detail: result.record.scope == .project ? "Project memory" : "Global memory",
+                score: result.score,
+                reasons: result.reasons
+            )
+        }
+        items.append(contentsOf: attachedSkills.map { skill in
+            AgentTurnRecallItem(
+                kind: .skill,
+                title: skill.identifier,
+                detail: oneLine(skill.description, limit: 160),
+                reasons: ["Attached via @skill for this turn."]
+            )
+        })
+        guard !items.isEmpty else { return nil }
+        return AgentTurnRecallSnapshot(
+            createdAt: createdAt,
+            query: query,
+            items: items
+        )
+    }
+
     func captureTurnEndLearning(
         for runtime: AgentRuntime,
         memoryState: AgentMemoryState,
@@ -104,7 +135,7 @@ extension AppState {
         AgentLearningReviewStore.enqueue(events: meaningfulEvents, sessionID: runtime.id)
     }
 
-    private static func oneLine(_ text: String, limit: Int) -> String {
+    static func oneLine(_ text: String, limit: Int) -> String {
         let normalized = text
             .replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: "\t", with: " ")

@@ -10,6 +10,36 @@
 import SwiftUI
 import AppKit
 
+enum EditorSettingsTab: Hashable {
+    case typography
+    case appearance
+    case workspace
+    case agent
+    case localAgents
+    case remoteRuntimes
+    case mobileGateway
+    case memory
+    case rules
+    case skills
+    case mcp
+    case tools
+}
+
+@MainActor
+final class EditorSettingsNavigation: ObservableObject {
+    static let shared = EditorSettingsNavigation()
+
+    @Published var selectedTab: EditorSettingsTab = .typography
+
+    private init() {}
+
+    func open(_ tab: EditorSettingsTab) {
+        selectedTab = tab
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
 struct SettingsKeyboardShortcutHandler: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)

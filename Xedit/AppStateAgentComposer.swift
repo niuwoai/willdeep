@@ -44,12 +44,23 @@ extension AppState {
 
         if runtime.isResponding {
             runtime.queuedMessages.append(
-                AgentQueuedMessage(text: prompt, images: images, textAttachments: textAttachments)
+                AgentQueuedMessage(
+                    text: prompt,
+                    images: images,
+                    textAttachments: textAttachments,
+                    attachedSkills: skills
+                )
             )
             return
         }
 
-        dispatchAgentMessage(for: runtime, text: prompt, images: images, textAttachments: textAttachments)
+        dispatchAgentMessage(
+            for: runtime,
+            text: prompt,
+            images: images,
+            textAttachments: textAttachments,
+            attachedSkills: skills
+        )
     }
 
     func activeRuntimeAfterCreatingNewSession() -> AgentRuntime? {

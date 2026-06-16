@@ -268,6 +268,7 @@ final class AppState: ObservableObject {
         let text: String
         let images: [AgentImageAttachment]
         let textAttachments: [AgentTextAttachment]
+        let attachedSkills: [AgentSkillEntry]
         let providerID: String
         let enqueuedAt: Date
     }

@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.78.0-rc98 - 2026-06-16
+
+### Fixed
+
+- 修复 CI：两个 timing-sensitive 测试（`EditorWorkflowTests.testFileLoadingTimingUnder500ms`、`AgentBackgroundJobsTests.timeoutSurfacesTimedOutStatus`）在 macos-26 共享 ARM runner 上调度饥饿超时（本地分别 0.04s / 1.17s 通过，慢机 5s / 16s 仍超时）。它们原本的 `GITHUB_ACTIONS` gate 在 `xcodebuild test` 启动的 xctest 进程里失效——测试进程不继承调用 shell 的环境变量，scheme 的 `<TestAction>` 又没声明 `<EnvironmentVariables>`，导致 gate 反向放行。改在 `Run XeditTests` 步骤用 `-skip-testing` 显式跳过这两个测试，CI 保持绿、本地仍全量覆盖。
+
+### Added
+
+- 新增 `AgentTurnRecall.swift`，为最新一轮会话持久化结构化召回快照：本轮命中的 memories、attached skills、检索分数与原因。
+
+### Changed
+
+- `dispatchAgentMessage`、provider 并发队列和 queued message 现在会保留 `attachedSkills` 元信息，不再只把 skill 正文内联进 prompt 后丢失来源。
+- `AgentTurnReport` 与 turn report UI 现在单独展示 `Recall`：用户可以看到本轮实际命中的 memory / skill，而不只是回合结束后的 learning actions。
+- `AgentSessionPersistenceTests` 与 `AgentTurnReportTests` 新增召回快照的向后兼容和报告覆盖。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc98`。
+
 ## 1.78.0-rc97 - 2026-06-16
 
 ### Fixed

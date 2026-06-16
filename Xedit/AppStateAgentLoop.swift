@@ -34,7 +34,8 @@ extension AppState {
         for runtime: AgentRuntime,
         text: String,
         images: [AgentImageAttachment],
-        textAttachments: [AgentTextAttachment] = []
+        textAttachments: [AgentTextAttachment] = [],
+        attachedSkills: [AgentSkillEntry] = []
     ) {
         rejectPendingAgentPatchProposals(
             for: runtime,
@@ -55,6 +56,7 @@ extension AppState {
                     text: text,
                     images: images,
                     textAttachments: textAttachments,
+                    attachedSkills: attachedSkills,
                     providerID: providerID,
                     enqueuedAt: Date()
                 )
@@ -66,6 +68,7 @@ extension AppState {
         runtime.errorDetails = nil
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
+        runtime.currentTurnAttachedSkills = attachedSkills
 
         let userMessage = AgentMessage(
             role: .user,
@@ -74,6 +77,7 @@ extension AppState {
             textAttachments: textAttachments
         )
         runtime.messages.append(userMessage)
+        runtime.latestTurnRecall = nil
         // Persist the user's message to disk the instant it's sent —
         // BEFORE the turn runs. The turn's `defer` persist only fires
         // when the loop finishes; if the turn hangs (slow/flaky proxy)
@@ -203,7 +207,8 @@ extension AppState {
             for: runtime,
             text: next.text,
             images: next.images,
-            textAttachments: next.textAttachments
+            textAttachments: next.textAttachments,
+            attachedSkills: next.attachedSkills
         )
     }
 
@@ -283,6 +288,11 @@ extension AppState {
             rootDirectory: workspaceURL,
             openedFileURL: openedFileURL,
             selectedText: selectedText
+        )
+        runtime.latestTurnRecall = Self.buildTurnRecallSnapshot(
+            query: memoryQuery,
+            retrievedMemories: retrievedMemories,
+            attachedSkills: runtime.currentTurnAttachedSkills
         )
         let memoryContextBlock = AgentMemoryEngine.contextBlock(for: retrievedMemories)
 

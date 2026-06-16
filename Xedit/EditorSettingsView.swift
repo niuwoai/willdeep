@@ -10,6 +10,7 @@ import AppKit
 
 struct EditorSettingsView: View {
     @EnvironmentObject var appState: AppState
+    @ObservedObject private var settingsNavigation = EditorSettingsNavigation.shared
     @State private var cliInstallState: CommandLineToolInstallState = .notInstalled
     @State private var cliStatusMessage = ""
     @State private var isInstallingCLI = false
@@ -53,63 +54,75 @@ struct EditorSettingsView: View {
     @State private var discoveredLocalAgents: [LocalAgentCLI.Discovery] = LocalAgentCLI.discoverAll()
 
     var body: some View {
-        TabView {
+        TabView(selection: $settingsNavigation.selectedTab) {
             typographySettings
+                .tag(EditorSettingsTab.typography)
                 .tabItem {
                     Label(L10n.Settings.tabTypography, systemImage: "textformat")
                 }
 
             appearanceSettings
+                .tag(EditorSettingsTab.appearance)
                 .tabItem {
                     Label(L10n.Settings.tabAppearance, systemImage: "slider.horizontal.3")
                 }
 
             workspaceSettings
+                .tag(EditorSettingsTab.workspace)
                 .tabItem {
                     Label(L10n.Settings.tabWorkspace, systemImage: "sidebar.left")
                 }
 
             agentSettings
+                .tag(EditorSettingsTab.agent)
                 .tabItem {
                     Label(L10n.Settings.tabAgent, systemImage: "sparkles")
                 }
 
             localAgentSettings
+                .tag(EditorSettingsTab.localAgents)
                 .tabItem {
                     Label(L10n.Settings.tabLocalAgents, systemImage: "cpu")
                 }
 
             AgentRuntimeSettingsView()
+                .tag(EditorSettingsTab.remoteRuntimes)
                 .tabItem {
                     Label(L10n.Settings.tabRemoteRuntimes, systemImage: "network")
                 }
 
             MobileGatewaySettingsView()
+                .tag(EditorSettingsTab.mobileGateway)
                 .tabItem {
                     Label(L10n.Settings.tabMobileGateway, systemImage: "iphone.radiowaves.left.and.right")
                 }
 
             AgentMemorySettingsView()
+                .tag(EditorSettingsTab.memory)
                 .tabItem {
                     Label(L10n.Settings.tabMemory, systemImage: "brain.head.profile")
                 }
 
             AgentGlobalRulesSettingsView()
+                .tag(EditorSettingsTab.rules)
                 .tabItem {
                     Label(L10n.Settings.tabRules, systemImage: "doc.text.magnifyingglass")
                 }
 
             AgentSkillSettingsView()
+                .tag(EditorSettingsTab.skills)
                 .tabItem {
                     Label(L10n.Settings.tabSkills, systemImage: "wand.and.stars")
                 }
 
             AgentMCPSettingsView()
+                .tag(EditorSettingsTab.mcp)
                 .tabItem {
                     Label(L10n.Settings.tabMcp, systemImage: "globe")
                 }
 
             toolsSettings
+                .tag(EditorSettingsTab.tools)
                 .tabItem {
                     Label(L10n.Settings.tabTools, systemImage: "terminal")
                 }

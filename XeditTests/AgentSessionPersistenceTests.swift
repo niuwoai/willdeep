@@ -32,6 +32,7 @@ struct AgentSessionPersistenceTests {
         #expect(session.interactionMode == .normal)
         #expect(session.currentPlan == nil)
         #expect(session.currentGoal == nil)
+        #expect(session.latestTurnRecall == nil)
         #expect(session.didEditFiles == false)
         #expect(session.workspaceRootPath == nil)
     }
@@ -64,7 +65,20 @@ struct AgentSessionPersistenceTests {
             didEditFiles: true,
             interactionMode: .plan,
             currentPlan: plan,
-            currentGoal: goal
+            currentGoal: goal,
+            latestTurnRecall: AgentTurnRecallSnapshot(
+                createdAt: Date(timeIntervalSince1970: 760_000_000),
+                query: "release workflow",
+                items: [
+                    AgentTurnRecallItem(
+                        kind: .memory,
+                        title: "Use yarn in this project.",
+                        detail: "Project memory",
+                        score: 0.76,
+                        reasons: ["keyword overlap"]
+                    )
+                ]
+            )
         )
 
         let encoded = try JSONEncoder().encode(original)
@@ -79,6 +93,8 @@ struct AgentSessionPersistenceTests {
         #expect(decoded.currentGoal?.checklist.count == 2)
         #expect(decoded.currentGoal?.checklist.first?.done == true)
         #expect(decoded.currentGoal?.checklist.last?.done == false)
+        #expect(decoded.latestTurnRecall?.items.count == 1)
+        #expect(decoded.latestTurnRecall?.items.first?.kind == .memory)
         #expect(decoded.didEditFiles == true)
     }
 

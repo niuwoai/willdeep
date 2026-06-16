@@ -16,6 +16,9 @@ struct AgentTurnReportCard: View {
         VStack(alignment: .leading, spacing: 10) {
             header
             summaryGrid
+            if report.recallSnapshot?.hasUsefulContent == true {
+                recallSection
+            }
             if report.toolSummary.total > 0 {
                 toolSection
             }
@@ -75,6 +78,9 @@ struct AgentTurnReportCard: View {
             metric(L10n.Transcript.turnReportTools, "\(report.toolSummary.total)")
             metric(L10n.Transcript.turnReportApprovals, approvalSummary)
             metric(L10n.Transcript.turnReportLearning, "\(report.learningEvents.count)")
+            if let recallSnapshot = report.recallSnapshot {
+                metric(L10n.Transcript.turnReportRecall, recallSummary(for: recallSnapshot))
+            }
             if let elapsed = report.elapsedSeconds {
                 metric(L10n.Transcript.turnReportElapsed, String(format: "%.1fs", elapsed))
             }
@@ -125,6 +131,45 @@ struct AgentTurnReportCard: View {
                                 .font(AgentDesign.captionFont)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var recallSection: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(L10n.Transcript.turnReportRecallSection)
+                .font(AgentDesign.captionFont)
+                .foregroundStyle(.secondary)
+            if let recallSnapshot = report.recallSnapshot {
+                ForEach(recallSnapshot.items.prefix(4)) { item in
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: item.kind == .memory ? "text.badge.plus" : "wand.and.stars")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(item.kind == .memory ? Color.blue : Color.purple)
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 5) {
+                                Text(item.kind == .memory ? L10n.Transcript.turnReportRecallMemory : L10n.Transcript.turnReportRecallSkill)
+                                    .font(AgentDesign.captionFont)
+                                    .foregroundStyle(.secondary)
+                                if let score = item.score {
+                                    Text(L10n.Transcript.turnReportRecallScore(String(format: "%.2f", score)))
+                                        .font(AgentDesign.captionFont)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Text(item.title)
+                                .font(AgentDesign.captionFont)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                            if !item.detail.isEmpty {
+                                Text(item.detail)
+                                    .font(AgentDesign.captionFont)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
                         }
                     }
                 }
@@ -209,13 +254,27 @@ struct AgentTurnReportCard: View {
         if let totalTokens = report.totalTokens {
             lines.append("\(L10n.Transcript.turnReportTokens): \(totalTokens)")
         }
+        if let recallSnapshot = report.recallSnapshot {
+            lines.append("\(L10n.Transcript.turnReportRecall): \(recallSummary(for: recallSnapshot))")
+        }
         for call in report.tools {
             lines.append("- \(call.toolName): \(statusLabel(for: call.status))")
+        }
+        if let recallSnapshot = report.recallSnapshot {
+            for item in recallSnapshot.items {
+                lines.append("- \(item.kind == .memory ? L10n.Transcript.turnReportRecallMemory : L10n.Transcript.turnReportRecallSkill): \(item.title)")
+            }
         }
         for event in report.learningEvents {
             lines.append("- \(learningLine(for: event))")
         }
         return lines.joined(separator: "\n")
+    }
+
+    private func recallSummary(for snapshot: AgentTurnRecallSnapshot) -> String {
+        let memoryCount = snapshot.items.filter { $0.kind == .memory }.count
+        let skillCount = snapshot.items.filter { $0.kind == .skill }.count
+        return L10n.Transcript.turnReportRecallSummary("\(memoryCount)", "\(skillCount)")
     }
 
     private func learningLine(for event: AgentLearningEvent) -> String {

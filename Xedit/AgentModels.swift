@@ -54,6 +54,9 @@ struct AgentSession: Identifiable, Codable, Equatable {
     /// product-visible audit events for memory, skill, and MCP discovery
     /// actions captured at turn end.
     var learningEvents: [AgentLearningEvent]
+    /// Structured record of which memories / attached skills were
+    /// injected into the latest turn context.
+    var latestTurnRecall: AgentTurnRecallSnapshot?
     /// When the user pinned this session to the top of its workspace
     /// group. Nil = not pinned. We store the timestamp (not a bool) so
     /// that multiple pinned items inside one workspace can be ordered
@@ -95,6 +98,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         currentPlan: AgentPlan? = nil,
         currentGoal: AgentGoal? = nil,
         learningEvents: [AgentLearningEvent] = [],
+        latestTurnRecall: AgentTurnRecallSnapshot? = nil,
         pinnedAt: Date? = nil,
         archivedAt: Date? = nil,
         titleIsUserSet: Bool = false
@@ -116,6 +120,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.currentPlan = currentPlan
         self.currentGoal = currentGoal
         self.learningEvents = learningEvents
+        self.latestTurnRecall = latestTurnRecall
         self.pinnedAt = pinnedAt
         self.archivedAt = archivedAt
         self.titleIsUserSet = titleIsUserSet
@@ -176,7 +181,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         case id, title, workspaceRootPath, workspaceLocation, modelID
         case providerID, providerDisplayName
         case createdAt, updatedAt, messages
-        case didEditFiles, agentEditedPaths, interactionMode, approvalMode, currentPlan, currentGoal, learningEvents
+        case didEditFiles, agentEditedPaths, interactionMode, approvalMode, currentPlan, currentGoal, learningEvents, latestTurnRecall
         case pinnedAt, archivedAt, titleIsUserSet
     }
 
@@ -200,6 +205,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.currentPlan = try c.decodeIfPresent(AgentPlan.self, forKey: .currentPlan)
         self.currentGoal = try c.decodeIfPresent(AgentGoal.self, forKey: .currentGoal)
         self.learningEvents = try c.decodeIfPresent([AgentLearningEvent].self, forKey: .learningEvents) ?? []
+        self.latestTurnRecall = try c.decodeIfPresent(AgentTurnRecallSnapshot.self, forKey: .latestTurnRecall)
         self.pinnedAt = try c.decodeIfPresent(Date.self, forKey: .pinnedAt)
         self.archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
         self.titleIsUserSet = try c.decodeIfPresent(Bool.self, forKey: .titleIsUserSet) ?? false

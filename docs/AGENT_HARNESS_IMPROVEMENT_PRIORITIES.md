@@ -1,6 +1,6 @@
 # Agent Harness Improvement Priorities
 
-> Last updated: 2026-06-16 | Current version: v1.78.0-rc97
+> Last updated: 2026-06-16 | Current version: v1.78.0-rc98
 
 这份文档用于回答一个核心问题：一个 harness 级 Agent 要继续变强，哪些问题必须优先解决。
 
@@ -35,9 +35,9 @@
 
 ## P1：自学习
 
-当前状态：rc71 起有 `add_memory`、`create_user_skill`、`suggest_mcp_server`，并在回合结束时尝试自动 memory 捕获和 skill 候选提取；rc75 起新增 `search_mcp_servers`；rc82 起 system prompt 把 meaningful task 的 learning checkpoint 写成必经路径，同一句“自动 memory / skill / MCP 建议”会拆成具体 memory、skill 和 MCP discovery 策略。rc85 起新增 `AgentSelfLearningAudit`，把本轮 memory、skill 候选、MCP 建议和工具证据数量结构化，MCP 缺口记忆会带具体 `Search query`，默认 skill 沉淀门槛降为 3 次工具调用。rc88 起 `AgentLearningEvent` 会把自动 memory、skill 创建/跳过/失败和 MCP discovery 建议持久化到 session，并在 transcript 底部展示最近学习记录。rc89 起新增持久 review 队列，在 Memory 设置页集中处理待审核学习项，支持复制、标记已审核、忽略和清理已审核记录。rc95 起 `AgentLearningAction` 会给每条自动学习事件附上结构化下一步：工具名、目标、搜索词、原因、下一步、是否需要用户确认；transcript、review 队列和 turn report 都能展示“已经自动保存/创建”和“建议用户确认”的差异。
+当前状态：rc71 起有 `add_memory`、`create_user_skill`、`suggest_mcp_server`，并在回合结束时尝试自动 memory 捕获和 skill 候选提取；rc75 起新增 `search_mcp_servers`；rc82 起 system prompt 把 meaningful task 的 learning checkpoint 写成必经路径，同一句“自动 memory / skill / MCP 建议”会拆成具体 memory、skill 和 MCP discovery 策略。rc85 起新增 `AgentSelfLearningAudit`，把本轮 memory、skill 候选、MCP 建议和工具证据数量结构化，MCP 缺口记忆会带具体 `Search query`，默认 skill 沉淀门槛降为 3 次工具调用。rc88 起 `AgentLearningEvent` 会把自动 memory、skill 创建/跳过/失败和 MCP discovery 建议持久化到 session，并在 transcript 底部展示最近学习记录。rc89 起新增持久 review 队列，在 Memory 设置页集中处理待审核学习项，支持复制、标记已审核、忽略和清理已审核记录。rc95 起 `AgentLearningAction` 会给每条自动学习事件附上结构化下一步：工具名、目标、搜索词、原因、下一步、是否需要用户确认；transcript、review 队列和 turn report 都能展示“已经自动保存/创建”和“建议用户确认”的差异。rc98 起 turn report 会额外展示 `Recall`：本轮检索命中的 memories 和随消息注入的 attached skills 会持久化成 `latestTurnRecall`，避免“学到了什么”和“用了什么上下文”继续混在一起。
 
-仍然不好：学习结果已经结构化、可见且可审核，但还缺少候选编辑、低置信度解释，以及“哪些 memory/skill 真的影响了本轮决策”的召回可观测性。MCP 建议已经带 action metadata 和用户确认边界，但还没有进入一键确认安装、凭据配置和安装后验证闭环。
+仍然不好：学习结果已经结构化、可见且可审核，turn report 也开始展示 memory / attached skill 召回来源，但还缺少候选编辑、低置信度解释，以及更完整的召回可观测性，例如自动 skill 发现来源、MCP 建议命中来源和“为什么没有命中”的跳过理由。MCP 建议已经带 action metadata 和用户确认边界，但还没有进入一键确认安装、凭据配置和安装后验证闭环。
 
 下一步顺序：
 
@@ -59,13 +59,13 @@
 
 ## P2：可观测性与测试
 
-当前状态：工具调用、审批、沙箱、后台任务、版本、Mobile Gateway readiness 都已有一定测试或报告。rc90 起基础 GitHub Actions workflow 会跑复杂度守门和 XeditTests，并上传复杂度报告与 Xcode 测试报告。rc91 起同一 workflow 增加版本一致性检查和 `willdeep-agent` 的 `go test ./...`，版本漂移与 Go agent 回归会在 PR 级别暴露。rc93 起 transcript 底部新增最新 turn report，用户能看到模型/provider、工具、审批、sandbox 和自学习动作的一轮摘要。rc95 起 turn report 的学习区会优先显示结构化 action（例如 saved memory、created skill、suggest MCP install），复制报告时也包含这些动作。
+当前状态：工具调用、审批、沙箱、后台任务、版本、Mobile Gateway readiness 都已有一定测试或报告。rc90 起基础 GitHub Actions workflow 会跑复杂度守门和 XeditTests，并上传复杂度报告与 Xcode 测试报告。rc91 起同一 workflow 增加版本一致性检查和 `willdeep-agent` 的 `go test ./...`，版本漂移与 Go agent 回归会在 PR 级别暴露。rc93 起 transcript 底部新增最新 turn report，用户能看到模型/provider、工具、审批、sandbox 和自学习动作的一轮摘要。rc95 起 turn report 的学习区会优先显示结构化 action（例如 saved memory、created skill、suggest MCP install），复制报告时也包含这些动作。rc98 起 turn report 新增 `Recall` 区块，显示本轮命中的 memory / attached skill 来源。
 
-仍然不好：CI 覆盖面还不够，跨 runtime、跨移动端、跨 MCP 的端到端验证仍然依赖本机人工触发。turn report 第一版还没有精确记录网络/TLS retry 次数、memory/skill 召回来源和每个工具的完整 sandbox decision 历史。
+仍然不好：CI 覆盖面还不够，跨 runtime、跨移动端、跨 MCP 的端到端验证仍然依赖本机人工触发。turn report 已经补了第一段 memory / attached skill 召回来源，但还没有精确记录网络/TLS retry 次数、自动 skill / MCP 建议的召回来源，以及每个工具的完整 sandbox decision 历史。
 
 下一步顺序：
 
-1. 给 Agent turn report 补精确 retry 计数、memory/skill 召回来源和完整 sandbox decision。
+1. 给 Agent turn report 继续补精确 retry 计数、自动 skill / MCP 建议召回来源和完整 sandbox decision。
 2. 对高风险路径补最小 E2E smoke：远端 runtime、Mobile Gateway、MCP 调用、artifact 生成。
 3. 给 CI 失败摘要补更明确的“哪个闸门失败、下一步怎么修”提示。
 

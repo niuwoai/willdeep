@@ -71,6 +71,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var currentPlan: AgentPlan?
     @Published var currentGoal: AgentGoal?
     @Published var learningEvents: [AgentLearningEvent] = []
+    @Published var latestTurnRecall: AgentTurnRecallSnapshot?
     @Published var sessionModelOverride: String?
     /// True after the runtime successfully applied at least one patch.
     /// Drives the "正在编辑 / N 个文件已更改" worktree card so empty
@@ -94,6 +95,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// when idle. Cancelled when the session is closed or the user
     /// stops the response.
     var requestTask: Task<Void, Never>?
+    /// Skills that were explicitly attached to the in-flight user turn.
+    /// They are cleared/overwritten on the next dispatch and used only
+    /// to explain turn recall in reports.
+    var currentTurnAttachedSkills: [AgentSkillEntry] = []
 
     /// Set when the user presses Stop while queued messages exist. The
     /// cancelled turn skips post-turn compression so the queue head can
@@ -133,6 +138,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.currentPlan = session.currentPlan
         self.currentGoal = session.currentGoal
         self.learningEvents = session.learningEvents
+        self.latestTurnRecall = session.latestTurnRecall
     }
 
     /// Move an idle/new session to another workspace. Used by the
@@ -170,6 +176,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.currentPlan = currentPlan
         session.currentGoal = currentGoal
         session.learningEvents = learningEvents
+        session.latestTurnRecall = latestTurnRecall
         session.updatedAt = Date()
         // Two title sources fight for this slot:
         //   1. User-set (sidebar rename) — `titleIsUserSet == true`,

@@ -84,6 +84,25 @@ struct AgentTurnReportTests {
                 createdAt: Date(timeIntervalSince1970: 1_800_001_130)
             )
         ]
+        runtime.latestTurnRecall = AgentTurnRecallSnapshot(
+            createdAt: Date(timeIntervalSince1970: 1_800_001_125),
+            query: "new turn",
+            items: [
+                AgentTurnRecallItem(
+                    kind: .memory,
+                    title: "Agent should use yarn by default.",
+                    detail: "Project memory",
+                    score: 0.82,
+                    reasons: ["keyword overlap"]
+                ),
+                AgentTurnRecallItem(
+                    kind: .skill,
+                    title: "release-guardian",
+                    detail: "Use before shipping a release.",
+                    reasons: ["Attached via @skill for this turn."]
+                )
+            ]
+        )
 
         let report = try #require(AgentTurnReport.latest(for: runtime))
 
@@ -97,6 +116,8 @@ struct AgentTurnReportTests {
         #expect(report.toolSummary.autoApproved == 1)
         #expect(report.toolSummary.sandboxModes == ["workspace-write"])
         #expect(report.tools.map(\.toolName) == ["run_command"])
+        #expect(report.recallSnapshot?.items.count == 2)
+        #expect(report.recallSnapshot?.items.map(\.kind) == [.memory, .skill])
         #expect(report.learningEvents.map(\.title) == ["Created user skill"])
     }
 }

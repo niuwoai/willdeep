@@ -35,12 +35,13 @@ struct AgentTurnReport: Identifiable, Equatable {
     var totalTokens: Int?
     var promptTokens: Int?
     var completionTokens: Int?
+    var recallSnapshot: AgentTurnRecallSnapshot?
     var toolSummary: ToolSummary
     var tools: [AgentToolCall]
     var learningEvents: [AgentLearningEvent]
 
     var hasUsefulContent: Bool {
-        assistantMessageCount > 0 || toolSummary.total > 0 || !learningEvents.isEmpty
+        assistantMessageCount > 0 || toolSummary.total > 0 || !learningEvents.isEmpty || recallSnapshot?.hasUsefulContent == true
     }
 }
 
@@ -71,6 +72,7 @@ extension AgentTurnReport {
             totalTokens: sumOptional(assistantMessages.map(\.usageTokens)),
             promptTokens: sumOptional(assistantMessages.map(\.promptTokens)),
             completionTokens: sumOptional(assistantMessages.map(\.completionTokens)),
+            recallSnapshot: runtime.latestTurnRecall?.createdAt ?? .distantPast >= latestUser.createdAt ? runtime.latestTurnRecall : nil,
             toolSummary: summarizeTools(tools),
             tools: Array(tools.prefix(8)),
             learningEvents: Array(learningEvents.prefix(6))
