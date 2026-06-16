@@ -710,6 +710,111 @@ struct AgentSelfLearningTests {
         #expect(item.event.detail.contains("Draft skill: release-ready-checklist"))
     }
 
+    // MARK: - Recall ↔ learning linkage
+
+    @Test
+    func relatedRecallLinksMatchOnSharedKeywords() {
+        let memoryItem = AgentTurnRecallItem(
+            kind: .memory,
+            title: "Deployment rollback must back up the running build first",
+            detail: "Project memory"
+        )
+        let snapshot = AgentTurnRecallSnapshot(
+            createdAt: Date(),
+            query: "deployment",
+            items: [memoryItem]
+        )
+        let event = AgentLearningEvent(
+            kind: .memory,
+            status: .saved,
+            title: "Saved automatic learning memory",
+            detail: "Captured deployment rollback policy for future releases."
+        )
+
+        let links = AgentSelfLearning.relatedRecallLinks(for: event, in: snapshot)
+        #expect(links.count == 1)
+        #expect(links.first?.id == memoryItem.id)
+        #expect(links.first?.kind == .memory)
+    }
+
+    @Test
+    func relatedRecallLinksMatchOnVerbatimSkillTitle() {
+        let skillItem = AgentTurnRecallItem(
+            kind: .skill,
+            title: "deep-research",
+            detail: "Fan-out web research harness.",
+            reasons: ["Attached via @skill for this turn."]
+        )
+        let snapshot = AgentTurnRecallSnapshot(
+            createdAt: Date(),
+            query: "research",
+            items: [skillItem]
+        )
+        // Few shared keywords, but the attached skill's identifier appears
+        // verbatim — the strong-match path should still link it.
+        let event = AgentLearningEvent(
+            kind: .skill,
+            status: .suggested,
+            title: "Proposed formalizing the deep-research workflow as a skill",
+            detail: ""
+        )
+
+        let links = AgentSelfLearning.relatedRecallLinks(for: event, in: snapshot)
+        #expect(links.map(\.id) == [skillItem.id])
+    }
+
+    @Test
+    func relatedRecallLinksEmptyWhenNoOverlap() {
+        let snapshot = AgentTurnRecallSnapshot(
+            createdAt: Date(),
+            query: "github",
+            items: [
+                AgentTurnRecallItem(kind: .memory, title: "Prefer GitHub pull request reviews", detail: "Global memory")
+            ]
+        )
+        let event = AgentLearningEvent(
+            kind: .memory,
+            status: .saved,
+            title: "Saved automatic learning memory",
+            detail: "Rename selected variables inside the editor buffer."
+        )
+
+        #expect(AgentSelfLearning.relatedRecallLinks(for: event, in: snapshot).isEmpty)
+    }
+
+    @Test
+    func relatedRecallLinksEmptyForNilSnapshot() {
+        let event = AgentLearningEvent(
+            kind: .memory,
+            status: .saved,
+            title: "Saved automatic learning memory",
+            detail: "Captured deployment rollback policy."
+        )
+        #expect(AgentSelfLearning.relatedRecallLinks(for: event, in: nil).isEmpty)
+    }
+
+    @Test
+    func relatedRecallSummaryAppearsInCopyText() {
+        let recallItem = AgentTurnRecallItem(
+            kind: .memory,
+            title: "Deployment rollback must back up the running build",
+            detail: "Project memory"
+        )
+        let event = AgentLearningEvent(
+            kind: .memory,
+            status: .saved,
+            title: "Saved automatic learning memory",
+            detail: "Captured deployment rollback policy.",
+            relatedRecall: [
+                AgentLearningRecallLink(id: recallItem.id, kind: .memory, title: recallItem.title)
+            ]
+        )
+
+        let summary = try? #require(AgentLearningActionPresentation.relatedRecallSummary(for: event))
+        #expect(summary?.contains("Deployment rollback") == true)
+        #expect(AgentLearningActionPresentation.copyText(for: event).contains("Related recall"))
+    }
+
     private func temporarySkillRoot() throws -> URL {
         let container = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep-self-learning-\(UUID().uuidString)")

@@ -79,6 +79,19 @@ extension AppState {
             for: runtime,
             workspaceURL: workspaceURL
         ))
+        // Cross-link each learning event back to the recall hits that
+        // influenced this turn, so the audit trail can say "this
+        // suggestion relates to these recalled memories / attached skills"
+        // — not just "it came from a tool sequence". Recall was captured
+        // early in the turn (see runAgentLoop), so `latestTurnRecall` is
+        // populated by the time this turn-end pass runs.
+        let recall = runtime.latestTurnRecall
+        events = events.map { event in
+            var enriched = event
+            let links = AgentSelfLearning.relatedRecallLinks(for: event, in: recall)
+            enriched.relatedRecall = links.isEmpty ? nil : links
+            return enriched
+        }
         appendAgentLearningEvents(events, to: runtime)
     }
 

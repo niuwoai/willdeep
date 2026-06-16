@@ -91,6 +91,24 @@ struct AgentLearningAction: Codable, Equatable {
     }
 }
 
+/// A back-reference from a learning event to a turn-recall item that
+/// influenced it. Lets the UI say not just "this suggestion came from a
+/// tool sequence" but also "it relates to these recall hits this turn".
+/// `id` matches an `AgentTurnRecallItem.id` in the same turn's snapshot;
+/// `title`/`kind` are duplicated so the event is self-contained for
+/// display and copy without cross-referencing the snapshot.
+struct AgentLearningRecallLink: Identifiable, Codable, Equatable {
+    var id: UUID
+    var kind: AgentTurnRecallKind
+    var title: String
+
+    init(id: UUID, kind: AgentTurnRecallKind, title: String) {
+        self.id = id
+        self.kind = kind
+        self.title = title
+    }
+}
+
 struct AgentLearningEvent: Identifiable, Codable, Equatable {
     var id: UUID
     var kind: AgentLearningEventKind
@@ -99,6 +117,14 @@ struct AgentLearningEvent: Identifiable, Codable, Equatable {
     var detail: String
     var action: AgentLearningAction?
     var createdAt: Date
+    /// Optional in storage so sessions persisted before this field
+    /// existed still decode (a missing key becomes `nil`, not a decode
+    /// failure that would drop the whole session file). Read through
+    /// `recallLinks` for a non-optional view.
+    var relatedRecall: [AgentLearningRecallLink]?
+
+    /// Non-optional accessor for the recall back-references.
+    var recallLinks: [AgentLearningRecallLink] { relatedRecall ?? [] }
 
     init(
         id: UUID = UUID(),
@@ -107,7 +133,8 @@ struct AgentLearningEvent: Identifiable, Codable, Equatable {
         title: String,
         detail: String,
         action: AgentLearningAction? = nil,
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        relatedRecall: [AgentLearningRecallLink]? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -116,6 +143,7 @@ struct AgentLearningEvent: Identifiable, Codable, Equatable {
         self.detail = detail
         self.action = action
         self.createdAt = createdAt
+        self.relatedRecall = relatedRecall
     }
 }
 
@@ -940,4 +968,73 @@ enum AgentSelfLearning {
         guard normalized.count > limit else { return normalized }
         return String(normalized.prefix(limit)) + "..."
     }
+
+    // MARK: - Recall ↔ learning linkage
+
+    /// Find which turn-recall items relate to a learning event, so the UI
+    /// can show "this suggestion relates to these recall hits". Matching is
+    /// deterministic (no model call): a recall item links to the event when
+    /// either its title appears verbatim in the event's text (the strong
+    /// case — e.g. the event proposes to formalize an attached skill by
+    /// name), or the two share at least two significant keywords.
+    static func relatedRecallLinks(
+        for event: AgentLearningEvent,
+        in snapshot: AgentTurnRecallSnapshot?
+    ) -> [AgentLearningRecallLink] {
+        guard let snapshot, !snapshot.items.isEmpty else { return [] }
+        let eventText = recallMatchText(for: event)
+        guard !eventText.isEmpty else { return [] }
+        let eventTokens = significantTokens(eventText)
+        var links: [AgentLearningRecallLink] = []
+        for item in snapshot.items {
+            let titleHit = !item.title.isEmpty
+                && eventText.localizedCaseInsensitiveContains(item.title)
+            let itemText = ([item.title, item.detail] + item.reasons).joined(separator: " ")
+            let shared = eventTokens.intersection(significantTokens(itemText))
+            if titleHit || shared.count >= 2 {
+                links.append(AgentLearningRecallLink(id: item.id, kind: item.kind, title: item.title))
+            }
+        }
+        return links
+    }
+
+    /// The user-meaningful text of a learning event used for recall
+    /// matching: its title/detail plus the structured action's fields.
+    private static func recallMatchText(for event: AgentLearningEvent) -> String {
+        var parts = [event.title, event.detail]
+        if let action = event.action {
+            parts.append(action.reason)
+            parts.append(contentsOf: [action.target, action.searchQuery, action.nextStep].compactMap { $0 })
+            if let draft = action.skillDraft {
+                parts.append(contentsOf: [draft.name, draft.description])
+            }
+            if let draft = action.mcpDraft {
+                parts.append(contentsOf: [draft.capability, draft.serverName, draft.reason])
+            }
+        }
+        return parts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Lowercased alphanumeric tokens of length ≥ 4 with common English
+    /// stopwords removed. CJK runs survive as single tokens (no word
+    /// boundaries), so CJK overlap requires a shared phrase — verbatim
+    /// title matching covers that case separately.
+    private static func significantTokens(_ text: String) -> Set<String> {
+        var tokens: Set<String> = []
+        for part in text.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }) {
+            let token = String(part)
+            if token.count >= 4, !recallStopwords.contains(token) {
+                tokens.insert(token)
+            }
+        }
+        return tokens
+    }
+
+    private static let recallStopwords: Set<String> = [
+        "this", "that", "with", "from", "into", "your", "their", "about",
+        "when", "then", "than", "they", "them", "have", "will", "would",
+        "should", "could", "what", "which", "where", "while", "these",
+        "those", "before", "after", "turn", "tool", "tools", "agent",
+        "memory", "skill", "skills"
+    ]
 }

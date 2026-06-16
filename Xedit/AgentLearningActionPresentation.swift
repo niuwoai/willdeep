@@ -77,6 +77,26 @@ enum AgentLearningActionPresentation {
         explanation(for: event).confidence
     }
 
+    /// One-line "Related recall: …" summary of the turn-recall hits a
+    /// learning event was cross-linked to, or nil when there are none.
+    /// Titles are clipped and capped so the line stays readable.
+    static func relatedRecallSummary(for event: AgentLearningEvent) -> String? {
+        let links = event.recallLinks
+        guard !links.isEmpty else { return nil }
+        let titles = links.prefix(3).map { clip($0.title, limit: 48) }
+        var summary = titles.joined(separator: "; ")
+        if links.count > titles.count {
+            summary += " (+\(links.count - titles.count))"
+        }
+        return L10n.Transcript.learningRelatedRecall(summary)
+    }
+
+    private static func clip(_ text: String, limit: Int) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > limit else { return trimmed }
+        return String(trimmed.prefix(limit)) + "…"
+    }
+
     static func copyText(for event: AgentLearningEvent) -> String {
         var sections = [event.title]
         let detail = event.detail.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -86,6 +106,9 @@ enum AgentLearningActionPresentation {
         let actionLines = summaryLines(for: event)
         if !actionLines.isEmpty {
             sections.append(actionLines.joined(separator: "\n"))
+        }
+        if let recall = relatedRecallSummary(for: event) {
+            sections.append(recall)
         }
         return sections.joined(separator: "\n\n")
     }

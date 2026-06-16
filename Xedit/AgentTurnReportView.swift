@@ -278,15 +278,22 @@ struct AgentTurnReportCard: View {
     }
 
     private func learningLine(for event: AgentLearningEvent) -> String {
-        guard let action = event.action else {
-            return event.title
+        let base: String
+        if let action = event.action {
+            let label = AgentLearningActionPresentation.label(for: action.kind)
+            if let target = action.target?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !target.isEmpty {
+                base = "\(label): \(target)"
+            } else {
+                base = "\(label): \(event.title)"
+            }
+        } else {
+            base = event.title
         }
-        let label = AgentLearningActionPresentation.label(for: action.kind)
-        if let target = action.target?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !target.isEmpty {
-            return "\(label): \(target)"
+        if let recall = AgentLearningActionPresentation.relatedRecallSummary(for: event) {
+            return "\(base) · \(recall)"
         }
-        return "\(label): \(event.title)"
+        return base
     }
 
     private func iconName(for call: AgentToolCall) -> String {

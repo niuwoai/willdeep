@@ -1419,6 +1419,10 @@ enum L10n {
             let template = String(localized: "transcript.learning.action.why", defaultValue: "Why: %@")
             return String(format: template, a1)
         }
+        static func learningRelatedRecall(_ a1: String) -> String {
+            let template = String(localized: "transcript.learning.related-recall", defaultValue: "Related recall: %@")
+            return String(format: template, a1)
+        }
         static let learningCopyHelp = String(localized: "transcript.learning.copy-help", defaultValue: "Copy learning event details")
         static let learningCopied = String(localized: "transcript.learning.copied", defaultValue: "Copied")
         static let messageTruncatedHelp = String(localized: "transcript.message-truncated.help", defaultValue: "Open in standalone window to view full message content")

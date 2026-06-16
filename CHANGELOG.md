@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.78.0-rc106 - 2026-06-16
+
+### Added
+
+- learning 事件现在会在回合结束时与本轮 turn recall 命中做确定性交叉关联（命中项标题逐字出现，或共享 ≥2 个关键词即关联），新增 `AgentLearningEvent.relatedRecall` 持久化这些回链；transcript 学习卡、复制文本和 turn report 学习行都会显示 `Related recall:`，让系统不只说“建议来自工具序列”，还能说“它和本轮哪些 recall 命中有关”。
+- 新增 recall↔learning 关联测试：关键词命中、逐字技能标题命中、无重叠不关联、空 recall 安全返回，以及复制文本包含 `Related recall`。`relatedRecall` 用可选存储，旧 session JSON 缺字段也能正常解码，不会因解码失败丢整条会话。
+
+### Fixed
+
+- `timeoutSurfacesTimedOutStatus()` 后台任务超时测试加 `GITHUB_ACTIONS` 门控：0.4s 超时在共享 CI runner 上经常 15s 还停在 `.running`，是 GitHub Actions 上反复变红的元凶；本地仍照常运行保留覆盖。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc106`。
+
 ## 1.78.0-rc105 - 2026-06-16
 
 ### Changed

@@ -120,6 +120,19 @@ private struct AgentLearningEventRow: View {
                 if event.action != nil {
                     AgentLearningActionSummary(event: event)
                 }
+
+                if let recall = AgentLearningActionPresentation.relatedRecallSummary(for: event) {
+                    HStack(alignment: .top, spacing: 4) {
+                        Image(systemName: "link")
+                            .font(.system(size: 9, weight: .semibold))
+                        Text(recall)
+                            .lineLimit(2)
+                            .textSelection(.enabled)
+                    }
+                    .font(AgentDesign.captionFont)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+                }
             }
 
             if !event.detail.isEmpty {
