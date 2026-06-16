@@ -1024,22 +1024,22 @@ enum AgentSelfLearning {
             let shared = eventTokens.intersection(significantTokens(itemText))
             guard titleHit || shared.count >= 2 else { continue }
 
-            // Score the association so the UI can rank and band it. A
-            // verbatim title match is the strongest signal; keyword
-            // overlap scales with how many significant words are shared.
+            // A verbatim title match is the strongest signal; keyword overlap
+            // scales with how many significant words are shared.
             let keywordScore = min(0.9, Double(shared.count) * 0.25)
-            let score = max(titleHit ? 0.9 : 0, keywordScore)
-            let reason = recallLinkReason(
-                titleHit: titleHit,
-                title: item.title,
-                shared: shared
-            )
+            let base = max(titleHit ? 0.9 : 0, keywordScore)
+            // Fold in the recall retrieval relevance: memory items carry a
+            // 0–1 retrieval score (attached skills don't). A strongly-recalled
+            // item that also matches is a stronger association than a weakly-
+            // recalled one. The match signal stays dominant (0.7) so a verbatim
+            // title hit never drops below "related".
+            let score = item.score.map { min(1.0, base * 0.7 + $0 * 0.3) } ?? base
             links.append(AgentLearningRecallLink(
                 id: item.id,
                 kind: item.kind,
                 title: item.title,
                 score: (score * 100).rounded() / 100,
-                reason: reason
+                reason: recallLinkReason(titleHit: titleHit, title: item.title, shared: shared, retrieval: item.score)
             ))
         }
         // Strongest associations first so truncated displays keep the
@@ -1047,17 +1047,57 @@ enum AgentSelfLearning {
         return links.sorted { ($0.score ?? 0) > ($1.score ?? 0) }
     }
 
-    /// Build the "why linked" explanation for a recall association.
+    /// Why a recall item was NOT linked to any of the turn's learning
+    /// events — currently the near-miss case: it shared exactly one
+    /// significant keyword (just below the ≥2 bar). Returns nil when the
+    /// item was linked to some event or had no overlap worth explaining.
+    static func recallItemLinkStatus(
+        _ item: AgentTurnRecallItem,
+        events: [AgentLearningEvent]
+    ) -> RecallItemLinkStatus {
+        if events.contains(where: { $0.recallLinks.contains { $0.id == item.id } }) {
+            return .linked
+        }
+        let itemTokens = significantTokens(([item.title, item.detail] + item.reasons).joined(separator: " "))
+        var bestShared: Set<String> = []
+        for event in events {
+            let eventText = recallMatchText(for: event)
+            guard !eventText.isEmpty else { continue }
+            let shared = significantTokens(eventText).intersection(itemTokens)
+            if shared.count > bestShared.count { bestShared = shared }
+        }
+        // ≥2 would have linked it elsewhere; a single shared keyword is the
+        // informative "almost" case.
+        guard bestShared.count == 1, let keyword = bestShared.first else {
+            return .unrelated
+        }
+        return .nearMiss(L10n.Transcript.learningRecallNearMiss(keyword))
+    }
+
+    enum RecallItemLinkStatus: Equatable {
+        case linked
+        case nearMiss(String)
+        case unrelated
+    }
+
+    /// Build the "why linked" explanation for a recall association,
+    /// optionally noting the underlying recall retrieval relevance.
     private static func recallLinkReason(
         titleHit: Bool,
         title: String,
-        shared: Set<String>
+        shared: Set<String>,
+        retrieval: Double?
     ) -> String {
+        let base: String
         if titleHit {
-            return L10n.Transcript.learningRecallReasonTitle(title)
+            base = L10n.Transcript.learningRecallReasonTitle(title)
+        } else {
+            let keywords = shared.sorted().prefix(4).joined(separator: ", ")
+            base = L10n.Transcript.learningRecallReasonKeywords(keywords)
         }
-        let keywords = shared.sorted().prefix(4).joined(separator: ", ")
-        return L10n.Transcript.learningRecallReasonKeywords(keywords)
+        guard let retrieval else { return base }
+        let formatted = String(format: "%.2f", retrieval)
+        return L10n.Transcript.learningRecallReasonWithRecall(base, formatted)
     }
 
     /// The user-meaningful text of a learning event used for recall

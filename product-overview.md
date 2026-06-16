@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-16 | Current version: v1.78.0-rc108
+> Last updated: 2026-06-16 | Current version: v1.78.0-rc109
 
 ## Positioning
 
@@ -63,6 +63,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **版本一致性与 Go CI（1.78.0-rc91）** — 新增 `scripts/version_consistency.rb`，校验 Xcode / Go agent / Help / README / product overview / Mobile Gateway / harness priorities / CHANGELOG 顶部版本一致性并输出 Markdown + JSON 报告；本地 `scripts/run_tests.sh` 和 GitHub Actions `Tests` workflow 都会执行该检查，CI 同时补跑 `willdeep-agent` 的 `go test ./...`。
 - **Agent turn report（1.78.0-rc93）** — 新增 `AgentTurnReport.swift` 和 `AgentTurnReportView.swift`，transcript 底部会展示最近一轮 Agent 的模型/provider、交互与审批模式、耗时、token、工具状态、风险分布、审批来源、sandbox mode 和自学习动作，并支持复制报告文本。
 - **Agent 自学习动作元数据（1.78.0-rc95）** — 新增 `AgentLearningAction` 与 `AgentLearningActionPresentation`：自动 memory、skill 创建/跳过/失败和 MCP 建议都会结构化记录工具名、目标、搜索词、原因、下一步和是否需要用户确认；transcript 学习卡、Settings review 队列和 turn report 都能显示“已自动执行”与“待用户确认”的差异。
+- **Recall↔learning 检索分数 + 为什么没关联（1.78.0-rc109）** — 关联评分把召回检索分数也并进来（`match 0.7 + 检索 0.3`，原因里注明 `recalled at 0.NN`），强相关的检索命中能进一步拉高分档。turn report 的 recall 区现在逐条标注命中项是“已关联到学习建议”，还是“为什么没关联”——近失项（只与某条学习建议共享 1 个关键词、不足 ≥2 门槛）会显式说明原因，复制报告时也带上。
 - **Recall↔learning 关联评分（1.78.0-rc108）** — 每条 recall 回链现在带 0–1 关联评分、`strong / related / weak` 分档和“为什么关联”的原因（逐字标题命中，或共享了哪些关键词），并按强度从高到低排序；transcript 的 `Related recall:` 行显示分档，复制学习事件时会展开每条命中的原因与强度。`score` / `reason` 用可选存储，rc106 已存的旧回链也能安全解码。
 - **Recall↔learning 关联（1.78.0-rc106）** — 回合末每条 learning 事件会与本轮 `latestTurnRecall` 命中做确定性交叉关联（命中项标题逐字出现，或共享 ≥2 个关键词即关联），`AgentLearningEvent.relatedRecall` 持久化这些回链；transcript 学习卡、复制文本和 turn report 学习行都显示 `Related recall:`，让系统不只说“建议来自工具序列/某来源”，还能说“它和本轮哪些 recall 命中有关”。`relatedRecall` 用可选存储，旧 session 缺字段也能安全解码。
 - **学习来源可见（1.78.0-rc105）** — skill / MCP 自学习事件现在会补充 `Source:` 线索，把显式用户要求、复用工作流信号、相关工具序列和“缺少已配置集成”的能力缺口直接写进 detail，让 review 队列和 transcript 不只知道“建议了什么”，也知道“为什么是它”。

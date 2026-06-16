@@ -170,10 +170,32 @@ struct AgentTurnReportCard: View {
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                             }
+                            recallLinkStatusLabel(for: item)
                         }
                     }
                 }
             }
+        }
+    }
+
+    /// Shows whether this recall hit was linked to a learning suggestion
+    /// this turn, or — for a near miss — why it wasn't. Silent for items
+    /// with no overlap, to avoid noise.
+    @ViewBuilder
+    private func recallLinkStatusLabel(for item: AgentTurnRecallItem) -> some View {
+        switch AgentSelfLearning.recallItemLinkStatus(item, events: report.learningEvents) {
+        case .linked:
+            Label(L10n.Transcript.learningRecallLinkedTag, systemImage: "link")
+                .font(AgentDesign.captionFont)
+                .foregroundStyle(.green)
+                .labelStyle(.titleAndIcon)
+        case .nearMiss(let reason):
+            Text(reason)
+                .font(AgentDesign.captionFont)
+                .foregroundStyle(.orange)
+                .lineLimit(1)
+        case .unrelated:
+            EmptyView()
         }
     }
 
@@ -262,7 +284,17 @@ struct AgentTurnReportCard: View {
         }
         if let recallSnapshot = report.recallSnapshot {
             for item in recallSnapshot.items {
-                lines.append("- \(item.kind == .memory ? L10n.Transcript.turnReportRecallMemory : L10n.Transcript.turnReportRecallSkill): \(item.title)")
+                let kindLabel = item.kind == .memory ? L10n.Transcript.turnReportRecallMemory : L10n.Transcript.turnReportRecallSkill
+                var line = "- \(kindLabel): \(item.title)"
+                switch AgentSelfLearning.recallItemLinkStatus(item, events: report.learningEvents) {
+                case .linked:
+                    line += " [\(L10n.Transcript.learningRecallLinkedTag)]"
+                case .nearMiss(let reason):
+                    line += " [\(reason)]"
+                case .unrelated:
+                    break
+                }
+                lines.append(line)
             }
         }
         for event in report.learningEvents {

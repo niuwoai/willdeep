@@ -733,7 +733,7 @@ struct AgentSelfLearningTests {
 
         let links = AgentSelfLearning.relatedRecallLinks(for: event, in: snapshot)
         #expect(links.count == 1)
-        let link = try? #require(links.first)
+        let link = links.first
         #expect(link?.id == memoryItem.id)
         #expect(link?.kind == .memory)
         // 2 shared keywords → 0.5 → "related" band, reason names them.
@@ -799,6 +799,60 @@ struct AgentSelfLearningTests {
     }
 
     @Test
+    func relatedRecallLinksFoldInRetrievalScore() {
+        // Same 2-keyword overlap (match base 0.5) but the memory carries a
+        // high retrieval score → blended 0.5*0.7 + 0.9*0.3 = 0.62.
+        let memoryItem = AgentTurnRecallItem(
+            kind: .memory,
+            title: "Deployment rollback must back up the running build",
+            detail: "Project memory",
+            score: 0.9
+        )
+        let snapshot = AgentTurnRecallSnapshot(createdAt: Date(), query: "deployment", items: [memoryItem])
+        let event = AgentLearningEvent(
+            kind: .memory,
+            status: .saved,
+            title: "Saved automatic learning memory",
+            detail: "Captured deployment rollback policy for future releases."
+        )
+
+        let link = AgentSelfLearning.relatedRecallLinks(for: event, in: snapshot).first
+        #expect(link?.score == 0.62)
+        #expect(link?.strength == .related)
+        #expect(link?.reason?.contains("recalled at 0.90") == true)
+    }
+
+    @Test
+    func recallItemLinkStatusReportsLinkedNearMissAndUnrelated() {
+        let item = AgentTurnRecallItem(kind: .memory, title: "Deployment guide", detail: "Project memory")
+
+        // Linked: an event whose relatedRecall already references the item.
+        let linkedEvent = AgentLearningEvent(
+            kind: .memory, status: .saved, title: "Saved memory", detail: "",
+            relatedRecall: [AgentLearningRecallLink(id: item.id, kind: .memory, title: item.title)]
+        )
+        #expect(AgentSelfLearning.recallItemLinkStatus(item, events: [linkedEvent]) == .linked)
+
+        // Near miss: shares exactly one keyword ("deployment"), below ≥2.
+        let nearEvent = AgentLearningEvent(
+            kind: .memory, status: .saved, title: "Saved memory",
+            detail: "Captured deployment policy notes."
+        )
+        if case .nearMiss(let reason) = AgentSelfLearning.recallItemLinkStatus(item, events: [nearEvent]) {
+            #expect(reason.contains("deployment"))
+        } else {
+            Issue.record("expected a near-miss status")
+        }
+
+        // Unrelated: no shared keywords.
+        let unrelatedEvent = AgentLearningEvent(
+            kind: .memory, status: .saved, title: "Saved memory",
+            detail: "Rename selected variables inside the editor."
+        )
+        #expect(AgentSelfLearning.recallItemLinkStatus(item, events: [unrelatedEvent]) == .unrelated)
+    }
+
+    @Test
     func relatedRecallLinksEmptyWhenNoOverlap() {
         let snapshot = AgentTurnRecallSnapshot(
             createdAt: Date(),
@@ -845,7 +899,7 @@ struct AgentSelfLearningTests {
             ]
         )
 
-        let summary = try? #require(AgentLearningActionPresentation.relatedRecallSummary(for: event))
+        let summary = AgentLearningActionPresentation.relatedRecallSummary(for: event)
         #expect(summary?.contains("Deployment rollback") == true)
         #expect(AgentLearningActionPresentation.copyText(for: event).contains("Related recall"))
     }

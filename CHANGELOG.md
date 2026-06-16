@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.78.0-rc109 - 2026-06-16
+
+### Added
+
+- recall↔learning 关联评分现在把召回检索分数也并进来：memory 命中项的 0–1 检索相关度按 `match 0.7 + 检索 0.3` 融合进关联评分（attached skill 无检索分数则只用 match），原因里注明 `recalled at 0.NN`，强相关的检索命中能进一步拉高 strong/related/weak 分档。
+- turn report 的 recall 区逐条标注“为什么没关联”：命中项要么显示“已关联到学习建议”，要么对近失项（只与某条学习建议共享 1 个关键词、不足 ≥2 门槛）说明原因；复制报告时一并带上。新增 `AgentSelfLearning.recallItemLinkStatus` 与 linked / near-miss / unrelated 三态测试，以及检索分数融合测试。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc109`。
+
 ## 1.78.0-rc108 - 2026-06-16
 
 ### Added
