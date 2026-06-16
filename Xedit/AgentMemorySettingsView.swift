@@ -55,6 +55,8 @@ struct AgentMemorySettingsView: View {
 
     var body: some View {
         Form {
+            AgentLearningReviewSettingsSection()
+
             Section(L10n.Settings.Memory.featuresSection) {
                 Toggle(L10n.Settings.Memory.enableToggle, isOn: setting(\.isMemoryEnabled))
                 Text(L10n.Settings.Memory.enableDescription)

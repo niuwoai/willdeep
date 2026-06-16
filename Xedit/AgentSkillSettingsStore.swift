@@ -14,7 +14,7 @@ struct AgentSkillSettings: Codable, Equatable {
 
     static let `default` = AgentSkillSettings(
         autoExtractionEnabled: true,
-        minimumToolCallCount: 5,
+        minimumToolCallCount: 3,
         disabledSkillIdentifiers: []
     )
 
@@ -32,13 +32,22 @@ struct AgentSkillSettings: Codable, Equatable {
 
 enum AgentSkillSettingsStore {
     private static let settingsKey = "com.willdeep.agentSkillSettings.v1"
+    private static let defaultThresholdMigrationKey = "com.willdeep.agentSkillSettings.defaultThreshold.rc85"
 
     static func load() -> AgentSkillSettings {
         guard let data = UserDefaults.standard.data(forKey: settingsKey),
               let settings = try? JSONDecoder().decode(AgentSkillSettings.self, from: data) else {
             return .default
         }
-        return settings.normalized
+        var normalized = settings.normalized
+        let defaults = UserDefaults.standard
+        if !defaults.bool(forKey: defaultThresholdMigrationKey),
+           normalized.minimumToolCallCount == 5 {
+            normalized.minimumToolCallCount = AgentSkillSettings.default.minimumToolCallCount
+            save(normalized)
+        }
+        defaults.set(true, forKey: defaultThresholdMigrationKey)
+        return normalized
     }
 
     static func save(_ settings: AgentSkillSettings) {
@@ -88,7 +97,12 @@ enum AgentSkillFileManager {
             .appendingPathComponent(".codex/skills")
     }
 
-    static func createUserSkill(name: String, description: String, body: String) throws -> URL {
+    static func createUserSkill(
+        name: String,
+        description: String,
+        body: String,
+        root: URL = userSkillsRoot
+    ) throws -> URL {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
             throw AgentSkillFileError.invalidName
@@ -98,7 +112,7 @@ enum AgentSkillFileManager {
             throw AgentSkillFileError.invalidName
         }
 
-        let skillDirectory = userSkillsRoot.appendingPathComponent(slug)
+        let skillDirectory = root.appendingPathComponent(slug)
         let skillURL = skillDirectory.appendingPathComponent("SKILL.md")
         if FileManager.default.fileExists(atPath: skillURL.path) {
             throw AgentSkillFileError.alreadyExists(slug)

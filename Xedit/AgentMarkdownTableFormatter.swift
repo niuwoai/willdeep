@@ -32,46 +32,138 @@
 import Foundation
 
 enum AgentMarkdownTableFormatter {
+    /// An inline-Markdown style applied to a run of the laid-out plain
+    /// text. Offsets are *Character* offsets into the formatted string
+    /// (not UTF-16), so callers convert to whatever index space their
+    /// attributed-string API needs.
+    struct StyledSpan: Equatable {
+        enum Style: Equatable { case bold, italic, code }
+        /// Character-offset range into the formatted text.
+        let range: Range<Int>
+        let style: Style
+    }
+
     /// Returns the table as a multi-line string with `│`-separated
     /// columns and a `─┼─` rule under the header. Returns an empty
     /// string when there are no headers and no rows.
+    ///
+    /// Inline Markdown inside cells (`**bold**`, `*italic*`, `` `code` ``)
+    /// is *parsed away* — the returned plain text holds the visible text
+    /// only, and column widths are measured on that visible text so the
+    /// `**` markers don't push columns out of alignment. Use
+    /// `formattedWithSpans` when you also need the style runs to restyle
+    /// an attributed string.
     static func formatted(headers: [String], rows: [[String]]) -> String {
+        formattedWithSpans(headers: headers, rows: rows).text
+    }
+
+    /// Same layout as `formatted`, plus the list of inline-Markdown style
+    /// runs (bold/italic/code) discovered inside the cells, expressed as
+    /// Character-offset ranges into the returned `text`. Both chat
+    /// rendering paths use this to bake `**bold**` etc. into the
+    /// monospaced fallback while keeping the columns aligned.
+    static func formattedWithSpans(
+        headers: [String],
+        rows: [[String]]
+    ) -> (text: String, spans: [StyledSpan]) {
         let allRows: [[String]] = headers.isEmpty ? rows : ([headers] + rows)
-        guard !allRows.isEmpty else { return "" }
+        guard !allRows.isEmpty else { return ("", []) }
         let columnCount = allRows.map { $0.count }.max() ?? 0
-        guard columnCount > 0 else { return "" }
+        guard columnCount > 0 else { return ("", []) }
+
+        let rendered = allRows.map { row in row.map(renderCell) }
 
         var widths = Array(repeating: 0, count: columnCount)
-        for row in allRows {
+        for row in rendered {
             for (index, cell) in row.enumerated() where index < columnCount {
-                widths[index] = max(widths[index], displayWidth(of: cell))
+                widths[index] = max(widths[index], displayWidth(of: cell.visible))
             }
         }
 
-        func renderRow(_ row: [String]) -> String {
-            var pieces: [String] = []
+        var text = ""
+        var spans: [StyledSpan] = []
+        var offset = 0          // running Character offset, == text.count
+        var wroteLine = false
+
+        func append(_ string: String) {
+            text += string
+            offset += string.count
+        }
+
+        func newline() {
+            if wroteLine { append("\n") }
+            wroteLine = true
+        }
+
+        func appendRow(_ row: [RenderedCell]) {
             for index in 0..<columnCount {
-                let cell = index < row.count ? row[index] : ""
-                let padding = max(0, widths[index] - displayWidth(of: cell))
-                pieces.append(cell + String(repeating: " ", count: padding))
+                if index > 0 { append(" │ ") }
+                let cell = index < row.count ? row[index] : RenderedCell(visible: "", spans: [])
+                let cellStart = offset
+                for span in cell.spans {
+                    spans.append(StyledSpan(
+                        range: (cellStart + span.range.lowerBound)..<(cellStart + span.range.upperBound),
+                        style: span.style
+                    ))
+                }
+                append(cell.visible)
+                let padding = max(0, widths[index] - displayWidth(of: cell.visible))
+                if padding > 0 { append(String(repeating: " ", count: padding)) }
             }
-            return pieces.joined(separator: " │ ")
         }
 
-        var lines: [String] = []
         var bodyStartIndex = 0
         if !headers.isEmpty {
-            lines.append(renderRow(headers))
+            newline(); appendRow(rendered[0])
+            newline()
             let rule = widths
                 .map { String(repeating: "─", count: max(1, $0)) }
                 .joined(separator: "─┼─")
-            lines.append(rule)
+            append(rule)
             bodyStartIndex = 1
         }
-        for row in allRows.dropFirst(bodyStartIndex) {
-            lines.append(renderRow(row))
+        for row in rendered.dropFirst(bodyStartIndex) {
+            newline(); appendRow(row)
         }
-        return lines.joined(separator: "\n")
+        return (text, spans)
+    }
+
+    /// A single cell after inline-Markdown parsing: the visible text plus
+    /// the style runs (offsets are Character offsets *within `visible`*).
+    private struct RenderedCell {
+        let visible: String
+        let spans: [StyledSpan]
+    }
+
+    /// Parse a cell's inline Markdown into visible text + style runs.
+    /// Uses `.inlineOnlyPreservingWhitespace` so leading/trailing spaces
+    /// (which matter for column alignment) survive and the cell is never
+    /// promoted to a block element. Falls back to the raw string when the
+    /// parser throws.
+    private static func renderCell(_ raw: String) -> RenderedCell {
+        let options = AttributedString.MarkdownParsingOptions(
+            interpretedSyntax: .inlineOnlyPreservingWhitespace
+        )
+        guard let attributed = try? AttributedString(markdown: raw, options: options) else {
+            return RenderedCell(visible: raw, spans: [])
+        }
+        let visible = String(attributed.characters)
+        var spans: [StyledSpan] = []
+        var offset = 0
+        for run in attributed.runs {
+            let length = attributed.characters[run.range].count
+            defer { offset += length }
+            guard length > 0, let intent = run.inlinePresentationIntent else { continue }
+            let range = offset..<(offset + length)
+            if intent.contains(.code) {
+                spans.append(StyledSpan(range: range, style: .code))
+            } else if intent.contains(.stronglyEmphasized) {
+                spans.append(StyledSpan(range: range, style: .bold))
+            } else if intent.contains(.emphasized) {
+                spans.append(StyledSpan(range: range, style: .italic))
+            }
+        }
+        return RenderedCell(visible: visible, spans: spans)
     }
 
     /// Approximate the visual column width of `text` in a monospaced

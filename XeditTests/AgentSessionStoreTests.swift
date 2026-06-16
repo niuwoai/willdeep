@@ -18,6 +18,7 @@ import Foundation
 @testable import WillDeep
 
 @Suite
+@MainActor
 struct AgentSessionStoreTests {
 
     // MARK: - deriveTitle

@@ -14,6 +14,7 @@ import Foundation
 @testable import WillDeep
 
 @Suite
+@MainActor
 struct AgentToolsCoreTests {
 
     // MARK: - Risk / status enums
@@ -308,7 +309,7 @@ struct AgentToolsCoreTests {
     func sandboxedEnvironmentScrubsSecretsAndUsesTemporaryHome() {
         let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
         let env = AgentSandboxPolicy.sandboxedEnvironment(
-            mode: .workspaceWrite,
+            mode: .workspaceWriteNetwork,
             rootDirectory: root,
             base: [
                 "PATH": "/usr/bin",
@@ -322,7 +323,7 @@ struct AgentToolsCoreTests {
         #expect(env["MY_SECRET"] == nil)
         #expect(env["LANG"] == "en_US.UTF-8")
         #expect(env["HOME"] != "/Users/real")
-        #expect(env["WILLDEEP_AGENT_SANDBOX"] == AgentSandboxMode.workspaceWrite.rawValue)
+        #expect(env["WILLDEEP_AGENT_SANDBOX"] == AgentSandboxMode.workspaceWriteNetwork.rawValue)
         #expect(env["WILLDEEP_WORKSPACE_ROOT"] == root.path)
     }
 
@@ -338,6 +339,31 @@ struct AgentToolsCoreTests {
             #expect(launch.executableURL.path == "/usr/bin/sandbox-exec")
             #expect(launch.arguments.contains("/bin/sh"))
             #expect(launch.arguments.contains("pwd"))
+        } else {
+            #expect(launch.executableURL.path == "/bin/sh")
+        }
+    }
+
+    @Test
+    func sandboxLaunchAllowsNetworkOnlyForWorkspaceNetworkMode() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let root = projectRoot
+            .appendingPathComponent("build", isDirectory: true)
+            .appendingPathComponent("willdeep-workspace-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let launch = AgentSandboxPolicy.shellLaunch(
+            command: "npm install pptxgenjs",
+            mode: .workspaceWriteNetwork,
+            rootDirectory: root
+        )
+        if FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec") {
+            let profile = launch.arguments.first { $0.contains("allow network") } ?? ""
+            #expect(profile.contains("(allow network*)"))
+            #expect(profile.contains(root.path))
         } else {
             #expect(launch.executableURL.path == "/bin/sh")
         }

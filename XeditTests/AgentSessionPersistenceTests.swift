@@ -12,6 +12,7 @@ import Foundation
 @testable import WillDeep
 
 @Suite
+@MainActor
 struct AgentSessionPersistenceTests {
     /// Older session JSON written before plan/goal persistence existed
     /// must still decode — fields default to normal/nil/false.

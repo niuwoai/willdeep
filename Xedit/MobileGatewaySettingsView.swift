@@ -99,7 +99,7 @@ struct MobileGatewaySettingsView: View {
                     .onSubmit {
                         commitPortText()
                     }
-                    .onChange(of: portFieldFocused) { isFocused in
+                    .onChange(of: portFieldFocused) { _, isFocused in
                         if !isFocused {
                             commitPortText()
                         }

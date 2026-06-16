@@ -13,6 +13,7 @@ import Foundation
 @testable import WillDeep
 
 @Suite
+@MainActor
 struct AgentWebToolsTests {
 
     // MARK: - Registry wiring

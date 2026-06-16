@@ -53,7 +53,7 @@ enum EditorInspectorPanelOrder: String, CaseIterable, Codable, Identifiable {
     }
 }
 
-struct EditorOutlineItem: Identifiable, Equatable {
+nonisolated struct EditorOutlineItem: Identifiable, Equatable {
     enum Kind: String {
         case type
         case function
@@ -69,7 +69,7 @@ struct EditorOutlineItem: Identifiable, Equatable {
     let level: Int
 }
 
-enum EditorOutlineExtractor {
+nonisolated enum EditorOutlineExtractor {
     static func outline(for source: String, language: Language?) -> [EditorOutlineItem] {
         guard !source.isEmpty else { return [] }
 

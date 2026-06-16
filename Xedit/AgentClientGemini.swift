@@ -45,7 +45,7 @@ struct GeminiAdapter {
     /// picks a reasonable default), but pinning it keeps long-form
     /// replies bounded the same way the Anthropic adapter does. Lifts
     /// to a settings knob later if it becomes a constraint.
-    private static let defaultMaxOutputTokens = 8192
+    nonisolated private static let defaultMaxOutputTokens = 8192
 
     init(configuration: AgentConfiguration, session: URLSession? = nil) {
         self.configuration = configuration.normalized

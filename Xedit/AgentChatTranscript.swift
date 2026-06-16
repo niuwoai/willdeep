@@ -226,6 +226,16 @@ struct AgentChatTranscript: View {
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                     }
 
+                    if let report = appState.agentLatestTurnReport {
+                        AgentTurnReportCard(report: report)
+                            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+                    }
+
+                    if !appState.agentLearningEvents.isEmpty {
+                        AgentLearningEventsCard(events: appState.agentLearningEvents)
+                            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+                    }
+
                     Color.clear
                         .frame(height: 1)
                         .id(Self.bottomScrollID)
@@ -253,6 +263,9 @@ struct AgentChatTranscript: View {
                 proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
             }
             .onChange(of: appState.agentToolCalls.count) { _, _ in
+                proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+            }
+            .onChange(of: appState.agentLearningEvents.count) { _, _ in
                 proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
             }
         }

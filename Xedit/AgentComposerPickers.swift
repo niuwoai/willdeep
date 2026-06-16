@@ -50,9 +50,9 @@ struct WorkspacePickerPill: View {
             menuContent
         } label: {
             HStack(spacing: 3) {
-                Image(systemName: activeRemoteRuntime == nil ? "folder" : "globe")
+                Image(systemName: workspaceIconName)
                     .font(.system(size: 10))
-                    .foregroundStyle(activeRemoteRuntime == nil ? Color.secondary : Color.accentColor)
+                    .foregroundStyle(workspaceIconTint)
                 Text(label)
                     .font(AgentDesign.secondaryFont)
                     .lineLimit(1)
@@ -90,9 +90,8 @@ struct WorkspacePickerPill: View {
     }
 
     private var helpText: String {
-        if let runtime = activeRemoteRuntime,
-           case .remote(_, let path) = appState.activeRuntime?.workspaceLocation {
-            return "\(runtime.displayName): \(path)"
+        if let remote = activeRemoteWorkspace {
+            return WorkspacePresentation.remoteHelp(runtime: remote.runtime, path: remote.path)
         }
         if let localPath = appState.activeRuntime?.workspaceLocation?.localPath {
             return localPath
@@ -211,6 +210,9 @@ struct WorkspacePickerPill: View {
                     } label: {
                         HStack {
                             Text("\(runtime.displayName): \(runtime.defaultWorkspacePath)")
+                            Text(WorkspacePresentation.remoteBadge(for: runtime))
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(WorkspacePresentation.remoteTint(for: runtime))
                             if activeRemoteRuntime?.id == runtime.id {
                                 Image(systemName: "checkmark")
                             }
@@ -234,10 +236,7 @@ struct WorkspacePickerPill: View {
     }
 
     private var activeRemoteRuntime: RuntimeDescriptor? {
-        guard case .remote(let runtimeID, _) = appState.activeRuntime?.workspaceLocation else {
-            return nil
-        }
-        return AgentRuntimeStore.descriptor(id: runtimeID)
+        activeRemoteWorkspace?.runtime
     }
 
     private var activeLocalWorkspaceURL: URL? {
@@ -258,12 +257,31 @@ struct WorkspacePickerPill: View {
     }
 
     private var activeRemoteWorkspaceLabel: String? {
-        guard let runtime = activeRemoteRuntime,
-              case .remote(_, let path) = appState.activeRuntime?.workspaceLocation else {
+        guard let remote = activeRemoteWorkspace else {
             return nil
         }
-        let name = URL(fileURLWithPath: path).lastPathComponent
-        return "\(runtime.displayName): \(name.isEmpty ? path : name)"
+        return WorkspacePresentation.remoteDisplayName(runtime: remote.runtime, path: remote.path)
+    }
+
+    private var activeRemoteWorkspace: (runtime: RuntimeDescriptor?, path: String)? {
+        guard case .remote(let runtimeID, let path) = appState.activeRuntime?.workspaceLocation else {
+            return nil
+        }
+        return (AgentRuntimeStore.descriptor(id: runtimeID), path)
+    }
+
+    private var workspaceIconName: String {
+        if let remote = activeRemoteWorkspace {
+            return WorkspacePresentation.remoteSymbolName(for: remote.runtime)
+        }
+        return "folder"
+    }
+
+    private var workspaceIconTint: Color {
+        if let remote = activeRemoteWorkspace {
+            return WorkspacePresentation.remoteTint(for: remote.runtime)
+        }
+        return Color.secondary
     }
 
     /// Union of (a) folder paths that appear as workspaceRootPath on

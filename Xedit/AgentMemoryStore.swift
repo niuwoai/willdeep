@@ -481,7 +481,9 @@ enum AgentMemoryEngine {
     private static func candidateSentences(from text: String) -> [String] {
         let markers = [
             "remember", "记住", "以后", "always", "never", "must", "should",
-            "prefer", "use ", "don't", "不要", "必须", "统一", "规则", "约定"
+            "prefer", "use ", "don't", "不要", "必须", "统一", "规则", "约定",
+            "希望", "默认", "优先", "每次", "下次", "遇到", "自动", "自主",
+            "workflow", "skill", "mcp", "whenever", "next time", "by default"
         ]
         return text
             .components(separatedBy: CharacterSet(charactersIn: "\n。.!?；;"))

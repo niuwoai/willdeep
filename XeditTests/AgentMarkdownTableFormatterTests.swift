@@ -151,4 +151,83 @@ struct AgentMarkdownTableFormatterTests {
         #expect(!AgentMarkdownTableFormatter.isFullWidth(Unicode.Scalar(0x30))) // 0
         #expect(!AgentMarkdownTableFormatter.isFullWidth(Unicode.Scalar(0x20))) // space
     }
+
+    /// Inline `**bold**` markers are parsed away in the plain text — the
+    /// fallback layout shows the visible word, never the literal asterisks.
+    @Test
+    func boldMarkersAreStrippedFromPlainText() {
+        let out = AgentMarkdownTableFormatter.formatted(
+            headers: ["类别", "说明"],
+            rows: [["**截图**", "大量截图文件"]]
+        )
+        #expect(!out.contains("**"))
+        #expect(out.contains("截图"))
+    }
+
+    /// Column widths are measured on the *visible* text, not on the raw
+    /// markers — a `**bold**` cell aligns with a plain cell of the same
+    /// visible length below it.
+    @Test
+    func columnWidthIgnoresInlineMarkers() {
+        let out = AgentMarkdownTableFormatter.formatted(
+            headers: ["A"],
+            rows: [["**hello**"], ["world"]]
+        )
+        let lines = out.split(separator: "\n", omittingEmptySubsequences: false)
+        // header + rule + 2 body rows
+        #expect(lines.count == 4)
+        let row1 = AgentMarkdownTableFormatter.displayWidth(of: String(lines[2]))
+        let row2 = AgentMarkdownTableFormatter.displayWidth(of: String(lines[3]))
+        #expect(row1 == row2)
+        #expect(row1 == 5) // "hello" / "world"
+    }
+
+    /// `formattedWithSpans` reports a bold run covering exactly the visible
+    /// characters of the cell, at the right offset in the laid-out text.
+    @Test
+    func reportsBoldSpanOverVisibleText() {
+        let layout = AgentMarkdownTableFormatter.formattedWithSpans(
+            headers: [],
+            rows: [["**hi**"]]
+        )
+        #expect(layout.text == "hi")
+        #expect(layout.spans.count == 1)
+        let span = layout.spans[0]
+        #expect(span.style == .bold)
+        #expect(span.range == 0..<2)
+    }
+
+    /// Spans land at the correct global offset once a cell sits after a
+    /// column separator, so attributes don't drift onto the wrong run.
+    @Test
+    func spanOffsetAccountsForColumnSeparator() {
+        let layout = AgentMarkdownTableFormatter.formattedWithSpans(
+            headers: [],
+            rows: [["ab", "**cd**"]]
+        )
+        #expect(layout.text == "ab │ cd")
+        #expect(layout.spans.count == 1)
+        let span = layout.spans[0]
+        #expect(span.style == .bold)
+        // "ab │ " == 5 chars, then "cd".
+        #expect(span.range == 5..<7)
+    }
+
+    /// Inline code and italic are recognised alongside bold.
+    @Test
+    func reportsCodeAndItalicSpans() {
+        let codeLayout = AgentMarkdownTableFormatter.formattedWithSpans(
+            headers: [],
+            rows: [["`x`"]]
+        )
+        #expect(codeLayout.text == "x")
+        #expect(codeLayout.spans == [.init(range: 0..<1, style: .code)])
+
+        let italicLayout = AgentMarkdownTableFormatter.formattedWithSpans(
+            headers: [],
+            rows: [["*y*"]]
+        )
+        #expect(italicLayout.text == "y")
+        #expect(italicLayout.spans == [.init(range: 0..<1, style: .italic)])
+    }
 }

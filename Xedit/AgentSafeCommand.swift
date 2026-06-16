@@ -14,13 +14,13 @@
 
 import Foundation
 
-enum CommandSafety: Equatable {
+nonisolated enum CommandSafety: Equatable, Sendable {
     case alwaysSafe
     case alwaysDangerous
     case needsJudgment
 }
 
-enum SafeCommand {
+nonisolated enum SafeCommand {
     // MARK: - Public API
 
     /// Classify a shell command line. The shell line is split on `|`,
@@ -331,7 +331,7 @@ enum SafeCommand {
         case "go":
             return classifyGo(tokens: tokens)
         case "npm", "pnpm", "yarn":
-            return classifyPackageManager(firstToken: firstToken, tokens: tokens)
+            return AgentPackageCommandPolicy.classify(firstToken: firstToken, tokens: tokens)
         case "xargs":
             // xargs by itself wraps another command — defer to judgment.
             return .needsJudgment
@@ -435,27 +435,6 @@ enum SafeCommand {
             }
         }
         return .alwaysSafe
-    }
-
-    private static func classifyPackageManager(firstToken: String, tokens: [String]) -> CommandSafety {
-        guard tokens.count >= 2 else { return .alwaysSafe } // help/usage
-        let lowered = tokens.map { $0.lowercased() }
-        let safeScripts: Set<String> = [
-            "dev", "build", "test", "start", "preview", "lint",
-            "format", "typecheck", "check"
-        ]
-
-        if firstToken == "yarn" {
-            if lowered.count >= 3, lowered[1] == "run" {
-                return safeScripts.contains(lowered[2]) ? .alwaysSafe : .needsJudgment
-            }
-            return safeScripts.contains(lowered[1]) ? .alwaysSafe : .needsJudgment
-        }
-
-        guard lowered.count >= 3, lowered[1] == "run" else {
-            return .needsJudgment
-        }
-        return safeScripts.contains(lowered[2]) ? .alwaysSafe : .needsJudgment
     }
 
     /// Minimal POSIX-ish tokenizer: splits on whitespace outside quotes.

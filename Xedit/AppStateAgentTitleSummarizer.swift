@@ -176,7 +176,7 @@ extension AppState {
             content: "USER:\n\(userClip)\n\nASSISTANT:\n\(assistantClip)"
         )
 
-        let client = AgentClient(configuration: configuration)
+        let client = await AgentClient(configuration: configuration)
         let collector = CompressionSummaryCollector()
         do {
             try await client.streamChat(messages: [system, payload]) { event in

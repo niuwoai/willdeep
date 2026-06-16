@@ -13,7 +13,7 @@ import Foundation
 /// Coarse category used purely for grouping. ask_user and patch
 /// proposals are intentionally outside the grouped families — they
 /// need explicit user interaction and must always render full-size.
-enum AgentToolKind: Equatable {
+nonisolated enum AgentToolKind: Equatable, Sendable {
     case runCommand
     case fileExploration
     case subagent
@@ -168,7 +168,7 @@ enum AgentToolCallGrouping {
     }
 }
 
-struct AgentToolActivitySummary: Equatable {
+nonisolated struct AgentToolActivitySummary: Equatable {
     var readFileCount: Int
     var listedDirectoryCount: Int
     var searchCount: Int

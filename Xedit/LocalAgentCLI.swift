@@ -10,7 +10,7 @@
 import Foundation
 
 struct LocalAgentCLI: Identifiable, Equatable {
-    enum Integration: Equatable {
+    nonisolated enum Integration: Equatable, Sendable {
         case directTool(String)
         case discoveryOnly
 

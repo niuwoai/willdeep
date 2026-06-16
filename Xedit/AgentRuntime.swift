@@ -70,6 +70,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var approvalMode: AgentApprovalMode = .smart
     @Published var currentPlan: AgentPlan?
     @Published var currentGoal: AgentGoal?
+    @Published var learningEvents: [AgentLearningEvent] = []
     @Published var sessionModelOverride: String?
     /// True after the runtime successfully applied at least one patch.
     /// Drives the "正在编辑 / N 个文件已更改" worktree card so empty
@@ -131,6 +132,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.approvalMode = session.approvalMode
         self.currentPlan = session.currentPlan
         self.currentGoal = session.currentGoal
+        self.learningEvents = session.learningEvents
     }
 
     /// Move an idle/new session to another workspace. Used by the
@@ -167,6 +169,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.approvalMode = approvalMode
         session.currentPlan = currentPlan
         session.currentGoal = currentGoal
+        session.learningEvents = learningEvents
         session.updatedAt = Date()
         // Two title sources fight for this slot:
         //   1. User-set (sidebar rename) — `titleIsUserSet == true`,

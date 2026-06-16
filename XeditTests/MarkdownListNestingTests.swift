@@ -11,6 +11,7 @@ import Foundation
 @testable import WillDeep
 
 @Suite
+@MainActor
 struct MarkdownListNestingTests {
     @Test
     func topLevelListItemsAreIndentZero() {

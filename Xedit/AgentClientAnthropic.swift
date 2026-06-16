@@ -41,7 +41,7 @@ struct AnthropicMessagesAdapter {
     /// long-form replies that would otherwise truncate are extremely
     /// rare in an agent loop (we'd cycle through another tool call
     /// first). Bump via settings if it becomes a problem.
-    private static let defaultMaxTokens = 4096
+    nonisolated private static let defaultMaxTokens = 4096
 
     init(configuration: AgentConfiguration, session: URLSession? = nil) {
         self.configuration = configuration.normalized

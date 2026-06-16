@@ -1,5 +1,717 @@
 # Changelog
 
+## 1.78.0-rc96 - 2026-06-16
+
+### Fixed
+
+- 修复 Agent 对话中 Markdown 表格单元格内的 **加粗**、*斜体*、`行内代码` 不渲染、直接显示 `**` 等字面标记的问题。三条渲染路径里此前只有 SwiftUI 预览窗格支持单元格内联格式；流式助手气泡和 TextKit 聊天历史都把表格当作纯文本输出。
+- `AgentMarkdownTableFormatter` 现在解析单元格内联 Markdown：按「可见文本」（剥离 `**`/`*`/`` ` `` 标记后）计算列宽，保证 CJK/ASCII 对齐不被标记撑歪，并额外产出样式 span，让两条 Agent 渲染路径把加粗/斜体/代码属性映射回对齐后的等宽文本。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc96`。
+
+## 1.78.0-rc95 - 2026-06-16
+
+### Added
+
+- 新增 `AgentLearningAction` 与 `AgentLearningActionPresentation`，让自动学习事件不再只是文本日志，而是结构化记录下一步动作：已保存 memory、已创建/候选 skill、MCP 搜索/安装建议、目标、搜索词、工具名和是否需要用户确认。
+
+### Changed
+
+- 自动 memory、skill 创建/跳过/失败、MCP 建议都会携带 action metadata；transcript 学习卡、Settings review 队列和最新 turn report 会显示具体学习动作，用户能区分“已经自动做了”和“建议下一步确认”。
+- `AgentSelfLearningTests` 覆盖 action 持久化、旧 session 无 action 字段兼容、MCP 安装建议需用户确认、skill 创建/跳过的结构化动作。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc95`。
+
+## 1.78.0-rc94 - 2026-06-16
+
+### Changed
+
+- Agent 对话里的 Markdown 链接现在有一个**柔和的颜色**做区分（系统链接蓝往正文色调和 30%，自适应明暗），不再跟正文同色。只对真实 URL 链接生效；复制代码 / 重试 / 表格等内部操作链接保持原样不受影响。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc94`。
+
+## 1.78.0-rc93 - 2026-06-16
+
+### Added
+
+- 新增 `AgentTurnReport.swift`，从最近一轮用户消息之后的 assistant/tool/learning 状态生成轻量 turn audit：模型、provider、交互/审批模式、耗时、token、工具状态、风险分布、审批来源、sandbox mode 和自学习动作。
+- 新增 `AgentTurnReportView.swift`，在 transcript 底部展示最近一轮 Agent turn report，并支持复制报告文本，方便排查“模型为什么这么做、哪些工具自动跑了、哪些动作需要用户批准”。
+- 新增 `AgentTurnReportTests.swift`，覆盖最近一轮过滤、tool/approval/sandbox 统计和 learning event 收集。
+
+### Changed
+
+- `AgentChatTranscript` 在学习事件卡片前展示最新 turn report，P2 可观测性从 CI 报告推进到用户可见的单轮审计。
+- Agent harness 优先级文档更新：turn report 已有第一版，下一步聚焦精确 retry 计数、召回来源、E2E smoke 和失败修复指引。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc93`。
+
+## 1.78.0-rc92 - 2026-06-16
+
+### Fixed
+
+- 修复"会话丢失"问题：用户消息此前只在内存里 append，要等整轮跑完才在 `runAgentLoop` 的 `defer` 落盘。若这一轮卡住/超时（常见于翻墙代理抖动）而 App 在结束前被关闭，`defer` 不执行，盘上只剩新建会话时存的空占位符，随后会被 `pruneEmptyAgentSessions` 当作空 "New Chat" 删除，整条会话连同提问一起消失。现在改为**发送消息时立即落盘**（`dispatchAgentMessage` 中 append 后即 `persistAgentSession`），会话不再可能被误删。
+
+### Changed
+
+- TLS / 握手失败的错误文案改写得两头兼顾：既提示翻墙/自签代理的连接抖动会自动重试，也提示镜像服务证书未被信任时需先信任证书，避免把代理抖动误导成"去装证书"。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc92`。
+
+## 1.78.0-rc91 - 2026-06-16
+
+### Added
+
+- 新增 `scripts/version_consistency.rb`，校验 Xcode 6 个 `MARKETING_VERSION`、Go agent `Version`、Help bundle、README badge、product-overview、Mobile Gateway 文档、Agent harness 优先级文档和 CHANGELOG 顶部版本是否一致，并输出 `version_report.md` 与 `version_report.json`。
+- `scripts/run_tests.sh` 在复杂度守门后自动执行版本一致性检查，避免本地测试时漏掉 rc 号同步。
+- GitHub Actions `Tests` workflow 增加版本一致性检查和 `willdeep-agent` 的 `go test ./...`，并把版本报告追加到 job summary 与 artifacts。
+
+### Changed
+
+- product overview 与 Agent harness 优先级文档将 P2 CI 状态更新为已覆盖复杂度守门、版本一致性、Go test 和 XeditTests；仍待补高风险 E2E 和更细的 turn report。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc91`。
+
+## 1.78.0-rc90 - 2026-06-16
+
+### Added
+
+- 新增 `scripts/complexity_guard.rb`，按 AGENTS.md 的 2000 行软阈值、3000 行硬阈值扫描 Swift / Go / Ruby / Shell / workflow 源文件，并输出 `complexity_report.md` 与 `complexity_report.json`。
+- `scripts/run_tests.sh` 在运行 Xcode 测试前自动执行复杂度守门，防止热点文件重新悄悄膨胀。
+- GitHub Actions `Tests` workflow 增加复杂度守门步骤，并把复杂度 Markdown/JSON 报告追加到 job summary 与 artifacts。
+
+### Changed
+
+- Agent harness 优先级文档将 P0 复杂度治理更新为“已有自动化守门”，P2 测试/CI 状态更新为已有基础 CI、仍缺 Go/version consistency/E2E 补齐。
+- product overview 更新测试与 CI 说明，记录复杂度报告和当前 0 个文件超过软/硬阈值。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc90`。
+
+## 1.78.0-rc89 - 2026-06-16
+
+### Added
+
+- 新增 `AgentLearningReviewStore.swift`，把回合末自动学习事件写入持久 review 队列；队列支持 pending / reviewed / dismissed 状态、同内容去重和最多 200 条保留。
+- 新增 `AgentLearningReviewSettingsView.swift`，在 Memory 设置页展示待审核的 memory、skill 和 MCP discovery 学习项，并支持复制详情、标记已审核、忽略和清理已审核记录。
+
+### Changed
+
+- `AppStateAgentLearning` 在更新 session 学习事件时同步入队 review 项，避免自动 memory、skill 和 MCP 建议只出现在 transcript 里。
+- `AgentSelfLearningTests` 增加 review store 入队去重、标记已审核和清理覆盖。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc89`。
+
+## 1.78.0-rc88 - 2026-06-16
+
+### Changed
+
+- 新增 `AgentLearningEvent` 和 `AgentLearningEventViews.swift`，把回合末自动 memory、skill 和 MCP 建议结果保存到 session，并在 transcript 底部展示最近学习记录。
+- `AgentSelfLearning` 不再静默吞掉自动 skill 创建结果：创建成功、重复跳过、证据不足跳过和失败都会生成可见学习事件；MCP 缺口会展示具体 `Search query` 和需要用户确认安装/配置的边界。
+- `AgentSession` / `AgentRuntime` 持久化最近学习事件，切换会话或重启后仍能审计本会话学过什么。
+- `AgentSelfLearningTests` 增加学习事件、低证据 skill 跳过解释和 session 编解码覆盖。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc88`。
+
+## 1.78.0-rc87 - 2026-06-16
+
+### Changed
+
+- 新增 `AgentMessageSupportViews.swift`，将 long-token breaker、streaming cursor、用户图片描述折叠、message footer、queued message row 和 empty state 从 `AgentMessageView.swift` 拆出。
+- `AgentMessageView.swift` 从约 1080 行降到约 527 行，主文件重新聚焦 per-message bubble、assistant Markdown body 和单 `AttributedString` renderer；消息 support 视图独立维护，便于后续添加自学习可见报告前继续控住 UI 复杂度。
+- Agent harness 优先级文档更新 P0 复杂度治理进度：message support 已拆分，下一步观察 session lifecycle / routine / 窗口级状态聚合。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc87`。
+
+## 1.78.0-rc86 - 2026-06-16
+
+### Changed
+
+- 新增 `AgentComposerPaletteViews.swift`，将 slash command palette、`@` attachment picker、composer skill/file chips 和 sidebar session mode badges 从 `AgentModeComposerView.swift` 拆出。
+- `AgentModeComposerView.swift` 从约 1103 行降到约 687 行，主文件重新聚焦 composer 容器、输入协调、粘贴/拖拽/图片附加、worktree/goal/status bar 和 context indicator。
+- Agent harness 优先级文档更新 P0 复杂度治理进度：composer palette/chip/badge 已完成第一轮拆分，下一步继续观察 `AgentMessageView.swift` 与 session 状态聚合。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc86`。
+
+## 1.78.0-rc85 - 2026-06-16
+
+### Changed
+
+- `AgentSelfLearning` 新增 turn audit 结构化结果，统一产出本轮 memory 策略、skill 候选、MCP 建议候选和相关工具证据数量，避免自学习只停留在 prompt 文案里。
+- 自动 MCP 缺口捕获会额外沉淀带 `Search query` 和 `search_mcp_servers` 下一步的具体建议记忆；遇到 GitHub/Gmail/数据库/Figma/浏览器/ERP 等外部能力缺口时，后续回合能检索到更明确的 MCP discovery 路径。
+- 默认 skill 自动提取门槛从 5 次工具调用降到 3 次工具调用，并对仍停在旧默认值的本地设置做一次性迁移；显式要求“沉淀 skill”的三步流程和普通可复用三步 workflow 都能生成本地 skill 候选。
+- `AgentSelfLearningTests` 增加 turn audit、MCP search query 建议和默认三步 skill workflow 回归覆盖。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc85`。
+
+## 1.78.0-rc84 - 2026-06-16
+
+### Changed
+
+- 新增 `AgentMCPModels.swift`，将 MCP transport/source/server config/trust/settings 模型从 `AgentMCPBridge.swift` 拆出。
+- 新增 `AgentMCPServerDirectory.swift`，将 MCP settings store、Keychain credential reference 管理、Cursor/Codex/User server discovery 与 TOML/JSON 解析从 bridge 文件拆出。
+- `AgentMCPBridge.swift` 从 1130 行降到 440 行，重新聚焦 `list_mcp_servers`、`list_mcp_tools`、`call_mcp_tool` 以及 stdio / streamable-http JSON-RPC 调用；MCP 配置、发现和 credential 行为保持不变。
+- Agent harness 优先级文档更新 P0 复杂度治理进度：MCP bridge 已完成 models/settings/directory 第一轮拆分，下一步继续观察 composer/message 高密度 UI 和执行状态聚合。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc84`。
+
+## 1.78.0-rc83 - 2026-06-16
+
+### Changed
+
+- 新增 `AgentToolAuthorizationSupport.swift`，将 sandbox audit JSONL logging、命令 Always Allow 签名、tool-level 签名和 MCP read-only heuristics 从 `AgentToolAuthorization.swift` 拆出。
+- `AgentToolAuthorization.swift` 从 1177 行降到 869 行，保留 sandbox policy、执行边界决策和 Always Allow 持久记录模型；审批语义和调用点保持不变。
+- Agent harness 优先级文档更新 P0 复杂度治理进度：审批/授权边界已完成一轮低风险拆分，下一刀继续观察 `AgentMCPBridge.swift` 的 models/settings/directory 边界。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc83`。
+
+## 1.78.0-rc82 - 2026-06-16
+
+### Changed
+
+- Agent system prompt 将自学习从“任务结束时考虑”提升为 meaningful task 的必经 learning checkpoint：遇到长期偏好/规则调用 `add_memory`，遇到可复用多步骤 workflow 调用 `create_user_skill`，遇到缺外部集成先 `list_mcp_servers`、再 `search_mcp_servers` / `suggest_mcp_server`。
+- 回合末自学习不再只沉淀一条泛化 MCP 策略；同一句“自动 memory / skill / MCP 建议”会拆成可检索的 memory 策略、skill 策略和 MCP discovery 策略，并额外识别 GitHub、Gmail、数据库、Figma、浏览器、ERP 等外部能力缺口。
+- 自动 skill 候选在用户明确要求“创建/沉淀 skill”时允许三步工具链路成形，不再完全受默认 5 次工具调用门槛限制。
+- `AgentSelfLearningTests` 补充具体 self-learning memory 拆分、外部集成缺口 MCP discovery、显式 skill 沉淀三步 workflow 等回归覆盖。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc82`。
+
+## 1.78.0-rc81 - 2026-06-16
+
+### Changed
+
+- 新增 `AppStateAgentDispatchQueue.swift`，将 provider 并发槽和待派发队列 draining 从 `AppStateAgentLoop.swift` 拆出。
+- 新增 `AppStateAgentRequestEstimates.swift`，将当前 turn 配置解析、模型状态、请求消息预估、token 估算和上下文窗口启发式从主 loop 拆出。
+- `AppStateAgentLoop.swift` 从 1251 行降到 986 行，主文件重新聚焦派发入口、图片降级、主异步 loop、工具等待和子 agent 执行。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc81`。
+
+## 1.78.0-rc80 - 2026-06-16
+
+### Changed
+
+- 新增 `AgentProviderLibraryModels.swift`，将 `AgentProviderEntry`、`AgentProviderLibrary` 和 provider library 专用字符串 helper 从 `AgentModels.swift` 拆出。
+- `AgentModels.swift` 从 1307 行降到 1090 行，主模型文件重新聚焦 Agent session、Plan/Goal、provider configuration、patch/worktree/error 和附件模型。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc80`。
+
+## 1.78.0-rc79 - 2026-06-16
+
+### Changed
+
+- 新增 `AgentChatHistoryChromeRenderer.swift`，将 TextKit 聊天历史的 header/avatar、bubble paragraph style、footer chrome、文本附件和工具组 chrome 从 `AgentChatHistoryFormatter.swift` 拆出。
+- `AgentChatHistoryFormatter.swift` 从 1330 行降到 825 行，主文件重新聚焦 transcript cache、message render loop、plain/tool body 和 Markdown block baker。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc79`。
+
+## 1.78.0-rc78 - 2026-06-16
+
+### Changed
+
+- 新增 `AgentMobileGatewayDesktopPeer.swift`，将 Mobile Gateway 桌面 WebSocket peer、断线重连、快照发布和消息收发从 `AgentMobileGatewayBridge.swift` 拆出。
+- 新增 `AppStateMobileGatewayController.swift`，将移动端命令落回 AppState 的安全适配层从 command router 中拆出，继续保留 workspace path guard、danger confirm、patch/tool/job/file/queue 等既有安全入口。
+- `AgentMobileGatewayBridge.swift` 从 1332 行降到 593 行，重新聚焦移动端 command router、snapshot envelope 和 payload JSON 转换。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc78`。
+
+## 1.78.0-rc77 - 2026-06-16
+
+### Changed
+
+- 新增 `AgentRemoteRuntimeModels.swift`，将远端 runtime 的平台/架构/传输枚举、capabilities、descriptor、workspace location、远端路径校验、Keychain token store 和 runtime descriptor store 从 `AgentRemoteRuntime.swift` 拆出。
+- `AgentRemoteRuntime.swift` 从 1338 行降到 840 行，重新聚焦 SSH / daemon backend 的远端工具执行、probe、命令运行和 daemon wire DTO。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc77`。
+
+## 1.78.0-rc76 - 2026-06-16
+
+### Changed
+
+- 新增 `AppStateAgentRuntimeAccessors.swift`，将 AppState 上兼容旧 API 的 AgentRuntime 转发访问器拆出，包括 `activeRuntime`、messages、patch/tool state、composer pending attachments、Plan/Goal、queued messages、worktree summary、tool waiter 和 request task。
+- `AppState.swift` 从 1343 行降到 1182 行，主状态枢纽进一步聚焦窗口级存储、初始化、订阅和文件/编辑器工作流；Agent per-session runtime 兼容层独立维护。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc76`。
+
+## 1.78.0-rc75 - 2026-06-16
+
+### Added
+
+- 新增 `search_mcp_servers` 只读工具：Agent 在缺少外部系统能力时可以先搜索 MCP server 候选、查看当前已配置 MCP 摘要，并获得“建议安装/配置/验证”的下一步指引；没有 web search key 时也会返回可用查询和 fallback 建议。
+- 回合末自学习新增 MCP/外部能力缺口记忆：当用户明确要求“自动 memory / skill / MCP 建议”这类 harness 策略时，会沉淀为长期记忆，后续 turn 可被 memory retrieval 命中。
+- `AgentSelfLearningTests` 新增 MCP 搜索 dry-run 和自动 MCP 能力缺口记忆测试，避免自学习只停留在 prompt 约束。
+
+### Changed
+
+- Agent system prompt 将 MCP 能力缺口路径调整为“`search_mcp_servers` → `suggest_mcp_server` → 用户确认配置 → `list_mcp_servers` / `list_mcp_tools` 验证”，明确安装和凭据仍需用户确认。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc75`。
+
+## 1.78.0-rc74 - 2026-06-16
+
+### Changed
+
+- 新增 `AppStateAgentComposer.swift`，将 Agent composer 的发送入口、skill/file/text 附件、编辑器选区附件和 workspace overview prompt 组装从 `AppStateAgentSessions.swift` 拆出。
+- `AppStateAgentSessions.swift` 从约 1353 行降到 1076 行，重新聚焦 provider library、Plan/Goal、worktree review、queue、session lifecycle、routine 和模型选择。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc74`。
+
+## 1.78.0-rc73 - 2026-06-16
+
+### Changed
+
+- 新增 `AgentStreamingMessageBuffer.swift`，将 assistant 流式 delta 批量刷新的缓冲类型从 `AppStateAgentLoop.swift` 拆出。
+- 新增 `AppStateAgentLearning.swift`，将 memory retrieval query、turn-end automatic memory 捕获和 skill 候选提取从主 loop 拆出。
+- `AppStateAgentLoop.swift` 从约 1386 行降到 1251 行，主循环继续聚焦 dispatch、provider round、tool execution 和队列释放。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc73`。
+
+## 1.78.0-rc72 - 2026-06-16
+
+### Changed
+
+- 新增 `AgentFileTools.swift`，将 `search_files`、`grep_files`、`read_file`、`list_directory` 和 `git_status` 从 `AgentTools.swift` 拆出，集中管理 workspace 路径解析、目录遍历、读取限制和 filename glob 逻辑。
+- `AgentTools.swift` 从约 1261 行降到 810 行，工具 runner 主文件重新聚焦命令运行、委派 agent 调用和后台任务管理，继续把“代码复杂度上升”作为最高优先级风险治理。
+- 新增 `docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md`，明确 harness 改进优先级：P0 先治理复杂度与执行自主性，P1 补自学习与 MCP 发现闭环，P2 收口可观测性与 CI/E2E。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc72`。
+
+## 1.78.0-rc71 - 2026-06-16
+
+### Added
+
+- 新增 `AgentSelfLearning.swift`，提供 `add_memory`、`create_user_skill`、`suggest_mcp_server` 三个自学习工具：Agent 可主动沉淀长期记忆、创建本地用户 skill，并在缺少外部集成能力时记录 MCP 建议。
+- Agent system prompt 明确要求在任务结束时评估是否需要保存 memory、提炼 reusable skill 或建议 MCP；这些动作走工具调用和现有审批链路，不做静默外部安装。
+- 回合收尾学习从“仅无 tool call 的正常结束”扩展为每个有效回合退出时捕获最后一条 assistant 回复；自动 skill 提取设置开始真正生效，会在多工具、可复用 workflow 信号出现时生成本地 skill 候选。
+- 自动 memory 候选识别补充“希望 / 默认 / 优先 / 每次 / 下次 / 遇到 / 自动 / 自主 / workflow / skill / MCP”等中英文偏好信号。
+- 新增 `AgentSelfLearningTests.swift` 覆盖 memory 工具落库、skill 写入脱敏、MCP 建议记忆、中文偏好候选和自动 skill 候选生成。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc71`。
+
+## 1.78.0-rc70 - 2026-06-16
+
+### Changed
+
+- 新增 `AgentToolCallViews.swift`，将实时 Agent transcript 的工具调用分组和工具调用卡片从 `AgentPanelView.swift` 拆出。
+- `AgentPanelView.swift` 从约 1459 行降到 771 行，右侧面板主文件重新聚焦 header、transcript、composer、worktree/file activity 等容器职责。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc70`。
+
+## 1.78.0-rc69 - 2026-06-16
+
+### Changed
+
+- 新增 `AppStateEditorPresentation.swift`，将 AppState 的 Agent/编辑器展示状态、预览/语言选择计算属性和 Find/Quick Open/Go to Line/Command Palette/Symbol Jump 等轻量 UI 命令拆出。
+- `AppState.swift` 从约 1537 行降到 1343 行，主状态枢纽进一步聚焦持久状态、初始化、文件/标签页和较重的工作流操作。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc69`。
+
+## 1.78.0-rc68 - 2026-06-16
+
+### Changed
+
+- 新增 `EditorCoreBehaviorTests.swift`，将文件大小/二进制/编码、编辑器设置、外部打开、语法高亮、scope guide 和 outline extractor 测试从 `XeditTests.swift` 拆出。
+- `XeditTests.swift` 从约 1782 行降到 1115 行，主测试 suite 重新聚焦 Agent/集成行为；编辑器核心行为回归独立维护。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc68`。
+
+## 1.78.0-rc67 - 2026-06-16
+
+### Changed
+
+- 新增 `EditorSettingsProviderLibrary.swift`，将 provider library 列表与右侧 provider entry 编辑器从 `EditorSettingsView.swift` 拆出。
+- `EditorSettingsView.swift` 从约 1516 行降到 779 行，设置页主文件重新聚焦 tab 组装、Agent/provider buffer 和保存/拉取逻辑。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc67`。
+
+## 1.78.0-rc66 - 2026-06-16
+
+### Changed
+
+- 新增 `EditorSettingsSupport.swift`，将 Settings 的键盘关闭监控、窗口 resizable shim 和可显示密钥输入框从 `EditorSettingsView.swift` 拆出。
+- `EditorSettingsView.swift` 从约 1645 行降到 1516 行，主文件进一步聚焦设置 tab、Agent/provider buffer 和保存/拉取逻辑。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc66`。
+
+## 1.78.0-rc65 - 2026-06-16
+
+### Changed
+
+- 新增 `AgentMessageModels.swift`，将 Agent 消息、图片/文本附件、provider tool call 与排队消息模型从 `AgentModels.swift` 拆出。
+- `AgentModels.swift` 从约 1603 行降到 1307 行，主文件继续聚焦 session、plan/goal、provider library、patch/worktree 和 error 模型。
+- `AgentTextAttachment` 的 byte/display/model block 纯值属性标记为非隔离，清理拆分后暴露的 Swift 6 actor isolation warning。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc65`。
+
+## 1.78.0-rc64 - 2026-06-16
+
+### Changed
+
+- 新增 `AgentChatToolSummaryFormatter.swift`，将 Agent 聊天历史里的工具调用折叠标题、展开参数摘要和 JSON 参数压缩逻辑从 `AgentChatHistoryFormatter.swift` 拆出。
+- 新增 `AgentMarkdownNormalizer.swift`，将模型输出 Markdown 预处理从 TextKit 渲染器主文件拆出。
+- `AgentChatHistoryFormatter.swift` 从约 1639 行降到 1333 行，主文件聚焦 transcript 的 attributed-string 排版、气泡 chrome、代码块和表格渲染。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc64`。
+
+## 1.78.0-rc63 - 2026-06-16
+
+### Changed
+
+- 新增 `AgentToolModels.swift`，将 Agent 工具风险模型、工具上下文、调用记录和 `AgentJSONValue` 从 `AgentTools.swift` 拆出。
+- `AgentTools.swift` 从约 1619 行降到 1255 行，工具 runner 文件聚焦内建工具执行、文件遍历、命令运行和委派 agent 调用。
+- `AnthropicMessagesAdapter` / `GeminiAdapter` 的默认 token 常量与 `AgentToolActivitySummary` 标记为非隔离纯值，清理相关 Swift 6 actor isolation warning。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc63`。
+
+## 1.78.0-rc62 - 2026-06-16
+
+### Changed
+
+- 新增 `AppStateAgentToolDecisions.swift`，将 Agent 工具审批、Always Allow、自动批准来源和安全 judge 配置从 `AppStateAgentLoop.swift` 拆出。
+- `AppStateAgentLoop.swift` 从约 1666 行降到 1366 行，执行 loop 主文件重新聚焦消息派发、流式请求、工具执行和回合收尾。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc62`。
+
+## 1.78.0-rc61 - 2026-06-16
+
+### Changed
+
+- 新增 `AgentPanelJobs.swift`，将右侧 Agent panel 的后台任务 drawer 和 job row 从 `AgentPanelView.swift` 拆出。
+- `AgentPanelView.swift` 从约 1681 行降到 1459 行，主 panel 文件进一步聚焦 header、transcript、composer 和实时状态编排。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc61`。
+
+## 1.78.0-rc60 - 2026-06-16
+
+### Fixed
+
+- `RuntimeDescriptor.sshTarget` 标记为 `nonisolated`，配合 rc59 的 SSH 参数 helper 修复，清理 detached SSH 执行路径剩余的 Swift 6 actor isolation warning。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc60`。
+
+## 1.78.0-rc59 - 2026-06-16
+
+### Fixed
+
+- `AgentRemoteRuntime` 的 SSH 参数构造 helper 标记为 `nonisolated`，避免 `Task.detached` 内调用纯字符串 helper 时触发 Swift 6 actor isolation warning。
+- Agent 会话标题自动摘要路径在构造 `AgentClient` 时显式跨 MainActor，清理 `AppStateAgentTitleSummarizer` 的 Swift 6 isolation warning。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc59`。
+
+## 1.78.0-rc58 - 2026-06-16
+
+### Changed
+
+- 新增 `AgentMobileGatewayModels.swift`，将 Mobile Gateway JSON envelope、snapshot、message event state、controller contract 和 command error 从 `AgentMobileGatewayBridge.swift` 拆出。
+- `AgentMobileGatewayBridge.swift` 从约 1725 行降到 1332 行，主文件重新聚焦 command router、desktop WebSocket peer 和 AppState 安全桥接实现；协议数据模型独立维护。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc58`。
+
+## 1.78.0-rc57 - 2026-06-16
+
+### Changed
+
+- 新增 `EditorViewAppKitSupport.swift`，将 `BracketPair`、`WillDeepTextView` 和 `LineNumberRulerView` 从 `EditorView.swift` 拆出。
+- `EditorView.swift` 从约 1799 行降到 969 行，主文件重新聚焦 SwiftUI/AppKit bridge、coordinator、高亮调度与光标/滚动状态；自定义 TextView、folding 绘制和 gutter 行号尺独立维护。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc57`。
+
+## 1.78.0-rc56 - 2026-06-16
+
+### Changed
+
+- 新增 `ContentViewEditorChrome.swift`，将 Go to Line、编辑器状态栏、分屏编辑器、预览 pane、Inspector、Find/Replace、TabBar 和进入 Agent mode 按钮从 `ContentView.swift` 拆出。
+- `ContentView.swift` 从约 1804 行降到 1225 行，主文件重新聚焦窗口级布局、侧栏控制、文件选择和模式切换；当前最大 Swift 文件转为 `EditorView.swift`（约 1799 行）。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc56`。
+
+## 1.78.0-rc55 - 2026-06-16
+
+### Fixed
+
+- `AgentTools` 的本地目录枚举改用 `NSDirectoryEnumerator.nextObject()` 循环，避免在 async tool runner 中触发 Swift 6 `makeIterator` 不可用 warning。
+- `AppState.refreshProjectFileList()` 去掉 MainActor task 内无意义的 `await`，清理 Quick Open 缓存回填路径 warning。
+- `MobileGatewaySettingsView` 的端口焦点监听改用 macOS 14+ 推荐的双参数 `onChange` 闭包，消除 deprecated API warning。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc55`。
+
+## 1.78.0-rc54 - 2026-06-16
+
+### Fixed
+
+- 将 `MarkdownTableParserTests` 和 `MarkdownListNestingTests` 标记为 `@MainActor`，清理 Markdown parser 测试触碰 MainActor 隔离 block kind 时的 Swift 6 warning。
+- `KeychainSandbox.deinit` 使用 `MainActor.assumeIsolated` 执行测试清理，避免 Keychain/UserDefaults sandbox 复位路径在 Swift 6 下被诊断为跨 actor 同步调用。
+- `EditorOutlineItem` 与 `EditorOutlineExtractor` 显式标记为 `nonisolated`，让后台结构提取 task 可以调用纯字符串解析器，不再牵住 MainActor。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc54`。
+
+## 1.78.0-rc53 - 2026-06-16
+
+### Changed
+
+- 新增 `AgentPanelCards.swift`，将右侧 Agent panel 的 patch proposal 卡片、空状态和消息气泡从 `AgentPanelView.swift` 拆出。
+- `AgentPanelView.swift` 从约 1938 行降到 1681 行，右侧 panel 主文件重新聚焦 header、transcript、composer、jobs drawer 和 tool-call 分组布局。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc53`。
+
+## 1.78.0-rc52 - 2026-06-16
+
+### Changed
+
+- 新增 `GitWorktreeCoreTests.swift`，将 Git porcelain / numstat 解析、worktree 变更摘要、worktree 命名和创建测试从 `XeditTests.swift` 拆出。
+- `XeditTests.swift` 从 1991 行降到 1782 行，主测试 suite 不再贴近 2000 行软阈值；最大 Swift 文件转为 `AgentPanelView.swift`（约 1938 行）。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc52`。
+
+## 1.78.0-rc51 - 2026-06-16
+
+### Changed
+
+- 新增 `AppStateAgentContextCompression.swift`，将 Agent 上下文压缩、自动压缩判断和旧 tool result 折叠逻辑从 `AppStateAgentLoop.swift` 拆出。
+- 新增 `AppStateAgentPatches.swift`，将 Agent patch proposal 捕获、应用、拒绝和路径校验逻辑从 `AppStateAgentLoop.swift` 拆出。
+- `AppStateAgentLoop.swift` 从约 1990 行降到 1666 行，主文件重新聚焦 dispatch / streaming loop / tool decision / subagent 执行路径；当前最大 Swift 文件继续保持低于 2000 行软阈值。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc51`。
+
+## 1.78.0-rc50 - 2026-06-16
+
+### Changed
+
+- 新增 `EditorSettingsPrimaryTabs.swift`，将 Settings 的字体、格式、工作区前三个 tab 及其 editor-setting binding helper 从 `EditorSettingsView.swift` 拆出。
+- `EditorSettingsView.swift` 从 1880 行降到 1645 行；设置页的信息架构保持“字体 / 格式 / 工作区”不变，但实现上降低后续继续扩展设置项时的复杂度反弹风险。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc50`。
+
+## 1.78.0-rc49 - 2026-06-16
+
+### Fixed
+
+- 将 `AgentToolsCoreTests`、`AgentWebToolsTests`、`AgentSkillMarketplaceTests`、`AgentSessionStoreTests`、`AgentSessionPersistenceTests` 和 `AgentRemoteRuntimeTests` 标记为 `@MainActor`，清理 Swift 6 下会升级为错误的测试 isolation warning。
+- 保持生产代码不变，仅收紧测试运行上下文，让 `xcodebuild test` 输出更容易暴露真正的回归问题。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc49`。
+
+## 1.78.0-rc48 - 2026-06-16
+
+### Fixed
+
+- 新增 `WorkspacePresentation.swift`，统一 composer、状态栏和侧边栏的本地/远端 workspace 展示逻辑。
+- 修复远端 session 在 runtime descriptor 暂时查不到时，composer workspace pill 退回 `Pick folder` 的问题；现在会根据 session 自身的 `.remote(runtimeID, path)` 显示 `Remote: <workspace>`。
+- 远端 workspace 在侧边栏和 composer 中使用 SSH/daemon 专属图标、强调色和小 badge，用户可直接识别该会话运行在远端 runtime。
+- 补充回归测试覆盖历史本地会话选择时自动恢复窗口 root，以及远端 workspace descriptor 缺失时仍保持显式展示。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc48`。
+
+## 1.78.0-rc47 - 2026-06-16
+
+### Changed
+
+- 新增 `EditorWorkflowTests.swift`，将文件加载、保存、标签页、编辑器导航、查找替换和 dirty-state 测试从 `XeditTests.swift` 拆出。
+- `XeditTests.swift` 从 2711 行降到 1991 行，低于仓库 2000 行软阈值；核心 Swift 源码热点和主测试文件均回到可持续拆分区间。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc47`。
+
+## 1.78.0-rc46 - 2026-06-16
+
+### Changed
+
+- 新增 `AgentErrorCard.swift`，将 Agent transcript 的错误卡片从 `AgentPanelView.swift` 拆出，并复用同一组件给 panel / mode transcript。
+- `AgentPanelView.swift` 从 2030 行降到 1938 行，回到仓库 2000 行软阈值以内；当前核心 Swift 复杂度热点已从“超阈值”转为后续可持续拆分。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc46`。
+
+## 1.78.0-rc45 - 2026-06-16
+
+### Changed
+
+- 新增 `AppStateAgentErrors.swift`，将 Agent 错误展示、Retry 按钮逻辑、TLS 证书错误重试判断和 goal 模式瞬时网络错误重试判断从 `AppStateAgentLoop.swift` 拆出。
+- `AppStateAgentLoop.swift` 从 2203 行降到 1990 行，低于仓库 2000 行软阈值；剩余高复杂度热点转为 `AgentPanelView.swift`（约 2030 行）。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc45`。
+
+## 1.78.0-rc44 - 2026-06-16
+
+### Fixed
+
+- `testGoalModeAutoApproval` 接入测试专用 `KeychainSandbox` / `UserDefaults` suite，避免开发机真实 Always Allow 规则污染普通模式审批断言。
+- 重新验证 `WillDeepTests` suite：159 个 Swift Testing 用例通过，确认 `AgentToolIntegrationTests.swift` 拆分后仍被测试 target 编译并运行。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc44`。
+
+## 1.78.0-rc43 - 2026-06-16
+
+### Changed
+
+- 将 `XeditTests.swift` 中 Agent tool、SafeCommand、工具分组、run_command 风险和依赖目录过滤测试拆到新的 `AgentToolIntegrationTests.swift`。
+- `XeditTests.swift` 从 3574 行降到 2709 行，回到仓库 3000 行硬上限以内；新文件 881 行，按 Agent 工具执行/安全回归聚合，便于后续继续拆 `AppStateAgentLoop.swift` 和 `AgentPanelView.swift`。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc43`。
+
+## 1.78.0-rc42 - 2026-06-16
+
+### Fixed
+
+- `AgentToolApprovalNotifier` 使用 `@preconcurrency import UserNotifications` 接入旧版 UserNotifications API，消除通知发送路径捕获 `UNMutableNotificationContent` / `UNUserNotificationCenter` 的 Sendable warning。
+- `AgentSubagentRun.displayHandle` 标记为 `nonisolated`，避免子 agent 完成报告在非隔离系统消息路径拼接展示 handle 时触发 MainActor isolation warning。
+- `AgentToolResult`、`AgentToolKind` 与 `LocalAgentCLI.Integration` 明确标记为非隔离纯值类型，避免 Swift Testing 的 `#expect` 宏在比较工具结果和工具分组时产生 MainActor isolation warning。
+- Agent sandbox audit 写入时显式丢弃 `FileHandle.seekToEnd()` 返回值，清理无用返回值 warning。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc42`。
+
+## 1.78.0-rc41 - 2026-06-16
+
+### Fixed
+
+- 将 `CommandSafety` 与 `SafeCommand` 标记为 `nonisolated` 纯策略类型，消除 Swift 默认 MainActor 隔离下，sandbox / authorization 非隔离路径调用安全分类时产生的 actor isolation warning。
+- 继续收紧 Agent 执行策略内核边界，让命令安全分类不依赖 UI 主线程隔离，降低后续沙箱、审批和包管理器规则演进时的隐性复杂度。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc41`。
+
+## 1.78.0-rc40 - 2026-06-15
+
+### Fixed
+
+- 将 npm/yarn/pnpm 的安全分类与沙箱网络授权收敛到 `AgentPackageCommandPolicy`，避免 SafeCommand 与 AgentSandboxPolicy 各自维护一份包管理器规则后产生漂移。
+- 修复 `workspaceWriteNetwork` seatbelt profile 只开放网络和临时目录、没有同步开放 workspace 根目录写权限的问题。
+- Agent tools 系统提示明确要求依赖安装、生成文件、构建、渲染、测试等任务尽量由 agent 通过 `run_command` 自己完成并验证，不再轻易要求用户手动执行命令。
+- 补充 Swift 回归测试覆盖包管理器带 `--registry`/`--save-dev` 的安装形态，以及 tools prompt 的自执行闭环要求。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc40`。
+
+## 1.78.0-rc39 - 2026-06-15
+
+### Fixed
+
+- Agent 沙箱新增 `workspaceWriteNetwork` 模式，项目内 `npm install/ci/add`、`yarn install/add`、`pnpm install/add` 会在允许写当前 workspace 的同时开放 registry 网络访问，避免生成 PPT/前端产物时依赖安装失败后要求用户手工执行。
+- 安装依赖仍保持边界：`npm install -g`、`npm publish`、`--prefix`、敏感路径、越界路径和破坏性命令不会自动放行。
+- 补充 Swift 单测覆盖包管理器安装分类、workspace 网络沙箱 profile 和自动放行边界。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc39`。
+
+## 1.78.0-rc38 - 2026-06-15
+
+### Fixed
+
+- Agent 模型请求遇到 TLS 握手或证书校验类 `URLError` 时会自动最多重试 5 次，每次间隔 5 秒；如果 assistant 已经输出内容或产生 tool call，则不自动重试，避免重复回答或重复工具执行。
+- 重试耗尽后继续显示原有“TLS / 证书校验失败”提示，引导用户信任自签代理或镜像服务证书。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档同步到 `1.78.0-rc38`。
+
 ## 1.78.0-rc37 - 2026-06-15
 
 ### Fixed

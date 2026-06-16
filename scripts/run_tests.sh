@@ -9,6 +9,8 @@
 # 产物（默认在 build/ci/）：
 #   - XeditTests.xcresult   xcodebuild 结果包
 #   - xcodebuild.log        原始日志
+#   - complexity_report.*   复杂度守门报告
+#   - version_report.*      版本一致性报告
 #   - report.md             markdown 报告（CI 摘要 & 本地 quick look）
 #   - report.json           机读格式（自动化下游用）
 # =============================================================================
@@ -25,6 +27,9 @@ REPORT_JSON="${OUT_DIR}/report.json"
 mkdir -p "${OUT_DIR}"
 # xcodebuild 拒绝复用同名 result bundle，每次重跑前清掉
 rm -rf "${XCRESULT}"
+
+ruby "${ROOT_DIR}/scripts/complexity_guard.rb" "${OUT_DIR}/complexity_report.md" "${OUT_DIR}/complexity_report.json"
+ruby "${ROOT_DIR}/scripts/version_consistency.rb" "${OUT_DIR}/version_report.md" "${OUT_DIR}/version_report.json"
 
 EXTRA_ARGS=("$@")
 if [ ${#EXTRA_ARGS[@]} -eq 0 ]; then

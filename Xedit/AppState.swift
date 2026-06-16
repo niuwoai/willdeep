@@ -95,127 +95,6 @@ final class AppState: ObservableObject {
             AgentSettingsStore.saveProviderLibrary(agentProviderLibrary)
         }
     }
-    // MARK: - Per-session state (rc2: delegated to activeRuntime)
-    //
-    // The 22 fields below used to be `@Published` stored properties.
-    // rc2 moved them onto `AgentRuntime` (one runtime per AgentSession)
-    // and turned the AppState-side names into get/set delegates that
-    // route to `activeRuntime`. UI and AppState-internal call sites
-    // are unchanged — they read/write `appState.agentMessages` etc.
-    // exactly as before, but the data now lives on the runtime.
-    //
-    // Change notifications: `subscribeToActiveRuntime()` republishes
-    // the active runtime's `objectWillChange` through AppState's own
-    // publisher, so SwiftUI bindings against `appState.foo` still
-    // refresh when the underlying runtime field mutates.
-    //
-    // When there is no active runtime (no session opened yet), reads
-    // return safe defaults and writes are dropped. That matches the
-    // pre-rc2 "empty AppState fields before any session exists" state.
-
-    var agentMessages: [AgentMessage] {
-        get { activeRuntime?.messages ?? [] }
-        set { activeRuntime?.messages = newValue }
-    }
-    var agentPatchProposals: [AgentPatchProposal] {
-        get { activeRuntime?.patchProposals ?? [] }
-        set { activeRuntime?.patchProposals = newValue }
-    }
-    var agentToolCalls: [AgentToolCall] {
-        get { activeRuntime?.toolCalls ?? [] }
-        set { activeRuntime?.toolCalls = newValue }
-    }
-    var agentInput: String {
-        get { activeRuntime?.input ?? "" }
-        set { activeRuntime?.input = newValue }
-    }
-    var isAgentResponding: Bool {
-        get { activeRuntime?.isResponding ?? false }
-        set { activeRuntime?.isResponding = newValue }
-    }
-    /// Wall-clock moment the current turn started — set when the user's
-    /// message is dispatched, cleared when the loop exits. The thinking
-    /// banner reads this through a `TimelineView` so the elapsed seconds
-    /// tick visibly while the model is still working.
-    var agentTurnStartedAt: Date? {
-        get { activeRuntime?.turnStartedAt }
-        set { activeRuntime?.turnStartedAt = newValue }
-    }
-    var agentErrorMessage: String? {
-        get { activeRuntime?.errorMessage }
-        set { activeRuntime?.errorMessage = newValue }
-    }
-    var agentErrorDetails: AgentErrorDetails? {
-        get { activeRuntime?.errorDetails }
-        set { activeRuntime?.errorDetails = newValue }
-    }
-    /// Images staged in the composer for the next user message.
-    var agentPendingImages: [AgentImageAttachment] {
-        get { activeRuntime?.pendingImages ?? [] }
-        set { activeRuntime?.pendingImages = newValue }
-    }
-    /// Long pasted text staged in the composer for the next user message.
-    var agentPendingTextAttachments: [AgentTextAttachment] {
-        get { activeRuntime?.pendingTextAttachments ?? [] }
-        set { activeRuntime?.pendingTextAttachments = newValue }
-    }
-    /// Skills the user attached via `@skill` for the next send.
-    var agentPendingSkills: [AgentSkillEntry] {
-        get { activeRuntime?.pendingSkills ?? [] }
-        set { activeRuntime?.pendingSkills = newValue }
-    }
-    /// Files the user attached via the `@` picker for the next send.
-    var agentPendingFiles: [AgentFileAttachment] {
-        get { activeRuntime?.pendingFiles ?? [] }
-        set { activeRuntime?.pendingFiles = newValue }
-    }
-    /// Whether the next send should include a workspace overview block.
-    var agentPendingIncludeWorkspaceOverview: Bool {
-        get { activeRuntime?.pendingIncludeWorkspaceOverview ?? false }
-        set { activeRuntime?.pendingIncludeWorkspaceOverview = newValue }
-    }
-    /// Top-level interaction mode for the active session.
-    var agentInteractionMode: AgentInteractionMode {
-        get { activeRuntime?.interactionMode ?? .normal }
-        set { activeRuntime?.interactionMode = newValue }
-    }
-    /// Per-session approval behavior shown in the composer.
-    var agentApprovalMode: AgentApprovalMode {
-        get { activeRuntime?.approvalMode ?? .smart }
-        set { activeRuntime?.approvalMode = newValue }
-    }
-    /// Current proposed/approved plan for Plan mode.
-    var agentCurrentPlan: AgentPlan? {
-        get { activeRuntime?.currentPlan }
-        set { activeRuntime?.currentPlan = newValue }
-    }
-    /// Currently-pinned goal for Goal mode.
-    var agentCurrentGoal: AgentGoal? {
-        get { activeRuntime?.currentGoal }
-        set { activeRuntime?.currentGoal = newValue }
-    }
-
-    /// True when Plan mode is on AND no plan exists yet OR the existing
-    /// plan hasn't been approved. While true, all write/exec tools and
-    /// patch application are blocked.
-    var isPlanGateActive: Bool {
-        activeRuntime?.isPlanGateActive ?? false
-    }
-    /// Messages the user queued while the agent was busy.
-    var agentQueuedMessages: [AgentQueuedMessage] {
-        get { activeRuntime?.queuedMessages ?? [] }
-        set { activeRuntime?.queuedMessages = newValue }
-    }
-    /// Per-session concrete model override.
-    var agentSessionModelOverride: String? {
-        get { activeRuntime?.sessionModelOverride }
-        set { activeRuntime?.sessionModelOverride = newValue }
-    }
-    /// Live `git status` snapshot for the active session's workspace.
-    var agentWorktreeChanges: AgentWorktreeChangeSummary {
-        get { activeRuntime?.worktreeChanges ?? .init() }
-        set { activeRuntime?.worktreeChanges = newValue }
-    }
     /// Model IDs the user has previously fetched in Settings — surfaced in
     /// the Agent-mode model picker as a quick switcher.
     @Published var agentKnownModelIDs: [String] = []
@@ -291,46 +170,12 @@ final class AppState: ObservableObject {
     /// 失效；同条数下（流式追加中）最多每秒重算一次。Not @Published。
     var agentTokenEstimateCache: (messageCount: Int, sessionID: AgentSession.ID?, value: Int, at: Date)?
 
-    /// The runtime backing the currently-selected session, or nil if
-    /// no session is selected (or its session was deleted underneath
-    /// us). Computed so it always reflects `activeAgentSessionID`.
-    var activeRuntime: AgentRuntime? {
-        guard let id = activeAgentSessionID else { return nil }
-        return agentRuntimes[id]
-    }
     /// Active Agent-mode session id. nil means "scratch" — Editor-mode
     /// chat keeps working without forcing a session to exist.
     @Published var activeAgentSessionID: AgentSession.ID?
-    /// Mirrors `AgentRuntime.didEditFiles` for the active session — flips
-    /// to true the moment the Agent successfully applies a patch in this
-    /// session, and stays true until the session is replaced. Used to gate
-    /// the worktree-change card so a fresh New Chat never shows it.
-    /// Pre-rc2 this was `@Published private(set)` on AppState; the
-    /// delegate keeps the same surface. Internal write call sites use
-    /// `appState.agentSessionDidEditFiles = ...` which routes to the
-    /// active runtime.
-    var agentSessionDidEditFiles: Bool {
-        get { activeRuntime?.didEditFiles ?? false }
-        set { activeRuntime?.didEditFiles = newValue }
-    }
-    /// Workspace-relative paths the Agent has actually written to in the
-    /// active session — used by the worktree-change card to filter out
-    /// the user's own diffs and untracked junk (e.g. `__pycache__/*.pyc`).
-    var agentEditedRelativePaths: Set<String> {
-        get { activeRuntime?.agentEditedPaths ?? [] }
-        set { activeRuntime?.agentEditedPaths = newValue }
-    }
     /// Top-level UI mode. Editor is the classic file editor; agent hides
     /// the editor and shows the conversation-first layout.
     @Published var appMode: AppMode = .editor
-    /// Continuation resumed when the user resolves (approve/deny/confirm) the
-    /// currently-blocked tool call. Internal to the agent loop. Delegated
-    /// to `activeRuntime` post-rc2 — each runtime owns its own waiter so
-    /// concurrent sessions don't fight over one slot.
-    var agentToolDecisionWaiter: CheckedContinuation<AgentToolDecision, Never>? {
-        get { activeRuntime?.toolDecisionWaiter }
-        set { activeRuntime?.toolDecisionWaiter = newValue }
-    }
     /// Display-ready Quick Open file list, backed by `ProjectFileListCache`.
     /// Populated instantly from disk cache on project open, then verified and
     /// backfilled by a background scan. `QuickOpenPanel` filters this in-memory
@@ -354,12 +199,6 @@ final class AppState: ObservableObject {
     var securityScopedAccessURLs: Set<URL> = []
     var gitStatusRefreshTask: Task<Void, Never>?
     private var quickOpenRefreshTask: Task<Void, Never>?
-    /// Provider request `Task` for the active turn. Delegated to
-    /// `activeRuntime` post-rc2 so each runtime can hold its own.
-    var agentRequestTask: Task<Void, Never>? {
-        get { activeRuntime?.requestTask }
-        set { activeRuntime?.requestTask = newValue }
-    }
     private var editorSettingsSideEffectsWorkItem: DispatchWorkItem?
     private var editorSettingsObserver: AnyCancellable?
     /// Republishes the ACTIVE runtime's `objectWillChange` through
@@ -610,213 +449,19 @@ final class AppState: ObservableObject {
         return lines
     }
 
-    var primaryAgentChangedFile: AgentFileChangeSummary? {
-        if let openedFileURL,
-           let repositoryRoot = agentWorktreeChanges.repositoryRoot {
-            let rootPath = repositoryRoot.standardizedFileURL.path
-            let filePath = openedFileURL.standardizedFileURL.path
-            if filePath == rootPath || filePath.hasPrefix(rootPath + "/") {
-                let relativePath = String(filePath.dropFirst(rootPath.count))
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-                if let activeChange = agentWorktreeChanges.change(for: relativePath) {
-                    return activeChange
-                }
-            }
-        }
-
-        return agentWorktreeChanges.files.first
-    }
-
-    var shouldShowAgentThinkingIndicator: Bool {
-        guard isAgentResponding, !isCompressingAgentContext else { return false }
-        if agentToolCalls.contains(where: { call in
-            call.status == .pendingApproval
-                || call.status == .awaitingConfirm
-                || call.status == .awaitingUserAnswer
-        }) {
-            return false
-        }
-
-        guard let lastMessage = agentMessages.last else { return false }
-        switch lastMessage.role {
-        case .user, .tool:
-            return true
-        case .assistant:
-            return lastMessage.content.isEmpty && lastMessage.toolCalls.isEmpty
-        case .system:
-            return false
-        }
-    }
-
-    /// 「正在思考」分割线下方的两行实时预览：当前流式 assistant 占位
-    /// 消息正在累积的 reasoningContent。生命周期与指示器完全一致——
-    /// 首个正文 token / 工具调用到达后指示器消失，预览随之消失。
-    /// 不单独输出 reasoning 流的服务商（未开 thinking 的 Claude 等）
-    /// 返回 nil，分割线退回纯标签样式。
-    var agentLiveThinkingPreview: String? {
-        guard shouldShowAgentThinkingIndicator,
-              let lastMessage = agentMessages.last,
-              lastMessage.role == .assistant,
-              let reasoning = lastMessage.reasoningContent,
-              !reasoning.isEmpty else { return nil }
-        return reasoning
-    }
-
-    /// 把完整 reasoning 轨迹压成适合两行展示的尾巴：换行折叠成空格、
-    /// 只留末尾 `maxLength` 个字符。截断时前置省略号示意"前面还有"。
-    /// 上限按两行 caption 字号的容量取值，配合视图层的
-    /// `truncationMode(.head)` 兜底——窗口再窄也保证看到的是最新内容。
-    nonisolated static func agentThinkingPreviewTail(_ raw: String, maxLength: Int = 160) -> String {
-        let collapsed = raw
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespaces)
-        guard collapsed.count > maxLength else { return collapsed }
-        return "…" + collapsed.suffix(maxLength)
-    }
-
-    /// Claude Code 式「✳ N running task」计数：正在执行的前台工具调用
-    /// + 本会话仍存活的后台作业。
-    ///
-    /// 前台工具只在 turn 进行中统计——被取消的 turn 理论上可能留下
-    /// `.running` 残骸，不能让它把状态行永远钉在底部。后台作业则刻意
-    /// **跨 turn 存活**：turn 已结束但编译还在跑时，transcript 底部
-    /// 继续显示"N 个任务运行中"，这正是参照 Claude Code 界面的关键
-    /// 行为（输出停了 ≠ 没事干了）。
-    var agentRunningTaskCount: Int {
-        let runningTools = isAgentResponding
-            ? agentToolCalls.filter { $0.status == .running }.count
-            : 0
-        let aliveJobs = activeAgentSessionID
-            .map { agentJobRegistry.aliveJobs(forRuntime: $0).count } ?? 0
-        return runningTools + aliveJobs
-    }
-
-    /// Tooltip 明细：每行一个运行中条目 — 前台工具显示工具名，后台
-    /// 作业显示 `job_xxxxxx · 命令前缀`。没有任何运行中条目时为 nil。
-    var agentRunningTaskSummary: String? {
-        var lines: [String] = []
-        if isAgentResponding {
-            lines += agentToolCalls
-                .filter { $0.status == .running }
-                .map(\.toolName)
-        }
-        if let runtimeID = activeAgentSessionID {
-            lines += agentJobRegistry.aliveJobs(forRuntime: runtimeID).map { job in
-                let command = job.command.replacingOccurrences(of: "\n", with: " ")
-                let preview = command.count > 60 ? String(command.prefix(60)) + "…" : command
-                return "\(job.displayHandle) · \(preview)"
-            }
-        }
-        return lines.isEmpty ? nil : lines.joined(separator: "\n")
-    }
-
-    var shouldShowGoalRunningStatusBar: Bool {
-        agentInteractionMode == .goal
-            && isAgentResponding
-            && agentCurrentGoal?.isEmpty == false
-    }
-
-    var canShowPreview: Bool {
-        let language = effectiveLanguage
-        return language == .markdown || language == .html
-    }
-
-    var detectedLanguage: Language? {
-        openedFileURL.map(Language.fromURL) ?? nil
-    }
-
-    var syntaxHighlightingSelection: SyntaxHighlightingSelection {
-        activeTab?.syntaxHighlightingSelection ?? .automatic
-    }
-
-    var effectiveLanguage: Language? {
-        switch syntaxHighlightingSelection {
-        case .automatic:
-            return detectedLanguage
-        case .plainText:
-            return nil
-        case .language(let language):
-            return language
-        }
-    }
-
-    func showFindBar() {
-        isFindBarVisible = true
-    }
-
-    func hideFindBar() {
-        isFindBarVisible = false
-    }
-
-    func showQuickOpen() {
-        guard rootDirectory != nil else { return }
-        quickOpenQuery = ""
-        isQuickOpenVisible = true
-    }
-
-    func hideQuickOpen() {
-        isQuickOpenVisible = false
-        quickOpenQuery = ""
-    }
-
-    func showGoToLine() {
-        guard activeTabID != nil else { return }
-        goToLineText = ""
-        isGoToLineVisible = true
-    }
-
-    func hideGoToLine() {
-        isGoToLineVisible = false
-        goToLineText = ""
-    }
-
-    func showCommandPalette() {
-        commandPaletteQuery = ""
-        isCommandPaletteVisible = true
-    }
-
-    func hideCommandPalette() {
-        isCommandPaletteVisible = false
-        commandPaletteQuery = ""
-    }
-
-    func showSymbolJump() {
-        guard activeTabID != nil else { return }
-        symbolJumpQuery = ""
-        isSymbolJumpVisible = true
-    }
-
-    func hideSymbolJump() {
-        isSymbolJumpVisible = false
-        symbolJumpQuery = ""
-    }
-
-    func toggleFocusMode() {
-        isFocusModeEnabled.toggle()
-    }
-
-    func toggleAgentPanel() {
-        isAgentPanelVisible.toggle()
-    }
-
-    func togglePreview() {
-        guard canShowPreview else { return }
-        isPreviewVisible.toggle()
-    }
-
-    func updateSelectionInfo(line: Int, column: Int, selectedCharacters: Int, selectedLines: Int, selectedText: String = "") {
+    func updateSelectionInfo(
+        line: Int,
+        column: Int,
+        selectedCharacters: Int,
+        selectedLines: Int,
+        selectedText: String = ""
+    ) {
         cursorLine = max(1, line)
         cursorColumn = max(1, column)
         selectedCharacterCount = max(0, selectedCharacters)
         selectedLineCount = max(0, selectedLines)
         self.selectedText = selectedText
     }
-
-    /// Submit the composer (text + staged images + skills + files + optional
-    /// workspace overview). Queues if the agent is already responding.
-    /// Editor-mode and Agent-mode share this entry point.
-
-    /// Best-effort token count for the next provider request. This mirrors
 
     func navigateEditor(toLine line: Int) {
         guard line > 0 else { return }
@@ -941,7 +586,7 @@ final class AppState: ObservableObject {
 
             if let cached, !Task.isCancelled {
                 let urls = ProjectFileListCache.fileURLs(from: cached, root: targetRoot)
-                await self?.applyQuickOpenFiles(urls, ifRootMatches: rootPath)
+                self?.applyQuickOpenFiles(urls, ifRootMatches: rootPath)
             }
 
             guard !Task.isCancelled else { return }
@@ -956,7 +601,7 @@ final class AppState: ObservableObject {
             if cached == nil || ProjectFileListCache.differs(cached!.entries, scanned.entries) {
                 ProjectFileListCache.save(scanned)
                 let urls = ProjectFileListCache.fileURLs(from: scanned, root: targetRoot)
-                await self?.applyQuickOpenFiles(urls, ifRootMatches: rootPath)
+                self?.applyQuickOpenFiles(urls, ifRootMatches: rootPath)
             }
         }
     }

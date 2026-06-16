@@ -59,7 +59,7 @@ struct AgentSubagentRun: Identifiable, Equatable {
     var roundCount: Int = 0
     var toolInvocationCount: Int = 0
 
-    var displayHandle: String { "agent_\(shortID)" }
+    nonisolated var displayHandle: String { "agent_\(shortID)" }
     nonisolated var duration: TimeInterval {
         (finishedAt ?? Date()).timeIntervalSince(startedAt)
     }

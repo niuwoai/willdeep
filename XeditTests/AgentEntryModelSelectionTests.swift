@@ -218,9 +218,11 @@ final class KeychainSandbox {
     }
 
     deinit {
-        AgentSettingsStore._wipeTestKeychain()
-        AgentSettingsStore._setTestKeychainServiceOverride(nil)
-        sandboxDefaults.removePersistentDomain(forName: suiteName)
-        AgentSettingsStore._setTestDefaultsOverride(nil)
+        MainActor.assumeIsolated {
+            AgentSettingsStore._wipeTestKeychain()
+            AgentSettingsStore._setTestKeychainServiceOverride(nil)
+            sandboxDefaults.removePersistentDomain(forName: suiteName)
+            AgentSettingsStore._setTestDefaultsOverride(nil)
+        }
     }
 }

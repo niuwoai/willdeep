@@ -696,6 +696,37 @@ enum L10n {
         static let savedStatus = String(localized: "settings.saved-status", defaultValue: "Saved.")
         static let allChangesSaved = String(localized: "settings.all-changes-saved", defaultValue: "All changes saved")
 
+        enum LearningReview {
+            static let section = String(localized: "settings.learning-review.section", defaultValue: "Learning Review")
+            static let title = String(localized: "settings.learning-review.title", defaultValue: "Review automatic learning")
+            static let description = String(localized: "settings.learning-review.description", defaultValue: "Memory saves, skill candidates, and MCP suggestions discovered at turn end stay here until reviewed.")
+            static let empty = String(localized: "settings.learning-review.empty", defaultValue: "No pending learning items.")
+            static let copy = String(localized: "settings.learning-review.copy", defaultValue: "Copy details")
+            static let copied = String(localized: "settings.learning-review.copied", defaultValue: "Copied")
+            static let markReviewed = String(localized: "settings.learning-review.mark-reviewed", defaultValue: "Mark reviewed")
+            static let dismiss = String(localized: "settings.learning-review.dismiss", defaultValue: "Dismiss")
+            static let clearReviewed = String(localized: "settings.learning-review.clear-reviewed", defaultValue: "Clear reviewed")
+            static let decisionPending = String(localized: "settings.learning-review.decision.pending", defaultValue: "Pending")
+            static let decisionReviewed = String(localized: "settings.learning-review.decision.reviewed", defaultValue: "Reviewed")
+            static let decisionDismissed = String(localized: "settings.learning-review.decision.dismissed", defaultValue: "Dismissed")
+            static func pendingCount(_ a1: String) -> String {
+                let template = String(localized: "settings.learning-review.pending-count", defaultValue: "%@ pending")
+                return String(format: template, a1)
+            }
+            static func morePending(_ a1: String) -> String {
+                let template = String(localized: "settings.learning-review.more-pending", defaultValue: "%@ more pending items hidden")
+                return String(format: template, a1)
+            }
+            static func reviewedDisclosure(_ a1: String) -> String {
+                let template = String(localized: "settings.learning-review.reviewed-disclosure", defaultValue: "Reviewed items (%@)")
+                return String(format: template, a1)
+            }
+            static func moreReviewed(_ a1: String) -> String {
+                let template = String(localized: "settings.learning-review.more-reviewed", defaultValue: "%@ more reviewed items hidden")
+                return String(format: template, a1)
+            }
+        }
+
         enum WebTools {
             static let braveKeyLabel = String(localized: "settings.web-tools.brave-api-key", defaultValue: "Brave Search API Key")
             static let description = String(localized: "settings.web-tools.description", defaultValue: "Enables the built-in web_search tool. Get a free key at brave.com/search/api — it is stored in the macOS Keychain. web_fetch needs no key and asks for approval per domain.")
@@ -1251,6 +1282,104 @@ enum L10n {
     }
 
     enum Transcript {
+        static let turnReportTitle = String(localized: "transcript.turn-report.title", defaultValue: "Agent turn report")
+        static func turnReportSubtitle(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "transcript.turn-report.subtitle", defaultValue: "%1$@ · %2$@")
+            return String(format: template, a1, a2)
+        }
+        static let turnReportCopyHelp = String(localized: "transcript.turn-report.copy-help", defaultValue: "Copy turn report")
+        static let turnReportCopied = String(localized: "transcript.turn-report.copied", defaultValue: "Copied")
+        static let turnReportModel = String(localized: "transcript.turn-report.model", defaultValue: "Model")
+        static let turnReportProvider = String(localized: "transcript.turn-report.provider", defaultValue: "Provider")
+        static let turnReportMode = String(localized: "transcript.turn-report.mode", defaultValue: "Mode")
+        static let turnReportApprovalMode = String(localized: "transcript.turn-report.approval-mode", defaultValue: "Approval mode")
+        static let turnReportTools = String(localized: "transcript.turn-report.tools", defaultValue: "Tools")
+        static let turnReportApprovals = String(localized: "transcript.turn-report.approvals", defaultValue: "Approvals")
+        static let turnReportLearning = String(localized: "transcript.turn-report.learning", defaultValue: "Learning")
+        static let turnReportElapsed = String(localized: "transcript.turn-report.elapsed", defaultValue: "Elapsed")
+        static let turnReportTokens = String(localized: "transcript.turn-report.tokens", defaultValue: "Tokens")
+        static let turnReportLearningSection = String(localized: "transcript.turn-report.learning-section", defaultValue: "Learning actions")
+        static func turnReportApprovalSummary(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "transcript.turn-report.approval-summary", defaultValue: "%1$@ auto / %2$@ user")
+            return String(format: template, a1, a2)
+        }
+        static func turnReportSucceeded(_ a1: String) -> String {
+            let template = String(localized: "transcript.turn-report.succeeded", defaultValue: "%@ succeeded")
+            return String(format: template, a1)
+        }
+        static func turnReportFailed(_ a1: String) -> String {
+            let template = String(localized: "transcript.turn-report.failed", defaultValue: "%@ failed")
+            return String(format: template, a1)
+        }
+        static func turnReportDenied(_ a1: String) -> String {
+            let template = String(localized: "transcript.turn-report.denied", defaultValue: "%@ denied")
+            return String(format: template, a1)
+        }
+        static func turnReportEscalated(_ a1: String) -> String {
+            let template = String(localized: "transcript.turn-report.escalated", defaultValue: "%@ escalated")
+            return String(format: template, a1)
+        }
+        static func turnReportSandbox(_ a1: String) -> String {
+            let template = String(localized: "transcript.turn-report.sandbox", defaultValue: "Sandbox: %@")
+            return String(format: template, a1)
+        }
+        static let turnReportStatusPendingApproval = String(localized: "transcript.turn-report.status.pending-approval", defaultValue: "Pending approval")
+        static let turnReportStatusAwaitingConfirm = String(localized: "transcript.turn-report.status.awaiting-confirm", defaultValue: "Awaiting confirm")
+        static let turnReportStatusAwaitingAnswer = String(localized: "transcript.turn-report.status.awaiting-answer", defaultValue: "Awaiting answer")
+        static let turnReportStatusRunning = String(localized: "transcript.turn-report.status.running", defaultValue: "Running")
+        static let turnReportStatusSucceeded = String(localized: "transcript.turn-report.status.succeeded", defaultValue: "Succeeded")
+        static let turnReportStatusFailed = String(localized: "transcript.turn-report.status.failed", defaultValue: "Failed")
+        static let turnReportStatusDenied = String(localized: "transcript.turn-report.status.denied", defaultValue: "Denied")
+        static let turnReportApprovalUser = String(localized: "transcript.turn-report.approval.user", defaultValue: "User approved")
+        static let turnReportApprovalAlwaysAllow = String(localized: "transcript.turn-report.approval.always-allow", defaultValue: "Always allow")
+        static let turnReportApprovalStatic = String(localized: "transcript.turn-report.approval.static", defaultValue: "Static allow")
+        static let turnReportApprovalJudge = String(localized: "transcript.turn-report.approval.judge", defaultValue: "Judge allow")
+        static let turnReportApprovalGoal = String(localized: "transcript.turn-report.approval.goal", defaultValue: "Goal mode")
+        static let turnReportApprovalWorkspace = String(localized: "transcript.turn-report.approval.workspace", defaultValue: "Workspace access")
+        static let turnReportApprovalEscalated = String(localized: "transcript.turn-report.approval.escalated", defaultValue: "Escalated")
+        static let turnReportApprovalTrustedServer = String(localized: "transcript.turn-report.approval.trusted-server", defaultValue: "Trusted server")
+
+        static let learningCardTitle = String(localized: "transcript.learning.title", defaultValue: "Agent learned from this turn")
+        static func learningCardSubtitle(_ a1: String) -> String {
+            let template = String(localized: "transcript.learning.subtitle", defaultValue: "%@ recent learning events")
+            return String(format: template, a1)
+        }
+        static func learningMore(_ a1: String) -> String {
+            let template = String(localized: "transcript.learning.more", defaultValue: "%@ more learning events hidden")
+            return String(format: template, a1)
+        }
+        static let learningKindMemory = String(localized: "transcript.learning.kind.memory", defaultValue: "Memory")
+        static let learningKindSkill = String(localized: "transcript.learning.kind.skill", defaultValue: "Skill")
+        static let learningKindMCP = String(localized: "transcript.learning.kind.mcp", defaultValue: "MCP")
+        static let learningStatusSaved = String(localized: "transcript.learning.status.saved", defaultValue: "Saved")
+        static let learningStatusCreated = String(localized: "transcript.learning.status.created", defaultValue: "Created")
+        static let learningStatusSuggested = String(localized: "transcript.learning.status.suggested", defaultValue: "Suggested")
+        static let learningStatusSkipped = String(localized: "transcript.learning.status.skipped", defaultValue: "Skipped")
+        static let learningStatusFailed = String(localized: "transcript.learning.status.failed", defaultValue: "Failed")
+        static let learningActionSaveMemory = String(localized: "transcript.learning.action.save-memory", defaultValue: "Saved memory")
+        static let learningActionCreateSkill = String(localized: "transcript.learning.action.create-skill", defaultValue: "Created skill")
+        static let learningActionProposeSkill = String(localized: "transcript.learning.action.propose-skill", defaultValue: "Skill candidate")
+        static let learningActionSearchMCP = String(localized: "transcript.learning.action.search-mcp", defaultValue: "Search MCP")
+        static let learningActionSuggestMCPInstall = String(localized: "transcript.learning.action.suggest-mcp-install", defaultValue: "Suggest MCP install")
+        static let learningActionNeedsConfirmation = String(localized: "transcript.learning.action.needs-confirmation", defaultValue: "Needs user confirmation")
+        static func learningActionCommand(_ a1: String) -> String {
+            let template = String(localized: "transcript.learning.action.command", defaultValue: "Tool: %@")
+            return String(format: template, a1)
+        }
+        static func learningActionTarget(_ a1: String) -> String {
+            let template = String(localized: "transcript.learning.action.target", defaultValue: "Target: %@")
+            return String(format: template, a1)
+        }
+        static func learningActionSearchQuery(_ a1: String) -> String {
+            let template = String(localized: "transcript.learning.action.search-query", defaultValue: "Search: %@")
+            return String(format: template, a1)
+        }
+        static func learningActionNextStep(_ a1: String) -> String {
+            let template = String(localized: "transcript.learning.action.next-step", defaultValue: "Next: %@")
+            return String(format: template, a1)
+        }
+        static let learningCopyHelp = String(localized: "transcript.learning.copy-help", defaultValue: "Copy learning event details")
+        static let learningCopied = String(localized: "transcript.learning.copied", defaultValue: "Copied")
         static let messageTruncatedHelp = String(localized: "transcript.message-truncated.help", defaultValue: "Open in standalone window to view full message content")
         static func messageTruncatedText(_ a1: String, _ a2: String) -> String {
             let template = String(localized: "transcript.message-truncated.text", defaultValue: "Message shows first N characters only")

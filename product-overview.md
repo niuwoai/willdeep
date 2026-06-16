@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-15 | Current version: v1.78.0-rc37
+> Last updated: 2026-06-16 | Current version: v1.78.0-rc96
 
 ## Positioning
 
@@ -15,69 +15,100 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
 - **入口** — `XeditApp.swift`：`@main App`，注入唯一 `AppState` `@StateObject` 给整个窗口树。
-- **状态枢纽** — `AppState.swift`：全局 `ObservableObject`，承载工作区根目录、tab 集、find/replace、git 状态、Agent 配置库等"窗口级"状态。rc42 完成体检阶段 3：把原 4946 行的 AppState 用 `extension` 拆成 6 个伴生文件（`AppStateAgentLoop`、`AppStateAgentSessions`、`AppStateFileOperations`、`AppStateGitStatus`、`AppStateEditorTextUtilities`、`AppStatePersistenceStores`），主类瘦身到 ~1364 行，所有伴生文件 < 1400 行；门面 + callsite 不动。**per-session Agent 状态已经在 rc2 抽到 `AgentRuntime`**：22 个原本 `@Published` 在 AppState 上的 Agent 字段（messages / patchProposals / queue / mode / plan / goal …）下沉到 `AgentRuntime`，AppState 上保留同名 get/set delegate 转发到 `activeRuntime`，并把 `activeRuntime.objectWillChange` 通过 `subscribeToActiveRuntime()` republish 到自身的 publisher 上，UI 端无感。
-- **视图层** — `ContentView.swift`（rc40 拆完，1804 行）是主窗口外壳，子视图（背景、空状态、窗口 chrome、Markdown 预览）独立成 `ContentViewBackgrounds.swift` / `EmptyStateViews.swift` / `MainWindowChrome.swift` / `MarkdownPreview.swift`。Agent 面板有两套渲染：`AgentPanelView`（侧边 panel 模式）和 `AgentModeView`（Cmd+Shift+A 进入的全屏 mode），共用 `AgentChatHistoryTextView`（TextKit 历史）和 `AgentModeComposerView`（输入区）。
-- **Agent 运行时** — `AgentRuntime.swift` 一个会话一个实例，独占自身的 messages / requestTask / toolDecisionWaiter / 模式 / 草稿等；多个 runtime 可以并发跑（后台自动化不会抢占用户的 active session）。**`AgentClient.swift` 自 1.56 起是 facade**：根据 `configuration.providerKind` 把调用分派给 4 个原生适配器——`OpenAIChatAdapter`（OpenAI / DashScope / DeepSeek / Kimi / Moonshot / OpenRouter / SiliconFlow / AnyRouter / some.im / Custom）、`AnthropicMessagesAdapter`（claude preset，rc2 起原生 /v1/messages）、`GeminiAdapter`（gemini preset，rc4 起原生 /v1beta/models/{model}:streamGenerateContent）、`OpenAIResponsesAdapter`（openai-responses preset，rc5 起原生 /responses，给 o-系列推理模型用）。共享工具（HTTP timeouts、User-Agent、URL 拼接、错误体脱敏）抽到 `AgentNetworkSupport.swift`。UI 文案集中在 `AgentProviderL10n.swift`，每个 `AgentProviderKind` 与 `AgentProviderPreset` 都有 `shortLabel` / `helpText` / `apiKeySourceHint` / `inlineNotice` 工具属性。`AgentTools.swift` 是内建工具（`search_files` / `grep_files` / `read_file` / `list_directory` / `git_status` / `run_command` / `ask_user` / skill / MCP / 1.57 新增的 `list_jobs` / `get_job_output` / `kill_job`）。**1.57 起** `run_command` 支持 `run_in_background: true`，把长任务交给 `AgentBackgroundJobs.swift` 的 `AgentJobRegistry`：子进程在 host 这边继续跑，agent loop 在下一轮 turn 开头自动把完成事件渲染成 `.system` 消息塞进 history，不用模型 busy-poll；UI 用 AgentPanelView 右侧抽屉展示 alive jobs + 实时计时器 + Kill 按钮；1.58.0-rc1 起两个 transcript 底部还有 Claude Code 式「✳ N 个任务运行中」状态行（`AgentRunningTasksRow`，统计前台 `.running` 工具 + 存活后台作业，turn 结束后只要作业还活着就继续显示）。**1.58 起**新增 `spawn_agent` 子 agent（`AgentSubagents.swift`）：模型可派出只读子 agent（headless 循环复用 AgentClient 四适配器 + AgentToolRunner，工具面仅 search/grep/read/list/git_status/skills + read 风险 shell，无审批 UI 故任何需审批操作直接拒绝；嵌套封死一层，回合上限 12），同步模式内联返回报告，`run_in_background: true` 最多 3 个并行、完成后经 `AgentSubagentRegistry` 复用后台作业管道注入 `<subagent-report>` 系统消息。rc2 再加 `claude_code` 工具：把写任务委派给本机 Claude Code CLI（headless `claude -p`，薄组装层直接走 runCommand 后台管道；`.write` 风险逐次审批，Always Allow 签名按 permission_mode 区分，`bypassPermissions` 硬编码排除）。rc16 起 Settings 新增 Local Agents 标签，扫描 Claude Code / Codex CLI / OpenCode / Aider / Gemini CLI / Qwen Code / Cursor CLI / Cline CLI / Goose / Amp / Crush 的常见安装路径与 PATH，并标明哪些已接入为可直接委派的 Agent 工具。rc17 起新增 `codex_cli` 与 `cursor_agent` 两个委派工具：分别调用本机 `codex exec` 和 `cursor agent --print`，默认后台运行，按 permission_mode 提供只读 plan/ask 与 workspace-write 模式，并固定排除 dangerous bypass / yolo / force 路径。1.65.0-rc1 起新增 `cline_cli` 委派工具：调用本机 `cline --json` 一次性任务，支持 `permission_mode: plan` 映射 Cline `--plan`、`--cwd` 工作区和可选 `--model`，同样默认后台运行并走 WillDeep 审批与后台作业链路。1.78.0-rc29 起用户发出新消息时会自动拒绝同一会话仍处于 pending 的旧 patch 提案，避免过期 diff 继续挂起可应用；失败态 patch 仍保留原错误，便于排查。1.78.0-rc30 起，智能审批会自动放行被 workspace-write sandbox 限定在当前 workspace 内的低风险生成/编辑命令（包括 heredoc 包装的脚本），危险命令、敏感路径、网络/凭据和越界路径仍保留审批/确认。1.78.0-rc31 起，破坏性命令确认卡改用低饱和红色描边按钮和细边框，避免大面积红底造成误读。1.78.0-rc32 起，审批/确认/回答按钮组靠右显示，`ask_user` 选项改为一行一个的整行选择项。1.78.0-rc34 起，切换本地 workspace 会话会自动恢复窗口根目录；远端 runtime 会话在 composer、状态栏和侧边栏使用远端图标/强调色展示，避免误认为需要 Pick folder。`AgentSessionStore` 负责 JSON 持久化（`~/Library/Application Support/WillDeep/agent-sessions/`），`AgentRoutineStore` + `AgentRoutineScheduler` 作为兼容存储层负责自动化调度。
+- **状态枢纽** — `AppState.swift`：全局 `ObservableObject`，承载工作区根目录、tab 集、find/replace、git 状态、Agent 配置库等"窗口级"状态。rc42 完成体检阶段 3：把原 4946 行的 AppState 用 `extension` 拆成 6 个伴生文件（`AppStateAgentLoop`、`AppStateAgentSessions`、`AppStateFileOperations`、`AppStateGitStatus`、`AppStateEditorTextUtilities`、`AppStatePersistenceStores`）；rc69 再把展示状态和轻量 UI 命令拆到 `AppStateEditorPresentation.swift`，主类降到约 1343 行；rc74 将 Agent composer 发送与附件上下文拆到 `AppStateAgentComposer.swift`，让 `AppStateAgentSessions.swift` 降到约 1076 行；rc76 将 AgentRuntime 兼容访问器拆到 `AppStateAgentRuntimeAccessors.swift`，主类降到约 1182 行。**per-session Agent 状态已经在 rc2 抽到 `AgentRuntime`**：22 个原本 `@Published` 在 AppState 上的 Agent 字段（messages / patchProposals / queue / mode / plan / goal …）下沉到 `AgentRuntime`，AppState 上保留同名 get/set delegate 转发到 `activeRuntime`，并把 `activeRuntime.objectWillChange` 通过 `subscribeToActiveRuntime()` republish 到自身的 publisher 上，UI 端无感。
+- **视图层** — `ContentView.swift` 是主窗口外壳，子视图（背景、空状态、窗口 chrome、Markdown 预览、编辑器 chrome）独立成 `ContentViewBackgrounds.swift` / `EmptyStateViews.swift` / `MainWindowChrome.swift` / `MarkdownPreview.swift` / `ContentViewEditorChrome.swift`，rc56 后主文件约 1225 行。`EditorView.swift` 是编辑器 bridge 主流程，rc57 将自定义 `NSTextView`、bracket helper 和行号尺拆到 `EditorViewAppKitSupport.swift` 后降到约 969 行。Agent 面板有两套渲染：`AgentPanelView`（侧边 panel 模式）和 `AgentModeView`（Cmd+Shift+A 进入的全屏 mode），共用 `AgentChatHistoryTextView`（TextKit 历史）、`AgentModeComposerView`（输入区）和 `AgentMessageView`（当前 SwiftUI 消息）；rc70 将实时 transcript 的工具调用分组/卡片拆到 `AgentToolCallViews.swift` 后，侧边 panel 主文件约 771 行；rc86 将 Agent composer 的 slash/@ palette、attachment chips 和 session mode badges 拆到 `AgentComposerPaletteViews.swift`，composer 主文件约 687 行；rc87 将消息 footer、queued row、empty state、long-token breaker 和用户图片描述折叠拆到 `AgentMessageSupportViews.swift`，消息主文件约 527 行；rc88 新增 `AgentLearningEventViews.swift`，把回合末自学习结果作为 transcript 底部独立卡片展示，避免回塞消息主文件。
+- **Agent 运行时** — `AgentRuntime.swift` 一个会话一个实例，独占自身的 messages / requestTask / toolDecisionWaiter / 模式 / 草稿等；多个 runtime 可以并发跑（后台自动化不会抢占用户的 active session）。**`AgentClient.swift` 自 1.56 起是 facade**：根据 `configuration.providerKind` 把调用分派给 4 个原生适配器——`OpenAIChatAdapter`（OpenAI / DashScope / DeepSeek / Kimi / Moonshot / OpenRouter / SiliconFlow / AnyRouter / some.im / Custom）、`AnthropicMessagesAdapter`（claude preset，rc2 起原生 /v1/messages）、`GeminiAdapter`（gemini preset，rc4 起原生 /v1beta/models/{model}:streamGenerateContent）、`OpenAIResponsesAdapter`（openai-responses preset，rc5 起原生 /responses，给 o-系列推理模型用）。共享工具（HTTP timeouts、User-Agent、URL 拼接、错误体脱敏）抽到 `AgentNetworkSupport.swift`。UI 文案集中在 `AgentProviderL10n.swift`，每个 `AgentProviderKind` 与 `AgentProviderPreset` 都有 `shortLabel` / `helpText` / `apiKeySourceHint` / `inlineNotice` 工具属性。`AgentTools.swift` 负责内建工具调度、命令运行、委派 agent 和后台任务；1.78.0-rc72 起，`AgentFileTools.swift` 承接 `search_files` / `grep_files` / `read_file` / `list_directory` / `git_status` 这组 workspace 只读文件/Git 工具。1.78.0-rc73 起，`AgentStreamingMessageBuffer.swift` 承接流式 assistant delta 缓冲，`AppStateAgentLearning.swift` 承接 memory query 与回合末自学习捕获。**1.57 起** `run_command` 支持 `run_in_background: true`，把长任务交给 `AgentBackgroundJobs.swift` 的 `AgentJobRegistry`：子进程在 host 这边继续跑，agent loop 在下一轮 turn 开头自动把完成事件渲染成 `.system` 消息塞进 history，不用模型 busy-poll；UI 用 AgentPanelView 右侧抽屉展示 alive jobs + 实时计时器 + Kill 按钮；1.58.0-rc1 起两个 transcript 底部还有 Claude Code 式「✳ N 个任务运行中」状态行（`AgentRunningTasksRow`，统计前台 `.running` 工具 + 存活后台作业，turn 结束后只要作业还活着就继续显示）。**1.58 起**新增 `spawn_agent` 子 agent（`AgentSubagents.swift`）：模型可派出只读子 agent（headless 循环复用 AgentClient 四适配器 + AgentToolRunner，工具面仅 search/grep/read/list/git_status/skills + read 风险 shell，无审批 UI 故任何需审批操作直接拒绝；嵌套封死一层，回合上限 12），同步模式内联返回报告，`run_in_background: true` 最多 3 个并行、完成后经 `AgentSubagentRegistry` 复用后台作业管道注入 `<subagent-report>` 系统消息。rc2 再加 `claude_code` 工具：把写任务委派给本机 Claude Code CLI（headless `claude -p`，薄组装层直接走 runCommand 后台管道；`.write` 风险逐次审批，Always Allow 签名按 permission_mode 区分，`bypassPermissions` 硬编码排除）。rc16 起 Settings 新增 Local Agents 标签，扫描 Claude Code / Codex CLI / OpenCode / Aider / Gemini CLI / Qwen Code / Cursor CLI / Cline CLI / Goose / Amp / Crush 的常见安装路径与 PATH，并标明哪些已接入为可直接委派的 Agent 工具。rc17 起新增 `codex_cli` 与 `cursor_agent` 两个委派工具：分别调用本机 `codex exec` 和 `cursor agent --print`，默认后台运行，按 permission_mode 提供只读 plan/ask 与 workspace-write 模式，并固定排除 dangerous bypass / yolo / force 路径。1.65.0-rc1 起新增 `cline_cli` 委派工具：调用本机 `cline --json` 一次性任务，支持 `permission_mode: plan` 映射 Cline `--plan`、`--cwd` 工作区和可选 `--model`，同样默认后台运行并走 WillDeep 审批与后台作业链路。1.78.0-rc29 起用户发出新消息时会自动拒绝同一会话仍处于 pending 的旧 patch 提案，避免过期 diff 继续挂起可应用；失败态 patch 仍保留原错误，便于排查。1.78.0-rc30 起，智能审批会自动放行被 workspace-write sandbox 限定在当前 workspace 内的低风险生成/编辑命令（包括 heredoc 包装的脚本），危险命令、敏感路径、网络/凭据和越界路径仍保留审批/确认。1.78.0-rc31 起，破坏性命令确认卡改用低饱和红色描边按钮和细边框，避免大面积红底造成误读。1.78.0-rc32 起，审批/确认/回答按钮组靠右显示，`ask_user` 选项改为一行一个的整行选择项。1.78.0-rc34 起，切换本地 workspace 会话会自动恢复窗口根目录；远端 runtime 会话在 composer、状态栏和侧边栏使用远端图标/强调色展示，避免误认为需要 Pick folder。1.78.0-rc71 起新增 `AgentSelfLearning`：Agent 可通过 `add_memory` 主动保存长期偏好/项目规则，通过 `create_user_skill` 创建本地 `~/.codex/skills` 用户 skill，并通过 `suggest_mcp_server` 在缺少外部系统能力时记录 MCP 建议；这些都是可审计工具调用，写入类动作仍经过现有审批链路，且回合收尾会统一尝试自动 memory 捕获和可复用 workflow 的 skill 候选提取。1.78.0-rc75 起新增 `search_mcp_servers`，缺外部集成时先搜索 MCP 候选并返回当前配置摘要，再通过 `suggest_mcp_server` 记录建议，且自动学习会把“需要主动 memory / skill / MCP 建议”的 harness 策略沉淀为长期记忆。1.78.0-rc82 起 system prompt 把 meaningful task 的 learning checkpoint 明确为必经路径，自动捕获会把“自动 memory / skill / MCP 建议”拆成具体 memory、skill 和 MCP discovery 策略，并在 GitHub、Gmail、数据库、Figma、浏览器、ERP 等外部能力缺口出现时沉淀 MCP 发现规则；用户明确要求沉淀 skill 时，三步工具链路即可生成本地 skill 候选。1.78.0-rc88 起 `AgentSession` / `AgentRuntime` 持久化 `AgentLearningEvent`，回合末自动 memory、skill 创建/跳过/失败和 MCP discovery 建议都会在 transcript 底部学习记录卡展示，MCP 安装或凭据配置仍必须用户确认。`AgentSessionStore` 负责 JSON 持久化（`~/Library/Application Support/WillDeep/agent-sessions/`），`AgentRoutineStore` + `AgentRoutineScheduler` 作为兼容存储层负责自动化调度。
 - **Agent mode 标题栏（1.78.0-rc35）** — 顶部会话标题不再展示复制标题按钮；右侧操作区移除“新聊天”图标，只保留一个切换回 Editor 模式的入口。
 - **设置页结构（1.78.0-rc36）** — 前三个设置标签整理为“字体 / 格式 / 工作区”：字体页同时管理编辑器正文和工作区列表文字，但两组字号/行高保持独立；格式页聚合主题、背景、行号、高亮和玻璃效果；工作区页专注检查器默认视图和保存行为。
 - **Agent 工具展示（1.78.0-rc37）** — 实时 transcript 不再同时展示工具活动摘要和同内容的工具组卡片；文件读取/目录浏览等工具只保留一张可展开工具组卡片，避免“已读取 N 个文件”重复出现。
-- **编辑器内核** — `EditorView.swift` 包 `NSTextView`，搭配 `SyntaxHighlighter.swift`（NSRegularExpression 静态缓存，viewport 高亮）/ `ScopeGuideCalculator.swift`（fold + scope guide）。
+- **Agent TLS 重试（1.78.0-rc38）** — 模型请求遇到 TLS 握手或证书校验类 `URLError` 时，如果 assistant 还没有输出内容、也没有产生 tool call，会自动最多重试 5 次，每次间隔 5 秒；重试耗尽后仍显示原有证书信任提示，避免临时代理抖动直接打断会话。
+- **Agent 依赖安装执行（1.78.0-rc39）** — `npm install/ci/add`、`yarn install/add`、`pnpm install/add` 这类项目内依赖准备命令会进入带网络的 workspace 沙箱，允许在当前 workspace 下载依赖并写入 lockfile/node_modules；全局安装、publish、敏感路径和越界路径仍不自动放行。
+- **Agent 执行策略内核（1.78.0-rc40）** — npm/yarn/pnpm 的安全分类与网络沙箱授权统一走 `AgentPackageCommandPolicy`；tools prompt 明确要求依赖安装、生成、构建、渲染、测试尽量由 agent 自己通过 `run_command` 执行并验证，只有真阻塞才让用户接手。
+- **Agent 策略并发边界（1.78.0-rc41）** — `CommandSafety` / `SafeCommand` 明确标记为 `nonisolated` 纯策略类型，避免 sandbox / authorization 的非隔离执行路径调用安全分类时被默认 MainActor 隔离牵住，降低执行内核后续演进复杂度。
+- **Agent warning 清理（1.78.0-rc42）** — 清理通知发送、子 agent 完成报告和 sandbox audit 写入路径的 Swift warning，让 build 诊断继续指向真正需要处理的执行内核问题。
+- **测试复杂度治理（1.78.0-rc43）** — `XeditTests.swift` 中 Agent tool / SafeCommand / run_command 风险测试拆到 `AgentToolIntegrationTests.swift`，让主测试文件从 3574 行回落到 2709 行，先解决仓库 3000 行硬上限问题。
+- **Agent 测试隔离（1.78.0-rc44）** — `testGoalModeAutoApproval` 改用测试专用 Keychain / UserDefaults sandbox，避免开发机真实 Always Allow 规则污染普通模式审批断言；`WillDeepTests` suite 当前 159 个用例通过。
+- **Agent loop 复杂度治理（1.78.0-rc45）** — 新增 `AppStateAgentErrors.swift`，承接 Agent 错误展示、Retry 按钮、TLS 证书错误重试和 goal 模式瞬时网络错误重试判断；`AppStateAgentLoop.swift` 降到约 1990 行，回到 2000 行软阈值以内。
+- **Agent panel 复杂度治理（1.78.0-rc46）** — 新增 `AgentErrorCard.swift`，将 panel / mode transcript 共用的错误卡片从 `AgentPanelView.swift` 拆出；`AgentPanelView.swift` 降到约 1938 行，核心 Swift 热点均回到 2000 行软阈值以内。
+- **测试复杂度治理（1.78.0-rc47）** — 新增 `EditorWorkflowTests.swift`，将文件加载、保存、标签页、编辑器导航、查找替换和 dirty-state 测试从 `XeditTests.swift` 拆出；`XeditTests.swift` 降到约 1991 行，主测试文件也回到 2000 行软阈值以内。
+- **Workspace / Runtime 可见性（1.78.0-rc48）** — 新增 `WorkspacePresentation.swift`，统一 composer、状态栏和侧边栏的 workspace 展示；远端会话即使 runtime descriptor 暂时缺失，也会根据 session 的 `.remote(runtimeID, path)` 显示 `Remote: <workspace>`，不再退回 `Pick folder`。SSH / daemon workspace 使用专属图标、强调色和 badge，帮助用户识别远端 runtime。
+- **测试诊断收口（1.78.0-rc49）** — 对触碰 MainActor 隔离模型/工具值的测试 suite 标记 `@MainActor`，清理 Swift 6 isolation warning，降低测试输出噪音。
+- **设置页复杂度治理（1.78.0-rc50）** — 新增 `EditorSettingsPrimaryTabs.swift`，将“字体 / 格式 / 工作区”前三个设置 tab 从 `EditorSettingsView.swift` 拆出；设置页信息架构不变，主文件降到约 1645 行。
+- **Agent loop 复杂度治理（1.78.0-rc51）** — 新增 `AppStateAgentContextCompression.swift` 和 `AppStateAgentPatches.swift`，将上下文压缩/自动压缩判断、旧 tool result 折叠、Agent patch proposal 捕获与应用逻辑从 `AppStateAgentLoop.swift` 拆出；主 loop 文件降到约 1666 行。
+- **测试复杂度治理（1.78.0-rc52）** — 新增 `GitWorktreeCoreTests.swift`，将 Git 状态解析、worktree 变更摘要、worktree 命名和创建测试从 `XeditTests.swift` 拆出；主测试文件降到约 1782 行。
+- **测试复杂度治理（1.78.0-rc68）** — 新增 `EditorCoreBehaviorTests.swift`，将文件大小/二进制/编码、编辑器设置、外部打开、语法高亮、scope guide 和 outline extractor 测试从 `XeditTests.swift` 拆出；主测试文件降到约 1115 行。
+- **AppState 复杂度治理（1.78.0-rc69）** — 新增 `AppStateEditorPresentation.swift`，将 Agent/编辑器展示状态、预览/语言选择计算属性和轻量 UI 命令从 `AppState.swift` 拆出；主状态枢纽降到约 1343 行。
+- **Agent panel 工具卡片治理（1.78.0-rc70）** — 新增 `AgentToolCallViews.swift`，将实时 transcript 的工具调用分组和工具调用卡片从 `AgentPanelView.swift` 拆出；侧边 panel 主文件降到约 771 行，优先卸掉高频 UI 文件的复杂度压力。
+- **Agent 自学习工具（1.78.0-rc71）** — 新增 `AgentSelfLearning.swift` 和 `AgentSelfLearningTests.swift`，补齐主动记忆、自动 skill 候选和 MCP 建议工具链；memory 捕获覆盖所有有效回合退出路径，并扩展中文偏好触发词。
+- **Agent tools 复杂度治理（1.78.0-rc72）** — 新增 `AgentFileTools.swift`，将 workspace 只读文件/Git 工具从 `AgentTools.swift` 拆出；`AgentTools.swift` 降到约 810 行，继续把复杂度债作为 Agent harness 的优先治理项。
+- **Agent harness 改进优先级（1.78.0-rc72）** — 新增 `docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md`，把复杂度治理、执行自主性、自学习、MCP 发现、可观测性和测试分成 P0/P1/P2，明确后续“先降复杂度，再叠能力”的执行顺序。
+- **Agent loop 复杂度治理（1.78.0-rc73）** — 新增 `AgentStreamingMessageBuffer.swift` 和 `AppStateAgentLearning.swift`，将流式输出缓冲与回合末自学习捕获从 `AppStateAgentLoop.swift` 拆出；主 loop 文件降到约 1251 行。
+- **Agent composer 复杂度治理（1.78.0-rc74）** — 新增 `AppStateAgentComposer.swift`，将发送入口、附件上下文和编辑器选区附件从 `AppStateAgentSessions.swift` 拆出；session 文件降到约 1076 行，后续可继续专注 session lifecycle / routine / Plan & Goal。
+- **Agent MCP 自学习闭环（1.78.0-rc75）** — 新增 `search_mcp_servers` 工具和自动 MCP 能力缺口记忆：Agent 遇到缺外部系统能力时可先搜索候选、生成可审计建议，并在用户明确要求时沉淀“自动 memory / skill / MCP 建议”的长期策略。
+- **AppState runtime 访问器治理（1.78.0-rc76）** — 新增 `AppStateAgentRuntimeAccessors.swift`，将 `activeRuntime`、Agent messages/tool state、composer pending attachments、Plan/Goal、queued messages、worktree summary、tool waiter 和 request task 的兼容转发访问器从主状态文件拆出；`AppState.swift` 降到约 1182 行。
+- **Remote runtime 复杂度治理（1.78.0-rc77）** — 新增 `AgentRemoteRuntimeModels.swift`，将远端 runtime descriptor、capabilities、workspace location、路径校验和 runtime store 从 `AgentRemoteRuntime.swift` 拆出；远端执行主文件降到约 840 行。
+- **Mobile Gateway bridge 复杂度治理（1.78.0-rc78）** — 新增 `AgentMobileGatewayDesktopPeer.swift` 和 `AppStateMobileGatewayController.swift`，将桌面 WebSocket peer 与 AppState 安全适配层从 `AgentMobileGatewayBridge.swift` 拆出；bridge 主文件降到约 593 行，专注移动端 command router 与 envelope 转换。
+- **Agent chat history chrome 治理（1.78.0-rc79）** — 新增 `AgentChatHistoryChromeRenderer.swift`，将 TextKit 聊天历史的 header/avatar、bubble paragraph style、footer、文本附件和工具组 chrome 从 `AgentChatHistoryFormatter.swift` 拆出；主渲染器降到约 825 行。
+- **Agent provider library 模型治理（1.78.0-rc80）** — 新增 `AgentProviderLibraryModels.swift`，将 provider library entry/container 从 `AgentModels.swift` 拆出；主模型文件降到约 1090 行。
+- **Agent loop 执行配套治理（1.78.0-rc81）** — 新增 `AppStateAgentDispatchQueue.swift` 和 `AppStateAgentRequestEstimates.swift`，将 provider 并发槽/待派发队列、当前 turn 配置、模型状态、请求消息预估、token 估算和上下文窗口启发式从 `AppStateAgentLoop.swift` 拆出；主 loop 降到约 986 行。
+- **Agent 自学习行为协议（1.78.0-rc82）** — system prompt 将 self-learning checkpoint 变成 meaningful task 的必经路径；回合末自动捕获会拆分 memory / skill / MCP discovery 具体策略，并识别常见外部集成缺口；显式 skill 沉淀允许三步工具链路生成候选。
+- **Agent 审批边界复杂度治理（1.78.0-rc83）** — 新增 `AgentToolAuthorizationSupport.swift`，将 sandbox audit log、命令/工具 Always Allow 签名和 MCP read-only heuristics 从 `AgentToolAuthorization.swift` 拆出；主授权策略文件降到约 869 行，继续聚焦 sandbox policy 和执行边界决策。
+- **Agent MCP bridge 复杂度治理（1.78.0-rc84）** — 新增 `AgentMCPModels.swift` 和 `AgentMCPServerDirectory.swift`，将 MCP transport/source/config/settings、Keychain credential reference、Cursor/Codex/User server discovery 和 TOML/JSON 解析从 `AgentMCPBridge.swift` 拆出；bridge 主文件降到约 440 行，专注 JSON-RPC stdio / streamable-http 调用。
+- **Agent 自学习审计闭环（1.78.0-rc85）** — 新增 `AgentSelfLearningAudit`，将本轮应沉淀的 memory、skill 候选、MCP 建议和工具证据数量结构化；MCP 缺口自动记忆会带上 `Search query` 和 `search_mcp_servers` 下一步，默认 skill 自动提取门槛从 5 步降到 3 步，并迁移仍停在旧默认值的本地设置。
+- **Agent composer palette 复杂度治理（1.78.0-rc86）** — 新增 `AgentComposerPaletteViews.swift`，将 slash command palette、`@` attachment picker、composer skill/file chips 和 session mode badges 从 `AgentModeComposerView.swift` 拆出；composer 主文件从约 1103 行降到约 687 行。
+- **Agent message support 复杂度治理（1.78.0-rc87）** — 新增 `AgentMessageSupportViews.swift`，将 long-token breaker、streaming cursor、用户图片描述折叠、message footer、queued message row 和 empty state 从 `AgentMessageView.swift` 拆出；消息主文件从约 1080 行降到约 527 行。
+- **Agent 自学习可见性（1.78.0-rc88）** — 新增 `AgentLearningEvent` 和 `AgentLearningEventViews.swift`，自动 memory、skill 创建/跳过/失败和 MCP discovery 建议会进入 session 持久化并在 transcript 底部显示；MCP 建议展示 `Search query` 和用户确认安装/配置边界。
+- **Agent 自学习审核队列（1.78.0-rc89）** — 新增 `AgentLearningReviewStore.swift` 和 `AgentLearningReviewSettingsView.swift`，回合末自动学习事件会进入持久 review 队列，并在 Memory 设置页支持复制、标记已审核、忽略和清理已审核记录。
+- **复杂度自动守门（1.78.0-rc90）** — 新增 `scripts/complexity_guard.rb`，按 2000 行软阈值和 3000 行硬阈值扫描 Swift / Go / Ruby / Shell / workflow 源文件，输出 Markdown + JSON 报告；本地 `scripts/run_tests.sh` 和 GitHub Actions `Tests` workflow 都会在测试前执行该守门。
+- **版本一致性与 Go CI（1.78.0-rc91）** — 新增 `scripts/version_consistency.rb`，校验 Xcode / Go agent / Help / README / product overview / Mobile Gateway / harness priorities / CHANGELOG 顶部版本一致性并输出 Markdown + JSON 报告；本地 `scripts/run_tests.sh` 和 GitHub Actions `Tests` workflow 都会执行该检查，CI 同时补跑 `willdeep-agent` 的 `go test ./...`。
+- **Agent turn report（1.78.0-rc93）** — 新增 `AgentTurnReport.swift` 和 `AgentTurnReportView.swift`，transcript 底部会展示最近一轮 Agent 的模型/provider、交互与审批模式、耗时、token、工具状态、风险分布、审批来源、sandbox mode 和自学习动作，并支持复制报告文本。
+- **Agent 自学习动作元数据（1.78.0-rc96）** — 新增 `AgentLearningAction` 与 `AgentLearningActionPresentation`：自动 memory、skill 创建/跳过/失败和 MCP 建议都会结构化记录工具名、目标、搜索词、原因、下一步和是否需要用户确认；transcript 学习卡、Settings review 队列和 turn report 都能显示“已自动执行”与“待用户确认”的差异。
+- **Agent panel 复杂度治理（1.78.0-rc53）** — 新增 `AgentPanelCards.swift`，将右侧 Agent panel 的 patch proposal 卡片、空状态和消息气泡从 `AgentPanelView.swift` 拆出；panel 主文件降到约 1681 行。
+- **Swift 6 诊断收口（1.78.0-rc54）** — Markdown parser 测试 suite 显式 `@MainActor`，`KeychainSandbox` 清理路径在主 actor 内复位测试 Keychain/UserDefaults，`EditorOutlineExtractor` 标为非隔离纯解析工具，减少 actor isolation warning 噪音。
+- **Swift 6 诊断收口（1.78.0-rc55）** — `AgentTools` 本地目录枚举改用 `nextObject()`，Quick Open 缓存回填去掉无意义 `await`，Mobile Gateway 设置页端口焦点监听更新为新版 `onChange` 签名。
+- **ContentView 复杂度治理（1.78.0-rc56）** — 新增 `ContentViewEditorChrome.swift`，将 Go to Line、状态栏、分屏、预览、Inspector、Find/Replace、TabBar 和进入 Agent mode 按钮从 `ContentView.swift` 拆出；主窗口 shell 降到约 1225 行。
+- **EditorView 复杂度治理（1.78.0-rc57）** — 新增 `EditorViewAppKitSupport.swift`，将 bracket helper、自定义 `WillDeepTextView`、folding 绘制和 `LineNumberRulerView` 从 `EditorView.swift` 拆出；编辑器 bridge 主文件降到约 969 行。
+- **Mobile Gateway bridge 复杂度治理（1.78.0-rc58）** — 新增 `AgentMobileGatewayModels.swift`，将 JSON envelope、snapshot、message event state、controller contract 和 command error 从 `AgentMobileGatewayBridge.swift` 拆出；bridge 主文件降到约 1332 行。
+- **Swift 6 诊断收口（1.78.0-rc59）** — `AgentRemoteRuntime` 的 SSH 参数 helper 标记为非隔离纯函数，标题自动摘要路径显式跨 MainActor 构造 `AgentClient`，减少 Xcode 测试输出中的 actor isolation warning。
+- **Swift 6 诊断收口（1.78.0-rc60）** — `RuntimeDescriptor.sshTarget` 标记为非隔离纯计算属性，清理 detached SSH 执行路径剩余的 actor isolation warning。
+- **Agent panel 复杂度治理（1.78.0-rc61）** — 新增 `AgentPanelJobs.swift`，将右侧后台任务 drawer 和 job row 从 `AgentPanelView.swift` 拆出；panel 主文件降到约 1459 行。
+- **Agent loop 复杂度治理（1.78.0-rc62）** — 新增 `AppStateAgentToolDecisions.swift`，将工具审批、Always Allow、自动批准来源和安全 judge 配置从 `AppStateAgentLoop.swift` 拆出；执行 loop 主文件降到约 1366 行。
+- **Agent tools 复杂度治理（1.78.0-rc63）** — 新增 `AgentToolModels.swift`，将工具风险模型、上下文、调用记录和 `AgentJSONValue` 从 `AgentTools.swift` 拆出；工具 runner 主文件降到约 1255 行，并顺手清理 adapter 默认 token 常量与工具活动摘要的 Swift 6 actor isolation warning。
+- **Agent chat history 复杂度治理（1.78.0-rc64）** — 新增 `AgentChatToolSummaryFormatter.swift` 和 `AgentMarkdownNormalizer.swift`，将工具调用摘要/参数压缩和 Markdown 预处理从 `AgentChatHistoryFormatter.swift` 拆出；TextKit 渲染器主文件降到约 1333 行。
+- **Agent message 模型治理（1.78.0-rc65）** — 新增 `AgentMessageModels.swift`，将消息、图片/文本附件、provider tool call 和排队消息模型从 `AgentModels.swift` 拆出；主模型文件降到约 1307 行，并清理文本附件纯值属性的 Swift 6 actor isolation warning。
+- **Settings 支撑视图治理（1.78.0-rc66）** — 新增 `EditorSettingsSupport.swift`，将 Settings 键盘关闭监控、窗口 resizable shim 和可显示密钥输入框从 `EditorSettingsView.swift` 拆出；设置页主文件降到约 1516 行。
+- **Settings provider 复杂度治理（1.78.0-rc67）** — 新增 `EditorSettingsProviderLibrary.swift`，将 provider library 列表和右侧 provider entry 编辑器从 `EditorSettingsView.swift` 拆出；设置页主文件降到约 779 行。
+- **编辑器内核** — `EditorView.swift` 包装 `NSTextView` bridge 主流程，`EditorViewAppKitSupport.swift` 承接自定义 `WillDeepTextView`、folding 绘制、bracket helper 和行号尺，搭配 `SyntaxHighlighter.swift`（NSRegularExpression 静态缓存，viewport 高亮）/ `ScopeGuideCalculator.swift`（fold + scope guide）。
 
 ## 目录结构
 
-源码全部在 `Xedit/` 下，单 module。截至 rc42 的主要 Swift 文件（按行数倒序选）：
+源码主要在 `Xedit/` 下，测试在 `XeditTests/` 下。截至 rc90，`scripts/complexity_guard.rb` 扫描到的源代码/自动化文件超过 2000 行的数量为 0，超过 3000 行的数量为 0；当前最接近软阈值的文件如下：
 
 | 文件 | 行数 | 职责 |
 | --- | --- | --- |
-| `AppState.swift` | ~1364 | 全局状态枢纽 + 6 个 manager 伴生文件聚合（rc42 拆完） |
-| `AppStateAgentLoop.swift` | ~1382 | `dispatchAgentMessage` / `runAgentLoop` / `awaitToolDecision` / 工具决策处理 / context 压缩 / patch 应用（rc42 拆出） |
-| `AppStateAgentSessions.swift` | ~1280 | sendAgentMessage / sessions/automations 生命周期 / Plan & Goal / provider library 切换 / 附件管理（rc42 拆出） |
-| `AppStateFileOperations.swift` | ~540 | NSOpenPanel / file load/save / session restore / security-scoped bookmark（rc42 拆出） |
-| `AppStateGitStatus.swift` | ~488 | git porcelain 解析 + `loadGitStatus` / `refreshGitStatusAfterAgentTool` / worktree snapshot/diff preview（rc42 拆出） |
-| `AppStateEditorTextUtilities.swift` | ~180 | nonisolated 文本工具：findRanges / changedLineNumbers / 行操作 / 目录枚举（rc42 拆出） |
-| `AppStatePersistenceStores.swift` | ~111 | RecentItemsStore / SessionStore / CompressionSummaryCollector（rc42 拆出） |
-| `AgentModeView.swift` | ~88 | Agent mode 主壳（rc45 拆完） |
-| `AgentMessageView.swift` | ~870 | 消息气泡 / 助手 Markdown 渲染器 / token breaker / footer / queued row / 空状态（rc45 拆出） |
-| `AgentSessionsSidebar.swift` | ~504 | 左侧会话侧栏：CHATS / provider 状态 / workspace 分组 / 归档分区（rc45 拆出） |
-| `AgentChatTranscript.swift` | ~381 | Plan/Goal banner / 历史 + 流式分流 / tool group / 错误卡（rc45 拆出） |
-| `AgentChatHeader.swift` | ~78 | 会话标题 + 复制 + 新会话 + 切回 editor（rc45 拆出） |
-| `AgentStatusIndicators.swift` | ~558 | StatsDashboard / StatCell / Models 用量列表 / PlanStatusPill / 呼吸 icon / RunningTasksRow（rc45 拆出，rc13 扩展 Models tab） |
-| `AgentPlanGoalCards.swift` | ~528 | Plan card / 修订行 / 步骤行 / 简单 sheet / Goal card / Goal editor（rc45 拆出） |
-| `AgentTools.swift` | ~944 | 共享类型 / UI 状态 / JSON 辅助 / Tool runner（rc45 拆完） |
-| `AgentToolRegistry.swift` | ~458 | 工具描述符表 + read-only shell 分级 + 安全 path 检查（rc45 拆出） |
-| `AgentSkillDirectory.swift` | ~255 | Codex skill 发现 + `list_skills`/`read_skill` 工具入口（rc45 拆出） |
-| `AgentToolAuthorization.swift` | ~118 | always-allow 签名归一化（rc45 拆出） |
-| `AgentModeComposerView.swift` | ~986 | Composer 主壳 + Worktree banner + status bar + slash/@ 弹层（rc45 拆完） |
-| `ComposerTextInput.swift` | ~449 | NSTextView 桥接 + 历史 cursor + @-token 派生（rc45 拆出） |
-| `AgentComposerPickers.swift` | ~428 | Workspace / Model / Mode 三个 pill picker（rc45 拆出） |
-| `AgentComposerAttachments.swift` | ~112 | AttachButton / SendStopButton / QueueBadge（rc45 拆出） |
-| `AgentChatHistoryTextView.swift` | ~541 | NSViewRepresentable 包装 + NSTextView 子类 + bubble layout manager（rc45 拆完） |
-| `AgentChatHistoryFormatter.swift` | ~1247 | Markdown normalizer + AgentChatHistoryRenderer TextKit baker（rc45 拆出） |
-| `AgentChatChromeRenderers.swift` | ~121 | 代码 copy 按钮 + footer 按钮 NSAttributedString builder（rc45 拆出） |
-| `ContentView.swift` | ~1804 | 主窗口外壳（rc40 拆完） |
-| `EditorView.swift` | ~1782 | NSTextView 包装、滚动、caret/scroll 记忆、folding |
-| `AgentPanelView.swift` | ~1977 | 侧边 panel 形态的 Agent 面板 |
-| `EditorSettingsView.swift` | ~1393 | Settings 主窗口：通用 / 字体 / Agent / Skills / Memory / MCP |
-| `AgentModels.swift` | ~1567 | `AgentSession` / `AgentMessage` / `AgentConfiguration` / `AgentProviderLibrary` 等数据模型 |
-| `SyntaxHighlighter.swift` | ~902 | 多语言正则规则 + 静态 NSRegularExpression 缓存 + viewport 高亮 |
-| `AgentMCPBridge.swift` | ~891 | MCP server 发现（App / Cursor / Codex）+ stdio / streamable-http 调用 |
-| `MarkdownPreview.swift` | ~727 | 编辑器右侧 Markdown / HTML 预览（rc40 抽出） |
-| `AgentClient.swift` | ~125 | Facade：按 `providerKind` 分派给具体适配器（1.56 重构） |
-| `AgentClientOpenAIChat.swift` | ~561 | OpenAI Chat Completions 方言适配器（1.56 拆出，含 SSE/tools/image_url/usage） |
-| `AgentClientAnthropic.swift` | ~757 | Anthropic Messages 原生适配器：line-pair SSE / system 顶层 / tool_result 块 / image base64 / stop_reason 映射（1.56-rc2 新增） |
-| `AgentClientGemini.swift` | ~814 | Gemini generateContent 原生适配器：模型在 URL 路径 / x-goog-api-key header / functionCall by name + 合成 id / SCHEMA 大写枚举 / JSONValue helper（1.56-rc4 新增） |
-| `AgentClientOpenAIResponses.swift` | ~734 | OpenAI Responses API 原生适配器：line-pair SSE / instructions 顶层 / function_call + function_call_output items / reasoning_summary.delta 路由到 reasoningDelta / finish_reason 映射（1.56-rc5 新增） |
-| `AgentNetworkSupport.swift` | ~163 | 协议无关共享工具：timeouts / User-Agent / endpoint 拼接 / 错误体 & URL 脱敏（1.56 拆出） |
-| `AgentProviderL10n.swift` | ~95 | Provider/Kind 的 UI 文案集中：shortLabel / helpText / apiKeySourceHint / inlineNotice（1.56 新增） |
-| `AgentRuntime.swift` | — | 每会话一个：messages / requestTask / toolDecisionWaiter / mode/plan/goal |
-| `ContentViewBackgrounds.swift` | ~201 | 主窗口背景、视觉效果、resize handle（rc40 抽出） |
-| `EmptyStateViews.swift` | ~308 | 空工作区 / 空 tab hero + recent（rc40 抽出） |
-| `MainWindowChrome.swift` | ~423 | 键盘快捷键 / 窗口 chrome 配置 / 调色板转发（rc40 抽出） |
-| `AgentMarkdownTableFormatter.swift` | ~111 | CJK 双宽列对齐表格格式化（rc38 抽出，两条渲染路径共用） |
+| `L10n.swift` | ~1327 | String Catalog 访问入口与本地化 key |
+| `ContentView.swift` | ~1225 | 主窗口外壳；rc56 已将 editor chrome 叶子视图拆到 `ContentViewEditorChrome.swift` |
+| `AppState.swift` | ~1182 | 全局状态枢纽 + manager 伴生文件聚合；rc69 拆展示状态，rc76 拆 AgentRuntime 兼容访问器 |
+| `AgentModels.swift` | ~1097 | `AgentSession` / Plan & Goal / provider configuration / patch / worktree / error / attachment / learning event 模型；rc65 已拆消息模型，rc80 已拆 provider library |
+| `AppStateAgentSessions.swift` | ~1076 | Provider library、Plan & Goal、worktree review、queue、session lifecycle、routine 和模型选择；rc74 已拆 composer 附件上下文 |
+| `AgentMobileGatewayBridgeTests.swift` | ~1006 | Mobile Gateway 桌面桥接安全边界与消息流回归测试 |
+| `AppStateAgentLoop.swift` | ~986 | `dispatchAgentMessage` / `runAgentLoop` / `awaitToolDecision` / subagent 执行；rc45/rc51/rc62/rc73/rc81 持续拆出错误、压缩、patch、审批、streaming buffer、turn-end learning、dispatch queue 和 request estimates |
+| `EditorView.swift` | ~969 | NSTextView bridge、滚动、caret/scroll 记忆、高亮调度；rc57 已将自定义 TextView 和行号尺拆出 |
+| `SyntaxHighlighter.swift` | ~923 | 多语言正则规则 + 静态 NSRegularExpression 缓存 + viewport 高亮 |
+| `AgentToolAuthorization.swift` | ~869 | sandbox policy、执行边界决策和 Always Allow 持久记录；rc83 已拆签名与 audit support |
+| `AgentRemoteRuntime.swift` | ~840 | SSH / daemon remote tool execution、probe、命令运行和 daemon wire DTO；rc77 已拆 runtime model/store |
+| `AgentChatHistoryFormatter.swift` | ~825 | AgentChatHistoryRenderer TextKit baker；rc64 已拆 Markdown normalizer/工具摘要，rc79 已拆 chrome renderer |
+| `AgentTools.swift` | ~812 | 内建工具 runner、命令运行、委派 agent 调用和后台任务；rc63 已拆共享工具模型，rc71 拆 self-learning，rc72 拆 workspace 文件/Git 工具 |
+| `AgentPanelView.swift` | ~771 | 侧边 panel 形态的 Agent 面板；rc46/rc53/rc61/rc70 已拆出错误卡片、消息卡片、后台任务 drawer 和工具调用卡片 |
+| `AgentSelfLearning.swift` | ~740 | 自学习 memory / skill / MCP audit 与回合末事件捕获 |
+| `AgentToolCallViews.swift` | ~688 | 实时 transcript 的工具调用分组与工具卡片 |
+| `AgentModeComposerView.swift` | ~687 | Composer 主壳 + Worktree/Goal/status bar + 输入协调；rc86 已拆 palette/chip/badge |
+| `AgentMessageSupportViews.swift` | ~529 | Message footer、queued row、empty state、long-token breaker 和用户图片描述折叠 |
+| `AgentMessageView.swift` | ~527 | 消息气泡 / 助手 Markdown body / 单 `AttributedString` renderer；rc87 已拆 support views |
+| `AgentMCPServerDirectory.swift` | ~473 | MCP settings store、credential reference 管理和 User/Cursor/Codex server discovery |
+| `AgentMCPBridge.swift` | ~440 | MCP JSON-RPC bridge；rc84 已拆 models/settings/directory |
 
-其余文件（`AgentMemoryStore` / `AgentSkillSettingsStore` / `FileTreeView` / `EditorInspector` / `EditorAppearance` / `EditorTab` / `FileSystemNode` / `ProjectFileListCache` / `CommandLineToolInstaller` / `AgentImageViews` / `AgentRoutine*` 等）单一职责、规模可控（<500 行），目前不在重构清单。
-
-CLAUDE.md §10 的软上限是 2000 行，硬上限是 3000 行。rc42 拆完 `AppState.swift`（1364 行）；rc45 拆完 `AgentModeView.swift` / `AgentTools.swift` / `AgentModeComposerView.swift` / `AgentChatHistoryTextView.swift` 共 14 个新文件，全部低于 1500 行任务目标。当前所有 `Xedit/*.swift` 主文件均 < 2000 行（`AgentPanelView.swift` 约 1977 行，已接近软上限，后续扩展应优先拆分）。
+已拆出的复杂度承载文件包括 `AppStateAgentErrors.swift`（~230）、`AppStateAgentContextCompression.swift`（~190）、`AppStateAgentPatches.swift`（~155）、`AppStateAgentToolDecisions.swift`（~280）、`AppStateAgentLearning.swift`（~108）、`AppStateAgentRuntimeAccessors.swift`（~180）、`AppStateAgentComposer.swift`（~256）、`AppStateAgentDispatchQueue.swift`（~68）、`AppStateAgentRequestEstimates.swift`（~216）、`AppStateEditorPresentation.swift`（~198）、`AppStateMobileGatewayController.swift`（~545）、`AgentRemoteRuntimeModels.swift`（~506）、`AgentMobileGatewayDesktopPeer.swift`（~210）、`AgentChatHistoryChromeRenderer.swift`（~503）、`AgentProviderLibraryModels.swift`（~223）、`AgentStreamingMessageBuffer.swift`（~83）、`AgentMessageModels.swift`（~303）、`AgentMessageSupportViews.swift`（~529）、`AgentLearningActionPresentation.swift`（~65）、`AgentLearningEventViews.swift`（~230）、`AgentLearningReviewStore.swift`（~184）、`AgentLearningReviewSettingsView.swift`（~286）、`AgentTurnReport.swift`（~132）、`AgentTurnReportView.swift`（~275）、`AgentToolModels.swift`（~374）、`AgentToolAuthorizationSupport.swift`（~303）、`AgentMCPModels.swift`（~208）、`AgentMCPServerDirectory.swift`（~473）、`AgentSelfLearning.swift`（~829）、`AgentComposerPaletteViews.swift`（~411）、`AgentFileTools.swift`（~444）、`AgentChatToolSummaryFormatter.swift`（~241）、`AgentMarkdownNormalizer.swift`（~83）、`AgentErrorCard.swift`（~100）、`AgentPanelCards.swift`（~264）、`AgentPanelJobs.swift`（~228）、`AgentToolCallViews.swift`（~688）、`ContentViewEditorChrome.swift`（~566）、`EditorSettingsPrimaryTabs.swift`（~249）、`EditorSettingsSupport.swift`（~139）、`EditorSettingsProviderLibrary.swift`（~738）、`EditorViewAppKitSupport.swift`（~828）、`AgentMobileGatewayModels.swift`（~401）、`AgentToolIntegrationTests.swift`（~886）、`AgentSelfLearningTests.swift`（~603）、`AgentTurnReportTests.swift`（~97）、`EditorWorkflowTests.swift`（~743）、`EditorCoreBehaviorTests.swift`（~675）、`GitWorktreeCoreTests.swift`（~223）和 workspace 展示 helper `WorkspacePresentation.swift`（~65）。AGENTS.md §10 的软上限是 2000 行，硬上限是 3000 行；rc90 起本地测试入口和 CI 会生成复杂度报告并在硬阈值超线时失败。下一批需要观察的是 `AppStateAgentSessions.swift`、`AppState.swift` 和窗口级状态聚合：它们尚未超线，但都是横切密集区，继续新增功能前应优先考虑按 runtime lifecycle 边界继续拆分。
 
 ## 关键概念
 
@@ -142,7 +173,7 @@ CLAUDE.md §2 要求 React 部分必须走 i18n，但 WillDeep 是 SwiftUI macOS
 
 - **本地测试**：详见 [TESTING.md](./TESTING.md)。`XeditTests/` 12 个 Swift Testing（`@Suite` / `@Test`）风格的单测，覆盖 Agent 历史渲染、模型选路、目标 checklist 解析、MCP 服务发现、Memory 存储、Plan 进度、Provider library、Session 持久化、Skill 目录、Markdown 列表嵌套与表格解析。Xcode 跑：`Cmd+U`；命令行跑：`xcodebuild test -project Xedit.xcodeproj -scheme Xedit -destination 'platform=macOS'`。
 - **已知 flaky**：CHANGELOG rc41 提到的 7-8 个测试由 AppState init 中的磁盘 IO 在测试间相互污染引起，已 spawn 独立任务追踪，不在本轮范围。
-- **CI**：**未落地。** 仓库下没有 `.github/workflows/`。后续阶段计划：PR 触发 `xcodebuild test` + lint + 版本号一致性校验。详见 [ROADMAP.md](./ROADMAP.md) 阶段 6。
+- **CI**：`.github/workflows/test.yml` 已落地基础 `Tests` workflow，PR / push / 手动触发会运行复杂度守门、版本一致性检查、`willdeep-agent` Go 测试和 `XeditTests`，并上传 Xcode 测试报告、复杂度报告与版本一致性 Markdown/JSON artifact。仍待补齐高风险 E2E smoke 和更细的 Agent turn report。
 
 ## Current Capabilities
 

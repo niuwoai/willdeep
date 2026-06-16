@@ -40,6 +40,16 @@ jobs:
       - name: List schemes
         run: xcodebuild -project Xedit.xcodeproj -list
 
+      - name: Run complexity guard
+        run: ruby scripts/complexity_guard.rb build/ci/complexity_report.md build/ci/complexity_report.json
+
+      - name: Run version consistency
+        run: ruby scripts/version_consistency.rb build/ci/version_report.md build/ci/version_report.json
+
+      - name: Run Go agent tests
+        run: go test ./...
+        working-directory: willdeep-agent
+
       - name: Run XeditTests
         id: tests
         run: |
@@ -63,7 +73,12 @@ jobs:
 
       - name: Append report to job summary
         if: always()
-        run: cat build/ci/report.md >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          cat build/ci/complexity_report.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat build/ci/version_report.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat build/ci/report.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload test artifacts
         if: always()
@@ -74,5 +89,9 @@ jobs:
             build/ci/XeditTests.xcresult
             build/ci/report.md
             build/ci/report.json
+            build/ci/complexity_report.md
+            build/ci/complexity_report.json
+            build/ci/version_report.md
+            build/ci/version_report.json
             build/ci/xcodebuild.log
           retention-days: 14

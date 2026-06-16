@@ -8,6 +8,7 @@ import Testing
 @testable import WillDeep
 
 @Suite(.serialized)
+@MainActor
 struct AgentRemoteRuntimeTests {
     @Test("old session JSON migrates workspaceRootPath to local WorkspaceLocation")
     func oldSessionJSONMigratesWorkspaceRootPath() throws {
@@ -38,6 +39,26 @@ struct AgentRemoteRuntimeTests {
         #expect(session.workspaceRootPath == nil)
         #expect(session.workspaceSidebarGroupKey == "remote:11111111-1111-1111-1111-111111111111:/srv/apps/xedit")
         #expect(session.workspaceSidebarGroupKey != AgentSession.noWorkspaceSidebarGroupKey)
+    }
+
+    @Test("remote workspace presentation stays explicit without a runtime descriptor")
+    func remoteWorkspacePresentationFallback() {
+        let runtime = RuntimeDescriptor(
+            displayName: "q3",
+            host: "q3.example.com",
+            username: "rocky",
+            defaultWorkspacePath: "/srv/apps/wp"
+        )
+
+        #expect(WorkspacePresentation.remoteDisplayName(runtime: runtime, path: "/srv/apps/wp") == "q3: wp")
+        #expect(WorkspacePresentation.remoteHelp(runtime: runtime, path: "/srv/apps/wp").contains("SSH runtime q3"))
+        #expect(WorkspacePresentation.remoteSymbolName(for: runtime) == "terminal.fill")
+        #expect(WorkspacePresentation.remoteBadge(for: runtime) == "SSH")
+
+        #expect(WorkspacePresentation.remoteDisplayName(runtime: nil, path: "/srv/apps/wp") == "Remote: wp")
+        #expect(WorkspacePresentation.remoteHelp(runtime: nil, path: "/srv/apps/wp") == "Remote workspace: /srv/apps/wp")
+        #expect(WorkspacePresentation.remoteSymbolName(for: nil) == "globe")
+        #expect(WorkspacePresentation.remoteBadge(for: nil) == "REMOTE")
     }
 
     @Test("runtime platform and architecture parsing covers supported remote shapes")

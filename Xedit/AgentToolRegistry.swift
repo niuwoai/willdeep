@@ -117,6 +117,49 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "add_memory",
+            description: "Save a durable user or project memory when the conversation reveals a preference, rule, recurring fact, or reusable constraint that should influence future turns. Do not store secrets. Requires approval outside autonomous modes.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "content", type: .string, description: "The concise memory to save. Prefer one durable fact or rule, not a transcript summary.", required: true),
+                AgentToolParameter(name: "scope", type: .string, description: "`global` for user-wide preference, or `project` for workspace-specific conventions. Defaults to global.", required: false),
+                AgentToolParameter(name: "lifetime", type: .string, description: "`longTerm` for durable rules or `transient` for short-lived context. Defaults to longTerm.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "create_user_skill",
+            description: "Create a local user Codex skill under ~/.codex/skills when a reusable workflow has emerged and should be available via @skill/list_skills in future turns. Include when to use it, steps, verification, and safety notes. Requires approval outside autonomous modes.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "name", type: .string, description: "Short skill name, e.g. `release-guardian` or `ppt-qc-workflow`.", required: true),
+                AgentToolParameter(name: "description", type: .string, description: "One sentence describing when the Agent should use this skill.", required: true),
+                AgentToolParameter(name: "body", type: .string, description: "Markdown skill instructions. Must avoid secrets and stale outputs.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "search_mcp_servers",
+            description: "Search for MCP server candidates for a missing external capability, include currently configured MCP servers, and return next-step guidance. Use before suggest_mcp_server when the current server/package name is uncertain. Read-only; if web search is not configured it still returns a concrete query and fallback guidance.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "capability", type: .string, description: "The missing capability, e.g. `GitHub PR review threads`, `PostgreSQL readonly queries`, or `Figma assets`.", required: true),
+                AgentToolParameter(name: "ecosystem", type: .string, description: "Optional ecosystem hint such as GitHub, Gmail, PostgreSQL, Figma, browser, ERP, or Slack.", required: false),
+                AgentToolParameter(name: "count", type: .integer, description: "Number of search results to request, 1-10. Defaults to 5.", required: false),
+                AgentToolParameter(name: "dry_run", type: .boolean, description: "When true, only compose the search query and configured-server summary without contacting web search.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "suggest_mcp_server",
+            description: "Record and return an MCP server suggestion when the user needs an external integration that is not currently configured. Use web_search first when a current server name or setup path is uncertain. This does not install anything or add credentials.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "capability", type: .string, description: "The missing capability, e.g. `GitHub PR review threads`, `PostgreSQL readonly queries`, or `Figma assets`.", required: true),
+                AgentToolParameter(name: "server_name", type: .string, description: "Candidate MCP server/package name if known.", required: false),
+                AgentToolParameter(name: "install_hint", type: .string, description: "Concise setup hint or URL/package reference. Do not include secrets.", required: false),
+                AgentToolParameter(name: "reason", type: .string, description: "Why this MCP would help this or future tasks.", required: false),
+                AgentToolParameter(name: "search_query", type: .string, description: "The query used or recommended to verify the MCP option.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "web_search",
             description: "Search the web with Brave Search and return result titles, URLs, and snippets. Use for current events, library/API documentation, error messages, or anything not answerable from the workspace. Requires a Brave Search API key configured in Settings → Agent → Web tools. Read-only.",
             risk: .read,

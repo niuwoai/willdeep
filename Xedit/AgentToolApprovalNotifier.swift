@@ -25,7 +25,7 @@
 
 import AppKit
 import Foundation
-import UserNotifications
+@preconcurrency import UserNotifications
 
 enum AgentToolApprovalNotifier {
     private static var hasRequestedAuthorization = false

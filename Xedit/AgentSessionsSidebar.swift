@@ -196,6 +196,7 @@ struct AgentSessionsSidebar: View {
         let visible = isExpanded ? activeSessions : Array(activeSessions.prefix(initialRowCount))
         let archivedExpanded = expandedArchivedGroups.contains(workspace)
         let remoteWorkspace = remoteWorkspaceGroup(from: workspace)
+        let remoteRuntime = remoteWorkspace.flatMap { AgentRuntimeStore.descriptor(id: $0.runtimeID) }
 
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
@@ -214,9 +215,11 @@ struct AgentSessionsSidebar: View {
                         }
                     }
                 } label: {
-                    Image(systemName: remoteWorkspace == nil ? (isCollapsed ? "folder.fill" : "folder") : "globe")
+                    Image(systemName: remoteWorkspace == nil
+                        ? (isCollapsed ? "folder.fill" : "folder")
+                        : WorkspacePresentation.remoteSymbolName(for: remoteRuntime))
                         .font(.system(size: 11))
-                        .foregroundStyle(remoteWorkspace == nil ? Color.secondary : Color.accentColor)
+                        .foregroundStyle(remoteWorkspace == nil ? Color.secondary : WorkspacePresentation.remoteTint(for: remoteRuntime))
                         .frame(width: 14, height: 14)
                         .contentShape(Rectangle())
                 }
@@ -226,6 +229,15 @@ struct AgentSessionsSidebar: View {
                     .font(.system(size: 12, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
+                if remoteWorkspace != nil {
+                    Text(WorkspacePresentation.remoteBadge(for: remoteRuntime))
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(WorkspacePresentation.remoteTint(for: remoteRuntime))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(WorkspacePresentation.remoteTint(for: remoteRuntime).opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                }
                 Spacer(minLength: 0)
                 Button {
                     startNewSession(inWorkspaceGroup: workspace)
@@ -537,9 +549,8 @@ struct AgentSessionsSidebar: View {
     private func workspaceDisplayName(_ key: String) -> String {
         if key == AgentSession.noWorkspaceSidebarGroupKey { return "No workspace" }
         if let remote = remoteWorkspaceGroup(from: key) {
-            let runtimeName = AgentRuntimeStore.descriptor(id: remote.runtimeID)?.displayName ?? "Remote"
-            let folderName = URL(fileURLWithPath: remote.path).lastPathComponent
-            return "\(runtimeName): \(folderName.isEmpty ? remote.path : folderName)"
+            let runtime = AgentRuntimeStore.descriptor(id: remote.runtimeID)
+            return WorkspacePresentation.remoteDisplayName(runtime: runtime, path: remote.path)
         }
         return URL(fileURLWithPath: key).lastPathComponent
     }

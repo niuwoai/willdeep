@@ -10,6 +10,7 @@ import Testing
 @testable import WillDeep
 
 @Suite(.serialized)
+@MainActor
 struct AgentSkillMarketplaceTests {
     @Test
     func marketplaceSkillInstallStatusAndUninstallRoundTrip() throws {

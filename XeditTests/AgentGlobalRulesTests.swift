@@ -93,6 +93,27 @@ struct AgentGlobalRulesTests {
         #expect(!prompt.contains("Global user instructions:"))
     }
 
+    @Test
+    func toolsPromptRequiresEndToEndCommandExecution() throws {
+        let tempDir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let prompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: tempDir,
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            toolsEnabled: true,
+            globalRules: nil
+        )
+
+        #expect(prompt.contains("Work end-to-end with tools whenever the workspace makes that possible."))
+        #expect(prompt.contains("Do not tell the user to run install/build/test/render commands when run_command can do it."))
+        #expect(prompt.contains("npm install"))
+        #expect(prompt.contains("Verify generated artifacts before your final answer"))
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep-global-rules-tests-\(UUID().uuidString)", isDirectory: true)
