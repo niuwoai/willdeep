@@ -208,8 +208,19 @@ extension EditorSettingsView {
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
 
-        if panel.runModal() == .OK, let url = panel.url {
-            update(\.windowBackgroundImagePath, url.path)
+        // Use a sheet attached to the Settings window (or a modeless panel
+        // as fallback) instead of `runModal()`. The app-modal nested run
+        // loop made the SwiftUI Settings scene dismiss itself the moment
+        // the panel closed — so picking an image slammed the whole Settings
+        // window shut. begin/beginSheetModal keeps it open.
+        let completion: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .OK, let url = panel.url else { return }
+            self.update(\.windowBackgroundImagePath, url.path)
+        }
+        if let window = NSApp.keyWindow {
+            panel.beginSheetModal(for: window, completionHandler: completion)
+        } else {
+            panel.begin(completionHandler: completion)
         }
     }
 

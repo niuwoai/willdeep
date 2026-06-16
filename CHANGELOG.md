@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.78.0-rc113 - 2026-06-16
+
+### Fixed
+
+- 修复设置页选择「编辑器背景图」后整个设置窗被一起关掉的问题。根因是背景图选择用了 `NSOpenPanel.runModal()`（app-modal 嵌套事件循环），SwiftUI 设置场景在该面板关闭时会顺手 dismiss 自己。改为依附设置窗的 sheet（`beginSheetModal(for:)`，拿不到窗时退化为 modeless `begin`），与项目其它选文件入口一致，选完图片设置窗保持打开。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc113`。
+
 ## 1.78.0-rc112 - 2026-06-16
 
 ### Added
