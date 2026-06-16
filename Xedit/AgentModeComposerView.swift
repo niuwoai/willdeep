@@ -563,6 +563,26 @@ struct AgentChatStatusBar: View {
 
             CompressButton()
             ContextRingIndicator()
+
+            // Quick access: gear opens Settings (keeping the last tab),
+            // phone jumps straight to the Mobile Gateway section.
+            Button {
+                EditorSettingsNavigation.shared.openWindow()
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 13))
+            }
+            .buttonStyle(.plain)
+            .help(L10n.Settings.agentBarSettings)
+
+            Button {
+                EditorSettingsNavigation.shared.open(.mobileGateway)
+            } label: {
+                Image(systemName: "iphone.radiowaves.left.and.right")
+                    .font(.system(size: 13))
+            }
+            .buttonStyle(.plain)
+            .help(L10n.Settings.agentBarMobileGateway)
         }
         .font(AgentDesign.captionFont)
         .foregroundStyle(.secondary)

@@ -592,7 +592,39 @@ extension AppState {
                 openFolderURL(url)
             }
         }
-        return startNewAgentSession()
+        let session = startNewAgentSession()
+        unhideWorkspace(key: session.workspaceSidebarGroupKey)
+        return session
+    }
+
+    // MARK: - Hidden workspaces
+
+    private static let hiddenWorkspaceKeysDefaultsKey = "com.willdeep.sidebar.hiddenWorkspaceKeys.v1"
+
+    static func loadHiddenWorkspaceKeys() -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: hiddenWorkspaceKeysDefaultsKey) ?? [])
+    }
+
+    private func persistHiddenWorkspaceKeys() {
+        UserDefaults.standard.set(Array(hiddenWorkspaceKeys), forKey: Self.hiddenWorkspaceKeysDefaultsKey)
+    }
+
+    /// Hide a workspace group from the sidebar. Sessions stay on disk —
+    /// this only flips visibility, so re-adding the same folder restores
+    /// the full chat list. The catch-all "no workspace" group can't be
+    /// hidden.
+    func hideWorkspace(key: String) {
+        guard key != AgentSession.noWorkspaceSidebarGroupKey else { return }
+        hiddenWorkspaceKeys.insert(key)
+        persistHiddenWorkspaceKeys()
+    }
+
+    /// Un-hide a workspace (called when the user re-adds / switches into
+    /// it), bringing its preserved sessions back into the sidebar.
+    func unhideWorkspace(key: String) {
+        guard hiddenWorkspaceKeys.contains(key) else { return }
+        hiddenWorkspaceKeys.remove(key)
+        persistHiddenWorkspaceKeys()
     }
 
     /// Bind the current composer/session to a selected workspace. Empty
@@ -612,6 +644,7 @@ extension AppState {
             runtime.rebindWorkspace(to: url.path)
             runtime.worktreeChanges = .init()
             persistAgentSession(runtime: runtime)
+            unhideWorkspace(key: runtime.session.workspaceSidebarGroupKey)
             return runtime.session
         }
 
@@ -626,6 +659,7 @@ extension AppState {
             runtime.rebindRemoteWorkspace(runtimeID: runtimeID, path: normalizedPath)
             runtime.worktreeChanges = .init()
             persistAgentSession(runtime: runtime)
+            unhideWorkspace(key: runtime.session.workspaceSidebarGroupKey)
             return runtime.session
         }
 
@@ -646,6 +680,7 @@ extension AppState {
         agentCurrentPlan = nil
         agentCurrentGoal = nil
         AgentSessionStore.save(session)
+        unhideWorkspace(key: session.workspaceSidebarGroupKey)
         return session
     }
 

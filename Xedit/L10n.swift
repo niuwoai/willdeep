@@ -551,6 +551,7 @@ enum L10n {
         static let workspaceHeader = String(localized: "sidebar.workspace-header", defaultValue: "Workspaces")
         static let workspaceHeaderOpenTooltip = String(localized: "sidebar.workspace-header.open-tooltip", defaultValue: "Open another folder as a new workspace")
         static let workspaceMenuNewChat = String(localized: "sidebar.workspace-menu.new-chat", defaultValue: "New Chat in this Workspace")
+        static let workspaceMenuRemove = String(localized: "sidebar.workspace-menu.remove", defaultValue: "Remove from List")
         static let workspaceToggleCollapseTooltip = String(localized: "sidebar.workspace-toggle.collapse-tooltip", defaultValue: "Collapse session list")
         static let workspaceToggleExpandTooltip = String(localized: "sidebar.workspace-toggle.expand-tooltip", defaultValue: "Expand session list")
     }
@@ -643,6 +644,8 @@ enum L10n {
         static let tabLocalAgents = String(localized: "settings.tab.local-agents", defaultValue: "Local Agents")
         static let tabRemoteRuntimes = String(localized: "settings.tab.remote-runtimes", defaultValue: "Runtimes")
         static let tabMobileGateway = String(localized: "settings.tab.mobile-gateway", defaultValue: "Mobile Gateway")
+        static let agentBarSettings = String(localized: "agent.statusbar.settings", defaultValue: "Settings")
+        static let agentBarMobileGateway = String(localized: "agent.statusbar.mobile-gateway", defaultValue: "Mobile Gateway")
 
         static let sectionTypography = String(localized: "settings.section.typography", defaultValue: "Typography")
         static let sectionEditorText = String(localized: "settings.section.editor-text", defaultValue: "Editor Text")
@@ -842,6 +845,8 @@ enum L10n {
             static let qrAccessibilityLabel = String(localized: "settings.mobile-gateway.qr-accessibility-label", defaultValue: "Mobile Gateway pairing QR code")
             static let qrUnavailable = String(localized: "settings.mobile-gateway.qr-unavailable", defaultValue: "QR code unavailable")
             static let listenDescription = String(localized: "settings.mobile-gateway.listen-description", defaultValue: "The gateway listens only after you enable it. Android connects over the local network; Agent execution, tools, patches, and file access still run through the Mac app.")
+            static let advancedToggle = String(localized: "settings.mobile-gateway.advanced-toggle", defaultValue: "Show advanced info (IP / port / executable)")
+            static let scanHint = String(localized: "settings.mobile-gateway.scan-hint", defaultValue: "Scan this QR code with the WillDeep Android app to pair over your local network.")
             static func resolvedExecutable(_ a1: String) -> String {
                 let template = String(localized: "settings.mobile-gateway.resolved-executable", defaultValue: "Using %@")
                 return String(format: template, a1)

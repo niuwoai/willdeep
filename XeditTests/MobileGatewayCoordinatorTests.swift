@@ -178,4 +178,54 @@ struct MobileGatewayCoordinatorTests {
         #expect(envelope.ok)
         #expect(envelope.data?.pairingPayload == nil)
     }
+
+    // MARK: - Reliability helpers (rc112)
+
+    /// With no captured output we keep the original bare status line.
+    @Test
+    func terminationMessageWithoutOutputIsBare() {
+        let message = MobileGatewayCoordinator.terminationMessage(status: 1, output: "")
+        #expect(message == "Mobile Gateway exited with status 1.")
+    }
+
+    /// Whitespace-only output is treated as empty — no dangling tail.
+    @Test
+    func terminationMessageIgnoresWhitespaceOnlyOutput() {
+        let message = MobileGatewayCoordinator.terminationMessage(status: 1, output: "\n  \n")
+        #expect(message == "Mobile Gateway exited with status 1.")
+    }
+
+    /// The real reason (e.g. "address already in use") is appended so the
+    /// UI shows something actionable instead of just "status 1".
+    @Test
+    func terminationMessageAppendsOutputTail() {
+        let output = "starting gateway\nbind: address already in use\n"
+        let message = MobileGatewayCoordinator.terminationMessage(status: 1, output: output)
+        #expect(message.hasPrefix("Mobile Gateway exited with status 1."))
+        #expect(message.contains("address already in use"))
+    }
+
+    /// Only the last few lines are kept so a noisy log doesn't flood the
+    /// status field.
+    @Test
+    func terminationMessageKeepsOnlyLastLines() {
+        let output = (1...10).map { "line\($0)" }.joined(separator: "\n")
+        let message = MobileGatewayCoordinator.terminationMessage(status: 2, output: output)
+        #expect(message.contains("line10"))
+        #expect(message.contains("line7"))
+        #expect(!message.contains("line6"))
+    }
+
+    /// Probing returns a bindable port at or above the preferred one, so a
+    /// busy 8877 no longer forces a status-1 launch failure.
+    @Test
+    func findAvailablePortReturnsBindablePortAtOrAbovePreferred() {
+        let preferred = 8877
+        let port = MobileGatewayCoordinator.findAvailablePort(preferred: preferred)
+        #expect(port != nil)
+        if let port {
+            #expect(port >= preferred)
+            #expect(port <= mobileGatewayPortRange.upperBound)
+        }
+    }
 }

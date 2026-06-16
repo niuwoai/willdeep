@@ -13,6 +13,10 @@ struct MobileGatewaySettingsView: View {
     @State private var draft = MobileGatewaySettingsStore.load()
     @State private var portText = String(MobileGatewaySettingsStore.load().port)
     @FocusState private var portFieldFocused: Bool
+    /// Advanced info (IP / port / host / executable path) stays hidden by
+    /// default — day-to-day the user only needs the QR code. Persisted so
+    /// power users who flip it on keep it on.
+    @AppStorage("com.willdeep.mobileGateway.showAdvanced") private var showAdvanced = false
 
     private var coordinator: MobileGatewayCoordinator {
         appState.mobileGatewayCoordinator
@@ -33,16 +37,8 @@ struct MobileGatewaySettingsView: View {
                 LabeledContent(L10n.Settings.MobileGateway.statusLabel) {
                     Text(statusText)
                         .foregroundStyle(statusColor)
-                }
-
-                LabeledContent(L10n.Settings.MobileGateway.addressLabel) {
-                    Text(coordinator.displayBaseURL?.absoluteString ?? L10n.Settings.MobileGateway.notRunning)
                         .textSelection(.enabled)
-                }
-
-                LabeledContent(L10n.Settings.MobileGateway.protocolLabel) {
-                    Text(coordinator.health?.protocolVersion ?? "mobile-gateway.v1")
-                        .textSelection(.enabled)
+                        .multilineTextAlignment(.trailing)
                 }
 
                 LabeledContent(L10n.Settings.MobileGateway.desktopPeerLabel) {
@@ -78,91 +74,117 @@ struct MobileGatewaySettingsView: View {
                 }
             }
 
-            Section(L10n.Settings.MobileGateway.listenSection) {
-                TextField(L10n.Settings.MobileGateway.hostPrompt, text: Binding(
-                    get: { draft.host },
-                    set: { draft.host = $0; saveDraft() }
-                ))
-                .textFieldStyle(.roundedBorder)
-
-                HStack {
-                    Text(L10n.Settings.MobileGateway.portInputLabel)
-                    Spacer()
-                    TextField(L10n.Settings.MobileGateway.portPrompt, text: Binding(
-                        get: { portText },
-                        set: { updatePortText($0) }
-                    ))
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 160)
-                    .multilineTextAlignment(.trailing)
-                    .focused($portFieldFocused)
-                    .onSubmit {
-                        commitPortText()
-                    }
-                    .onChange(of: portFieldFocused) { _, isFocused in
-                        if !isFocused {
-                            commitPortText()
-                        }
-                    }
-                }
-
-                TextField(L10n.Settings.MobileGateway.desktopNamePrompt, text: Binding(
-                    get: { draft.desktopName },
-                    set: { draft.desktopName = $0; saveDraft() }
-                ))
-                .textFieldStyle(.roundedBorder)
-
-                Toggle(L10n.Settings.MobileGateway.allowPairingToggle, isOn: Binding(
-                    get: { draft.allowPairing },
-                    set: { draft.allowPairing = $0; saveDraft() }
-                ))
-
-                TextField(L10n.Settings.MobileGateway.executablePathPrompt, text: Binding(
-                    get: { draft.executablePath },
-                    set: { draft.executablePath = $0; saveDraft() }
-                ))
-                .textFieldStyle(.roundedBorder)
-
-                if let resolved = coordinator.resolvedExecutablePath {
-                    Text(L10n.Settings.MobileGateway.resolvedExecutable(resolved))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                }
-
-                Text(L10n.Settings.MobileGateway.listenDescription)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
+            // QR code is the star: a phone scans it to pair. Everything
+            // else (IP / port / executable) is diagnostics, tucked behind
+            // the advanced toggle below.
             Section(L10n.Settings.MobileGateway.pairingSection) {
                 if let payload = coordinator.pairingPayload {
-                    HStack(alignment: .top, spacing: 16) {
+                    VStack(spacing: 12) {
                         MobileGatewayQRCodeView(text: payload.qrJSONString)
-                            .frame(width: 168, height: 168)
-                        VStack(alignment: .leading, spacing: 8) {
-                            LabeledContent(L10n.Settings.MobileGateway.pairingBaseURLLabel) {
-                                Text(payload.baseURL)
-                                    .textSelection(.enabled)
+                            .frame(width: 220, height: 220)
+                        Text(L10n.Settings.MobileGateway.scanHint)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        LabeledContent(L10n.Settings.MobileGateway.expiresLabel) {
+                            Text(payload.expiresAt, style: .relative)
+                        }
+                        HStack(spacing: 8) {
+                            Button(L10n.Settings.MobileGateway.copyPayloadButton) {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(payload.qrJSONString, forType: .string)
                             }
-                            LabeledContent(L10n.Settings.MobileGateway.expiresLabel) {
-                                Text(payload.expiresAt, style: .relative)
-                            }
-                            HStack(spacing: 8) {
-                                Button(L10n.Settings.MobileGateway.copyPayloadButton) {
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(payload.qrJSONString, forType: .string)
-                                }
-                                Button {
-                                    Task { await coordinator.rotatePairingPayload() }
-                                } label: {
-                                    Label(L10n.Settings.MobileGateway.refreshPairingButton, systemImage: "arrow.clockwise")
-                                }
+                            Button {
+                                Task { await coordinator.rotatePairingPayload() }
+                            } label: {
+                                Label(L10n.Settings.MobileGateway.refreshPairingButton, systemImage: "arrow.clockwise")
                             }
                         }
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
                 } else {
                     Text(coordinator.isRunning ? L10n.Settings.MobileGateway.noPairingPayload : L10n.Settings.MobileGateway.startToPair)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section {
+                Toggle(L10n.Settings.MobileGateway.advancedToggle, isOn: $showAdvanced)
+            }
+
+            if showAdvanced {
+                Section(L10n.Settings.MobileGateway.listenSection) {
+                    LabeledContent(L10n.Settings.MobileGateway.addressLabel) {
+                        Text(coordinator.displayBaseURL?.absoluteString ?? L10n.Settings.MobileGateway.notRunning)
+                            .textSelection(.enabled)
+                    }
+
+                    LabeledContent(L10n.Settings.MobileGateway.protocolLabel) {
+                        Text(coordinator.health?.protocolVersion ?? "mobile-gateway.v1")
+                            .textSelection(.enabled)
+                    }
+
+                    if let payload = coordinator.pairingPayload {
+                        LabeledContent(L10n.Settings.MobileGateway.pairingBaseURLLabel) {
+                            Text(payload.baseURL)
+                                .textSelection(.enabled)
+                        }
+                    }
+
+                    TextField(L10n.Settings.MobileGateway.hostPrompt, text: Binding(
+                        get: { draft.host },
+                        set: { draft.host = $0; saveDraft() }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+
+                    HStack {
+                        Text(L10n.Settings.MobileGateway.portInputLabel)
+                        Spacer()
+                        TextField(L10n.Settings.MobileGateway.portPrompt, text: Binding(
+                            get: { portText },
+                            set: { updatePortText($0) }
+                        ))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 160)
+                        .multilineTextAlignment(.trailing)
+                        .focused($portFieldFocused)
+                        .onSubmit {
+                            commitPortText()
+                        }
+                        .onChange(of: portFieldFocused) { _, isFocused in
+                            if !isFocused {
+                                commitPortText()
+                            }
+                        }
+                    }
+
+                    TextField(L10n.Settings.MobileGateway.desktopNamePrompt, text: Binding(
+                        get: { draft.desktopName },
+                        set: { draft.desktopName = $0; saveDraft() }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+
+                    Toggle(L10n.Settings.MobileGateway.allowPairingToggle, isOn: Binding(
+                        get: { draft.allowPairing },
+                        set: { draft.allowPairing = $0; saveDraft() }
+                    ))
+
+                    TextField(L10n.Settings.MobileGateway.executablePathPrompt, text: Binding(
+                        get: { draft.executablePath },
+                        set: { draft.executablePath = $0; saveDraft() }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+
+                    if let resolved = coordinator.resolvedExecutablePath {
+                        Text(L10n.Settings.MobileGateway.resolvedExecutable(resolved))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+
+                    Text(L10n.Settings.MobileGateway.listenDescription)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }

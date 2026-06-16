@@ -105,6 +105,9 @@ final class MobileGatewayCoordinator: ObservableObject {
     private var monitorTask: Task<Void, Never>?
     private var tokenFileURL: URL?
     private let session: URLSession
+    /// Tail (~4KB) of the child's stdout/stderr, kept only so a non-zero
+    /// exit can surface the real reason instead of a bare status code.
+    private var recentOutput = ""
 
     init(
         appState: AppState,
@@ -157,8 +160,16 @@ final class MobileGatewayCoordinator: ObservableObject {
             return
         }
         state = .starting
+        recentOutput = ""
         do {
-            let normalized = settings.normalized
+            var normalized = settings.normalized
+            // 默认端口 8877 常被占用(残留网关进程或其它 App),直接导致
+            // 子进程以 status 1 退出。从配置端口起探测第一个可 bind 的
+            // 端口,自动避开冲突,保证「启动即可用」。
+            if let available = Self.findAvailablePort(preferred: normalized.port),
+               available != normalized.port {
+                normalized.port = available
+            }
             settings = normalized
             MobileGatewaySettingsStore.save(normalized)
 
@@ -328,7 +339,7 @@ final class MobileGatewayCoordinator: ObservableObject {
         if finishedProcess.terminationStatus == 0 {
             state = .stopped
         } else {
-            fail("Mobile Gateway exited with status \(finishedProcess.terminationStatus).")
+            fail(Self.terminationMessage(status: finishedProcess.terminationStatus, output: recentOutput))
         }
     }
 
@@ -340,12 +351,24 @@ final class MobileGatewayCoordinator: ObservableObject {
     }
 
     private func drain(pipe: Pipe) {
-        monitorTask = Task.detached {
+        monitorTask = Task.detached { [weak self] in
             let handle = pipe.fileHandleForReading
             while !Task.isCancelled {
                 let data = handle.availableData
                 if data.isEmpty { return }
+                if let text = String(data: data, encoding: .utf8), !text.isEmpty {
+                    await self?.appendRecentOutput(text)
+                }
             }
+        }
+    }
+
+    /// Append child output, keeping only the tail so a long-running
+    /// gateway doesn't accumulate unbounded logs in memory.
+    private func appendRecentOutput(_ text: String) {
+        recentOutput += text
+        if recentOutput.count > 4096 {
+            recentOutput = String(recentOutput.suffix(4096))
         }
     }
 
@@ -439,6 +462,54 @@ final class MobileGatewayCoordinator: ObservableObject {
             fallback = fallback ?? address
         }
         return fallback
+    }
+
+    /// Build a diagnosable failure string: the exit status plus the last
+    /// few lines the child printed (the real reason — e.g. "address
+    /// already in use" — instead of a bare status code).
+    static func terminationMessage(status: Int32, output: String) -> String {
+        let base = "Mobile Gateway exited with status \(status)."
+        let tail = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !tail.isEmpty else { return base }
+        let lastLines = tail
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .suffix(4)
+            .joined(separator: "\n")
+        return "\(base)\n\(lastLines)"
+    }
+
+    /// Find the first bindable TCP port at or above `preferred`. Default
+    /// 8877 is frequently already held (a stale gateway or another app),
+    /// which made the child exit with status 1; probing avoids the
+    /// conflict. Returns nil if no port in the window is free.
+    static func findAvailablePort(preferred: Int, attempts: Int = 50) -> Int? {
+        let start = min(max(preferred, mobileGatewayPortRange.lowerBound), mobileGatewayPortRange.upperBound)
+        for offset in 0..<attempts {
+            let candidate = start + offset
+            guard candidate <= mobileGatewayPortRange.upperBound else { break }
+            if isPortBindable(candidate) { return candidate }
+        }
+        return nil
+    }
+
+    /// True when a TCP socket can bind 0.0.0.0:port right now — i.e. the
+    /// port isn't held by an active listener. Mirrors what the Go child
+    /// does on launch (plain bind, no SO_REUSEADDR) so the probe result
+    /// matches the child's actual outcome.
+    private static func isPortBindable(_ port: Int) -> Bool {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = in_port_t(UInt16(truncatingIfNeeded: port).bigEndian)
+        addr.sin_addr.s_addr = INADDR_ANY
+        let bound = withUnsafePointer(to: &addr) { ptr -> Int32 in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
+                Darwin.bind(fd, sa, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        return bound == 0
     }
 }
 

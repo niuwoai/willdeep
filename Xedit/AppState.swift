@@ -127,6 +127,10 @@ final class AppState: ObservableObject {
     }
     /// Persisted Agent-mode chat sessions, newest-updated first.
     @Published var agentSessions: [AgentSession] = []
+    /// Sidebar group keys the user has removed from view. Removal only
+    /// hides the workspace — its sessions stay on disk, so re-adding the
+    /// same folder restores the full chat list. Persisted across launches.
+    @Published var hiddenWorkspaceKeys: Set<String> = AppState.loadHiddenWorkspaceKeys()
     /// Persisted Agent routines (scheduled prompts), most-recently-updated
     /// first. Surfaces in the Agent-mode sidebar's Routines section and
     /// drives the AgentRoutineScheduler that wakes them up on schedule.

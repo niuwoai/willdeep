@@ -265,6 +265,14 @@ struct AgentSessionsSidebar: View {
                 Button(L10n.Sidebar.workspaceMenuNewChat) {
                     startNewSession(inWorkspaceGroup: workspace)
                 }
+                if workspace != AgentSession.noWorkspaceSidebarGroupKey {
+                    Divider()
+                    // Removal only hides the group — sessions stay on disk
+                    // and reappear if the same folder is re-added later.
+                    Button(L10n.Sidebar.workspaceMenuRemove, role: .destructive) {
+                        appState.hideWorkspace(key: workspace)
+                    }
+                }
             }
 
             if !isCollapsed {
@@ -538,6 +546,7 @@ struct AgentSessionsSidebar: View {
         // first), so within a folder the chat order still reflects
         // recency — only the folder ordering is frozen.
         return groups
+            .filter { !appState.hiddenWorkspaceKeys.contains($0.key) }
             .map { ($0.key, $0.value.sorted(by: sessionOrder)) }
             .sorted { lhs, rhs in
                 let lKey = lhs.0

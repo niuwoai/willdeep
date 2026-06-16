@@ -36,6 +36,13 @@ final class EditorSettingsNavigation: ObservableObject {
 
     func open(_ tab: EditorSettingsTab) {
         selectedTab = tab
+        openWindow()
+    }
+
+    /// Open the settings window without changing the selected tab — used
+    /// by the Agent status-bar gear so it lands on whatever section the
+    /// user last had open.
+    func openWindow() {
         NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
         NSApp.activate(ignoringOtherApps: true)
     }
