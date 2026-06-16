@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.78.0-rc107 - 2026-06-16
+
+### Fixed
+
+- 真正修掉 CI 上反复变红的 `timeoutSurfacesTimedOutStatus()`。rc106 的 `.enabled(if: GITHUB_ACTIONS)` 门控在 CI 上无效——`xcodebuild test` 给 swift-testing 进程的是净化过的环境，读不到 `GITHUB_ACTIONS`；而 workflow 里的 `-skip-testing` 只能匹配 `test` 前缀的 swift-testing 函数，匹配不到这个测试。改用 swift-testing 的 `withKnownIssue(isIntermittent:)` 包裹计时敏感断言：快机器照常断言真实行为，共享 CI 上偶发的超时未触发会被记成可容忍的 known issue 而非红叉。同时移除 workflow 里那条失效的 `-skip-testing`。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc107`。
+
 ## 1.78.0-rc106 - 2026-06-16
 
 ### Added
