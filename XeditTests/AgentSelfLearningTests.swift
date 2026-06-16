@@ -853,6 +853,45 @@ struct AgentSelfLearningTests {
     }
 
     @Test
+    func recallUtilizationTalliesLinkedNearMissAndUnused() {
+        let linkedItem = AgentTurnRecallItem(kind: .memory, title: "Deployment guide", detail: "Project memory")
+        let nearItem = AgentTurnRecallItem(kind: .memory, title: "Rollback checklist", detail: "Project memory")
+        let unusedItem = AgentTurnRecallItem(kind: .skill, title: "github-pr", detail: "Review helper.")
+        let snapshot = AgentTurnRecallSnapshot(
+            createdAt: Date(),
+            query: "deployment",
+            items: [linkedItem, nearItem, unusedItem]
+        )
+        let events = [
+            AgentLearningEvent(
+                kind: .memory, status: .saved, title: "Saved memory",
+                detail: "Captured rollback policy notes.",
+                relatedRecall: [AgentLearningRecallLink(id: linkedItem.id, kind: .memory, title: linkedItem.title)]
+            )
+        ]
+
+        let u = AgentSelfLearning.recallUtilization(in: snapshot, events: events)
+        #expect(u.hasLearning)
+        #expect(u.linked == 1)   // linkedItem via relatedRecall
+        #expect(u.nearMiss == 1) // nearItem shares only "rollback"
+        #expect(u.unused == 1)   // github-pr shares nothing
+        #expect(u.total == 3)
+    }
+
+    @Test
+    func recallUtilizationFlagsNoLearningTurn() {
+        let snapshot = AgentTurnRecallSnapshot(
+            createdAt: Date(),
+            query: "deployment",
+            items: [AgentTurnRecallItem(kind: .memory, title: "Deployment guide", detail: "Project memory")]
+        )
+        let u = AgentSelfLearning.recallUtilization(in: snapshot, events: [])
+        #expect(u.hasLearning == false)
+        #expect(u.unused == 1)
+        #expect(u.linked == 0)
+    }
+
+    @Test
     func relatedRecallLinksEmptyWhenNoOverlap() {
         let snapshot = AgentTurnRecallSnapshot(
             createdAt: Date(),

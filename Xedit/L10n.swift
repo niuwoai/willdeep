@@ -1440,6 +1440,11 @@ enum L10n {
             return String(format: template, a1)
         }
         static let learningRecallLinkedTag = String(localized: "transcript.learning.recall-linked-tag", defaultValue: "linked to a learning suggestion")
+        static func learningRecallUtilization(_ a1: String, _ a2: String, _ a3: String) -> String {
+            let template = String(localized: "transcript.learning.recall-utilization", defaultValue: "%@ linked · %@ near-miss · %@ unused")
+            return String(format: template, a1, a2, a3)
+        }
+        static let learningRecallNoLearning = String(localized: "transcript.learning.recall-no-learning", defaultValue: "no learning suggestions this turn — nothing to link")
         static let learningRecallStrengthStrong = String(localized: "transcript.learning.recall-strength.strong", defaultValue: "strong")
         static let learningRecallStrengthRelated = String(localized: "transcript.learning.recall-strength.related", defaultValue: "related")
         static let learningRecallStrengthWeak = String(localized: "transcript.learning.recall-strength.weak", defaultValue: "weak")

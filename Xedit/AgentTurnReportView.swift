@@ -143,6 +143,11 @@ struct AgentTurnReportCard: View {
             Text(L10n.Transcript.turnReportRecallSection)
                 .font(AgentDesign.captionFont)
                 .foregroundStyle(.secondary)
+            if let utilization = recallUtilizationLine {
+                Text(utilization)
+                    .font(AgentDesign.captionFont)
+                    .foregroundStyle(.secondary)
+            }
             if let recallSnapshot = report.recallSnapshot {
                 ForEach(recallSnapshot.items.prefix(4)) { item in
                     HStack(alignment: .top, spacing: 6) {
@@ -176,6 +181,16 @@ struct AgentTurnReportCard: View {
                 }
             }
         }
+    }
+
+    /// One-line "did recall feed learning?" tally, or nil when the turn
+    /// recalled nothing. Words the no-learning case distinctly from a
+    /// turn where learning ran but didn't draw on the recalled context.
+    private var recallUtilizationLine: String? {
+        guard let snapshot = report.recallSnapshot, !snapshot.items.isEmpty else { return nil }
+        let u = AgentSelfLearning.recallUtilization(in: snapshot, events: report.learningEvents)
+        guard u.hasLearning else { return L10n.Transcript.learningRecallNoLearning }
+        return L10n.Transcript.learningRecallUtilization("\(u.linked)", "\(u.nearMiss)", "\(u.unused)")
     }
 
     /// Shows whether this recall hit was linked to a learning suggestion
@@ -278,6 +293,9 @@ struct AgentTurnReportCard: View {
         }
         if let recallSnapshot = report.recallSnapshot {
             lines.append("\(L10n.Transcript.turnReportRecall): \(recallSummary(for: recallSnapshot))")
+            if let utilization = recallUtilizationLine {
+                lines.append(utilization)
+            }
         }
         for call in report.tools {
             lines.append("- \(call.toolName): \(statusLabel(for: call.status))")

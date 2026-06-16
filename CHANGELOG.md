@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.78.0-rc110 - 2026-06-16
+
+### Added
+
+- turn report 的 recall 区新增一行利用率汇总：`N linked · M near-miss · K unused`，一眼看出本轮召回的 memory/skill 有多少真的喂给了学习建议。零学习的回合改标注“无学习建议可关联”，把“召回了但没产出学习”和“召回与学习不相关”区分开；复制报告时一并带上。新增 `AgentSelfLearning.recallUtilization` 与 tally / no-learning 两个测试。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc110`。
+
 ## 1.78.0-rc109 - 2026-06-16
 
 ### Added

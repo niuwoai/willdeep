@@ -1080,6 +1080,35 @@ enum AgentSelfLearning {
         case unrelated
     }
 
+    /// Turn-level tally of how this turn's recall hits were used by its
+    /// learning suggestions, for the report's "did recall feed learning?"
+    /// line. `hasLearning` is false when the turn produced no learning
+    /// events at all — in that case every hit reads as `unused`, but the
+    /// reason is "nothing to link to", which the UI words differently.
+    struct RecallUtilization: Equatable {
+        var linked: Int
+        var nearMiss: Int
+        var unused: Int
+        var hasLearning: Bool
+        var total: Int { linked + nearMiss + unused }
+    }
+
+    static func recallUtilization(
+        in snapshot: AgentTurnRecallSnapshot?,
+        events: [AgentLearningEvent]
+    ) -> RecallUtilization {
+        var tally = RecallUtilization(linked: 0, nearMiss: 0, unused: 0, hasLearning: !events.isEmpty)
+        guard let snapshot else { return tally }
+        for item in snapshot.items {
+            switch recallItemLinkStatus(item, events: events) {
+            case .linked: tally.linked += 1
+            case .nearMiss: tally.nearMiss += 1
+            case .unrelated: tally.unused += 1
+            }
+        }
+        return tally
+    }
+
     /// Build the "why linked" explanation for a recall association,
     /// optionally noting the underlying recall retrieval relevance.
     private static func recallLinkReason(
