@@ -120,9 +120,19 @@ enum AgentSkillDirectory {
         var roots: [SkillRoot] = bundledSkillRoots().map {
             SkillRoot(url: $0, source: .bundled)
         }
-        roots.append(SkillRoot(url: home.appendingPathComponent(".codex/skills"), source: .user))
+        // 1.85.0-rc5：主用户目录改 `~/.willdeep/skills/`,旧 `~/.codex/skills/`
+        // 仍扫描以兼容老用户。两边都用 `.user` source —— UI 上区分起来意义
+        // 不大,且两边创建的 skill 行为完全等价。
+        roots.append(SkillRoot(url: AgentSkillFileManager.userSkillsRoot, source: .user))
+        roots.append(SkillRoot(url: AgentSkillFileManager.legacyCodexSkillsRoot, source: .user))
         roots.append(SkillRoot(url: home.appendingPathComponent(".codex/plugins/cache"), source: .plugin))
         return roots
+    }
+
+    /// 暴露所有 skill 根目录的纯 URL 列表,给 `UserWorkflowRegistry`
+    /// 复用——同一套发现路径,不重复造轮子。
+    static func allSkillRootURLs() -> [URL] {
+        skillRoots().map(\.url)
     }
 
     private static func bundledSkillRoots() -> [URL] {

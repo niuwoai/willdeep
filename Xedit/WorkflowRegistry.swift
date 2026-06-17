@@ -2,16 +2,19 @@
 //  WorkflowRegistry.swift
 //  WillDeep
 //
-//  Static registry of built-in workflows. 1.81.0-rc1 不暴露用户自定义；
-//  4 个内置 workflow 在 init 时注册，slash 命令分发查这里。
+//  内置 + 用户自定义 workflow 的统一注册中心。
+//
+//  1.81.0-rc1 起手只有内置 workflow 静态注册。
+//  1.85.0-rc5 起把 `~/.willdeep/skills/<slug>/workflow.yaml` 发现来的
+//  用户 workflow 合并进同一个表 —— composer palette、slash 命令分发、
+//  `spawn_workflow` 工具看到的是合并后的列表。
 //
 
 import Foundation
 
 enum WorkflowRegistry {
-    /// 全部内置 workflow。slash 命令分发 + composer palette 都从这里
-    /// 读。顺序就是 palette 显示顺序。
-    static let all: [any WorkflowDefinition] = [
+    /// 仅内置 workflow（不含用户）。顺序就是 palette 显示顺序的内置段。
+    static let builtIn: [any WorkflowDefinition] = [
         DeepResearchWorkflow(),
         CodeReviewWorkflow(),
         BugHuntWorkflow(),
@@ -56,6 +59,15 @@ enum WorkflowRegistry {
         VideoSpeedupWorkflow(),
         VideoSubtitleWorkflow(),
     ]
+
+    /// 全部 workflow：内置在前，用户自定义在后（同一 slash 用户不可覆盖
+    /// 内置）。每次访问都重新扫盘 —— 用户改 yaml 立即生效，规模上 skill
+    /// 数量是十级别，扫描成本可忽略。
+    static var all: [any WorkflowDefinition] {
+        let reserved = Set(builtIn.map(\.slashCommand))
+        let user = UserWorkflowRegistry.discover(reservedSlashCommands: reserved)
+        return builtIn + (user as [any WorkflowDefinition])
+    }
 
     static func find(slashCommand: String) -> (any WorkflowDefinition)? {
         all.first { $0.slashCommand == slashCommand }

@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.85.0-rc6 - 2026-06-17
+
+### Added
+
+- **用户自定义 declarative workflow**(`~/.willdeep/skills/<slug>/workflow.yaml`)。Skill 系统从 "只能给 LLM 看的 SKILL.md markdown" 升级为 "用户自己也能写一个新的 slash workflow,不写 Swift 代码"。
+  - **新主目录** `~/.willdeep/skills/`(`.codex` 是借来的老名字)。旧 `~/.codex/skills/` 仍然兼容扫描以保护已经手写过 skill 的用户,但创建新 skill 一律写到 willdeep 目录。
+  - **workflow.yaml 清单**。最小子集 YAML(name / version / slash_command / display_title / short_description / args_placeholder / allows_empty_args / max_agents / steps[] / summary)。支持 `|` block scalar、行注释、quoted/裸 scalar。**自己写解析器**,不引入 YAML 依赖。
+  - **DeclarativeWorkflow** = `WorkflowDefinition` 的 yaml-driven 实现。按 steps 顺序串行跑,每步一次 `engine.agent(prompt, label:)`,最后用 `summary` 模板渲染成 report.summary。占位符:`{{args}}` / `{{steps.<id>.output}}`。
+  - **合并到 `WorkflowRegistry.all`**(改为 computed):内置 workflow + `UserWorkflowRegistry.discover()` 扫盘结果。Composer palette / slash 命令分发 / `spawn_workflow` 工具看到的是合并表。用户**不可**用 yaml 覆盖内置 slash 命令(reservedSlashCommands 校验)。
+  - **每次访问都重扫盘**,改完 yaml 立即生效,不需要重启 app。skill 量级是十级,扫描成本可忽略。
+  - **示例 skill**:`BundledSkills/example-translate/`(workflow.yaml + SKILL.md)。`/translate-cn <text>` 翻译成简体中文。复制这个目录到 `~/.willdeep/skills/my-skill/` 改 yaml 就是自己的 workflow。
+- **单测覆盖**:`UserWorkflowManifestTests` 覆盖 happy path、block scalar、缺字段、重复 step id、非法 slash shape、保留 slash 拒绝、bundled 示例可发现。
+- **语法错有提示**。`UserWorkflowRegistry.recentErrors` 缓存最近一次扫盘的 yaml 解析失败列表,`AppState.startWorkflow` 在 slash 命令找不到匹配时主动把错误浮到 `agentErrorMessage`(顶部红条)。完整列表仍走 `NSLog` 进 Console.app,banner 只显示前 3 条 + 余下数量提示。
+- **Phase 3 后续候选**(留给后续 rc):widget 模板渲染(workflow.yaml 同目录 widget.html 出 widget 卡)、parallel step、条件分支、Settings → Skills 加 "User workflow.yaml errors" panel(避开必须先输错 slash 才看得到错误的尴尬)。
+
+### 实现位置
+
+- 新增:[Xedit/UserWorkflowManifest.swift](Xedit/UserWorkflowManifest.swift)(清单 model + MiniYAML 解析器)
+- 新增:[Xedit/DeclarativeWorkflow.swift](Xedit/DeclarativeWorkflow.swift)(WorkflowDefinition 实现 + UserWorkflowRegistry)
+- 修改:[Xedit/WorkflowRegistry.swift](Xedit/WorkflowRegistry.swift)(`all` 改 computed,合并内置 + 用户)
+- 修改:[Xedit/AgentSkillSettingsStore.swift](Xedit/AgentSkillSettingsStore.swift)(`userSkillsRoot` 迁到 `~/.willdeep/skills/`,加 `legacyCodexSkillsRoot`)
+- 修改:[Xedit/AgentSkillDirectory.swift](Xedit/AgentSkillDirectory.swift)(扫描两个用户目录 + 暴露 `allSkillRootURLs()`)
+- 新增:`BundledSkills/example-translate/`(示例 workflow + 模板说明)
+- 新增:[XeditTests/UserWorkflowManifestTests.swift](XeditTests/UserWorkflowManifestTests.swift)
+
+### 版本
+
+- 同 minor 内功能扩展,rc 号递增:1.85.0-rc5 → **1.85.0-rc6**。pbxproj×6 同步。product-overview 更新 skill 系统章节。
+
+### 已知问题
+
+- 本地 `xcodebuild test` 仍偶发 "Pseudo Terminal Setup Error"(macOS 26.4 上的 test runner 问题,跟 rc4 修过的 Release-only build phase 是同一类。`build-for-testing` 通过)。CI 上 `CODE_SIGNING_ALLOWED=NO` 模式不受影响。
+
 ## 1.85.0-rc5 - 2026-06-17
 
 ### Fixed

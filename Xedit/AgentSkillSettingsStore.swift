@@ -92,7 +92,19 @@ enum AgentSkillSource: String, Codable, CaseIterable, Identifiable {
 }
 
 enum AgentSkillFileManager {
+    /// 用户自定义 skill 的主目录。1.85.0-rc5 起从 `~/.codex/skills/` 迁
+    /// 到 `~/.willdeep/skills/` —— `.codex` 是借来的旧名，正式品牌叫
+    /// WillDeep。新增 skill 默认写到 willdeep 目录;旧 codex 目录仍然
+    /// 被 `AgentSkillDirectory` 扫描以兼容已经手写过 skill 的用户,但
+    /// 不再作为创建目的地。
     static var userSkillsRoot: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".willdeep/skills")
+    }
+
+    /// Legacy 兼容根目录(只读)。仍会被扫描,但创建新 skill 一律写到
+    /// `userSkillsRoot`。
+    static var legacyCodexSkillsRoot: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".codex/skills")
     }
