@@ -347,7 +347,7 @@ final class AppState: ObservableObject {
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
             }
-        mobileGatewayCoordinator.startIfEnabled()
+        mobileGatewayCoordinator.autoStart()
     }
 
     deinit {

@@ -17,7 +17,6 @@ struct MobileGatewayCoordinatorTests {
     @Test
     func settingsNormalizeHostPortAndDesktopName() {
         let settings = MobileGatewaySettings(
-            isEnabled: true,
             host: "  ",
             port: 70_000,
             desktopName: "  ",
@@ -34,8 +33,10 @@ struct MobileGatewayCoordinatorTests {
     @Test
     func settingsLoadToleratesLegacyMissingFields() throws {
         let defaults = try #require(UserDefaults(suiteName: "willdeep-mobile-gateway-legacy-\(UUID().uuidString)"))
+        // rc10 起结构里已经没有 `isEnabled` 字段,但旧持久化 JSON 里残留
+        // 该 key 时必须被 Codable 安全忽略,不能抛错。
         let legacyPayload: [String: Any] = [
-            "isEnabled": true,
+            "isEnabled": false,
             "host": "0.0.0.0",
             "desktopName": "Legacy Mac"
         ]
@@ -44,7 +45,6 @@ struct MobileGatewayCoordinatorTests {
 
         let settings = MobileGatewaySettingsStore.load(defaults: defaults)
 
-        #expect(settings.isEnabled)
         #expect(settings.host == "0.0.0.0")
         #expect(settings.port == 8877)
         #expect(settings.desktopName == "Legacy Mac")
@@ -65,7 +65,6 @@ struct MobileGatewayCoordinatorTests {
     @Test
     func baseURLsUseLoopbackForDesktopAndLANForPairing() {
         let settings = MobileGatewaySettings(
-            isEnabled: true,
             host: "0.0.0.0",
             port: 8877,
             desktopName: "Mac",

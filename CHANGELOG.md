@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.85.0-rc10 - 2026-06-17
+
+### Changed
+
+- **局域网手机网关改为「总是自启动」**,去掉「启用/停用」开关。用户原话:「就应该总是尝试打开手机的这个网关,不要开啊关的搞太复杂了,反正有 token 之类的验证」。
+  - [MobileGatewaySettings](Xedit/MobileGatewaySettingsStore.swift) 去掉 `isEnabled` 字段。旧持久化 JSON 里残留的 `isEnabled` key 由 Codable 安全忽略,无需迁移。
+  - [MobileGatewayCoordinator](Xedit/MobileGatewayCoordinator.swift) `startIfEnabled()` / `setEnabled(_:)` → 合并为单一 `autoStart()`,无条件 `Task { await start() }`;[AppState](Xedit/AppState.swift:350) 启动路径相应改名。
+  - [MobileGatewaySettingsView](Xedit/MobileGatewaySettingsView.swift) 删掉「启用局域网手机网关」Toggle 和 Start/Stop 按钮,只留 Status / Desktop peer 状态行 + Refresh + Apply & Restart。
+  - [L10n](Xedit/L10n.swift) 清掉无人引用的 `enableToggle` / `startButton` / `stopButton` 三条 mobile-gateway 字符串。
+  - 测试 [MobileGatewayCoordinatorTests](XeditTests/MobileGatewayCoordinatorTests.swift) 跟着去掉 `isEnabled` 入参;`settingsLoadToleratesLegacyMissingFields` 改为校验旧 `isEnabled: false` 的 JSON 也能被忽略而正常解码。
+
+### 版本
+
+- 行为变更但范围窄,只 bump rc 号:1.85.0-rc9 → **1.85.0-rc10**。pbxproj×6 / Go agent / Help Info.plist / README / docs / product-overview 同步。
+
 ## 1.85.0-rc9 - 2026-06-17
 
 ### Fixed

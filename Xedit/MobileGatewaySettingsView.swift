@@ -24,16 +24,9 @@ struct MobileGatewaySettingsView: View {
 
     var body: some View {
         Form {
+            // 1.85.0-rc10:网关总是自启动,这里只展示状态 + 提供 Refresh /
+            // Restart;不再有「启用/停用」开关和 Start/Stop 按钮。
             Section(L10n.Settings.MobileGateway.controlSection) {
-                Toggle(L10n.Settings.MobileGateway.enableToggle, isOn: Binding(
-                    get: { draft.isEnabled },
-                    set: { value in
-                        draft.isEnabled = value
-                        saveDraft()
-                        coordinator.setEnabled(value)
-                    }
-                ))
-
                 LabeledContent(L10n.Settings.MobileGateway.statusLabel) {
                     Text(statusText)
                         .foregroundStyle(statusColor)
@@ -47,18 +40,6 @@ struct MobileGatewaySettingsView: View {
                 }
 
                 HStack {
-                    Button(coordinator.isRunning ? L10n.Settings.MobileGateway.stopButton : L10n.Settings.MobileGateway.startButton) {
-                        if coordinator.isRunning {
-                            draft.isEnabled = false
-                            saveDraft()
-                            coordinator.setEnabled(false)
-                        } else {
-                            draft.isEnabled = true
-                            saveDraft()
-                            coordinator.setEnabled(true)
-                        }
-                    }
-
                     Button(L10n.Settings.MobileGateway.refreshButton) {
                         Task { await coordinator.refresh() }
                     }
@@ -70,7 +51,6 @@ struct MobileGatewaySettingsView: View {
                             await coordinator.start()
                         }
                     }
-                    .disabled(!coordinator.isRunning)
                 }
             }
 

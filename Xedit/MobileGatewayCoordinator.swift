@@ -142,20 +142,11 @@ final class MobileGatewayCoordinator: ObservableObject {
         MobileGatewaySettingsStore.save(settings)
     }
 
-    func startIfEnabled() {
-        guard settings.isEnabled else { return }
+    /// 1.85.0-rc10:网关无条件自启动,不再读 `isEnabled`。配对仍然要求
+    /// 手机扫 QR + token 校验,关闭开关并不增加实际安全收益,只是徒增
+    /// 「为啥状态栏齿轮显示未连接」这类困惑。
+    func autoStart() {
         Task { await start() }
-    }
-
-    func setEnabled(_ enabled: Bool) {
-        var updated = settings
-        updated.isEnabled = enabled
-        updateSettings(updated)
-        if enabled {
-            Task { await start() }
-        } else {
-            stop()
-        }
     }
 
     func start() async {

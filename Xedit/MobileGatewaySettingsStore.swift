@@ -14,7 +14,6 @@ import Security
 let mobileGatewayPortRange = 1...65535
 
 struct MobileGatewaySettings: Codable, Equatable {
-    var isEnabled: Bool
     var host: String
     var port: Int
     var desktopName: String
@@ -22,7 +21,6 @@ struct MobileGatewaySettings: Codable, Equatable {
     var allowPairing: Bool
 
     enum CodingKeys: String, CodingKey {
-        case isEnabled
         case host
         case port
         case desktopName
@@ -30,8 +28,11 @@ struct MobileGatewaySettings: Codable, Equatable {
         case allowPairing
     }
 
+    // 1.85.0-rc10:网关总是尝试启动,不再有「启用/停用」开关 —— 配对仍然
+    // 走 token + QR 码,关闭开关没什么实际安全收益,反而增加用户认知负担。
+    // 旧持久化里 `isEnabled` 字段保留在 JSON 里也无所谓(Codable 忽略多余
+    // key),但本结构不再有这个字段。
     static let `default` = MobileGatewaySettings(
-        isEnabled: false,
         host: "0.0.0.0",
         port: 8877,
         desktopName: Host.current().localizedName ?? "WillDeep Mac",
@@ -40,14 +41,12 @@ struct MobileGatewaySettings: Codable, Equatable {
     )
 
     init(
-        isEnabled: Bool,
         host: String,
         port: Int,
         desktopName: String,
         executablePath: String,
         allowPairing: Bool
     ) {
-        self.isEnabled = isEnabled
         self.host = host
         self.port = port
         self.desktopName = desktopName
@@ -58,7 +57,6 @@ struct MobileGatewaySettings: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let fallback = Self.default
-        isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? fallback.isEnabled
         host = try container.decodeIfPresent(String.self, forKey: .host) ?? fallback.host
         port = try container.decodeIfPresent(Int.self, forKey: .port) ?? fallback.port
         desktopName = try container.decodeIfPresent(String.self, forKey: .desktopName) ?? fallback.desktopName
@@ -68,7 +66,6 @@ struct MobileGatewaySettings: Codable, Equatable {
 
     var normalized: MobileGatewaySettings {
         MobileGatewaySettings(
-            isEnabled: isEnabled,
             host: host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "0.0.0.0" : host.trimmingCharacters(in: .whitespacesAndNewlines),
             port: min(max(port, mobileGatewayPortRange.lowerBound), mobileGatewayPortRange.upperBound),
             desktopName: desktopName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
