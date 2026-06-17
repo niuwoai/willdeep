@@ -50,6 +50,15 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				Voice/Libraries/kaldi-native-fbank/csrc/feature-fbank.cc,
+				Voice/Libraries/kaldi-native-fbank/csrc/feature-functions.cc,
+				Voice/Libraries/kaldi-native-fbank/csrc/feature-window.cc,
+				Voice/Libraries/kaldi-native-fbank/csrc/fftsg.c,
+				Voice/Libraries/kaldi-native-fbank/csrc/log.cc,
+				Voice/Libraries/kaldi-native-fbank/csrc/mel-computations.cc,
+				Voice/Libraries/kaldi-native-fbank/csrc/online-feature.cc,
+				Voice/Libraries/kaldi-native-fbank/csrc/rfft.cc,
+				Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib,
 			);
 			target = 5CA6B0602FC6D8F9006DFCCC /* Xedit */;
 		};
@@ -386,7 +395,18 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/Vendor/iossdk/AIPipe",
+					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/include",
+					"$(SRCROOT)/Xedit/Voice/Libraries",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
+				);
+				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				INFOPLIST_FILE = Xedit/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = WillDeep;
 				INFOPLIST_KEY_CFBundleName = WillDeep;
@@ -427,7 +447,18 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/Vendor/iossdk/AIPipe",
+					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/include",
+					"$(SRCROOT)/Xedit/Voice/Libraries",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
+				);
+				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				INFOPLIST_FILE = Xedit/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = WillDeep;
 				INFOPLIST_KEY_CFBundleName = WillDeep;
