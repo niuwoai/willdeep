@@ -293,6 +293,7 @@ final class AgentSingleMessageReaderWindowController: NSWindowController, NSWind
         case .assistant: roleLabel = "assistant"
         case .tool: roleLabel = "tool"
         case .workflowReport: roleLabel = "workflow"
+        case .widget: roleLabel = "widget"
         }
         if sessionTitle.isEmpty {
             return "Message (\(roleLabel))"

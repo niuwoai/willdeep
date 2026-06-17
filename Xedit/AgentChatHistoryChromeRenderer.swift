@@ -42,6 +42,10 @@ extension AgentChatHistoryRenderer {
             label = "Workflow"
             avatar = "WFL"
             color = NSColor.systemBlue
+        case .widget:
+            label = "Widget"
+            avatar = "WGT"
+            color = NSColor.systemTeal
         }
 
         let headerStart = result.length
@@ -63,7 +67,7 @@ extension AgentChatHistoryRenderer {
                     .foregroundColor: secondaryColor,
                 ]
             ))
-        case .system, .assistant, .tool, .workflowReport:
+        case .system, .assistant, .tool, .workflowReport, .widget:
             result.append(avatarToken(label: avatar, fill: color))
             result.append(NSAttributedString(
                 string: " " + label + "\n",
@@ -95,7 +99,7 @@ extension AgentChatHistoryRenderer {
             return .user
         case .assistant:
             return .assistant
-        case .tool, .workflowReport:
+        case .tool, .workflowReport, .widget:
             return .tool
         }
     }
@@ -110,7 +114,7 @@ extension AgentChatHistoryRenderer {
             style.headIndent = AgentChatHistoryLayoutMetrics.userBodyHeadIndent
             style.firstLineHeadIndent = AgentChatHistoryLayoutMetrics.userBodyHeadIndent
             style.tailIndent = AgentChatHistoryLayoutMetrics.userBodyTailIndent
-        case .assistant, .system, .tool, .workflowReport:
+        case .assistant, .system, .tool, .workflowReport, .widget:
             style.headIndent = 32
             style.firstLineHeadIndent = 32
             style.tailIndent = -18
@@ -132,7 +136,7 @@ extension AgentChatHistoryRenderer {
             style.headIndent = 32
             style.firstLineHeadIndent = 32
             style.tailIndent = -18
-        case .system, .tool, .workflowReport:
+        case .system, .tool, .workflowReport, .widget:
             style.headIndent = 32
             style.firstLineHeadIndent = 32
             style.tailIndent = -18
@@ -260,7 +264,7 @@ extension AgentChatHistoryRenderer {
             return !body.isEmpty || !message.textAttachments.isEmpty
         case .assistant:
             return !body.isEmpty
-        case .system, .tool, .workflowReport:
+        case .system, .tool, .workflowReport, .widget:
             return false
         }
     }

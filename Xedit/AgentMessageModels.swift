@@ -31,6 +31,11 @@ enum AgentRole: String, Codable {
     /// 消息（AgentChatHistoryFormatter 会过滤），workflow 的最终结果由
     /// engine 完成时单独 inject 一条 `.system` notice。
     case workflowReport
+    /// 1.84.0-rc1：`show_widget` 工具生成的可视化卡片消息。
+    /// `content` 留空，HTML/SVG 挂在 `widget: AgentWidget?` 字段上。
+    /// 渲染走 AgentWidgetCardView（WKWebView + CSP sandbox）。同样
+    /// **不发给 LLM**：所有 AgentClient adapter 看到都跳过。
+    case widget
 }
 
 /// A user-attached image, encoded inline so it round-trips through session
@@ -190,6 +195,10 @@ struct AgentMessage: Identifiable, Codable, Equatable {
     /// summary 等），UI 卡片读它显示进度。其它 role 一定是 nil；旧版本
     /// session 反序列化时也是 nil（Codable optional），向后兼容。
     var workflowReport: WorkflowReport?
+    /// 1.84.0-rc1：role == .widget 时挂载的 HTML/SVG 可视化数据。其它
+    /// role 一定 nil；旧 session 反序列化时也是 nil（Codable optional 向
+    /// 后兼容）。
+    var widget: AgentWidget?
     let createdAt: Date
 
     nonisolated init(
@@ -209,6 +218,7 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         reasoningTokens: Int? = nil,
         elapsedSeconds: Double? = nil,
         workflowReport: WorkflowReport? = nil,
+        widget: AgentWidget? = nil,
         createdAt: Date = Date()
     ) {
         self.id = id
@@ -227,6 +237,7 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         self.reasoningTokens = reasoningTokens
         self.elapsedSeconds = elapsedSeconds
         self.workflowReport = workflowReport
+        self.widget = widget
         self.createdAt = createdAt
     }
 

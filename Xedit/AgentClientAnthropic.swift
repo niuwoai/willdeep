@@ -543,8 +543,8 @@ struct AnthropicMessagesAdapter {
                     "content": content
                 ])
 
-            case .workflowReport:
-                // Workflow card 不发给模型，跳过。
+            case .workflowReport, .widget:
+                // Workflow / widget card 不发给模型，跳过。
                 continue
             }
         }

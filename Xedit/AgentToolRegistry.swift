@@ -269,6 +269,15 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "options", type: .stringArray, description: "Optional list of preset answers. When provided, the UI renders them as buttons (single-choice) or checkboxes (multi-choice). The user can still type a free-form answer.", required: false),
                 AgentToolParameter(name: "multi_select", type: .boolean, description: "When true, the user can pick multiple options; the tool result is a comma-separated list. Defaults to false (single choice).", required: false)
             ]
+        ),
+        AgentToolDescriptor(
+            name: "show_widget",
+            description: "Render an interactive HTML/SVG visualization inline in the transcript. Use for dashboards, calculators with sliders/inputs, comparison tables that benefit from a live UI, charts, mockups, or any time a static markdown table or image would lose interactivity. The HTML runs in a strict WKWebView sandbox: NO network requests (connect-src 'none'), NO navigation, NO file access, NO popups. You must inline all styles and scripts — external <script src=...> or <link href=...> are blocked by CSP. CSS variables `--bg`, `--fg`, `--secondary`, `--accent` are pre-set to match the host theme; use `var(--fg)` etc. for colors so light/dark looks right. Returns immediately with a short ack; the rendered card appears in the transcript next turn.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "title", type: .string, description: "Short title shown on the widget card (1-5 words). Also used as the file name when the user exports the widget.", required: true),
+                AgentToolParameter(name: "html", type: .string, description: "The full HTML/SVG to render. Inline <style> and <script> are allowed; external `src`/`href` are blocked. Keep under ~200 KB for snappy load.", required: true)
+            ]
         )
     ]
 

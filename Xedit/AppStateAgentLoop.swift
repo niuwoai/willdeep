@@ -328,6 +328,17 @@ extension AppState {
                 )
             }
 
+            // 1.84.0-rc1: drain `show_widget` queue the same way. Each
+            // queued AgentWidget becomes a `.widget` message; the card
+            // view renders it inline in the transcript and the LLM
+            // never sees the raw HTML again (clients all skip .widget).
+            let pendingWidgets = AgentWidgetRegistry.shared.consumePending(forRuntime: runtime.id)
+            for widget in pendingWidgets {
+                runtime.messages.append(
+                    AgentMessage(role: .widget, content: "", widget: widget)
+                )
+            }
+
             let assistantMessage = AgentMessage(role: .assistant, content: "")
             runtime.messages.append(assistantMessage)
             let assistantID = assistantMessage.id

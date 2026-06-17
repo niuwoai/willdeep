@@ -162,7 +162,7 @@ struct AgentMessageBubble: View {
 
     private var shouldShowFooter: Bool {
         switch message.role {
-        case .system, .tool, .workflowReport: return false
+        case .system, .tool, .workflowReport, .widget: return false
         case .user, .assistant:
             return !message.content.isEmpty || !message.textAttachments.isEmpty
         }
@@ -247,6 +247,7 @@ struct AgentMessageBubble: View {
         case .assistant: return "Agent"
         case .tool: return "Tool"
         case .workflowReport: return "Workflow"
+        case .widget: return "Widget"
         }
     }
 
@@ -258,7 +259,7 @@ struct AgentMessageBubble: View {
             return Color.accentColor.opacity(0.12)
         case .assistant:
             return Color(nsColor: .controlBackgroundColor).opacity(0.75)
-        case .tool, .workflowReport:
+        case .tool, .workflowReport, .widget:
             return Color(nsColor: .controlBackgroundColor).opacity(0.4)
         }
     }

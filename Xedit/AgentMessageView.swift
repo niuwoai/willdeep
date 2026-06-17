@@ -84,6 +84,12 @@ struct AgentModeMessageView: View {
             } else {
                 EmptyView()
             }
+        case .widget:
+            if let widget = message.widget {
+                AgentWidgetCardView(widget: widget)
+            } else {
+                EmptyView()
+            }
         }
     }
 

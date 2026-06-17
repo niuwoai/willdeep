@@ -68,6 +68,8 @@ enum AgentToolRunner {
             return try await AgentMCPBridge.listTools(arguments: arguments)
         case "call_mcp_tool":
             return try await AgentMCPBridge.callTool(arguments: arguments)
+        case "show_widget":
+            return try await showWidget(arguments: arguments, context: context)
         default:
             throw AgentToolError.unknownTool(name)
         }
@@ -807,6 +809,49 @@ enum AgentToolRunner {
             lock.unlock()
             return value
         }
+    }
+
+    // MARK: show_widget (1.84.0-rc1)
+
+    /// `show_widget` 工具 handler。把模型生成的 HTML 推到
+    /// `AgentWidgetRegistry`，由 AppStateAgentLoop 在下一轮 turn 顶部
+    /// drain 出来 append `.widget` 消息到 transcript。返回值只是 ack
+    /// 字符串（"widget queued"），所以 LLM 不会看到 raw HTML 占用上
+    /// 下文。如果调用上下文没有 runtimeID（比如 ad-hoc skill harness
+    /// 路径），返回错误让模型知道这条管线在该环境下不可用。
+    private static func showWidget(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        guard let title = arguments["title"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !title.isEmpty else {
+            throw AgentToolError.missingArgument("title")
+        }
+        guard let html = arguments["html"]?.stringValue(), !html.isEmpty else {
+            throw AgentToolError.missingArgument("html")
+        }
+        guard let runtimeID = context.runtimeID else {
+            return AgentToolResult(
+                summary: "show_widget unavailable",
+                payload: "show_widget is only available in conversational agent runtimes (no runtime id in this call context)."
+            )
+        }
+        let bytes = html.utf8.count
+        if bytes > 1_048_576 {
+            return AgentToolResult(
+                summary: "Refused (>1 MB)",
+                payload: "show_widget refused: html payload is \(bytes) bytes (>1 MB). Trim it down or split into multiple widgets."
+            )
+        }
+        let widget = AgentWidget(title: title, html: html)
+        await MainActor.run {
+            AgentWidgetRegistry.shared.add(widget, forRuntime: runtimeID)
+        }
+        let kbLabel = bytes >= 1024 ? "\(bytes / 1024) KB" : "\(bytes) B"
+        return AgentToolResult(
+            summary: "Queued widget: \(title)",
+            payload: "widget queued: \"\(title)\" (\(kbLabel)) — will appear in the transcript at the start of the next turn."
+        )
     }
 
 }

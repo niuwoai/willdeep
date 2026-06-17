@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.84.0-rc1 - 2026-06-17
+
+### Added
+
+- **可交互 widget**：新增 `show_widget` 工具，让模型在 transcript 里渲染 HTML/SVG 卡片，支持滑块 / 表单 / 动态计算 / 实时图表（参考 Claude Code 的 `visualize` 插件那种体验）。
+  - **`show_widget(title, html)` 工具**：参数最少化，模型给标题 + 一段 HTML（含 inline `<style>` 和 `<script>`），WillDeep 在下一个 turn 顶部 append `.widget` 消息渲染。Tool descriptor 显式告诉模型：CSP 拦截一切外联 src/href，必须 inline；`var(--fg)` 等 CSS 变量已注入；返回 ack 字符串（≤几十字符），LLM 不会看到 raw HTML 占上下文。
+  - **数据层**（`AgentWidget` + `AgentWidgetRegistry`）：仿 spawn_agent / background-job 模式 —— 工具 handler enqueue，AppStateAgentLoop turn 顶部 drain。`AgentWidget` 是 Codable，跟 message 一起进 session JSON 持久化。`AgentRole.widget` 是新 case；`AgentMessage.widget: AgentWidget?` 是新 optional 字段（旧 session 反序列化时为 nil，向后兼容）。
+  - **WKWebView 沙箱**（`AgentWidgetCardView`）：每个 widget 独立 WKWebView 实例；HTML 被包一层 wrapper：
+    - **CSP meta**：`default-src 'self' 'unsafe-inline' data: blob:` + `connect-src 'none'` + `frame-src 'none'` + `object-src 'none'` + `base-uri 'none'` + `form-action 'none'`。`connect-src 'none'` 是核心 —— LLM 写 fetch / XHR / WebSocket 都发不出去。`unsafe-inline` 必开（不然 inline style/script 跑不了），但 connect 禁了所以 XSS 也回传不出去。
+    - **Navigation 拦截**：`WKNavigationDelegate.decidePolicyFor` 仅放 `about:` / `data:`，所有 `http(s)://` / `file://` / `ws(s)://` `.cancel`。
+    - **createWebViewWith** 返回 nil —— 不开 popup / new window。
+    - **主题 CSS 变量注入**：跟随 SwiftUI `@Environment(\.colorScheme)` 设 `--bg`、`--fg`、`--secondary`、`--accent`，widget 写 `var(--fg)` 自动适配明暗。
+  - **不发回 LLM**：4 个 AgentClient 适配器（Anthropic / OpenAI Chat / OpenAI Responses / Gemini）switch case `.widget` 一律 `continue`。`AgentChatHistoryChromeRenderer` 给 `.widget` 一个标签（"Widget" / "WGT" / teal）；`AgentChatTranscript.visibleMessages` 白名单加 `.widget`。
+  - **Guardrail**：HTML 上限 1 MB（防 LLM 误贴整段 base64 数据集），工具 handler 直接拒、返回明确错误。卡片底部显示实际字节数 + "Sandbox: no network, no navigation" 提示。
+  - **UI**：卡片头部含标题 + "Widget" badge + 折叠按钮；中部 WKWebView 默认 360px 高，下方一条灰色 resize handle 可拖调（120-900px）；HTML 自身高度需要 JS 测量，phase 2 加，当前由用户手动拖。
+- **Phase 2 排期**：
+  - `sendPrompt(text)` 双向桥（`WKScriptMessageHandler`）让 widget 里的按钮能反向给 chat 发消息。
+  - 自动高度（widget 自带 JS 报告 `document.body.scrollHeight`，Swift 这边 KVO 调整）。
+  - Widget 历史抽屉：把 session 里所有 widgets 抽出来浏览 / 重新打开。
+  - 预设 widget templates（`/csv-viz` workflow 用 d3 模板）。
+
+### 实现位置（共 4 个新文件 + 12 个修改）
+
+- 新文件：`Xedit/AgentWidget.swift`、`Xedit/AgentWidgetRegistry.swift`、`Xedit/AgentWidgetCardView.swift`、（pbxproj × 6 同步）
+- 修改：`Xedit/AgentMessageModels.swift`（加 .widget role + widget 字段）、`Xedit/AgentToolRegistry.swift`（加 show_widget descriptor）、`Xedit/AgentTools.swift`（dispatch + handler）、`Xedit/AppStateAgentLoop.swift`（turn 顶部 drain）、`Xedit/AgentChatTranscript.swift`（filter 白名单）、`Xedit/AgentMessageView.swift`（render switch）、`Xedit/AgentClientAnthropic.swift` / `AgentClientGemini.swift` / `AgentClientOpenAIResponses.swift`（不发给 LLM）、`Xedit/AppStateAgentContextCompression.swift` / `AppStateEditorPresentation.swift` / `AgentChatHistoryChromeRenderer.swift` / `AgentPanelCards.swift` / `AgentTranscriptReaderWindow.swift`（exhaustive switch 补 case）
+
+### 版本
+
+- **功能新增**，升 minor：1.83.0-rc1 → **1.84.0-rc1**。Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步。
+
 ## 1.83.0-rc1 - 2026-06-17
 
 ### Added
