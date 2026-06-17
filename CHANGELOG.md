@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.85.0-rc9 - 2026-06-17
+
+### Fixed
+
+- **Agent mode 选 folder 不再联动 editor 窗口的 rootDirectory**。原先 [AppStateAgentSessions.moveActiveAgentSessionToWorkspace](Xedit/AppStateAgentSessions.swift:665) 通过 `openFolderURL(url)` 顺手把 editor 的 `rootDirectory` / `selectedFolderURL` 一起换了,导致用户在 agent 这边切目录,editor 窗口的侧边栏 / quick open 也被强行跟过去。现在只为 agent 子进程激活 security scope + 写 recents,editor 状态保持不动;agent runtime 自己持有 workspace 路径,行为完全解耦。
+- **Agent 底部状态栏齿轮 / 手机按钮点击没反应**。独立的 Agent 窗口(1.80.0-rc1+)首响应链不经过 SwiftUI `Settings` scene,旧的 `NSApp.sendAction(showSettingsWindow:)` 找不到 target,所以两个按钮都是哑的。改用 macOS 14+ 的 `@Environment(\.openSettings)`([AgentModeComposerView.swift](Xedit/AgentModeComposerView.swift) `AgentChatStatusBar`),齿轮直接打开 Settings,手机按钮先把 `EditorSettingsNavigation.selectedTab` 切到 `.mobileGateway` 再打开,并紧跟一次 `NSApp.activate` 把窗口抬到前台。
+
+### 版本
+
+- bugfix,只 bump rc 号:1.85.0-rc8 → **1.85.0-rc9**。pbxproj×6 / Go agent / Help Info.plist / README / product-overview 同步。
+
 ## 1.85.0-rc8 - 2026-06-17
 
 ### Fixed

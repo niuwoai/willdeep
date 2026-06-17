@@ -605,6 +605,10 @@ private struct ComposerCard: View {
 
 struct AgentChatStatusBar: View {
     @EnvironmentObject var appState: AppState
+    // 1.85.0-rc9：独立 Agent 窗口里 `NSApp.sendAction(showSettingsWindow:)`
+    // 找不到 target(responder chain 不经过 Settings scene),齿轮/手机按钮
+    // 之前点了无反应。改用 macOS 14+ 的 `\.openSettings` 环境值。
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         HStack(spacing: 14) {
@@ -651,7 +655,8 @@ struct AgentChatStatusBar: View {
             // Quick access: gear opens Settings (keeping the last tab),
             // phone jumps straight to the Mobile Gateway section.
             Button {
-                EditorSettingsNavigation.shared.openWindow()
+                openSettings()
+                NSApp.activate(ignoringOtherApps: true)
             } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 13))
@@ -660,7 +665,9 @@ struct AgentChatStatusBar: View {
             .help(L10n.Settings.agentBarSettings)
 
             Button {
-                EditorSettingsNavigation.shared.open(.mobileGateway)
+                EditorSettingsNavigation.shared.selectedTab = .mobileGateway
+                openSettings()
+                NSApp.activate(ignoringOtherApps: true)
             } label: {
                 Image(systemName: "iphone.radiowaves.left.and.right")
                     .font(.system(size: 13))

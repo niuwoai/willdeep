@@ -664,9 +664,11 @@ extension AppState {
     @discardableResult
     func moveActiveAgentSessionToWorkspace(at workspacePath: String) -> AgentSession {
         let url = URL(fileURLWithPath: workspacePath).standardizedFileURL
-        if Self.isExistingDirectory(url),
-           rootDirectory?.standardizedFileURL.path != url.path {
-            openFolderURL(url)
+        if Self.isExistingDirectory(url) {
+            // 1.85.0-rc9：agent 选 folder 不再联动 editor 窗口的 rootDirectory。
+            // 只为 agent 子进程拿读取权限 + 写 recents,editor 侧保持原样。
+            _ = activateSecurityScope(for: url)
+            registerRecentFolder(url)
         }
 
         if let runtime = activeRuntime, runtime.isEmpty, !runtime.isResponding {
