@@ -62,5 +62,21 @@ extension L10n {
             localized: "plan-auto-execution-settings.danger-scan-help",
             defaultValue: "When on, the Execute countdown disables itself if the plan mentions rm -rf, git push --force, dd, reboot, etc. You can still execute manually."
         )
+        static let clearSilentButton = String(
+            localized: "plan-auto-execution-settings.clear-silent-button",
+            defaultValue: "Re-enable Plan prompt for this workspace"
+        )
+        static let clearSilentHelp = String(
+            localized: "plan-auto-execution-settings.clear-silent-help",
+            defaultValue: "You previously chose to silently auto-execute plans in this workspace. Click to bring back the confirmation banner."
+        )
+        static let clearSilentEmpty = String(
+            localized: "plan-auto-execution-settings.clear-silent-empty",
+            defaultValue: "No silent-execution preference saved for the current workspace."
+        )
+        static let noWorkspace = String(
+            localized: "plan-auto-execution-settings.no-workspace",
+            defaultValue: "Open a workspace to manage its Plan auto-execution preference."
+        )
     }
 }

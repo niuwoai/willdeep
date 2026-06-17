@@ -53,6 +53,12 @@ struct EditorSettingsView: View {
     @State private var braveSearchSaveStatus: String = ""
     @State private var discoveredLocalAgents: [LocalAgentCLI.Discovery] = LocalAgentCLI.discoverAll()
 
+    // 1.79.0-rc2 Plan 自动执行 banner 的设置项。@State 缓存当前值，
+    // onAppear / 切 workspace 时同步加载；toggle / button 写回 store
+    // 后立刻更新缓存触发 UI 重算。
+    @State private var planDangerScanEnabled: Bool = AgentSettingsStore.loadPlanAutoExecuteDangerScanEnabled()
+    @State private var planSilentlyApprovedForWorkspace: Bool = false
+
     var body: some View {
         TabView(selection: $settingsNavigation.selectedTab) {
             typographySettings
@@ -252,6 +258,47 @@ struct EditorSettingsView: View {
                 Text(L10n.Settings.AgentBehavior.toolApprovalDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Section(L10n.PlanAutoExecutionSettings.sectionTitle) {
+                Toggle(L10n.PlanAutoExecutionSettings.dangerScanToggle, isOn: $planDangerScanEnabled)
+                    .onChange(of: planDangerScanEnabled) { _, newValue in
+                        AgentSettingsStore.savePlanAutoExecuteDangerScanEnabled(newValue)
+                    }
+                Text(L10n.PlanAutoExecutionSettings.dangerScanHelp)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if let path = appState.rootDirectory?.path, !path.isEmpty {
+                    if planSilentlyApprovedForWorkspace {
+                        Button(L10n.PlanAutoExecutionSettings.clearSilentButton) {
+                            AgentSettingsStore.savePlanAutoExecuteSilently(false, workspacePath: path)
+                            planSilentlyApprovedForWorkspace = false
+                        }
+                        Text(L10n.PlanAutoExecutionSettings.clearSilentHelp)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(L10n.PlanAutoExecutionSettings.clearSilentEmpty)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text(L10n.PlanAutoExecutionSettings.noWorkspace)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .onAppear {
+                planDangerScanEnabled = AgentSettingsStore.loadPlanAutoExecuteDangerScanEnabled()
+                planSilentlyApprovedForWorkspace = AgentSettingsStore.loadPlanAutoExecuteSilently(
+                    workspacePath: appState.rootDirectory?.path
+                )
+            }
+            .onChange(of: appState.rootDirectory?.path) { _, newPath in
+                planSilentlyApprovedForWorkspace = AgentSettingsStore.loadPlanAutoExecuteSilently(
+                    workspacePath: newPath
+                )
             }
 
             Section(L10n.Settings.sectionWebTools) {

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.79.0-rc2 - 2026-06-17
+
+### Added
+
+- Plan 自动执行 banner（1.79.0-rc1 引入）的两项收尾，把已暴露的 API 接到 Settings UI：
+  - 「设置 → AI 服务商」标签页新增 **Plan auto-execution** section，加全局开关 **Scan plan for destructive keywords**（默认开），关掉后所有 plan 都跑倒计时自动执行、不再因为 `rm -rf` / `git push --force` 等关键词被拦截。
+  - 同一 section 内加 **Re-enable Plan prompt for this workspace** 按钮：仅当当前 workspace 之前勾过 banner 上的「本工作区不再询问」时显示；点一下清掉该 workspace 的 silent 偏好，下次 plan 就绪会重新弹询问 banner。未勾过显示「No silent-execution preference saved for the current workspace.」；当前没打开 workspace 显示「Open a workspace to manage its Plan auto-execution preference.」。
+- 实现位置：
+  - `Xedit/EditorSettingsView.swift`（在 `sectionToolApproval` Section 之后插入新 `PlanAutoExecutionSettings.sectionTitle` Section；@State 缓存 `planDangerScanEnabled` / `planSilentlyApprovedForWorkspace`，onAppear / 切 workspace 时重新加载）
+  - `Xedit/L10n+PlanAutoExecution.swift`（新增 `clearSilentButton` / `clearSilentHelp` / `clearSilentEmpty` / `noWorkspace` 4 条文案）
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.79.0-rc2`。bugfix/收尾性质，rc 号递增（rc1 → rc2）。
+
 ## 1.79.0-rc1 - 2026-06-17
 
 ### Added
