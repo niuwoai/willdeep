@@ -45,6 +45,11 @@ enum WorkflowRegistry {
         VideoClipWorkflow(),
         VideoCompressWorkflow(),
         VideoGifWorkflow(),
+        // 1.85.0-rc2: "extract everything" + thumbnail + merge —— the
+        // tools you reach for when copying someone else's video.
+        VideoExtractWorkflow(),
+        VideoThumbnailWorkflow(),
+        VideoMergeWorkflow(),
     ]
 
     static func find(slashCommand: String) -> (any WorkflowDefinition)? {

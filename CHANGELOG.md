@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.85.0-rc2 - 2026-06-17
+
+### Added
+
+- **3 个"照抄别人视频"专用 ffmpeg workflow**（继 rc1 三连之后再来 3 个，主题：素材提取 + 缩略 + 合并）：
+  - **`/video-extract <path>`** —— 一键 dump 所有可复用素材到 `~/Downloads/<stem>-extracted-<ts>/`：① `metadata.json`（ffprobe 全部 stream/format JSON）② `audio.m4a`（音轨复制，失败时 fallback AAC 重编码）③ `transcript.md`（SenseVoice 带源头标注的 markdown）④ `keyframes/`（ffmpeg `select='gt(scene,0.4)'` 自动场景检测抽帧，最多 40 张 jpg）⑤ `report.md`（1 个 sub-agent 看 metadata + transcript 写"how this video was made"分析，含 TL;DR / Structure / Voice & tone / Technical choices / How to imitate 5 段）。Workflow card 直接在 transcript 里展示完整 report。**1 agent**。
+  - **`/video-thumbnail <path> [mode=scene|interval] [count=N]`** —— 纯 Swift。`mode=scene`（默认）用 scene-detect 抽变化最大的帧，`mode=interval` 等距抽 N 帧。除了单张文件，还用 `tile=4xN:padding=4:margin=4` 拼一张 320px 宽的 contact-sheet 作为概览大图。两个产物都落到 `~/Downloads/`。
+  - **`/video-merge <p1> <p2> [p3...]`** —— 至少 2 个 input。先用 ffprobe 看每个 input 的 video codec + 分辨率，**一致就走 concat demuxer + `-c copy`** 无重编码（极快无损）；**不一致或 copy 失败 fallback** 到 `-filter_complex concat=n=N:v=1:a=1` + libx264 medium + AAC + faststart 重编码。Workflow card 显式告诉用户走的是哪条路径（fast copy / re-encode）和 fallback 原因。MVP 不解析引号路径，要求 path 无空格（提示用户先 cp 到 ~/Downloads）。
+
+### 实现位置（4 个新/改文件）
+
+- 新文件：`Xedit/VideoExtractWorkflow.swift`、`Xedit/VideoThumbnailWorkflow.swift`、`Xedit/VideoMergeWorkflow.swift`
+- 修改：`Xedit/WorkflowRegistry.swift`（注册 3 个）
+
+### 视频工作流全景（截至本 rc）
+
+| Workflow | 干啥 |
+|---|---|
+| `/transcribe` | 音/视频转文字 |
+| `/video-summary` | 视频 → 章节 + TL;DR + quotes |
+| `/meeting-notes` | 会议录音 → action items + decisions |
+| `/video-clip` | 转录 → 找匹配段 → 切片 |
+| `/video-compress` | ffprobe + 两遍编码 → 目标体积 |
+| `/video-gif` | 转录 → 精彩段 → palette-optimized GIF |
+| `/video-extract` ⭐ | 一键 dump 所有素材 + LLM 分析 |
+| `/video-thumbnail` ⭐ | scene-detect / interval 抽帧 + contact sheet |
+| `/video-merge` ⭐ | concat（同 codec 时无重编码）/ re-encode 合并 |
+
+### 版本
+
+- 同 minor 内功能扩展，rc 号递增：1.85.0-rc1 → **1.85.0-rc2**。Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步。
+
 ## 1.85.0-rc1 - 2026-06-17
 
 ### Added
