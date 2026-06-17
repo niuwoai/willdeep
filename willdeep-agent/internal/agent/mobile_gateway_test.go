@@ -366,6 +366,121 @@ func TestMobileGatewayWebSocketAuthAndForwarding(t *testing.T) {
 	}
 }
 
+func TestMobileGatewayWorkspaceListRoundTrip(t *testing.T) {
+	gateway := newTestMobileGateway(t)
+	_, deviceToken := claimTestDevice(t, gateway, "Pixel")
+	server := httptest.NewServer(gateway.routes())
+	defer server.Close()
+	wsURL := mobileTestWSURL(server.URL)
+
+	desktopHeader := http.Header{}
+	desktopHeader.Set("Authorization", "Bearer desktop-secret")
+	desktopConn, _, err := websocket.DefaultDialer.Dial(wsURL+"/mobile/ws", desktopHeader)
+	if err != nil {
+		t.Fatalf("dial desktop websocket: %v", err)
+	}
+	defer desktopConn.Close()
+
+	deviceHeader := http.Header{}
+	deviceHeader.Set("Authorization", "Bearer "+deviceToken)
+	deviceConn, _, err := websocket.DefaultDialer.Dial(wsURL+"/mobile/ws", deviceHeader)
+	if err != nil {
+		t.Fatalf("dial device websocket: %v", err)
+	}
+	defer deviceConn.Close()
+
+	command := MobileEnvelope{
+		ID:      "wl-1",
+		Type:    "workspace.list",
+		Payload: map[string]any{},
+	}
+	if err := deviceConn.WriteJSON(command); err != nil {
+		t.Fatalf("write workspace.list command: %v", err)
+	}
+
+	var forwarded MobileEnvelope
+	if err := desktopConn.ReadJSON(&forwarded); err != nil {
+		t.Fatalf("desktop read forwarded workspace.list: %v", err)
+	}
+	if forwarded.Type != "workspace.list" || forwarded.ID != command.ID {
+		t.Fatalf("forwarded workspace.list = %#v", forwarded)
+	}
+	if forwarded.Payload["_device_id"] == "" {
+		t.Fatalf("forwarded workspace.list missing _device_id")
+	}
+
+	var ack MobileEnvelope
+	if err := deviceConn.ReadJSON(&ack); err != nil {
+		t.Fatalf("device read ack for workspace.list: %v", err)
+	}
+	if ack.Type != "ack" || ack.ID != command.ID {
+		t.Fatalf("workspace.list ack = %#v", ack)
+	}
+	if ackType, _ := ack.Payload["type"].(string); ackType != "workspace.list" {
+		t.Fatalf("workspace.list ack payload.type = %#v, want \"workspace.list\"", ack.Payload["type"])
+	}
+
+	event := MobileEnvelope{
+		ID:   "wl-evt",
+		Type: "workspace.list",
+		Payload: map[string]any{
+			"workspaces": []any{
+				map[string]any{
+					"path":         "/Users/rocky/Sites/Xedit",
+					"name":         "Xedit",
+					"last_used_at": "2026-06-17T03:21:08Z",
+					"session_count": 2,
+					"is_current":   true,
+					"is_git_repo":  true,
+				},
+			},
+		},
+	}
+	if err := desktopConn.WriteJSON(event); err != nil {
+		t.Fatalf("write desktop workspace.list event: %v", err)
+	}
+	var received MobileEnvelope
+	if err := deviceConn.ReadJSON(&received); err != nil {
+		t.Fatalf("device read workspace.list event: %v", err)
+	}
+	if received.Type != "workspace.list" || received.ID != event.ID {
+		t.Fatalf("workspace.list event = %#v, want %#v", received, event)
+	}
+	workspaces, ok := received.Payload["workspaces"].([]any)
+	if !ok || len(workspaces) != 1 {
+		t.Fatalf("workspace.list event payload.workspaces = %#v", received.Payload["workspaces"])
+	}
+}
+
+func TestMobileGatewayWorkspaceListWithoutDesktopPeerReturnsError(t *testing.T) {
+	gateway := newTestMobileGateway(t)
+	_, deviceToken := claimTestDevice(t, gateway, "Pixel")
+	server := httptest.NewServer(gateway.routes())
+	defer server.Close()
+
+	header := http.Header{}
+	header.Set("Authorization", "Bearer "+deviceToken)
+	conn, _, err := websocket.DefaultDialer.Dial(mobileTestWSURL(server.URL)+"/mobile/ws", header)
+	if err != nil {
+		t.Fatalf("dial device websocket: %v", err)
+	}
+	defer conn.Close()
+
+	if err := conn.WriteJSON(MobileEnvelope{ID: "wl-orphan", Type: "workspace.list"}); err != nil {
+		t.Fatalf("write workspace.list command: %v", err)
+	}
+	var response MobileEnvelope
+	if err := conn.ReadJSON(&response); err != nil {
+		t.Fatalf("read workspace.list error response: %v", err)
+	}
+	if response.Type != "error" {
+		t.Fatalf("workspace.list response type = %q, want error", response.Type)
+	}
+	if response.ID != "wl-orphan" {
+		t.Fatalf("workspace.list error envelope id = %q, want wl-orphan", response.ID)
+	}
+}
+
 func TestMobileGatewayUnknownCommandReturnsError(t *testing.T) {
 	gateway := newTestMobileGateway(t)
 	_, deviceToken := claimTestDevice(t, gateway, "Pixel")

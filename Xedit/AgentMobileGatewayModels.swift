@@ -252,6 +252,16 @@ struct AgentMobileGatewayMessageEventState {
     }
 }
 
+struct AgentMobileGatewayWorkspaceSnapshot: Equatable {
+    var path: String
+    var name: String
+    var lastUsedAt: Date?
+    var sessionCount: Int
+    var isCurrent: Bool
+    var isGitRepo: Bool
+    var repositoryRoot: String?
+}
+
 struct AgentMobileGatewayWorktreeFileSnapshot: Equatable {
     var path: String
     var kind: String
@@ -287,6 +297,8 @@ protocol AgentMobileGatewayControlling: AnyObject {
     func mobileGatewaySelectSession(id: UUID) -> Bool
     func mobileGatewaySendMessage(sessionID: UUID?, text: String, workspacePath: String?) throws -> AgentMobileGatewayCommandResult
     func mobileGatewayStopTurn(sessionID: UUID?) throws -> AgentMobileGatewayCommandResult
+    var mobileGatewayWorkspaceList: [AgentMobileGatewayWorkspaceSnapshot] { get }
+    func mobileGatewayValidateWorkspacePath(_ rawPath: String) throws -> String
     var mobileGatewayPendingToolApprovals: [AgentMobileGatewayToolApprovalSnapshot] { get }
     var mobileGatewayPendingPatchProposals: [AgentMobileGatewayPatchSnapshot] { get }
     func mobileGatewayDecideTool(
@@ -349,6 +361,10 @@ enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
     case notRegularFile(String)
     case binaryFile(String)
     case unsupportedCommand(String)
+    case missingWorkspacePath
+    case workspacePathNotFound(String)
+    case workspacePathNotDirectory(String)
+    case workspacePathForbidden(String)
 
     var errorDescription: String? {
         switch self {
@@ -396,6 +412,14 @@ enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
             return "Refusing to read binary file: \(path)."
         case .unsupportedCommand(let type):
             return "Unsupported mobile command: \(type)."
+        case .missingWorkspacePath:
+            return "session.create requires payload.workspace_path."
+        case .workspacePathNotFound(let path):
+            return "Workspace path does not exist: \(path)."
+        case .workspacePathNotDirectory(let path):
+            return "Workspace path is not a directory: \(path)."
+        case .workspacePathForbidden(let path):
+            return "Workspace path is not allowed: \(path)."
         }
     }
 }

@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.85.0-rc7 - 2026-06-17
+
+### Added
+
+- **Mobile Gateway `workspace.list` 协议(desktop peer 端实现)**。Android `1.17.0-rc58` 起,FAB「新建会话」必须先选 workspace —— 选择器打开时先发 `workspace.list`,等 Mac 回事件再渲染列表。此前手机端只能死等 spinner,因为 Mac 侧根本没接这个命令。
+  - **Go 网关**([willdeep-agent/internal/agent/mobile_gateway.go](willdeep-agent/internal/agent/mobile_gateway.go))把 `workspace.list` 加进 `mobileCommandTypes`(手机→Mac 命令白名单)和 `mobileDesktopEventTypes`(Mac→手机事件白名单);否则 relay 任一方向都会落到 `error` 分支。Round-trip 测试覆盖:手机发命令 → 网关转发 + 自动 ack → desktop peer 回事件 → 网关广播回手机。另测无 desktop peer 时返回 `error`。
+  - **Mac desktop peer**([Xedit/AppStateMobileGatewayController.swift](Xedit/AppStateMobileGatewayController.swift) 新增 `mobileGatewayWorkspaceList`):枚举条目来自 `agentSessions` 里所有 local workspaceLocation + 当前 `rootDirectory`。所有路径走 `URL.resolvingSymlinksInPath().standardizedFileURL.path` 拿 realpath 去重,按 `last_used_at` 降序返回(取每个 workspace 内 session 的 max updatedAt;当前打开的 root 即便无 session 也回一个,`last_used_at` 标 now)。每个条目带 `path / name / last_used_at / session_count / is_current / is_git_repo / repository_root`。
+  - **白名单过滤**:拒绝 `/`、`/etc`、`/private/etc`、`/System`、`/Library`、`/usr`、`/bin`、`/sbin`、用户 `~/Library` 这些敏感目录;也拒绝任何以这些目录为前缀的子路径。
+  - **`session.create` 严格校验 workspace_path**(spec §3.2-6):路径必须存在、是目录、不在禁区。失败时返回 `command.error` 而**不**静默回落到当前选中的 workspace —— Android 端会让用户重选或粘贴。空 `workspace_path` 字段视为错误;完全缺字段(旧 Android 客户端)仍按 legacy 路径放行。
+  - **主动推送**:`AgentMobileGatewayDesktopPeer.publishSnapshot()` 每次刷新都额外发一条 `workspace.list` 事件,做增量更新。手机端总是用最后一次事件全量覆盖。
+- **路由 + Model**([Xedit/AgentMobileGatewayBridge.swift](Xedit/AgentMobileGatewayBridge.swift) `case "workspace.list"` + `workspaceListEnvelope`,[Xedit/AgentMobileGatewayModels.swift](Xedit/AgentMobileGatewayModels.swift) 新增 `AgentMobileGatewayWorkspaceSnapshot` + 协议方法 `mobileGatewayWorkspaceList` / `mobileGatewayValidateWorkspacePath`)。
+- **测试**:`XeditTests/AgentMobileGatewayBridgeTests` 加 5 个用例(workspace.list 事件 schema、session.create 路径校验通过/失败/空白/缺字段)。Go 侧加 `TestMobileGatewayWorkspaceListRoundTrip` 和 `TestMobileGatewayWorkspaceListWithoutDesktopPeerReturnsError`。
+
+### 实现位置
+
+- 修改:[willdeep-agent/internal/agent/mobile_gateway.go](willdeep-agent/internal/agent/mobile_gateway.go)、[willdeep-agent/internal/agent/mobile_gateway_test.go](willdeep-agent/internal/agent/mobile_gateway_test.go)
+- 修改:[Xedit/AgentMobileGatewayModels.swift](Xedit/AgentMobileGatewayModels.swift)、[Xedit/AgentMobileGatewayBridge.swift](Xedit/AgentMobileGatewayBridge.swift)、[Xedit/AgentMobileGatewayDesktopPeer.swift](Xedit/AgentMobileGatewayDesktopPeer.swift)、[Xedit/AppStateMobileGatewayController.swift](Xedit/AppStateMobileGatewayController.swift)
+- 修改:[XeditTests/AgentMobileGatewayBridgeTests.swift](XeditTests/AgentMobileGatewayBridgeTests.swift)
+
+### 版本
+
+- 同 minor 内功能扩展,rc 号递增:1.85.0-rc6 → **1.85.0-rc7**。pbxproj×6 / Go agent / Help Info.plist / product-overview 同步。
+
+### 兼容性
+
+- 旧版手机客户端发 `session.create` 不带 `workspace_path` 仍按现状放行(deprecated 但不破)。Android `1.17.0-rc58` 起一律带该字段。
+- `MOBILE_GATEWAY_PROTOCOL_VERSION` 仍是 `mobile-gateway.v1`,新增 type 对旧客户端 forward-compatible。
+
 ## 1.85.0-rc6 - 2026-06-17
 
 ### Added

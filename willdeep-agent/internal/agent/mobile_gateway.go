@@ -119,6 +119,7 @@ var mobileCommandTypes = map[string]struct{}{
 	"file.read":      {},
 	"diff.get":       {},
 	"job.kill":       {},
+	"workspace.list": {},
 }
 
 var mobileDesktopEventTypes = map[string]struct{}{
@@ -132,6 +133,7 @@ var mobileDesktopEventTypes = map[string]struct{}{
 	"patch.upsert":     {},
 	"job.updated":      {},
 	"worktree.updated": {},
+	"workspace.list":   {},
 	"error":            {},
 	"ack":              {},
 	"command.error":    {},
