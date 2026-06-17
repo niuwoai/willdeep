@@ -181,6 +181,7 @@
 				5CA6B05E2FC6D8F9006DFCCC /* Frameworks */,
 				5CA6B05F2FC6D8F9006DFCCC /* Resources */,
 				5CA6B0B72FE10A01006DFCCC /* Build willdeep-agent */,
+				5CA6B0C02FE10B00006DFCCC /* Re-sign ONNX dylib (Release only) */,
 			);
 			buildRules = (
 			);
@@ -334,6 +335,24 @@
 			shellPath = /bin/zsh;
 			shellScript = "set -euo pipefail\nif ! command -v go >/dev/null 2>&1; then\n  echo \"warning: go not found; skipping willdeep-agent resource build\"\n  exit 0\nfi\nmkdir -p \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\ncd \"$SRCROOT/willdeep-agent\"\ngo build -o \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/willdeep-agent\" ./cmd/willdeep-agent\n";
 		};
+		5CA6B0C02FE10B00006DFCCC /* Re-sign ONNX dylib (Release only) */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Re-sign ONNX dylib (Release only)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/zsh;
+			shellScript = "set -euo pipefail\n\n# Debug / CI 一律跳过 —— Debug 用 Library Validation entitlement\n# 解决 dylib 加载（rc1 验过），CI 用 CODE_SIGNING_ALLOWED=NO 跳过\n# 整个签名链路，重签反而可能引入 PTY 启动问题。Release archive 才走\n# 这条路径。\nif [ \"${CONFIGURATION:-}\" != \"Release\" ]; then\n  echo \"Skipping ONNX dylib re-sign on configuration='${CONFIGURATION:-unknown}'\"\n  exit 0\nfi\n\nSRC_DYLIB=\"${SRCROOT}/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib\"\nif [ ! -f \"${SRC_DYLIB}\" ]; then\n  echo \"warning: ONNX dylib not found at ${SRC_DYLIB}\"\n  exit 0\nfi\n\nDEST_DIR=\"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\nmkdir -p \"${DEST_DIR}\"\nDEST_DYLIB=\"${DEST_DIR}/libonnxruntime.1.23.2.dylib\"\ncp -f \"${SRC_DYLIB}\" \"${DEST_DYLIB}\"\ncd \"${DEST_DIR}\"\nrm -f libonnxruntime.dylib\nln -s libonnxruntime.1.23.2.dylib libonnxruntime.dylib\n\nSIGN=\"${EXPANDED_CODE_SIGN_IDENTITY:-${CODE_SIGN_IDENTITY:--}}\"\n[ -z \"${SIGN}\" ] && SIGN=\"-\"\necho \"Re-signing ${DEST_DYLIB} with identity: ${SIGN}\"\ncodesign --remove-signature \"${DEST_DYLIB}\" 2>/dev/null || true\ncodesign --force --sign \"${SIGN}\" --timestamp=none \"${DEST_DYLIB}\"\necho \"ONNX dylib re-signed and ready for distribution\"\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -416,7 +435,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = "1.85.0-rc3";
+				MARKETING_VERSION = "1.85.0-rc4";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
 				REGISTER_APP_GROUPS = YES;
@@ -470,7 +489,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = "1.85.0-rc3";
+				MARKETING_VERSION = "1.85.0-rc4";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
 				REGISTER_APP_GROUPS = YES;
@@ -613,7 +632,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = "1.85.0-rc3";
+				MARKETING_VERSION = "1.85.0-rc4";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -634,7 +653,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = "1.85.0-rc3";
+				MARKETING_VERSION = "1.85.0-rc4";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -653,7 +672,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.85.0-rc3";
+				MARKETING_VERSION = "1.85.0-rc4";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -672,7 +691,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.85.0-rc3";
+				MARKETING_VERSION = "1.85.0-rc4";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;

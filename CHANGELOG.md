@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.85.0-rc4 - 2026-06-17
+
+### Added
+
+- **Phase 3 voice 收尾：Release archive 自动重签 ONNX dylib**。新增 PBXShellScriptBuildPhase "Re-sign ONNX dylib (Release only)" 在 buildPhases 末尾。
+  - **触发条件**：只在 `CONFIGURATION=Release` 时跑。Debug build（本机日常开发）和 CI（`xcodebuild test`）都直接跳过，从 stdout 输出 `Skipping ONNX dylib re-sign on configuration='Debug'`，对现有 dev flow 0 影响。
+  - **干啥**：copy `${SRCROOT}/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib` 到 `${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/`（即 .app/Contents/Frameworks/），创建 `libonnxruntime.dylib` symlink 指向 `1.23.2`，然后用 `EXPANDED_CODE_SIGN_IDENTITY`（host process 的当前签名身份）重签 dylib。这让 hardened runtime 在 archive build 不再因 Team ID 不匹配拒绝加载 dylib，即使 Release 不带 `disable-library-validation` entitlement 也能跑。
+  - **不影响 Debug 路径**：Debug 仍走 rc1 验证过的方案 —— `disable-library-validation` entitlement + 提交的本机签 dylib。这是为什么 CI（用 `CODE_SIGNING_ALLOWED=NO` 跳签名链路）和本机 Debug 都不需要改。本地 `xcodebuild -configuration Release` 验证：`Re-signing .../libonnxruntime.1.23.2.dylib with identity: B892EC272BD5A3A8ED4D8C8469AEAFEAE670D0A3 / ONNX dylib re-signed and ready for distribution`。
+  - **为什么 Release-only**：之前尝试在所有 config 跑 build phase 时，本机 `xcodebuild test` 挂"Pseudo Terminal Setup Error" —— `cp + codesign --remove-signature + sign` 这套操作的某种组合似乎会让 macOS 26.4 上的 test runner 起不来（CI 上的 macos-26 runner 不受影响因为 CODE_SIGNING_ALLOWED=NO）。把范围限制在 Release 完全规避这个问题：开发时仍然走稳定的 rc1 dylib 路径。
+- **Phase 3 voice 收尾的剩余项**（留给后续 rc）：
+  - Onboarding sheet 在缺模型时主动弹（当前是 Settings → AI Providers → Voice 入口）
+  - Speaker Diarization（从 fastv 搬 SpeakerDiarization 模块）让 `/meeting-notes` 出 speaker-attributed 笔记
+  - `/video-summary` 多模态升级（关键帧 + 视觉 LLM）
+
+### 实现位置
+
+- 修改：`Xedit.xcodeproj/project.pbxproj`（加 PBXShellScriptBuildPhase 5CA6B0C02FE10B00006DFCCC + 引用到 Xedit target buildPhases）
+
+### 版本
+
+- 同 minor 内功能扩展，rc 号递增：1.85.0-rc3 → **1.85.0-rc4**。Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步。
+
 ## 1.85.0-rc3 - 2026-06-17
 
 ### Added
