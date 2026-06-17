@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.85.0-rc11 - 2026-06-17
+
+### Fixed
+
+- **Agent 切 workspace / 切会话 不再拽动 editor 窗口的 rootDirectory**(rc9 漏修了两条路径,这次补齐)。用户反馈:「editor 窗口变来变去算怎么回事」。
+  - [startNewAgentSession(inWorkspaceAt:)](Xedit/AppStateAgentSessions.swift:615) — composer 「Switch workspace」菜单切到带历史的 workspace 时,fallback 会走这里;原先 `openFolderURL(url)` 强行把 editor 跟着切。现在只激活 security scope + 写 recents。
+  - [syncWorkspaceContext(for:)](Xedit/AppStateAgentSessions.swift:771) — 在 sidebar 点历史会话时也会拽 editor,同样去掉,只激活 scope。
+  - 回归测试 [WorkspaceSessionTests](XeditTests/WorkspaceSessionTests.swift) 反向重写:现在断言 editor 的 `rootDirectory` 在多次 agent 切换中保持不动,只有 `activeRuntime.workspaceRootPath` 跟着会话切。
+
+### 版本
+
+- bugfix,只 bump rc 号:1.85.0-rc10 → **1.85.0-rc11**。pbxproj×6 / Go agent / Help Info.plist / README / docs / product-overview 同步。
+
 ## 1.85.0-rc10 - 2026-06-17
 
 ### Changed

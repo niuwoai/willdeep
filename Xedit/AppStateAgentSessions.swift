@@ -606,20 +606,18 @@ extension AppState {
         return session
     }
 
-    /// Start a new session that belongs to a specific workspace, switching
-    /// the current window's `rootDirectory` to that workspace first so the
-    /// Agent's tool context matches the session's group. Used by the
-    /// sidebar workspace-row context menu. Pass `nil` for the "no
-    /// workspace" group — the new session is created with no root.
+    /// Start a new session bound to a specific workspace. 1.85.0-rc11 起
+    /// 不再顺手把 editor 窗口的 `rootDirectory` 切过去 —— agent runtime 自
+    /// 己持有 workspace 路径就够了,editor 不应该被 agent 这边的切换拖着
+    /// 走。只为子进程激活 security scope + 写 recents。Pass `nil` for the
+    /// "no workspace" group — the new session is created with no root.
     @discardableResult
     func startNewAgentSession(inWorkspaceAt workspacePath: String?) -> AgentSession {
         if let workspacePath, !workspacePath.isEmpty {
-            let url = URL(fileURLWithPath: workspacePath)
-            // Only switch root if the target really is an existing
-            // directory — a stale persisted path shouldn't break anything.
-            if Self.isExistingDirectory(url),
-               rootDirectory?.standardizedFileURL.path != url.standardizedFileURL.path {
-                openFolderURL(url)
+            let url = URL(fileURLWithPath: workspacePath).standardizedFileURL
+            if Self.isExistingDirectory(url) {
+                _ = activateSecurityScope(for: url)
+                registerRecentFolder(url)
             }
         }
         let session = startNewAgentSession()
@@ -764,12 +762,11 @@ extension AppState {
         summarizeAgentSessionTitleIfNeeded(runtime: runtime, force: true)
     }
 
-    /// Selecting a historical session should restore the workspace it was
-    /// created under. Local sessions switch the window's root folder so
-    /// file tools, git status, quick-open, and the composer picker all
-    /// point at the selected chat's project. Remote sessions keep the
-    /// local window root untouched; their binding lives on
-    /// `workspaceLocation` and is rendered explicitly by the composer.
+    /// 1.85.0-rc11:切到历史会话时不再把 editor 窗口的 `rootDirectory`
+    /// 一起拽过去。Agent 工具读 / git status / quick-open 等都基于
+    /// `runtime.session.workspaceRootPath` 走 agent 自己的上下文,editor
+    /// 窗口保持用户当前的浏览状态。这里只确保子进程拿到该路径的
+    /// security scope。Remote 会话本来就不动 editor。
     private func syncWorkspaceContext(for session: AgentSession) {
         let location = session.workspaceLocation ?? session.workspaceRootPath.map { .local(path: $0) }
         guard case .local(let path) = location, !path.isEmpty else {
@@ -777,11 +774,8 @@ extension AppState {
         }
 
         let url = URL(fileURLWithPath: path).standardizedFileURL
-        guard Self.isExistingDirectory(url),
-              rootDirectory?.standardizedFileURL.path != url.path else {
-            return
-        }
-        openFolderURL(url)
+        guard Self.isExistingDirectory(url) else { return }
+        _ = activateSecurityScope(for: url)
     }
 
     /// Drop sessions that never received a user message — they're
