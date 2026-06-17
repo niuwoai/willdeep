@@ -197,7 +197,17 @@ struct VideoExtractWorkflow: WorkflowDefinition {
         let reportURL = outputDir.appendingPathComponent("report.md")
         try? reportBody.write(to: reportURL, atomically: true, encoding: .utf8)
 
-        // -- 6. 返回 workflow card summary --
+        // -- 6. Keyframes widget：6 张代表帧缩成 240px jpg 后 base64
+        //       嵌进 HTML，让用户直接在 transcript 里看到画面概览。
+        //       Widget HTML 上限 1 MB —— 6 张 240px jpg 大约 120-180 KB
+        //       base64，安全。
+        await pushKeyframeGalleryWidget(
+            engine: engine,
+            keyframesDir: keyframesDir,
+            stem: stem
+        )
+
+        // -- 7. 返回 workflow card summary --
         let audioBytes = (try? FileManager.default.attributesOfItem(atPath: audioURL.path)[.size] as? Int64) ?? 0
         let audioMB = Double(audioBytes) / (1024 * 1024)
 
@@ -278,6 +288,74 @@ struct VideoExtractWorkflow: WorkflowDefinition {
                 NSLocalizedDescriptionKey: "ffmpeg exit \(p.terminationStatus): \(err.suffix(400))"
             ])
         }
+    }
+
+    /// 从 keyframesDir 里挑最多 6 张，缩到 240px 宽，base64 嵌入 HTML
+    /// gallery widget 推到 transcript。失败静默 —— 主流程已经成功。
+    private func pushKeyframeGalleryWidget(
+        engine: WorkflowEngine,
+        keyframesDir: URL,
+        stem: String
+    ) async {
+        let frames = ((try? FileManager.default.contentsOfDirectory(atPath: keyframesDir.path)) ?? [])
+            .filter { $0.hasSuffix(".jpg") }
+            .sorted()
+        guard !frames.isEmpty else { return }
+
+        // 等距挑 6 张代表
+        let picks: [String]
+        if frames.count <= 6 {
+            picks = frames
+        } else {
+            let step = Double(frames.count) / 6.0
+            picks = (0..<6).map { i in
+                let idx = min(Int(Double(i) * step), frames.count - 1)
+                return frames[idx]
+            }
+        }
+
+        // 缩图到临时目录
+        let workDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WillDeep-ExtractThumbs-\(UUID().uuidString.prefix(8))")
+        try? FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workDir) }
+
+        var cards: [(name: String, base64: String)] = []
+        for (i, name) in picks.enumerated() {
+            let src = keyframesDir.appendingPathComponent(name)
+            let dst = workDir.appendingPathComponent("thumb-\(i).jpg")
+            do {
+                try runFFmpeg([
+                    "-y", "-i", src.path,
+                    "-vf", "scale=240:-1",
+                    "-q:v", "5",
+                    dst.path,
+                ])
+            } catch { continue }
+            guard let data = try? Data(contentsOf: dst) else { continue }
+            cards.append((name, data.base64EncodedString()))
+        }
+        guard !cards.isEmpty else { return }
+
+        let imgs = cards.map { card in
+            // 从文件名抽时间标签（best-effort —— 文件名可能是 scene-001.jpg）
+            let label = card.name.replacingOccurrences(of: ".jpg", with: "")
+            return """
+            <figure style="margin:0;display:flex;flex-direction:column;gap:4px;align-items:center;">
+                <img src="data:image/jpeg;base64,\(card.base64)" style="width:100%;border-radius:4px;border:1px solid rgba(255,255,255,0.08);" />
+                <figcaption style="font-size:10px;color:var(--secondary);">\(label)</figcaption>
+            </figure>
+            """
+        }.joined(separator: "\n")
+
+        let html = """
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+            \(imgs)
+        </div>
+        """
+
+        let widget = AgentWidget(title: "\(stem) — keyframes", html: html)
+        await engine.displayWidget(widget)
     }
 
     private func formatDuration(_ seconds: Double) -> String {

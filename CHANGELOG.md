@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.85.0-rc3 - 2026-06-17
+
+### Added
+
+- **3 个"创作者三连"workflow** —— 给"我抄了别人视频但要加自己印记"的场景：
+  - **`/video-watermark <path> "<text>" [position=br|tr|bl|tl|center] [opacity=0.5]`** —— 纯 Swift。用 ffmpeg `drawtext` filter 烧文字水印进画面，字体走 macOS `/System/Library/Fonts/Helvetica.ttc`，字号 `h/24`（自适应视频高度），白字 + 半透明黑底框。5 个位置预设。文本里的特殊字符 (`\\` / `'` / `:` / `%`) 自动 escape。Args 解析支持引号包裹的 text（不解析路径里的引号 —— path 仍要无空格）。
+  - **`/video-speedup <path> <factor>`** —— 纯 Swift。Factor 范围 0.25-4.0。`[0:v]setpts=PTS/factor[v]` 改 video PTS + `[0:a]atempo=...,atempo=...[a]` 改 audio tempo。`atempo` 单步限制 0.5-2.0，自动 chain 多个解决 4× 或 0.25× 超界（`buildAtempoChain` 帮助函数）。输出 libx264 medium + AAC + faststart。
+  - **`/video-subtitle <path> [srt-path]`** —— 自动 + 手动两种模式。**自动**：SenseVoice 转录视频音轨，解析 transcript 里的 `[N/M] start.ssS - end.ssS` 段落标记成 SRT（`buildSRT` 用 NSRegularExpression 抽时间戳 + 段内容），再用 ffmpeg `subtitles=` filter 烧入画面。**手动**：直接接受用户提供的 SRT 路径，跳过转录。字幕样式硬编码白字 + 半透明黑描边（保证亮色背景可见），phase 2 接受 style 覆盖。SRT 文件先 copy 到无特殊字符的 tmp 路径绕过 ffmpeg filter escape 问题。
+- **`/video-extract` 多模态升级** —— Workflow 完成后**主动推 keyframes gallery widget** 到 transcript：从抽出的 keyframes 等距挑 6 张代表帧，缩到 240px 宽，base64 编码进 HTML grid widget，让用户直接在 chat 里看到画面概览（不用打开 Finder）。Widget 总体积 ~120-180 KB base64，远低于 1 MB 限制。
+  - 新增 `WorkflowEngine.displayWidget(_:)` async API：workflow 跑完没有"下一个 turn"概念，没法走 `show_widget` 工具的 next-turn drain 管线，所以加直接 append 到 `runtime.messages` 的旁路。其它 workflow 也能用（比如 `/csv-ask` 可以同款出张可排序的结果表 widget）。
+
+### 实现位置（5 个新/改文件）
+
+- 新文件：`Xedit/VideoWatermarkWorkflow.swift`、`Xedit/VideoSpeedupWorkflow.swift`、`Xedit/VideoSubtitleWorkflow.swift`
+- 修改：`Xedit/WorkflowEngine.swift`（加 `displayWidget`）、`Xedit/VideoExtractWorkflow.swift`（推 keyframes widget）、`Xedit/WorkflowRegistry.swift`（注册 3 个）
+
+### 视频工作流全景（截至本 rc）
+
+| Workflow | 干啥 | 是否调 LLM |
+|---|---|---|
+| `/transcribe` | 音/视频转文字 | ❌ |
+| `/video-summary` | 章节 + TL;DR + quotes | ✅ |
+| `/meeting-notes` | action items + decisions | ✅ |
+| `/video-clip` | 转录 → 找匹配段 → 切片 | ✅ |
+| `/video-compress` | 两遍编码到目标体积 | ❌ |
+| `/video-gif` | 找精彩段 → palette GIF | ✅ |
+| `/video-extract` | dump 全素材 + LLM 分析 + keyframes widget | ✅ |
+| `/video-thumbnail` | 抽帧 + contact sheet | ❌ |
+| `/video-merge` | concat copy / re-encode | ❌ |
+| `/video-watermark` ⭐ | drawtext 文字水印 | ❌ |
+| `/video-speedup` ⭐ | setpts + atempo 倍速/慢放 | ❌ |
+| `/video-subtitle` ⭐ | SenseVoice → SRT → 烧字幕 | ❌ |
+
+### 版本
+
+- 同 minor 内功能扩展，rc 号递增：1.85.0-rc2 → **1.85.0-rc3**。Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步。
+
 ## 1.85.0-rc2 - 2026-06-17
 
 ### Added

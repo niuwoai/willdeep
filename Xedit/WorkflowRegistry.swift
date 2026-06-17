@@ -50,6 +50,11 @@ enum WorkflowRegistry {
         VideoExtractWorkflow(),
         VideoThumbnailWorkflow(),
         VideoMergeWorkflow(),
+        // 1.85.0-rc3: 「creator essentials」三连 —— 给"我抄了别人视频但
+        // 要加点自己的东西"场景：水印、变速、字幕。
+        VideoWatermarkWorkflow(),
+        VideoSpeedupWorkflow(),
+        VideoSubtitleWorkflow(),
     ]
 
     static func find(slashCommand: String) -> (any WorkflowDefinition)? {

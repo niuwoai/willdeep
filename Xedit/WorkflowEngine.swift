@@ -136,6 +136,20 @@ final class WorkflowEngine {
         return results
     }
 
+    // MARK: - DSL: displayWidget
+
+    /// 1.85.0-rc3：让 workflow 直接把 widget 推到 transcript 立刻显示
+    /// （绕过 `show_widget` 工具的 next-turn drain 管线，因为 workflow
+    /// 跑完没有"下一个 turn"概念）。同样落到 runtime.messages，由
+    /// `AgentWidgetCardView` 渲染。
+    func displayWidget(_ widget: AgentWidget) async {
+        await MainActor.run {
+            guard let appState = appState else { return }
+            guard let runtime = appState.agentRuntimes[runtimeID] else { return }
+            runtime.messages.append(AgentMessage(role: .widget, content: "", widget: widget))
+        }
+    }
+
     // MARK: - Internal report mutation
 
     private func mutateReport(_ mutation: (inout WorkflowReport) -> Void) {
