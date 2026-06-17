@@ -544,10 +544,15 @@ struct EditorTabBar: View {
 
 struct EnterAgentModeButton: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Button {
-            appState.setAppMode(.agent)
+            // 1.80.0-rc1：Agent 是独立 singleton 窗口。openWindow(id:)
+            // 对单例 Window scene 幂等 —— 已经存在则抬起，不存在则
+            // 创建。窗口本身通过 EditorAppStateRegistry 自动跟随当前
+            // 聚焦的 editor 窗口（即 self.appState 所在窗口）。
+            openWindow(id: AgentWindowID.value)
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "sparkles")

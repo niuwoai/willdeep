@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AppKit
+import Combine
 
 @main
 struct WillDeepApp: App {
@@ -25,11 +26,24 @@ struct WillDeepApp: App {
             WillDeepCommands()
         }
 
+        // 1.80.0-rc1：Agent 独立成单例窗口。窗口本身不持有 AppState，
+        // 通过 EditorAppStateRegistry 跟随当前聚焦的 editor 窗口 ——
+        // 切到另一个 workspace 的窗口，agent 窗口 transcript 跟着切。
+        Window(L10n.AgentWindow.title, id: AgentWindowID.value) {
+            AgentWindowRootView()
+        }
+
         Settings {
             EditorSettingsView()
                 .environmentObject(AppState())
         }
     }
+}
+
+/// Window id 字符串字面值集中放一处，菜单 / openWindow / SwiftUI 三处
+/// 都用同一个，避免拼错。
+enum AgentWindowID {
+    static let value = "agent-window"
 }
 
 /// 菜单命令独立成 Commands 结构体，@FocusedObject 只能放这里、
@@ -175,8 +189,12 @@ private struct WillDeepCommands: Commands {
                 }
                 .keyboardShortcut("a", modifiers: [.command, .option])
 
-                Button(appState?.appMode == .agent ? L10n.Menu.viewSwitchToEditorMode : L10n.Menu.viewSwitchToAgentMode) {
-                    appState?.toggleAppMode()
+                // 1.80.0-rc1：不再 toggle editor↔agent，而是打开
+                // (或聚焦) 独立的 Agent 窗口。SwiftUI `openWindow(id:)`
+                // 对单例 Window scene 来说是幂等的 —— 已经存在就抬起，
+                // 不存在就创建。
+                Button(L10n.AgentWindow.openMenuItem) {
+                    openWindow(id: AgentWindowID.value)
                 }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
             }
@@ -228,6 +246,12 @@ private struct WillDeepCommands: Commands {
 private struct WindowRootView: View {
     @Environment(\.openWindow) private var openWindow
     @StateObject private var appState = AppState()
+    /// 桥到 NSWindow.didBecomeKeyNotification，本窗口被聚焦时把
+    /// self.appState 写到 EditorAppStateRegistry —— 这样独立的 Agent
+    /// 窗口（1.80.0-rc1+）通过 registry 跟随当前 editor 窗口的上下文。
+    /// 用 @StateObject 持有 observer 的生命周期；deinit 时自动摘
+    /// 通知。
+    @StateObject private var windowFocus = WindowFocusObserver()
     let initialExternalURL: URL?
     @State private var didHandleInitialExternalURL = false
 
@@ -239,6 +263,11 @@ private struct WindowRootView: View {
         ContentView()
             .environmentObject(appState)
             .focusedSceneObject(appState)
+            .background(
+                WindowAccessor { window in
+                    windowFocus.attach(to: window, appState: appState)
+                }
+            )
             .onOpenURL { url in
                 if AppState.isExistingDirectory(url) {
                     appState.registerRecentFolder(url)
@@ -248,10 +277,80 @@ private struct WindowRootView: View {
                 appState.openExternalURL(url)
             }
             .onAppear {
+                // 注册到全局 registry —— 第一个 editor 窗口顺便会被
+                // 设为 current，后面 NSWindow becomeKey 通知再做精确
+                // 切换。
+                EditorAppStateRegistry.shared.register(appState)
                 if !didHandleInitialExternalURL, let initialExternalURL {
                     didHandleInitialExternalURL = true
                     appState.openExternalURL(initialExternalURL)
                 }
             }
+            .onDisappear {
+                EditorAppStateRegistry.shared.unregister(appState)
+                windowFocus.detach()
+            }
+    }
+}
+
+/// SwiftUI ↔ AppKit 桥：从 view tree 拿到所在的 NSWindow，回调一次。
+/// 用 `.background(WindowAccessor { ... })` 挂在任意 view 上。
+private struct WindowAccessor: NSViewRepresentable {
+    let onWindowReady: (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        // view.window 在 makeNSView 阶段还没接上窗口树，下一轮 runloop
+        // 才有值。async 一下。
+        DispatchQueue.main.async { [weak view] in
+            if let window = view?.window {
+                onWindowReady(window)
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+/// 监听单个 NSWindow 的 didBecomeKey 通知，本窗口聚焦时把对应的
+/// AppState 推到 EditorAppStateRegistry。@StateObject 持有它就跟着
+/// WindowRootView 的生命周期；deinit 摘通知，零泄漏。
+///
+/// 故意**只**在 editor 窗口（这里）attach；Agent 窗口、Settings 窗口
+/// 都不 attach，所以它们获焦不会污染 registry.current —— 用户切到
+/// agent 窗口看 transcript 时，registry 仍然指向上一个 editor。
+@MainActor
+private final class WindowFocusObserver: ObservableObject {
+    private var observer: NSObjectProtocol?
+
+    func attach(to window: NSWindow, appState: AppState) {
+        detach()
+        observer = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: window,
+            queue: .main
+        ) { [weak appState, weak window] _ in
+            guard let appState, let window else { return }
+            Task { @MainActor in
+                EditorAppStateRegistry.shared.setCurrent(appState, window: window)
+            }
+        }
+        // 启动场景：第一个窗口创建时往往已经是 key，notification 错过了
+        // 第一次。手动补一发。
+        if window.isKeyWindow {
+            EditorAppStateRegistry.shared.setCurrent(appState, window: window)
+        }
+    }
+
+    func detach() {
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+        observer = nil
+    }
+
+    deinit {
+        // NotificationCenter.removeObserver 是 nonisolated，可以在
+        // deinit 安全调用。这里兜底，防止 detach 没被显式调到。
+        if let observer { NotificationCenter.default.removeObserver(observer) }
     }
 }

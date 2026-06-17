@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.80.0-rc1 - 2026-06-17
+
+### Added
+
+- 新特性：**Agent 拆成独立窗口，跟随当前聚焦的 editor**（多年来 editor↔agent 同窗口 toggle 全屏的体验告一段落）。
+  - **Editor 仍然多窗口**：每个 workspace 一个，行为不变。
+  - **Agent 现在是 singleton 窗口**（SwiftUI `Window(id: "agent-window")`）。Cmd+Shift+A 菜单从「Switch to Agent Mode」改名为「Open Agent Window」—— SwiftUI 的 `openWindow(id:)` 对单例 scene 是幂等的，已存在则抬起、不存在则创建。
+  - **跟随聚焦语义**：新建 `EditorAppStateRegistry`（@MainActor 全局单例 ObservableObject），每个 editor 窗口通过 `NSWindow.didBecomeKeyNotification` 在被聚焦时把自己的 AppState 推到 registry.current；Agent 窗口本身**不**注册到 registry，所以从 editor 切到 agent 窗口看 transcript 时 current 不变。切到另一个 workspace 的 editor 窗口 → registry.current 变 → Agent 窗口 root view body 重算 → AgentModeView 用 `.id(ObjectIdentifier(appState))` 强制重建，避免跨 workspace 切换时旧滚动位置 / 草稿 / sidebar 选中态等 stale @State 残留。
+  - **极端场景**：所有 editor 窗口都关掉只剩 Agent 窗口时，registry.current 变 nil → 显示「No editor window open / Open Workspace…」占位（点按钮等价 Cmd+N，新建窗口的 onAppear 立刻把它注册进 registry，占位自动消失）。SwiftUI 启动复原 Agent 窗口而 editor 窗口还没创建时也走这条占位路径。
+  - **AgentChatHeader 右上角"切回 editor"按钮**：从 `setAppMode(.editor)`（旧 toggle）改为 `EditorAppStateRegistry.focusCurrentEditorWindow()` —— registry 顺手用 NSWindow 弱引用记下每个 editor 窗口，按钮直接 `makeKeyAndOrderFront`。
+  - **Empty workspace / EnterAgentMode 按钮**：两处入口（`EmptyStateViews.swift` / `ContentViewEditorChrome.swift`）从 setAppMode(.agent) 改为 openWindow(id: "agent-window")。
+  - **Dock 行为**：macOS 一个 app 永远一个 dock icon。Dock 右键菜单会列出所有 editor 窗口 + Agent —— 标准 multi-window app 行为（Xcode / VS Code / Cursor 都是），不会出现多个 icon。
+  - **`appState.appMode` 字段保留**（仍有少量代码读取它判断 plan / goal session 流程），但 ContentView 不再据此切 UI；`setAppMode` / `toggleAppMode` 现在只做状态记账，不影响 view 渲染。
+  - **避坑设计**：
+    - registry 是单例 ObservableObject，但 agent 窗口 root view 只读 current（@ObservedObject 自动订阅），**不写**任何 @Published 字段 —— 与 [SwiftUI Sheet @Published 死循环](memory/project_swiftui_sheet_published_loop.md) 同族陷阱无关。
+    - `WindowFocusObserver`（@StateObject 持有 NSWindow notification observer）在 deinit 双重摘通知（detach + deinit 兜底），不依赖 SwiftUI 销毁时序。
+    - `WindowAccessor` 用 NSViewRepresentable 桥接，DispatchQueue.main.async 等待 view 接上窗口树再回调，避免 view.window 在 makeNSView 阶段还是 nil 的时序问题。
+- 实现位置（共 8 个文件）：
+  - 新文件：`Xedit/EditorAppStateRegistry.swift`、`Xedit/AgentWindowRootView.swift`、`Xedit/L10n+AgentWindow.swift`
+  - 修改：`Xedit/XeditApp.swift`（新增 Window scene + WindowAccessor + WindowFocusObserver + 菜单改名）、`Xedit/ContentView.swift`（删 if appMode == .agent 分支）、`Xedit/AgentChatHeader.swift`、`Xedit/ContentViewEditorChrome.swift`、`Xedit/EmptyStateViews.swift`、`Xedit/AppState.swift`（openAgentChangedFile 改用 focusCurrentEditorWindow）
+
+### 版本
+
+- **功能新增**，升 minor 位：1.79.0-rc3 → **1.80.0-rc1**。Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步。
+
 ## 1.79.0-rc3 - 2026-06-17
 
 ### Fixed

@@ -162,6 +162,7 @@ struct EmptyWorkspaceView: View {
 /// clear path into the AI experience even without opening a file.
 struct EmptyWorkspaceHero: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.openWindow) private var openWindow
     let onOpenFile: () -> Void
     let onOpenFolder: () -> Void
 
@@ -201,7 +202,8 @@ struct EmptyWorkspaceHero: View {
                 .accessibilityLabel(L10n.EmptyState.openFolderAccessibilityLabel)
 
                 Button {
-                    appState.setAppMode(.agent)
+                    // 1.80.0-rc1：Agent 是独立窗口，不再切 mode。
+                    openWindow(id: AgentWindowID.value)
                 } label: {
                     Label(L10n.EmptyState.agentMode, systemImage: "sparkles")
                 }

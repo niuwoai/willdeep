@@ -548,9 +548,10 @@ final class AppState: ObservableObject {
         guard let url = agentChangedFileURL(relativePath) else { return }
         registerRecentFile(url)
         openedFileURL = url
-        if appMode == .agent {
-            setAppMode(.editor)
-        }
+        // 1.80.0-rc1：editor / agent 已经分窗口，老的 setAppMode(.editor)
+        // 切回路径不再有意义；改成把当前跟随中的 editor 窗口抬到前
+        // 台，让用户看到刚打开的那个文件。
+        EditorAppStateRegistry.shared.focusCurrentEditorWindow()
     }
 
     func agentChangedFileURL(_ relativePath: String) -> URL? {

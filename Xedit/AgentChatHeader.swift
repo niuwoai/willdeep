@@ -25,7 +25,12 @@ struct AgentChatHeader: View {
             Spacer(minLength: 8)
 
             Button {
-                appState.setAppMode(.editor)
+                // 1.80.0-rc1：editor / agent 已经分窗口，这个按钮的
+                // 语义从「切回 editor 模式」变成「把对应的 editor
+                // 窗口抬到前台」。当前 AppState（agent 窗口跟随的）
+                // 对应的 editor NSWindow 由 EditorAppStateRegistry
+                // 跟踪。
+                EditorAppStateRegistry.shared.focusCurrentEditorWindow()
             } label: {
                 Image(systemName: "rectangle.split.2x1")
             }

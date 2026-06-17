@@ -30,16 +30,17 @@ struct ContentView: View {
         ZStack {
             WorkspaceWindowBackground()
 
-            if appState.appMode == .agent {
-                AgentModeView()
-            } else {
-                HStack(spacing: 0) {
-                    sidebar
-                    sidebarControl
+            // 1.80.0-rc1：Agent 不再在 editor 窗口内 toggle 全屏，已经
+            // 拆成独立的 singleton Window scene（见 XeditApp.swift +
+            // AgentWindowRootView.swift）。这里只渲染 editor；
+            // `appState.appMode` 字段保留供其它仍依赖它的代码读，但不
+            // 再控制 UI 切换。
+            HStack(spacing: 0) {
+                sidebar
+                sidebarControl
 
-                    detail
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
+                detail
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
         }
