@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.78.0-rc116 - 2026-06-17
+
+### Fixed
+
+- 修复在「设置 → MCP」点击「新服务器」（或外部 `AgentMCPServerCreationCoordinator.open(draft:)` 推入草稿）触发 sheet 弹出时，主进程 100% CPU、UI 完全卡死、Sheet 动画永远完不成的死循环（实测累计耗时可冲到 500+ 分钟 CPU）。`sample` 显示 3591/3591 个采样全部停在 `SheetMoveHelper._doAnimation` → `GraphHost.flushTransactions` → `AgentMCPSettingsView.body` → `AgentMCPServerCreationCoordinator.consumeDraft()`。根因两层叠加：
+  - `AgentMCPSettingsView.body` 的 `.sheet { ... }` 内容闭包里直接写了 `AgentMCPServerCreationSheet(initialDraft: creationCoordinator.consumeDraft())`，而 SwiftUI 在 sheet 动画的嵌套 RunLoop 里会反复重算 body —— 每次重算都会调一次 `consumeDraft()`。
+  - `consumeDraft()` 用 `defer { draft = nil }` 写回 `@Published`，但 `@Published` 即便新旧都是 nil 也会无脑发 `objectWillChange.send()`；coordinator 又是 `@ObservedObject` —— 通知一发，父 view 立刻被标脏，下一帧再 flush → 再调 `consumeDraft()` → 再发通知 …… 形成主线程死循环。叠加 `enabledCount` 每帧全表 filter + `AgentMCPServerConfig` 值类型 copy + 大量 `_swift_getKeyPath` mangled name 解析，CPU 直接焊死。
+  - 修复：① `consumeDraft()` 加 `guard let` 早返回，nil → nil 不再触发 `@Published` 通知；② 新增 `@State pendingDraft`，在按 「新服务器」按钮 / `onChange` 收到外部草稿 *那一刻* 一次性 snapshot 出来，sheet content 闭包之后只读 `pendingDraft`，再也不会回头调 coordinator，body 反复重算也无副作用。属同一族「主线程在 SwiftUI flushTransactions 里失控」问题，但触发器换成了 sheet content 闭包里同步写 `@Published`。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.78.0-rc116`。
+
 ## 1.78.0-rc115 - 2026-06-16
 
 ### Fixed

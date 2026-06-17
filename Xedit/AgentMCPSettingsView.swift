@@ -25,8 +25,13 @@ final class AgentMCPServerCreationCoordinator: ObservableObject {
     }
 
     func consumeDraft() -> AgentLearningMCPDraft? {
-        defer { draft = nil }
-        return draft
+        // 必须 guard 后再写回。`@Published` 即便新旧都是 nil 也会无脑发
+        // `objectWillChange`，被 sheet content 闭包反复调用时会和上层
+        // `AgentMCPSettingsView` 的 body 互拉成死循环 —— 主线程 100% CPU、
+        // sheet 动画永远完不成（参见 1.78.0-rc116 修复）。
+        guard let current = draft else { return nil }
+        draft = nil
+        return current
     }
 
     func markReviewItemReviewedIfNeeded() {
@@ -49,6 +54,10 @@ struct AgentMCPSettingsView: View {
     @State private var serverMessageIsError: Set<String> = []
     @State private var isRefreshing: Set<String> = []
     @State private var isCreatingServer = false
+    // Sheet 打开瞬间从 coordinator 取出来缓存这里；之后 sheet content
+    // 闭包在 body 反复重算时只读 @State，不再回头调 coordinator，避免
+    // 触发 @Published 通知 → 父 body 标脏 → 再次重算的死循环。
+    @State private var pendingDraft: AgentLearningMCPDraft?
     @State private var statusMessage = L10n.Settings.allChangesSaved
 
     private var enabledCount: Int {
@@ -82,6 +91,7 @@ struct AgentMCPSettingsView: View {
                     Spacer()
 
                     Button {
+                        pendingDraft = creationCoordinator.consumeDraft()
                         isCreatingServer = true
                     } label: {
                         Label(L10n.Settings.MCP.newServer, systemImage: "plus")
@@ -106,9 +116,10 @@ struct AgentMCPSettingsView: View {
             .background(.bar)
         }
         .sheet(isPresented: $isCreatingServer) {
-            AgentMCPServerCreationSheet(initialDraft: creationCoordinator.consumeDraft()) { server in
+            AgentMCPServerCreationSheet(initialDraft: pendingDraft) { server in
                 AgentMCPSettingsStore.upsertUserServer(server)
                 isCreatingServer = false
+                pendingDraft = nil
                 refreshServers()
                 creationCoordinator.markReviewItemReviewedIfNeeded()
                 statusMessage = L10n.Settings.MCP.createdServer(server.name)
@@ -117,11 +128,13 @@ struct AgentMCPSettingsView: View {
                 }
             } onCancel: {
                 isCreatingServer = false
+                pendingDraft = nil
                 creationCoordinator.clearPendingReviewItem()
             }
         }
         .onChange(of: creationCoordinator.draft?.serverName) { _, newValue in
             if newValue != nil {
+                pendingDraft = creationCoordinator.consumeDraft()
                 isCreatingServer = true
             }
         }
