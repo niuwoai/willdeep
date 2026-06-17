@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.79.0-rc1 - 2026-06-17
+
+### Added
+
+- 新特性：Plan 模式下计划解析就绪时，composer 上方浮出一个**自动执行 banner** —— 直接对标 codex 的同款交互：
+  - **Execute** 按钮：approve plan + 立即派发"按计划执行"的内置 prompt，agent 下一个 turn 就开干。**故意留在 Plan 模式**（不切到 Normal），plan card 继续跟踪每一步的勾选/进度。
+  - **Stay in Plan** 按钮：拒绝，banner 收起，留在 plan 模式让用户继续编辑或追加上下文。
+  - **8 秒倒计时进度条**：什么都不做、倒计时归零自动 Execute（等价点了「Execute」）。
+  - **用户开始打字 → banner 立刻收起**：在 composer 输入框里敲任何字符（监听 `agentInput` 长度变长）视作"我有补充，留在 plan 模式"，立刻 dismiss banner、取消倒计时。
+  - **「本工作区不再询问」复选框**：勾上 + Execute 一次后，本 workspace 下次 plan 就绪不再弹 banner、直接 confirm。偏好按 workspace 路径 DJB2 哈希分桶存到 UserDefaults（`AgentSettingsStore.savePlanAutoExecuteSilently(_:workspacePath:)`），不写入完整路径。
+  - **危险词扫描**（默认开启，可关）：banner 弹出前用 `AgentToolRegistry.planTextLooksDestructive` 扫整段 plan（summary + 所有 step.text）。命中 `rm -rf` / `git push --force` / `dd if=` / `mkfs` / `reboot` 等 12 项关键词时倒计时进度条灰显且**不自动 fire**，banner 文案变成「Plan mentions destructive actions — confirm manually.」，强制手动点 Execute。设置可通过 `AgentSettingsStore.savePlanAutoExecuteDangerScanEnabled(_:)` 关掉（设置项 UI 留待后续 PR；当前先暴露 API）。
+  - Banner 状态全部用 `@State`（local timer、`@State secondsRemaining`、`dismissedPlanFingerprint`）而不是写 `@Published`，主动避开 [SwiftUI Sheet @Published 死循环](memory/project_swiftui_sheet_published_loop.md)（1.78.0-rc116 修复过同族问题）的反复发作。
+- 实现位置：
+  - `Xedit/AgentPlanAutoExecutionBanner.swift`（新文件，独立 SwiftUI View）
+  - `Xedit/AgentModeComposerView.swift`（`AgentChatComposer` 顶部条件渲染 banner + 三处 onChange：plan status 变成 .proposed 时检查"本工作区记住"偏好直接 fire / agentInput 变长 dismiss / 切 session 重置）
+  - `Xedit/AppStateAgentSessions.swift`（新方法 `confirmAgentPlanAndExecute()`：approve plan + 立即派发执行 prompt，agent 忙时进队列）
+  - `Xedit/L10n+PlanAutoExecution.swift`（新文件，banner 文案；不动 1487 行的 L10n.swift 主文件）
+  - `Xedit/AgentSettingsStore.swift`（新增 `planAutoExecuteDangerScanKey` 全局开关 + per-workspace `planAutoExecuteSilently` 读写方法）
+  - `Xedit/AgentToolRegistry.swift`（暴露 `planTextLooksDestructive(_:)` 复用现有 `dangerousPatterns` 黑名单）
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.79.0-rc1`。**功能新增**，按规则提升正式版本位（1.78.0 → 1.79.0）。
+
 ## 1.78.0-rc116 - 2026-06-17
 
 ### Fixed

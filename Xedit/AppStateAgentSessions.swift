@@ -131,6 +131,36 @@ extension AppState {
         persistActiveAgentSession()
     }
 
+    /// 1.79.0 plan 自动执行 banner 入口。用户点「执行」或倒计时归零
+    /// 时调用。等效于 approve plan + 立刻派发一条「按 plan 执行」的
+    /// user 消息，agent 下个 turn 就会开干。
+    ///
+    /// 故意**留在 Plan 模式**，不切到 Normal：plan 模式的 system
+    /// prompt 在 `plan.status == .approved` 时已自动解锁 write tools，
+    /// 留在 plan 模式可以保留 plan card 的步骤勾选 / 进度跟踪体验。
+    /// 如果 agent 当前 turn 还在跑（罕见 —— banner 只在 plan 刚解析
+    /// 完时出现），prompt 会进队列。
+    func confirmAgentPlanAndExecute() {
+        guard agentInteractionMode == .plan,
+              var plan = agentCurrentPlan,
+              plan.status == .proposed else { return }
+        plan.status = .approved
+        agentCurrentPlan = plan
+        persistActiveAgentSession()
+
+        let prompt = """
+        Plan approved. Please proceed with executing the plan step by step. \
+        Emit a ```progress fenced block to mark each step as in_progress / done / failed as you go, \
+        and stop when every step has reached a terminal state.
+        """
+        guard let runtime = activeRuntime else { return }
+        if runtime.isResponding {
+            runtime.queuedMessages.append(AgentQueuedMessage(text: prompt, images: []))
+            return
+        }
+        dispatchAgentMessage(for: runtime, text: prompt, images: [])
+    }
+
     /// Manually retire an approved plan (e.g. after the agent reported done).
     func completeAgentPlan() {
         guard var plan = agentCurrentPlan else { return }

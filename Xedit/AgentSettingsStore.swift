@@ -15,6 +15,13 @@ enum AgentSettingsStore {
     private static let autoApproveKey = "com.willdeep.agentSettings.autoApproveSafeCommands.v1"
     private static let perProviderConcurrencyKey = "com.willdeep.agentSettings.perProviderConcurrencyLimit.v1"
     private static let chatBaseFontSizeKey = "com.willdeep.agentSettings.chatBaseFontSize.v1"
+    /// Global toggle: 关掉后 plan 自动执行 banner 不再做 destructive keyword
+    /// 扫描，所有 plan 都跑倒计时自动执行。默认开。
+    private static let planAutoExecuteDangerScanKey = "com.willdeep.agentSettings.planAutoExecuteDangerScan.v1"
+    /// Per-workspace 偏好：勾选"本工作区记住"后写入；下次 plan 就绪不再
+    /// 弹 banner，直接走 confirmPlanAndExecute。key 形如
+    /// `com.willdeep.agentSettings.planAutoExecuteSilently.v1.<workspaceHash>`。
+    private static let planAutoExecuteSilentlyKeyPrefix = "com.willdeep.agentSettings.planAutoExecuteSilently.v1."
 
     /// Hard bounds for the Agent chat base font slider. The lower
     /// bound matches the prior caption size so the picker can't shrink
@@ -141,6 +148,59 @@ enum AgentSettingsStore {
 
     static func saveAutoApproveSafeCommands(_ enabled: Bool) {
         defaults.set(enabled, forKey: autoApproveKey)
+    }
+
+    // MARK: - Plan auto-execution (1.79.0)
+
+    /// 是否在 plan 自动执行 banner 弹出前扫 destructive 关键词；命中后
+    /// 倒计时被禁用，需要用户手动点确认。默认 true（保守 + 可关）。
+    static func loadPlanAutoExecuteDangerScanEnabled() -> Bool {
+        if defaults.object(forKey: planAutoExecuteDangerScanKey) == nil {
+            return true
+        }
+        return defaults.bool(forKey: planAutoExecuteDangerScanKey)
+    }
+
+    static func savePlanAutoExecuteDangerScanEnabled(_ enabled: Bool) {
+        defaults.set(enabled, forKey: planAutoExecuteDangerScanKey)
+    }
+
+    /// 「本工作区记住」：勾选后，下次同 workspace 下 plan 就绪不再弹
+    /// banner，直接 confirm。workspace 用绝对路径的 SHA256 前缀做 key
+    /// 后缀，避免把完整路径写进 defaults。nil workspace（无 workspace
+    /// 的场景）走特殊 key。
+    static func loadPlanAutoExecuteSilently(workspacePath: String?) -> Bool {
+        defaults.bool(forKey: planAutoExecuteSilentlyKey(for: workspacePath))
+    }
+
+    static func savePlanAutoExecuteSilently(_ enabled: Bool, workspacePath: String?) {
+        let key = planAutoExecuteSilentlyKey(for: workspacePath)
+        if enabled {
+            defaults.set(true, forKey: key)
+        } else {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    private static func planAutoExecuteSilentlyKey(for workspacePath: String?) -> String {
+        let suffix: String
+        if let path = workspacePath, !path.isEmpty {
+            suffix = workspaceHash(path)
+        } else {
+            suffix = "no-workspace"
+        }
+        return planAutoExecuteSilentlyKeyPrefix + suffix
+    }
+
+    /// 稳定、与平台无关的 workspace 路径短哈希。用 DJB2（djb2a 变体）
+    /// 是为了避免引入 CryptoKit 在所有 target 上的传染；这里只是
+    /// per-workspace 偏好 key 的命名空间，无安全/抗碰撞要求。
+    private static func workspaceHash(_ path: String) -> String {
+        var hash: UInt64 = 5381
+        for byte in path.utf8 {
+            hash = ((hash << 5) &+ hash) &+ UInt64(byte)
+        }
+        return String(hash, radix: 16)
     }
 
     /// Cap on simultaneous in-flight Agent turns per provider. The

@@ -313,6 +313,15 @@ enum AgentToolRegistry {
         return dangerousPatterns.contains { lower.contains($0) }
     }
 
+    /// 1.79.0 plan 自动执行 banner 用。复用 shell 危险词黑名单扫
+    /// 整段 plan markdown（步骤描述里可能有 `rm -rf /tmp` 这类的反引
+    /// 号片段或自然语言描述）。**会假阳性**（例如 plan 里写"小心
+    /// `rm` 时…"也会命中），但 banner 的处理是"只 dim 倒计时、不
+    /// 拦截手动确认"，假阳性的代价只是用户多点一下，可以接受。
+    static func planTextLooksDestructive(_ text: String) -> Bool {
+        looksDangerous(command: text)
+    }
+
     private static func isReadOnlyShellCommand(_ command: String, rootDirectory: URL?) -> Bool {
         guard let segments = splitSimpleShellChain(command), !segments.isEmpty else {
             return false
