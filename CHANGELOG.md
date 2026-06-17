@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.84.0-rc2 - 2026-06-17
+
+### Added
+
+- **Widget sendPrompt(text) 双向桥**：widget 里的按钮 / 表单可以**反向**触发 agent。注入到每个 widget 的 `window.sendPrompt(text)` 全局函数把字符串经 `WKScriptMessageHandler` 发到 Swift 端 → 写入 `appState.agentInput` → 自动 `sendAgentMessage()`。单次 prompt ≤ 4 KB（防 widget 灌大量内容）；空字符串拒。Bridge channel 只暴露 `sendPrompt` + 自动高度两种 message type，未知类型静默丢弃，防 widget 滥用通道。
+- **Widget 自动高度**：注入脚本用 `ResizeObserver` 监听 `document.body`，把 `scrollHeight` postMessage 回 Swift；`AgentWidgetCardView` 拿到后 clamp 到 120-900px 范围内自动调高度。初始 50ms / 250ms / 1000ms 三次主动报告兜底 widget 加载初期布局抖动。手动 resize handle 取消（高度由 widget 自己决定）。
+- **`run_workflow` 工具**：agent 现在可以**主动**派 workflow，不依赖用户敲 slash 命令。用户说「review this PR」→ agent 直接调 `run_workflow(workflow_name="pr-review", args="123")`；说「summarize this video」→ agent 派 `video-summary`；用 `/db-explore` 的场景但用户没敲 slash → agent 自己识别意图。13 个内置 workflow 全部可达。Handler 用新的 `EditorAppStateRegistry.appState(forRuntime:)` 路由到正确的 AppState（多 editor 窗口场景下 widget / agent 派的 workflow 落到原 session 的 transcript）。
+- 实现位置（4 个文件改动）：
+  - `Xedit/AgentWidgetCardView.swift`：bridge JS + WKScriptMessageHandler + auto-height
+  - `Xedit/AgentToolRegistry.swift`：新增 `run_workflow` descriptor + 优化 show_widget 描述
+  - `Xedit/AgentTools.swift`：`runWorkflow` handler + dispatch case
+  - `Xedit/EditorAppStateRegistry.swift`：`appState(forRuntime:)` 查找方法
+
+### 版本
+
+- 同 minor 内功能扩展，rc 号递增：1.84.0-rc1 → **1.84.0-rc2**。Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步。
+
 ## 1.84.0-rc1 - 2026-06-17
 
 ### Added

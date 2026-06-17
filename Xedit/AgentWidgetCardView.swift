@@ -11,14 +11,14 @@
 //      `connect-src 'none'`，LLM 不论怎么写 fetch / XHR / WebSocket 都
 //      发不出去网络请求。
 //   2. **Navigation 拦截**：`decidePolicyFor navigationAction` 全部
-//      `.cancel`。点击 <a href> 不会跳走（外链改成"复制到剪贴板"或
-//      丢弃；MVP 直接丢弃）。
-//   3. **scheme 黑名单**：`file://` `ws://` `wss://` 全部拒。
-//   4. **JS 通信**：MVP **不**接 WKScriptMessageHandler，widget 不能反
-//      向调 Swift。phase 2 加 `sendPrompt(text)` 时再开。
+//      `.cancel`。
+//   3. **scheme 黑名单**：file:// / ws:// / wss:// 一律拒。
+//   4. **JS 通信**：1.84.0-rc2 通过 `WKScriptMessageHandler` 加了双向
+//      桥，但仅暴露**两个**函数：`window.sendPrompt(text)` 给 widget
+//      反向触发 chat；自动高度 `height` 事件由注入脚本静默上报。
+//      Widget 拿不到 read 任何 Swift 状态，只能 push 这两类消息。
 //   5. **主题 CSS 变量注入**：跟随 SwiftUI 当前 colorScheme 注入
-//      `--bg --fg --accent --secondary`，widget 写 `var(--fg)` 就能
-//      自动适配。
+//      `--bg --fg --accent --secondary`。
 //
 
 import SwiftUI
@@ -27,26 +27,37 @@ import WebKit
 struct AgentWidgetCardView: View {
     let widget: AgentWidget
 
+    @EnvironmentObject var appState: AppState
     @State private var expanded: Bool = true
+    @State private var height: CGFloat = 360
     @Environment(\.colorScheme) private var colorScheme
 
-    /// Card 内 WKWebView 的可调高度。Web 视图本身高度不容易由内容
-    /// 撑开（needs JS measurement），MVP 给一个固定高度让用户拖。
-    @State private var height: CGFloat = 360
+    /// 自动高度上报后的最小 / 最大 clamp。Widget body 高度 > 900px
+    /// 时滚动；小于 120px 时给一个最小展示空间。
+    private static let minHeight: CGFloat = 120
+    private static let maxAutoHeight: CGFloat = 900
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
             if expanded {
-                AgentWidgetWebView(html: composedHTML, height: $height)
-                    .frame(height: height)
-                    .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-                    )
-                resizeHandle
+                AgentWidgetWebView(
+                    html: composedHTML,
+                    appState: appState,
+                    onHeightChange: { reported in
+                        let clamped = max(Self.minHeight, min(Self.maxAutoHeight, reported))
+                        if abs(clamped - height) > 2 {
+                            height = clamped
+                        }
+                    }
+                )
+                .frame(height: height)
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                )
             }
             footer
         }
@@ -61,8 +72,6 @@ struct AgentWidgetCardView: View {
         )
         .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
     }
-
-    // MARK: - Subviews
 
     private var header: some View {
         HStack(spacing: 8) {
@@ -95,28 +104,11 @@ struct AgentWidgetCardView: View {
             Text(byteLabel)
                 .font(.system(size: 10).monospacedDigit())
                 .foregroundStyle(.secondary)
-            Text("· Sandbox: no network, no navigation")
+            Text("· Sandbox: no network, no navigation · sendPrompt() available")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
             Spacer(minLength: 4)
         }
-    }
-
-    /// 简易拖动调高度的小灰条。WKWebView 自身没有 intrinsic content
-    /// height（HTML 文档高度需要 JS 测，phase 2 加），现在让用户手动调。
-    private var resizeHandle: some View {
-        Rectangle()
-            .fill(Color.primary.opacity(0.08))
-            .frame(height: 6)
-            .clipShape(RoundedRectangle(cornerRadius: 3))
-            .gesture(
-                DragGesture()
-                    .onChanged { value in
-                        let next = height + value.translation.height
-                        height = max(120, min(900, next))
-                    }
-            )
-            .help("Drag to resize")
     }
 
     private var byteLabel: String {
@@ -130,12 +122,6 @@ struct AgentWidgetCardView: View {
         return "\(b) B"
     }
 
-    // MARK: - Composed HTML with CSP + theme
-
-    /// 把 widget.html 包一层 `<html><head>...</head><body>...</body></html>`，
-    /// 注入 CSP meta + 主题 CSS 变量。如果 LLM 已经写了完整 doctype，我们
-    /// 仍然外包一层 wrapper —— 双重 html 浏览器会无视外层，CSP meta 仍
-    /// 生效（最先解析的优先）。
     private var composedHTML: String {
         let isDark = colorScheme == .dark
         let bg = isDark ? "#1c1c1e" : "#ffffff"
@@ -151,6 +137,41 @@ struct AgentWidgetCardView: View {
             + "object-src 'none'; "
             + "base-uri 'none'; "
             + "form-action 'none';"
+        // Bridge script — injected at the END of <body> so user HTML
+        // can override window.sendPrompt if it really wants to (it
+        // shouldn't, but the WKScriptMessageHandler on the Swift side
+        // also gates by message `type` so a hijack can only post the
+        // two allowed events anyway).
+        let bridgeScript = """
+        (function() {
+          if (!window.webkit || !window.webkit.messageHandlers || !window.webkit.messageHandlers.willdeep) {
+            return;
+          }
+          var handler = window.webkit.messageHandlers.willdeep;
+          window.sendPrompt = function(text) {
+            if (typeof text !== 'string' || text.length === 0) { return; }
+            try { handler.postMessage({type: 'sendPrompt', text: text}); } catch (e) {}
+          };
+          var lastReportedHeight = 0;
+          function reportHeight() {
+            var h = Math.max(
+              document.body ? document.body.scrollHeight : 0,
+              document.documentElement ? document.documentElement.scrollHeight : 0
+            );
+            if (h && Math.abs(h - lastReportedHeight) > 2) {
+              lastReportedHeight = h;
+              try { handler.postMessage({type: 'height', value: h}); } catch (e) {}
+            }
+          }
+          if (typeof ResizeObserver === 'function') {
+            new ResizeObserver(reportHeight).observe(document.body);
+          }
+          window.addEventListener('load', reportHeight);
+          setTimeout(reportHeight, 50);
+          setTimeout(reportHeight, 250);
+          setTimeout(reportHeight, 1000);
+        })();
+        """
         return """
         <!DOCTYPE html>
         <html>
@@ -179,6 +200,7 @@ struct AgentWidgetCardView: View {
         </head>
         <body>
             \(widget.html)
+            <script>\(bridgeScript)</script>
         </body>
         </html>
         """
@@ -189,38 +211,56 @@ struct AgentWidgetCardView: View {
 
 private struct AgentWidgetWebView: NSViewRepresentable {
     let html: String
-    @Binding var height: CGFloat
+    let appState: AppState
+    let onHeightChange: (CGFloat) -> Void
 
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
-        // No JS evaluation hook into Swift in MVP. Phase 2 adds
-        // sendPrompt(text) via WKScriptMessageHandler.
         let preferences = WKWebpagePreferences()
         preferences.allowsContentJavaScript = true
         configuration.defaultWebpagePreferences = preferences
+
+        // Bridge: widget JS → Swift. Only the `willdeep` channel exists;
+        // any other webkit.messageHandlers.* are undefined.
+        configuration.userContentController.add(
+            context.coordinator,
+            name: "willdeep"
+        )
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         webView.setValue(false, forKey: "drawsBackground")
-        // Background = transparent so the SwiftUI .thinMaterial backdrop
-        // shows through if the HTML doesn't fill the frame.
         return webView
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
+        context.coordinator.appState = appState
+        context.coordinator.onHeightChange = onHeightChange
         webView.loadHTMLString(html, baseURL: nil)
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator()
+        Coordinator(appState: appState, onHeightChange: onHeightChange)
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
-        /// Block every navigation except the initial loadHTMLString.
-        /// `decidePolicyFor` is called for the synthetic `about:blank`
-        /// load that backs `loadHTMLString` too — we allow scheme `about`
-        /// and `data`, block everything else.
+    static func dismantleNSView(_ nsView: WKWebView, coordinator: Coordinator) {
+        // 解开 message handler 避免 retain cycle（WKWebView 强引用
+        // configuration → contentController → handler）。
+        nsView.configuration.userContentController.removeScriptMessageHandler(forName: "willdeep")
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+        weak var appState: AppState?
+        var onHeightChange: (CGFloat) -> Void
+
+        init(appState: AppState, onHeightChange: @escaping (CGFloat) -> Void) {
+            self.appState = appState
+            self.onHeightChange = onHeightChange
+        }
+
+        // MARK: Navigation
+
         func webView(_ webView: WKWebView,
                      decidePolicyFor navigationAction: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
@@ -232,19 +272,52 @@ private struct AgentWidgetWebView: NSViewRepresentable {
             if scheme == "about" || scheme == "data" {
                 decisionHandler(.allow)
             } else {
-                // Drop the click on the floor. Phase 2 can route http(s) to
-                // the user's default browser via NSWorkspace.shared.open.
                 decisionHandler(.cancel)
             }
         }
 
-        // Refuse popups, new windows, JS alerts — sandbox stays in this
-        // single embedded view.
         func webView(_ webView: WKWebView,
                      createWebViewWith configuration: WKWebViewConfiguration,
                      for navigationAction: WKNavigationAction,
                      windowFeatures: WKWindowFeatures) -> WKWebView? {
             nil
+        }
+
+        // MARK: Bridge
+
+        func userContentController(_ controller: WKUserContentController,
+                                   didReceive message: WKScriptMessage) {
+            guard let body = message.body as? [String: Any],
+                  let type = body["type"] as? String else {
+                return
+            }
+            switch type {
+            case "sendPrompt":
+                guard let text = body["text"] as? String else { return }
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                // 防护：单次最长 4 KB，防止 widget 不小心 / 故意推一个
+                // 巨大 prompt 进 composer。
+                guard !trimmed.isEmpty, trimmed.count <= 4096 else { return }
+                Task { @MainActor [weak appState] in
+                    guard let appState else { return }
+                    appState.agentInput = trimmed
+                    appState.sendAgentMessage()
+                }
+            case "height":
+                guard let raw = body["value"] as? CGFloat else {
+                    if let intRaw = body["value"] as? Int {
+                        onHeightChange(CGFloat(intRaw))
+                    } else if let doubleRaw = body["value"] as? Double {
+                        onHeightChange(CGFloat(doubleRaw))
+                    }
+                    return
+                }
+                onHeightChange(raw)
+            default:
+                // Ignore unknown event types — defense against a future
+                // widget trying to abuse the channel.
+                break
+            }
         }
     }
 }

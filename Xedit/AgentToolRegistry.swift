@@ -271,6 +271,15 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "run_workflow",
+            description: "Start one of the built-in workflows (deep-research / code-review / bug-hunt / competitor-analysis / pr-review / release-notes / issue-triage / csv-ask / db-explore / db-schema-doc / transcribe / video-summary / meeting-notes) without making the user type a slash command. Use this when the user's request is clearly served by a workflow (e.g. user says \"review this PR\" → `pr-review`; \"summarize this video\" → `video-summary`; \"how many users signed up last week?\" against an open CSV/DB → `csv-ask` / `db-explore`). The workflow card appears in the transcript and runs in the background; this tool returns immediately with a one-liner so you can keep talking. Pass the same args you'd type after the slash command.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "workflow_name", type: .string, description: "Internal slug, e.g. `deep-research`, `code-review`, `pr-review`, `db-explore`, `video-summary`. NOT the slash command — drop the leading `/`.", required: true),
+                AgentToolParameter(name: "args", type: .string, description: "Arguments to pass to the workflow, same shape as what comes after the slash command. For `/research how do mac apps update` pass `\"how do mac apps update\"`. For `/code-review --pr 123` pass `\"--pr 123\"`. Optional for workflows that allow empty args (e.g. /code-review on working tree, /issue-triage). Leave empty string when omitting.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "show_widget",
             description: "Render an interactive HTML/SVG visualization inline in the transcript. Use for dashboards, calculators with sliders/inputs, comparison tables that benefit from a live UI, charts, mockups, or any time a static markdown table or image would lose interactivity. The HTML runs in a strict WKWebView sandbox: NO network requests (connect-src 'none'), NO navigation, NO file access, NO popups. You must inline all styles and scripts — external <script src=...> or <link href=...> are blocked by CSP. CSS variables `--bg`, `--fg`, `--secondary`, `--accent` are pre-set to match the host theme; use `var(--fg)` etc. for colors so light/dark looks right. Returns immediately with a short ack; the rendered card appears in the transcript next turn.",
             risk: .read,

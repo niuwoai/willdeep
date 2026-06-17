@@ -80,6 +80,19 @@ final class EditorAppStateRegistry: ObservableObject {
         }
     }
 
+    /// 找到拥有指定 runtimeID 的 AppState。1.84.0-rc2 起 `run_workflow`
+    /// 工具用这个把 agent 主动派的 workflow 注入到正确的 transcript。
+    /// 跨多个 editor 窗口扫一遍 —— window 数量极小（用户开 3 个就算
+    /// 多），扫表无所谓。
+    func appState(forRuntime runtimeID: UUID) -> AppState? {
+        for appState in activeEditors.values {
+            if appState.agentRuntimes[runtimeID] != nil {
+                return appState
+            }
+        }
+        return nil
+    }
+
     /// 把当前 current 对应的 editor 窗口激活到前台。Agent 窗口的
     /// header 「切回 editor」按钮用。如果窗口已经被系统释放（不该
     /// 发生，因为 unregister 时会清掉 windows entry，但 weak ref 兜底）

@@ -70,6 +70,8 @@ enum AgentToolRunner {
             return try await AgentMCPBridge.callTool(arguments: arguments)
         case "show_widget":
             return try await showWidget(arguments: arguments, context: context)
+        case "run_workflow":
+            return try await runWorkflow(arguments: arguments, context: context)
         default:
             throw AgentToolError.unknownTool(name)
         }
@@ -851,6 +853,61 @@ enum AgentToolRunner {
         return AgentToolResult(
             summary: "Queued widget: \(title)",
             payload: "widget queued: \"\(title)\" (\(kbLabel)) — will appear in the transcript at the start of the next turn."
+        )
+    }
+
+    // MARK: run_workflow (1.84.0-rc2)
+
+    /// Agent 自己派 workflow（无需用户 slash 命令）。handler 通过
+    /// `AppState.startWorkflow` 走和 composer slash 同款入口 ——
+    /// AppState 创建 .workflowReport message + 起后台 Task 跑
+    /// WorkflowEngine。本工具返回简短 ack；后续 turn 顶部 LLM 自然能在
+    /// transcript 里读到 workflow card 的 summary。
+    private static func runWorkflow(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        guard let name = arguments["workflow_name"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !name.isEmpty else {
+            throw AgentToolError.missingArgument("workflow_name")
+        }
+        guard let runtimeID = context.runtimeID else {
+            return AgentToolResult(
+                summary: "run_workflow unavailable",
+                payload: "run_workflow is only available in conversational agent runtimes."
+            )
+        }
+        let normalizedName = name.hasPrefix("/") ? String(name.dropFirst()) : name
+        guard let workflow = await MainActor.run(body: {
+            WorkflowRegistry.find(name: normalizedName)
+                ?? WorkflowRegistry.find(slashCommand: "/\(normalizedName)")
+        }) else {
+            let known = await MainActor.run { WorkflowRegistry.all.map { $0.name }.joined(separator: ", ") }
+            return AgentToolResult(
+                summary: "Unknown workflow",
+                payload: "Unknown workflow `\(name)`. Available: \(known)."
+            )
+        }
+        let args = arguments["args"]?.stringValue() ?? ""
+        let result = await MainActor.run { () -> (Bool, String) in
+            // 用 runtime 自己的 startWorkflow 路径 —— 它会找到该 runtime
+            // 的 messages / 状态并塞 workflow card 进去。
+            guard let appState = EditorAppStateRegistry.shared.appState(forRuntime: runtimeID) else {
+                return (false, "no app state for runtime \(runtimeID)")
+            }
+            let claimed = appState.startWorkflow(slashCommand: workflow.slashCommand, args: args)
+            return (claimed, claimed ? "started" : "could not start (workflow rejected args)")
+        }
+        if result.0 {
+            let argsHint = args.isEmpty ? "" : " with args: \(args)"
+            return AgentToolResult(
+                summary: "Started \(workflow.displayTitle)",
+                payload: "workflow `\(workflow.name)` queued\(argsHint). Card will appear in the transcript with live agent counts; final report joins the transcript when synthesize finishes."
+            )
+        }
+        return AgentToolResult(
+            summary: "Failed to start \(workflow.displayTitle)",
+            payload: "Could not start workflow `\(workflow.name)`: \(result.1)."
         )
     }
 
