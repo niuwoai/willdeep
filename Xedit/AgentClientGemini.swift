@@ -553,6 +553,10 @@ struct GeminiAdapter {
                         ]
                     ]
                 ])
+
+            case .workflowReport:
+                // Workflow card 不发给模型，跳过。
+                continue
             }
         }
 

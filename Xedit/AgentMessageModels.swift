@@ -24,6 +24,13 @@ enum AgentRole: String, Codable {
     case user
     case assistant
     case tool
+    /// 1.81.0-rc1：workflow（/research / /code-review / …）启动时塞一条这种
+    /// role 的消息进 messages，content 留空，挂在 `workflowReport` 字段上
+    /// 的 `WorkflowReport` 持续被 engine 更新。transcript 渲染时识别此
+    /// role 走 AgentWorkflowCardView，不走普通 bubble。模型看不到此类
+    /// 消息（AgentChatHistoryFormatter 会过滤），workflow 的最终结果由
+    /// engine 完成时单独 inject 一条 `.system` notice。
+    case workflowReport
 }
 
 /// A user-attached image, encoded inline so it round-trips through session
@@ -178,6 +185,11 @@ struct AgentMessage: Identifiable, Codable, Equatable {
     /// connect to `.finishedTurn`. Only set on assistant messages once
     /// the stream terminates.
     var elapsedSeconds: Double?
+    /// 1.81.0-rc1：role == .workflowReport 时挂载的 workflow 运行数据。
+    /// engine 边跑边 mutate 这里的字段（subAgents 状态、totalUsageTokens、
+    /// summary 等），UI 卡片读它显示进度。其它 role 一定是 nil；旧版本
+    /// session 反序列化时也是 nil（Codable optional），向后兼容。
+    var workflowReport: WorkflowReport?
     let createdAt: Date
 
     nonisolated init(
@@ -196,6 +208,7 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         cacheWritePromptTokens: Int? = nil,
         reasoningTokens: Int? = nil,
         elapsedSeconds: Double? = nil,
+        workflowReport: WorkflowReport? = nil,
         createdAt: Date = Date()
     ) {
         self.id = id
@@ -213,6 +226,7 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         self.cacheWritePromptTokens = cacheWritePromptTokens
         self.reasoningTokens = reasoningTokens
         self.elapsedSeconds = elapsedSeconds
+        self.workflowReport = workflowReport
         self.createdAt = createdAt
     }
 

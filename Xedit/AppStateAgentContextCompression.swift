@@ -105,6 +105,7 @@ extension AppState {
                 case .assistant: label = "ASSISTANT"
                 case .tool: label = "TOOL(\(message.toolCallID ?? "?"))"
                 case .system: label = "SYSTEM"
+                case .workflowReport: label = "WORKFLOW(\(message.workflowReport?.workflowName ?? "?"))"
                 }
                 return "\(label):\n\(message.content)"
             }

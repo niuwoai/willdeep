@@ -276,7 +276,10 @@ struct AgentChatTranscript: View {
             // `.system` is reserved for host-injected notices (e.g.
             // background-task completion); the user reads those via the
             // right-side jobs drawer, not the transcript.
-            message.role != .tool && message.role != .system && !isEmptyThinkingPlaceholder(message)
+            // `.workflowReport` (1.81.0-rc1) is rendered as a custom card
+            // — explicitly allowed through.
+            if message.role == .workflowReport { return true }
+            return message.role != .tool && message.role != .system && !isEmptyThinkingPlaceholder(message)
         }
     }
 

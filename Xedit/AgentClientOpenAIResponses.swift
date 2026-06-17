@@ -547,6 +547,12 @@ struct OpenAIResponsesAdapter {
                     "call_id": callID,
                     "output": message.modelContent
                 ])
+
+            case .workflowReport:
+                // Workflow report 卡片不发给模型 —— summary 已经够用户
+                // 直接读；模型如果要看可以在 transcript 里被引用，由
+                // user 自己 quote 进下一条消息。
+                continue
             }
         }
 

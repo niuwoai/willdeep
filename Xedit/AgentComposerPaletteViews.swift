@@ -20,45 +20,81 @@ struct SlashCommand: Identifiable {
     let title: String
     let subtitle: String
     let symbol: String
-    let action: () -> Void
+    /// 接收用户输入框里去掉 leading slash-command 后的 trailing args
+    /// （已 trim 空白）。绝大多数命令忽略这个参数；workflow 类命令
+    /// 把它当 query 转给 startWorkflow。
+    let action: (_ args: String) -> Void
 
     static func builtIn(state: AppState) -> [SlashCommand] {
-        [
-            SlashCommand(id: "new", title: "/new", subtitle: "Start a fresh chat in this workspace", symbol: "square.and.pencil") {
+        let core: [SlashCommand] = [
+            SlashCommand(id: "new", title: "/new", subtitle: "Start a fresh chat in this workspace", symbol: "square.and.pencil") { _ in
                 state.startNewAgentSession()
             },
-            SlashCommand(id: "clear", title: "/clear", subtitle: "Clear the current chat's messages", symbol: "eraser") {
+            SlashCommand(id: "clear", title: "/clear", subtitle: "Clear the current chat's messages", symbol: "eraser") { _ in
                 state.clearAgentConversation()
             },
-            SlashCommand(id: "compress", title: "/compress", subtitle: "Summarize older turns to free context", symbol: "rectangle.compress.vertical") {
+            SlashCommand(id: "compress", title: "/compress", subtitle: "Summarize older turns to free context", symbol: "rectangle.compress.vertical") { _ in
                 state.compressAgentContext()
             },
-            SlashCommand(id: "stop", title: "/stop", subtitle: "Stop the current model response", symbol: "stop.circle") {
+            SlashCommand(id: "stop", title: "/stop", subtitle: "Stop the current model response", symbol: "stop.circle") { _ in
                 state.stopAgentResponse()
             },
-            SlashCommand(id: "clear-queue", title: "/clear-queue", subtitle: "Drop any pending queued messages", symbol: "tray.2") {
+            SlashCommand(id: "clear-queue", title: "/clear-queue", subtitle: "Drop any pending queued messages", symbol: "tray.2") { _ in
                 state.clearAgentQueue()
             },
-            SlashCommand(id: "copy-last", title: "/copy-last", subtitle: "Copy the last assistant message", symbol: "doc.on.doc") {
+            SlashCommand(id: "copy-last", title: "/copy-last", subtitle: "Copy the last assistant message", symbol: "doc.on.doc") { _ in
                 guard let last = state.agentMessages.last(where: { $0.role == .assistant }) else { return }
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(last.content, forType: .string)
             },
         ]
+        // 1.81.0-rc1：注册内置 workflow 为 slash 命令（/research,
+        // /code-review, /bug-hunt, /competitor）。args 部分作为 query
+        // 转给 startWorkflow，runtime 内起后台 task 跑 engine。
+        let workflows: [SlashCommand] = WorkflowRegistry.all.map { workflow in
+            SlashCommand(
+                id: "workflow-\(workflow.name)",
+                title: workflow.slashCommand,
+                subtitle: workflow.shortDescription,
+                symbol: "wand.and.rays"
+            ) { args in
+                state.startWorkflow(slashCommand: workflow.slashCommand, args: args)
+            }
+        }
+        return core + workflows
     }
 
     /// Filters by fuzzy-ish prefix on the slash-stripped query. The text
     /// view passes `"/cl"` etc. — we strip the leading slash and match
     /// either the canonical id or the title prefix. Empty query (just
     /// `/`) lists everything.
+    ///
+    /// 1.81.0-rc1：workflow 命令带 args（`/research my topic`），所以
+    /// 取第一个空格前的部分当命令名做 filter；之后的内容由
+    /// `argsForCommand(_:)` 在 dispatch 时切出来传给 action。
     static func filter(_ rawInput: String, allCommands: [SlashCommand]) -> [SlashCommand] {
         let trimmed = rawInput.trimmingCharacters(in: .whitespaces)
         guard trimmed.hasPrefix("/") else { return [] }
-        let query = String(trimmed.dropFirst()).lowercased()
+        let head: String
+        if let spaceIdx = trimmed.firstIndex(of: " ") {
+            head = String(trimmed[..<spaceIdx])
+        } else {
+            head = trimmed
+        }
+        let query = String(head.dropFirst()).lowercased()
         guard !query.isEmpty else { return allCommands }
         return allCommands.filter { c in
             c.id.lowercased().contains(query) || c.title.lowercased().contains(query)
         }
+    }
+
+    /// 从 composer 当前 input 切出 args 部分（第一个空格之后的内容）。
+    /// workflow 命令用，core 命令忽略。
+    static func argsForCommand(_ rawInput: String) -> String {
+        let trimmed = rawInput.trimmingCharacters(in: .whitespaces)
+        guard let spaceIdx = trimmed.firstIndex(of: " ") else { return "" }
+        return String(trimmed[trimmed.index(after: spaceIdx)...])
+            .trimmingCharacters(in: .whitespaces)
     }
 }
 

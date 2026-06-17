@@ -481,9 +481,12 @@ private struct ComposerCard: View {
         guard !commands.isEmpty else { return false }
         let safeIndex = min(max(0, slashMenuSelection), commands.count - 1)
         let command = commands[safeIndex]
+        // 先把当前 raw input 里的 args 切出来 —— workflow 命令需要它，
+        // core 命令忽略。然后再清空输入框。
+        let args = SlashCommand.argsForCommand(appState.agentInput)
         slashMenuVisible = false
         appState.agentInput = ""
-        command.action()
+        command.action(args)
         return true
     }
 

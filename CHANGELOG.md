@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.81.0-rc1 - 2026-06-17
+
+### Added
+
+- 新特性：**Workflow** —— Claude Code / codex 同款"用户启动一个 workflow，主 agent 不阻塞，背后并发跑 N 个 sub-agent，transcript 出张卡片实时显示进度，完成后整理报告"的体验。
+  - **4 个内置 workflow**（slash 命令触发，args 跟在命令后面）：
+    - `/research <query>` —— Deep Research。5 个 angle 并发搜索（news / docs / reviews / competitors / business）+ 1 个 synthesize agent 出引用版 markdown 报告。**6 agents**。
+    - `/code-review [focus hint]` —— Code Review。当前 git diff 按 4 个 dimension 并发审：correctness / security / performance / tests。**4 agents**。无 hint 也能跑。
+    - `/bug-hunt [area hint]` —— Bug Hunt。1 个 picker agent 挑 6 个最值得审的文件，6 个 hunter agent 并发各审一个 + 1 个 synthesize 去重/排序。**最多 8 agents**。
+    - `/competitor <product1, product2, …>` —— Competitor Analysis。每个产品 1 个 scout agent 并发查（最多 5 个）+ 1 个 synthesize 出对比表 + per-product depth + "honest take"。**最多 6 agents**。
+  - **Workflow Engine（`Xedit/WorkflowEngine.swift`）**：提供 DSL 原语 `agent(prompt:label:)` 和 `parallel(maxConcurrent:thunks:)`。每个 `agent(...)` 直接调用 `AgentSubagentRunner.run(...)`（**绕过** `AgentSubagentRegistry` 硬编码的 3 并发上限 —— spawn_agent 工具的并发预算和 workflow 用户主动派的预算是分开的）；engine 自己用 TaskGroup + window scroll 实现并发上限。
+  - **Workflow Card（`Xedit/AgentWorkflowCardView.swift`）**：transcript inline 卡片。顶部 workflow 名 + "Workflow" badge + 折叠按钮；中部 args 摘要 + "M / N agents" 进度 + 耗时；折叠展开后看每个 sub-agent 的 label / status / 单独耗时 / token；完成后下方加 synthesize 出的 summary（textSelection 可选可拷）；footer 显示累计 token 和状态 pill。
+  - **新消息类型 `.workflowReport`**：`AgentRole` 加新 case，`AgentMessage` 加 optional `workflowReport: WorkflowReport?` 字段。**不发给 LLM**：4 个 AgentClient 适配器（OpenAI Chat / OpenAI Responses / Anthropic / Gemini）都加 `case .workflowReport: continue` 跳过；context compression 把它当 "WORKFLOW(name)" 落到 summary text。transcript filter 把它放进白名单。
+  - **后台执行**：`AppState.startWorkflow(slashCommand:args:)` 验完参数、塞一条 `.workflowReport` message 到 transcript（状态 `.planning`），然后起 `Task { ... }` 跑 engine。Engine 边跑边通过 `AppState.updateWorkflowReport(id:runtimeID:mutation:)` mutate 卡片，离散事件触发 SwiftUI 重渲染。完成 / 失败 / 取消都 mutate 最终状态。
+  - **避坑设计**：
+    - 所有 engine → AppState 的更新都走 mutation closure + 整体 reassign message —— @Published 通知是离散的（每个 sub-agent 状态变化一次），不在 view body 求值期间写，与 [SwiftUI Sheet @Published 死循环](memory/project_swiftui_sheet_published_loop.md) / [SwiftUI 流式渲染内存失控](memory/project_swiftui_streaming_layout_runaway.md) 同族陷阱无关。
+    - Workflow 持有 `weak var appState: AppState?` 防止 runtime 释放后 engine 还往里写。
+    - Sub-agent 失败默认返回 `nil` 不让整组炸（`parallel` 用 try/catch 包裹每个 thunk），workflow 自己决定是否要 fail。
+  - **Slash 命令分发改造**：`SlashCommand.action` 签名从 `() -> Void` 改为 `(_ args: String) -> Void`；`SlashCommand.argsForCommand(_:)` 切出第一个空格之后的 args；`SlashCommand.filter(_:_:)` 只用 head（第一个空格之前的部分）做命令匹配，让 `/research my topic` 也能命中 `/research`。core 命令（/new、/clear、/compress、/stop、/clear-queue、/copy-last）忽略 args。
+- 实现位置（共 17 个文件）：
+  - 新文件 10 个：`Xedit/WorkflowReport.swift`、`Xedit/WorkflowDefinition.swift`、`Xedit/WorkflowEngine.swift`、`Xedit/WorkflowRegistry.swift`、`Xedit/DeepResearchWorkflow.swift`、`Xedit/CodeReviewWorkflow.swift`、`Xedit/BugHuntWorkflow.swift`、`Xedit/CompetitorAnalysisWorkflow.swift`、`Xedit/AgentWorkflowCardView.swift`、`Xedit/L10n+Workflow.swift`、`Xedit/AppStateAgentWorkflows.swift`
+  - 修改：`Xedit/AgentMessageModels.swift`（加 role + workflowReport 字段）、`Xedit/AgentChatTranscript.swift`（visibleMessages 白名单）、`Xedit/AgentMessageView.swift`（switch 加 case 渲染卡片）、`Xedit/AgentComposerPaletteViews.swift`（slash 命令改 args 签名 + 注册 workflow 命令 + filter 用 head）、`Xedit/AgentModeComposerView.swift`（dispatch 切 args）、`Xedit/AgentClientOpenAIResponses.swift` / `AgentClientAnthropic.swift` / `AgentClientGemini.swift`（client switch 跳过 workflow card）、`Xedit/AgentPanelCards.swift` / `AgentChatHistoryChromeRenderer.swift` / `AppStateAgentContextCompression.swift` / `AppStateEditorPresentation.swift` / `AgentTranscriptReaderWindow.swift`（exhaustive switch 补 case）
+
+### 版本
+
+- **功能新增**，升 minor 位：1.80.0-rc1 → **1.81.0-rc1**。Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步。
+
 ## 1.80.0-rc1 - 2026-06-17
 
 ### Added

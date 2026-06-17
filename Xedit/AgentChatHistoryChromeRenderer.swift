@@ -35,6 +35,13 @@ extension AgentChatHistoryRenderer {
             label = message.toolCallID.map { "Tool output · \($0)" } ?? "Tool output"
             avatar = "OUT"
             color = NSColor.systemGreen
+        case .workflowReport:
+            // History NSTextView 不渲染 workflow card —— 卡片是 SwiftUI
+            // 单独绘的（见 AgentMessageView 里的 .workflowReport 分支）。
+            // 但 chrome renderer 需要可消解这条消息，所以给它个最少配置。
+            label = "Workflow"
+            avatar = "WFL"
+            color = NSColor.systemBlue
         }
 
         let headerStart = result.length
@@ -56,7 +63,7 @@ extension AgentChatHistoryRenderer {
                     .foregroundColor: secondaryColor,
                 ]
             ))
-        case .system, .assistant, .tool:
+        case .system, .assistant, .tool, .workflowReport:
             result.append(avatarToken(label: avatar, fill: color))
             result.append(NSAttributedString(
                 string: " " + label + "\n",
@@ -88,7 +95,7 @@ extension AgentChatHistoryRenderer {
             return .user
         case .assistant:
             return .assistant
-        case .tool:
+        case .tool, .workflowReport:
             return .tool
         }
     }
@@ -103,7 +110,7 @@ extension AgentChatHistoryRenderer {
             style.headIndent = AgentChatHistoryLayoutMetrics.userBodyHeadIndent
             style.firstLineHeadIndent = AgentChatHistoryLayoutMetrics.userBodyHeadIndent
             style.tailIndent = AgentChatHistoryLayoutMetrics.userBodyTailIndent
-        case .assistant, .system, .tool:
+        case .assistant, .system, .tool, .workflowReport:
             style.headIndent = 32
             style.firstLineHeadIndent = 32
             style.tailIndent = -18
@@ -125,7 +132,7 @@ extension AgentChatHistoryRenderer {
             style.headIndent = 32
             style.firstLineHeadIndent = 32
             style.tailIndent = -18
-        case .system, .tool:
+        case .system, .tool, .workflowReport:
             style.headIndent = 32
             style.firstLineHeadIndent = 32
             style.tailIndent = -18
@@ -253,7 +260,7 @@ extension AgentChatHistoryRenderer {
             return !body.isEmpty || !message.textAttachments.isEmpty
         case .assistant:
             return !body.isEmpty
-        case .system, .tool:
+        case .system, .tool, .workflowReport:
             return false
         }
     }
