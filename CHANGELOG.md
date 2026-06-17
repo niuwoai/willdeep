@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.85.0-rc8 - 2026-06-17
+
+### Fixed
+
+- `UserWorkflowManifestTests`(rc6 引入)两个测试期望和实现对不上,让 main CI 一直挂红:
+  - `blockScalarPreservesNewlines()` 期望 YAML `|` (clip) 模式无尾换行,但 [UserWorkflowManifest.swift readBlockScalar](Xedit/UserWorkflowManifest.swift:410) 按 YAML 1.2 spec 固定补一个尾 `\n`(spec-compliant)。改测试期望加 `\n`。
+  - `builtInWorkflowsAlwaysPresent()` 期望内置 workflow 含 `/deep-research`,但内置只有 `/research`(`/deep-research` 是 anthropic-skills 提供的 skill,不进 `WorkflowRegistry.all`)。改测试期望为 `/research`。
+
+### 版本
+
+- bugfix,只 bump rc 号:1.85.0-rc7 → **1.85.0-rc8**。pbxproj×6 / Go agent / Help Info.plist / README / docs / product-overview 同步。
+
 ## 1.85.0-rc7 - 2026-06-17
 
 ### Added

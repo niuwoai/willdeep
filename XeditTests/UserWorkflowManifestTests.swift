@@ -129,8 +129,8 @@ struct UserWorkflowManifestTests {
               line four
         """
         let m = try UserWorkflowManifestParser.parse(yaml)
-        // clip 模式:trim 尾部空行,保留中间空行
-        #expect(m.steps[0].prompt == "line one\nline two\n\nline four")
+        // YAML clip 模式(`|`):trim 尾部空行,保留中间空行,固定补一个尾换行(spec 行为)。
+        #expect(m.steps[0].prompt == "line one\nline two\n\nline four\n")
     }
 
     // MARK: - Errors
@@ -264,7 +264,7 @@ struct UserWorkflowManifestTests {
         let workflows = WorkflowRegistry.all
         let slashes = Set(workflows.map(\.slashCommand))
         #expect(slashes.contains("/code-review"))
-        #expect(slashes.contains("/deep-research"))
+        #expect(slashes.contains("/research"))
         #expect(slashes.contains("/video-clip"))
     }
 }
