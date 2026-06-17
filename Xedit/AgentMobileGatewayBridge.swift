@@ -27,8 +27,19 @@ enum AgentMobileGatewayCommandRouter {
                     now: now
                 )
             case "session.create":
+                let rawWorkspacePath = envelope.payload["workspace_path"]?.stringValue
+                let resolvedWorkspacePath: String?
+                if let raw = rawWorkspacePath?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                   !raw.isEmpty {
+                    resolvedWorkspacePath = try controller.mobileGatewayValidateWorkspacePath(raw)
+                } else if rawWorkspacePath != nil {
+                    throw AgentMobileGatewayCommandError.missingWorkspacePath
+                } else {
+                    resolvedWorkspacePath = nil
+                }
                 let session = controller.mobileGatewayStartSession(
-                    workspacePath: envelope.payload["workspace_path"]?.stringValue
+                    workspacePath: resolvedWorkspacePath
                 )
                 return sessionEnvelope(
                     type: "session.upsert",
@@ -36,6 +47,12 @@ enum AgentMobileGatewayCommandRouter {
                     session: session,
                     isActive: controller.mobileGatewayActiveSessionID == session.id,
                     isResponding: controller.mobileGatewayRuntimeIsResponding(sessionID: session.id),
+                    now: now
+                )
+            case "workspace.list":
+                return workspaceListEnvelope(
+                    id: envelope.id,
+                    controller: controller,
                     now: now
                 )
             case "session.select":
@@ -190,6 +207,37 @@ enum AgentMobileGatewayCommandRouter {
             ],
             timestamp: isoTimestamp(now)
         )
+    }
+
+    static func workspaceListEnvelope(
+        id: String? = nil,
+        controller: AgentMobileGatewayControlling,
+        now: Date = Date()
+    ) -> AgentMobileGatewayEnvelope {
+        let workspaces = controller.mobileGatewayWorkspaceList.map(workspaceJSON)
+        return AgentMobileGatewayEnvelope(
+            id: id,
+            type: "workspace.list",
+            payload: ["workspaces": .array(workspaces)],
+            timestamp: isoTimestamp(now)
+        )
+    }
+
+    private static func workspaceJSON(_ workspace: AgentMobileGatewayWorkspaceSnapshot) -> AgentMobileGatewayJSON {
+        var fields: [String: AgentMobileGatewayJSON] = [
+            "path": .string(workspace.path),
+            "name": .string(workspace.name),
+            "session_count": .int(workspace.sessionCount),
+            "is_current": .bool(workspace.isCurrent),
+            "is_git_repo": .bool(workspace.isGitRepo)
+        ]
+        if let lastUsedAt = workspace.lastUsedAt {
+            fields["last_used_at"] = .string(isoTimestamp(lastUsedAt))
+        }
+        if let root = workspace.repositoryRoot {
+            fields["repository_root"] = .string(root)
+        }
+        return .object(fields)
     }
 
     static func toolPendingEnvelope(

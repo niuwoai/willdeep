@@ -798,6 +798,131 @@ struct AgentMobileGatewayBridgeTests {
         #expect(runtime.patchProposals[1].statusMessage == "The diff format is not supported yet.")
     }
 
+    @Test @MainActor
+    func workspaceListReturnsWorkspaceListEnvelope() {
+        let controller = FakeMobileGatewayController(sessions: [], activeSessionID: nil)
+        controller.workspaceListSnapshots = [
+            AgentMobileGatewayWorkspaceSnapshot(
+                path: "/Users/rocky/Sites/Xedit",
+                name: "Xedit",
+                lastUsedAt: fixedDate,
+                sessionCount: 2,
+                isCurrent: true,
+                isGitRepo: true,
+                repositoryRoot: "/Users/rocky/Sites/Xedit"
+            ),
+            AgentMobileGatewayWorkspaceSnapshot(
+                path: "/Users/rocky/Sites/willdeep-android",
+                name: "willdeep-android",
+                lastUsedAt: fixedDate.addingTimeInterval(-3600),
+                sessionCount: 5,
+                isCurrent: false,
+                isGitRepo: true,
+                repositoryRoot: nil
+            )
+        ]
+
+        let response = AgentMobileGatewayCommandRouter.handle(
+            AgentMobileGatewayEnvelope(id: "wl-1", type: "workspace.list"),
+            controller: controller,
+            now: fixedDate
+        )
+
+        #expect(response.id == "wl-1")
+        #expect(response.type == "workspace.list")
+        guard case .array(let workspaces)? = response.payload["workspaces"] else {
+            Issue.record("workspaces payload missing")
+            return
+        }
+        #expect(workspaces.count == 2)
+        guard case .object(let first)? = workspaces.first else {
+            Issue.record("workspace entry is not an object")
+            return
+        }
+        #expect(first["path"]?.stringValue == "/Users/rocky/Sites/Xedit")
+        #expect(first["name"]?.stringValue == "Xedit")
+        #expect(first["session_count"]?.intValue == 2)
+        #expect(first["is_current"]?.boolValue == true)
+        #expect(first["is_git_repo"]?.boolValue == true)
+        #expect(first["last_used_at"]?.stringValue == "2026-06-13T12:00:00.000Z")
+        #expect(first["repository_root"]?.stringValue == "/Users/rocky/Sites/Xedit")
+    }
+
+    @Test @MainActor
+    func sessionCreateValidatesWorkspacePathBeforeStartingSession() {
+        let controller = FakeMobileGatewayController(sessions: [], activeSessionID: nil)
+        controller.workspaceValidationOverrides["/Users/rocky/Sites/Xedit"] = .success("/Users/rocky/Sites/Xedit")
+
+        let response = AgentMobileGatewayCommandRouter.handle(
+            AgentMobileGatewayEnvelope(
+                id: "sc-1",
+                type: "session.create",
+                payload: ["workspace_path": .string("/Users/rocky/Sites/Xedit")]
+            ),
+            controller: controller,
+            now: fixedDate
+        )
+
+        #expect(response.type == "session.upsert")
+        #expect(controller.validatedWorkspacePaths == ["/Users/rocky/Sites/Xedit"])
+        #expect(controller.createdSessionCount == 1)
+    }
+
+    @Test @MainActor
+    func sessionCreateReturnsCommandErrorWhenWorkspacePathInvalid() {
+        let controller = FakeMobileGatewayController(sessions: [], activeSessionID: nil)
+        let badPath = "/no/such/place"
+        controller.workspaceValidationOverrides[badPath] = .failure(.workspacePathNotFound(badPath))
+
+        let response = AgentMobileGatewayCommandRouter.handle(
+            AgentMobileGatewayEnvelope(
+                id: "sc-2",
+                type: "session.create",
+                payload: ["workspace_path": .string(badPath)]
+            ),
+            controller: controller,
+            now: fixedDate
+        )
+
+        #expect(response.type == "command.error")
+        #expect(response.id == "sc-2")
+        #expect(controller.createdSessionCount == 0)
+        #expect(response.payload["type"]?.stringValue == "session.create")
+    }
+
+    @Test @MainActor
+    func sessionCreateRejectsBlankWorkspacePath() {
+        let controller = FakeMobileGatewayController(sessions: [], activeSessionID: nil)
+
+        let response = AgentMobileGatewayCommandRouter.handle(
+            AgentMobileGatewayEnvelope(
+                id: "sc-3",
+                type: "session.create",
+                payload: ["workspace_path": .string("   ")]
+            ),
+            controller: controller,
+            now: fixedDate
+        )
+
+        #expect(response.type == "command.error")
+        #expect(controller.createdSessionCount == 0)
+        #expect(controller.validatedWorkspacePaths.isEmpty)
+    }
+
+    @Test @MainActor
+    func sessionCreateAllowsMissingWorkspacePathForLegacyClients() {
+        let controller = FakeMobileGatewayController(sessions: [], activeSessionID: nil)
+
+        let response = AgentMobileGatewayCommandRouter.handle(
+            AgentMobileGatewayEnvelope(id: "sc-4", type: "session.create"),
+            controller: controller,
+            now: fixedDate
+        )
+
+        #expect(response.type == "session.upsert")
+        #expect(controller.createdSessionCount == 1)
+    }
+
     private var fixedDate: Date {
         DateComponents(
             calendar: Calendar(identifier: .gregorian),
@@ -882,14 +1007,30 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
         self.activeSessionID = activeSessionID
     }
 
+    var workspaceListSnapshots: [AgentMobileGatewayWorkspaceSnapshot] = []
+    var workspaceValidationOverrides: [String: Result<String, AgentMobileGatewayCommandError>] = [:]
+    var validatedWorkspacePaths: [String] = []
+
     var mobileGatewaySessions: [AgentSession] { sessions }
     var mobileGatewayActiveSessionID: UUID? { activeSessionID }
+    var mobileGatewayWorkspaceList: [AgentMobileGatewayWorkspaceSnapshot] { workspaceListSnapshots }
     var mobileGatewayPendingToolApprovals: [AgentMobileGatewayToolApprovalSnapshot] { pendingTools }
     var mobileGatewayPendingPatchProposals: [AgentMobileGatewayPatchSnapshot] { pendingPatches }
     var mobileGatewayJobs: [AgentMobileGatewayJobSnapshot] { jobs }
     var mobileGatewayQueuedMessages: [AgentMobileGatewayQueuedMessageSnapshot] { queuedMessages }
     var mobileGatewayRecentMessages: [AgentMobileGatewayMessageSnapshot] { messages }
     var mobileGatewayWorktreeChanges: [AgentMobileGatewayWorktreeSnapshot] { worktrees }
+
+    func mobileGatewayValidateWorkspacePath(_ rawPath: String) throws -> String {
+        validatedWorkspacePaths.append(rawPath)
+        if let result = workspaceValidationOverrides[rawPath] {
+            switch result {
+            case .success(let value): return value
+            case .failure(let error): throw error
+            }
+        }
+        return rawPath
+    }
 
     func mobileGatewayRuntimeIsResponding(sessionID: UUID) -> Bool {
         false

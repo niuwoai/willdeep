@@ -7,6 +7,14 @@
 
 import Foundation
 
+private struct AgentState_MobileGatewayWorkspaceBucket {
+    var path: String
+    var name: String
+    var lastUsedAt: Date?
+    var sessionCount: Int
+    var isCurrent: Bool
+}
+
 extension AppState: AgentMobileGatewayControlling {
     var mobileGatewaySessions: [AgentSession] { agentSessions }
     var mobileGatewayActiveSessionID: UUID? { activeAgentSessionID }
@@ -148,8 +156,168 @@ extension AppState: AgentMobileGatewayControlling {
         agentRuntimes[sessionID]?.isResponding ?? false
     }
 
+    var mobileGatewayWorkspaceList: [AgentMobileGatewayWorkspaceSnapshot] {
+        var buckets: [String: AgentState_MobileGatewayWorkspaceBucket] = [:]
+        let currentPath = rootDirectory.map { Self.mobileGatewayRealpath($0.path) }
+
+        for session in agentSessions {
+            guard case .local(let raw)? = session.workspaceLocation else {
+                if let raw = session.workspaceRootPath, !raw.isEmpty {
+                    Self.mobileGatewayUpsertWorkspaceBucket(
+                        into: &buckets,
+                        rawPath: raw,
+                        lastUsedAt: session.updatedAt,
+                        currentPath: currentPath
+                    )
+                }
+                continue
+            }
+            guard !raw.isEmpty else { continue }
+            Self.mobileGatewayUpsertWorkspaceBucket(
+                into: &buckets,
+                rawPath: raw,
+                lastUsedAt: session.updatedAt,
+                currentPath: currentPath
+            )
+        }
+        if let currentPath {
+            Self.mobileGatewayUpsertWorkspaceBucket(
+                into: &buckets,
+                rawPath: currentPath,
+                lastUsedAt: nil,
+                currentPath: currentPath
+            )
+        }
+
+        let now = Date()
+        let snapshots = buckets.values.map { bucket -> AgentMobileGatewayWorkspaceSnapshot in
+            let url = URL(fileURLWithPath: bucket.path)
+            return AgentMobileGatewayWorkspaceSnapshot(
+                path: bucket.path,
+                name: bucket.name,
+                lastUsedAt: bucket.lastUsedAt ?? (bucket.isCurrent ? now : nil),
+                sessionCount: bucket.sessionCount,
+                isCurrent: bucket.isCurrent,
+                isGitRepo: Self.mobileGatewayIsGitRepo(url),
+                repositoryRoot: Self.mobileGatewayRepositoryRoot(for: url)
+            )
+        }
+        return snapshots.sorted { lhs, rhs in
+            let l = lhs.lastUsedAt ?? .distantPast
+            let r = rhs.lastUsedAt ?? .distantPast
+            if l != r { return l > r }
+            return lhs.path < rhs.path
+        }
+    }
+
+    func mobileGatewayValidateWorkspacePath(_ rawPath: String) throws -> String {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw AgentMobileGatewayCommandError.missingWorkspacePath
+        }
+        let expanded = (trimmed as NSString).expandingTildeInPath
+        let resolved = Self.mobileGatewayRealpath(expanded)
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: resolved, isDirectory: &isDir) else {
+            throw AgentMobileGatewayCommandError.workspacePathNotFound(rawPath)
+        }
+        guard isDir.boolValue else {
+            throw AgentMobileGatewayCommandError.workspacePathNotDirectory(rawPath)
+        }
+        guard Self.mobileGatewayIsWorkspacePathAllowed(resolved) else {
+            throw AgentMobileGatewayCommandError.workspacePathForbidden(rawPath)
+        }
+        return resolved
+    }
+
     func mobileGatewayStartSession(workspacePath: String?) -> AgentSession {
         startNewAgentSession(inWorkspaceAt: workspacePath)
+    }
+
+    private static func mobileGatewayUpsertWorkspaceBucket(
+        into buckets: inout [String: AgentState_MobileGatewayWorkspaceBucket],
+        rawPath: String,
+        lastUsedAt: Date?,
+        currentPath: String?
+    ) {
+        let resolved = mobileGatewayRealpath(rawPath)
+        guard !resolved.isEmpty, resolved != "/" else { return }
+        guard mobileGatewayIsWorkspacePathAllowed(resolved) else { return }
+        let name = (resolved as NSString).lastPathComponent
+        let isCurrent = currentPath.map { $0 == resolved } ?? false
+        if var existing = buckets[resolved] {
+            if let lastUsedAt {
+                if let prior = existing.lastUsedAt {
+                    if lastUsedAt > prior { existing.lastUsedAt = lastUsedAt }
+                } else {
+                    existing.lastUsedAt = lastUsedAt
+                }
+                existing.sessionCount += 1
+            }
+            if isCurrent { existing.isCurrent = true }
+            buckets[resolved] = existing
+        } else {
+            buckets[resolved] = AgentState_MobileGatewayWorkspaceBucket(
+                path: resolved,
+                name: name.isEmpty ? resolved : name,
+                lastUsedAt: lastUsedAt,
+                sessionCount: lastUsedAt == nil ? 0 : 1,
+                isCurrent: isCurrent
+            )
+        }
+    }
+
+    private static func mobileGatewayRealpath(_ path: String) -> String {
+        let expanded = (path as NSString).expandingTildeInPath
+        let url = URL(fileURLWithPath: expanded)
+        return url.resolvingSymlinksInPath().standardizedFileURL.path
+    }
+
+    private static func mobileGatewayIsGitRepo(_ url: URL) -> Bool {
+        var isDir: ObjCBool = false
+        let gitPath = url.appendingPathComponent(".git").path
+        guard FileManager.default.fileExists(atPath: gitPath, isDirectory: &isDir) else {
+            return false
+        }
+        return isDir.boolValue || mobileGatewayIsGitFileWorktree(url.appendingPathComponent(".git"))
+    }
+
+    private static func mobileGatewayIsGitFileWorktree(_ url: URL) -> Bool {
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe),
+              let text = String(data: data.prefix(64), encoding: .utf8) else {
+            return false
+        }
+        return text.hasPrefix("gitdir:")
+    }
+
+    private static func mobileGatewayRepositoryRoot(for url: URL) -> String? {
+        var current = url.standardizedFileURL
+        let fm = FileManager.default
+        while true {
+            var isDir: ObjCBool = false
+            if fm.fileExists(atPath: current.appendingPathComponent(".git").path, isDirectory: &isDir) {
+                return current.path
+            }
+            let parent = current.deletingLastPathComponent()
+            if parent.path == current.path { return nil }
+            current = parent
+        }
+    }
+
+    private static func mobileGatewayIsWorkspacePathAllowed(_ resolved: String) -> Bool {
+        guard !resolved.isEmpty, resolved != "/" else { return false }
+        let forbiddenExact: Set<String> = ["/etc", "/var", "/usr", "/bin", "/sbin", "/private", "/System", "/Library"]
+        if forbiddenExact.contains(resolved) { return false }
+        let forbiddenPrefixes = ["/etc/", "/private/etc/", "/System/", "/usr/", "/bin/", "/sbin/"]
+        for prefix in forbiddenPrefixes where resolved.hasPrefix(prefix) {
+            return false
+        }
+        let home = NSHomeDirectory()
+        let userLibrary = (home as NSString).appendingPathComponent("Library")
+        if resolved == userLibrary || resolved.hasPrefix(userLibrary + "/") {
+            return false
+        }
+        return true
     }
 
     func mobileGatewaySelectSession(id: UUID) -> Bool {
