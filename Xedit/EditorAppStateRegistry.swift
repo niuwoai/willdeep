@@ -28,6 +28,10 @@ final class EditorAppStateRegistry: ObservableObject {
     /// `@ObservedObject` 订阅 → 这个值变化 agent 窗口 body 重算 →
     /// 注入新的 AppState 到 environment（配合 `.id()` 强制 AgentModeView
     /// 重建，避免旧窗口的滚动位置 / 草稿之类 stale @State）。
+    ///
+    /// rc12 起 never-nil:`unregister` 关掉最后一个 editor 不再清空它;
+    /// 冷启动场景由 `ensureHeadlessFallback()` 兜底惰性 mint 一个
+    /// headless AppState,保证 agent 窗口永远有内容(会话/草稿/配置)。
     @Published private(set) var current: AppState?
 
     /// 所有活跃 editor 窗口的 AppState。用 ObjectIdentifier 做 key 是
@@ -42,12 +46,28 @@ final class EditorAppStateRegistry: ObservableObject {
 
     private init() {}
 
-    /// Editor 窗口 onAppear 调用。注册自己；如果是第一个窗口、
-    /// current 还没设过，顺便把自己设成 current（用户启动 app → 直接
-    /// 开 agent 窗口的场景能立刻有内容看）。
+    /// Agent 窗口 onAppear 调用,确保 `current` 非空。冷启动只开 agent
+    /// 窗口、还没有任何 editor 窗口注册时,惰性建一个 headless AppState
+    /// 顶上。当后续 editor 窗口 becomeKey 时,`setCurrent` 会自然把
+    /// orphan 替换掉。
+    func ensureHeadlessFallback() {
+        guard current == nil else { return }
+        current = AppState()
+    }
+
+    /// Editor 窗口 onAppear 调用。注册自己;如果是第一个窗口,或者
+    /// 当前 current 是 rc12 引入的 headless orphan(没有任何对应的真实
+    /// editor 窗口),把自己升为 current —— 真 editor 注册后应该立刻
+    /// 取代 orphan,而不是要等到 becomeKey 才切。
     func register(_ appState: AppState) {
         activeEditors[ObjectIdentifier(appState)] = appState
         if current == nil {
+            current = appState
+            return
+        }
+        if let existing = current,
+           activeEditors[ObjectIdentifier(existing)] == nil {
+            // existing 是 orphan headless,优先切到刚注册的真 editor。
             current = appState
         }
     }
@@ -68,16 +88,23 @@ final class EditorAppStateRegistry: ObservableObject {
         current = appState
     }
 
-    /// Editor 窗口 onDisappear 调用。摘掉自己；如果是 current，
-    /// fallback 到任意一个剩余窗口（用 dict 任意值）；都关了 current
-    /// 置 nil，agent 窗口会显示「No editor open」占位。
+    /// Editor 窗口 onDisappear 调用。摘掉自己;如果是 current,优先
+    /// fallback 到任意剩余 editor 窗口。
+    ///
+    /// 1.85.0-rc12:**最后一个 editor 窗口关闭时不再把 current 置 nil**。
+    /// 用户原话「editor 窗口关了 agent mode 窗口里就没有内容了,这太
+    /// 扯淡了」—— 改成保留这个 orphan AppState(registry 强引用,它不会
+    /// 被释放),agent 窗口继续基于它显示会话/草稿。下次 editor 窗口
+    /// becomeKey 通过 `setCurrent` 把 current 切到新窗口的 AppState,
+    /// orphan 自然被替换。
     func unregister(_ appState: AppState) {
         let key = ObjectIdentifier(appState)
         activeEditors.removeValue(forKey: key)
         windows.removeValue(forKey: key)
-        if current === appState {
-            current = activeEditors.values.first
+        if current === appState, let next = activeEditors.values.first {
+            current = next
         }
+        // 否则保留 current 指向 orphan,不主动置 nil。
     }
 
     /// 找到拥有指定 runtimeID 的 AppState。1.84.0-rc2 起 `run_workflow`

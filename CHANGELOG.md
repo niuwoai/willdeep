@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.85.0-rc12 - 2026-06-17
+
+### Fixed
+
+- **rc11 回归测试在 CI 上 `Run XeditTests` 红了**:[startNewAgentSession(inWorkspaceAt:)](Xedit/AppStateAgentSessions.swift:615) rc11 把 `openFolderURL(url)` 拿掉后,还在甩给无参 `startNewAgentSession()`,而后者是从 `rootDirectory` 读 workspace —— 解耦后这条链就把入参吞了,新会话错绑到 editor 当前根。改成本函数内联建会话,显式用入参 path 写 `workspaceRootPath` / `workspaceLocation`,不再经 rootDirectory。
+- **关掉最后一个 editor 窗口后 agent 窗口不再变成「空状态」**。用户原话:「editor 窗口关了,或是没有打开任意 workspace,agent mode 窗口里就没有内容了,这也太扯淡了」。
+  - [EditorAppStateRegistry.unregister](Xedit/EditorAppStateRegistry.swift:74) 关掉最后一个 editor 不再把 `current` 置 nil,保留 orphan AppState(registry 强引用,不会释放),agent 窗口继续基于它显示会话/草稿/配置。下次 editor `becomeKey` 通过 `setCurrent` 把 orphan 替掉。
+  - [EditorAppStateRegistry.register](Xedit/EditorAppStateRegistry.swift:48) 注册新 editor 时,如果 current 是 orphan headless(不在 activeEditors 字典里),立刻升级为新 editor,不等 becomeKey。
+  - 新增 [`ensureHeadlessFallback()`](Xedit/EditorAppStateRegistry.swift) + [AgentWindowRootView](Xedit/AgentWindowRootView.swift) `.onAppear` 调用 —— 冷启动只开 agent 窗口、没有任何 editor 注册的场景也兜底惰性 mint 一个 headless AppState。
+  - 删除 `AgentWindowEmptyState` 占位视图 + `L10n.AgentWindow.emptyTitle/emptySubtitle/emptyOpenButton` 三条已无人引用的文案。
+
+### 版本
+
+- bugfix,只 bump rc 号:1.85.0-rc11 → **1.85.0-rc12**。pbxproj×6 / Go agent / Help Info.plist / README / docs / product-overview 同步。
+
 ## 1.85.0-rc11 - 2026-06-17
 
 ### Fixed

@@ -35,56 +35,24 @@ struct AgentWindowRootView: View {
                     // AppState's lifetime.
                     .id(ObjectIdentifier(appState))
             } else {
-                AgentWindowEmptyState()
+                // rc12 兜底:理论上不会走到(`ensureHeadlessFallback`
+                // 在 onAppear 已经 mint),但万一在 onAppear 跑之前 SwiftUI
+                // 就已经先评估了一次 body 仍然能给个明确占位。
+                Color.clear
             }
         }
         .frame(minWidth: 720, minHeight: 480)
-    }
-}
-
-/// Shown when there's no active editor window — typically because the
-/// user closed every workspace but kept the Agent window floating, or
-/// SwiftUI restored the Agent window on app launch before any editor
-/// window has been opened.
-private struct AgentWindowEmptyState: View {
-    @Environment(\.openWindow) private var openWindow
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(.secondary)
-
-            VStack(spacing: 6) {
-                Text(L10n.AgentWindow.emptyTitle)
-                    .font(.headline)
-                Text(L10n.AgentWindow.emptySubtitle)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            Button(L10n.AgentWindow.emptyOpenButton) {
-                openFolderInNewWindow()
-            }
-            .controlSize(.large)
-            .keyboardShortcut(.defaultAction)
-        }
-        .padding(40)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
-    }
-
-    /// Opens the standard folder picker and routes the choice through
-    /// the URL-typed WindowGroup so the new workspace lands in its own
-    /// editor window — same path as Cmd+N "New Window" from the menu.
-    /// As soon as that editor window's `onAppear` runs, it'll register
-    /// itself in EditorAppStateRegistry and this empty state goes away.
-    private func openFolderInNewWindow() {
-        let panel = AppState.folderOpenPanel()
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            openWindow(value: url)
+        .onAppear {
+            // 冷启动只开 agent 窗口、还没任何 editor 注册时,惰性建一个
+            // headless AppState 顶上,保证「editor 没开 / 没选 workspace
+            // 时 agent 窗口里就空了」这件事不再发生。
+            registry.ensureHeadlessFallback()
         }
     }
 }
+
+// 1.85.0-rc12:旧的 `AgentWindowEmptyState` 已经删除 —— agent 窗口现在
+// 永远基于一个 AppState 显示(真 editor 的 / orphan / 冷启动惰性建的
+// headless),「关掉 editor 就一片空白」的窘境不再发生。L10n 里的
+// `AgentWindow.emptyTitle / emptySubtitle / emptyOpenButton` 三条空状态
+// 文案也跟着失效,统一在 `L10n.swift` 那边清掉。

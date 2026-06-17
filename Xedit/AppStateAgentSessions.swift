@@ -609,18 +609,44 @@ extension AppState {
     /// Start a new session bound to a specific workspace. 1.85.0-rc11 起
     /// 不再顺手把 editor 窗口的 `rootDirectory` 切过去 —— agent runtime 自
     /// 己持有 workspace 路径就够了,editor 不应该被 agent 这边的切换拖着
-    /// 走。只为子进程激活 security scope + 写 recents。Pass `nil` for the
-    /// "no workspace" group — the new session is created with no root.
+    /// 走。Pass `nil` for the "no workspace" group。
+    ///
+    /// 注意:`startNewAgentSession()` 是从 `rootDirectory` 推 workspace 的
+    /// (老路径默认认为 agent 跟 editor 同根)。rc11 解耦后,这里必须显式
+    /// 用入参重建 session,而不是甩给无参版本 —— 否则新会话会继承 editor
+    /// 当前的根,跟用户在菜单里选的目录对不上。
     @discardableResult
     func startNewAgentSession(inWorkspaceAt workspacePath: String?) -> AgentSession {
+        let normalizedPath: String?
         if let workspacePath, !workspacePath.isEmpty {
             let url = URL(fileURLWithPath: workspacePath).standardizedFileURL
             if Self.isExistingDirectory(url) {
                 _ = activateSecurityScope(for: url)
                 registerRecentFolder(url)
             }
+            normalizedPath = url.path
+        } else {
+            normalizedPath = nil
         }
-        let session = startNewAgentSession()
+
+        pruneEmptyAgentSessions()
+
+        let session = AgentSession(
+            workspaceRootPath: normalizedPath,
+            workspaceLocation: normalizedPath.map { WorkspaceLocation.local(path: $0) },
+            modelID: activeAgentModelID
+        )
+        agentSessions.insert(session, at: 0)
+        let newRuntime = AgentRuntime(session: session)
+        agentRuntimes[session.id] = newRuntime
+        activeAgentSessionID = session.id
+        subscribeToActiveRuntime()
+        agentSessionDidEditFiles = false
+        agentInteractionMode = .normal
+        agentApprovalMode = .smart
+        agentCurrentPlan = nil
+        agentCurrentGoal = nil
+        AgentSessionStore.save(session)
         unhideWorkspace(key: session.workspaceSidebarGroupKey)
         return session
     }

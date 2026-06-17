@@ -23,20 +23,8 @@ extension L10n {
             localized: "agent-window.title",
             defaultValue: "WillDeep Agent"
         )
-        /// Placeholder body shown when no editor window is open
-        /// (e.g. user closed every workspace but left the Agent window
-        /// floating). Pairs with a button that opens a folder picker.
-        static let emptyTitle = String(
-            localized: "agent-window.empty-title",
-            defaultValue: "No editor window open"
-        )
-        static let emptySubtitle = String(
-            localized: "agent-window.empty-subtitle",
-            defaultValue: "Open a workspace to give the agent context to talk about."
-        )
-        static let emptyOpenButton = String(
-            localized: "agent-window.empty-open-button",
-            defaultValue: "Open Workspace…"
-        )
+        // 1.85.0-rc12:旧的 `emptyTitle / emptySubtitle / emptyOpenButton`
+        // 三条「关掉所有 editor 显示占位」的文案已删除 —— agent 窗口
+        // 现在永远基于一个 AppState 显示,不再有空占位状态。
     }
 }
