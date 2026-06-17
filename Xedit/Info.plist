@@ -39,5 +39,7 @@
 	<string>WillDeep Help</string>
 	<key>CFBundleName</key>
 	<string>WillDeep</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>WillDeep uses your microphone to power voice-driven workflows: dictating prompts to the agent, recording meeting notes, and transcribing live audio on-device (no cloud upload).</string>
 </dict>
 </plist>

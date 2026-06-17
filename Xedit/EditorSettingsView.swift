@@ -290,6 +290,10 @@ struct EditorSettingsView: View {
                 }
             }
 
+            Section("Voice (on-device)") {
+                VoiceSettingsView()
+            }
+
             Section(L10n.Settings.sectionWebTools) {
                 LabeledContent(L10n.Settings.WebTools.braveKeyLabel) {
                     RevealableSecretField(

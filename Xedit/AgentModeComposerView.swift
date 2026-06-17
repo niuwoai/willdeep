@@ -458,6 +458,7 @@ private struct ComposerCard: View {
                 if !appState.agentQueuedMessages.isEmpty {
                     QueueBadge()
                 }
+                MicPushToTalkButton()
                 SendStopButton()
             }
         }

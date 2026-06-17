@@ -47,14 +47,12 @@ enum WhisperPreflight {
 
     /// 检查模型文件齐全。Workflow 启动时调一次。
     static func checkModel() throws {
-        let expected: [(name: String, url: URL)] = [
-            ("model.onnx", VoiceModelLocation.modelOnnxURL),
-            ("tokens.json", VoiceModelLocation.tokensURL),
-            ("am.mvn", VoiceModelLocation.cmvnURL),
-        ]
-        let missing = expected.filter { !FileManager.default.fileExists(atPath: $0.url.path) }.map(\.name)
-        if !missing.isEmpty {
-            throw Failure.modelMissing(missing: missing)
+        // phase 2: tokens.json / am.mvn / config.yaml 已经打包进 Bundle
+        // 的 Voice/BundledAssets/，只检查 ~937 MB 的 model.onnx 在
+        // VoiceModelLocation 里。
+        let onnx = VoiceModelLocation.modelOnnxURL
+        if !FileManager.default.fileExists(atPath: onnx.path) {
+            throw Failure.modelMissing(missing: ["model.onnx"])
         }
     }
 

@@ -26,18 +26,27 @@ struct SpeechTranscriber {
         return nil
     }
     
-    // WillDeep 迁移：tokens.json / config.yaml / am.mvn 不再随 Bundle
-    // 分发（避免给 .app 加 ~1MB Resources），全部和 model.onnx 一起放在
-    // ~/Library/Application Support/WillDeep/Voice/Models/sensevoice-small/，
-    // 由 ModelDownloader 或用户从 fastv 共享。
+    // WillDeep phase 2：tokens.json / config.yaml / am.mvn 这 3 个辅助
+    // 文件（共 ~360KB）打包进 Bundle 的 Voice/BundledAssets/ 里，免去
+    // ModelDownloader 下载。优先用 VoiceModelLocation（用户 override /
+    // fastv symlink），fallback 到 Bundle。这样只有 937MB 的 model.onnx
+    // 需要走 onboarding 下载流程。
     private static var tokensPath: URL? {
-        let url = VoiceModelLocation.tokensURL
-        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+        let overrideURL = VoiceModelLocation.tokensURL
+        if FileManager.default.fileExists(atPath: overrideURL.path) {
+            return overrideURL
+        }
+        return Bundle.main.url(forResource: "tokens", withExtension: "json", subdirectory: "Voice/BundledAssets")
+            ?? Bundle.main.url(forResource: "tokens", withExtension: "json")
     }
 
     private static var configPath: URL? {
-        let url = VoiceModelLocation.modelDirectory.appendingPathComponent("config.yaml")
-        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+        let overrideURL = VoiceModelLocation.modelDirectory.appendingPathComponent("config.yaml")
+        if FileManager.default.fileExists(atPath: overrideURL.path) {
+            return overrideURL
+        }
+        return Bundle.main.url(forResource: "config", withExtension: "yaml", subdirectory: "Voice/BundledAssets")
+            ?? Bundle.main.url(forResource: "config", withExtension: "yaml")
     }
     
     // 缓存 token 映射（使用 NSCache 自动管理内存）
@@ -50,10 +59,18 @@ struct SpeechTranscriber {
     private static let tokenMapQueue = DispatchQueue(label: "speech.transcriber.tokenMapCache")
     nonisolated(unsafe) private static var cachedTokenMap: [Int: String]?
     
-    // am.mvn 文件 —— WillDeep 改造：与 model.onnx 同目录，由 ModelDownloader
-    // 或用户从 fastv 共享。
+    // am.mvn —— phase 2：优先 VoiceModelLocation，fallback Bundle 的
+    // BundledAssets，最后才报错。
     private static func resolveCMVNURL() -> URL? {
-        let url = VoiceModelLocation.cmvnURL
+        let overrideURL = VoiceModelLocation.cmvnURL
+        if FileManager.default.fileExists(atPath: overrideURL.path) {
+            return overrideURL
+        }
+        if let bundleURL = Bundle.main.url(forResource: "am", withExtension: "mvn", subdirectory: "Voice/BundledAssets")
+            ?? Bundle.main.url(forResource: "am", withExtension: "mvn") {
+            return bundleURL
+        }
+        let url = overrideURL
         if FileManager.default.fileExists(atPath: url.path) {
             return url
         }

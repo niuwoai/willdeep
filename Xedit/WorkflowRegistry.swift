@@ -33,6 +33,11 @@ enum WorkflowRegistry {
         // SenseVoice ONNX pipeline ported from fastv. No LLM sub-agents
         // —— pure Swift work, runs through Workflow surface for card UI.
         TranscribeWorkflow(),
+        // Phase 2 voice → application workflows. Both share the local
+        // SenseVoice pipeline; /video-summary additionally needs
+        // ffmpeg + (for URL inputs) yt-dlp.
+        VideoSummaryWorkflow(),
+        MeetingNotesWorkflow(),
     ]
 
     static func find(slashCommand: String) -> (any WorkflowDefinition)? {

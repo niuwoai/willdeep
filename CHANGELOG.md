@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.83.0-rc1 - 2026-06-17
+
+### Added
+
+- **语音应用层（Voice Phase 2）**：1.82.0-rc1 把 SenseVoice ONNX STT 底座搬通，本版本一口气把它接到 4 个用户可见能力上。
+  - **A+B：Entitlements + Mic permission**：新建 `Xedit/WillDeep.entitlements`，含 `com.apple.security.cs.disable-library-validation = true`（让 hardened runtime 接受 ONNX dylib，免去 clone 后手动 codesign 的 Team ID 问题）+ `com.apple.security.device.audio-input = true`（录音权限）；pbxproj 加 `CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements`；`Info.plist` 加 `NSMicrophoneUsageDescription`（描述了 voice composer / meeting notes 三个用途，符合 App Review 期望）。
+  - **C：VoiceModelDownloader + Settings 入口**：
+    - `Xedit/Voice/VoiceModelDownloader.swift` 提供两条路径。`importFromFastv()` 检测用户机器是否装过 fastv（`妙打 / fastv / 若一智能助手` 三处 ApplicationSupport 路径），有就 `createSymbolicLink` 0 字节秒完成；`download()` 从 fastv CDN 下载 ~937 MB `model.onnx`，KVO 观察 `URLSessionDownloadTask.progress.fractionCompleted` 算实时速度。`@Published var state: State` 暴露 idle / importing / downloading / finished / failed，SwiftUI 自动跟。
+    - `tokens.json` / `config.yaml` / `am.mvn` 三个辅助文件（共 ~360 KB）已经打包进 `Xedit/Voice/BundledAssets/`（PBXFileSystemSynchronizedRootGroup 自动进 Bundle）。SpeechTranscriber 路径解析改成「优先 VoiceModelLocation override → fallback Bundle」，新装机器开箱可用，无需下载小文件。
+    - `Xedit/Voice/VoiceSettingsView.swift` 集成进 EditorSettingsView 的 AI Providers 标签，新增「Voice (on-device)」section：状态指示器（绿勾 / 灰叉）+ 「Import from fastv」按钮（仅当检测到 fastv 副本时显示）+ 「Download (~937 MB)」按钮 + 进度条（速度 MB/s）+ Cancel。
+    - `WhisperPreflight.checkModel()` 简化为只查 `model.onnx`（其它三个已 Bundle）。
+  - **D：MicPushToTalkButton — Composer 录音 → 文字**：
+    - `Xedit/Voice/VoiceRecorder.swift` 用 `AVAudioRecorder` 录 16kHz mono AAC m4a 到 `~/Library/Application Support/WillDeep/Voice/Recordings/<uuid>.m4a`。`start()` 异步请求 mic 权限（`AVCaptureDevice.requestAccess(for: .audio)`），通过则开 recorder；`stopAndTranscribe()` 停录后直接调 `SpeechTranscriber.transcribe(audioURL:)` 出文字。`@Published State` 跟 idle / recording / transcribing / failed。
+    - `Xedit/Voice/MicPushToTalkButton.swift`：composer 工具栏插一个 push-to-talk 按钮（Slack 风），用 `DragGesture(minimumDistance: 0).onChanged/onEnded` 实现按下开始 / 松开结束的 push-to-talk 语义。状态映射成图标颜色（蓝待机 / 红录音 / 蓝转录 / 橙错误）。模型没装时按钮 dim 提示去 Settings 下载。转录结果直接 `append` 到 `appState.agentInput`，光标后空格分隔。
+  - **E：/video-summary workflow**：
+    - `Xedit/VideoSummaryWorkflow.swift` + `Xedit/VideoToolPreflight.swift`。Preflight 链：模型 → ffmpeg → （URL 输入时）yt-dlp。Pipeline 全程 Swift 端：① 如果输入是 URL，`yt-dlp --no-playlist -f best[height<=720]/best -o video.%(ext)s <url>` 拉到临时目录；② `ffmpeg -i video.* -ac 1 -ar 16000 -vn -acodec pcm_s16le audio.wav` 抽 16kHz mono PCM；③ `SpeechTranscriber.transcribe(audioURL:)` 出转录；④ 1 个 sub-agent 写 markdown 笔记（TL;DR / Chapters / Key quotes / Takeaways / Open questions）。临时目录用 defer 清理。
+  - **F：/meeting-notes workflow**：
+    - `Xedit/MeetingNotesWorkflow.swift`。接音频文件或视频文件（视频时自动 ffmpeg 抽音轨）。转录后 1 个 sub-agent 出 markdown：TL;DR / Decisions made / Action items checklist (`- [ ]` 格式带 owner 和 due date 占位) / Open questions / Highlights。Speaker diarization 留 phase 3（fastv 的 SpeakerDiarization 模块用 Python 推理，搬过来需要再写一遍 ONNX 推理路径，工作量大）。当前 MVP 让 LLM 从转录文字里凭语境猜每条 item 的归属人（"Anna will follow up on X" → action item owner: Anna）。
+- 实现位置（共 **9 个新文件** + 5 个修改）：
+  - 新文件：`Xedit/WillDeep.entitlements`、`Xedit/Voice/VoiceModelDownloader.swift`、`Xedit/Voice/VoiceSettingsView.swift`、`Xedit/Voice/VoiceRecorder.swift`、`Xedit/Voice/MicPushToTalkButton.swift`、`Xedit/Voice/BundledAssets/{tokens.json, config.yaml, am.mvn}`、`Xedit/VideoToolPreflight.swift`、`Xedit/VideoSummaryWorkflow.swift`、`Xedit/MeetingNotesWorkflow.swift`
+  - 修改：`Xedit/Voice/SpeechTranscriber.swift`（Bundle fallback）、`Xedit/WhisperPreflight.swift`（只查 model.onnx）、`Xedit/EditorSettingsView.swift`（加 Voice section）、`Xedit/AgentModeComposerView.swift`（插 MicPushToTalkButton）、`Xedit/WorkflowRegistry.swift`（注册 VideoSummary / MeetingNotes）、`Xedit.xcodeproj/project.pbxproj`（CODE_SIGN_ENTITLEMENTS）、`Xedit/Info.plist`（NSMicrophoneUsageDescription）
+
+### Phase 3 排期
+
+- **PBXShellScriptBuildPhase 自动签 dylib**：现在用 `disable-library-validation` entitlement 已经解决加载问题，phase 3 加自动签可去掉这条 entitlement 收紧 security posture。
+- **Onboarding sheet 自动弹**：首次用 `/transcribe` 而模型缺时主动弹 sheet，省去去 Settings 找。
+- **Speaker Diarization**：从 fastv 搬 SpeakerDiarization 模型（Python venv → Swift 重写 ONNX 推理），让 /meeting-notes 出 speaker-attributed 笔记。
+- **/video-summary 关键帧 + 多模态 LLM**：ffmpeg 抽每 60s 关键帧 → 多模态 LLM 看图 → 笔记带画面描述。
+- **录音历史浏览**：composer 旁加一个 "voice notes" 抽屉浏览 / 重新转录历史录音。
+
+### 版本
+
+- **功能新增**，升 minor：1.82.0-rc1 → **1.83.0-rc1**。Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步。
+
 ## 1.82.0-rc1 - 2026-06-17
 
 ### Added

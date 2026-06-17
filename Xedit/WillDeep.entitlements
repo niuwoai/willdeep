@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTD/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Hardened runtime: disable library validation so the bundled
+	     ONNX Runtime dylib (signed by Microsoft, then re-signed locally
+	     during development) can be loaded without Team ID matching the
+	     host process's certificate. Required for /transcribe to work
+	     in release builds. Notarization accepts this entitlement; the
+	     tradeoff is that any dylib placed inside the app bundle will
+	     load — we accept that since we already ship ONNX as a trusted
+	     third-party binary. -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+
+	<!-- Microphone access: needed for the voice-driven composer + push-
+	     to-talk + future /meeting-notes live recording. Lands now so
+	     the user only sees one permission prompt across phase 2-3. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+
+	<!-- App Sandbox is OFF (default for this project). If sandbox ever
+	     gets enabled, also add:
+	       com.apple.security.app-sandbox = true
+	       com.apple.security.files.user-selected.read-only = true
+	     so the agent can still read user-picked audio files via the
+	     panel-driven path. -->
+</dict>
+</plist>

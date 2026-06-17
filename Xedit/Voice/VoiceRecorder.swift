@@ -1,0 +1,138 @@
+//
+//  VoiceRecorder.swift
+//  WillDeep
+//
+//  Phase 2 push-to-talk recorder：按下开始录、松开转录文字。AVAudioRecorder
+//  写入 ~/Library/Application Support/WillDeep/Voice/Recordings/<uuid>.m4a，
+//  录完调 `SpeechTranscriber.transcribe(audioURL:)`，转录结果通过 async
+//  方法返回给调用方（composer 接住后 append 到 agentInput）。
+//
+//  Mic 权限：app 启动时不主动 prompt，第一次按 push-to-talk 才 prompt。
+//  WillDeep.entitlements + Info.plist 已加 audio-input + NSMicrophoneUsage
+//  Description，permission flow 一次拒绝后用户可去 System Settings 重开。
+//
+
+import Foundation
+import AVFoundation
+import Combine
+
+@MainActor
+final class VoiceRecorder: ObservableObject {
+    static let shared = VoiceRecorder()
+
+    enum State: Equatable {
+        case idle
+        case recording(startedAt: Date)
+        case transcribing
+        case failed(message: String)
+    }
+
+    @Published private(set) var state: State = .idle
+    @Published private(set) var permissionDenied: Bool = false
+
+    private var recorder: AVAudioRecorder?
+    private var recordingURL: URL?
+
+    private init() {}
+
+    /// 录音目录：~/Library/Application Support/WillDeep/Voice/Recordings/
+    private static var recordingsDirectory: URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let dir = appSupport
+            .appendingPathComponent("WillDeep")
+            .appendingPathComponent("Voice")
+            .appendingPathComponent("Recordings")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// 按下 mic 按钮触发。先请求权限（一次性 prompt），通过则开 recorder。
+    func start() async {
+        // 模型必须先到位 —— transcribe 阶段会用。提前 check 给清晰错误。
+        guard VoiceModelDownloader.isModelInstalled else {
+            state = .failed(message: "Voice model not installed. Open Settings → AI Providers → Voice to download it (~937 MB).")
+            return
+        }
+
+        // 权限请求。macOS 用 AVCaptureDevice.requestAccess(for: .audio)。
+        let granted: Bool
+        if #available(macOS 14.0, *) {
+            granted = await AVCaptureDevice.requestAccess(for: .audio)
+        } else {
+            granted = await withCheckedContinuation { continuation in
+                AVCaptureDevice.requestAccess(for: .audio) { ok in
+                    continuation.resume(returning: ok)
+                }
+            }
+        }
+        guard granted else {
+            permissionDenied = true
+            state = .failed(message: "Microphone permission denied. Re-enable in System Settings → Privacy & Security → Microphone.")
+            return
+        }
+        permissionDenied = false
+
+        let url = Self.recordingsDirectory.appendingPathComponent("\(UUID().uuidString).m4a")
+        let settings: [String: Any] = [
+            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+            AVSampleRateKey: 16000.0,
+            AVNumberOfChannelsKey: 1,
+            AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue,
+        ]
+        do {
+            let r = try AVAudioRecorder(url: url, settings: settings)
+            r.isMeteringEnabled = false
+            guard r.record() else {
+                state = .failed(message: "Failed to start recording (AVAudioRecorder.record() returned false).")
+                return
+            }
+            recorder = r
+            recordingURL = url
+            state = .recording(startedAt: Date())
+        } catch {
+            state = .failed(message: "Failed to init recorder: \(error.localizedDescription)")
+        }
+    }
+
+    /// 松开 mic 按钮触发。停录 → 转录 → 返回 transcript 字符串。
+    /// 失败抛错或返回 nil。
+    @discardableResult
+    func stopAndTranscribe() async -> String? {
+        guard let r = recorder, let url = recordingURL else {
+            state = .idle
+            return nil
+        }
+        r.stop()
+        recorder = nil
+        recordingURL = nil
+        state = .transcribing
+
+        do {
+            let transcript = try await SpeechTranscriber.transcribe(
+                audioURL: url,
+                language: .auto,
+                enableCTCDeduplication: false
+            )
+            // 录音文件留磁盘 —— phase 3 加自动清理 / 历史浏览。
+            state = .idle
+            let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        } catch {
+            state = .failed(message: "Transcription failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// 取消（用户改主意）。停录 + 丢弃文件。
+    func cancel() {
+        if let r = recorder {
+            r.stop()
+        }
+        if let url = recordingURL {
+            try? FileManager.default.removeItem(at: url)
+        }
+        recorder = nil
+        recordingURL = nil
+        state = .idle
+    }
+}
