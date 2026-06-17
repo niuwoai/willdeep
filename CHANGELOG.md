@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.82.0-rc1 - 2026-06-17
+
+### Added
+
+- **本地语音转文字** —— 把姊妹项目 `fastv`（妙打）的 SenseVoice ONNX 转录管道完整移植进 WillDeep，100% 本地推理，不上云。
+  - **`/transcribe <audio-or-video path>`** slash 命令直接出 markdown 报告：音频文件名 + 时长 + 转录耗时 + ×实时率 + 完整 transcript。Workflow 卡片照常显示（virtual 1 agent —— 实际是纯 Swift 工作，不调 LLM sub-agent，复用 Workflow 卡片只为体验一致）。
+  - **Dogfood smoke test**：7 分钟 m4a 中文录音 45.6 秒跑完（**~10× 实时**），1765 字符正确转录。`XeditTests/VoiceSmokeTests.swift` 会自动找 `~/Downloads/willdeep-voice-test.*` 或几个候选 m4a/wav 跑端到端测试；CI 上找不到测试音频会早 return，不挂。
+  - **模型来源**：用户已经装过 fastv 的话直接 symlink 共享，0 字节下载。`WhisperPreflight` 在缺模型时给出可粘贴的 `ln -s` 命令引导：
+    ```
+    ln -s "$HOME/Library/Application Support/妙打/Models/sensevoice-small/model.onnx" "$HOME/Library/Application Support/WillDeep/Voice/Models/sensevoice-small/model.onnx"
+    ln -s "$HOME/Sites/fastv/fastv/Resources/Models/sensevoice-small/tokens.json" "$HOME/Library/Application Support/WillDeep/Voice/Models/sensevoice-small/tokens.json"
+    ln -s "$HOME/Sites/fastv/fastv/Resources/Models/sensevoice-small/am.mvn" "$HOME/Library/Application Support/WillDeep/Voice/Models/sensevoice-small/am.mvn"
+    ```
+    （onboarding 自动下载流程进 phase 2。）
+- **技术栈集成**：
+  - **ONNX Runtime 1.23.2** macOS universal2 dylib（71 MB）打包进 `Xedit/Voice/Libraries/onnxruntime/`。pbxproj 加 HEADER_SEARCH_PATHS / LIBRARY_SEARCH_PATHS / OTHER_LDFLAGS 直接全路径 link + `-Wl,-rpath,$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime` 让 dyld 在 `@rpath/libonnxruntime.1.23.2.dylib` 找到。
+  - **dylib 重签**：Microsoft 默认签的 dylib 在 hardened runtime 下因为 Team ID 不匹配会被拒绝加载（`code signature ... not valid for use in process: mapping process and mapped file (non-platform) have different Team IDs`）。dylib 现已用本机 Apple Development 证书重签 in-place 提交进 git。**CI 跑测试用 `CODE_SIGNING_ALLOWED=NO` 不强制 Team ID**，所以 CI 上加载也不挂。Phase 2 会加自动 build phase 用 host app 的当前签名身份重签，免去 clone 后的手动步骤。
+  - **Kaldi-native-fbank** C++ 源码（7 个 `.cc` + 1 个 `.c` + 8 个 `.h`）打包进 `Xedit/Voice/Libraries/kaldi-native-fbank/csrc/`。**inline 编译策略**：`KaldiFbankBridge.mm` 用 `#include "Libraries/kaldi-native-fbank/csrc/*.cc"` 把全部源码塞进一个翻译单元；pbxproj `membershipExceptions` 把这 8 个 .cc/.c 单独排除掉，否则 PBXFileSystemSynchronizedRootGroup 也会自动加进 Compile Sources，产生 duplicate symbol。`CLANG_CXX_LANGUAGE_STANDARD = c++17`。
+  - **WillDeep bridging header** (`Xedit/WillDeep-Bridging-Header.h`) 新增 `#import "Voice/ONNXRuntimeBridge.h"` 和 `#import "Voice/KaldiFbankBridge.h"`，Swift 直接访问 ONNX C API。
+  - **路径统一**：`VoiceConfig.swift` 提供 `VoiceModelLocation`，把 fastv 三处 `NSLocalizedString("app.name", comment: "")` 的本地化键依赖全部消除，全部走 `~/Library/Application Support/WillDeep/Voice/Models/sensevoice-small/`。`UserPreferences` shim 把 fastv 那个全局 ObservableObject 简化成只暴露 `enableCTCDeduplication` 一个 UserDefaults knob。
+- **实现位置**（共 **52 个文件**，+26679 行；分两个 commit 合入：[99e9d10](https://github.com/xurenlu/willdeep/commit/99e9d10) scaffold + [e22de6e](https://github.com/xurenlu/willdeep/commit/e22de6e) end-to-end）：
+  - 新文件：`Xedit/TranscribeWorkflow.swift`、`Xedit/WhisperPreflight.swift`、`Xedit/Voice/{SpeechTranscriber,ONNXRuntimeWrapper,ONNXRuntimeCWrapper,AudioFeatureExtractor,AudioSegmenter,KaldiFbankWrapper,SilenceDetector,SpeechTranscriptionModel,VoiceRecording,TranscriptLanguage,VideoProcessingError,VoiceConfig}.swift`、`Xedit/Voice/{ONNXRuntimeBridge,KaldiFbankBridge}.h`、`Xedit/Voice/KaldiFbankBridge.mm`、`Xedit/Voice/Libraries/onnxruntime/{include 14 个头文件,libonnxruntime.1.23.2.dylib}`、`Xedit/Voice/Libraries/kaldi-native-fbank/csrc/{8 个 .cc/.c + 7 个 .h}`、`Xedit/Voice/PHASE1_NOTES.md`、`XeditTests/VoiceSmokeTests.swift`
+  - 修改：`Xedit/WorkflowRegistry.swift`（注册 TranscribeWorkflow）、`Xedit/WillDeep-Bridging-Header.h`、`Xedit.xcodeproj/project.pbxproj`
+
+### Phase 2 排期（feat/voice-to-text-phase2 分支会继续推）
+
+- **`PBXShellScriptBuildPhase` 自动签 dylib**：免去 clone 后手动 codesign。
+- **`NSMicrophoneUsageDescription` + audio-input entitlement**：为后续录音功能预留。
+- **`VoiceModelDownloader.swift` + onboarding sheet**：用户没装 fastv 时弹首次下载流程。
+- **`/video-summary`**：yt-dlp + ffmpeg 取关键帧 + transcribe + 多模态 LLM 看图 + 文字 → 章节 / TL;DR / quote highlights。
+- **`/meeting-notes`**：transcribe + Speaker Diarization → action items / decisions / 谁说了啥。
+- **Composer mic 按钮 + 全局快捷键**：录音 → whisper → 直接插进 composer 当 prompt。
+
+### 版本
+
+- **功能新增**，升 minor 位：1.81.0-rc3 → **1.82.0-rc1**。Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步。
+
 ## 1.81.0-rc3 - 2026-06-17
 
 ### Added
