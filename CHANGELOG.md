@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.81.0-rc2 - 2026-06-17
+
+### Added
+
+- 在 1.81.0-rc1 Workflow 基础上加 **3 个 GitHub 系 workflow** 和升级 `/code-review` 支持任意 PR。所有 GitHub 系 workflow 开跑前都会通过新的 `GitHubCLIPreflight` 同步检查 `gh` 装好、登录、cwd 是 git 仓库、有 GitHub remote 4 件事，未通过直接报错给用户、不浪费 LLM token。
+  - **`/pr-review <#>`** — 深度 PR 审查。Phase 1 一个 context agent 用 `gh pr view --json …` + `gh pr view --comments` + `gh pr checks` 把 PR 元数据、已有 review 线程、CI 状态收成一段 markdown；Phase 2 四个 dim agent（correctness / security / performance / tests）并发审 `gh pr diff <#>`，每个发现都带 "suggested inline comment"（≤120 字符的可粘贴评论）；Phase 3 synthesize 出 GitHub-style verdict：✅ Approve / 🔄 Request changes / 💬 Comment only + must-fix / should-fix / nits / suggested inline comments 四段。**6 agents**。
+  - **`/release-notes <since-tag>`** — 一个 scout agent 用 `git log <tag>..HEAD --oneline` + `gh pr list --state merged` 收集原材料 → 3 个分类 agent 并发拆 features / fixes / breaking → 1 个 synthesize agent 输出最终 release notes（带 ⚠️ Breaking changes / ✨ New features / 🐛 Bug fixes / Contributors 四段，PR 号用 `#NNN` 形式让 GitHub 自动 link）。**5 agents**。
+  - **`/issue-triage [label filter]`** — 一个 scout 用 `gh issue list --state open --json … --limit 40` 拉 issues + body 摘要 → 3 个分析 agent 并发跑：classify（bug/feature/question/docs/stale/duplicate/unclear）、severity（P0-P3 + N/A）、duplicates（找 duplicate cluster 和 related-issue 集群）→ 1 个 synthesize 出 triage 看板：at-a-glance 统计 + top 10 优先级 + 可关闭的 stale issues + 全量合并表。**5 agents**。
+  - **`/code-review` 升级**：args 里支持 `--pr <#>`、`--pr=<#>`、`pr=<#>`、单独的 `#<#>` 几种形式解析 PR 号；命中后 prompt 改让 sub-agent 跑 `gh pr view` + `gh pr diff` 而非 working tree 的 `git diff`，其它 dimension 不变。默认行为（不传 `--pr`）仍是审 working tree diff，向后兼容。
+  - `GitHubCLIPreflight.Failure` 提供四种结构化错误（ghNotInstalled / notLoggedIn / notAGitRepo / noGitHubRemote），errorDescription 给出明确的修复建议（`brew install gh`、`gh auth login` 等），workflow catch 后直接当 summary 写到卡片，用户立刻知道怎么修。
+- **手动 smoke 文档**：新增 `docs/MANUAL_TEST_QUEUE.md` 收 1.78.0-rc116 以来 5 个版本的所有「你需要手动 smoke 这几样」清单，⏳/✅/❌ 状态约定，避免 UI/SwiftUI/窗口管理那些 CI 验不了的特性长期没人测。
+
+### 实现位置（共 11 个文件）
+
+- 新文件 5 个：`Xedit/GitHubCLIPreflight.swift`、`Xedit/PRReviewWorkflow.swift`、`Xedit/ReleaseNotesWorkflow.swift`、`Xedit/IssueTriageWorkflow.swift`、`docs/MANUAL_TEST_QUEUE.md`
+- 修改：`Xedit/CodeReviewWorkflow.swift`（args 解析 + PR 模式分支）、`Xedit/WorkflowRegistry.swift`（注册 3 个新 workflow）
+
+### 版本
+
+- 同 minor 内功能扩展，rc 号递增：1.81.0-rc1 → **1.81.0-rc2**。Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步。
+
 ## 1.81.0-rc1 - 2026-06-17
 
 ### Added

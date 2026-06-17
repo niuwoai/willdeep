@@ -16,6 +16,12 @@ enum WorkflowRegistry {
         CodeReviewWorkflow(),
         BugHuntWorkflow(),
         CompetitorAnalysisWorkflow(),
+        // 1.81.0-rc2：GitHub 系 workflow。所有这些 workflow 开跑前会
+        // 通过 GitHubCLIPreflight 同步检查 `gh` 是否装好且登录，未通过
+        // 直接报错给用户，避免子 agent 跑到 LLM 调用层才发现 401。
+        PRReviewWorkflow(),
+        ReleaseNotesWorkflow(),
+        IssueTriageWorkflow(),
     ]
 
     static func find(slashCommand: String) -> (any WorkflowDefinition)? {
