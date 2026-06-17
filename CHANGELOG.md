@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.79.0-rc3 - 2026-06-17
+
+### Fixed
+
+- Plan 自动执行 banner 的两处防御性 hardening（静态 audit 发现的 P1，未触发 production 事故，但属"早晚会成为 CPU 热点"那种潜在问题）：
+  - **`AgentPlanAutoExecutionBanner.isDestructive` 改 computed → @State**：之前是 computed property，每次 banner body 重算（用户打字 / timer tick / 父 view onChange）都会重新 lowercased + 12 次 contains 扫整段 plan 文本（summary + 所有 step.text）。plan 步骤多 + body 频繁重算时是 CPU 热点。改为在 `onAppear` 算一次缓存到 `@State isDestructive` / `@State dangerScanEnabled`。plan 在 banner 生命周期内固定（父 view 用 fingerprint 做 `.id()`，plan 变会重建 banner），一次就够。
+  - **`EditorSettingsView` Plan 自动执行 Section 的 `.onAppear` / `.onChange` 提升到 Form 级别**：之前 attach 在 Section 上，Settings 窗口重新获焦 / TabView 切回 AI 服务商时 Section 可能被 SwiftUI 视作重建 → 反复触发 UserDefaults 读。提升到 Form 整体的 `.onAppear` + 新增 Form 级 `.onChange(of: appState.rootDirectory?.path)`，与 `loadAgentBuffersFromAppState()` 同节奏。
+
+### 版本
+
+- Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步到 `1.79.0-rc3`。无功能新增，rc 号递增。
+
 ## 1.79.0-rc2 - 2026-06-17
 
 ### Added

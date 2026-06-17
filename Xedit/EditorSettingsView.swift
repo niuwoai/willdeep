@@ -289,17 +289,6 @@ struct EditorSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .onAppear {
-                planDangerScanEnabled = AgentSettingsStore.loadPlanAutoExecuteDangerScanEnabled()
-                planSilentlyApprovedForWorkspace = AgentSettingsStore.loadPlanAutoExecuteSilently(
-                    workspacePath: appState.rootDirectory?.path
-                )
-            }
-            .onChange(of: appState.rootDirectory?.path) { _, newPath in
-                planSilentlyApprovedForWorkspace = AgentSettingsStore.loadPlanAutoExecuteSilently(
-                    workspacePath: newPath
-                )
-            }
 
             Section(L10n.Settings.sectionWebTools) {
                 LabeledContent(L10n.Settings.WebTools.braveKeyLabel) {
@@ -372,6 +361,12 @@ struct EditorSettingsView: View {
         .formStyle(.grouped)
         .onAppear {
             loadAgentBuffersFromAppState()
+            // Plan 自动执行偏好提升到 Form 级别加载，避免 attach 在
+            // Section 上时 Section 重建导致反复 UserDefaults 读。
+            planDangerScanEnabled = AgentSettingsStore.loadPlanAutoExecuteDangerScanEnabled()
+            planSilentlyApprovedForWorkspace = AgentSettingsStore.loadPlanAutoExecuteSilently(
+                workspacePath: appState.rootDirectory?.path
+            )
         }
         .onChange(of: appState.agentConfiguration) { _, _ in
             // External writes (e.g. fetchModels picking a default) should
@@ -381,6 +376,11 @@ struct EditorSettingsView: View {
             if !agentBuffersDiffer {
                 loadAgentBuffersFromAppState()
             }
+        }
+        .onChange(of: appState.rootDirectory?.path) { _, newPath in
+            planSilentlyApprovedForWorkspace = AgentSettingsStore.loadPlanAutoExecuteSilently(
+                workspacePath: newPath
+            )
         }
     }
 

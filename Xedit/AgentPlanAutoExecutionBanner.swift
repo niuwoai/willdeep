@@ -25,23 +25,19 @@ struct AgentPlanAutoExecutionBanner: View {
     @State private var secondsRemaining: Int = AgentPlanAutoExecutionBanner.countdownSeconds
     @State private var rememberChoice: Bool = false
     @State private var didFire: Bool = false
+    /// 缓存 plan 危险词扫描结果。computed property 每次 body 重算都
+    /// 会扫一遍整段 plan 文本（plan.summary + 所有 step.text），plan
+    /// 步骤多 + body 频繁重算时（用户打字 / timer tick / 父 view
+    /// onChange 触发）会成为 CPU 热点。改在 onAppear 算一次，plan 在
+    /// banner 生命周期内不会变（plan 变了父 view 会用新的 `.id()`
+    /// 重建 banner），所以一次就够。
+    @State private var isDestructive: Bool = false
+    @State private var dangerScanEnabled: Bool = true
 
     /// Timer publisher 每秒推一次 tick。@State 持有最新 tick 触发 view
     /// 重算 —— 计时状态完全本地，不写父 view 的 @Published，避免触发
     /// [[project-swiftui-sheet-published-loop]] 那一族死循环。
     private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
-
-    private var isDestructive: Bool {
-        guard AgentSettingsStore.loadPlanAutoExecuteDangerScanEnabled() else {
-            return false
-        }
-        let blob = plan.summary + "\n" + plan.steps.map(\.text).joined(separator: "\n")
-        return AgentToolRegistry.planTextLooksDestructive(blob)
-    }
-
-    private var dangerScanEnabled: Bool {
-        AgentSettingsStore.loadPlanAutoExecuteDangerScanEnabled()
-    }
 
     private var countdownProgress: Double {
         let total = Double(Self.countdownSeconds)
@@ -150,6 +146,19 @@ struct AgentPlanAutoExecutionBanner: View {
             }
             if secondsRemaining == 0 {
                 fireConfirm(source: .countdown)
+            }
+        }
+        .onAppear {
+            // plan 在 banner 生命周期内固定（父 view 用 plan
+            // fingerprint 作 `.id()`，plan 变 → banner 重建），所以
+            // 危险词扫描和开关读取只需做一次。
+            let scanOn = AgentSettingsStore.loadPlanAutoExecuteDangerScanEnabled()
+            dangerScanEnabled = scanOn
+            if scanOn {
+                let blob = plan.summary + "\n" + plan.steps.map(\.text).joined(separator: "\n")
+                isDestructive = AgentToolRegistry.planTextLooksDestructive(blob)
+            } else {
+                isDestructive = false
             }
         }
     }
