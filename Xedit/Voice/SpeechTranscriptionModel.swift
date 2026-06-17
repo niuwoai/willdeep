@@ -21,15 +21,10 @@ actor SpeechTranscriptionModel {
 
     private init() {}
 
-    /// 获取模型路径（与 SpeechTranscriber 逻辑一致）
+    /// 获取模型路径（WillDeep 迁移：统一走 VoiceModelLocation）
     private static func getModelPath() -> URL? {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let appDir = appSupport.appendingPathComponent(NSLocalizedString("app.name", comment: ""))
-        let downloadedPath = appDir.appendingPathComponent("Models/sensevoice-small/model.onnx")
-        if FileManager.default.fileExists(atPath: downloadedPath.path) {
-            return downloadedPath
-        }
-        return nil
+        let url = VoiceModelLocation.modelOnnxURL
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
     /// 检查模型文件是否存在（用于启动时决定是否预加载）
@@ -62,9 +57,7 @@ actor SpeechTranscriptionModel {
             return w
         }
         guard let path = Self.getModelPath() else {
-            let modelDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-                .appendingPathComponent(NSLocalizedString("app.name", comment: ""))
-                .appendingPathComponent("Models/sensevoice-small")
+            let modelDir = VoiceModelLocation.modelDirectory
             throw VideoProcessingError.modelLoadFailed(
                 """
                 模型文件未找到。

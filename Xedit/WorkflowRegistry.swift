@@ -29,6 +29,10 @@ enum WorkflowRegistry {
         CSVAskWorkflow(),
         DBExploreWorkflow(),
         DBSchemaDocWorkflow(),
+        // Phase 1 voice-to-text (feat/voice-to-text branch). Local
+        // SenseVoice ONNX pipeline ported from fastv. No LLM sub-agents
+        // —— pure Swift work, runs through Workflow surface for card UI.
+        TranscribeWorkflow(),
     ]
 
     static func find(slashCommand: String) -> (any WorkflowDefinition)? {

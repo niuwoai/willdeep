@@ -405,6 +405,7 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
+					"-Wl,-rpath,$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
 				);
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				INFOPLIST_FILE = Xedit/Info.plist;
@@ -457,6 +458,7 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
+					"-Wl,-rpath,$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
 				);
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				INFOPLIST_FILE = Xedit/Info.plist;

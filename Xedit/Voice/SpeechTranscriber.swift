@@ -26,24 +26,18 @@ struct SpeechTranscriber {
         return nil
     }
     
-    // tokens.json 文件从 Bundle 中读取（随 app 提供）
+    // WillDeep 迁移：tokens.json / config.yaml / am.mvn 不再随 Bundle
+    // 分发（避免给 .app 加 ~1MB Resources），全部和 model.onnx 一起放在
+    // ~/Library/Application Support/WillDeep/Voice/Models/sensevoice-small/，
+    // 由 ModelDownloader 或用户从 fastv 共享。
     private static var tokensPath: URL? {
-        // 首先尝试在子目录中查找
-        if let url = Bundle.main.url(forResource: "tokens", withExtension: "json", subdirectory: "Models/sensevoice-small") {
-            return url
-        }
-        // 如果不在子目录，尝试在 Resources 根目录查找
-        return Bundle.main.url(forResource: "tokens", withExtension: "json")
+        let url = VoiceModelLocation.tokensURL
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
-    
-    // config.yaml 文件从 Bundle 中读取（随 app 提供）
+
     private static var configPath: URL? {
-        // 首先尝试在子目录中查找
-        if let url = Bundle.main.url(forResource: "config", withExtension: "yaml", subdirectory: "Models/sensevoice-small") {
-            return url
-        }
-        // 如果不在子目录，尝试在 Resources 根目录查找
-        return Bundle.main.url(forResource: "config", withExtension: "yaml")
+        let url = VoiceModelLocation.modelDirectory.appendingPathComponent("config.yaml")
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
     
     // 缓存 token 映射（使用 NSCache 自动管理内存）
@@ -56,29 +50,15 @@ struct SpeechTranscriber {
     private static let tokenMapQueue = DispatchQueue(label: "speech.transcriber.tokenMapCache")
     nonisolated(unsafe) private static var cachedTokenMap: [Int: String]?
     
-    // am.mvn 文件从 Bundle 中读取（随 app 提供）
+    // am.mvn 文件 —— WillDeep 改造：与 model.onnx 同目录，由 ModelDownloader
+    // 或用户从 fastv 共享。
     private static func resolveCMVNURL() -> URL? {
-        // 方式1: 使用子目录
-        if let url = Bundle.main.url(forResource: "am", withExtension: "mvn", subdirectory: "Models/sensevoice-small") {
+        let url = VoiceModelLocation.cmvnURL
+        if FileManager.default.fileExists(atPath: url.path) {
             return url
-        }
-        // 方式2: 根目录
-        if let url = Bundle.main.url(forResource: "am", withExtension: "mvn") {
-            return url
-        }
-        // 方式3: 手动拼路径
-        if let resourcePath = Bundle.main.resourcePath {
-            let sensevoicePath = (resourcePath as NSString).appendingPathComponent("Models/sensevoice-small/am.mvn")
-            if FileManager.default.fileExists(atPath: sensevoicePath) {
-                return URL(fileURLWithPath: sensevoicePath)
-            }
-            let fallbackPath = (resourcePath as NSString).appendingPathComponent("am.mvn")
-            if FileManager.default.fileExists(atPath: fallbackPath) {
-                return URL(fileURLWithPath: fallbackPath)
-            }
         }
         #if DEBUG
-        print("警告：未找到 am.mvn 文件，特征可能未归一化")
+        print("警告：未找到 am.mvn 文件 (\(url.path))，特征可能未归一化")
         #endif
         return nil
     }
