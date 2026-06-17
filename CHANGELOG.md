@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.85.0-rc1 - 2026-06-17
+
+### Added
+
+- **3 个 ffmpeg 视频处理 workflow**：
+  - **`/video-clip <path> <description>`** — 用 SenseVoice 转录视频，sub-agent 在转录文本里找出匹配 description 的段落、输出 `{start_seconds, end_seconds, reason}` JSON，Swift 用 `ffmpeg -ss -to -c copy` 无重编码切片到 `~/Downloads/<stem>-clip-<timestamp>.<ext>`。报告含原始时间范围 + clip 时长 + reason 字段（LLM 解释为什么选这段）+ `open "..."` 一键预览命令。无重编码切片速度极快但只能切关键帧边界（最差几秒偏移）；Phase 2 会加 `-c:v h264` 重编码选项做精确切。**2 agents**（locate + cut）。
+  - **`/video-compress <path> [target-MB]`** — 纯 Swift（无 LLM）。`ffprobe -show_format -show_streams -of json` 拿原视频时长 + 码率 + 编码信息；算目标 video bitrate = `(target_bytes - audio_bytes) / duration`，固定 128 kbps AAC 音频；ffmpeg two-pass libx264 medium preset 编码 + `-movflags +faststart` 让 mp4 能边下边播；输出到 `~/Downloads/<stem>-compressed-<timestamp>.mp4`。默认目标 = 原文件 30% 体积；目标过激（视频码率 < 200 kbps）拒绝。报告含前后体积对比、压缩率、视频/音频码率、duration。**1 agent**。
+  - **`/video-gif <path> <description>`** — 转录视频，sub-agent 找一个 3-12 秒的精彩段（输出 `{start_seconds, duration_seconds, caption}` JSON），ffmpeg `palettegen=stats_mode=diff` 提取最优 256 色调色板，再 `paletteuse=dither=bayer:bayer_scale=5` 应用调色板做 GIF；默认 480px 宽 + 12 fps。比 naive `-i video.mp4 output.gif` 体积小 5-10 倍且色彩准确得多。报告含 caption + 文件大小 + `open "..."` 命令。**2 agents**（locate + encode）。
+- **基础设施**：
+  - 新增 `VideoMediaHelpers`（在 `VideoClipWorkflow.swift` 里）—— 3 个共用基元 `extractWavAudio` / `cutSegment` / `probe`，给其它视频 workflow 复用。后续 `MeetingNotesWorkflow` 和 `VideoSummaryWorkflow` 里的重复 ffmpeg 调用可以迁移到这里。
+  - `VideoToolPreflight` 新增 `checkFFprobe()` 检查（ffprobe 跟 ffmpeg 一起装但 PATH 不一定有，给清晰错误提示）+ 新 `Failure.ffprobeMissing` case。
+  - 3 个 workflow 都注册到 `WorkflowRegistry.all`，slash palette 自动显示，`run_workflow` agent 工具也认识它们。
+
+### 实现位置（5 个新/改文件）
+
+- 新文件：`Xedit/VideoClipWorkflow.swift`、`Xedit/VideoCompressWorkflow.swift`、`Xedit/VideoGifWorkflow.swift`
+- 修改：`Xedit/VideoToolPreflight.swift`（加 ffprobe 检查）、`Xedit/WorkflowRegistry.swift`（注册 3 个）
+
+### 版本
+
+- **功能新增**，升 minor：1.84.0-rc2 → **1.85.0-rc1**。Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步。
+
 ## 1.84.0-rc2 - 2026-06-17
 
 ### Added

@@ -11,6 +11,7 @@ import Foundation
 enum VideoToolPreflight {
     enum Failure: Error, LocalizedError {
         case ffmpegMissing
+        case ffprobeMissing
         case ytDlpMissing
         case videoFileMissing(path: String)
 
@@ -18,6 +19,8 @@ enum VideoToolPreflight {
             switch self {
             case .ffmpegMissing:
                 return "`ffmpeg` is not installed or not on PATH. Install with: `brew install ffmpeg`."
+            case .ffprobeMissing:
+                return "`ffprobe` is not on PATH. Comes bundled with ffmpeg — `brew install ffmpeg` should give you both."
             case .ytDlpMissing:
                 return "`yt-dlp` is not installed or not on PATH. Install with: `brew install yt-dlp`."
             case .videoFileMissing(let path):
@@ -29,6 +32,12 @@ enum VideoToolPreflight {
     static func checkFFmpeg() throws {
         if run("/usr/bin/env", ["-S", "ffmpeg", "-version"]).exitCode != 0 {
             throw Failure.ffmpegMissing
+        }
+    }
+
+    static func checkFFprobe() throws {
+        if run("/usr/bin/env", ["-S", "ffprobe", "-version"]).exitCode != 0 {
+            throw Failure.ffprobeMissing
         }
     }
 

@@ -38,6 +38,13 @@ enum WorkflowRegistry {
         // ffmpeg + (for URL inputs) yt-dlp.
         VideoSummaryWorkflow(),
         MeetingNotesWorkflow(),
+        // 1.85.0-rc1: ffmpeg-driven video manipulation workflows. All
+        // three rely on SpeechTranscriber to locate moments in the
+        // video (clip / gif) or none at all (compress). Output goes to
+        // ~/Downloads/.
+        VideoClipWorkflow(),
+        VideoCompressWorkflow(),
+        VideoGifWorkflow(),
     ]
 
     static func find(slashCommand: String) -> (any WorkflowDefinition)? {
