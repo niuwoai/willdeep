@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.85.0-rc5 - 2026-06-17
+
+### Fixed
+
+- **后台能耗大幅下降**。Activity Monitor 上 WillDeep 长期霸榜 12 小时能耗榜首（1337 Wh，是第二名 Claude 的 3.5×），定位是 [ContentView.swift:68](Xedit/ContentView.swift:68) 一个 `Timer.publish(every: 3, on: .main, in: .common)` 在所有 runloop mode 下常驻。
+  - **每跳 fork 4 个 `git` 子进程**：`git rev-parse --show-toplevel`、`git branch --show-current`、`git status --porcelain=v1 -uall`、`git diff --numstat HEAD`（[AppStateGitStatus.swift:28-56](Xedit/AppStateGitStatus.swift:28)）。3 秒一次 × 4 = 每小时 ~4,800 次 fork/exec，12 小时 ~57,600 次。
+  - **致命点**：用 `.common` runloop mode + 没有 `scenePhase` 监听，app 退到后台、窗口被遮挡、Mac 合盖唤醒后照跑不误。
+  - **本次修复**：
+    - 间隔 3s → **10s**，已经把基础频率砍掉 ~70%。
+    - 加 `@Environment(\.scenePhase)` 守卫，`scenePhase != .active` 时 timer tick 直接 return —— 后台/未激活时**完全停止**轮询。
+  - **没改的**：`git status --porcelain=v1 -uall` 的 `-uall` 暂保留。改成 `--untracked-files=normal` 会让 Agent 在新目录里创建文件时，[AppStateGitStatus.swift:61](Xedit/AppStateGitStatus.swift:61) 的 `restrictTo.contains(path)` 漏匹配（porcelain 只报目录名而不是子文件），是 Agent 编辑视图的回归风险。下个版本做 git 缓存层 + FSEvents 事件驱动时一起处理。
+  - **预期效果**：app 在前台高频使用时能耗略降（间隔放宽）；app 在后台 / 屏幕锁定 / 未激活时能耗接近 0。按这次的 12 小时榜单结构，正常使用模式下 80%+ 时间 app 不是 frontmost，节能应该立竿见影。
+
+### 实现位置
+
+- 修改：[Xedit/ContentView.swift](Xedit/ContentView.swift)（加 `scenePhase` 守卫 + 间隔调整）
+
+### 版本
+
+- Perf bugfix，rc 号递增：1.85.0-rc4 → **1.85.0-rc5**。pbxproj×5 / ContentView 注释同步。
+
 ## 1.85.0-rc4 - 2026-06-17
 
 ### Added

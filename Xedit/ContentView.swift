@@ -12,6 +12,11 @@ import Combine
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
+    /// 1.85.0-rc5：后台能耗优化。下面 git/外部文件状态轮询会 gate 在
+    /// `scenePhase == .active`，app 退到后台 / 窗口被遮挡时不再每 N 秒
+    /// fork 4 个 `git` 子进程。配合把轮询间隔从 3s 调到 10s，闲置时
+    /// CPU/磁盘 IO 接近 0。
+    @Environment(\.scenePhase) private var scenePhase
 
     /// Derived from `appState.rootDirectory` — the tree model root node.
     /// Re-created whenever the root directory changes.
@@ -65,7 +70,13 @@ struct ContentView: View {
         .onChange(of: appState.fileContent) { _, _ in
             appState.refreshExternalFileStatus()
         }
-        .onReceive(Timer.publish(every: 3, on: .main, in: .common).autoconnect()) { _ in
+        .onReceive(Timer.publish(every: 10, on: .main, in: .common).autoconnect()) { _ in
+            // 1.85.0-rc5：app 退到后台 / 窗口被遮挡时不刷新。原先 3s 一
+            // 跳，每跳 fork 4 个 git 子进程（rev-parse / branch /
+            // status -uall / diff --numstat），12 小时 ~5.7 万次
+            // fork/exec，是 Activity Monitor 上 WillDeep 长期霸榜能耗
+            // 的主因。
+            guard scenePhase == .active else { return }
             appState.refreshExternalFileStatus()
             appState.refreshGitStatus()
         }
