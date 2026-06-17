@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.81.0-rc3 - 2026-06-17
+
+### Added
+
+- 在 1.81.0-rc1/rc2 Workflow 基础上加 **3 个 BI / 数据库系 workflow**。核心想法：剑走偏锋——不做 PPT/Word 那些办公套件已经卷成红海的方向，反过来让 agent 真去跑 SQL 拿结果再决定下一步。
+  - **`/csv-ask <path> <question>`** — 本地 CSV / TSV / Parquet / JSONL / NDJSON 直接问，0 配置。Phase 1 schema agent 用 `DESCRIBE` + `COUNT(*)` + `USING SAMPLE 5 ROWS` 把 schema + 采样收一遍；Phase 2 三个 angle agent 并发：**answer**（写 SQL 直接回答用户问题）、**quality**（NULL / 重复 / 数值范围 / categorical top values 跑一组质量检查）、**distribution**（pick 2-3 个有意思的数值列跑百分位 / IQR outlier / 10-bucket 直方图，pick 1-2 个分类列看 top 10 + share）；Phase 3 synthesize 出最终报告，TL;DR 把"答案+最重要的 caveat"压成 2-3 句。**5 agents**。
+  - **`/db-explore <conn> <question>`** — 接 Postgres / MySQL / SQLite / DuckDB。Phase 1 schema introspect agent 用 information_schema / pragma 列出最多 ~50 张表 + 挑 8-12 张可能相关的细化 column 信息；Phase 2 三个 angle agent 并发：**answer**（写 SQL 答问题）、**sanity**（独立 spot-check 时间覆盖 / 重复 PK / 严重 skew）、**alternatives**（建议 3-5 个互补的"另一个切法" + 各自的可运行 SQL，**不**实际跑 —— 留给用户决策）；Phase 3 synthesize 出含 TL;DR、Answer、Caveats、What to look at next 四段的报告。所有 query prompt 都硬性要求 **read-only**（SELECT / WITH / EXPLAIN only），遇到 INSERT / UPDATE / DELETE / DROP / CREATE / ALTER / TRUNCATE / GRANT / REVOKE 拒绝。**5 agents**。
+  - **`/db-schema-doc <conn>`** — 反查数据库 → markdown 文档 + mermaid ER 图。Phase 1 picker agent 列所有表 + 按"行数多 / 被多 FK 引用 / 领域核心名 / 排除 migration / queue / audit / _archive" 挑出 6 张最重要的；Phase 2 6 个 inspect agent 并发各审一张，每张产出 columns 表 + indexes + sample rows + typical query patterns；Phase 3 synthesize 出最终 reference doc，含 At-a-glance / Entity relationships (mermaid `erDiagram`) / 每表深度文档 / 全量表名清单 4 段。最多 **8 agents**。
+  - 新增 `DatabaseToolingPreflight`：
+    - `parseTarget(_:)` 解析 args 第一个 token 为 `Target` 枚举（postgres / mysql / sqlite / duckdb / csvOrParquet）—— 支持 URI scheme (`postgres://…`、`sqlite:///…`) 和裸路径（按 `.csv` / `.parquet` / `.sqlite` / `.duckdb` 扩展名分流）。
+    - `check(_:)` 按 target 同步跑对应 CLI 的 `--version` + 文件型 target 检查文件存在；失败抛 `Failure` 带 `brew install duckdb` / `brew install libpq && brew link --force libpq` / `brew install mysql-client` 等具体修复提示。
+    - `maskConnection(_:)` best-effort 把 `scheme://user:pass@host/db` 里的 `pass` 替换成 `****`，用于卡片显示和 prompt echo。agent 内部跑 CLI 时仍用原 connection string，sub-agent prompt 里也建议用户改用 `$DATABASE_URL` 环境变量 / `~/.pgpass` / `~/.my.cnf` 把密码彻底挪出 args，从根上避免泄漏到 transcript。
+  - 所有 BI workflow 同时拒绝任何写操作。Sub-agent prompt 里硬编码"**HARD RULE — READ-ONLY**: SELECT / WITH / EXPLAIN only. Never INSERT / UPDATE / DELETE / DROP / CREATE / ALTER / TRUNCATE / GRANT / REVOKE"。如果用户的问题需要写，sub-agent 应拒绝并说明。
+- 实现位置（共 6 个文件）：
+  - 新文件 4 个：`Xedit/DatabaseToolingPreflight.swift`、`Xedit/CSVAskWorkflow.swift`、`Xedit/DBExploreWorkflow.swift`、`Xedit/DBSchemaDocWorkflow.swift`
+  - 修改：`Xedit/WorkflowRegistry.swift`（注册 3 个新 workflow）
+
+### 版本
+
+- 同 minor 内功能扩展，rc 号递增：1.81.0-rc2 → **1.81.0-rc3**。Go agent、pbxproj×6、Help Info.plist、README、product-overview、Mobile Gateway 文档和 Agent harness 优先级文档同步。
+
 ## 1.81.0-rc2 - 2026-06-17
 
 ### Added

@@ -22,6 +22,13 @@ enum WorkflowRegistry {
         PRReviewWorkflow(),
         ReleaseNotesWorkflow(),
         IssueTriageWorkflow(),
+        // 1.81.0-rc3：BI / 数据库系 workflow。开跑前用
+        // DatabaseToolingPreflight 解析 target 类型 + 检测对应 CLI
+        // （duckdb / psql / mysql / sqlite3）。所有查询 prompt 强制
+        // read-only —— sub-agent 看到 SELECT 之外的语句应当拒绝。
+        CSVAskWorkflow(),
+        DBExploreWorkflow(),
+        DBSchemaDocWorkflow(),
     ]
 
     static func find(slashCommand: String) -> (any WorkflowDefinition)? {
