@@ -1,0 +1,30 @@
+name: example-translate
+version: 1.0.0
+slash_command: /translate-cn
+display_title: Translate to Simplified Chinese
+short_description: Translate any text into Simplified Chinese
+args_placeholder: <text to translate>
+allows_empty_args: false
+max_agents: 1
+
+steps:
+  - id: translate
+    label: translate
+    prompt: |
+      You are a professional translator. Translate the following text into
+      Simplified Chinese. Preserve formatting (markdown, code blocks, lists).
+      Output ONLY the translation —— no preface, no commentary.
+
+      Text:
+      {{args}}
+
+summary: |
+  ## 译文
+
+  **原文**:
+
+  > {{args}}
+
+  ---
+
+  {{steps.translate.output}}

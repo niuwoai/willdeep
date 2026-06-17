@@ -19,6 +19,14 @@ extension AppState {
     @discardableResult
     func startWorkflow(slashCommand: String, args: String) -> Bool {
         guard let workflow = WorkflowRegistry.find(slashCommand: slashCommand) else {
+            // 1.85.0-rc6:slash 没匹配任何内置/用户 workflow 时,如果有
+            // 用户 workflow.yaml 解析失败,顺手把错误浮上来给用户看 ——
+            // 否则用户写错 yaml 后 slash 命令静默"不存在",根本不知道
+            // 是 yaml 语法错。注意只 set message 不 return true,常规
+            // slash palette 仍然有机会处理这条命令(可能是别的功能)。
+            if let banner = UserWorkflowRegistry.errorBanner() {
+                agentErrorMessage = banner
+            }
             return false
         }
         let trimmedArgs = args.trimmingCharacters(in: .whitespacesAndNewlines)
