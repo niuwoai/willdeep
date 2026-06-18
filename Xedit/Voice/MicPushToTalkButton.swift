@@ -2,12 +2,22 @@
 //  MicPushToTalkButton.swift
 //  WillDeep
 //
-//  Phase 2 voice → composer：composer 工具栏里的 mic 按钮。按下开始
-//  录音，松开（onChange of isPressed → false）停录并转录，结果 append
-//  到 appState.agentInput。视觉上模仿 Slack push-to-talk 风格。
+//  Composer 工具栏右侧的麦克风按钮。1.88.0-rc1 起从 push-to-talk
+//  (按住录)改成 **click-to-toggle**(点一下开始,再点停止+转录):
 //
-//  Push-to-talk 用 long-press gesture 的 `.onChanged` + `.onEnded` 实现。
-//  录音中红色脉动；转录中蓝色 spinner；错误状态显示 1 秒红色感叹号。
+//   - 鼠标 click 触发的「按下立刻松开」会把 DragGesture push-to-talk
+//     压成几毫秒,VoiceRecorder.start() 还没把 state 切到 .recording,
+//     onEnded guard 就 return 了 —— 浮窗一闪而过,用户什么也录不到。
+//   - 改成 toggle 之后,用户必须有意识地再点一次才停,中间用户实际
+//     在说话,recorder 也有充足时间切状态。
+//   - 键盘端(Fn)继续 push-to-talk —— 那本来就是键盘自然手势,且
+//     FnPushToTalkMonitor 自己有 isStarting/pendingStop 防竞态。
+//
+//  视觉态:
+//   - idle           mic.fill        accent
+//   - recording      stop.fill       红色(pulsing 可后续加)
+//   - transcribing   waveform        蓝色
+//   - failed         exclamationmark 橙色 → 点击进入失败处理(权限弹 alert 或 reset)
 //
 
 import SwiftUI
@@ -17,7 +27,7 @@ struct MicPushToTalkButton: View {
     @ObservedObject private var recorder = VoiceRecorder.shared
 
     var body: some View {
-        Button(action: {}) {
+        Button(action: { onTap() }) {
             ZStack {
                 Circle()
                     .fill(backgroundColor)
@@ -31,41 +41,39 @@ struct MicPushToTalkButton: View {
         .buttonStyle(.plain)
         .disabled(!isAvailable)
         .help(helpText)
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    // 1.87.0-rc2:从 .failed 残留态脱困,否则按钮永远显示
-                    // 感叹号、按了没反应。.transcribing 不动(后台还在跑)。
-                    // 1.87.0-rc3:如果失败原因是麦克风权限被拒,先弹
-                    // alert 一键去系统设置,而不是默默 reset 让用户摸不着头脑。
-                    if case .failed(let msg) = recorder.state {
-                        if MicPermissionAlert.messageIsPermissionDenied(msg) {
-                            MicPermissionAlert.present(message: msg)
-                            return
-                        }
-                        recorder.reset()
-                    }
-                    if case .idle = recorder.state {
-                        Task {
-                            await recorder.start()
-                            if case .failed(let msg) = recorder.state,
-                               MicPermissionAlert.messageIsPermissionDenied(msg) {
-                                MicPermissionAlert.present(message: msg)
-                            }
-                        }
-                    }
+    }
+
+    // MARK: - Action
+
+    private func onTap() {
+        switch recorder.state {
+        case .idle:
+            Task {
+                await recorder.start()
+                // start 失败如果是权限被拒,主动弹 alert(同 Fn 路径)
+                if case .failed(let msg) = recorder.state,
+                   MicPermissionAlert.messageIsPermissionDenied(msg) {
+                    MicPermissionAlert.present(message: msg)
                 }
-                .onEnded { _ in
-                    guard case .recording = recorder.state else { return }
-                    Task {
-                        if let transcript = await recorder.stopAndTranscribe() {
-                            appState.agentInput.append(
-                                appState.agentInput.isEmpty ? transcript : " " + transcript
-                            )
-                        }
-                    }
+            }
+        case .recording:
+            Task {
+                if let transcript = await recorder.stopAndTranscribe() {
+                    appState.agentInput.append(
+                        appState.agentInput.isEmpty ? transcript : " " + transcript
+                    )
                 }
-        )
+            }
+        case .transcribing:
+            // 后台正在转,再点没意义。
+            return
+        case .failed(let msg):
+            if MicPermissionAlert.messageIsPermissionDenied(msg) {
+                MicPermissionAlert.present(message: msg)
+            } else {
+                recorder.reset()
+            }
+        }
     }
 
     // MARK: - Styling
@@ -93,10 +101,14 @@ struct MicPushToTalkButton: View {
             return "Voice model not installed — go to Settings → Voice."
         }
         switch recorder.state {
-        case .idle: return "Press and hold to record; release to transcribe and insert into the composer."
-        case .recording: return "Recording — release to transcribe."
-        case .transcribing: return "Transcribing…"
-        case .failed(let message): return message
+        case .idle:
+            return "Click to start recording. Click again to stop and transcribe. (Or hold Fn anywhere in the app for push-to-talk.)"
+        case .recording:
+            return "Recording — click to stop and transcribe."
+        case .transcribing:
+            return "Transcribing…"
+        case .failed(let message):
+            return message
         }
     }
 

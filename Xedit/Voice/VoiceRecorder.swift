@@ -15,6 +15,7 @@
 import Foundation
 import AVFoundation
 import Combine
+import OSLog
 
 @MainActor
 final class VoiceRecorder: ObservableObject {
@@ -30,9 +31,11 @@ final class VoiceRecorder: ObservableObject {
     @Published private(set) var state: State = .idle
     @Published private(set) var permissionDenied: Bool = false
 
+    private let log = Logger(subsystem: "com.willdeep.app", category: "VoiceRecorder")
     private var recorder: AVAudioRecorder?
     private var recordingURL: URL?
     private var meterTimer: Timer?
+    private var recordingStartedAt: Date?
 
     private init() {}
 
@@ -93,9 +96,11 @@ final class VoiceRecorder: ObservableObject {
             }
             recorder = r
             recordingURL = url
+            recordingStartedAt = Date()
             state = .recording(startedAt: Date())
             WaveformOverlayWindowManager.shared.show()
             startMetering()
+            log.info("start: recording to \(url.lastPathComponent)")
         } catch {
             state = .failed(message: "Failed to init recorder: \(error.localizedDescription)")
         }
@@ -137,8 +142,18 @@ final class VoiceRecorder: ObservableObject {
         recorder = nil
         recordingURL = nil
         stopMetering()
+        let recordedDuration = recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
+        recordingStartedAt = nil
         state = .transcribing
         WaveformOverlayWindowManager.shared.setTranscribing()
+
+        // 诊断:多大、多久。若 < 500ms 或 < 4KB,基本是「按下立刻松开」
+        // 的死亡触发,什么也没录到 —— 给一条明确 warn。
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
+        log.info("stopAndTranscribe: file=\(url.lastPathComponent) size=\(fileSize)B duration=\(recordedDuration, format: .fixed(precision: 2))s")
+        if recordedDuration < 0.4 || fileSize < 4_000 {
+            log.warning("stopAndTranscribe: audio is suspiciously short/small — likely caught by click/release race or user spoke after release")
+        }
 
         do {
             let transcript = try await SpeechTranscriber.transcribe(
@@ -146,6 +161,7 @@ final class VoiceRecorder: ObservableObject {
                 language: .auto,
                 enableCTCDeduplication: false
             )
+            log.info("stopAndTranscribe: transcript=\(transcript.isEmpty ? "<empty>" : transcript)")
             // 录音文件留磁盘 —— phase 3 加自动清理 / 历史浏览。
             state = .idle
             WaveformOverlayWindowManager.shared.hide()
@@ -163,6 +179,7 @@ final class VoiceRecorder: ObservableObject {
             }
             return trimmed.isEmpty ? nil : trimmed
         } catch {
+            log.error("stopAndTranscribe: transcription threw \(error.localizedDescription)")
             state = .failed(message: "Transcription failed: \(error.localizedDescription)")
             WaveformOverlayWindowManager.shared.hide()
             return nil

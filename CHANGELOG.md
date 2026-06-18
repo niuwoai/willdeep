@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.88.0-rc1 - 2026-06-18
+
+### Fixed
+
+- **Composer mic 按钮鼠标点击「一闪而过」**:1.88.0 之前 mic 按钮是 `DragGesture` push-to-talk —— 鼠标 click(按下立刻松开)和 `VoiceRecorder.start()` 的 async 时序撞,start 还没把 state 切到 `.recording`,onEnded guard 就 return,浮窗一闪、什么也没录到。改成 **click-to-toggle**:第一次点开始录,第二次点停止+转录,语义直觉对齐用户「再点一下取消」的预期。点 `!`(失败态)如果是权限被拒走 alert 流,其它失败直接 reset。Fn 键继续 push-to-talk(键盘自然手势,且 FnPushToTalkMonitor 已自带 isStarting/pendingStop 防竞态)。
+- **诊断「为什么没转出来」**:`VoiceRecorder.stopAndTranscribe` 加 OSLog,打音频文件大小 + 录音时长 + transcript 内容(empty 时显式标 `<empty>`)。如果 duration < 0.4s 或文件 < 4KB,主动 warn —— 这是「按下立刻松开 / 用户在松开后才开始说话」的死亡场景,以前转录回来是空字符串,append 路径直接 return,用户看不到任何反馈。Console.app 搜 subsystem `com.willdeep.app` / category `VoiceRecorder` 看流。
+
+### 版本
+
+- bugfix,只递增 rc:1.88.0 → **1.88.0-rc1**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / MOBILE_GATEWAY_REQUIREMENTS (4 处) / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
 ## 1.88.0 - 2026-06-18
 
 ### Added
