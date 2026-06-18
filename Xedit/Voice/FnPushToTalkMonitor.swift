@@ -98,6 +98,11 @@ final class FnPushToTalkMonitor {
             return
         }
         let recorder = VoiceRecorder.shared
+        // 1.87.0-rc2:从 .failed 残留态自动脱困
+        if case .failed = recorder.state {
+            log.info("startRecording: clearing stale .failed state")
+            recorder.reset()
+        }
         guard case .idle = recorder.state else {
             log.info("startRecording: recorder not idle (state=\(String(describing: recorder.state)))")
             return

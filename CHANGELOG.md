@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.87.0-rc2 - 2026-06-18
+
+### Fixed
+
+- **Composer mic 按钮 / Fn 监听器卡在感叹号**:用户报告按钮显示 `!` 后再按没反应。根因是 [MicPushToTalkButton.swift:37](Xedit/Voice/MicPushToTalkButton.swift:37) 的 gesture 只在 `if case .idle = recorder.state` 时才 start —— 一旦上一次失败(权限拒、AVAudioRecorder 起不来、转录抛错)进 `.failed`,状态永远不动,按钮永远是 `!`,用户没法手动复位。修法:`VoiceRecorder.reset()` 新方法把 `.failed` / 残留态强制置 `.idle`(不动正在录的 recorder),mic 按钮 + [FnPushToTalkMonitor](Xedit/Voice/FnPushToTalkMonitor.swift) 在 gesture down 时先 `if case .failed { reset() }` 再 start,自然脱困。
+
+### 版本
+
+- bugfix,只递增 rc:1.87.0-rc1 → **1.87.0-rc2**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / MOBILE_GATEWAY_REQUIREMENTS (4 处) / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
 ## 1.87.0-rc1 - 2026-06-18
 
 ### Fixed

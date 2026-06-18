@@ -158,6 +158,15 @@ final class VoiceRecorder: ObservableObject {
         }
     }
 
+    /// 把状态强制置回 .idle。1.87.0-rc2 修「.failed 卡死」:gesture
+    /// 在 `if case .idle` 才 start,残留的 .failed 状态让按钮永远显示
+    /// 感叹号,按了没反应。下一次 push-to-talk 前先 reset 一下脱困。
+    /// 不动正在录音的 recorder —— 真在录就走 cancel(),不要从这里来。
+    func reset() {
+        guard recorder == nil else { return }  // 真在录别瞎清
+        state = .idle
+    }
+
     /// 取消（用户改主意）。停录 + 丢弃文件。
     func cancel() {
         if let r = recorder {

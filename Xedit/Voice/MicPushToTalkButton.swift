@@ -34,6 +34,11 @@ struct MicPushToTalkButton: View {
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in
+                    // 1.87.0-rc2:从 .failed 残留态脱困,否则按钮永远显示
+                    // 感叹号、按了没反应。.transcribing 不动(后台还在跑)。
+                    if case .failed = recorder.state {
+                        recorder.reset()
+                    }
                     if case .idle = recorder.state {
                         Task { await recorder.start() }
                     }
