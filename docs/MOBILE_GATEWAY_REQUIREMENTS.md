@@ -66,8 +66,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.85.0-rc20`
-- `X-Server-Version: 1.85.0-rc20`
+- `X-App-Version: 1.85.0-rc22`
+- `X-Server-Version: 1.85.0-rc22`
 
 ### `GET /mobile/health`
 
@@ -79,7 +79,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.85.0-rc20",
+    "version": "1.85.0-rc22",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
