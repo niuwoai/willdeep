@@ -65,16 +65,8 @@ struct AgentPlanAutoExecutionBanner: View {
 
                 Spacer(minLength: 8)
 
-                Button {
-                    fireConfirm(source: .manual)
-                } label: {
-                    Text(L10n.PlanAutoExecutionBanner.confirmButton)
-                        .font(.system(size: 12, weight: .semibold))
-                }
-                .keyboardShortcut(.return, modifiers: [.command])
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-
+                // 1.85.0-rc16:按 macOS 习惯把「拒绝」放最左、「确认/执行」
+                // 放最右(显著的 borderedProminent),避免快速操作时误触。
                 Button {
                     fireReject()
                 } label: {
@@ -83,6 +75,16 @@ struct AgentPlanAutoExecutionBanner: View {
                 }
                 .keyboardShortcut(.escape, modifiers: [])
                 .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Button {
+                    fireConfirm(source: .manual)
+                } label: {
+                    Text(L10n.PlanAutoExecutionBanner.confirmButton)
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .keyboardShortcut(.return, modifiers: [.command])
+                .buttonStyle(.borderedProminent)
                 .controlSize(.small)
             }
 

@@ -50,18 +50,20 @@ struct AgentPatchProposalCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
 
+            // rc16:Reject 放最左,Apply 放右,Spacer 留在右侧把它们顶到左边
+            // 簇集 —— 仍然按「负 → 正」从左到右,误触概率低于「正 → 负」。
             HStack {
-                Button {
-                    appState.applyAgentPatchProposal(id: proposal.id)
-                } label: {
-                    Label("Apply", systemImage: "checkmark.circle")
-                }
-                .disabled(proposal.status != .pending)
-
                 Button {
                     appState.rejectAgentPatchProposal(id: proposal.id)
                 } label: {
                     Label("Reject", systemImage: "xmark.circle")
+                }
+                .disabled(proposal.status != .pending)
+
+                Button {
+                    appState.applyAgentPatchProposal(id: proposal.id)
+                } label: {
+                    Label("Apply", systemImage: "checkmark.circle")
                 }
                 .disabled(proposal.status != .pending)
 

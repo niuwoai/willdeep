@@ -71,12 +71,14 @@ struct AgentPlanCard: View {
             }
 
             if plan.status == .proposed {
+                // rc16:Reject 在左、Approve 在右(borderedProminent),对齐
+                // macOS「拒绝远离主操作位」防误触习惯。
                 HStack(spacing: 8) {
-                    Button(L10n.PlanCard.approveButton) { appState.approveAgentPlan() }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
                     Button(L10n.PlanCard.rejectButton) { appState.rejectAgentPlan() }
                         .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    Button(L10n.PlanCard.approveButton) { appState.approveAgentPlan() }
+                        .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                     Spacer(minLength: 0)
                     Text(L10n.PlanCard.infoText)

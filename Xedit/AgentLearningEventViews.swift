@@ -14,6 +14,10 @@ struct AgentLearningEventsCard: View {
     /// 按钮,点击后 dismiss 该 review item;nil 时(老的 transcript 内嵌
     /// 卡片用法)只显示复制按钮,与旧行为一致。
     var onReject: ((AgentLearningEvent) -> Void)? = nil
+    /// 1.85.0-rc16:popover 上的「Approve」绿色对勾。只有当事件携带了
+    /// `memoryDrafts`(turn-end 自动 capture 改成 pending 后才有)才显示;
+    /// 点击 → AppState 真正写入 memory store + 把事件标 `.saved`。
+    var onApprove: ((AgentLearningEvent) -> Void)? = nil
     /// rc13:popover 里隐藏 5 条 cap + 「N more」,直接全展示。
     var capItems: Bool = true
     @State private var copiedEventID: AgentLearningEvent.ID?
@@ -44,7 +48,11 @@ struct AgentLearningEventsCard: View {
                         event: event,
                         didCopy: copiedEventID == event.id,
                         onCopy: { copy(event) },
-                        onReject: onReject.map { reject in { reject(event) } }
+                        onReject: onReject.map { reject in { reject(event) } },
+                        // 只有带 pending drafts 的事件才暴露 Approve 按钮。
+                        onApprove: (onApprove != nil && !event.pendingMemoryDrafts.isEmpty)
+                            ? { onApprove?(event) }
+                            : nil
                     )
                     if index < visibleEvents.count - 1 {
                         Divider()
@@ -91,6 +99,8 @@ private struct AgentLearningEventRow: View {
     let onCopy: () -> Void
     /// rc13:popover 形态下用来 dismiss review item;nil 时不渲染 reject 按钮。
     var onReject: (() -> Void)? = nil
+    /// rc16:popover 形态下用来 Approve pending memory drafts;nil 时不渲染。
+    var onApprove: (() -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -144,6 +154,18 @@ private struct AgentLearningEventRow: View {
                 }
             }
 
+            // rc16:正向操作(Approve ✓)放最右、拒绝(Reject 垃圾桶)放
+            // 最左,避免误触;Copy 中性放中间。
+            if let onReject {
+                Button(action: onReject) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(L10n.Transcript.learningRejectHelp)
+            }
+
             if !event.detail.isEmpty {
                 Button(action: onCopy) {
                     Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
@@ -154,14 +176,14 @@ private struct AgentLearningEventRow: View {
                 .help(didCopy ? L10n.Transcript.learningCopied : L10n.Transcript.learningCopyHelp)
             }
 
-            if let onReject {
-                Button(action: onReject) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color.secondary)
+            if let onApprove {
+                Button(action: onApprove) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Color.green)
                 }
                 .buttonStyle(.plain)
-                .help(L10n.Transcript.learningRejectHelp)
+                .help(L10n.Transcript.learningApproveHelp)
             }
         }
         .padding(.vertical, 8)

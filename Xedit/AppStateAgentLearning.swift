@@ -110,33 +110,81 @@ extension AppState {
               }) else {
             return []
         }
-        let existingIDs = Set(memoryState.memories.map(\.id))
-        memoryState.addAutomaticMemories(
+        // 1.85.0-rc16:不再调 `memoryState.addAutomaticMemories(...)` 直接
+        // 落盘;改用 `AgentMemoryEngine.candidates(...)` 拿候选(同一份
+        // 抽取逻辑),拍成 [AgentMemoryDraft] 挂到 LearningEvent 上,等用户
+        // 在 popover 里按 Approve 才真正写入。详见 [AgentMemoryDraft](Xedit/AgentSelfLearning.swift)
+        // + [AppState.applyAgentMemoryDrafts](Xedit/AppStateAgentLearning.swift)。
+        let candidates = AgentMemoryEngine.candidates(
             fromUser: latestUser.modelContent,
             assistantText: assistant.modelContent,
-            rootDirectory: workspaceURL
+            rootDirectory: workspaceURL,
+            now: Date()
         )
-        let savedMemories = memoryState.memories.filter { !existingIDs.contains($0.id) }
-        guard !savedMemories.isEmpty else { return [] }
-        let preview = savedMemories
+        guard !candidates.isEmpty else { return [] }
+        let drafts = candidates.map { record in
+            AgentMemoryDraft(
+                content: record.content,
+                scopeRaw: record.scope.rawValue,
+                lifetimeRaw: record.lifetime.rawValue,
+                rootDirectoryPath: record.scope == .project ? workspaceURL?.path : nil
+            )
+        }
+        let preview = drafts
             .prefix(3)
             .map { "- \(Self.oneLine($0.content, limit: 180))" }
             .joined(separator: "\n")
         return [
             AgentLearningEvent(
                 kind: .memory,
-                status: .saved,
-                title: "Saved \(savedMemories.count) conversation memor\(savedMemories.count == 1 ? "y" : "ies")",
+                status: .suggested,
+                title: "Suggested \(drafts.count) conversation memor\(drafts.count == 1 ? "y" : "ies") (pending your Approve)",
                 detail: preview,
                 action: AgentLearningAction(
                     kind: .saveMemory,
                     commandName: "add_memory",
                     target: workspaceURL == nil ? "global memory" : "project memory",
                     reason: "The latest turn exposed durable conversation context.",
-                    nextStep: "Use retrieved memories as context in future turns."
-                )
+                    nextStep: "Click Approve in the learning popover to save these into your memory store.",
+                    requiresUserConfirmation: true
+                ),
+                memoryDrafts: drafts
             )
         ]
+    }
+
+    /// 1.85.0-rc16:popover 里的 Approve 按钮 → 把一个 LearningEvent 上
+    /// 攒着的所有 `AgentMemoryDraft` 真正写入 memory store,然后把对应
+    /// review item 标 `.reviewed`。返回实际写入的条数。
+    ///
+    /// `AgentMemoryState` 构造时从 UserDefaults 加载;`memories` 数组有
+    /// `didSet` 自动落盘,所以这里只需 addMemory 然后让 state 走出作用
+    /// 域即可,不需要显式 persist。
+    @discardableResult
+    func applyAgentMemoryDrafts(for event: AgentLearningEvent) -> Int {
+        let drafts = event.pendingMemoryDrafts
+        guard !drafts.isEmpty else { return 0 }
+        let memoryState = AgentMemoryState()
+        for draft in drafts {
+            memoryState.addMemory(
+                content: draft.content,
+                source: .automatic,
+                lifetime: draft.lifetime,
+                scope: draft.scope,
+                rootDirectory: draft.rootDirectoryURL
+            )
+        }
+        memoryState.mergeDuplicateMemories()
+        // 把该事件在所有 runtime 里的 status / drafts 都更新一次,popover
+        // 重渲染时 Approve 按钮就消失,避免被重复 Approve。
+        for runtime in agentRuntimes.values {
+            if let idx = runtime.learningEvents.firstIndex(where: { $0.id == event.id }) {
+                runtime.learningEvents[idx].status = .saved
+                runtime.learningEvents[idx].memoryDrafts = nil
+            }
+        }
+        AgentLearningReviewStore.mark(id: event.id, decision: .reviewed)
+        return drafts.count
     }
 
     private func appendAgentLearningEvents(_ events: [AgentLearningEvent], to runtime: AgentRuntime) {

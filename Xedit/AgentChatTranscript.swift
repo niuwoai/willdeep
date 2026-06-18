@@ -231,7 +231,10 @@ struct AgentChatTranscript: View {
                     // 紧凑的图标条 + popover —— 详见 AgentTurnPostStrip。
                     AgentTurnPostStrip(
                         report: appState.agentLatestTurnReport,
-                        learningEvents: appState.agentLearningEvents
+                        learningEvents: appState.agentLearningEvents,
+                        onApproveMemory: { event in
+                            appState.applyAgentMemoryDrafts(for: event)
+                        }
                     )
                     .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
 

@@ -24,6 +24,10 @@ import AppKit
 struct AgentTurnPostStrip: View {
     let report: AgentTurnReport?
     let learningEvents: [AgentLearningEvent]
+    /// 1.85.0-rc16:Approve 回调,popover 里点 ✓ 触发,把 LearningEvent 上
+    /// 的 pending `memoryDrafts` 真正写入 memory store。AppState 提供
+    /// `applyAgentMemoryDrafts(for:)` 实现。
+    var onApproveMemory: ((AgentLearningEvent) -> Void)? = nil
 
     @State private var showReport = false
     @State private var showLearning = false
@@ -93,6 +97,7 @@ struct AgentTurnPostStrip: View {
                 onReject: { event in
                     AgentLearningReviewStore.mark(id: event.id, decision: .dismissed)
                 },
+                onApprove: onApproveMemory,
                 capItems: false
             )
             .padding(12)

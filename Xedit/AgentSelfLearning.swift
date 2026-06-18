@@ -49,6 +49,32 @@ struct AgentLearningSkillDraft: Codable, Equatable {
     var body: String
 }
 
+/// 1.85.0-rc16:turn-end 自动 memory capture 不再直接落盘 —— 拍成 draft
+/// 挂在 [AgentLearningEvent.memoryDrafts](Xedit/AgentSelfLearning.swift) 上,
+/// 由 popover 的 Approve 按钮触发真正写入。所有字段都是 Codable 基本
+/// 类型,持久化平迁老 session。
+struct AgentMemoryDraft: Codable, Equatable, Hashable {
+    var content: String
+    var scopeRaw: String        // AgentMemoryScope.rawValue
+    var lifetimeRaw: String     // AgentMemoryLifetime.rawValue
+    /// 当 scope == .project 时,落盘需要 workspace 根路径 —— 这里存绝对
+    /// 路径而不是 fingerprint,便于 popover 这边直接 `URL(fileURLWithPath:)`
+    /// 还原。global memory 留 nil。
+    var rootDirectoryPath: String?
+
+    var scope: AgentMemoryScope {
+        AgentMemoryScope(rawValue: scopeRaw) ?? .global
+    }
+
+    var lifetime: AgentMemoryLifetime {
+        AgentMemoryLifetime(rawValue: lifetimeRaw) ?? .longTerm
+    }
+
+    var rootDirectoryURL: URL? {
+        rootDirectoryPath.flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
+    }
+}
+
 struct AgentLearningMCPDraft: Codable, Equatable {
     var capability: String
     var serverName: String
@@ -153,9 +179,16 @@ struct AgentLearningEvent: Identifiable, Codable, Equatable {
     /// failure that would drop the whole session file). Read through
     /// `recallLinks` for a non-optional view.
     var relatedRecall: [AgentLearningRecallLink]?
+    /// 1.85.0-rc16:turn-end 自动 memory 不再直接落盘,把候选拍成 draft
+    /// 挂这里 —— popover 的 Approve 按钮触发真正写入。同样 Optional 平
+    /// 迁老 session(missing = nil = 没有待审 draft)。
+    var memoryDrafts: [AgentMemoryDraft]?
 
     /// Non-optional accessor for the recall back-references.
     var recallLinks: [AgentLearningRecallLink] { relatedRecall ?? [] }
+
+    /// 便于 view 层直接判断「这个事件有没有可 Approve 的 memory 写入」。
+    var pendingMemoryDrafts: [AgentMemoryDraft] { memoryDrafts ?? [] }
 
     init(
         id: UUID = UUID(),
@@ -165,7 +198,8 @@ struct AgentLearningEvent: Identifiable, Codable, Equatable {
         detail: String,
         action: AgentLearningAction? = nil,
         createdAt: Date = Date(),
-        relatedRecall: [AgentLearningRecallLink]? = nil
+        relatedRecall: [AgentLearningRecallLink]? = nil,
+        memoryDrafts: [AgentMemoryDraft]? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -175,6 +209,7 @@ struct AgentLearningEvent: Identifiable, Codable, Equatable {
         self.action = action
         self.createdAt = createdAt
         self.relatedRecall = relatedRecall
+        self.memoryDrafts = memoryDrafts
     }
 }
 
@@ -399,39 +434,39 @@ enum AgentSelfLearning {
         if let mcpSuggestion = audit.mcpSuggestion {
             appendUnique(automaticMCPSuggestionMemory(from: mcpSuggestion), to: &memories)
         }
-        guard !memories.isEmpty else { return [] }
-
-        let scope: AgentMemoryScope = workspaceURL == nil ? .global : .project
-        let existingIDs = Set(memoryState.memories.map(\.id))
-        for memory in memories {
-            memoryState.addMemory(
-                content: memory,
-                source: .automatic,
-                lifetime: .longTerm,
-                scope: scope,
-                rootDirectory: workspaceURL
-            )
-        }
-        memoryState.mergeDuplicateMemories()
-        let savedMemories = memoryState.memories.filter { !existingIDs.contains($0.id) }
         var events: [AgentLearningEvent] = []
-        if !savedMemories.isEmpty {
-            let preview = savedMemories
+
+        // 1.85.0-rc16:同 captureAutomaticMemories,这里也不再直接 addMemory
+        // 落盘 —— 候选拍成 [AgentMemoryDraft] 等用户 Approve。原先调用
+        // `memoryState.addMemory` + 「Saved N memories」事件那一支去掉。
+        if !memories.isEmpty {
+            let scope: AgentMemoryScope = workspaceURL == nil ? .global : .project
+            let drafts = memories.map {
+                AgentMemoryDraft(
+                    content: $0,
+                    scopeRaw: scope.rawValue,
+                    lifetimeRaw: AgentMemoryLifetime.longTerm.rawValue,
+                    rootDirectoryPath: scope == .project ? workspaceURL?.path : nil
+                )
+            }
+            let preview = drafts
                 .prefix(3)
                 .map { "- \(oneLine($0.content, limit: 180))" }
                 .joined(separator: "\n")
             events.append(AgentLearningEvent(
                 kind: .memory,
-                status: .saved,
-                title: "Saved \(savedMemories.count) automatic learning memor\(savedMemories.count == 1 ? "y" : "ies")",
+                status: .suggested,
+                title: "Suggested \(drafts.count) self-learning memor\(drafts.count == 1 ? "y" : "ies") (pending your Approve)",
                 detail: preview,
                 action: AgentLearningAction(
                     kind: .saveMemory,
                     commandName: "add_memory",
                     target: scope == .global ? "global memory" : "project memory",
                     reason: "The turn contained durable self-learning policy or integration guidance.",
-                    nextStep: "Retrieve this memory before future turns that mention learning, skills, MCP, or external integrations."
-                )
+                    nextStep: "Click Approve in the learning popover to save these into your memory store.",
+                    requiresUserConfirmation: true
+                ),
+                memoryDrafts: drafts
             ))
         }
         if let mcpSuggestion = audit.mcpSuggestion {
@@ -743,6 +778,17 @@ enum AgentSelfLearning {
         if let generalPolicy = automaticMCPCapabilityGapMemory(from: text) {
             appendUnique(generalPolicy, to: &memories)
         }
+        // 1.85.0-rc16:加一道 strong-intent 闸 —— 用户得明确说「以后 /
+        // 记住 / 偏好 / always / never / from now on / preference / rule」
+        // 之类带「持久化意图」的词,才允许进入下面这几条 framework 规则
+        // 的匹配。原先只要文本里出现「memory + 自动」这样弱关联的 2 词
+        // 组合就触发,误报严重(基本每次随便聊都会蹦出一堆 candidate)。
+        guard hasStrongDurableIntent(in: lower) else {
+            if let externalGap = automaticExternalIntegrationGapMemory(from: text) {
+                appendUnique(externalGap, to: &memories)
+            }
+            return memories
+        }
         if containsAny(["memory", "记忆"], in: lower),
            containsAny(["自动", "自主", "必要", "以后", "下次", "proactive", "when needed"], in: lower) {
             appendUnique(
@@ -768,6 +814,26 @@ enum AgentSelfLearning {
             appendUnique(externalGap, to: &memories)
         }
         return memories
+    }
+
+    /// rc16:用户必须明确说出「我要长期记住这件事」的意图,才允许 framework
+    /// 这层把规则种子塞进 memory candidate 列表。这里收一组中英文常见的
+    /// 强意图短语 —— 都是用户在「这是我的偏好 / 以后都这么干 / 别忘了」
+    /// 这类场景才用的词。
+    ///
+    /// 「以后」「下次」单独成立,因为中文里它们本身就承载未来约束;原先
+    /// 试图只匹配「以后请 / 下次记得」这种短语,被实际语料(「以后这类
+    /// 流程要自动…」「下次自动复用」)漏掉。
+    static func hasStrongDurableIntent(in lower: String) -> Bool {
+        containsAny(
+            [
+                "记住", "请记住", "以后", "下次", "偏好", "我喜欢", "默认",
+                "永远", "总是", "从此", "始终",
+                "always", "never", "from now on", "going forward", "remember that",
+                "remember this", "my preference", "i prefer", "by default", "in the future",
+            ],
+            in: lower
+        )
     }
 
     static func automaticExternalIntegrationGapMemory(from text: String) -> String? {

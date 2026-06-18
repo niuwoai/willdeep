@@ -1466,6 +1466,9 @@ enum L10n {
             return String(format: template, a1)
         }
         static let learningRejectHelp = String(localized: "transcript.learning.reject-help", defaultValue: "Dismiss from review queue")
+        // 1.85.0-rc16:popover 里 Approve 按钮的 tooltip。仅当事件有
+        // pending memoryDrafts 时显示;点击会把 draft 真正写入 memory store。
+        static let learningApproveHelp = String(localized: "transcript.learning.approve-help", defaultValue: "Save these memories to your memory store")
         static let messageTruncatedHelp = String(localized: "transcript.message-truncated.help", defaultValue: "Open in standalone window to view full message content")
         static func messageTruncatedText(_ a1: String, _ a2: String) -> String {
             let template = String(localized: "transcript.message-truncated.text", defaultValue: "Message shows first N characters only")

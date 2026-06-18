@@ -291,14 +291,16 @@ struct AgentToolCallCard: View {
             if call.status == .pendingApproval {
                 VStack(alignment: .leading, spacing: 6) {
                     approvalCommandBlock
+                    // rc16:把 Deny 推到最左,Allow / Always Allow 在右侧簇集,
+                    // 对齐 macOS「主操作右、负操作远离」防误触习惯。
                     HStack {
+                        Button(L10n.ToolCard.deny) { appState.denyAgentToolCall(id: call.id) }
                         Spacer(minLength: 0)
-                        Button(L10n.ToolCard.allow) { appState.approveAgentToolCall(id: call.id) }
                         if let signature = alwaysAllowSignature {
                             Button(L10n.ToolCard.alwaysAllow) { appState.alwaysAllowAgentToolCall(id: call.id) }
                                 .help(L10n.ToolCard.alwaysAllowHelp(signature))
                         }
-                        Button(L10n.ToolCard.deny) { appState.denyAgentToolCall(id: call.id) }
+                        Button(L10n.ToolCard.allow) { appState.approveAgentToolCall(id: call.id) }
                     }
                     .font(.caption)
                 }
@@ -308,7 +310,11 @@ struct AgentToolCallCard: View {
                     Text(L10n.ToolCard.destructiveWarning)
                         .font(.caption2)
                         .foregroundStyle(destructiveAccentColor)
+                    // rc16:同上,Deny 在左,Confirm Run 在右。
                     HStack {
+                        Button(L10n.ToolCard.deny) {
+                            appState.denyAgentToolCall(id: call.id)
+                        }
                         Spacer(minLength: 0)
                         Button {
                             _ = appState.confirmAgentToolCall(id: call.id, typedConfirmation: "confirm")
@@ -325,9 +331,6 @@ struct AgentToolCallCard: View {
                                 )
                         }
                         .buttonStyle(.plain)
-                        Button(L10n.ToolCard.deny) {
-                            appState.denyAgentToolCall(id: call.id)
-                        }
                     }
                     .font(.caption)
                 }
@@ -403,16 +406,18 @@ struct AgentToolCallCard: View {
                 .font(.system(size: 12))
                 .lineLimit(1...4)
 
+            // rc16:Skip 在左、Send 在右,对齐「正向操作右、误触概率低」的
+            // macOS 习惯。Send 的 disabled 状态自然把视觉重心保留在右侧。
             HStack(spacing: 6) {
+                Button("Skip") {
+                    appState.denyAgentToolCall(id: call.id)
+                    resetAskUserInputs()
+                }
                 Spacer(minLength: 0)
                 Button("Send") {
                     submitAnswer(options: options, isMultiSelect: isMultiSelect)
                 }
                 .disabled(!canSubmitAskUser(isMultiSelect: isMultiSelect))
-                Button("Skip") {
-                    appState.denyAgentToolCall(id: call.id)
-                    resetAskUserInputs()
-                }
             }
             .font(.caption)
         }

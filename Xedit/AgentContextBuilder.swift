@@ -35,6 +35,11 @@ enum AgentContextBuilder {
         Keep answers practical and scoped to the visible project context.
         """)
 
+        // 1.85.0-rc16:把用户的系统偏好语言塞进 prompt —— 让模型的回复、
+        // add_memory / create_user_skill 写入的内容、ask_user 的问题都
+        // 走用户的母语,而不是模型默认的英文。详见 [AppLocale](Xedit/AppLocale.swift)。
+        sections.append(AppLocale.systemPromptDirective)
+
         // Plan mode: lock writes behind a numbered, user-approved plan.
         if interactionMode == .plan {
             if currentPlan == nil || currentPlan?.status == .proposed || currentPlan?.status == .rejected {

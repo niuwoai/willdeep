@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.85.0-rc16 - 2026-06-18
+
+### Changed
+
+- **Turn-end 自动 memory capture 从「直接落盘」改成「pending,等用户在 popover 里 Approve」**。用户反馈:阈值太低,加上没经用户确认就一股脑写进 memory store。
+  - 新增 [AgentMemoryDraft](Xedit/AgentSelfLearning.swift) Codable 结构(content / scope / lifetime / rootDirectoryPath);[AgentLearningEvent](Xedit/AgentSelfLearning.swift) 加 optional `memoryDrafts: [AgentMemoryDraft]?`(平迁老 session,missing = nil)。
+  - [AppStateAgentLearning.captureAutomaticMemories](Xedit/AppStateAgentLearning.swift) 不再调 `memoryState.addAutomaticMemories(...)` —— 改用 `AgentMemoryEngine.candidates(...)` 拿候选,拍成 draft 挂到 `.suggested` 事件上。
+  - [AgentSelfLearning.captureAutomaticMCPCapabilityGap](Xedit/AgentSelfLearning.swift) 同样,framework 自学习规则种子也走 draft 路径,不再 inline `memoryState.addMemory`。MCP suggestion 子事件本来就是 `.suggested`,不动。
+  - [AppState.applyAgentMemoryDrafts(for:)](Xedit/AppStateAgentLearning.swift):popover 里点 ✓ → 把事件上所有 pending draft 写入 `AgentMemoryState`(constructor 加载 + memories 数组 didSet 自动落盘),事件 status 翻 `.saved` + 清 drafts,review item 标 `.reviewed`,避免被重复 Approve。
+  - [AgentLearningEventsCard / AgentLearningEventRow](Xedit/AgentLearningEventViews.swift) 加 `onApprove` 回调 + 绿色 ✓ 按钮,只在事件携带 pending drafts 时显示;[AgentTurnPostStrip](Xedit/AgentTurnPostStrip.swift) 把 `appState.applyAgentMemoryDrafts(for:)` 接进去。
+- **自学习触发阈值提高:framework 那 3 条规则(`memory` / `skill` / `mcp`)matcher 前面加一道 strong-intent 闸门**([AgentSelfLearning.hasStrongDurableIntent](Xedit/AgentSelfLearning.swift))。用户消息得包含「以后请 / 记住 / 默认 / 永远 / 总是 / always / never / from now on / remember this / preference / by default」之类明确的持久化意图词,候选才会进列表;否则 framework 这一层不出 candidate。日常闲聊里随便提到「memory / skill / mcp」不再产生噪音。`automaticExternalIntegrationGapMemory`(基于「cannot access X」的显式整合缺口)豁免本闸,逻辑不变。
+
+### Added
+
+- **App 启动时检测系统偏好语言并全局共享给 agent**。用户反馈「输出的 memory、skill 要本地化,用户语言什么就用什么形式输出;app 启动时要检测当前的语言并全局共享给 agent」。
+  - 新增 [AppLocale](Xedit/AppLocale.swift):`languageTag`(`zh-Hans` / `en-US` …)、`languageCode`(`zh` / `en`)、`displayName`(系统本地化的语言名)、`systemPromptDirective`(一句给模型的指令)。
+  - [AgentContextBuilder.systemPrompt](Xedit/AgentContextBuilder.swift) 在基础 sections 之后追加 `AppLocale.systemPromptDirective` —— 「User's preferred language: <name> (<tag>). Reply to the user, write memory entries created via add_memory, generate skill content via create_user_skill, draft ask_user questions, and produce any other user-facing artifact in this language unless the user explicitly asks for another.」 模型由此自动按用户母语回话 / 调 add_memory / 写 skill 体。
+
+### Tests
+
+- [AgentSelfLearningTests](XeditTests/AgentSelfLearningTests.swift) 同步重写:`automaticMCPCapabilityGapCreatesMemory` → `automaticMCPCapabilityGapEmitsPendingDraftEvents`,断言 memory store 保持空、事件携带 pending drafts + `requiresUserConfirmation == true`。`automaticSelfLearningMemoriesSplitMemorySkillAndMCPPolicy` 前缀补「以后请」过 strong-intent 闸;新增 `automaticSelfLearningMemoriesSkippedWithoutStrongIntent` 反向回归。
+
+### UI
+
+- **确认类按钮统一「拒绝最左 / 正向最右」防误触**。用户原话:「需要询问用户、需要用户确认时,要将正向的按钮(通过类)放在右边,拒绝类的放在最左边」。改的几处:
+  - [AgentPlanAutoExecutionBanner](Xedit/AgentPlanAutoExecutionBanner.swift):Reject 在左、Execute (`borderedProminent`) 在右。
+  - [AgentPatchProposalCard](Xedit/AgentPanelCards.swift):Reject 在左、Apply 在右,Spacer 顶到右侧。
+  - [AgentPlanCard](Xedit/AgentPlanGoalCards.swift) (`.proposed` 状态):Reject 在左、Approve (`borderedProminent`) 在右。
+  - [AgentToolCallCard.pendingApproval](Xedit/AgentToolCallViews.swift):Deny 在最左,Allow / Always Allow 在右侧簇集。
+  - [AgentToolCallCard.awaitingConfirm](Xedit/AgentToolCallViews.swift):Deny 在最左、Confirm Run(红描边)在最右。
+  - [AgentToolCallCard.askUserBody](Xedit/AgentToolCallViews.swift):Skip 在最左、Send 在最右。
+  - [AgentLearningEventRow](Xedit/AgentLearningEventViews.swift):垃圾桶 Reject 在最左、Copy 中立放中间、绿色 ✓ Approve 在最右。
+
+### 版本
+
+- 行为 + UI 变更,bump rc:1.85.0-rc15 → **1.85.0-rc16**。pbxproj×6 / Go agent / Help Info.plist / README / docs / product-overview 同步。
+
 ## 1.85.0-rc15 - 2026-06-18
 
 ### Changed

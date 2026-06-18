@@ -99,7 +99,9 @@ struct AgentSelfLearningTests {
     }
 
     @Test
-    func automaticMCPCapabilityGapCreatesMemory() throws {
+    func automaticMCPCapabilityGapEmitsPendingDraftEvents() throws {
+        // rc16:turn-end 不再把 memory 直接落盘。改成断言「事件携带 pending
+        // memoryDrafts + status == .suggested,memory store 不被动过」。
         let root = URL(fileURLWithPath: "/tmp/WillDeepProject")
         let state = AgentMemoryState(settings: .default, memories: [])
         let user = AgentMessage(
@@ -118,15 +120,19 @@ struct AgentSelfLearningTests {
             workspaceURL: root
         )
 
-        #expect(state.memories.contains { $0.scope == .project })
-        #expect(state.memories.contains { $0.content.contains("proactively save necessary memory") })
-        #expect(state.memories.contains { $0.content.contains("add_memory") })
-        #expect(state.memories.contains { $0.content.contains("create_user_skill") })
-        #expect(state.memories.contains { $0.content.contains("MCP") && $0.content.contains("user-confirmed") })
-        #expect(state.memories.contains { $0.content.contains("explicit user confirmation") })
-        #expect(state.memories.contains { $0.content.contains("Search query:") })
-        #expect(state.memories.contains { $0.content.contains("search_mcp_servers") })
-        #expect(events.contains { $0.kind == .memory && $0.status == .saved })
+        // 关键回归:memory store 保持空的,什么都没有偷偷写进去。
+        #expect(state.memories.isEmpty)
+        // 事件里应该有一条 `.memory / .suggested`,带着 draft。
+        let memoryEvent = try #require(events.first { $0.kind == .memory })
+        #expect(memoryEvent.status == .suggested)
+        #expect(memoryEvent.action?.requiresUserConfirmation == true)
+        let drafts = memoryEvent.pendingMemoryDrafts
+        #expect(!drafts.isEmpty)
+        #expect(drafts.allSatisfy { $0.scope == .project })
+        #expect(drafts.contains { $0.content.contains("add_memory") })
+        #expect(drafts.contains { $0.content.contains("create_user_skill") })
+        #expect(drafts.contains { $0.content.contains("Search query:") })
+        // MCP suggestion 事件本来就是 .suggested,保留不变。
         #expect(events.contains { $0.kind == .mcpSuggestion && $0.detail.contains("Search query:") })
         let mcpEvent = try #require(events.first { $0.kind == .mcpSuggestion })
         #expect(mcpEvent.action?.kind == .suggestMCPInstall)
@@ -139,13 +145,28 @@ struct AgentSelfLearningTests {
 
     @Test
     func automaticSelfLearningMemoriesSplitMemorySkillAndMCPPolicy() {
+        // rc16:matcher 现在需要先过「strong durable intent」闸 —— 测试
+        // 文本前面补一句「以后请」,代表用户明确表达持久化偏好,符合
+        // 真实触发条件。原文本作为弱信号在新阈值下应该被过滤掉,这才
+        // 是想要的行为。
         let memories = AgentSelfLearning.automaticSelfLearningMemories(
-            from: "需要实现自学习：自动地添加必要的 memory，自主地添加必要的 skill，必要时搜索和建议安装 mcp。"
+            from: "以后请实现自学习：自动地添加必要的 memory，自主地添加必要的 skill，必要时搜索和建议安装 mcp。"
         )
 
         #expect(memories.contains { $0.contains("add_memory") })
         #expect(memories.contains { $0.contains("create_user_skill") })
         #expect(memories.contains { $0.contains("MCP") && $0.contains("search") })
+    }
+
+    @Test
+    func automaticSelfLearningMemoriesSkippedWithoutStrongIntent() {
+        // rc16:没有 strong intent 词时,framework 那 3 条规则种子被门
+        // 拦下来,不应该出现。externalGap memory 是另外一道闸,这条
+        // 测试文本不包含「cannot access」之类,所以整体返回空。
+        let memories = AgentSelfLearning.automaticSelfLearningMemories(
+            from: "我们顺手聊聊 memory、skill 和 mcp 这几个概念,看看怎么用。"
+        )
+        #expect(memories.isEmpty)
     }
 
     @Test
