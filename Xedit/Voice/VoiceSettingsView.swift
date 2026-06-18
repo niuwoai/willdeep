@@ -2,97 +2,145 @@
 //  VoiceSettingsView.swift
 //  WillDeep
 //
-//  Phase 2 voice-to-text settings panel. Lives inside the existing
-//  EditorSettingsView "AI Providers" tab as its own Section. Surfaces
-//  three actions:
-//   1. Import from fastv (0-download symlink)
-//   2. Download SenseVoice model (~937 MB)
-//   3. Show where the model lives + how to wipe it
+//  1.86.0 起独占 Settings → Voice tab。整页布局,把下载/导入按钮放到
+//  最显眼的位置,并展示模型路径、占用、状态。语音相关的所有 UI 入口
+//  以后都收敛到这里。
 //
 
 import SwiftUI
+import AppKit
 
 struct VoiceSettingsView: View {
     @StateObject private var downloader = VoiceModelDownloader.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: VoiceModelDownloader.isModelInstalled ? "checkmark.circle.fill" : "xmark.circle")
-                    .foregroundStyle(VoiceModelDownloader.isModelInstalled ? .green : .secondary)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                header
+                statusCard
+                actionRow
+                progressView
+                footer
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 8)
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("On-device Voice (SenseVoice)", systemImage: "waveform")
+                .font(.title3.weight(.semibold))
+            Text("Push-to-talk in the composer transcribes 100% on-device. Nothing leaves your Mac.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var statusCard: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: VoiceModelDownloader.isModelInstalled ? "checkmark.circle.fill" : "arrow.down.circle")
+                .font(.system(size: 22))
+                .foregroundStyle(VoiceModelDownloader.isModelInstalled ? .green : .accentColor)
+            VStack(alignment: .leading, spacing: 4) {
                 Text(VoiceModelDownloader.isModelInstalled
                      ? "SenseVoice model installed"
-                     : "SenseVoice model not yet downloaded")
-                    .font(.system(size: 12))
+                     : "Model not installed yet")
+                    .font(.system(size: 13, weight: .medium))
+                Text(VoiceModelDownloader.isModelInstalled
+                     ? "Mic button in composer is enabled. Press and hold to record, release to transcribe."
+                     : "Click Download below (~937 MB). After install the mic button in composer goes live automatically.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.primary.opacity(0.04))
+        )
+    }
 
-            Text("`/transcribe` and other voice features run 100% on-device using SenseVoice ONNX. The ~937 MB model lives at `\(VoiceModelLocation.modelDirectory.path)`.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
+    private var actionRow: some View {
+        HStack(spacing: 10) {
+            if !VoiceModelDownloader.isModelInstalled {
+                Button {
+                    Task { await downloader.download() }
+                } label: {
+                    Label("Download model (~937 MB)", systemImage: "arrow.down.to.line")
+                        .frame(minWidth: 220)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(isBusy)
 
-            stateView
-
-            HStack(spacing: 8) {
-                if VoiceModelDownloader.canImportFromFastv && !VoiceModelDownloader.isModelInstalled {
-                    Button("Import from fastv") {
+                if VoiceModelDownloader.canImportFromFastv {
+                    Button {
                         Task { try? await downloader.importFromFastv() }
+                    } label: {
+                        Label("Import from fastv (0 MB)", systemImage: "link")
                     }
                     .disabled(isBusy)
-                    .help("Symlink an existing fastv model copy — 0 bytes downloaded.")
+                    .help("Symlink an existing fastv model copy — no download.")
                 }
-
-                if !VoiceModelDownloader.isModelInstalled {
-                    Button("Download (~937 MB)") {
-                        Task { await downloader.download() }
-                    }
-                    .disabled(isBusy)
-                    .help("Stream the model file from the CDN. Resume on failure is NOT supported in this rc — start over if interrupted.")
+            } else {
+                Button {
+                    NSWorkspace.shared.activateFileViewerSelecting([VoiceModelLocation.modelDirectory])
+                } label: {
+                    Label("Reveal in Finder", systemImage: "folder")
                 }
-
-                if isBusy {
-                    Button("Cancel") {
-                        downloader.cancel()
-                    }
-                }
-
-                Spacer()
             }
+
+            if isBusy {
+                Button("Cancel") { downloader.cancel() }
+            }
+
+            Spacer()
         }
     }
 
     @ViewBuilder
-    private var stateView: some View {
+    private var progressView: some View {
         switch downloader.state {
-        case .idle:
+        case .idle, .finished:
             EmptyView()
         case .importing:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text("Importing from fastv…").font(.caption).foregroundStyle(.secondary)
+                Text("Importing from fastv…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         case .downloading(let progress, let received, let total, let speed):
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 ProgressView(value: progress, total: 1.0)
                 Text("\(formatBytes(received)) / \(formatBytes(total)) — \(formatBytes(Int64(speed)))/s")
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
-        case .finished:
-            HStack(spacing: 6) {
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                Text("Ready. Use `/transcribe <path>` in agent composer.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         case .failed(let message):
             HStack(spacing: 6) {
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
                 Text(message)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(3)
+                    .lineLimit(4)
             }
+        }
+    }
+
+    private var footer: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Model location")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(VoiceModelLocation.modelDirectory.path)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
         }
     }
 

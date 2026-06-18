@@ -132,6 +132,12 @@ struct EditorSettingsView: View {
                 .tabItem {
                     Label(L10n.Settings.tabTools, systemImage: "terminal")
                 }
+
+            VoiceSettingsView()
+                .tag(EditorSettingsTab.voice)
+                .tabItem {
+                    Label(L10n.Settings.tabVoice, systemImage: "waveform")
+                }
         }
         .padding(20)
         .frame(
@@ -288,10 +294,6 @@ struct EditorSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-            }
-
-            Section("Voice (on-device)") {
-                VoiceSettingsView()
             }
 
             Section(L10n.Settings.sectionWebTools) {

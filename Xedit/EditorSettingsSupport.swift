@@ -24,6 +24,7 @@ enum EditorSettingsTab: Hashable {
     case skills
     case mcp
     case tools
+    case voice
 }
 
 @MainActor

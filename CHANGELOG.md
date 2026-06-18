@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.86.0 - 2026-06-18
+
+### Added
+
+- **Settings → Voice 独立 tab**:语音模型相关从原来塞在「AI Providers」尾巴的 Section 拆出来,升级为顶级 tab(`waveform` icon)。整页布局:状态卡片告诉你模型有没有装、装了之后 composer mic 自动就绪;一个 prominent 的「Download model (~937 MB)」大按钮,装好后切成「Reveal in Finder」;有 fastv 本地副本时仍可一键 symlink 导入(0 MB);进度条直接显示「已下载/总大小 — 速度」。模型路径放在底部,等宽字体可选中复制。`EditorSettingsTab` 新增 `.voice` case,`L10n.Settings.tabVoice` 默认值 "Voice"。
+- **Push-to-talk Waveform 浮窗**:按住 composer mic 按钮录音时,屏幕底部中央浮出 240×80 毛玻璃小窗;5 根 bar 实时跟随麦克风电平起伏(基础 30Hz 采样,`AVAudioRecorder.averagePower` 转线性归一化),松开切转录态时变成旋转 spinner,完成/失败/取消时整体淡出。窗口骨架从 `~/Sites/fastv` 的 `WaveformView` 移植精简,删掉 AI 修正相关状态,不依赖 `UserPreferences`,固定底部居中位置;`level = maximumWindow`、`collectionBehavior` 包含 `.canJoinAllSpaces` + `.fullScreenAuxiliary`,在全屏 app 上也能浮出;`ignoresMouseEvents` 不挡用户操作。
+- `VoiceRecorder` 同步打开 `isMeteringEnabled`,通过 `Timer.add(_:forMode: .common)` 喂电平,start/stop/cancel/failed 各路径都接入 overlay 的 show/setTranscribing/hide。
+
+### 版本
+
+- 新功能(独立 Voice tab + 录音浮窗),按规则提升正式版本:1.85.0-rc23 → **1.86.0**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / MOBILE_GATEWAY_REQUIREMENTS (4 处) / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
 ## 1.85.0-rc23 - 2026-06-18
 
 ### Added

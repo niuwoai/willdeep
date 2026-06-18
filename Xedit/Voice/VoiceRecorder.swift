@@ -32,8 +32,13 @@ final class VoiceRecorder: ObservableObject {
 
     private var recorder: AVAudioRecorder?
     private var recordingURL: URL?
+    private var meterTimer: Timer?
 
     private init() {}
+
+    deinit {
+        meterTimer?.invalidate()
+    }
 
     /// 录音目录：~/Library/Application Support/WillDeep/Voice/Recordings/
     private static var recordingsDirectory: URL {
@@ -81,7 +86,7 @@ final class VoiceRecorder: ObservableObject {
         ]
         do {
             let r = try AVAudioRecorder(url: url, settings: settings)
-            r.isMeteringEnabled = false
+            r.isMeteringEnabled = true
             guard r.record() else {
                 state = .failed(message: "Failed to start recording (AVAudioRecorder.record() returned false).")
                 return
@@ -89,9 +94,35 @@ final class VoiceRecorder: ObservableObject {
             recorder = r
             recordingURL = url
             state = .recording(startedAt: Date())
+            WaveformOverlayWindowManager.shared.show()
+            startMetering()
         } catch {
             state = .failed(message: "Failed to init recorder: \(error.localizedDescription)")
         }
+    }
+
+    /// 按 ~30Hz 把 AVAudioRecorder 的平均电平归一化后推给浮窗。
+    /// dB 到 [0, 1] 用 fastv 同款经验公式:`pow(10, dB / 20)`,再轻度
+    /// 抬底,避免完全静音时 bar 塌成一条线。
+    private func startMetering() {
+        meterTimer?.invalidate()
+        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, let r = self.recorder else { return }
+                r.updateMeters()
+                let db = r.averagePower(forChannel: 0)
+                let linear = pow(10.0, Double(db) / 20.0)
+                let normalized = Float(min(max(linear * 1.6, 0.05), 1.0))
+                WaveformOverlayWindowManager.shared.updateAudioLevel(normalized)
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        meterTimer = timer
+    }
+
+    private func stopMetering() {
+        meterTimer?.invalidate()
+        meterTimer = nil
     }
 
     /// 松开 mic 按钮触发。停录 → 转录 → 返回 transcript 字符串。
@@ -105,7 +136,9 @@ final class VoiceRecorder: ObservableObject {
         r.stop()
         recorder = nil
         recordingURL = nil
+        stopMetering()
         state = .transcribing
+        WaveformOverlayWindowManager.shared.setTranscribing()
 
         do {
             let transcript = try await SpeechTranscriber.transcribe(
@@ -115,10 +148,12 @@ final class VoiceRecorder: ObservableObject {
             )
             // 录音文件留磁盘 —— phase 3 加自动清理 / 历史浏览。
             state = .idle
+            WaveformOverlayWindowManager.shared.hide()
             let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? nil : trimmed
         } catch {
             state = .failed(message: "Transcription failed: \(error.localizedDescription)")
+            WaveformOverlayWindowManager.shared.hide()
             return nil
         }
     }
@@ -133,6 +168,8 @@ final class VoiceRecorder: ObservableObject {
         }
         recorder = nil
         recordingURL = nil
+        stopMetering()
         state = .idle
+        WaveformOverlayWindowManager.shared.hide()
     }
 }

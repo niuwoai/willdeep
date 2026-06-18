@@ -668,6 +668,7 @@ enum L10n {
         static let tabLocalAgents = String(localized: "settings.tab.local-agents", defaultValue: "Local Agents")
         static let tabRemoteRuntimes = String(localized: "settings.tab.remote-runtimes", defaultValue: "Runtimes")
         static let tabMobileGateway = String(localized: "settings.tab.mobile-gateway", defaultValue: "Mobile Gateway")
+        static let tabVoice = String(localized: "settings.tab.voice", defaultValue: "Voice")
         static let agentBarSettings = String(localized: "agent.statusbar.settings", defaultValue: "Settings")
         static let agentBarMobileGateway = String(localized: "agent.statusbar.mobile-gateway", defaultValue: "Mobile Gateway")
 
