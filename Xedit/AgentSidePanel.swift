@@ -45,6 +45,7 @@ enum AgentSidePanelKind: String, CaseIterable, Identifiable {
 struct AgentSidePanelHost: View {
     @EnvironmentObject var appState: AppState
     @Binding var kind: AgentSidePanelKind?
+    @Binding var selectedFile: URL?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -87,11 +88,11 @@ struct AgentSidePanelHost: View {
         case .diff:
             AgentSidePanelDiffView()
         case .files:
-            AgentSidePanelFilesView()
+            AgentSidePanelFilesView(selectedFile: $selectedFile, kind: $kind)
         case .plan:
             AgentSidePanelPlanView()
         case .preview:
-            AgentSidePanelPreviewView()
+            AgentSidePanelPreviewView(selectedFile: $selectedFile)
         case .none:
             comingSoonPlaceholder
         }
@@ -305,9 +306,10 @@ struct AgentSidePanelDiffView: View {
 
 struct AgentSidePanelFilesView: View {
     @EnvironmentObject var appState: AppState
+    @Binding var selectedFile: URL?
+    @Binding var kind: AgentSidePanelKind?
     @State private var root: FileSystemNode?
     @State private var rootPath: String?
-    @State private var selectedFileURL: URL?
     @State private var selectedFolderURL: URL?
 
     var body: some View {
@@ -315,7 +317,7 @@ struct AgentSidePanelFilesView: View {
             if let root {
                 FileTreeView(
                     root: root,
-                    selectedURL: $selectedFileURL,
+                    selectedURL: $selectedFile,
                     selectedFolderURL: $selectedFolderURL
                 )
             } else {
@@ -324,6 +326,14 @@ struct AgentSidePanelFilesView: View {
         }
         .onAppear { rebuildIfNeeded() }
         .onChange(of: appState.activeAgentSessionID) { _, _ in rebuildIfNeeded() }
+        .onChange(of: selectedFile) { _, newValue in
+            // 用户点的若是 markdown / html,顺手把面板切到 Preview,
+            // 看效果不用再切菜单。其它文件类型保持在 Files 内,
+            // 避免误切到 Preview 又显示「unsupported」。
+            guard let url = newValue,
+                  PreviewPaneCompatibility.supports(Language.fromURL(url)) else { return }
+            kind = .preview
+        }
     }
 
     private var placeholderNoWorkspace: some View {
@@ -408,7 +418,8 @@ struct AgentSidePanelPlanView: View {
 
 struct AgentSidePanelPreviewView: View {
     @EnvironmentObject var appState: AppState
-    @State private var currentURL: URL?
+    @Binding var selectedFile: URL?
+    @State private var loadedURL: URL?
     @State private var content: String = ""
     @State private var language: Language?
     @State private var loadError: String?
@@ -419,17 +430,19 @@ struct AgentSidePanelPreviewView: View {
             Divider().opacity(0.5)
             previewBody
         }
-        .onAppear { autoSelectIfNeeded() }
+        .onAppear { syncFromBinding() }
+        .onChange(of: selectedFile) { _, _ in syncFromBinding() }
         .onChange(of: appState.activeAgentSessionID) { _, _ in
-            currentURL = nil
+            selectedFile = nil
+            loadedURL = nil
             content = ""
-            autoSelectIfNeeded()
+            syncFromBinding()
         }
     }
 
     private var toolbar: some View {
         HStack(spacing: 6) {
-            if let currentURL {
+            if let currentURL = loadedURL {
                 Text(currentURL.lastPathComponent)
                     .font(AgentDesign.captionFont)
                     .foregroundStyle(.secondary)
@@ -457,7 +470,7 @@ struct AgentSidePanelPreviewView: View {
     private var previewBody: some View {
         if let loadError {
             placeholder(systemImage: "exclamationmark.triangle", text: loadError)
-        } else if currentURL == nil {
+        } else if loadedURL == nil {
             placeholderWithPicker
         } else if language == nil || !PreviewPaneCompatibility.supports(language) {
             placeholder(systemImage: "doc.questionmark", text: L10n.AgentSidePanel.previewUnsupported)
@@ -520,11 +533,26 @@ struct AgentSidePanelPreviewView: View {
         .padding(20)
     }
 
-    private func autoSelectIfNeeded() {
-        guard currentURL == nil, let root = resolvedWorkspaceRoot() else { return }
+    /// 同步规则:
+    /// 1. selectedFile 有值且 != loadedURL → 读它
+    /// 2. selectedFile 为 nil 且 loadedURL 也是 nil → 尝试 workspace README
+    /// 3. 其余情况 → 维持当前状态(不刷)
+    private func syncFromBinding() {
+        if let url = selectedFile, url != loadedURL {
+            load(url: url)
+            return
+        }
+        if selectedFile == nil, loadedURL == nil {
+            autoSelectReadme()
+        }
+    }
+
+    private func autoSelectReadme() {
+        guard let root = resolvedWorkspaceRoot() else { return }
         for candidate in ["README.md", "Readme.md", "readme.md", "README", "README.markdown"] {
             let url = root.appendingPathComponent(candidate)
             if FileManager.default.fileExists(atPath: url.path) {
+                selectedFile = url
                 load(url: url)
                 return
             }
@@ -540,6 +568,7 @@ struct AgentSidePanelPreviewView: View {
             panel.directoryURL = root
         }
         if panel.runModal() == .OK, let url = panel.url {
+            selectedFile = url
             load(url: url)
         }
     }
@@ -549,11 +578,11 @@ struct AgentSidePanelPreviewView: View {
         do {
             let data = try Data(contentsOf: url, options: .mappedIfSafe)
             content = String(decoding: data, as: UTF8.self)
-            currentURL = url
+            loadedURL = url
             language = Language.fromURL(url)
         } catch {
             content = ""
-            currentURL = url
+            loadedURL = url
             language = nil
             loadError = error.localizedDescription
         }

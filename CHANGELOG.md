@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.85.0-rc23 - 2026-06-18
+
+### Added
+
+- **Files → Preview 联动**:Agent 侧栏 Files 里点击 markdown / html 文件,自动把面板切到 Preview 并 render 该文件,不需要再手动开菜单。其它类型文件保持在 Files 内,避免误切去 Preview 显示「unsupported」。
+- 「当前选中的预览文件」状态从子 view 的 `@State` 上提到 `AgentModeView` 的 `@State private var sidePanelFile: URL?`,通过 `@Binding` 同时穿给 `AgentSidePanelFilesView` 和 `AgentSidePanelPreviewView`。同一时间只挂一个面板,但切面板时子 view 会被拆掉,所以「选中态」必须留在父 view 才能跨面板保活。Preview view 内部新增 `syncFromBinding()`:binding 有值就读它,否则尝试 workspace README,其余维持不刷,避免不必要的 IO。
+- Files 复用同文件里的 `PreviewPaneCompatibility.supports(_:)` 判定文件是否能预览,逻辑只剩一处。
+
+### 版本
+
+- 一项 UX 串联,bump rc:1.85.0-rc22 → **1.85.0-rc23**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / MOBILE_GATEWAY_REQUIREMENTS (4 处) / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
 ## 1.85.0-rc22 - 2026-06-18
 
 ### Added

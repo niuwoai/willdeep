@@ -15,6 +15,11 @@ struct AgentModeView: View {
     @EnvironmentObject var appState: AppState
     @State private var sidebarWidth: CGFloat = 230
     @State private var sidePanel: AgentSidePanelKind?
+    /// 共享给 Files 和 Preview 两个子面板:Files 里点击 markdown/html
+    /// 时写入,Preview 直接读它 render。lift 到 AgentModeView 是因为
+    /// 同一时间只有一个面板挂着,Files 切到 Preview 时子 view 会被
+    /// 拆掉,@State 留在父 view 才能跨面板保活。
+    @State private var sidePanelFile: URL?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -39,7 +44,7 @@ struct AgentModeView: View {
 
             if sidePanel != nil {
                 Divider()
-                AgentSidePanelHost(kind: $sidePanel)
+                AgentSidePanelHost(kind: $sidePanel, selectedFile: $sidePanelFile)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
