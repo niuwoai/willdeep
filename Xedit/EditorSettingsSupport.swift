@@ -22,6 +22,7 @@ enum EditorSettingsTab: Hashable {
     case memory
     case rules
     case skills
+    case connectors
     case mcp
     case tools
     case voice

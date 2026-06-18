@@ -8369,6 +8369,328 @@
         }
       }
     },
+    "settings.connectors.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manage team collaboration platforms that WillDeep can use for notifications, commands, and document publishing."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理 WillDeep 用于通知、指令和文档发布的团队协作平台。"
+          }
+        }
+      }
+    },
+    "settings.connectors.platforms-section" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Platforms" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "平台" } }
+      }
+    },
+    "settings.connectors.capabilities-section" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Capabilities" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "能力" } }
+      }
+    },
+    "settings.connectors.safety-section" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Safety" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "安全" } }
+      }
+    },
+    "settings.connectors.experimental" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Experimental" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "实验功能" } }
+      }
+    },
+    "settings.connectors.enabled-toggle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Enable connector" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启用连接器" } }
+      }
+    },
+    "settings.connectors.enabled-count" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ of %2$@ connectors enabled" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已启用 %1$@ / %2$@ 个连接器" } }
+      }
+    },
+    "settings.connectors.configuration-section" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ Configuration" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 配置" } }
+      }
+    },
+    "settings.connectors.status-line" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ · %2$@ · %3$@ capabilities" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ · %2$@ · %3$@ 项能力" } }
+      }
+    },
+    "settings.connectors.auth-mode" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Authorization" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "授权方式" } }
+      }
+    },
+    "settings.connectors.connection-state" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "State" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "状态" } }
+      }
+    },
+    "settings.connectors.app-id" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "App ID" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "App ID" } }
+      }
+    },
+    "settings.connectors.app-id-prompt" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Platform app_id / client_id" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "平台 app_id / client_id" } }
+      }
+    },
+    "settings.connectors.tenant-id" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Tenant / Corp ID" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "租户 / 企业 ID" } }
+      }
+    },
+    "settings.connectors.tenant-id-prompt" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Optional enterprise identifier" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "可选企业标识" } }
+      }
+    },
+    "settings.connectors.redirect-uri" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Redirect URI" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "回调 URI" } }
+      }
+    },
+    "settings.connectors.redirect-uri-prompt" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "https://fly.niuwoai.com/oauth/<platform>/callback" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "https://fly.niuwoai.com/oauth/<platform>/callback" } }
+      }
+    },
+    "settings.connectors.authorization-url" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Authorization URL" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "授权 URL" } }
+      }
+    },
+    "settings.connectors.authorization-url-prompt" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "https://... or URL with {client_id}, {redirect_uri}, {state}" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "https://... 或带 {client_id}、{redirect_uri}、{state} 的 URL" } }
+      }
+    },
+    "settings.connectors.credential-reference" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Credential reference" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "凭据引用" } }
+      }
+    },
+    "settings.connectors.credential-reference-prompt" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Keychain item or env name, not the secret itself" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Keychain 项或环境变量名，不填密钥本体" } }
+      }
+    },
+    "settings.connectors.secret-storage-note" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Secrets and OAuth tokens should live in macOS Keychain. This panel stores only non-sensitive routing metadata." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Secret 和 OAuth token 应存入 macOS Keychain。本面板只保存非敏感路由元数据。" } }
+      }
+    },
+    "settings.connectors.authorization-url-help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Leave empty to only prepare the callback and Keychain reference. When filled, WillDeep appends standard OAuth query parameters unless placeholders are present." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "留空时只准备回调和 Keychain 引用。填写后，如无占位符，WillDeep 会追加标准 OAuth 查询参数。" } }
+      }
+    },
+    "settings.connectors.prepare-authorization" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Prepare authorization" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "准备授权" } }
+      }
+    },
+    "settings.connectors.copy-redirect-uri" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy redirect URI" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复制回调 URI" } }
+      }
+    },
+    "settings.connectors.clear-credentials" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear credentials" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清理凭据" } }
+      }
+    },
+    "settings.connectors.open-docs" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open docs" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开文档" } }
+      }
+    },
+    "settings.connectors.default-space" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Default doc space" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "默认文档空间" } }
+      }
+    },
+    "settings.connectors.default-space-prompt" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Folder, wiki, or drive token" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "文件夹、知识库或云盘 token" } }
+      }
+    },
+    "settings.connectors.default-chat" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Default chat" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "默认会话" } }
+      }
+    },
+    "settings.connectors.default-chat-prompt" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Group, robot, or conversation ID" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "群、机器人或会话 ID" } }
+      }
+    },
+    "settings.connectors.write-policy" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Write policy" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "写入策略" } }
+      }
+    },
+    "settings.connectors.cloud-relay" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Use WillDeep Cloud Relay for incoming events" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用 WillDeep Cloud Relay 接收事件" } }
+      }
+    },
+    "settings.connectors.cloud-relay-description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Incoming @mentions need a public callback. Cloud Relay can receive platform events and forward them to this Mac when it is online." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "接收 @ 提及需要公网回调。Cloud Relay 可先接平台事件，再在这台 Mac 在线时转发。" } }
+      }
+    },
+    "settings.connectors.feishu-docs-note" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Feishu document writing is feasible through OpenAPI after OAuth scopes are granted. WillDeep should preview generated docs before publishing." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "飞书文档写入可在 OAuth 授权范围齐全后通过 OpenAPI 实现。WillDeep 应在发布前先预览生成文档。" } }
+      }
+    },
+    "settings.connectors.authorization-prepared" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ is ready for OAuth wiring." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 已准备好接入 OAuth 流程。" } }
+      }
+    },
+    "settings.connectors.authorization-opened" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ authorization page opened." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 授权页面已打开。" } }
+      }
+    },
+    "settings.connectors.authorization-needs-app-id" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add an App ID before preparing %@ authorization." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "准备 %@ 授权前需要先填写 App ID。" } }
+      }
+    },
+    "settings.connectors.redirect-uri-copied" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ redirect URI copied." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 回调 URI 已复制。" } }
+      }
+    },
+    "settings.connectors.credentials-cleared" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ local credentials cleared." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 本地凭据已清理。" } }
+      }
+    },
+    "settings.connectors.platform.feishu" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Feishu" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "飞书" } } } },
+    "settings.connectors.platform.dingtalk" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "DingTalk" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "钉钉" } } } },
+    "settings.connectors.platform.wecom" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "WeCom" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "企业微信" } } } },
+    "settings.connectors.platform.wechat-claw" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "WeChat / Claw" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "微信 / Claw" } } } },
+    "settings.connectors.summary.feishu" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Best first target for OAuth, bots, and AI-generated docs." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最适合作为首个 OAuth、机器人和 AI 文档发布目标。" } } } },
+    "settings.connectors.summary.dingtalk" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Good for enterprise bots, approvals, and operational notifications." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "适合企业机器人、审批和运维通知。" } } } },
+    "settings.connectors.summary.wecom" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Official bridge for WeChat-style enterprise messaging." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "面向微信生态企业消息的官方桥梁。" } } } },
+    "settings.connectors.summary.wechat-claw" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Desktop automation bridge for personal workflows; keep it out of production defaults." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "个人工作流的桌面自动化桥接，默认不建议用于生产。" } } } },
+    "settings.connectors.auth.webhook" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Webhook" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Webhook" } } } },
+    "settings.connectors.auth.oauth" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "OAuth" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "OAuth" } } } },
+    "settings.connectors.auth.cloud-relay" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Cloud Relay" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "云端中继" } } } },
+    "settings.connectors.auth.desktop-automation" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Desktop automation" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "桌面自动化" } } } },
+    "settings.connectors.auth.webhook-help" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "One-way robot messages and simple slash-like workflows. Fast to set up, limited user context." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用于单向机器人消息和简单指令，配置快，但用户上下文有限。" } } } },
+    "settings.connectors.auth.oauth-help" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "User-authorized access for docs, drive, chat, and future write actions. Tokens belong in Keychain." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用户授权访问文档、云盘、聊天和后续写入动作，token 应存入 Keychain。" } } } },
+    "settings.connectors.auth.cloud-relay-help" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Public event callbacks land in WillDeep Cloud Relay, then forward to the Mac app." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "公网事件先进入 WillDeep Cloud Relay，再转发给 Mac App。" } } } },
+    "settings.connectors.auth.desktop-automation-help" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Local GUI automation for personal workflows. Useful as a fallback, fragile for teams." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地 GUI 自动化，适合个人兜底流程，团队场景稳定性较弱。" } } } },
+    "settings.connectors.state.not-configured" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Not configured" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未配置" } } } },
+    "settings.connectors.state.ready" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Ready to authorize" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "可授权" } } } },
+    "settings.connectors.state.connected" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Connected" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已连接" } } } },
+    "settings.connectors.state.needs-review" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Needs review" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要检查" } } } },
+    "settings.connectors.capability.send-messages" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Send messages" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "发送消息" } } } },
+    "settings.connectors.capability.receive-commands" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Receive @mentions and commands" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "接收 @ 提及和指令" } } } },
+    "settings.connectors.capability.create-docs" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Create documents" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "创建文档" } } } },
+    "settings.connectors.capability.edit-docs" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit existing documents" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编辑已有文档" } } } },
+    "settings.connectors.capability.import-docs" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Import documents as context" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "导入文档作为上下文" } } } },
+    "settings.connectors.capability.calendar" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Calendar context" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "日历上下文" } } } },
+    "settings.connectors.capability.tasks" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Tasks" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "任务" } } } },
+    "settings.connectors.capability.approvals" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Approvals" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "审批" } } } },
+    "settings.connectors.capability.desktop-automation" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Desktop automation" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "桌面自动化" } } } },
+    "settings.connectors.policy.preview-then-publish" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Preview before publish" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "发布前预览" } } } },
+    "settings.connectors.policy.ask-every-time" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Ask every time" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "每次询问" } } } },
+    "settings.connectors.policy.allow-new-docs" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Allow new docs only" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "只允许新建文档" } } } },
     "settings.memory.add-memory" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -12578,6 +12900,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "技能"
+          }
+        }
+      }
+    },
+    "settings.tab.connectors" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connectors"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接器"
           }
         }
       }

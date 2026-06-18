@@ -121,6 +121,12 @@ struct EditorSettingsView: View {
                     Label(L10n.Settings.tabSkills, systemImage: "wand.and.stars")
                 }
 
+            CollaborationConnectorSettingsView()
+                .tag(EditorSettingsTab.connectors)
+                .tabItem {
+                    Label(L10n.Settings.tabConnectors, systemImage: "puzzlepiece.extension")
+                }
+
             AgentMCPSettingsView()
                 .tag(EditorSettingsTab.mcp)
                 .tabItem {

@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.90.0-rc3 - 2026-06-18
+
+### Added
+- `willdeep-agent` 新增 `serve-collab-relay` 子命令,可部署为 `https://fly.niuwoai.com` 的公网协作 relay,提供 `/collab/health`、`/oauth/{platform}/callback`、`/events/{platform}` 和 token 保护的 `/events/poll`。
+- 协作 relay 支持飞书、钉钉和企业微信的 OAuth callback 承接,默认将公网 HTTPS 回调转回 `willdeep://oauth/<platform>/callback`,方便 Mac App 继续处理授权码和 state。
+- 协作 relay 支持飞书/钉钉/企业微信事件入口、飞书 URL verification `challenge` 原样响应、1 MiB 事件体限制、内存事件队列和 bearer token 轮询。
+- 新增 `docs/COLLABORATION_CONNECTORS.md`,记录 `fly.niuwoai.com` 部署入口、飞书 L4/L5 文档协作目标、钉钉深化路径和上线检查清单。
+
+### Changed
+- Mac 端 OAuth 默认回调从本地 scheme 切到 `https://fly.niuwoai.com/oauth/<platform>/callback`,本地 `willdeep://oauth/<platform>/callback` 保留为 relay 跳回 App 的目标。
+- 版本号同步提升到 **1.90.0-rc3**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / MOBILE_GATEWAY_REQUIREMENTS / AGENT_HARNESS_IMPROVEMENT_PRIORITIES / Collaboration Connectors 文档同步。
+
+## 1.90.0-rc2 - 2026-06-18
+
+### Added
+- Connectors 设置页继续补齐 OAuth 接入骨架:支持授权 URL 配置、默认 `willdeep://oauth/<platform>/callback` 回调 URI、复制回调 URI、打开授权入口、临时 state 校验和本地凭据清理。
+- 新增 `CollaborationConnectorOAuthCoordinator`,集中管理协作平台 Keychain 引用、OAuth state、授权 URL 生成和回调解析;收到授权码后先标记为需要检查,为后续 token exchange 与飞书文档 OpenAPI 写入留出明确边界。
+- macOS App 注册 `willdeep` URL scheme,浏览器授权完成后可回到 WillDeep 并刷新连接器配置状态。
+
+### Changed
+- Connectors 配置模型增加授权 URL 元数据,继续保持 UserDefaults 只保存非敏感配置,secret/token 仍通过 `AgentCredentialStore` 的 Keychain 引用承接。
+- 版本号同步提升到 **1.90.0-rc2**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / MOBILE_GATEWAY_REQUIREMENTS / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
+## 1.90.0-rc1 - 2026-06-18
+
+### Added
+
+- **Settings 新增协作连接器管理**:新增 `CollaborationConnectorModels` / `CollaborationConnectorSettingsView`,在 Settings 里提供 Connectors 标签页,集中管理飞书、钉钉、企业微信和微信/Claw 实验入口。
+- **连接器能力边界可配置**:每个平台可设置启用状态、授权方式(Webhook/OAuth/Cloud Relay/桌面自动化)、连接状态、App ID、租户/企业 ID、回调 URI、默认文档空间、默认会话、能力开关和写入策略。飞书默认覆盖消息、指令和文档创建/编辑/导入,作为后续“AI 写飞书文档”的产品骨架。
+- **敏感信息边界**:连接器面板只保存非敏感路由元数据和 Keychain/env 凭据引用,不直接保存 secret 或 OAuth token;真实授权流程后续应接 macOS Keychain。
+- **回归测试**:新增 `CollaborationConnectorSettingsTests`,覆盖默认平台列表、能力范围规范化和 UserDefaults 持久化。
+
+### 版本
+
+- 新增功能,提升预发布版本:1.89.0-rc6 → **1.90.0-rc1**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / MOBILE_GATEWAY_REQUIREMENTS / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
 ## 1.89.0-rc6 - 2026-06-18
 
 ### Fixed
