@@ -1,0 +1,102 @@
+//
+//  AgentTurnPostStrip.swift
+//  WillDeep
+//
+//  1.85.0-rc13:把原本贴在 transcript 底部的两张大卡片(AgentTurnReportCard
+//  + AgentLearningEventsCard)收成一行紧凑的 footer 图标条 + popover。
+//
+//  动机:用户反馈大卡片每轮都吃掉一屏底部空间 —— "agent learn from this turn
+//  也一样,在当次 AI 输出后简要地用一行告诉用户学到了什么 skill 或加了什么
+//  memory,用户可以展开,并一项项地进行拒绝或复制"。
+//
+//  当前实现范围:仅渲染 CURRENT 轮的数据(`appState.agentLatestTurnReport` /
+//  `appState.agentLearningEvents`),挂在 AgentChatTranscript 的底部哨兵之
+//  上。把这两张卡片彻底从 transcript inline 渲染中移走。
+//
+//  历史轮次的 per-message 图标(显示在 TextKit 历史 footer 上)是另一个量级
+//  的活,需要扩展 AgentChatHistoryChromeRenderer 的 footer chrome 以及加
+//  per-message snapshot 数据 —— 留给后续 rc。
+//
+
+import SwiftUI
+import AppKit
+
+struct AgentTurnPostStrip: View {
+    let report: AgentTurnReport?
+    let learningEvents: [AgentLearningEvent]
+
+    @State private var showReport = false
+    @State private var showLearning = false
+
+    private var hasReport: Bool { report?.hasUsefulContent == true }
+    private var hasLearning: Bool { !learningEvents.isEmpty }
+
+    var body: some View {
+        // 两边数据都没有时不渲染 —— 避免在 transcript 底部留一条空 footprint。
+        if hasReport || hasLearning {
+            HStack(spacing: 14) {
+                if hasReport, let report {
+                    reportButton(report: report)
+                }
+                if hasLearning {
+                    learningButton
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 6)
+        }
+    }
+
+    @ViewBuilder
+    private func reportButton(report: AgentTurnReport) -> some View {
+        Button {
+            showReport.toggle()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "list.bullet.clipboard")
+                    .font(.system(size: 12, weight: .medium))
+                Text("\(report.toolSummary.total)")
+                    .font(AgentDesign.captionFont)
+            }
+            .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .help(L10n.Transcript.postTurnReportTooltip)
+        .popover(isPresented: $showReport, arrowEdge: .top) {
+            AgentTurnReportCard(report: report, initiallyExpanded: true)
+                .padding(12)
+                .frame(width: 520)
+        }
+    }
+
+    @ViewBuilder
+    private var learningButton: some View {
+        Button {
+            showLearning.toggle()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "brain.head.profile")
+                    .font(.system(size: 12, weight: .medium))
+                Text(L10n.Transcript.postTurnLearningOneLiner(String(learningEvents.count)))
+                    .font(AgentDesign.captionFont)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .foregroundStyle(.purple)
+        }
+        .buttonStyle(.plain)
+        .help(L10n.Transcript.postTurnLearningTooltip)
+        .popover(isPresented: $showLearning, arrowEdge: .top) {
+            AgentLearningEventsCard(
+                events: learningEvents,
+                onReject: { event in
+                    AgentLearningReviewStore.mark(id: event.id, decision: .dismissed)
+                },
+                capItems: false
+            )
+            .padding(12)
+            .frame(width: 480)
+        }
+    }
+}

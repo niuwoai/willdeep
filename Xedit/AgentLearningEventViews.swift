@@ -10,10 +10,16 @@ import SwiftUI
 
 struct AgentLearningEventsCard: View {
     let events: [AgentLearningEvent]
+    /// 1.85.0-rc13:popover 形态下传入此回调,每行多出一个 reject(垃圾桶)
+    /// 按钮,点击后 dismiss 该 review item;nil 时(老的 transcript 内嵌
+    /// 卡片用法)只显示复制按钮,与旧行为一致。
+    var onReject: ((AgentLearningEvent) -> Void)? = nil
+    /// rc13:popover 里隐藏 5 条 cap + 「N more」,直接全展示。
+    var capItems: Bool = true
     @State private var copiedEventID: AgentLearningEvent.ID?
 
     private var visibleEvents: [AgentLearningEvent] {
-        Array(events.prefix(5))
+        capItems ? Array(events.prefix(5)) : events
     }
 
     var body: some View {
@@ -37,7 +43,8 @@ struct AgentLearningEventsCard: View {
                     AgentLearningEventRow(
                         event: event,
                         didCopy: copiedEventID == event.id,
-                        onCopy: { copy(event) }
+                        onCopy: { copy(event) },
+                        onReject: onReject.map { reject in { reject(event) } }
                     )
                     if index < visibleEvents.count - 1 {
                         Divider()
@@ -46,7 +53,7 @@ struct AgentLearningEventsCard: View {
                 }
             }
 
-            if events.count > visibleEvents.count {
+            if capItems && events.count > visibleEvents.count {
                 Text(L10n.Transcript.learningMore(String(events.count - visibleEvents.count)))
                     .font(AgentDesign.secondaryFont)
                     .foregroundStyle(.secondary)
@@ -82,6 +89,8 @@ private struct AgentLearningEventRow: View {
     let event: AgentLearningEvent
     let didCopy: Bool
     let onCopy: () -> Void
+    /// rc13:popover 形态下用来 dismiss review item;nil 时不渲染 reject 按钮。
+    var onReject: (() -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -143,6 +152,16 @@ private struct AgentLearningEventRow: View {
                 }
                 .buttonStyle(.plain)
                 .help(didCopy ? L10n.Transcript.learningCopied : L10n.Transcript.learningCopyHelp)
+            }
+
+            if let onReject {
+                Button(action: onReject) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(L10n.Transcript.learningRejectHelp)
             }
         }
         .padding(.vertical, 8)

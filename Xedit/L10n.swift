@@ -1458,6 +1458,14 @@ enum L10n {
         static let learningRecallStrengthWeak = String(localized: "transcript.learning.recall-strength.weak", defaultValue: "weak")
         static let learningCopyHelp = String(localized: "transcript.learning.copy-help", defaultValue: "Copy learning event details")
         static let learningCopied = String(localized: "transcript.learning.copied", defaultValue: "Copied")
+        // 1.85.0-rc13:popover 策略下的 footer 图标 / 单行摘要 / reject 按钮文案
+        static let postTurnReportTooltip = String(localized: "transcript.post-turn.report-tooltip", defaultValue: "Turn audit report")
+        static let postTurnLearningTooltip = String(localized: "transcript.post-turn.learning-tooltip", defaultValue: "Memory / skill / MCP suggestions saved this turn")
+        static func postTurnLearningOneLiner(_ a1: String) -> String {
+            let template = String(localized: "transcript.post-turn.learning-summary", defaultValue: "Agent saved %@ item(s) this turn")
+            return String(format: template, a1)
+        }
+        static let learningRejectHelp = String(localized: "transcript.learning.reject-help", defaultValue: "Dismiss from review queue")
         static let messageTruncatedHelp = String(localized: "transcript.message-truncated.help", defaultValue: "Open in standalone window to view full message content")
         static func messageTruncatedText(_ a1: String, _ a2: String) -> String {
             let template = String(localized: "transcript.message-truncated.text", defaultValue: "Message shows first N characters only")

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.85.0-rc13 - 2026-06-18
+
+### Changed
+
+- **Agent transcript 底部「turn report」和「Agent learned from this turn」两张大卡片收成一行 footer 图标条 + popover**。用户反馈大卡片每轮都吃掉一屏底部空间。
+  - 新建 [AgentTurnPostStrip](Xedit/AgentTurnPostStrip.swift) —— 用 `appState.agentLatestTurnReport` + `appState.agentLearningEvents` 渲染两个紧凑图标(📋 总工具数 / 🧠 一行学到几条),空数据时整条不渲染,不占 footprint。
+  - 点图标弹 popover 展示原卡片完整内容([AgentTurnReportCard](Xedit/AgentTurnReportView.swift) 新增 `initiallyExpanded` 入参,popover 形态下直接展开);[AgentLearningEventsCard](Xedit/AgentLearningEventViews.swift) 新增 `onReject` 回调 + `capItems` 开关,popover 模式下 5 条上限解除、每行多一个垃圾桶按钮(调 `AgentLearningReviewStore.mark(decision: .dismissed)` 把该 review item 从待审队列移除)。
+  - [AgentChatTranscript](Xedit/AgentChatTranscript.swift) 原先 lines 229-237 那两个 inline 卡片去掉,换成 `AgentTurnPostStrip(...)` 单挂。
+  - L10n 新增 `postTurnReportTooltip` / `postTurnLearningTooltip` / `postTurnLearningOneLiner(_)` / `learningRejectHelp`。
+  - **本 rc 只覆盖 CURRENT 轮**。用户也要历史轮次的 per-message footer 图标(挂在 TextKit 历史 footer 上,和 copy / retry 并排)—— 那要扩展 [AgentChatHistoryChromeRenderer.appendMessageFooter](Xedit/AgentChatHistoryChromeRenderer.swift) 的 chrome + 给 `AgentMessage` 加 `turnReportSnapshot` / `learningEventsSnapshot` Codable 字段 + 改 NSTextView 点击路由起 popover,工作量是另一个 rc 的事,等本 rc 跑起来确认 popover 体验对路了再开。
+
+### 版本
+
+- 行为/UI 变更,只 bump rc 号:1.85.0-rc12 → **1.85.0-rc13**。pbxproj×6 / Go agent / Help Info.plist / README / docs / product-overview 同步。
+
 ## 1.85.0-rc12 - 2026-06-17
 
 ### Fixed

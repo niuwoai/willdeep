@@ -226,15 +226,14 @@ struct AgentChatTranscript: View {
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                     }
 
-                    if let report = appState.agentLatestTurnReport {
-                        AgentTurnReportCard(report: report)
-                            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
-                    }
-
-                    if !appState.agentLearningEvents.isEmpty {
-                        AgentLearningEventsCard(events: appState.agentLearningEvents)
-                            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
-                    }
+                    // 1.85.0-rc13:原来这里挂两张大卡片(AgentTurnReportCard
+                    // + AgentLearningEventsCard),每轮都吃半屏。改成一行
+                    // 紧凑的图标条 + popover —— 详见 AgentTurnPostStrip。
+                    AgentTurnPostStrip(
+                        report: appState.agentLatestTurnReport,
+                        learningEvents: appState.agentLearningEvents
+                    )
+                    .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
 
                     Color.clear
                         .frame(height: 1)

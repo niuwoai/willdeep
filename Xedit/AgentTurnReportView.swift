@@ -10,11 +10,20 @@ import SwiftUI
 
 struct AgentTurnReportCard: View {
     let report: AgentTurnReport
+    /// rc13:popover 形态下传 `true`,让卡片以展开态出现 —— popover 本身
+    /// 已经是 affordance,再让用户多点一下折叠 header 是冗余。
+    var initiallyExpanded: Bool = false
     @State private var didCopy = false
     // Collapsed by default — the report is reference detail, not something
     // the user needs in their face every turn. One line until clicked,
     // same affordance as a collapsed tool-call group.
-    @State private var isExpanded = false
+    @State private var isExpanded: Bool
+
+    init(report: AgentTurnReport, initiallyExpanded: Bool = false) {
+        self.report = report
+        self.initiallyExpanded = initiallyExpanded
+        _isExpanded = State(initialValue: initiallyExpanded)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: isExpanded ? 10 : 0) {
