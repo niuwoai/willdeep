@@ -48,8 +48,8 @@ struct VoiceSettingsView: View {
                      : "Model not installed yet")
                     .font(.system(size: 13, weight: .medium))
                 Text(VoiceModelDownloader.isModelInstalled
-                     ? "Mic button in composer is enabled. Press and hold to record, release to transcribe."
-                     : "Click Download below (~937 MB). After install the mic button in composer goes live automatically.")
+                     ? "Mic button in composer is enabled. Press and hold to record, release to transcribe. Tip: hold the Fn key anywhere in the app for the same push-to-talk."
+                     : "Click Download below (~937 MB). After install the mic button in composer goes live and the Fn-key push-to-talk shortcut starts working.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

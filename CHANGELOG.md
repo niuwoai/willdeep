@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.87.0 - 2026-06-18
+
+### Added
+
+- **Fn 键 push-to-talk(app-local)**:Xedit 在前台时,按住 `Fn` 键即开始录音、松开自动转录并把文本 append 到当前 AppState 的 composer 输入。和 composer 里的 mic 按钮走同一条 `VoiceRecorder.shared` 链路,所以一样会浮出 [WaveformOverlayWindow](Xedit/Voice/WaveformOverlayWindow.swift) 看电平。新文件 [FnPushToTalkMonitor.swift](Xedit/Voice/FnPushToTalkMonitor.swift):用 `NSEvent.addLocalMonitorForEvents(.flagsChanged)` 监听,只在 `NSApp.isActive` 时触发(全局监听需要辅助功能授权 + 会和 macOS 听写冲突,所以本期只做 app 内);rising/falling edge 防 Fn+F1 类组合误触发;`didResignActive` 时主动 cancel,防止你按 Fn 后 cmd+tab 走人录音机一直跑。`WillDeepAppDelegate.applicationDidFinishLaunching` 启动时 `install()`。
+- VoiceSettingsView 状态卡片提示加上 Fn 快捷键说明。
+
+### 版本
+
+- 新功能(Fn push-to-talk),按规则提升正式版本:1.86.0 → **1.87.0**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / MOBILE_GATEWAY_REQUIREMENTS (4 处) / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
 ## 1.86.0 - 2026-06-18
 
 ### Added

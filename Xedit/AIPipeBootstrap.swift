@@ -14,6 +14,9 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         AIPipeBootstrap.initialize()
         AppUpdateChecker.checkForUpdatesOnLaunch()
+        MainActor.assumeIsolated {
+            FnPushToTalkMonitor.shared.install()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
