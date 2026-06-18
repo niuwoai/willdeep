@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.85.0-rc20 - 2026-06-18
+
+### Changed
+
+- **DeepResearchWorkflow 全套重写,赶上 Claude `/deep-research` 的对抗性验证能力**(Phase 3 收官)。架构从原本「5 个写死 angle 并发 → 1 个 synthesize」升到「scope → pipeline(search → URL-dedup → fetch+extract) → 3-vote adversarial verify → synthesize」。
+  - **Phase 0 — Scope**:1 个 scope agent 用 `scopeSchema` 把问题动态拆成 3-6 个互补 angle(不再写死 news/docs/reviews/competitors/business),每个 angle 带 label / query / rationale。
+  - **Phase 1 — Pipeline**:per-angle item 级 pipeline(no barrier),每个 angle 走 search → URL-dedup → fetch+extract 三 stage。
+    - Search agent 返回 SearchResult(url/title/snippet/relevance enum)
+    - URL-dedup 用 [WorkflowState](Xedit/WorkflowState.swift) 共享 `DedupState`(`seen: Set<String>` + `remainingFetchSlots`),max 15 个 fetch 预算,预算用完只放 high-relevance 进
+    - Fetch+extract agent 给每个 novel URL 拉页面,评 sourceQuality (primary/secondary/blog/forum/unreliable),提 2-5 个 falsifiable claim + verbatim 引文 + importance (central/supporting/tangential)
+  - **Phase 2 — Verify**:把所有 claim 按 importance 排,取 top 25。每条 claim 派 **3 个 skeptic agent** 默认 refute,`refutationsRequired=2` 票即 kill。每个 verdict 含 evidence + confidence + 可选 counterSource。Quorum 检查:有效 votes < 2 视为 unverified(全 abstain 不能默认通过)。
+  - **Phase 3 — Synthesize**:幸存 claim 喂给 synthesize agent,用 `reportSchema` 强制输出 summary + findings (claim / confidence / sources[] / evidence) + caveats + openQuestions[]。
+  - **最终报告**渲染包含:TL;DR / Findings(按 confidence 标级,sources 内联 cite) / Caveats / Open questions / **Refuted claims**(透明披露被 kill 的声明) / Stats。
+  - 全程用 phase 1 / phase 2 基础设施(schema / pipeline / WorkflowState),无新底层依赖。
+- **/research 短描述**改成 `Adversarially-verified multi-angle web research`,`maxAgents` 从 10 提到 80 给 3-vote × N claims 的扇出留余量。
+
+### Tests
+
+- 新增 [DeepResearchWorkflowTests](XeditTests/DeepResearchWorkflowTests.swift) 7 条:metadata 不退化、`renderEmptyReport` / `renderAllRefutedReport` / `renderFinalReport` 三种终态出合理 markdown、`SynthesisOutput` / `ScopeOutput` Codable 能从 schema-shaped JSON round-trip、`ExtractOutput.toFetched` 透字段正确。端到端跑(真 web_search + 真模型)留给手动 `/research`,不进 CI。
+
+### 三阶段升级收尾
+
+rc18(schema infra) + rc19(pipeline + WorkflowState) + rc20(DeepResearchWorkflow 重写)= Xedit `/research` 现在和 Claude `/deep-research` 同级架构:动态 angle 拆分、源质量分级、falsifiable claim + 引文、URL dedup 预算、3-vote 对抗性验证、refuted claims 透明披露、schema 强约束输出。
+
+### 版本
+
+- 重写已有 workflow + 加配套 tests,bump rc:1.85.0-rc19 → **1.85.0-rc20**。pbxproj×6 / Go agent / Help Info.plist / README / docs / product-overview 同步。
+
 ## 1.85.0-rc19 - 2026-06-18
 
 ### Added
