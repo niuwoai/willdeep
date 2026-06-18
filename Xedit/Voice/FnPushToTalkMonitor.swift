@@ -114,6 +114,11 @@ final class FnPushToTalkMonitor {
             await recorder.start()
             self.isStarting = false
             self.log.info("recorder.start() returned; state=\(String(describing: recorder.state)), pendingStop=\(self.pendingStop)")
+            // 1.87.0-rc3:start 失败如果是权限被拒,主动弹 alert。
+            if case .failed(let msg) = recorder.state,
+               MicPermissionAlert.messageIsPermissionDenied(msg) {
+                MicPermissionAlert.present(message: msg)
+            }
             if self.pendingStop {
                 self.pendingStop = false
                 await self.completeRecording()

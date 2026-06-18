@@ -20,6 +20,12 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
     private var reconnectDesktopToken: String?
     private var reconnectSession: URLSession = .shared
     private var shouldReconnect = false
+    /// 1.87.0-rc3:连续失败次数,做指数退避。每次 receive 失败 +1,
+    /// 收到一帧就归 0。退避公式 `min(750ms * 2^n, 30s)`,gateway 不开
+    /// 时把 Console 刷屏从每秒一次降到 30s 一次。
+    private var consecutiveFailures = 0
+    private static let reconnectBaseDelay: UInt64 = 750_000_000  // 750ms
+    private static let reconnectMaxDelay: UInt64 = 30_000_000_000  // 30s
     private var appStateCancellable: AnyCancellable?
     private var snapshotTask: Task<Void, Never>?
     private var messageEventState = AgentMobileGatewayMessageEventState()
@@ -59,6 +65,7 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         reconnectBaseURL = nil
         reconnectDesktopToken = nil
         reconnectSession = .shared
+        consecutiveFailures = 0
     }
 
     func publishSnapshot() {
@@ -123,6 +130,7 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
                 guard let self else { return }
                 switch result {
                 case .success(let message):
+                    self.consecutiveFailures = 0
                     self.handle(message)
                     self.receiveNext()
                 case .failure(let error):
@@ -184,8 +192,15 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
               let desktopToken = reconnectDesktopToken else {
             return
         }
+        consecutiveFailures += 1
+        // 指数退避:base × 2^(n-1),封顶 30s。
+        let exponent = min(consecutiveFailures - 1, 10)  // 2^10 防溢出
+        let delay = min(
+            Self.reconnectBaseDelay &* UInt64(1 << exponent),
+            Self.reconnectMaxDelay
+        )
         reconnectTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 750_000_000)
+            try? await Task.sleep(nanoseconds: delay)
             guard let self, !Task.isCancelled, self.shouldReconnect else { return }
             self.reconnectTask = nil
             self.open(baseURL: baseURL, desktopToken: desktopToken, session: self.reconnectSession)

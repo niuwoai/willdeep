@@ -50,14 +50,14 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
-				Voice/Libraries/kaldi-native-fbank/csrc/feature-fbank.cc,
-				Voice/Libraries/kaldi-native-fbank/csrc/feature-functions.cc,
-				Voice/Libraries/kaldi-native-fbank/csrc/feature-window.cc,
-				Voice/Libraries/kaldi-native-fbank/csrc/fftsg.c,
-				Voice/Libraries/kaldi-native-fbank/csrc/log.cc,
-				Voice/Libraries/kaldi-native-fbank/csrc/mel-computations.cc,
-				Voice/Libraries/kaldi-native-fbank/csrc/online-feature.cc,
-				Voice/Libraries/kaldi-native-fbank/csrc/rfft.cc,
+				"Voice/Libraries/kaldi-native-fbank/csrc/feature-fbank.cc",
+				"Voice/Libraries/kaldi-native-fbank/csrc/feature-functions.cc",
+				"Voice/Libraries/kaldi-native-fbank/csrc/feature-window.cc",
+				"Voice/Libraries/kaldi-native-fbank/csrc/fftsg.c",
+				"Voice/Libraries/kaldi-native-fbank/csrc/log.cc",
+				"Voice/Libraries/kaldi-native-fbank/csrc/mel-computations.cc",
+				"Voice/Libraries/kaldi-native-fbank/csrc/online-feature.cc",
+				"Voice/Libraries/kaldi-native-fbank/csrc/rfft.cc",
 				Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib,
 			);
 			target = 5CA6B0602FC6D8F9006DFCCC /* Xedit */;
@@ -401,6 +401,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -417,16 +418,6 @@
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/include",
 					"$(SRCROOT)/Xedit/Voice/Libraries",
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
-				);
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
-					"-Wl,-rpath,$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
-				);
-				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				INFOPLIST_FILE = Xedit/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = WillDeep;
 				INFOPLIST_KEY_CFBundleName = WillDeep;
@@ -435,7 +426,17 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = "1.87.0-rc2";
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
+					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
+				);
+				MARKETING_VERSION = "1.87.0-rc3";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
+					"-Wl,-rpath,$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
 				REGISTER_APP_GROUPS = YES;
@@ -454,12 +455,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
+				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				ENABLE_APP_SANDBOX = NO;
-				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -471,16 +473,6 @@
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/include",
 					"$(SRCROOT)/Xedit/Voice/Libraries",
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
-				);
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
-					"-Wl,-rpath,$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
-				);
-				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				INFOPLIST_FILE = Xedit/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = WillDeep;
 				INFOPLIST_KEY_CFBundleName = WillDeep;
@@ -489,7 +481,17 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = "1.87.0-rc2";
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
+					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
+				);
+				MARKETING_VERSION = "1.87.0-rc3";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
+					"-Wl,-rpath,$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
 				REGISTER_APP_GROUPS = YES;
@@ -632,7 +634,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = "1.87.0-rc2";
+				MARKETING_VERSION = "1.87.0-rc3";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -653,7 +655,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = "1.87.0-rc2";
+				MARKETING_VERSION = "1.87.0-rc3";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -672,7 +674,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.87.0-rc2";
+				MARKETING_VERSION = "1.87.0-rc3";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -691,7 +693,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.87.0-rc2";
+				MARKETING_VERSION = "1.87.0-rc3";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;

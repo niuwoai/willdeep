@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.87.0-rc3 - 2026-06-18
+
+### Fixed
+
+- **麦克风权限被拒后用户被困**:rc2 修了「.failed 卡死」,rc3 进一步解决「拒了之后没办法重新拿权」。新文件 [MicPermissionAlert.swift](Xedit/Voice/MicPermissionAlert.swift):mic 按钮被按 / Fn 触发后 `recorder.start()` 失败且 message 含 `Microphone permission` 时,弹 `NSAlert`,**默认按钮一键打开** `x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone`。5 秒去重避免连按 Fn 弹出多个 alert。alert 文案同时提醒「系统设置勾开后可能需要重启 app 才会重新 issue prompt」。
+- **Mobile Gateway WebSocket 重连刷屏**:gateway daemon 没起时,客户端原本以 750ms 固定间隔无限重试,Console 里几秒就被 `[57] Socket is not connected` 刷成雪花。[AgentMobileGatewayDesktopPeer.swift](Xedit/AgentMobileGatewayDesktopPeer.swift) 加 `consecutiveFailures` 计数 + 指数退避 `min(750ms × 2^n, 30s)`,收到一帧归 0。daemon 不开时刷屏速率从 ~1.3 次/秒降到 1 次/30 秒,日志可读性回归。
+
+### 版本
+
+- bugfix,只递增 rc:1.87.0-rc2 → **1.87.0-rc3**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / MOBILE_GATEWAY_REQUIREMENTS (4 处) / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
 ## 1.87.0-rc2 - 2026-06-18
 
 ### Fixed

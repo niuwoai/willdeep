@@ -36,11 +36,23 @@ struct MicPushToTalkButton: View {
                 .onChanged { _ in
                     // 1.87.0-rc2:从 .failed 残留态脱困,否则按钮永远显示
                     // 感叹号、按了没反应。.transcribing 不动(后台还在跑)。
-                    if case .failed = recorder.state {
+                    // 1.87.0-rc3:如果失败原因是麦克风权限被拒,先弹
+                    // alert 一键去系统设置,而不是默默 reset 让用户摸不着头脑。
+                    if case .failed(let msg) = recorder.state {
+                        if MicPermissionAlert.messageIsPermissionDenied(msg) {
+                            MicPermissionAlert.present(message: msg)
+                            return
+                        }
                         recorder.reset()
                     }
                     if case .idle = recorder.state {
-                        Task { await recorder.start() }
+                        Task {
+                            await recorder.start()
+                            if case .failed(let msg) = recorder.state,
+                               MicPermissionAlert.messageIsPermissionDenied(msg) {
+                                MicPermissionAlert.present(message: msg)
+                            }
+                        }
                     }
                 }
                 .onEnded { _ in
