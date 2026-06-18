@@ -344,6 +344,30 @@ enum L10n {
     enum Header {
         static let newChat = String(localized: "header.new-chat", defaultValue: "New Chat")
         static let switchToEditor = String(localized: "header.switch-to-editor", defaultValue: "Switch to Editor Mode")
+        static let openSidePanel = String(localized: "header.open-side-panel", defaultValue: "Open Side Panel")
+    }
+
+    enum AgentSidePanel {
+        static let preview = String(localized: "agent-side-panel.preview", defaultValue: "Preview")
+        static let diff = String(localized: "agent-side-panel.diff", defaultValue: "Diff")
+        static let files = String(localized: "agent-side-panel.files", defaultValue: "Files")
+        static let backgroundTasks = String(localized: "agent-side-panel.background-tasks", defaultValue: "Background tasks")
+        static let plan = String(localized: "agent-side-panel.plan", defaultValue: "Plan")
+        static let close = String(localized: "agent-side-panel.close", defaultValue: "Close Panel")
+        static let comingSoon = String(localized: "agent-side-panel.coming-soon", defaultValue: "Coming soon")
+        static let refresh = String(localized: "agent-side-panel.refresh", defaultValue: "Refresh")
+        static let noWorkspace = String(localized: "agent-side-panel.no-workspace", defaultValue: "No workspace selected for this session.")
+        static let diffLoading = String(localized: "agent-side-panel.diff-loading", defaultValue: "Computing diff…")
+        static let diffEmpty = String(localized: "agent-side-panel.diff-empty", defaultValue: "No uncommitted changes.")
+        static let diffNotRepo = String(localized: "agent-side-panel.diff-not-repo", defaultValue: "Not a git repository.")
+        static func diffSummary(_ a1: String) -> String {
+            let template = String(localized: "agent-side-panel.diff-summary", defaultValue: "Diff against HEAD · %@")
+            return String(format: template, a1)
+        }
+        static let planMissing = String(localized: "agent-side-panel.plan-missing", defaultValue: "No active plan.")
+        static let previewEmpty = String(localized: "agent-side-panel.preview-empty", defaultValue: "Pick a markdown or HTML file to preview.")
+        static let previewChoose = String(localized: "agent-side-panel.preview-choose", defaultValue: "Choose File…")
+        static let previewUnsupported = String(localized: "agent-side-panel.preview-unsupported", defaultValue: "Only Markdown and HTML can be previewed here.")
     }
 
     enum HeatmapCell {

@@ -1,0 +1,577 @@
+//
+//  AgentSidePanel.swift
+//  WillDeep
+//
+//  1.85.0-rc21：Agent 模式右侧的可切换辅助栏。AgentChatHeader
+//  里的 Menu 选择哪类内容，这里负责把第三栏画出来。Background
+//  tasks 复用现有 jobs registry；Diff 走 git diff HEAD；其余
+//  Preview / Files / Plan 还在搭骨架，先画「Coming soon」占位。
+//
+
+import SwiftUI
+
+enum AgentSidePanelKind: String, CaseIterable, Identifiable {
+    case preview
+    case diff
+    case files
+    case backgroundTasks
+    case plan
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .preview: return L10n.AgentSidePanel.preview
+        case .diff: return L10n.AgentSidePanel.diff
+        case .files: return L10n.AgentSidePanel.files
+        case .backgroundTasks: return L10n.AgentSidePanel.backgroundTasks
+        case .plan: return L10n.AgentSidePanel.plan
+        }
+    }
+
+    /// SF Symbol used in both menu items and panel header. Picked so
+    /// the row is recognizable at a glance without depending on text.
+    var systemImage: String {
+        switch self {
+        case .preview: return "play.rectangle"
+        case .diff: return "rectangle.split.2x1.fill"
+        case .files: return "folder"
+        case .backgroundTasks: return "list.bullet.rectangle"
+        case .plan: return "checklist"
+        }
+    }
+}
+
+struct AgentSidePanelHost: View {
+    @EnvironmentObject var appState: AppState
+    @Binding var kind: AgentSidePanelKind?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider()
+            content
+        }
+        .frame(width: 320)
+        .background(AgentDesign.cardBackground.opacity(0.4))
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            if let kind {
+                Image(systemName: kind.systemImage)
+                    .foregroundStyle(.secondary)
+                Text(kind.title)
+                    .font(AgentDesign.titleFont)
+            }
+            Spacer(minLength: 0)
+            Button {
+                kind = nil
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .foregroundStyle(.secondary)
+            .help(L10n.AgentSidePanel.close)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: AgentDesign.headerHeight)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch kind {
+        case .backgroundTasks:
+            backgroundTasksList
+        case .diff:
+            AgentSidePanelDiffView()
+        case .files:
+            AgentSidePanelFilesView()
+        case .plan:
+            AgentSidePanelPlanView()
+        case .preview:
+            AgentSidePanelPreviewView()
+        case .none:
+            comingSoonPlaceholder
+        }
+    }
+
+    private var backgroundTasksList: some View {
+        Group {
+            if let runtimeID = appState.activeAgentSessionID {
+                let jobs = appState.agentJobRegistry.jobs(forRuntime: runtimeID)
+                if jobs.isEmpty {
+                    comingSoonPlaceholder
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(jobs) { job in
+                                AgentJobRow(job: job)
+                            }
+                        }
+                        .padding(10)
+                    }
+                }
+            } else {
+                comingSoonPlaceholder
+            }
+        }
+    }
+
+    private var comingSoonPlaceholder: some View {
+        VStack(spacing: 8) {
+            Spacer()
+            if let kind {
+                Image(systemName: kind.systemImage)
+                    .font(.system(size: 24))
+                    .foregroundStyle(.secondary.opacity(0.6))
+                Text(kind.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            Text(L10n.AgentSidePanel.comingSoon)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(16)
+    }
+}
+
+// MARK: - Diff panel
+//
+// Resolves the workspace root the same way `loadAgentWorktreeDiffPreview`
+// does (active runtime → app rootDirectory), then shells out to
+// `git diff --no-ext-diff HEAD --`. State machine kept on the view
+// because diff loading is per-instance and short-lived; no need to
+// litter AppState with another @Published.
+
+struct AgentSidePanelDiffView: View {
+    @EnvironmentObject var appState: AppState
+    @State private var state: LoadState = .idle
+    @State private var refreshTick = 0
+
+    enum LoadState {
+        case idle
+        case loading
+        case loaded(diff: String, summaryDate: Date)
+        case empty
+        case noWorkspace
+        case notRepo
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            toolbar
+            Divider().opacity(0.5)
+            body(for: state)
+        }
+        .task(id: refreshTick) {
+            await reload()
+        }
+        .onChange(of: appState.activeAgentSessionID) { _, _ in
+            refreshTick &+= 1
+        }
+    }
+
+    private var toolbar: some View {
+        HStack(spacing: 6) {
+            Group {
+                switch state {
+                case .loaded(_, let date):
+                    Text(L10n.AgentSidePanel.diffSummary(Self.dateFormatter.string(from: date)))
+                case .loading:
+                    Text(L10n.AgentSidePanel.diffLoading)
+                default:
+                    Text(" ")
+                }
+            }
+            .font(AgentDesign.captionFont)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+
+            Spacer(minLength: 0)
+
+            Button {
+                refreshTick &+= 1
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(.borderless)
+            .focusable(false)
+            .help(L10n.AgentSidePanel.refresh)
+            .disabled({ if case .loading = state { return true }; return false }())
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 30)
+    }
+
+    @ViewBuilder
+    private func body(for state: LoadState) -> some View {
+        switch state {
+        case .idle, .loading:
+            ProgressView()
+                .controlSize(.small)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .loaded(let diff, _):
+            ScrollView([.vertical, .horizontal]) {
+                Text(diff)
+                    .font(.system(size: 11, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+            }
+            .background(Color(nsColor: .textBackgroundColor))
+        case .empty:
+            placeholder(systemImage: "checkmark.seal", text: L10n.AgentSidePanel.diffEmpty)
+        case .noWorkspace:
+            placeholder(systemImage: "folder.badge.questionmark", text: L10n.AgentSidePanel.noWorkspace)
+        case .notRepo:
+            placeholder(systemImage: "exclamationmark.triangle", text: L10n.AgentSidePanel.diffNotRepo)
+        }
+    }
+
+    private func placeholder(systemImage: String, text: String) -> some View {
+        VStack(spacing: 8) {
+            Spacer()
+            Image(systemName: systemImage)
+                .font(.system(size: 22))
+                .foregroundStyle(.secondary.opacity(0.6))
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(20)
+    }
+
+    private func reload() async {
+        let root = resolveWorkspaceRoot()
+        guard let root else {
+            await MainActor.run { state = .noWorkspace }
+            return
+        }
+        await MainActor.run { state = .loading }
+
+        let result: LoadState = await Task.detached(priority: .userInitiated) {
+            let check = AppState.runGitCommand(
+                arguments: ["rev-parse", "--is-inside-work-tree"],
+                in: root,
+                allowedExitStatuses: [0, 128]
+            )
+            guard check.succeeded,
+                  check.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == "true" else {
+                return .notRepo
+            }
+            let diff = AppState.runGit(
+                arguments: ["diff", "--no-ext-diff", "HEAD", "--"],
+                in: root
+            )
+            let trimmed = diff.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                return .empty
+            }
+            return .loaded(diff: diff, summaryDate: Date())
+        }.value
+
+        await MainActor.run { state = result }
+    }
+
+    private func resolveWorkspaceRoot() -> URL? {
+        if let path = appState.activeRuntime?.workspaceRootPath, !path.isEmpty {
+            return URL(fileURLWithPath: path).standardizedFileURL
+        }
+        return appState.rootDirectory?.standardizedFileURL
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
+}
+
+// MARK: - Files panel
+//
+// Reuses the editor's `FileTreeView` rooted at the active agent
+// session's workspace path. Selection is kept local to the panel so
+// clicking around here doesn't disturb the editor sidebar's own
+// selection. Tree is rebuilt when the active session flips.
+
+struct AgentSidePanelFilesView: View {
+    @EnvironmentObject var appState: AppState
+    @State private var root: FileSystemNode?
+    @State private var rootPath: String?
+    @State private var selectedFileURL: URL?
+    @State private var selectedFolderURL: URL?
+
+    var body: some View {
+        Group {
+            if let root {
+                FileTreeView(
+                    root: root,
+                    selectedURL: $selectedFileURL,
+                    selectedFolderURL: $selectedFolderURL
+                )
+            } else {
+                placeholderNoWorkspace
+            }
+        }
+        .onAppear { rebuildIfNeeded() }
+        .onChange(of: appState.activeAgentSessionID) { _, _ in rebuildIfNeeded() }
+    }
+
+    private var placeholderNoWorkspace: some View {
+        VStack(spacing: 8) {
+            Spacer()
+            Image(systemName: "folder.badge.questionmark")
+                .font(.system(size: 22))
+                .foregroundStyle(.secondary.opacity(0.6))
+            Text(L10n.AgentSidePanel.noWorkspace)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(20)
+    }
+
+    private func rebuildIfNeeded() {
+        let resolved: URL? = {
+            if let path = appState.activeRuntime?.workspaceRootPath, !path.isEmpty {
+                return URL(fileURLWithPath: path).standardizedFileURL
+            }
+            return appState.rootDirectory?.standardizedFileURL
+        }()
+        let newPath = resolved?.path
+        if newPath == rootPath { return }
+        rootPath = newPath
+        root = resolved.map { FileSystemNode(url: $0) }
+    }
+}
+
+// MARK: - Plan panel
+//
+// Surfaces the current `AgentPlan` of the active runtime. Reuses the
+// transcript-level `AgentPlanCard` so the side-panel view is in sync
+// with whatever shows up inline once the plan is approved. The menu
+// entry that opens this panel is hidden in `AgentChatHeader` when no
+// plan exists, so the `nil` branch here is only a safety net for the
+// case where the plan disappears while the panel is already open.
+
+struct AgentSidePanelPlanView: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        Group {
+            if let plan = appState.agentCurrentPlan {
+                ScrollView {
+                    AgentPlanCard(plan: plan)
+                        .padding(12)
+                }
+            } else {
+                placeholderNoPlan
+            }
+        }
+    }
+
+    private var placeholderNoPlan: some View {
+        VStack(spacing: 8) {
+            Spacer()
+            Image(systemName: "checklist")
+                .font(.system(size: 22))
+                .foregroundStyle(.secondary.opacity(0.6))
+            Text(L10n.AgentSidePanel.planMissing)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(20)
+    }
+}
+
+// MARK: - Preview panel
+//
+// Renders a markdown / HTML preview of a workspace file using the
+// editor's `MarkdownPreviewParser` + `MarkdownPreviewBlockView` so the
+// look matches the existing preview pane. Default file is the
+// workspace README (any of `README.md` / `README` / `readme.md` cases);
+// user can pick another via NSOpenPanel.
+
+struct AgentSidePanelPreviewView: View {
+    @EnvironmentObject var appState: AppState
+    @State private var currentURL: URL?
+    @State private var content: String = ""
+    @State private var language: Language?
+    @State private var loadError: String?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            toolbar
+            Divider().opacity(0.5)
+            previewBody
+        }
+        .onAppear { autoSelectIfNeeded() }
+        .onChange(of: appState.activeAgentSessionID) { _, _ in
+            currentURL = nil
+            content = ""
+            autoSelectIfNeeded()
+        }
+    }
+
+    private var toolbar: some View {
+        HStack(spacing: 6) {
+            if let currentURL {
+                Text(currentURL.lastPathComponent)
+                    .font(AgentDesign.captionFont)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            } else {
+                Text(" ")
+                    .font(AgentDesign.captionFont)
+            }
+            Spacer(minLength: 0)
+            Button {
+                pickFile()
+            } label: {
+                Image(systemName: "folder")
+            }
+            .buttonStyle(.borderless)
+            .focusable(false)
+            .help(L10n.AgentSidePanel.previewChoose)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 30)
+    }
+
+    @ViewBuilder
+    private var previewBody: some View {
+        if let loadError {
+            placeholder(systemImage: "exclamationmark.triangle", text: loadError)
+        } else if currentURL == nil {
+            placeholderWithPicker
+        } else if language == nil || !PreviewPaneCompatibility.supports(language) {
+            placeholder(systemImage: "doc.questionmark", text: L10n.AgentSidePanel.previewUnsupported)
+        } else {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                        MarkdownPreviewBlockView(block: block)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+            }
+            .background(Color(nsColor: .textBackgroundColor))
+        }
+    }
+
+    private var blocks: [MarkdownPreviewBlock] {
+        switch language {
+        case .html:
+            return HTMLPreviewParser.blocks(from: content)
+        default:
+            return MarkdownPreviewParser.blocks(from: content)
+        }
+    }
+
+    private var placeholderWithPicker: some View {
+        VStack(spacing: 10) {
+            Spacer()
+            Image(systemName: "doc.richtext")
+                .font(.system(size: 22))
+                .foregroundStyle(.secondary.opacity(0.6))
+            Text(L10n.AgentSidePanel.previewEmpty)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button(L10n.AgentSidePanel.previewChoose) {
+                pickFile()
+            }
+            .controlSize(.small)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(20)
+    }
+
+    private func placeholder(systemImage: String, text: String) -> some View {
+        VStack(spacing: 8) {
+            Spacer()
+            Image(systemName: systemImage)
+                .font(.system(size: 22))
+                .foregroundStyle(.secondary.opacity(0.6))
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(20)
+    }
+
+    private func autoSelectIfNeeded() {
+        guard currentURL == nil, let root = resolvedWorkspaceRoot() else { return }
+        for candidate in ["README.md", "Readme.md", "readme.md", "README", "README.markdown"] {
+            let url = root.appendingPathComponent(candidate)
+            if FileManager.default.fileExists(atPath: url.path) {
+                load(url: url)
+                return
+            }
+        }
+    }
+
+    private func pickFile() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        if let root = resolvedWorkspaceRoot() {
+            panel.directoryURL = root
+        }
+        if panel.runModal() == .OK, let url = panel.url {
+            load(url: url)
+        }
+    }
+
+    private func load(url: URL) {
+        loadError = nil
+        do {
+            let data = try Data(contentsOf: url, options: .mappedIfSafe)
+            content = String(decoding: data, as: UTF8.self)
+            currentURL = url
+            language = Language.fromURL(url)
+        } catch {
+            content = ""
+            currentURL = url
+            language = nil
+            loadError = error.localizedDescription
+        }
+    }
+
+    private func resolvedWorkspaceRoot() -> URL? {
+        if let path = appState.activeRuntime?.workspaceRootPath, !path.isEmpty {
+            return URL(fileURLWithPath: path).standardizedFileURL
+        }
+        return appState.rootDirectory?.standardizedFileURL
+    }
+}
+
+/// Tiny shim so the side-panel preview view doesn't need to import
+/// PreviewPane's full surface area just to ask "is this language
+/// previewable?".
+private enum PreviewPaneCompatibility {
+    static func supports(_ language: Language?) -> Bool {
+        language == .markdown || language == .html
+    }
+}

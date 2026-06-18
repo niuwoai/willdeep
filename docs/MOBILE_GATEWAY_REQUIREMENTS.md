@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-06-17 | Target version: v1.85.0-rc20
+> Last updated: 2026-06-18 | Target version: v1.85.0-rc22
 
 ## Summary
 

@@ -14,6 +14,7 @@ import UniformTypeIdentifiers
 struct AgentModeView: View {
     @EnvironmentObject var appState: AppState
     @State private var sidebarWidth: CGFloat = 230
+    @State private var sidePanel: AgentSidePanelKind?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -27,7 +28,7 @@ struct AgentModeView: View {
             Divider()
 
             VStack(spacing: 0) {
-                AgentChatHeader()
+                AgentChatHeader(sidePanel: $sidePanel)
                 Divider().opacity(0.5)
                 AgentChatTranscript()
                 AgentChatComposer()
@@ -35,8 +36,15 @@ struct AgentModeView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(AgentDesign.chatBackground)
+
+            if sidePanel != nil {
+                Divider()
+                AgentSidePanelHost(kind: $sidePanel)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
         }
         .background(AgentDesign.chatBackground)
+        .animation(.easeInOut(duration: 0.18), value: sidePanel)
     }
 }
 

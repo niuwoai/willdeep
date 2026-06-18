@@ -3,17 +3,16 @@
 //  WillDeep
 //
 //  Title bar for the active agent session, split out of AgentModeView.swift
-//  in rc42. Keeps the session title readable and exposes one right-aligned
-//  escape hatch back to the editor.
-//
-//  Previously `private struct` inside the main file; now internal so
-//  `AgentModeView`'s body can compose it across the file boundary.
+//  in rc42. Keeps the session title readable and exposes two right-aligned
+//  escape hatches: a side-panel `Menu` (rc21+) and the original
+//  「raise editor window」button.
 //
 
 import SwiftUI
 
 struct AgentChatHeader: View {
     @EnvironmentObject var appState: AppState
+    @Binding var sidePanel: AgentSidePanelKind?
 
     var body: some View {
         HStack(spacing: 8) {
@@ -23,6 +22,8 @@ struct AgentChatHeader: View {
                 .truncationMode(.middle)
 
             Spacer(minLength: 8)
+
+            sidePanelMenu
 
             Button {
                 // 1.80.0-rc1：editor / agent 已经分窗口，这个按钮的
@@ -41,6 +42,46 @@ struct AgentChatHeader: View {
         }
         .padding(.horizontal, 18)
         .frame(height: AgentDesign.headerHeight)
+    }
+
+    private var sidePanelMenu: some View {
+        Menu {
+            ForEach(visibleKinds) { item in
+                Button {
+                    // 再点同一项就关闭——和 Claude Code 那个菜单一致。
+                    sidePanel = (sidePanel == item) ? nil : item
+                } label: {
+                    Label(item.title, systemImage: item.systemImage)
+                }
+            }
+            if sidePanel != nil {
+                Divider()
+                Button {
+                    sidePanel = nil
+                } label: {
+                    Label(L10n.AgentSidePanel.close, systemImage: "xmark")
+                }
+            }
+        } label: {
+            Image(systemName: "sidebar.right")
+                .foregroundStyle(.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .focusable(false)
+        .help(L10n.Header.openSidePanel)
+    }
+
+    /// Plan 一项只在 active runtime 真的有 plan 时出现 — 没有 plan
+    /// 还展示这个入口是浪费一行 + 误导用户。其它项始终可见。
+    private var visibleKinds: [AgentSidePanelKind] {
+        AgentSidePanelKind.allCases.filter { kind in
+            switch kind {
+            case .plan: return appState.agentCurrentPlan != nil
+            default: return true
+            }
+        }
     }
 
     private var title: String {

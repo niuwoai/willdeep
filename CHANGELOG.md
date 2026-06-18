@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.85.0-rc22 - 2026-06-18
+
+### Added
+
+- **Agent 侧栏菜单接入真实视图**:rc21 把骨架搭起来后,这一轮把 Diff / Files / Plan / Preview 四项从「Coming soon」占位换成可用视图。Background tasks 沿用 rc21 的 jobs registry,Terminal 入口先撤(用户不需要)。
+  - **Diff**:走 `git diff --no-ext-diff HEAD --`,workspace root 解析复用 `loadAgentWorktreeDiffPreview` 的同款链路(active runtime `workspaceRootPath` → app `rootDirectory`)。顶栏有刷新按钮 + 末次刷新时间戳;非 git 目录、无 workspace、空 diff 各自显示对应 placeholder。Diff 加载走 `Task.detached`,不阻塞主线程。
+  - **Files**:复用 `FileTreeView` + `FileSystemNode`,以 agent 会话的 workspace root 为根。选择 state 走面板本地 `@State`,**不**写回 AppState,免得污染 editor 窗口侧栏的选择(切换会话会自动重建树根)。
+  - **Plan**:复用 transcript 里的 `AgentPlanCard`,所见即同步,checkbox 直接走 `appState.setAgentPlanStepStatus`。**菜单入口条件可见** — `appState.agentCurrentPlan == nil` 时 `AgentChatHeader` 的 `visibleKinds` 直接把 Plan 滤掉,符合用户「有 plan 才需要」的预期。
+  - **Preview**:复用 editor `PreviewPane` 的 `MarkdownPreviewParser` / `MarkdownPreviewBlockView` / `HTMLPreviewParser` 渲染 Markdown / HTML。默认尝试 workspace 根目录的 README.md / Readme.md / readme.md / README / README.markdown,找到就直接 render;没找到给个 "Choose File…" 按钮走 `NSOpenPanel`,默认目录指向 workspace root,非 Markdown/HTML 文件提示不支持。
+- **AgentSidePanelKind** 删 `terminal` case + L10n `agent-side-panel.terminal` 字典项;`allCases` 现在剩 5 项:preview / diff / files / backgroundTasks / plan(顺序保留,菜单按 `allCases` 渲染)。
+
+### 版本
+
+- 把 rc21 的骨架填实 + 删 Terminal,按 bugfix/小功能演进 bump rc:1.85.0-rc21 → **1.85.0-rc22**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / MOBILE_GATEWAY_REQUIREMENTS / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
+## 1.85.0-rc21 - 2026-06-18
+
+### Added
+
+- **Agent 模式右上角加「侧栏菜单」**,对齐 Claude Code 那个 sidebar dropdown 的体验。`AgentChatHeader` 现在右上角并列两个按钮:旧的「回 editor」`rectangle.split.2x1` 保留不变,左侧新增一个 `sidebar.right` SwiftUI `Menu`,下拉项 Preview / Diff / Terminal / Files / Background tasks / Plan(每项带 SF Symbol),点哪个就在 agent 窗口右侧推出第三栏,再点同一项收起。
+- **AgentSidePanel.swift**:新增 `AgentSidePanelKind` 枚举(`CaseIterable, Identifiable`,各 case 暴露 `title` / `systemImage`)+ `AgentSidePanelHost` 容器视图(固定宽度 320,顶栏标题 + xmark 关闭按钮)。Background tasks 直接复用 `AgentJobRegistry.jobs(forRuntime:)` + 现成的 `AgentJobRow`;其余 Preview / Diff / Terminal / Files / Plan 五项先占位「Coming soon」,后续 rc 按需逐个接真实 view,避免一次性引入大面板撞到 [SwiftUI 流式渲染内存失控](memory/project_swiftui_streaming_layout_runaway.md) / [SwiftUI Sheet @Published 死循环](memory/project_swiftui_sheet_published_loop.md) 那两个老坑。
+- **AgentModeView 三栏布局**:外层 HStack 在 `sidePanel` 非空时插入 `Divider` + `AgentSidePanelHost`,`.transition(.move(edge: .trailing).combined(with: .opacity))` + `.animation(.easeInOut(duration: 0.18))`。State 走视图局部 `@State private var sidePanel: AgentSidePanelKind?`(不进 AppState — UI 临时态,每个 agent 窗口独立)。
+- **L10n** 新增 `header.open-side-panel` 和一组 `agent-side-panel.*` 字典项,所有文案走 i18n 不硬编码。
+
+### 版本
+
+- 新增功能(UI 入口 + 视图骨架),bump rc:1.85.0-rc20 → **1.85.0-rc21**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / MOBILE_GATEWAY_REQUIREMENTS / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
 ## 1.85.0-rc20 - 2026-06-18
 
 ### Changed
