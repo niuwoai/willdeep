@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="mark">WD</div>
+        <div>
+          <h1 data-i18n="popupTitle"></h1>
+          <p data-i18n="popupSubtitle"></p>
+        </div>
+      </header>
+
+      <section class="status">
+        <span id="status-dot" class="dot"></span>
+        <span id="status-text" data-i18n="statusChecking"></span>
+      </section>
+
+      <section class="actions">
+        <button id="read-page" type="button" data-i18n="readPage"></button>
+        <button id="read-selection" type="button" data-i18n="readSelection"></button>
+        <button id="capture-tab" type="button" data-i18n="captureTab"></button>
+      </section>
+
+      <section>
+        <h2 data-i18n="resultLabel"></h2>
+        <pre id="result"></pre>
+      </section>
+
+      <p class="note" data-i18n="permissionNote"></p>
+    </main>
+    <script src="popup.js" type="module"></script>
+  </body>
+</html>

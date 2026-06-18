@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.90.0-rc4 - 2026-06-18
+
+### Added
+- 新增 `chrome-extension/willdeep-browser` Manifest V3 扩展骨架,用于接入用户默认 Chrome profile 中已有登录态的页面自动化能力。
+- 扩展支持 Native Messaging、当前页读取、选区读取、链接/表单摘要、CSS selector 点击/输入、可视标签页截图,并预留 `chrome.debugger` 高危 CDP 命令入口。
+- `willdeep-agent` 新增 `chrome-native-host` 子命令,实现 Chrome Native Messaging 32-bit 长度前缀 JSON 协议,并开放 `127.0.0.1:8797` 本地桥给 Mac Agent 转发浏览器命令。
+- Agent 新增 `chrome_status`、`chrome_read_page`、`chrome_read_selection`、`chrome_click`、`chrome_type`、`chrome_capture_tab` 和高危 `chrome_debugger_command` 工具,将默认 Chrome profile 能力纳入审批体系。
+- 新增 `docs/CHROME_BROWSER_AUTOMATION.md`,记录默认 profile 扩展模式、本地 HTTP 桥、隔离 CDP 模式、Agent 工具和安全清单。
+
+### Changed
+- 版本号同步提升到 **1.90.0-rc4**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / MOBILE_GATEWAY_REQUIREMENTS / AGENT_HARNESS_IMPROVEMENT_PRIORITIES / Collaboration Connectors / Chrome Browser Automation 文档同步。
+
 ## 1.90.0-rc3 - 2026-06-18
 
 ### Added

@@ -35,6 +35,7 @@ func newRootCommand() *cobra.Command {
 	root.AddCommand(newServeCommand(&workspace))
 	root.AddCommand(newServeMobileCommand())
 	root.AddCommand(newServeCollabRelayCommand())
+	root.AddCommand(newChromeNativeHostCommand())
 	root.AddCommand(newProbeCommand(&workspace, &jsonOutput))
 	root.AddCommand(newVersionCommand(&jsonOutput))
 	return root
@@ -160,6 +161,18 @@ func newServeCollabRelayCommand() *cobra.Command {
 	cmd.Flags().StringVar(&tokenFile, "token-file", "", "file containing bearer token for polling queued events")
 	cmd.Flags().IntVar(&maxEvents, "max-events", 500, "maximum in-memory callback events retained for polling")
 	return cmd
+}
+
+func newChromeNativeHostCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "chrome-native-host",
+		Short: "Run the Chrome Native Messaging host for the WillDeep browser extension",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			return agent.ServeChromeNativeHost(ctx, os.Stdin, os.Stdout)
+		},
+	}
 }
 
 func newProbeCommand(workspace *string, jsonOutput *bool) *cobra.Command {

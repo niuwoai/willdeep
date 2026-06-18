@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+WILLDEEP_AGENT="${WILLDEEP_AGENT:-willdeep-agent}"
+exec "$WILLDEEP_AGENT" chrome-native-host
