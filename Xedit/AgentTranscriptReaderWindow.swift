@@ -76,6 +76,10 @@ final class AgentTranscriptReaderWindowController: NSWindowController, NSWindowD
     /// drop its reference.
     var onClose: ((UUID) -> Void)?
     private let sessionID: UUID
+    /// rc14:挂在主菜单响应链外的窗口,默认接不到 Cmd+W —— 装一个本地
+    /// keyDown 监听把它路由到 `performClose(_:)`。本窗口内嵌 NSTextView
+    /// 用了 Find bar,所以 **不**把无修饰 Esc 也当关窗,免得截掉搜索取消。
+    private var keyMonitor: Any?
 
     init(session: AgentSession) {
         self.sessionID = session.id
@@ -129,6 +133,7 @@ final class AgentTranscriptReaderWindowController: NSWindowController, NSWindowD
 
         super.init(window: window)
         window.delegate = self
+        keyMonitor = AuxiliaryWindowCloseShortcut.install(on: window, closesOnEscape: false)
 
         let attributed = Self.renderTranscript(session: session)
         textView.textStorage?.setAttributedString(attributed)
@@ -150,7 +155,17 @@ final class AgentTranscriptReaderWindowController: NSWindowController, NSWindowD
     }
 
     func windowWillClose(_ notification: Notification) {
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+            self.keyMonitor = nil
+        }
         onClose?(sessionID)
+    }
+
+    deinit {
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+        }
     }
 
     // MARK: - Transcript rendering
@@ -216,6 +231,9 @@ final class AgentSingleMessageReaderWindowRegistry {
 final class AgentSingleMessageReaderWindowController: NSWindowController, NSWindowDelegate {
     var onClose: ((UUID) -> Void)?
     private let messageID: UUID
+    /// rc14:同上,辅助 NSWindowController 默认接不到 Cmd+W,本窗口也用
+    /// Find bar,所以无修饰 Esc 不当关窗。
+    private var keyMonitor: Any?
 
     init(message: AgentMessage, sessionTitle: String) {
         self.messageID = message.id
@@ -266,6 +284,7 @@ final class AgentSingleMessageReaderWindowController: NSWindowController, NSWind
 
         super.init(window: window)
         window.delegate = self
+        keyMonitor = AuxiliaryWindowCloseShortcut.install(on: window, closesOnEscape: false)
 
         textView.textStorage?.setAttributedString(Self.render(message: message))
     }
@@ -282,7 +301,17 @@ final class AgentSingleMessageReaderWindowController: NSWindowController, NSWind
     }
 
     func windowWillClose(_ notification: Notification) {
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+            self.keyMonitor = nil
+        }
         onClose?(messageID)
+    }
+
+    deinit {
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+        }
     }
 
     private static func windowTitle(role: AgentRole, sessionTitle: String) -> String {

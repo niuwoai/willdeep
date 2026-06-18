@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.85.0-rc14 - 2026-06-18
+
+### Fixed
+
+- **辅助窗口(Markdown table detail / transcript reader / single-message reader)默认接不到 Cmd+W,打开了关不掉**。用户反馈:「在新窗口展示 markdown 内的 table 之后,要能用 alt+w 之类的快捷键关闭啊」。原因:这些窗口由独立 `NSWindowController` spawn,挂在主菜单响应链外,所以 Cmd+W 没人接。
+  - 新增 [AuxiliaryWindowCloseShortcut](Xedit/AuxiliaryWindowCloseShortcut.swift) `install(on:closesOnEscape:)`:`NSEvent.addLocalMonitorForEvents` 在事件目标是本窗口时拦截 Cmd+W / Opt+W 路由到 `performClose(_:)`;可选 Esc(无修饰键)同样关窗。
+  - [AgentMarkdownTableDetailWindow](Xedit/AgentMarkdownTableDetailWindow.swift) 接入,`closesOnEscape: true`(窗口里没有 Find bar / 编辑状态,Esc 安全)。
+  - [AgentTranscriptReaderWindowController](Xedit/AgentTranscriptReaderWindow.swift) 和 [AgentSingleMessageReaderWindowController](Xedit/AgentTranscriptReaderWindow.swift) 也接入,但 `closesOnEscape: false` —— 里面的 NSTextView 开了 Find bar,Esc 留给取消搜索。
+  - `windowWillClose` / `deinit` 双重摘 monitor,避免 closure 泄漏。
+
+### 版本
+
+- bugfix,只 bump rc 号:1.85.0-rc13 → **1.85.0-rc14**。pbxproj×6 / Go agent / Help Info.plist / README / docs / product-overview 同步。
+
 ## 1.85.0-rc13 - 2026-06-18
 
 ### Changed

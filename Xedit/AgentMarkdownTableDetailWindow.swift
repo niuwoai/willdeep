@@ -59,6 +59,11 @@ enum AgentMarkdownTableDetailWindowRegistry {
 private final class AgentMarkdownTableDetailWindowController: NSWindowController, NSWindowDelegate {
     private let release: (AgentMarkdownTableDetailWindowController) -> Void
     private let tableDataSource: AgentMarkdownTableDetailDataSource
+    /// 1.85.0-rc14:本窗口不在主菜单的响应链里(独立 NSWindowController
+    /// 起的辅助窗口),所以 Cmd+W 默认不会关它。装一个本地 keyDown 监听
+    /// 把 Cmd+W / Opt+W / Esc 路由到 `performClose(_:)`,行为对齐 Settings
+    /// 窗口的 [SettingsKeyboardShortcutHandler](Xedit/EditorSettingsSupport.swift)。
+    private var keyMonitor: Any?
 
     init(payload: AgentMarkdownTablePayload, release: @escaping (AgentMarkdownTableDetailWindowController) -> Void) {
         self.release = release
@@ -118,6 +123,9 @@ private final class AgentMarkdownTableDetailWindowController: NSWindowController
 
         super.init(window: window)
         window.delegate = self
+        // Markdown table detail 窗口没有 Find bar / 文本编辑等会用到 Esc
+        // 的状态,所以 Esc 也直接关窗,体验最顺手。
+        keyMonitor = AuxiliaryWindowCloseShortcut.install(on: window, closesOnEscape: true)
     }
 
     required init?(coder: NSCoder) {
@@ -125,7 +133,18 @@ private final class AgentMarkdownTableDetailWindowController: NSWindowController
     }
 
     func windowWillClose(_ notification: Notification) {
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+            self.keyMonitor = nil
+        }
         release(self)
+    }
+
+    deinit {
+        // windowWillClose 兜底没跑到的极端情况(例如被强 close)再清一遍。
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+        }
     }
 }
 
