@@ -100,6 +100,96 @@ final class WorkflowEngine {
         return outcome.report
     }
 
+    /// 1.85.0-rc18:**结构化输出版** —— 派一个 sub-agent 跑 prompt,通过
+    /// schema 约束它的最终交付,自动 Codable decode 到 `T`。
+    ///
+    /// 机制(详见 [AgentStructuredSchema](Xedit/AgentStructuredSchema.swift)
+    /// 顶部注释):往 sub-agent 工具表里注入 `structured_output(data:)`
+    /// 虚拟工具,system prompt 同步告诉它「答完调它,data 是 JSON 字符
+    /// 串符合 <schema>」;`AgentSubagentRunner` 收到 tool call 时拎出 data
+    /// 跑 schema validate,通过即结束 loop 把 JSON 字符串返回。这里再
+    /// JSONDecoder 解到 `T`。
+    ///
+    /// 校验失败 → 把 issues 当 tool result 灌回模型重试,在 round cap 内
+    /// 自愈;round cap 用完仍没成 → 抛 `WorkflowError.structuredOutputUnavailable`。
+    func agent<T: Decodable>(
+        _ prompt: String,
+        label: String,
+        schema: AgentStructuredSchema,
+        decode: T.Type = T.self
+    ) async throws -> T {
+        let subAgentID = UUID()
+        let startedAt = Date()
+        mutateReport { report in
+            report.subAgents.append(.init(
+                id: subAgentID,
+                label: label,
+                status: .running,
+                startedAt: startedAt
+            ))
+        }
+
+        let outcome: AgentSubagentRunner.Outcome
+        do {
+            outcome = try await AgentSubagentRunner.run(
+                prompt: prompt,
+                configuration: configuration,
+                workspaceURL: workspaceURL,
+                outputSchema: schema
+            )
+        } catch is CancellationError {
+            mutateReport { report in
+                if let idx = report.subAgents.firstIndex(where: { $0.id == subAgentID }) {
+                    report.subAgents[idx].status = .failed
+                    report.subAgents[idx].finishedAt = Date()
+                    report.subAgents[idx].report = "(cancelled)"
+                }
+            }
+            throw CancellationError()
+        } catch {
+            mutateReport { report in
+                if let idx = report.subAgents.firstIndex(where: { $0.id == subAgentID }) {
+                    report.subAgents[idx].status = .failed
+                    report.subAgents[idx].finishedAt = Date()
+                    report.subAgents[idx].report = "Sub-agent failed: \(error.localizedDescription)"
+                }
+            }
+            throw WorkflowError.subAgentFailed(label: label, underlying: error)
+        }
+
+        mutateReport { report in
+            if let idx = report.subAgents.firstIndex(where: { $0.id == subAgentID }) {
+                report.subAgents[idx].status = .done
+                report.subAgents[idx].finishedAt = Date()
+                report.subAgents[idx].usageTokens = outcome.usageTokens
+                report.subAgents[idx].roundCount = outcome.roundCount
+                report.subAgents[idx].report = outcome.report
+            }
+            report.totalUsageTokens += outcome.usageTokens
+        }
+
+        // Outcome.report 在 schema 模式下装的是已 validate 的 JSON 字符
+        // 串;decode 到 T。失败抛出 dedicated error,把原文 head 带出来
+        // 方便排查(罕见 —— 通常意味着 schema 描述和 Swift Decodable
+        // 类型对不上)。
+        guard let data = outcome.report.data(using: .utf8) else {
+            throw WorkflowError.structuredOutputDecodeFailed(
+                label: label,
+                underlying: NSError(domain: "WorkflowEngine", code: -1, userInfo: [NSLocalizedDescriptionKey: "outcome.report is not UTF-8"]),
+                json: outcome.report
+            )
+        }
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            throw WorkflowError.structuredOutputDecodeFailed(
+                label: label,
+                underlying: error,
+                json: outcome.report
+            )
+        }
+    }
+
     // MARK: - DSL: parallel
 
     /// 并发跑一组任务，受 `maxConcurrent` 限制（用 actor + semaphore
@@ -162,6 +252,11 @@ enum WorkflowError: Error, LocalizedError {
     case noWorkflowMatch(slashCommand: String)
     case missingArgs(workflow: String)
     case noActiveRuntime
+    /// rc18:schema 模式下子 agent 在 round cap 内没能产出合规结构化输出。
+    case structuredOutputUnavailable(reason: String)
+    /// rc18:JSON Codable decode 失败 —— validate 过了但 Decodable 类型
+    /// 对不上(很罕见,通常是 schema 和 Swift 类型不一致)。
+    case structuredOutputDecodeFailed(label: String, underlying: Error, json: String)
 
     var errorDescription: String? {
         switch self {
@@ -173,6 +268,11 @@ enum WorkflowError: Error, LocalizedError {
             return "Workflow \(workflow) requires input args."
         case .noActiveRuntime:
             return "No active Agent session to run this workflow in."
+        case .structuredOutputUnavailable(let reason):
+            return "Structured output unavailable: \(reason)"
+        case .structuredOutputDecodeFailed(let label, let underlying, let json):
+            let preview = json.prefix(120)
+            return "Structured output for \"\(label)\" passed schema but failed Codable decode (\(underlying.localizedDescription)). JSON head: \(preview)"
         }
     }
 }

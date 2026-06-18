@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.85.0-rc18 - 2026-06-18
+
+### Added
+
+- **WorkflowEngine 加 schema-validated 结构化输出支持**(对齐 Claude Code workflow 的 `agent(..., { schema })` 那一套)。这是把 Xedit 的 deep-research / verify 类管线赶上 Claude 等价能力的 phase 1。
+  - 新增 [AgentStructuredSchema](Xedit/AgentStructuredSchema.swift) —— JSON Schema 子集 Codable 类型(type / properties / required / items / enum / minItems / maxItems / additionalProperties / description),自带 `validate(...)` 跑形态校验、`renderedJSON()` 给模型读。**final class** 而非 struct,只为允许递归字段(properties / items 都可能套自身)。
+  - 新增 `WorkflowEngine.agent<T: Decodable>(_:label:schema:decode:)` —— 派子 agent 跑 prompt,完成后自动 Codable decode 到 typed model。
+  - [AgentSubagentRunner.run(...)](Xedit/AgentSubagents.swift) 加可选 `outputSchema:` 参数:非 nil 时往工具表追加虚拟工具 `structured_output(data:)`,system prompt 同步要求模型答完调它、把 JSON 字符串塞进 `data`。Handler 拎出 data → JSON parse → `schema.validate(...)`,通过即结束 loop,失败把 issues 当 tool result 灌回让模型在 round cap 内自愈;round cap 用完仍无合规答案 → 抛 [WorkflowError.structuredOutputUnavailable](Xedit/WorkflowEngine.swift)。
+  - 兼容性:老 `agent(_:label:) -> String` 不动,所有现有 workflow(DeepResearchWorkflow / CompetitorAnalysisWorkflow / ReleaseNotesWorkflow / MeetingNotesWorkflow / IssueTriageWorkflow / PRReviewWorkflow)零修改通过。schema 是 opt-in,phase 2/3 再让 deep-research 真正切到结构化路径。
+  - [AgentJSONValue](Xedit/AgentToolModels.swift) 顺手补一个 `Codable` extension(原本只 Equatable),让 schema 的 `enum:` 字段能直接 Codable round-trip。
+
+### Tests
+
+- 新增 [AgentStructuredSchemaTests](XeditTests/AgentStructuredSchemaTests.swift) 8 条单测:复合 object/array/enum 通过、missing required 报具体 key、enum 越界、array 边界、integer 拒绝浮点、type 错时不追问下层、`renderedJSON()` 合法、`additionalProperties: false` 拒绝多余 key。
+
+### 版本
+
+- 加功能但范围只在 workflow 基础设施(无现有工作流被改动),按惯例 bump rc:1.85.0-rc17 → **1.85.0-rc18**。pbxproj×6 / Go agent / Help Info.plist / README / docs / product-overview 同步。
+
+### Phase 2 / 3 预告
+
+- rc19:`pipeline(items, ...stages)` 非 barrier 推进 + shared mutable state 容器。
+- rc20:DeepResearchWorkflow 用上 schema + pipeline,重写为 scope → pipeline(search → URL-dedup → fetch+extract) → 3-vote verify → synthesize,赶上 Claude `/deep-research` 的对抗性验证能力。
+
 ## 1.85.0-rc17 - 2026-06-18
 
 ### Changed
