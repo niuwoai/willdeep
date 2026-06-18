@@ -59,9 +59,7 @@ struct MicPushToTalkButton: View {
         case .recording:
             Task {
                 if let transcript = await recorder.stopAndTranscribe() {
-                    appState.agentInput.append(
-                        appState.agentInput.isEmpty ? transcript : " " + transcript
-                    )
+                    appState.appendAgentInputTextCreatingSessionIfNeeded(transcript)
                 }
             }
         case .transcribing:

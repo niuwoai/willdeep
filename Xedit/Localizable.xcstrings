@@ -112,6 +112,9 @@
     "1." : {
 
     },
+    "After your first transcription, warm the ~937 MB model on each app start so push-to-talk responds instantly. Disable to save memory at the cost of a 1-5 s cold start." : {
+
+    },
     "Agent" : {
 
     },
@@ -893,7 +896,13 @@
         }
       }
     },
+    "An editor that codes, transcribes, and ships alongside you. Let's get you set up in three quick steps." : {
+
+    },
     "Anthropic Messages" : {
+
+    },
+    "API key" : {
 
     },
     "app-update.download" : {
@@ -2061,6 +2070,12 @@
         }
       }
     },
+    "Back" : {
+
+    },
+    "Base URL" : {
+
+    },
     "Cancel" : {
 
     },
@@ -2074,6 +2089,9 @@
 
     },
     "Click Download below (~937 MB). After install the mic button in composer goes live and the Fn-key push-to-talk shortcut starts working." : {
+
+    },
+    "Click Download for the full file, or import a copy you already have from fastv (no bytes transferred)." : {
 
     },
     "Close Agent" : {
@@ -3203,6 +3221,12 @@
 
     },
     "Copy Relative Path" : {
+
+    },
+    "Default model" : {
+
+    },
+    "Download (~937 MB)" : {
 
     },
     "Download model (~937 MB)" : {
@@ -4386,6 +4410,9 @@
         }
       }
     },
+    "Import from fastv" : {
+
+    },
     "Import from fastv (0 MB)" : {
 
     },
@@ -4430,6 +4457,12 @@
           }
         }
       }
+    },
+    "Loaded in memory" : {
+
+    },
+    "Memory" : {
+
     },
     "menu.edit.command-palette" : {
       "comment" : "Button label in Edit menu",
@@ -5021,7 +5054,13 @@
     "Mic button in composer is enabled. Press and hold to record, release to transcribe. Tip: hold the Fn key anywhere in the app for the same push-to-talk." : {
 
     },
+    "Model installed" : {
+
+    },
     "Model location" : {
+
+    },
+    "Model not installed" : {
 
     },
     "Model not installed yet" : {
@@ -5298,6 +5337,9 @@
 
     },
     "No workspace" : {
+
+    },
+    "Not in memory" : {
 
     },
     "On-device Voice (SenseVoice)" : {
@@ -6057,6 +6099,9 @@
         }
       }
     },
+    "Preload on launch" : {
+
+    },
     "preview-pane.title" : {
       "comment" : "Title for markdown/HTML preview pane",
       "extractionState" : "manual",
@@ -6074,6 +6119,9 @@
           }
         }
       }
+    },
+    "Provider" : {
+
     },
     "provider-status.help" : {
       "comment" : "tooltip for provider selector menu",
@@ -6097,6 +6145,9 @@
 
     },
     "Push-to-talk in the composer transcribes 100% on-device. Nothing leaves your Mac." : {
+
+    },
+    "Push-to-talk is ready. Press and hold the mic button in the composer, or hold the Fn key anywhere in the app." : {
 
     },
     "queued-message.actions-button" : {
@@ -6352,6 +6403,9 @@
       }
     },
     "Recently fetched" : {
+
+    },
+    "Refresh status" : {
 
     },
     "Reject" : {
@@ -13485,6 +13539,9 @@
         }
       }
     },
+    "sk-…" : {
+
+    },
     "Skip" : {
 
     },
@@ -13822,6 +13879,9 @@
 
     },
     "The agent can read files, search, list directories, run commands (with approval), and check Git status." : {
+
+    },
+    "The model also auto-unloads after 5 minutes of foreground idle, 10 minutes of background, or when the app's resident memory exceeds 4 GB." : {
 
     },
     "tool-card.allow" : {
@@ -15365,10 +15425,16 @@
         }
       }
     },
+    "Unload now" : {
+
+    },
     "Use route default: %@" : {
 
     },
     "v%@" : {
+
+    },
+    "Welcome to WillDeep" : {
 
     },
     "Widget" : {
@@ -15508,6 +15574,9 @@
           }
         }
       }
+    },
+    "You're all set" : {
+
     },
     "Your answer" : {
 

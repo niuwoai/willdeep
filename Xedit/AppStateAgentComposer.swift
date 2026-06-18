@@ -68,6 +68,26 @@ extension AppState {
         return activeRuntime
     }
 
+    @discardableResult
+    func appendAgentInputTextCreatingSessionIfNeeded(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        if activeRuntime == nil {
+            if let id = activeAgentSessionID {
+                _ = runtime(for: id)
+                subscribeToActiveRuntime()
+            }
+            if activeRuntime == nil {
+                _ = activeRuntimeAfterCreatingNewSession()
+            }
+        }
+
+        guard let runtime = activeRuntime else { return false }
+        runtime.input = runtime.input.isEmpty ? trimmed : runtime.input + " " + trimmed
+        return true
+    }
+
     func composeAttachedPrompt(
         userText: String,
         skills: [AgentSkillEntry],
