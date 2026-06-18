@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.88.0 - 2026-06-18
+
+### Added
+
+- **语音模型智能生命周期**:新增 [VoiceModelLifecycleController](Xedit/Voice/VoiceModelLifecycleController.swift) + [VoiceLifecyclePrefs](Xedit/Voice/VoiceLifecyclePrefs.swift)。策略矩阵:
+  - 第一次成功转录时 `markUsed()` 写 `UserDefaults.willdeep.voice.hasBeenUsed`。
+  - 启动时 `applicationDidFinishLaunching` 调 `install()`,如果用户用过 + preloadOnLaunch == true(默认 true),后台 `Task.detached(.utility)` 调 `SpeechTranscriptionModel.shared.preload()` —— 用过的人下次启动按 Fn 瞬时响应,不用付 1-5s 冷启动。
+  - App 进后台(`didResignActive`)起 10 分钟 timer,触发后主动 `unloadModel()` 让出 937 MB;回前台(`didBecomeActive`)取消 timer。
+  - 既有的「5 分钟前台空闲自动卸载」「4 GB 内存压力自动卸载」(`SpeechTranscriptionModel` 内置)保留。
+  - 全程 OSLog 打点(subsystem `com.willdeep.app` / category `VoiceLifecycle`)。
+- **Settings → Voice 加 Memory 区段**:新 `Toggle("Preload on launch")` 双向绑定 `VoiceLifecyclePrefs.preloadOnLaunch`,关掉之后下次启动跳过预热;`Loaded in memory` 指示灯实时显示 `SpeechTranscriptionModel.isModelLoaded()`;`Unload now` 按钮立刻释放 937 MB 内存;旁边附 5/10/4GB 三条触发规则说明。
+- **首次启动 Onboarding sheet**:新增 [OnboardingFlowController](Xedit/Onboarding/OnboardingFlowController.swift) + [OnboardingView](Xedit/Onboarding/OnboardingView.swift)。600×540 sheet,4 步 wizard:
+  1. **欢迎** — 价值主张 + 3 条 bullet
+  2. **AI Provider** — Picker(Claude / OpenAI / DeepSeek / OpenRouter / DashScope / Custom 6 选 1,默认 Claude),自动填 base URL + default model,SecureField 收 API key,空 key 视为「跳过」,填了就 `appState.agentProviderLibrary.upsert(...)` + 设为 active
+  3. **语音模型** — Download (~937 MB) / Import from fastv (0 MB) / Skip 三按钮 + 实时进度条
+  4. **完成** — 三条 tip:Agent 怎么开、Fn/mic 怎么用、Cmd-, 进 Settings
+  - `UserDefaults.willdeep.onboarding.hasCompleted.v1` 标记,完成后再开 app 不弹;同一会话内多窗口只在第一窗口弹(`hasShownThisSession` 标志)
+  - `WindowRootView` `.onAppear` 调 `presentIfNeeded()`,`.sheet(isPresented:)` 挂在窗口根层级,共享 window 的 `AppState`
+
+### 版本
+
+- 新功能(智能预热 + 后台卸载 + onboarding),按规则提升正式版本:1.87.0-rc3 → **1.88.0**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / MOBILE_GATEWAY_REQUIREMENTS (4 处) / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
 ## 1.87.0-rc3 - 2026-06-18
 
 ### Fixed

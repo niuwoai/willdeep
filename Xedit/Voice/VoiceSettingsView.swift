@@ -12,6 +12,8 @@ import AppKit
 
 struct VoiceSettingsView: View {
     @StateObject private var downloader = VoiceModelDownloader.shared
+    @State private var preloadOnLaunch: Bool = VoiceLifecyclePrefs.preloadOnLaunch
+    @State private var modelInMemory: Bool = false
 
     var body: some View {
         ScrollView {
@@ -20,10 +22,15 @@ struct VoiceSettingsView: View {
                 statusCard
                 actionRow
                 progressView
+                Divider().padding(.vertical, 4)
+                lifecycleSection
                 footer
             }
             .padding(.horizontal, 4)
             .padding(.vertical, 8)
+        }
+        .task {
+            await refreshMemoryStatus()
         }
     }
 
@@ -130,6 +137,75 @@ struct VoiceSettingsView: View {
                     .lineLimit(4)
             }
         }
+    }
+
+    private var lifecycleSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Memory")
+                .font(.headline)
+
+            Toggle(isOn: Binding(
+                get: { preloadOnLaunch },
+                set: { newValue in
+                    preloadOnLaunch = newValue
+                    VoiceLifecyclePrefs.preloadOnLaunch = newValue
+                    if newValue {
+                        VoiceModelLifecycleController.shared.preloadIfWarranted()
+                    }
+                }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Preload on launch")
+                        .font(.system(size: 13))
+                    Text("After your first transcription, warm the ~937 MB model on each app start so push-to-talk responds instantly. Disable to save memory at the cost of a 1-5 s cold start.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .toggleStyle(.switch)
+
+            HStack(spacing: 10) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(modelInMemory ? Color.green : Color.secondary.opacity(0.5))
+                        .frame(width: 8, height: 8)
+                    Text(modelInMemory ? "Loaded in memory" : "Not in memory")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if modelInMemory {
+                    Button("Unload now") {
+                        Task {
+                            await VoiceModelLifecycleController.shared.unloadNow()
+                            await refreshMemoryStatus()
+                        }
+                    }
+                    .controlSize(.small)
+                }
+
+                Spacer()
+
+                Button {
+                    Task { await refreshMemoryStatus() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.borderless)
+                .help("Refresh status")
+            }
+
+            Text("The model also auto-unloads after 5 minutes of foreground idle, 10 minutes of background, or when the app's resident memory exceeds 4 GB.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func refreshMemoryStatus() async {
+        modelInMemory = await VoiceModelLifecycleController.shared.isLoaded()
     }
 
     private var footer: some View {

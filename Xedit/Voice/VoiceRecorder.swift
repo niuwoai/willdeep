@@ -150,6 +150,17 @@ final class VoiceRecorder: ObservableObject {
             state = .idle
             WaveformOverlayWindowManager.shared.hide()
             let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                // 1.88.0:首次成功使用语音后,启用「下次启动预热」习惯。
+                // 调一次 preloadIfWarranted 是为了「现在 已经加载好了 +
+                // markUsed 让下次启动也享受预热」—— 现在这次不再二次
+                // 触发 load(model 已在内存)。
+                let firstTime = !VoiceLifecyclePrefs.userHasUsedVoice
+                VoiceLifecyclePrefs.markUsed()
+                if firstTime {
+                    VoiceModelLifecycleController.shared.preloadIfWarranted()
+                }
+            }
             return trimmed.isEmpty ? nil : trimmed
         } catch {
             state = .failed(message: "Transcription failed: \(error.localizedDescription)")

@@ -252,6 +252,10 @@ private struct WindowRootView: View {
     /// 用 @StateObject 持有 observer 的生命周期；deinit 时自动摘
     /// 通知。
     @StateObject private var windowFocus = WindowFocusObserver()
+    /// 1.88.0:首次启动 onboarding sheet 控制器。每个 WindowRootView
+    /// 都 .sheet 绑这个,但 OnboardingFlowController.presentIfNeeded()
+    /// 只让第一窗口翻 isPresented = true。
+    @ObservedObject private var onboarding = OnboardingFlowController.shared
     let initialExternalURL: URL?
     @State private var didHandleInitialExternalURL = false
 
@@ -285,10 +289,15 @@ private struct WindowRootView: View {
                     didHandleInitialExternalURL = true
                     appState.openExternalURL(initialExternalURL)
                 }
+                onboarding.presentIfNeeded()
             }
             .onDisappear {
                 EditorAppStateRegistry.shared.unregister(appState)
                 windowFocus.detach()
+            }
+            .sheet(isPresented: $onboarding.isPresented) {
+                OnboardingView()
+                    .environmentObject(appState)
             }
     }
 }

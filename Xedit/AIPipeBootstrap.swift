@@ -16,6 +16,7 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
         AppUpdateChecker.checkForUpdatesOnLaunch()
         MainActor.assumeIsolated {
             FnPushToTalkMonitor.shared.install()
+            VoiceModelLifecycleController.shared.install()
         }
     }
 
