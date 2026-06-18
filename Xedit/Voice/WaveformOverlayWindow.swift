@@ -5,8 +5,8 @@
 //  1.86.0 push-to-talk 浮窗。按住 mic 时屏幕右下角浮出一个毛玻璃小窗,
 //  里面是 5 根随 audioLevel 起伏的 bar;松开切转录态时变成旋转 spinner;
 //  结束/失败/取消时整体淡出。源代码骨架从 ~/Sites/fastv 的 WaveformView
-//  搬来,删掉 AI 修正相关分支、不依赖 UserPreferences,改成固定 240x80
-//  尺寸 + bottomCenter 位置。窗口 ignoresMouseEvents,不打扰用户操作。
+//  搬来,删掉 AI 修正相关分支。1.89 起位置/尺寸/颜色重新接回 fastv 风格
+//  设置。窗口 ignoresMouseEvents,不打扰用户操作。
 //
 
 import SwiftUI
@@ -39,16 +39,19 @@ final class WaveformOverlayWindowManager: ObservableObject {
         audioLevel = 0.0
 
         if let existing = window {
-            existing.orderFrontRegardless()
-            return
+            existing.contentView = nil
+            existing.close()
+            window = nil
+            hostingView = nil
         }
 
         let content = WaveformOverlayView(manager: self)
         let host = NSHostingView(rootView: content)
-        let size = NSSize(width: 240, height: 80)
+        let preferences = UserPreferences.shared
+        let size = preferences.waveformOverlayStyle.size
         host.frame = NSRect(origin: .zero, size: size)
 
-        let frame = Self.frame(for: size)
+        let frame = Self.frame(for: size, position: preferences.waveformOverlayPosition)
         let win = NSWindow(
             contentRect: frame,
             styleMask: [.borderless],
@@ -97,74 +100,112 @@ final class WaveformOverlayWindowManager: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: task)
     }
 
-    private static func frame(for size: NSSize) -> NSRect {
+    private static func frame(
+        for size: NSSize,
+        position: WaveformOverlayWindowPosition
+    ) -> NSRect {
         let screen = NSScreen.main ?? NSScreen.screens.first
         guard let s = screen else {
             return NSRect(origin: .zero, size: size)
         }
         let sf = s.frame
-        let margin: CGFloat = 48
-        let x = sf.midX - size.width / 2
-        let y = sf.minY + margin
+        let margin: CGFloat = 40
+        let x: CGFloat
+        let y: CGFloat
+
+        switch position {
+        case .topLeft:
+            x = sf.minX + margin
+            y = sf.maxY - size.height - margin
+        case .topRight:
+            x = sf.maxX - size.width - margin
+            y = sf.maxY - size.height - margin
+        case .bottomLeft:
+            x = sf.minX + margin
+            y = sf.minY + margin
+        case .bottomRight:
+            x = sf.maxX - size.width - margin
+            y = sf.minY + margin
+        case .bottomCenter:
+            x = sf.midX - size.width / 2
+            y = sf.minY + margin
+        }
+
         return NSRect(x: x, y: y, width: size.width, height: size.height)
     }
 }
 
 struct WaveformOverlayView: View {
     @ObservedObject var manager: WaveformOverlayWindowManager
+    @ObservedObject private var preferences = UserPreferences.shared
+    @Environment(\.colorScheme) private var colorScheme
     @State private var bars: [CGFloat] = [0.35, 0.55, 0.75, 0.55, 0.35]
     @State private var rotation: Double = 0
     @State private var containerScale: CGFloat = 0.8
     @State private var containerOpacity: Double = 0
 
-    private let barColor: Color = .accentColor
-    private let barWidth: CGFloat = 6
-    private let barSpacing: CGFloat = 6
-    private let maxBarHeight: CGFloat = 40
-    private let spinnerSize: CGFloat = 28
-
     var body: some View {
+        let style = preferences.waveformOverlayStyle
+        let colorConfig = preferences.waveformOverlayColorStyle.colorConfig(for: colorScheme)
+        let barColor = colorConfig.barColor
+        let size = style.size
+
         ZStack {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.25), radius: 14, x: 0, y: 6)
+            background(config: colorConfig, cornerRadius: style.cornerRadius)
 
             Group {
                 switch manager.state {
                 case .recording:
-                    HStack(spacing: barSpacing) {
-                        ForEach(0..<bars.count, id: \.self) { i in
-                            RoundedRectangle(cornerRadius: barWidth / 2, style: .continuous)
+                    Group {
+                        if style.isMinimal {
+                            let scale = 0.6 + CGFloat(manager.audioLevel) * 0.6
+                            Circle()
                                 .fill(
-                                    LinearGradient(
-                                        colors: [
-                                            barColor.opacity(0.95),
-                                            barColor.opacity(0.7),
-                                            barColor.opacity(0.45),
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .bottom
+                                    RadialGradient(
+                                        colors: [barColor, barColor.opacity(0.6)],
+                                        center: .center,
+                                        startRadius: 0,
+                                        endRadius: 6
                                     )
                                 )
-                                .frame(width: barWidth, height: bars[i] * maxBarHeight)
-                                .shadow(color: barColor.opacity(0.35), radius: 2)
+                                .frame(width: 8, height: 8)
+                                .scaleEffect(scale)
+                                .shadow(color: barColor.opacity(0.5), radius: 3)
+                                .animation(.easeOut(duration: 0.12), value: manager.audioLevel)
+                        } else {
+                            HStack(spacing: style.barSpacing) {
+                                ForEach(0..<bars.count, id: \.self) { i in
+                                    RoundedRectangle(cornerRadius: style.barWidth / 2, style: .continuous)
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [
+                                                    barColor.opacity(0.95),
+                                                    barColor.opacity(0.7),
+                                                    barColor.opacity(0.45),
+                                                ],
+                                                startPoint: .top,
+                                                endPoint: .bottom
+                                            )
+                                        )
+                                        .frame(width: style.barWidth, height: bars[i] * style.maxBarHeight)
+                                        .shadow(color: barColor.opacity(0.35), radius: 2)
+                                }
+                            }
+                            .onAppear { animateBars() }
+                            .onChange(of: manager.audioLevel) { _, level in
+                                updateBars(level)
+                            }
                         }
                     }
-                    .onAppear { animateBars() }
-                    .onChange(of: manager.audioLevel) { _, level in
-                        updateBars(level)
-                    }
+                    .padding(.horizontal, style.horizontalPadding)
+                    .padding(.vertical, style.verticalPadding)
                     .transition(.scale.combined(with: .opacity))
 
                 case .transcribing:
                     ZStack {
                         Circle()
                             .stroke(barColor.opacity(0.25), lineWidth: 2.5)
-                            .frame(width: spinnerSize, height: spinnerSize)
+                            .frame(width: style.spinnerSize, height: style.spinnerSize)
                         Circle()
                             .trim(from: 0, to: 0.75)
                             .stroke(
@@ -179,17 +220,19 @@ struct WaveformOverlayView: View {
                                 ),
                                 style: StrokeStyle(lineWidth: 2.6, lineCap: .round)
                             )
-                            .frame(width: spinnerSize, height: spinnerSize)
+                            .frame(width: style.spinnerSize, height: style.spinnerSize)
                             .rotationEffect(.degrees(rotation))
                             .shadow(color: barColor.opacity(0.45), radius: 4)
                     }
+                    .padding(.horizontal, style.horizontalPadding)
+                    .padding(.vertical, style.verticalPadding)
                     .onAppear { startSpin() }
                     .transition(.scale.combined(with: .opacity))
                 }
             }
             .id(manager.state)
         }
-        .frame(width: 240, height: 80)
+        .frame(width: size.width, height: size.height)
         .scaleEffect(containerScale)
         .opacity(containerOpacity)
         .onAppear {
@@ -197,6 +240,35 @@ struct WaveformOverlayView: View {
                 containerScale = 1.0
                 containerOpacity = 1.0
             }
+        }
+    }
+
+    @ViewBuilder
+    private func background(
+        config: WaveformOverlayColorConfig,
+        cornerRadius: CGFloat
+    ) -> some View {
+        if config.useMaterial {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .background {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(config.backgroundColor.opacity(config.backgroundOpacity))
+                }
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.25), radius: 14, x: 0, y: 6)
+        } else {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(config.backgroundColor.opacity(config.backgroundOpacity))
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.25), radius: 14, x: 0, y: 6)
         }
     }
 

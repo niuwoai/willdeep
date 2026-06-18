@@ -12,21 +12,34 @@
 import Foundation
 import Combine
 
-/// Shim for the fastv `UserPreferences` global the ported STT code
-/// reaches into. Currently exposes the single knob the STT path actually
-/// reads: `enableCTCDeduplication`. Persists via UserDefaults under a
-/// `com.willdeep.voice.*` key so it never collides with the rest of the
-/// AgentSettingsStore namespace.
+/// Shim for the fastv `UserPreferences` global the ported STT code reaches
+/// into. Persists voice-only knobs via `com.willdeep.voice.*` keys so they
+/// never collide with the rest of the AgentSettingsStore namespace.
 @MainActor
 final class UserPreferences: ObservableObject {
     static let shared = UserPreferences()
 
     private enum Keys {
         static let enableCTCDeduplication = "com.willdeep.voice.enableCTCDeduplication.v1"
+        static let waveformOverlayPosition = "com.willdeep.voice.waveformOverlay.position.v1"
+        static let waveformOverlayStyle = "com.willdeep.voice.waveformOverlay.style.v1"
+        static let waveformOverlayColorStyle = "com.willdeep.voice.waveformOverlay.colorStyle.v1"
     }
 
     @Published var enableCTCDeduplication: Bool {
         didSet { UserDefaults.standard.set(enableCTCDeduplication, forKey: Keys.enableCTCDeduplication) }
+    }
+
+    @Published var waveformOverlayPosition: WaveformOverlayWindowPosition {
+        didSet { UserDefaults.standard.set(waveformOverlayPosition.rawValue, forKey: Keys.waveformOverlayPosition) }
+    }
+
+    @Published var waveformOverlayStyle: WaveformOverlayWindowStyle {
+        didSet { UserDefaults.standard.set(waveformOverlayStyle.rawValue, forKey: Keys.waveformOverlayStyle) }
+    }
+
+    @Published var waveformOverlayColorStyle: WaveformOverlayWindowColorStyle {
+        didSet { UserDefaults.standard.set(waveformOverlayColorStyle.rawValue, forKey: Keys.waveformOverlayColorStyle) }
     }
 
     private init() {
@@ -36,6 +49,27 @@ final class UserPreferences: ObservableObject {
             self.enableCTCDeduplication = existing
         } else {
             self.enableCTCDeduplication = false
+        }
+
+        if let raw = UserDefaults.standard.string(forKey: Keys.waveformOverlayPosition),
+           let position = WaveformOverlayWindowPosition(rawValue: raw) {
+            self.waveformOverlayPosition = position
+        } else {
+            self.waveformOverlayPosition = .bottomCenter
+        }
+
+        if let raw = UserDefaults.standard.string(forKey: Keys.waveformOverlayStyle),
+           let style = WaveformOverlayWindowStyle(rawValue: raw) {
+            self.waveformOverlayStyle = style
+        } else {
+            self.waveformOverlayStyle = .compact
+        }
+
+        if let raw = UserDefaults.standard.string(forKey: Keys.waveformOverlayColorStyle),
+           let colorStyle = WaveformOverlayWindowColorStyle(rawValue: raw) {
+            self.waveformOverlayColorStyle = colorStyle
+        } else {
+            self.waveformOverlayColorStyle = .darkGrayBlue
         }
     }
 }

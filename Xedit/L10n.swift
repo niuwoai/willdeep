@@ -792,6 +792,50 @@ enum L10n {
             }
         }
 
+        enum Voice {
+            static let overlaySection = String(localized: "settings.voice.overlay.section", defaultValue: "Floating Transcription Bar")
+            static let overlayPositionLabel = String(localized: "settings.voice.overlay.position", defaultValue: "Position")
+            static let overlaySizeLabel = String(localized: "settings.voice.overlay.size", defaultValue: "Size")
+            static let overlayColorLabel = String(localized: "settings.voice.overlay.color", defaultValue: "Color")
+            static let overlayPreviewTitle = String(localized: "settings.voice.overlay.preview.title", defaultValue: "Preview")
+            static let overlayPreviewDescription = String(localized: "settings.voice.overlay.preview.description", defaultValue: "Uses the same style presets as fastv's floating transcription toolbar.")
+            static let overlayPreviewButton = String(localized: "settings.voice.overlay.preview.button", defaultValue: "Show bar")
+            static let overlayDescription = String(localized: "settings.voice.overlay.description", defaultValue: "These settings apply to both the Fn push-to-talk shortcut and the composer mic button.")
+
+            static let overlayPositionTopLeft = String(localized: "settings.voice.overlay.position.top-left", defaultValue: "Top left")
+            static let overlayPositionTopRight = String(localized: "settings.voice.overlay.position.top-right", defaultValue: "Top right")
+            static let overlayPositionBottomLeft = String(localized: "settings.voice.overlay.position.bottom-left", defaultValue: "Bottom left")
+            static let overlayPositionBottomRight = String(localized: "settings.voice.overlay.position.bottom-right", defaultValue: "Bottom right")
+            static let overlayPositionBottomCenter = String(localized: "settings.voice.overlay.position.bottom-center", defaultValue: "Bottom center")
+
+            static let overlayStyleMinimal = String(localized: "settings.voice.overlay.style.minimal", defaultValue: "Minimal")
+            static let overlayStyleCompact = String(localized: "settings.voice.overlay.style.compact", defaultValue: "Compact")
+            static let overlayStyleNormal = String(localized: "settings.voice.overlay.style.normal", defaultValue: "Normal")
+            static let overlayStyleLarge = String(localized: "settings.voice.overlay.style.large", defaultValue: "Large")
+
+            static let overlayColorBlue = String(localized: "settings.voice.overlay.color.blue", defaultValue: "Blue")
+            static let overlayColorPurple = String(localized: "settings.voice.overlay.color.purple", defaultValue: "Purple")
+            static let overlayColorPink = String(localized: "settings.voice.overlay.color.pink", defaultValue: "Pink")
+            static let overlayColorGreen = String(localized: "settings.voice.overlay.color.green", defaultValue: "Green")
+            static let overlayColorOrange = String(localized: "settings.voice.overlay.color.orange", defaultValue: "Orange")
+            static let overlayColorRed = String(localized: "settings.voice.overlay.color.red", defaultValue: "Red")
+            static let overlayColorBlackWhite = String(localized: "settings.voice.overlay.color.black-white", defaultValue: "Black + white")
+            static let overlayColorWhiteBlack = String(localized: "settings.voice.overlay.color.white-black", defaultValue: "White + black")
+            static let overlayColorDarkGrayWhite = String(localized: "settings.voice.overlay.color.dark-gray-white", defaultValue: "Dark gray + white")
+            static let overlayColorDarkBlueCyan = String(localized: "settings.voice.overlay.color.dark-blue-cyan", defaultValue: "Dark blue + cyan")
+            static let overlayColorDarkPurplePink = String(localized: "settings.voice.overlay.color.dark-purple-pink", defaultValue: "Dark purple + pink")
+            static let overlayColorDarkGreenLime = String(localized: "settings.voice.overlay.color.dark-green-lime", defaultValue: "Dark green + lime")
+            static let overlayColorDarkRedCoral = String(localized: "settings.voice.overlay.color.dark-red-coral", defaultValue: "Dark red + coral")
+            static let overlayColorDarkGrayBlue = String(localized: "settings.voice.overlay.color.dark-gray-blue", defaultValue: "Dark gray + blue")
+            static let overlayColorDarkGrayGreen = String(localized: "settings.voice.overlay.color.dark-gray-green", defaultValue: "Dark gray + green")
+            static let overlayColorDarkGrayOrange = String(localized: "settings.voice.overlay.color.dark-gray-orange", defaultValue: "Dark gray + orange")
+            static let overlayColorDarkGrayPink = String(localized: "settings.voice.overlay.color.dark-gray-pink", defaultValue: "Dark gray + pink")
+            static let overlayColorDarkGrayPurple = String(localized: "settings.voice.overlay.color.dark-gray-purple", defaultValue: "Dark gray + purple")
+            static let overlayColorDarkGrayRed = String(localized: "settings.voice.overlay.color.dark-gray-red", defaultValue: "Dark gray + red")
+            static let overlayColorDarkGrayYellow = String(localized: "settings.voice.overlay.color.dark-gray-yellow", defaultValue: "Dark gray + yellow")
+            static let overlayColorDarkGrayCyan = String(localized: "settings.voice.overlay.color.dark-gray-cyan", defaultValue: "Dark gray + cyan")
+        }
+
         enum Tools {
             static let alwaysAllowNote = String(localized: "settings.tools.always-allow-note", defaultValue: "Rules apply to command families such as `git push`; dangerous commands still require confirmation.")
             static let removeButton = String(localized: "settings.tools.remove", defaultValue: "Remove")
@@ -843,6 +887,7 @@ enum L10n {
             static let protocolLabel = String(localized: "settings.mobile-gateway.protocol", defaultValue: "Protocol")
             static let desktopPeerLabel = String(localized: "settings.mobile-gateway.desktop-peer", defaultValue: "Desktop peer")
             static let pairingBaseURLLabel = String(localized: "settings.mobile-gateway.pairing-base-url", defaultValue: "Pairing URL")
+            static let fallbackBaseURLsLabel = String(localized: "settings.mobile-gateway.fallback-base-urls", defaultValue: "Fallback URLs")
             static let expiresLabel = String(localized: "settings.mobile-gateway.expires", defaultValue: "Expires")
             static let hostPrompt = String(localized: "settings.mobile-gateway.host-prompt", defaultValue: "0.0.0.0")
             static let portInputLabel = String(localized: "settings.mobile-gateway.port-input", defaultValue: "Port")

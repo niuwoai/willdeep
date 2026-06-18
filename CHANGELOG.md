@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.89.0-rc2 - 2026-06-18
+
+### Fixed
+
+- **内嵌 Go Mobile Gateway 改为 macOS universal 二进制**:Xcode `Build willdeep-agent` build phase 不再只按构建机 CPU 输出单架构网关,而是分别构建 `darwin/arm64` 与 `darwin/amd64`,再用 `lipo -create` 合并为 `WillDeep.app/Contents/Resources/willdeep-agent`,让同一份 App 同时支持 Apple Silicon 与 Intel Mac。
+
+### 版本
+
+- 发布构建修复,只递增 rc:1.89.0-rc1 → **1.89.0-rc2**。pbxproj×6 / Go agent / Help Info.plist / product-overview / MOBILE_GATEWAY_REQUIREMENTS / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
+## 1.89.0-rc1 - 2026-06-18
+
+### Added
+
+- **Settings → Voice 浮动转录条样式**:参照 `~/Sites/fastv` 原项目恢复浮动条位置、尺寸和颜色设置。新增 `WaveformOverlayWindowPosition` / `WaveformOverlayWindowStyle` / `WaveformOverlayWindowColorStyle`,支持 top-left / top-right / bottom-left / bottom-right / bottom-center,以及 minimal / compact / normal / large 和 21 套 fastv 色彩预设。
+- **浮动条实时套用偏好**:Fn push-to-talk 与 composer mic 共用 `UserPreferences` 里的 `com.willdeep.voice.waveformOverlay.*` 设置;浮窗不再固定 240×80 / bottomCenter / accentColor。录音态支持 fastv 的极简呼吸点和经典波形两种渲染,转录态 spinner 跟随所选色彩。
+- **设置页预览**:Settings → Voice 新增样式预览卡和 "Show bar" 按钮,不用真的按 Fn 也能检查浮动条外观。
+- **Mobile Gateway Tailscale 备用地址**:Mac 端二维码 payload 继续保留局域网 `base_url`,同时自动扫描本机 `100.64.0.0/10` Tailscale IPv4 并写入 `fallback_base_urls`;Settings → Mobile Gateway 高级区也会显示 fallback URL,方便确认二维码里是否带上了 Tailscale 地址。
+- **回归测试**:新增 `WaveformOverlayStyleTests`,锁住 fastv 的四档尺寸和 21 套颜色矩阵基本形状。
+- **Mobile Gateway 回归测试**:新增 coordinator 覆盖,锁住 Tailscale 地址范围识别、wildcard 监听时才发 fallback、显式 host 绑定时不误发备用地址。
+
+### 版本
+
+- 新增功能,提升预发布版本:1.88.0-rc2 → **1.89.0-rc1**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / MOBILE_GATEWAY_REQUIREMENTS (4 处) / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
+## 1.88.0-rc2 - 2026-06-18
+
+### Fixed
+
+- **Agent mode 里 Fn 转录成功但没进 composer**:查本机 OSLog 后确认 Fn 监听和 SenseVoice 转录都跑了,失败点是 `FnPushToTalkMonitor.appendToCurrentComposer` 发现 `activeRuntime == nil` 后直接丢弃 transcript。新增 `appendAgentInputTextCreatingSessionIfNeeded(_:)`:没有 active runtime 时先按发送消息同款逻辑恢复/懒创建 Agent 会话,再把转录文本追加到 composer。Fn 路径和 mic 按钮路径都改走这个共享入口。
+- **回归测试**:新增 `AgentComposerVoiceInputTests`,覆盖「无 active session 时语音输入先创建会话再追加」和「已有输入时追加空格拼接」两条核心路径。
+
+### 版本
+
+- bugfix,只递增 rc:1.88.0-rc1 → **1.88.0-rc2**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / MOBILE_GATEWAY_REQUIREMENTS (4 处) / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
 ## 1.88.0-rc1 - 2026-06-18
 
 ### Fixed

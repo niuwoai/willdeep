@@ -126,6 +126,13 @@ struct MobileGatewaySettingsView: View {
                             Text(payload.baseURL)
                                 .textSelection(.enabled)
                         }
+                        if !payload.fallbackBaseURLs.isEmpty {
+                            LabeledContent(L10n.Settings.MobileGateway.fallbackBaseURLsLabel) {
+                                Text(payload.fallbackBaseURLs.joined(separator: "\n"))
+                                    .textSelection(.enabled)
+                                    .multilineTextAlignment(.trailing)
+                            }
+                        }
                     }
 
                     TextField(L10n.Settings.MobileGateway.hostPrompt, text: Binding(

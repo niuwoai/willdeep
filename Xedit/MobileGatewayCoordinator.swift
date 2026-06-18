@@ -12,6 +12,7 @@ import Foundation
 
 struct MobileGatewayPairingPayload: Codable, Equatable {
     var baseURL: String
+    var fallbackBaseURLs: [String]
     var pairingToken: String
     var protocolVersion: String
     var desktopName: String
@@ -19,10 +20,37 @@ struct MobileGatewayPairingPayload: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case baseURL = "base_url"
+        case fallbackBaseURLs = "fallback_base_urls"
         case pairingToken = "pairing_token"
         case protocolVersion = "protocol_version"
         case desktopName = "desktop_name"
         case expiresAt = "expires_at"
+    }
+
+    init(
+        baseURL: String,
+        fallbackBaseURLs: [String] = [],
+        pairingToken: String,
+        protocolVersion: String,
+        desktopName: String,
+        expiresAt: Date
+    ) {
+        self.baseURL = baseURL
+        self.fallbackBaseURLs = fallbackBaseURLs
+        self.pairingToken = pairingToken
+        self.protocolVersion = protocolVersion
+        self.desktopName = desktopName
+        self.expiresAt = expiresAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        baseURL = try container.decode(String.self, forKey: .baseURL)
+        fallbackBaseURLs = try container.decodeIfPresent([String].self, forKey: .fallbackBaseURLs) ?? []
+        pairingToken = try container.decode(String.self, forKey: .pairingToken)
+        protocolVersion = try container.decode(String.self, forKey: .protocolVersion)
+        desktopName = try container.decode(String.self, forKey: .desktopName)
+        expiresAt = try container.decode(Date.self, forKey: .expiresAt)
     }
 
     var qrJSONString: String {
@@ -34,6 +62,27 @@ struct MobileGatewayPairingPayload: Codable, Equatable {
             return "{}"
         }
         return text
+    }
+
+    func addingFallbackBaseURLs(_ urls: [URL]) -> MobileGatewayPairingPayload {
+        let primary = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        var seen = Set([primary])
+        let existing = fallbackBaseURLs.map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
+        let discovered = urls.map { $0.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
+        let fallbacks = (existing + discovered)
+            .filter { value in
+                guard !value.isEmpty, !seen.contains(value) else { return false }
+                seen.insert(value)
+                return true
+            }
+        return MobileGatewayPairingPayload(
+            baseURL: baseURL,
+            fallbackBaseURLs: fallbacks,
+            pairingToken: pairingToken,
+            protocolVersion: protocolVersion,
+            desktopName: desktopName,
+            expiresAt: expiresAt
+        )
     }
 }
 
@@ -232,7 +281,8 @@ final class MobileGatewayCoordinator: ObservableObject {
         let baseURL = Self.desktopBaseURL(for: settings)
         displayBaseURL = Self.pairingBaseURL(for: settings)
         health = try? await get(path: "/mobile/health", baseURL: baseURL, token: nil, as: MobileGatewayHealth.self)
-        pairingPayload = try? await get(path: "/mobile/pairing", baseURL: baseURL, token: desktopToken, as: MobileGatewayPairingResponse.self).pairingPayload
+        pairingPayload = (try? await get(path: "/mobile/pairing", baseURL: baseURL, token: desktopToken, as: MobileGatewayPairingResponse.self).pairingPayload)?
+            .addingFallbackBaseURLs(Self.pairingFallbackBaseURLs(for: settings))
         devices = (try? await get(path: "/mobile/devices", baseURL: baseURL, token: desktopToken, as: DevicesResponse.self).devices) ?? devices
     }
 
@@ -262,7 +312,7 @@ final class MobileGatewayCoordinator: ObservableObject {
                 token: desktopToken,
                 body: EmptyRequest(),
                 as: MobileGatewayPairingResponse.self
-            ).pairingPayload
+            ).pairingPayload?.addingFallbackBaseURLs(Self.pairingFallbackBaseURLs(for: settings))
             await refresh()
         } catch {
             fail(error.localizedDescription)
@@ -409,6 +459,28 @@ final class MobileGatewayCoordinator: ObservableObject {
         return URL(string: "http://\(host):\(settings.port)")!
     }
 
+    static func pairingFallbackBaseURLs(for settings: MobileGatewaySettings) -> [URL] {
+        pairingFallbackBaseURLs(for: settings, candidateIPv4Addresses: localIPv4Addresses())
+    }
+
+    static func pairingFallbackBaseURLs(
+        for settings: MobileGatewaySettings,
+        candidateIPv4Addresses: [String]
+    ) -> [URL] {
+        guard ["0.0.0.0", "::", ""].contains(settings.host) else { return [] }
+        let primary = pairingBaseURL(for: settings).absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        var seen = Set([primary])
+        return candidateIPv4Addresses
+            .filter(isTailscaleIPv4Address)
+            .compactMap { URL(string: "http://\($0):\(settings.port)") }
+            .filter { url in
+                let value = url.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                guard !seen.contains(value) else { return false }
+                seen.insert(value)
+                return true
+            }
+    }
+
     static func writeDesktopTokenFile(_ token: String) throws -> URL {
         let directory = try applicationSupportDirectory()
             .appendingPathComponent("MobileGateway", isDirectory: true)
@@ -433,11 +505,16 @@ final class MobileGatewayCoordinator: ObservableObject {
     }
 
     private static func primaryLANIPv4Address() -> String? {
+        let addresses = localIPv4Addresses()
+        return addresses.first { !isTailscaleIPv4Address($0) } ?? addresses.first
+    }
+
+    private static func localIPv4Addresses() -> [String] {
         var ifaddr: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return nil }
+        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return [] }
         defer { freeifaddrs(ifaddr) }
 
-        var fallback: String?
+        var addresses: [(name: String, address: String)] = []
         var pointer: UnsafeMutablePointer<ifaddrs>? = first
         while let current = pointer {
             defer { pointer = current.pointee.ifa_next }
@@ -457,12 +534,22 @@ final class MobileGatewayCoordinator: ObservableObject {
             )
             guard result == 0 else { continue }
             let address = String(cString: hostname)
-            if String(cString: current.pointee.ifa_name) == "en0" {
-                return address
-            }
-            fallback = fallback ?? address
+            addresses.append((String(cString: current.pointee.ifa_name), address))
         }
-        return fallback
+        return addresses.sorted { lhs, rhs in
+            if lhs.name == "en0" { return true }
+            if rhs.name == "en0" { return false }
+            return lhs.name < rhs.name
+        }.map(\.address)
+    }
+
+    static func isTailscaleIPv4Address(_ address: String) -> Bool {
+        let parts = address.split(separator: ".").compactMap { Int($0) }
+        guard parts.count == 4,
+              parts.allSatisfy({ (0...255).contains($0) }) else {
+            return false
+        }
+        return parts[0] == 100 && (64...127).contains(parts[1])
     }
 
     /// Build a diagnosable failure string: the exit status plus the last

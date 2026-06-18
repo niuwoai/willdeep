@@ -164,16 +164,11 @@ final class FnPushToTalkMonitor {
     /// 找当前活跃的 AppState(跟 MicPushToTalkButton 走的是 EnvironmentObject
     /// 拿到的同一份 —— Agent 窗口里那份取自 EditorAppStateRegistry.current),
     /// 在它的 agentInput 末尾拼上转录文本。注意 `agentInput` 是 computed
-    /// property 走 `activeRuntime?.input`,如果 activeRuntime 是 nil
-    /// (workspace 还没有 active agent session)写不进去 —— 提前 detect
-    /// 给出诊断。
+    /// property 走 `activeRuntime?.input`。如果 workspace 还没有 active
+    /// agent session,先按 send path 同款策略懒创建一条,再写入。
     private func appendToCurrentComposer(_ transcript: String) {
         guard let appState = EditorAppStateRegistry.shared.current else {
             log.warning("append: no current AppState — transcript dropped (\(transcript))")
-            return
-        }
-        guard appState.activeRuntime != nil else {
-            log.warning("append: no activeRuntime (activeAgentSessionID=\(String(describing: appState.activeAgentSessionID))) — transcript dropped (\(transcript))")
             return
         }
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -181,8 +176,14 @@ final class FnPushToTalkMonitor {
             log.info("append: trimmed transcript empty")
             return
         }
-        let next = appState.agentInput.isEmpty ? trimmed : appState.agentInput + " " + trimmed
-        appState.agentInput = next
-        log.info("append: wrote \(trimmed.count) chars; total now \(appState.agentInput.count)")
+        let beforeID = appState.activeAgentSessionID
+        guard appState.appendAgentInputTextCreatingSessionIfNeeded(trimmed) else {
+            log.warning("append: no activeRuntime after lazy session creation — transcript dropped")
+            return
+        }
+        if beforeID == nil, let newID = appState.activeAgentSessionID {
+            log.info("append: lazily created agent session \(newID.uuidString, privacy: .private)")
+        }
+        log.info("append: wrote transcript; total now \(appState.agentInput.count)")
     }
 }

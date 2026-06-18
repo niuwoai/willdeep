@@ -89,6 +89,7 @@ struct MobileGatewayCoordinatorTests {
         )))
         let payload = MobileGatewayPairingPayload(
             baseURL: "http://192.168.1.20:8877",
+            fallbackBaseURLs: ["http://100.90.80.70:8877"],
             pairingToken: "token",
             protocolVersion: "mobile-gateway.v1",
             desktopName: "Mac",
@@ -98,9 +99,78 @@ struct MobileGatewayCoordinatorTests {
         let data = try #require(payload.qrJSONString.data(using: .utf8))
         let raw = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         #expect(raw?["base_url"] as? String == "http://192.168.1.20:8877")
+        #expect(raw?["fallback_base_urls"] as? [String] == ["http://100.90.80.70:8877"])
         #expect(raw?["pairing_token"] as? String == "token")
         #expect(raw?["protocol_version"] as? String == "mobile-gateway.v1")
         #expect(raw?["desktop_name"] as? String == "Mac")
+    }
+
+    @Test
+    func pairingPayloadDecodesLegacyJSONWithoutFallbackBaseURLs() throws {
+        let json = """
+        {
+          "base_url": "http://192.168.1.20:8877",
+          "pairing_token": "token",
+          "protocol_version": "mobile-gateway.v1",
+          "desktop_name": "Mac",
+          "expires_at": "2026-06-13T12:02:00Z"
+        }
+        """
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let payload = try decoder.decode(
+            MobileGatewayPairingPayload.self,
+            from: try #require(json.data(using: .utf8))
+        )
+
+        #expect(payload.baseURL == "http://192.168.1.20:8877")
+        #expect(payload.fallbackBaseURLs.isEmpty)
+    }
+
+    @Test
+    func pairingFallbackBaseURLsUseTailscaleRangeOnlyWhenListeningOnWildcard() {
+        let settings = MobileGatewaySettings(
+            host: "0.0.0.0",
+            port: 8877,
+            desktopName: "Mac",
+            executablePath: "",
+            allowPairing: true
+        )
+
+        let fallbacks = MobileGatewayCoordinator.pairingFallbackBaseURLs(
+            for: settings,
+            candidateIPv4Addresses: [
+                "192.168.1.20",
+                "100.63.255.255",
+                "100.64.0.1",
+                "100.127.255.254",
+                "100.128.0.1",
+            ]
+        )
+
+        #expect(fallbacks.map(\.absoluteString) == [
+            "http://100.64.0.1:8877",
+            "http://100.127.255.254:8877",
+        ])
+    }
+
+    @Test
+    func pairingFallbackBaseURLsAreEmptyForExplicitHostBinding() {
+        let settings = MobileGatewaySettings(
+            host: "192.168.1.20",
+            port: 8877,
+            desktopName: "Mac",
+            executablePath: "",
+            allowPairing: true
+        )
+
+        let fallbacks = MobileGatewayCoordinator.pairingFallbackBaseURLs(
+            for: settings,
+            candidateIPv4Addresses: ["100.64.0.1"]
+        )
+
+        #expect(fallbacks.isEmpty)
     }
 
     @Test

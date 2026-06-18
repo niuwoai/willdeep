@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-06-18 | Target version: v1.88.0-rc1
+> Last updated: 2026-06-18 | Target version: v1.89.0-rc2
 
 ## Summary
 
@@ -66,8 +66,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.88.0-rc1`
-- `X-Server-Version: 1.88.0-rc1`
+- `X-App-Version: 1.89.0-rc2`
+- `X-Server-Version: 1.89.0-rc2`
 
 ### `GET /mobile/health`
 
@@ -79,7 +79,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.88.0-rc1",
+    "version": "1.89.0-rc2",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
@@ -103,6 +103,7 @@ Response data:
 {
   "pairing_payload": {
     "base_url": "http://192.168.1.20:8877",
+    "fallback_base_urls": ["http://100.90.80.70:8877"],
     "pairing_token": "short-lived-token",
     "protocol_version": "mobile-gateway.v1",
     "desktop_name": "Rocky's Mac",
@@ -111,7 +112,7 @@ Response data:
 }
 ```
 
-The macOS UI should render this payload as a QR code. The pairing token is single-use and defaults to a 2-minute lifetime.
+The macOS UI should render this payload as a QR code. The pairing token is single-use and defaults to a 2-minute lifetime. When the gateway is listening on a wildcard host and macOS has a Tailscale IPv4 address in `100.64.0.0/10`, the QR payload may include `fallback_base_urls` so Android can try the Tailscale address after the LAN address fails.
 
 ### `POST /mobile/pairing/rotate`
 
@@ -125,6 +126,7 @@ Response data:
 {
   "pairing_payload": {
     "base_url": "http://192.168.1.20:8877",
+    "fallback_base_urls": ["http://100.90.80.70:8877"],
     "pairing_token": "new-short-lived-token",
     "protocol_version": "mobile-gateway.v1",
     "desktop_name": "Rocky's Mac",
@@ -321,7 +323,7 @@ The macOS app includes a Mobile Gateway settings section:
 - list paired devices with last connected time;
 - revoke a paired device.
 
-The Swift coordinator uses the bundled `willdeep-agent` resource by default, allows an explicit executable path as a fallback, passes the desktop bearer token through a protected token file instead of the process argument list, fetches pairing/device metadata through desktop-authenticated HTTP, and connects the desktop peer bridge to `/mobile/ws`.
+The Swift coordinator uses the bundled `willdeep-agent` resource by default, allows an explicit executable path as a fallback, passes the desktop bearer token through a protected token file instead of the process argument list, fetches pairing/device metadata through desktop-authenticated HTTP, and connects the desktop peer bridge to `/mobile/ws`. Starting in v1.89.0-rc2, the bundled gateway executable must be a macOS universal Mach-O built from both `darwin/arm64` and `darwin/amd64`, so the same app bundle can run the Mobile Gateway on Apple Silicon and Intel Macs.
 
 All user-visible SwiftUI text must go through `Localizable.xcstrings` and `L10n.swift`.
 

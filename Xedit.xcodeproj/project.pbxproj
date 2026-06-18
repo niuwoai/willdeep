@@ -333,7 +333,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/zsh;
-			shellScript = "set -euo pipefail\nif ! command -v go >/dev/null 2>&1; then\n  echo \"warning: go not found; skipping willdeep-agent resource build\"\n  exit 0\nfi\nmkdir -p \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\ncd \"$SRCROOT/willdeep-agent\"\ngo build -o \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/willdeep-agent\" ./cmd/willdeep-agent\n";
+			shellScript = "set -euo pipefail\nif ! command -v go >/dev/null 2>&1; then\n  echo \"warning: go not found; skipping willdeep-agent resource build\"\n  exit 0\nfi\nif ! command -v lipo >/dev/null 2>&1; then\n  echo \"warning: lipo not found; skipping willdeep-agent universal resource build\"\n  exit 0\nfi\nmkdir -p \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\ntmpdir=\"$(mktemp -d)\"\ntrap 'rm -rf \"$tmpdir\"' EXIT\ncd \"$SRCROOT/willdeep-agent\"\nCGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -o \"$tmpdir/willdeep-agent-arm64\" ./cmd/willdeep-agent\nCGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -o \"$tmpdir/willdeep-agent-amd64\" ./cmd/willdeep-agent\nlipo -create \"$tmpdir/willdeep-agent-arm64\" \"$tmpdir/willdeep-agent-amd64\" -output \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/willdeep-agent\"\nchmod +x \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/willdeep-agent\"\nlipo -info \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/willdeep-agent\"\n";
 		};
 		5CA6B0C02FE10B00006DFCCC /* Re-sign ONNX dylib (Release only) */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -431,7 +431,7 @@
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
 					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
 				);
-				MARKETING_VERSION = "1.88.0-rc1";
+				MARKETING_VERSION = "1.89.0-rc2";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
@@ -486,7 +486,7 @@
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
 					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
 				);
-				MARKETING_VERSION = "1.88.0-rc1";
+				MARKETING_VERSION = "1.89.0-rc2";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
@@ -634,7 +634,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = "1.88.0-rc1";
+				MARKETING_VERSION = "1.89.0-rc2";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -655,7 +655,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = "1.88.0-rc1";
+				MARKETING_VERSION = "1.89.0-rc2";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -674,7 +674,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.88.0-rc1";
+				MARKETING_VERSION = "1.89.0-rc2";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -693,7 +693,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.88.0-rc1";
+				MARKETING_VERSION = "1.89.0-rc2";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
