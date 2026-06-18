@@ -1,0 +1,38 @@
+{
+  "extensionName": {
+    "message": "WillDeep 浏览器桥"
+  },
+  "extensionDescription": {
+    "message": "在明确授权下，把已登录的 Chrome 默认 profile 桥接给 WillDeep。"
+  },
+  "popupTitle": {
+    "message": "WillDeep 浏览器桥"
+  },
+  "popupSubtitle": {
+    "message": "默认 profile 自动化桥接"
+  },
+  "statusChecking": {
+    "message": "正在检查本地 host..."
+  },
+  "statusConnected": {
+    "message": "本地 host 已连接"
+  },
+  "statusDisconnected": {
+    "message": "本地 host 不可用"
+  },
+  "readPage": {
+    "message": "读取页面"
+  },
+  "readSelection": {
+    "message": "读取选区"
+  },
+  "captureTab": {
+    "message": "截取标签页"
+  },
+  "resultLabel": {
+    "message": "结果"
+  },
+  "permissionNote": {
+    "message": "只把这个扩展授权给你希望 WillDeep 检查或操作的页面。"
+  }
+}

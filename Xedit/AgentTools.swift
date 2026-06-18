@@ -62,6 +62,20 @@ enum AgentToolRunner {
             return try await AgentWebTools.webSearch(arguments: arguments)
         case "web_fetch":
             return try await AgentWebTools.webFetch(arguments: arguments)
+        case "chrome_status":
+            return try await AgentChromeTools.status(arguments: arguments)
+        case "chrome_read_page":
+            return try await AgentChromeTools.readPage(arguments: arguments)
+        case "chrome_read_selection":
+            return try await AgentChromeTools.readSelection(arguments: arguments)
+        case "chrome_click":
+            return try await AgentChromeTools.click(arguments: arguments)
+        case "chrome_type":
+            return try await AgentChromeTools.typeText(arguments: arguments)
+        case "chrome_capture_tab":
+            return try await AgentChromeTools.captureTab(arguments: arguments)
+        case "chrome_debugger_command":
+            return try await AgentChromeTools.debuggerCommand(arguments: arguments)
         case "list_mcp_servers":
             return try AgentMCPBridge.listServers()
         case "list_mcp_tools":

@@ -663,6 +663,7 @@ enum L10n {
         static let tabMemory = String(localized: "settings.tab.memory", defaultValue: "Memory")
         static let tabRules = String(localized: "settings.tab.rules", defaultValue: "Rules")
         static let tabSkills = String(localized: "settings.tab.skills", defaultValue: "Skills")
+        static let tabConnectors = String(localized: "settings.tab.connectors", defaultValue: "Connectors")
         static let tabMcp = String(localized: "settings.tab.mcp", defaultValue: "MCP")
         static let tabTools = String(localized: "settings.tab.tools", defaultValue: "Tools")
         static let tabLocalAgents = String(localized: "settings.tab.local-agents", defaultValue: "Local Agents")
@@ -1120,6 +1121,111 @@ enum L10n {
             static let errorServerNameRequired = String(localized: "settings.mcp.error-server-name", defaultValue: "Server name is required.")
             static let errorValidURLRequired = String(localized: "settings.mcp.error-valid-url", defaultValue: "A valid server URL is required.")
             static let errorCommandRequired = String(localized: "settings.mcp.error-command-required", defaultValue: "Command is required.")
+        }
+
+        enum Connectors {
+            static let description = String(localized: "settings.connectors.description", defaultValue: "Manage team collaboration platforms that WillDeep can use for notifications, commands, and document publishing.")
+            static let platformsSection = String(localized: "settings.connectors.platforms-section", defaultValue: "Platforms")
+            static let capabilitiesSection = String(localized: "settings.connectors.capabilities-section", defaultValue: "Capabilities")
+            static let safetySection = String(localized: "settings.connectors.safety-section", defaultValue: "Safety")
+            static let experimentalBadge = String(localized: "settings.connectors.experimental", defaultValue: "Experimental")
+            static let enabledToggle = String(localized: "settings.connectors.enabled-toggle", defaultValue: "Enable connector")
+            static let authModeLabel = String(localized: "settings.connectors.auth-mode", defaultValue: "Authorization")
+            static let connectionStateLabel = String(localized: "settings.connectors.connection-state", defaultValue: "State")
+            static let appIDLabel = String(localized: "settings.connectors.app-id", defaultValue: "App ID")
+            static let appIDPrompt = String(localized: "settings.connectors.app-id-prompt", defaultValue: "Platform app_id / client_id")
+            static let tenantIDLabel = String(localized: "settings.connectors.tenant-id", defaultValue: "Tenant / Corp ID")
+            static let tenantIDPrompt = String(localized: "settings.connectors.tenant-id-prompt", defaultValue: "Optional enterprise identifier")
+            static let redirectURILabel = String(localized: "settings.connectors.redirect-uri", defaultValue: "Redirect URI")
+            static let redirectURIPrompt = String(localized: "settings.connectors.redirect-uri-prompt", defaultValue: "https://fly.niuwoai.com/oauth/<platform>/callback")
+            static let authorizationURLLabel = String(localized: "settings.connectors.authorization-url", defaultValue: "Authorization URL")
+            static let authorizationURLPrompt = String(localized: "settings.connectors.authorization-url-prompt", defaultValue: "https://... or URL with {client_id}, {redirect_uri}, {state}")
+            static let credentialReferenceLabel = String(localized: "settings.connectors.credential-reference", defaultValue: "Credential reference")
+            static let credentialReferencePrompt = String(localized: "settings.connectors.credential-reference-prompt", defaultValue: "Keychain item or env name, not the secret itself")
+            static let defaultSpaceLabel = String(localized: "settings.connectors.default-space", defaultValue: "Default doc space")
+            static let defaultSpacePrompt = String(localized: "settings.connectors.default-space-prompt", defaultValue: "Folder, wiki, or drive token")
+            static let defaultChatLabel = String(localized: "settings.connectors.default-chat", defaultValue: "Default chat")
+            static let defaultChatPrompt = String(localized: "settings.connectors.default-chat-prompt", defaultValue: "Group, robot, or conversation ID")
+            static let writePolicyLabel = String(localized: "settings.connectors.write-policy", defaultValue: "Write policy")
+            static let cloudRelayToggle = String(localized: "settings.connectors.cloud-relay", defaultValue: "Use WillDeep Cloud Relay for incoming events")
+            static let cloudRelayDescription = String(localized: "settings.connectors.cloud-relay-description", defaultValue: "Incoming @mentions need a public callback. Cloud Relay can receive platform events and forward them to this Mac when it is online.")
+            static let secretStorageNote = String(localized: "settings.connectors.secret-storage-note", defaultValue: "Secrets and OAuth tokens should live in macOS Keychain. This panel stores only non-sensitive routing metadata.")
+            static let authorizationURLHelp = String(localized: "settings.connectors.authorization-url-help", defaultValue: "Leave empty to only prepare the callback and Keychain reference. When filled, WillDeep appends standard OAuth query parameters unless placeholders are present.")
+            static let prepareAuthorization = String(localized: "settings.connectors.prepare-authorization", defaultValue: "Prepare authorization")
+            static let copyRedirectURI = String(localized: "settings.connectors.copy-redirect-uri", defaultValue: "Copy redirect URI")
+            static let clearCredentials = String(localized: "settings.connectors.clear-credentials", defaultValue: "Clear credentials")
+            static let openDocs = String(localized: "settings.connectors.open-docs", defaultValue: "Open docs")
+            static let feishuDocsNote = String(localized: "settings.connectors.feishu-docs-note", defaultValue: "Feishu document writing is feasible through OpenAPI after OAuth scopes are granted. WillDeep should preview generated docs before publishing.")
+
+            static let platformFeishu = String(localized: "settings.connectors.platform.feishu", defaultValue: "Feishu")
+            static let platformDingTalk = String(localized: "settings.connectors.platform.dingtalk", defaultValue: "DingTalk")
+            static let platformWeCom = String(localized: "settings.connectors.platform.wecom", defaultValue: "WeCom")
+            static let platformWechatClaw = String(localized: "settings.connectors.platform.wechat-claw", defaultValue: "WeChat / Claw")
+            static let summaryFeishu = String(localized: "settings.connectors.summary.feishu", defaultValue: "Best first target for OAuth, bots, and AI-generated docs.")
+            static let summaryDingTalk = String(localized: "settings.connectors.summary.dingtalk", defaultValue: "Good for enterprise bots, approvals, and operational notifications.")
+            static let summaryWeCom = String(localized: "settings.connectors.summary.wecom", defaultValue: "Official bridge for WeChat-style enterprise messaging.")
+            static let summaryWechatClaw = String(localized: "settings.connectors.summary.wechat-claw", defaultValue: "Desktop automation bridge for personal workflows; keep it out of production defaults.")
+
+            static let authWebhook = String(localized: "settings.connectors.auth.webhook", defaultValue: "Webhook")
+            static let authOAuth = String(localized: "settings.connectors.auth.oauth", defaultValue: "OAuth")
+            static let authCloudRelay = String(localized: "settings.connectors.auth.cloud-relay", defaultValue: "Cloud Relay")
+            static let authDesktopAutomation = String(localized: "settings.connectors.auth.desktop-automation", defaultValue: "Desktop automation")
+            static let authWebhookHelp = String(localized: "settings.connectors.auth.webhook-help", defaultValue: "One-way robot messages and simple slash-like workflows. Fast to set up, limited user context.")
+            static let authOAuthHelp = String(localized: "settings.connectors.auth.oauth-help", defaultValue: "User-authorized access for docs, drive, chat, and future write actions. Tokens belong in Keychain.")
+            static let authCloudRelayHelp = String(localized: "settings.connectors.auth.cloud-relay-help", defaultValue: "Public event callbacks land in WillDeep Cloud Relay, then forward to the Mac app.")
+            static let authDesktopAutomationHelp = String(localized: "settings.connectors.auth.desktop-automation-help", defaultValue: "Local GUI automation for personal workflows. Useful as a fallback, fragile for teams.")
+
+            static let stateNotConfigured = String(localized: "settings.connectors.state.not-configured", defaultValue: "Not configured")
+            static let stateReady = String(localized: "settings.connectors.state.ready", defaultValue: "Ready to authorize")
+            static let stateConnected = String(localized: "settings.connectors.state.connected", defaultValue: "Connected")
+            static let stateNeedsReview = String(localized: "settings.connectors.state.needs-review", defaultValue: "Needs review")
+
+            static let capabilitySendMessages = String(localized: "settings.connectors.capability.send-messages", defaultValue: "Send messages")
+            static let capabilityReceiveCommands = String(localized: "settings.connectors.capability.receive-commands", defaultValue: "Receive @mentions and commands")
+            static let capabilityCreateDocs = String(localized: "settings.connectors.capability.create-docs", defaultValue: "Create documents")
+            static let capabilityEditDocs = String(localized: "settings.connectors.capability.edit-docs", defaultValue: "Edit existing documents")
+            static let capabilityImportDocs = String(localized: "settings.connectors.capability.import-docs", defaultValue: "Import documents as context")
+            static let capabilityCalendar = String(localized: "settings.connectors.capability.calendar", defaultValue: "Calendar context")
+            static let capabilityTasks = String(localized: "settings.connectors.capability.tasks", defaultValue: "Tasks")
+            static let capabilityApprovals = String(localized: "settings.connectors.capability.approvals", defaultValue: "Approvals")
+            static let capabilityDesktopAutomation = String(localized: "settings.connectors.capability.desktop-automation", defaultValue: "Desktop automation")
+
+            static let policyPreviewThenPublish = String(localized: "settings.connectors.policy.preview-then-publish", defaultValue: "Preview before publish")
+            static let policyAskEveryTime = String(localized: "settings.connectors.policy.ask-every-time", defaultValue: "Ask every time")
+            static let policyAllowNewDocs = String(localized: "settings.connectors.policy.allow-new-docs", defaultValue: "Allow new docs only")
+
+            static func enabledCount(_ a1: String, _ a2: String) -> String {
+                let template = String(localized: "settings.connectors.enabled-count", defaultValue: "%1$@ of %2$@ connectors enabled")
+                return String(format: template, a1, a2)
+            }
+            static func configurationSection(_ a1: String) -> String {
+                let template = String(localized: "settings.connectors.configuration-section", defaultValue: "%@ Configuration")
+                return String(format: template, a1)
+            }
+            static func statusLine(_ a1: String, _ a2: String, _ a3: String) -> String {
+                let template = String(localized: "settings.connectors.status-line", defaultValue: "%1$@ · %2$@ · %3$@ capabilities")
+                return String(format: template, a1, a2, a3)
+            }
+            static func authorizationPrepared(_ a1: String) -> String {
+                let template = String(localized: "settings.connectors.authorization-prepared", defaultValue: "%@ is ready for OAuth wiring.")
+                return String(format: template, a1)
+            }
+            static func authorizationOpened(_ a1: String) -> String {
+                let template = String(localized: "settings.connectors.authorization-opened", defaultValue: "%@ authorization page opened.")
+                return String(format: template, a1)
+            }
+            static func authorizationNeedsAppID(_ a1: String) -> String {
+                let template = String(localized: "settings.connectors.authorization-needs-app-id", defaultValue: "Add an App ID before preparing %@ authorization.")
+                return String(format: template, a1)
+            }
+            static func redirectURICopied(_ a1: String) -> String {
+                let template = String(localized: "settings.connectors.redirect-uri-copied", defaultValue: "%@ redirect URI copied.")
+                return String(format: template, a1)
+            }
+            static func credentialsCleared(_ a1: String) -> String {
+                let template = String(localized: "settings.connectors.credentials-cleared", defaultValue: "%@ local credentials cleared.")
+                return String(format: template, a1)
+            }
         }
 
         enum Skill {

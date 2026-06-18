@@ -178,6 +178,58 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "chrome_status",
+            description: "Check whether the WillDeep Browser Chrome extension native bridge is reachable on localhost and return protocol/version/capability details. Read-only.",
+            risk: .read,
+            parameters: []
+        ),
+        AgentToolDescriptor(
+            name: "chrome_read_page",
+            description: "Read the active tab in the user's default Chrome profile through the WillDeep Browser extension. Returns URL, title, selected text, capped page text, link summaries, and form summaries. Does not read cookies or hidden form values. Read-only.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "max_chars", type: .integer, description: "Maximum page text characters to return. Defaults to 20000, capped at 100000.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "chrome_read_selection",
+            description: "Read only the current text selection from the active Chrome tab through the WillDeep Browser extension. Read-only.",
+            risk: .read,
+            parameters: []
+        ),
+        AgentToolDescriptor(
+            name: "chrome_click",
+            description: "Click an element in the active Chrome tab using a CSS selector through the WillDeep Browser extension. Requires approval because it changes browser state.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "selector", type: .string, description: "CSS selector for the element to click, e.g. `button[type=submit]`.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "chrome_type",
+            description: "Focus an element in the active Chrome tab and replace its text/value through the WillDeep Browser extension. Requires approval because it can edit web apps.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "selector", type: .string, description: "CSS selector for the input, textarea, editable element, or text-like target.", required: true),
+                AgentToolParameter(name: "text", type: .string, description: "Text to put into the target element.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "chrome_capture_tab",
+            description: "Capture the visible area of the active Chrome tab through the WillDeep Browser extension and return the screenshot data URL. Requires approval because screenshots may expose private information.",
+            risk: .write,
+            parameters: []
+        ),
+        AgentToolDescriptor(
+            name: "chrome_debugger_command",
+            description: "Run an explicit Chrome DevTools Protocol command against the active tab through chrome.debugger. This is high risk and should only be used when normal page tools are insufficient.",
+            risk: .danger,
+            parameters: [
+                AgentToolParameter(name: "method", type: .string, description: "CDP method name, e.g. `Runtime.evaluate` or `Page.captureScreenshot`.", required: true),
+                AgentToolParameter(name: "params_json", type: .string, description: "JSON object string for CDP params. Defaults to `{}`.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "list_mcp_servers",
             description: "List configured MCP servers from Codex config with sensitive environment values redacted. Does not start servers. Read-only.",
             risk: .read,

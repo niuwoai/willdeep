@@ -273,12 +273,7 @@ private struct WindowRootView: View {
                 }
             )
             .onOpenURL { url in
-                if AppState.isExistingDirectory(url) {
-                    appState.registerRecentFolder(url)
-                    openWindow(value: url)
-                    return
-                }
-                appState.openExternalURL(url)
+                handleExternalURL(url)
             }
             .onAppear {
                 // 注册到全局 registry —— 第一个 editor 窗口顺便会被
@@ -287,7 +282,7 @@ private struct WindowRootView: View {
                 EditorAppStateRegistry.shared.register(appState)
                 if !didHandleInitialExternalURL, let initialExternalURL {
                     didHandleInitialExternalURL = true
-                    appState.openExternalURL(initialExternalURL)
+                    handleExternalURL(initialExternalURL)
                 }
                 onboarding.presentIfNeeded()
             }
@@ -299,6 +294,18 @@ private struct WindowRootView: View {
                 OnboardingView()
                     .environmentObject(appState)
             }
+    }
+
+    private func handleExternalURL(_ url: URL) {
+        if CollaborationConnectorOAuthCoordinator.handleCallback(url) {
+            return
+        }
+        if AppState.isExistingDirectory(url) {
+            appState.registerRecentFolder(url)
+            openWindow(value: url)
+            return
+        }
+        appState.openExternalURL(url)
     }
 }
 

@@ -1,0 +1,38 @@
+{
+  "extensionName": {
+    "message": "WillDeep Browser"
+  },
+  "extensionDescription": {
+    "message": "Bridge the signed-in Chrome profile to WillDeep with explicit user control."
+  },
+  "popupTitle": {
+    "message": "WillDeep Browser"
+  },
+  "popupSubtitle": {
+    "message": "Default-profile automation bridge"
+  },
+  "statusChecking": {
+    "message": "Checking native host..."
+  },
+  "statusConnected": {
+    "message": "Native host connected"
+  },
+  "statusDisconnected": {
+    "message": "Native host unavailable"
+  },
+  "readPage": {
+    "message": "Read page"
+  },
+  "readSelection": {
+    "message": "Read selection"
+  },
+  "captureTab": {
+    "message": "Capture tab"
+  },
+  "resultLabel": {
+    "message": "Result"
+  },
+  "permissionNote": {
+    "message": "Only grant this extension to pages you want WillDeep to inspect or operate."
+  }
+}
