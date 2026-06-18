@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.89.0-rc2 - 2026-06-18
+
+### Fixed
+
+- **内嵌 Go Mobile Gateway 改为 macOS universal 二进制**:Xcode `Build willdeep-agent` build phase 不再只按构建机 CPU 输出单架构网关,而是分别构建 `darwin/arm64` 与 `darwin/amd64`,再用 `lipo -create` 合并为 `WillDeep.app/Contents/Resources/willdeep-agent`,让同一份 App 同时支持 Apple Silicon 与 Intel Mac。
+
+### 版本
+
+- 发布构建修复,只递增 rc:1.89.0-rc1 → **1.89.0-rc2**。pbxproj×6 / Go agent / Help Info.plist / product-overview / MOBILE_GATEWAY_REQUIREMENTS / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
 ## 1.89.0-rc1 - 2026-06-18
 
 ### Added
