@@ -95,12 +95,32 @@ struct ComposerTextEditor: NSViewRepresentable {
         textView.textContainer?.widthTracksTextView = true
 
         scrollView.documentView = textView
+        // 初始化「我们最近一次 publish 的值」=  当前 binding,避免第一次
+        // updateNSView 误判初始 text 是「外部塞进来的不同值」就跑去覆写。
+        context.coordinator.lastPublishedValue = text
         return scrollView
     }
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let textView = nsView.documentView as? NSTextView else { return }
         if textView.string != text {
+            // 1.85.0-rc15:绝大多数「我输了东西被覆盖掉/回退掉」的现象,
+            // 根因是这里的 binding-echo 竞态。流程:
+            //   ① 用户在 NSTextView 里敲字 → `textDidChange` 同步把新值
+            //     写进 `text.wrappedValue`(= `activeRuntime.input`),
+            //     `lastPublishedValue` 记下我们刚发出去的字符串。
+            //   ② AppState 因为别的事(token streaming / timer / status
+            //     bar 闪一下)发了 `objectWillChange` → SwiftUI 重算 body
+            //     → `updateNSView` 跑了。
+            //   ③ 如果用户在 ②③ 之间又敲了几个字,`textView.string` 已经
+            //     比 `text` 长;此时 `text` 还是我们 ① 发出去的那个值(也
+            //     就是 `lastPublishedValue`)。
+            //   ④ 旧实现只判 `textView.string != text` 就直接覆写,等于
+            //     把刚敲进去的字符给回退掉。
+            // 兜底:`text` 等于我们最后一次主动 publish 的值 → 这一次
+            // binding 通知就是我们自己的回声,跳过覆写,让 textView 保
+            // 留更新的内容。
+            if text == context.coordinator.lastPublishedValue { return }
             // During Chinese/Japanese/Korean IME composition, NSTextView
             // holds marked text that is not committed to the SwiftUI
             // binding yet. Parent view refreshes (streaming transcript,
@@ -114,6 +134,10 @@ struct ComposerTextEditor: NSViewRepresentable {
             // emptying the buffer after running an action.
             context.coordinator.markTextReplacedExternally(to: text)
             textView.string = text
+            // 同步标记:这次是 SwiftUI 这边新塞进来的值(slash 清空 /
+            // history recall / editor selection prefill 之类),让下一轮
+            // 比对也跳过同值回声。
+            context.coordinator.lastPublishedValue = text
         }
     }
 
@@ -146,6 +170,12 @@ struct ComposerTextEditor: NSViewRepresentable {
         /// before selection updates, so we use the cached pointer rather
         /// than relying on the notification's object).
         fileprivate weak var activeTextView: NSTextView?
+        /// rc15:记下我们最近一次往 `text.wrappedValue` 写入的字符串。
+        /// `updateNSView` 拿到的 binding 值如果 ===  这个,说明 SwiftUI
+        /// 这一轮通知就是在回放我们刚发出去的内容,而 `textView` 在通
+        /// 知派发期间可能又前进了几个字符 —— 不能覆写,否则就是「我
+        /// 输了东西被覆盖掉/回退掉」。
+        fileprivate var lastPublishedValue: String = ""
 
         init(
             text: Binding<String>,
@@ -193,6 +223,10 @@ struct ComposerTextEditor: NSViewRepresentable {
             guard let textView = notification.object as? NSTextView else { return }
             activeTextView = textView
             let newValue = textView.string
+            // 顺序很关键:先写 lastPublishedValue 再 publish 到 binding。
+            // 这样 SwiftUI 触发的 updateNSView 在比对时一定能看到「这就是
+            // 我刚发出去的那个值」,从而跳过 clobber(详见 updateNSView 注释)。
+            lastPublishedValue = newValue
             text.wrappedValue = newValue
             // Any user edit invalidates the history cursor and re-derives
             // slash + @ visibility.
@@ -326,6 +360,9 @@ struct ComposerTextEditor: NSViewRepresentable {
 
         private func applyHistory(_ value: String, to textView: NSTextView) {
             textView.string = value
+            // 主动 publish:同步更新 lastPublishedValue,免得 updateNSView
+            // 后续误判这是「外部写入」再尝试覆写。
+            lastPublishedValue = value
             text.wrappedValue = value
             lastHistoryString = value
             // Park the caret at end so the user can keep typing.
@@ -415,8 +452,11 @@ struct ComposerTextEditor: NSViewRepresentable {
             let replaceRange = NSRange(location: i, length: caret - i)
             let mutable = NSMutableString(string: textView.string)
             mutable.replaceCharacters(in: replaceRange, with: replacement)
-            textView.string = mutable as String
-            text.wrappedValue = mutable as String
+            let result = mutable as String
+            textView.string = result
+            // 同 applyHistory:主动 publish 后立刻同步 lastPublishedValue。
+            lastPublishedValue = result
+            text.wrappedValue = result
             let newCaret = i + (replacement as NSString).length
             textView.setSelectedRange(NSRange(location: newCaret, length: 0))
             atMenuVisible.wrappedValue = false

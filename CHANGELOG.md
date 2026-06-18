@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.85.0-rc15 - 2026-06-18
+
+### Changed
+
+- **Composer 输入框可见高度封顶从 ~7 行收到 ~3 行**(对齐 codex 默认体感;claude 是 1 行,这里取中间)。[AgentModeComposerView](Xedit/AgentModeComposerView.swift) 把 `ComposerTextEditor` 外层 `frame(maxHeight:)` 从 116 改成 70 —— 内部 `NSScrollView` 的 vertical scroller 自动接上,长内容不会被截。
+
+### Fixed
+
+- **「我输了东西被覆盖掉/回退掉」**。根因:`ComposerTextEditor.updateNSView` 的 binding-echo 竞态。
+  - 流程:① 用户敲字 → `textDidChange` 同步把新值写进 `text.wrappedValue` (= `activeRuntime.input`)。② AppState 因为别的事(token streaming / timer / status bar 刷新)发了 `objectWillChange` → SwiftUI 重算 body → `updateNSView` 跑了。③ 这中间用户又敲了几个字,`textView.string` 已经比 `text` 长;此时 `text` 还是 ① 那一次的旧值。④ 旧实现只判 `textView.string != text` 就直接覆写 → 把刚敲的字回退掉。
+  - 修复:[ComposerTextEditor.Coordinator](Xedit/ComposerTextInput.swift) 新增 `lastPublishedValue` 记下我们最近一次往 binding 写入的值;`updateNSView` 比对时若 `text == lastPublishedValue` 就跳过覆写(纯属自己的回声,textView 内容更新)。`textDidChange` / `applyHistory` / `replaceCurrentAtToken` / `makeNSView` 初始化 / `updateNSView` 自身的外部塞值都同步刷新该字段,保证下一轮判断准确。
+  - IME 的 marked text 旧守卫 (`!textView.hasMarkedText()`) 保留,作为第二道屏障。
+
+### 版本
+
+- 行为变更 + bugfix,只 bump rc 号:1.85.0-rc14 → **1.85.0-rc15**。pbxproj×6 / Go agent / Help Info.plist / README / docs / product-overview 同步。
+
 ## 1.85.0-rc14 - 2026-06-18
 
 ### Fixed

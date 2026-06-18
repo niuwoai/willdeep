@@ -414,7 +414,10 @@ private struct ComposerCard: View {
                     coordinatorRef: coordinatorRef
                 )
                 .focused($inputFocused)
-                .frame(minHeight: 26, maxHeight: 116)
+                // 1.85.0-rc15:封顶从 ~7 行收到 ~3 行(对齐 codex 默认体感;
+                // claude 是 1 行,这里取中间)。超出后内部 NSScrollView 的
+                // vertical scroller 自动接上,长内容不会被截。
+                .frame(minHeight: 26, maxHeight: 70)
                 .onDrop(of: [.image, .fileURL], isTargeted: nil) { providers in
                     handleDroppedProviders(providers)
                     return true
