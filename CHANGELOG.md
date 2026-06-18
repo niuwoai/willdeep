@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.89.0-rc3 - 2026-06-18
+
+### Fixed
+
+- **Settings → Runtimes 列表整行可点选**:远端 runtime 列表 row 的 plain button 现在把整行宽度和空白区域纳入 hit testing,不再只有点到图标/文字才会选中。
+
+### 版本
+
+- bugfix,只递增 rc:1.89.0-rc2 → **1.89.0-rc3**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / MOBILE_GATEWAY_REQUIREMENTS (4 处) / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
 ## 1.89.0-rc2 - 2026-06-18
 
 ### Fixed

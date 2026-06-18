@@ -78,6 +78,8 @@ struct AgentRuntimeSettingsView: View {
                                     Image(systemName: "checkmark")
                                 }
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
