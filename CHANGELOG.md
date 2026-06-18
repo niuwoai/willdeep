@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.87.0-rc1 - 2026-06-18
+
+### Fixed
+
+- **Fn push-to-talk 转录文本没进 composer**:用户反馈 1.87.0 按 Fn 没把转录贴回输入框。两个嫌疑点修一下:
+  1. **start/stop 竞态**:`VoiceRecorder.start()` 是 async,按一下 Fn 立刻松开时 start Task 还没把 state 切到 `.recording`,stop 已经被调用 → `guard case .recording = recorder.state` 直接 return。新增 `isStarting` + `pendingStop` 标志,stop 时如果 start 还在 await,等 start 完成再收尾。
+  2. **可观测性盲区**:没 log 没法判断 Fn 到底有没有触发、转录有没有返回、append 写到了哪个 runtime。改用 `OSLog(subsystem: "com.willdeep.app", category: "Fn-PTT")` 把 install / flagsChanged / start / stopAndTranscribe / append 全程打点,Console.app 过滤 subsystem 就能看完整事件流。同时 append 路径在 `activeRuntime` 为 nil 时显式 warn,把「workspace 没有 active session 所以 setter noop」这个静默 bug 暴露出来。
+- 同时加 `didBecomeActiveNotification` 监听,失焦再回来时把 `fnDown` 状态重置,防止失焦期间漏接 fn-up 导致一进来就以为还按着。
+
+### 版本
+
+- bugfix,按规则只递增 rc:1.87.0 → **1.87.0-rc1**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / MOBILE_GATEWAY_REQUIREMENTS (4 处) / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
 ## 1.87.0 - 2026-06-18
 
 ### Added
