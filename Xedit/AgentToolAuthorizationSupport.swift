@@ -99,7 +99,8 @@ private extension JSONEncoder {
 
 enum AgentCommandAuthorization {
     nonisolated static func signature(for command: String) -> String? {
-        guard let tokens = shellTokens(from: command) else { return nil }
+        guard let rawTokens = shellTokens(from: command) else { return nil }
+        let tokens = commandTokensSkippingEnvironmentAssignments(rawTokens)
         guard let executable = tokens.first?.lowercased(), !executable.isEmpty else {
             return nil
         }
@@ -128,7 +129,9 @@ enum AgentCommandAuthorization {
     }
 
     nonisolated static func prefixRule(for command: String) -> [String]? {
-        guard let tokens = shellTokens(from: command), !tokens.isEmpty else { return nil }
+        guard let rawTokens = shellTokens(from: command) else { return nil }
+        let tokens = commandTokensSkippingEnvironmentAssignments(rawTokens)
+        guard !tokens.isEmpty else { return nil }
         let executable = tokens[0].lowercased()
         if executable == "git", tokens.count >= 2 {
             return [executable, tokens[1].lowercased()]
@@ -140,6 +143,27 @@ enum AgentCommandAuthorization {
             return [executable, tokens[1].lowercased()]
         }
         return tokenAllowsBareSignature(executable) ? [executable] : nil
+    }
+
+    nonisolated private static func commandTokensSkippingEnvironmentAssignments(_ tokens: [String]) -> [String] {
+        var index = 0
+        while index < tokens.count, isEnvironmentAssignment(tokens[index]) {
+            index += 1
+        }
+        return Array(tokens.suffix(from: index))
+    }
+
+    nonisolated private static func isEnvironmentAssignment(_ token: String) -> Bool {
+        guard let equalsIndex = token.firstIndex(of: "="),
+              equalsIndex != token.startIndex else {
+            return false
+        }
+        let name = token[..<equalsIndex]
+        guard let first = name.first,
+              first == "_" || first.isLetter else {
+            return false
+        }
+        return name.allSatisfy { $0 == "_" || $0.isLetter || $0.isNumber }
     }
 
     nonisolated private static func tokenUsesSubcommand(_ token: String) -> Bool {

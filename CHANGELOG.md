@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.90.0-rc6 - 2026-06-19
+
+### Fixed
+
+- **run_command 构建审批误伤** —— 智能审批现在能识别 `cd <workspace> && GOCACHE=$(pwd)/.cache/go-build GOMODCACHE=$(pwd)/.cache/go-mod go build ...` 这类项目内 Go 构建命令:只把精确的 `$(pwd)` 视为无副作用展开,再剥离前置 `VAR=value` 环境变量识别真实命令头,因此核心 `go build/test` 会继续走低风险 workspace-write 自动放行。
+- **环境变量前缀纳入安全检查** —— `VAR=value command` 里的变量名、变量值路径会进入敏感名/敏感路径/越界路径检查;`$(rm ...)`、反引号和 `<(...)` 仍然进入 escalated/typed confirmation,不会因为这次放行 `$(pwd)` 而开大口子。
+- **工具调用回归覆盖** —— `AgentToolIntegrationTests` 补齐 SafeCommand、risk、sandbox decision 和 `canAutoApproveWorkspaceWriteCommand` 对同一类命令的断言,防止 UI 风险降了但最终仍弹确认卡。
+
+### 版本
+
+- bugfix,bump rc:1.90.0-rc5 → **1.90.0-rc6**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 四个 docs(MOBILE_GATEWAY / AGENT_HARNESS / CHROME / COLLAB)/ chrome-extension README 同步。
+
 ## 1.90.0-rc5 - 2026-06-19
 
 ### Fixed

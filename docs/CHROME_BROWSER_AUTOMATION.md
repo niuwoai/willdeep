@@ -1,6 +1,6 @@
 # Chrome Browser Automation
 
-> Last updated: 2026-06-19 | Current version: v1.90.0-rc5
+> Last updated: 2026-06-19 | Current version: v1.90.0-rc6
 
 WillDeep supports two Chrome automation modes:
 

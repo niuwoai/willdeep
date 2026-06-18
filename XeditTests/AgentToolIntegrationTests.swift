@@ -131,6 +131,7 @@ extension WillDeepTests {
         // they may write build artifacts, but should not require a manual
         // approval click in smart/goal flows.
         #expect(SafeCommand.classify(command: "go build -o bin/metaserver . 2>&1") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "GOCACHE=$(pwd)/.cache/go-build GOMODCACHE=$(pwd)/.cache/go-mod go build -o bin/metaserver . 2>&1") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "go test ./...") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "go env -w GOPROXY=https://proxy.golang.org") == .needsJudgment)
         #expect(SafeCommand.classify(command: "yarn run dev") == .alwaysSafe)
@@ -166,6 +167,7 @@ extension WillDeepTests {
     func testSafeCommandRejectsRedirectionAndSubstitution() {
         #expect(SafeCommand.classify(command: "cat foo > bar") == .alwaysDangerous)
         #expect(SafeCommand.classify(command: "echo $(rm -rf /)") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "GOCACHE=$(rm -rf /tmp/cache) go build -o bin/metaserver .") == .alwaysDangerous)
         #expect(SafeCommand.classify(command: "ls `pwd`") == .alwaysDangerous)
         // Harmless stderr redirection should still be classified as safe.
         #expect(SafeCommand.classify(command: "git status 2>/dev/null") == .alwaysSafe)
@@ -559,6 +561,12 @@ extension WillDeepTests {
             arguments: ["command": .string("cd /Users/rocky/Sites/Xedit && go build -o bin/metaserver . 2>&1")],
             rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
         )
+        let goBuildWithWorkspaceCacheCommand = "cd /Users/rocky/Sites/Xedit && GOCACHE=$(pwd)/.cache/go-build GOMODCACHE=$(pwd)/.cache/go-mod go build -o bin/metaserver . 2>&1"
+        let goBuildWithWorkspaceCacheRisk = AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string(goBuildWithWorkspaceCacheCommand)],
+            rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+        )
         let yarnDevRisk = AgentToolRegistry.risk(
             for: "run_command",
             arguments: ["command": .string("yarn run dev")],
@@ -589,6 +597,14 @@ extension WillDeepTests {
         )
         let goBuildDecision = AgentSandboxPolicy.commandDecision(
             command: "cd /Users/rocky/Sites/Xedit && go build -o bin/metaserver . 2>&1",
+            rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+        )
+        let goBuildWithWorkspaceCacheDecision = AgentSandboxPolicy.commandDecision(
+            command: goBuildWithWorkspaceCacheCommand,
+            rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+        )
+        let unsafeGoBuildCacheDecision = AgentSandboxPolicy.commandDecision(
+            command: "cd /Users/rocky/Sites/Xedit && GOCACHE=$(rm -rf /tmp/cache) go build -o bin/metaserver .",
             rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
         )
         let npmInstallDecision = AgentSandboxPolicy.commandDecision(
@@ -631,12 +647,26 @@ extension WillDeepTests {
         #expect(redirectedReadRisk == .write)
         #expect(harmlessRedirectionRisk == .read)
         #expect(goBuildRisk == .write)
+        #expect(goBuildWithWorkspaceCacheRisk == .write)
         #expect(yarnDevRisk == .write)
         #expect(npmInstallRisk == .write)
         #expect(npmRegistryInstallRisk == .write)
         #expect(npmGlobalInstallRisk == .write)
         #expect(goBuildDecision.mode == .workspaceWrite)
         #expect(goBuildDecision.requiresTypedConfirmation == false)
+        #expect(goBuildWithWorkspaceCacheDecision.mode == .workspaceWrite)
+        #expect(goBuildWithWorkspaceCacheDecision.requiresUserApproval == true)
+        #expect(goBuildWithWorkspaceCacheDecision.requiresTypedConfirmation == false)
+        #expect(AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
+            command: goBuildWithWorkspaceCacheCommand,
+            rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+        ))
+        #expect(unsafeGoBuildCacheDecision.mode == .escalated)
+        #expect(unsafeGoBuildCacheDecision.requiresTypedConfirmation == true)
+        #expect(!AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
+            command: "cd /Users/rocky/Sites/Xedit && GOCACHE=$(rm -rf /tmp/cache) go build -o bin/metaserver .",
+            rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+        ))
         #expect(npmInstallDecision.mode == .workspaceWriteNetwork)
         #expect(npmInstallDecision.requiresTypedConfirmation == false)
         #expect(npmRegistryInstallDecision.mode == .workspaceWriteNetwork)
