@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.85.0-rc19 - 2026-06-18
+
+### Added
+
+- **WorkflowEngine 加 `pipeline(items:maxConcurrent:_:)` 与 `WorkflowState<T>` actor**(deep-research 重写前的 phase 2 基础设施)。
+  - [WorkflowEngine.pipeline(...)](Xedit/WorkflowEngine.swift) —— item 级 pipeline:每个 item 独立流过 `body` 里的所有 stage,**stage 间无 barrier**,item A 在 stage 3 时 item B 还可以在 stage 1。技术上是 `parallel()` 的语法糖(Swift 异步本身就是 thunk 级独立 await),差别在 ergonomic;Claude Code 用 `pipeline(items, stage1, stage2)` 多 stage 函数式语法,Swift 单 body 闭包等价但更简洁。
+  - 新增 [WorkflowState&lt;Value: Sendable&gt;](Xedit/WorkflowState.swift) —— generic actor 包 mutable state,workflow 跨 agent 共享 URL dedup set / fetch budget 计数器 等场景一行用:`await state.update { $0.insert(url).inserted }`。Mutation 闭包 sync(避不可优先级反转)、能返回任意 R 给 caller 用(典型 `inserted` 标志)。
+  - 兼容性:`parallel(...)` 不动,现有 workflow(DeepResearchWorkflow / CompetitorAnalysisWorkflow / ReleaseNotesWorkflow / MeetingNotesWorkflow / IssueTriageWorkflow / PRReviewWorkflow / DeclarativeWorkflow)零修改。
+
+### Tests
+
+- 新增 [WorkflowPipelineTests](XeditTests/WorkflowPipelineTests.swift) 2 条:`WorkflowState` 在 100 并发 task 下 counter 不丢任何 +1;Set 跑 URL dedup,7 个 url 4 个唯一,inserted 标志数对得上。
+
+### 版本
+
+- 基础设施加功能但无现有工作流被改动,按惯例 bump rc:1.85.0-rc18 → **1.85.0-rc19**。pbxproj×6 / Go agent / Help Info.plist / README / docs / product-overview 同步。
+
+### Phase 3 预告
+
+- rc20:DeepResearchWorkflow 用上 schema + pipeline + WorkflowState,重写为 scope → pipeline(search → URL-dedup → fetch+extract) → 3-vote adversarial verify → synthesize,赶上 Claude `/deep-research` 的对抗性验证能力。
+
 ## 1.85.0-rc18 - 2026-06-18
 
 ### Added

@@ -226,6 +226,34 @@ final class WorkflowEngine {
         return results
     }
 
+    // MARK: - DSL: pipeline (rc19)
+
+    /// 1.85.0-rc19:item 级 pipeline。每个 item 独立流过 `body` 里的所有
+    /// stage,**stage 间没有 barrier** —— item A 可以在 stage 3,item B
+    /// 还在 stage 1。这是把 deep-research 那种「search 完一个就立刻
+    /// fetch+extract 一个,不等所有 search 都完成」的形态做成 first-class
+    /// 入口。
+    ///
+    /// 严格说,这层是 `parallel()` 之上的语法糖 —— 因为 Swift 异步本来
+    /// 就是 thunk 级独立 await,把多 stage 写在一个 body 里自然就拿到
+    /// 「no barrier」的 pipeline 语义。差别只是 ergonomic:`pipeline` 强
+    /// 调输入是「items + 一个流水线 body」,`parallel` 强调「一堆独立 thunks」。
+    /// Claude Code workflow runtime 用的是 `pipeline(items, stage1, stage2, ...)`
+    /// 多 stage 函数式语法;在 Swift 用单 body 闭包更简洁,语义等价。
+    ///
+    /// `body` 收 `(item, index)`,index 给你打日志 / label。失败 → nil,
+    /// 不让整组炸,语义同 `parallel`。
+    func pipeline<Item: Sendable, Result: Sendable>(
+        _ items: [Item],
+        maxConcurrent: Int,
+        _ body: @Sendable @escaping (Item, Int) async throws -> Result
+    ) async -> [Result?] {
+        let thunks: [@Sendable () async throws -> Result] = items.enumerated().map { offset, item in
+            { try await body(item, offset) }
+        }
+        return await parallel(maxConcurrent: maxConcurrent, thunks)
+    }
+
     // MARK: - DSL: displayWidget
 
     /// 1.85.0-rc3：让 workflow 直接把 widget 推到 transcript 立刻显示
