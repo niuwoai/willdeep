@@ -6,6 +6,7 @@
 //  desktop-only metadata, and connects the Swift desktop peer bridge.
 //
 
+import AppKit
 import Combine
 import Darwin
 import Foundation
@@ -151,6 +152,7 @@ final class MobileGatewayCoordinator: ObservableObject {
 
     private weak var appState: AppState?
     private var process: Process?
+    private var appTerminationObserver: NSObjectProtocol?
     private var monitorTask: Task<Void, Never>?
     private var tokenFileURL: URL?
     private let session: URLSession
@@ -170,11 +172,23 @@ final class MobileGatewayCoordinator: ObservableObject {
         // Loopback session: the gateway always lives on 127.0.0.1, so a
         // configured system proxy must not intercept these probes.
         self.session = session ?? AgentNetworkSupport.loopbackSession()
+        appTerminationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.stop()
+            }
+        }
     }
 
     deinit {
         monitorTask?.cancel()
-        process?.terminate()
+        if let appTerminationObserver {
+            NotificationCenter.default.removeObserver(appTerminationObserver)
+        }
+        Self.terminateGatewayProcess(process)
     }
 
     var isRunning: Bool {
@@ -195,6 +209,7 @@ final class MobileGatewayCoordinator: ObservableObject {
     /// 手机扫 QR + token 校验,关闭开关并不增加实际安全收益,只是徒增
     /// 「为啥状态栏齿轮显示未连接」这类困惑。
     func autoStart() {
+        guard Self.shouldAutoStart() else { return }
         Task { await start() }
     }
 
@@ -207,6 +222,13 @@ final class MobileGatewayCoordinator: ObservableObject {
         recentOutput = ""
         do {
             var normalized = settings.normalized
+            let executableURL = try Self.resolveExecutableURL(settings: normalized)
+            resolvedExecutablePath = executableURL.path
+            let desktopToken = try MobileGatewaySettingsStore.loadOrCreateDesktopToken()
+            let tokenURL = try Self.writeDesktopTokenFile(desktopToken)
+            tokenFileURL = tokenURL
+            Self.reapStaleGatewayProcesses(desktopTokenFilePath: tokenURL.path)
+
             // 默认端口 8877 常被占用(残留网关进程或其它 App),直接导致
             // 子进程以 status 1 退出。从配置端口起探测第一个可 bind 的
             // 端口,自动避开冲突,保证「启动即可用」。
@@ -217,14 +239,9 @@ final class MobileGatewayCoordinator: ObservableObject {
             settings = normalized
             MobileGatewaySettingsStore.save(normalized)
 
-            let executableURL = try Self.resolveExecutableURL(settings: normalized)
-            resolvedExecutablePath = executableURL.path
-            let desktopToken = try MobileGatewaySettingsStore.loadOrCreateDesktopToken()
             let desktopBaseURL = Self.desktopBaseURL(for: normalized)
             let pairingBaseURL = Self.pairingBaseURL(for: normalized)
             displayBaseURL = pairingBaseURL
-            let tokenURL = try Self.writeDesktopTokenFile(desktopToken)
-            tokenFileURL = tokenURL
 
             let gatewayProcess = Process()
             gatewayProcess.executableURL = executableURL
@@ -261,8 +278,9 @@ final class MobileGatewayCoordinator: ObservableObject {
 
     func stop() {
         appState?.mobileGatewayDesktopPeer.disconnect()
-        process?.terminate()
+        let activeProcess = process
         process = nil
+        Self.terminateGatewayProcess(activeProcess)
         monitorTask?.cancel()
         monitorTask = nil
         health = nil
@@ -396,8 +414,9 @@ final class MobileGatewayCoordinator: ObservableObject {
 
     private func fail(_ message: String) {
         appState?.mobileGatewayDesktopPeer.disconnect()
-        process?.terminate()
+        let activeProcess = process
         process = nil
+        Self.terminateGatewayProcess(activeProcess)
         state = .failed(message)
     }
 
@@ -420,6 +439,78 @@ final class MobileGatewayCoordinator: ObservableObject {
         recentOutput += text
         if recentOutput.count > 4096 {
             recentOutput = String(recentOutput.suffix(4096))
+        }
+    }
+
+    static func shouldAutoStart(environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        environment["XCTestConfigurationFilePath"] == nil
+    }
+
+    static func staleGatewayPIDs(
+        from processList: String,
+        desktopTokenFilePath: String,
+        currentPID: pid_t = getpid()
+    ) -> [pid_t] {
+        processList.split(separator: "\n", omittingEmptySubsequences: true).compactMap { rawLine in
+            let line = String(rawLine)
+            let fields = line.split(maxSplits: 2, whereSeparator: \.isWhitespace)
+            guard fields.count == 3,
+                  let pid = pid_t(String(fields[0])),
+                  let parentPID = pid_t(String(fields[1])),
+                  pid != currentPID,
+                  parentPID == 1 else {
+                return nil
+            }
+            let command = String(fields[2])
+            guard command.contains("willdeep-agent"),
+                  command.contains("serve-mobile"),
+                  command.contains("--desktop-token-file"),
+                  command.contains(desktopTokenFilePath) else {
+                return nil
+            }
+            return pid
+        }
+    }
+
+    private static func reapStaleGatewayProcesses(desktopTokenFilePath: String) {
+        guard let processList = currentProcessList() else { return }
+        for pid in staleGatewayPIDs(from: processList, desktopTokenFilePath: desktopTokenFilePath) {
+            terminateGatewayPID(pid)
+        }
+    }
+
+    private static func currentProcessList() -> String? {
+        let ps = Process()
+        ps.executableURL = URL(fileURLWithPath: "/bin/ps")
+        ps.arguments = ["-axo", "pid=,ppid=,command="]
+        let output = Pipe()
+        ps.standardOutput = output
+        ps.standardError = Pipe()
+        do {
+            try ps.run()
+            ps.waitUntilExit()
+        } catch {
+            return nil
+        }
+        guard ps.terminationStatus == 0 else { return nil }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        return String(data: data, encoding: .utf8)
+    }
+
+    nonisolated private static func terminateGatewayProcess(_ process: Process?) {
+        guard let process, process.isRunning else { return }
+        process.terminate()
+        usleep(250_000)
+        guard process.isRunning else { return }
+        kill(process.processIdentifier, SIGKILL)
+    }
+
+    private static func terminateGatewayPID(_ pid: pid_t) {
+        guard pid > 1, pid != getpid() else { return }
+        guard kill(pid, SIGTERM) == 0 else { return }
+        usleep(250_000)
+        if kill(pid, 0) == 0 {
+            kill(pid, SIGKILL)
         }
     }
 

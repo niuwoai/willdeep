@@ -17,6 +17,12 @@ class ONNXRuntimeWrapper {
     private var session: OpaquePointer? // OrtSession*
     private var env: OpaquePointer? // OrtEnv*
     private var api: UnsafePointer<OrtApi>?
+
+    static func balancedThreadCount(activeProcessorCount: Int = ProcessInfo.processInfo.activeProcessorCount) -> Int {
+        let cores = max(1, activeProcessorCount)
+        if cores <= 2 { return cores }
+        return min(4, max(2, cores / 2))
+    }
     
     init() {
         // 获取 ONNX Runtime API
@@ -79,8 +85,9 @@ class ONNXRuntimeWrapper {
             }
         }
         
-        // 性能优化：设置多线程
-        let numThreads = max(4, ProcessInfo.processInfo.activeProcessorCount)
+        // Balance throughput with thermals: SenseVoice is bursty and runs
+        // inside a long-lived GUI app, so don't let ORT occupy every core.
+        let numThreads = Self.balancedThreadCount()
         status = api.pointee.SetIntraOpNumThreads(sessionOptions, Int32(numThreads))
         if status != nil {
             let errorMsg = getErrorMessage(from: status, api: api)
@@ -88,6 +95,20 @@ class ONNXRuntimeWrapper {
             print("⚠️ 设置线程数失败: \(errorMsg)")
         } else {
             print("✅ ONNX Runtime 使用 \(numThreads) 个线程")
+        }
+
+        status = api.pointee.SetInterOpNumThreads(sessionOptions, 1)
+        if status != nil {
+            let errorMsg = getErrorMessage(from: status, api: api)
+            api.pointee.ReleaseStatus(status)
+            print("⚠️ 设置 inter-op 线程数失败: \(errorMsg)")
+        }
+
+        status = api.pointee.DisableCpuMemArena(sessionOptions)
+        if status != nil {
+            let errorMsg = getErrorMessage(from: status, api: api)
+            api.pointee.ReleaseStatus(status)
+            print("⚠️ 关闭 CPU memory arena 失败: \(errorMsg)")
         }
         
         // 设置图优化级别

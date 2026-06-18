@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.89.0-rc5 - 2026-06-18
+
+### Fixed
+
+- **Mobile Gateway 孤儿进程清理**:`MobileGatewayCoordinator` 在 App 退出、手动 stop、启动失败和析构时同步终止子进程,并在短暂等待后对仍存活的网关进程发送强制终止,避免 `willdeep-agent serve-mobile` 被系统接管后继续占端口。
+- **测试环境不再自动启动手机网关**:检测到 XCTest 环境时跳过 `autoStart()`,避免每次 Xcode test 启动 AppState 都额外拉起一个网关子进程。
+- **启动前清理同 token 遗留网关**:新网关启动前会扫描 `PPID=1` 且使用同一个 desktop token 文件的 `willdeep-agent serve-mobile` 进程并清理,减少历史孤儿进程导致端口一路递增。
+- **回归测试**:扩展 `MobileGatewayCoordinatorTests`,覆盖 XCTest 自动启动保护和 orphan gateway 进程列表解析。
+
+### 版本
+
+- bugfix/稳定性提升,只递增 rc:1.89.0-rc4 → **1.89.0-rc5**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / MOBILE_GATEWAY_REQUIREMENTS (4 处) / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
+## 1.89.0-rc4 - 2026-06-18
+
+### Fixed
+
+- **Agent workspace 分组状态重启后可恢复**:会话侧栏的 workspace 收起、超过 5 条后的展开、归档分组展开状态现在写入 UserDefaults,退出再打开后会按 workspace 恢复;同时按现有 session workspace prune 旧 key,避免长期运行和频繁切项目后偏好状态无界增长。
+- **会话侧栏分钟刷新降载**:把每个 session row 各自持有的 `TimelineView(.periodic)` 改成侧栏单一的分钟刷新源,减少长列表长期挂起时的计时器数量和每分钟重绘压力,降低 CPU 无谓升温的概率。
+- **语音模型资源策略收敛**:ONNX Runtime 默认推理线程从"至少 4 且可能占满全部 CPU 核"改为按机器规模折中且最多 4 线程,并固定 inter-op 为 1、关闭 CPU memory arena,减少转录时 CPU 打满和 session 长期保留内存的概率。语音模型预热任务现在会去重,空闲监控在模型释放后自动退出。
+- **回归测试**:新增 `AgentSidebarWorkspaceStateStoreTests` 与 `VoiceRuntimeResourcePolicyTests`,覆盖 workspace 状态保存/清理/stale key prune,以及 ONNX 线程数上限策略。
+
+### 版本
+
+- bugfix/稳定性提升,只递增 rc:1.89.0-rc3 → **1.89.0-rc4**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / MOBILE_GATEWAY_REQUIREMENTS (4 处) / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
 ## 1.89.0-rc3 - 2026-06-18
 
 ### Fixed

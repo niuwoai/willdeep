@@ -308,4 +308,32 @@ struct MobileGatewayCoordinatorTests {
         #expect(proxies?["HTTPSEnable"] as? Int == 0)
         #expect(proxies?["SOCKSEnable"] as? Int == 0)
     }
+
+    @Test
+    func autoStartSkipsXCTestEnvironment() {
+        #expect(!MobileGatewayCoordinator.shouldAutoStart(environment: [
+            "XCTestConfigurationFilePath": "/tmp/WillDeepTests.xctestconfiguration",
+        ]))
+        #expect(MobileGatewayCoordinator.shouldAutoStart(environment: [:]))
+    }
+
+    @Test
+    func staleGatewayParserOnlySelectsOrphanedMobileGatewayForSameToken() {
+        let tokenPath = "/Users/me/Library/Application Support/com.willdeep.app/MobileGateway/desktop-token"
+        let processList = """
+          101     1 /Applications/WillDeep.app/Contents/Resources/willdeep-agent serve-mobile --desktop-token-file \(tokenPath) --port 8877
+          102  9000 /Applications/WillDeep.app/Contents/Resources/willdeep-agent serve-mobile --desktop-token-file \(tokenPath) --port 8878
+          103     1 /Applications/WillDeep.app/Contents/Resources/willdeep-agent other --desktop-token-file \(tokenPath)
+          104     1 /Applications/WillDeep.app/Contents/Resources/willdeep-agent serve-mobile --desktop-token-file /tmp/other-token
+          105     1 /bin/sleep 100
+        """
+
+        let pids = MobileGatewayCoordinator.staleGatewayPIDs(
+            from: processList,
+            desktopTokenFilePath: tokenPath,
+            currentPID: 999
+        )
+
+        #expect(pids == [101])
+    }
 }

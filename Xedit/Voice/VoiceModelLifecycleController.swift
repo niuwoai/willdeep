@@ -36,6 +36,7 @@ final class VoiceModelLifecycleController {
     private var resignObserver: NSObjectProtocol?
     private var activateObserver: NSObjectProtocol?
     private var backgroundUnloadTask: Task<Void, Never>?
+    private var preloadTask: Task<Void, Never>?
 
     /// 进后台多久之后主动 unload。10 分钟是经验值:用户切走小会儿
     /// (查资料、回消息)回来不需要重新付 1-5s 冷启动;切走半小时以上
@@ -89,11 +90,17 @@ final class VoiceModelLifecycleController {
             log.info("preloadIfWarranted: no model file on disk — skip")
             return
         }
+        guard preloadTask == nil else {
+            log.info("preloadIfWarranted: preload already running — skip")
+            return
+        }
         log.info("preloadIfWarranted: kicking background preload")
-        Task.detached(priority: .utility) {
+        preloadTask = Task(priority: .utility) { [weak self] in
             let ok = await SpeechTranscriptionModel.shared.preload()
-            await MainActor.run { [self] in
-                log.info("preload finished: ok=\(ok)")
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self?.log.info("preload finished: ok=\(ok)")
+                self?.preloadTask = nil
             }
         }
     }
@@ -124,6 +131,8 @@ final class VoiceModelLifecycleController {
 
     /// Settings 「Unload now」按钮调。
     func unloadNow() async {
+        preloadTask?.cancel()
+        preloadTask = nil
         await SpeechTranscriptionModel.shared.unloadModel()
         log.info("manual unload")
     }

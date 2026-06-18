@@ -15,9 +15,16 @@ actor SpeechTranscriptionModel {
     private var wrapper: ONNXRuntimeWrapper?
     private var lastUseTime: Date?
     private var isInactivityMonitoringEnabled = false
+    private var inactivityMonitorGeneration = 0
 
     // 空闲后自动卸载模型的时间阈值（秒）
     private static let inactivityThreshold: TimeInterval = 300  // 5分钟
+
+    private enum InactivityCheckResult {
+        case keepMonitoring
+        case stopped
+        case unloaded
+    }
 
     private init() {}
 
@@ -80,8 +87,10 @@ actor SpeechTranscriptionModel {
         // 启动空闲监控
         if !isInactivityMonitoringEnabled {
             isInactivityMonitoringEnabled = true
+            inactivityMonitorGeneration += 1
+            let generation = inactivityMonitorGeneration
             Task.detached(priority: .utility) {
-                await Self.monitorInactivity()
+                await Self.monitorInactivity(generation: generation)
             }
         }
 
@@ -89,24 +98,33 @@ actor SpeechTranscriptionModel {
     }
 
     /// 监控模型空闲时间，自动卸载
-    private static func monitorInactivity() async {
-        while true {
+    private static func monitorInactivity(generation: Int) async {
+        while !Task.isCancelled {
             try? await Task.sleep(nanoseconds: UInt64(60 * 1_000_000_000))  // 每分钟检查一次
 
-            let shouldUnload = await shared.checkAndUnloadIfIdle()
-            if shouldUnload {
+            let result = await shared.checkInactivity(generation: generation)
+            switch result {
+            case .keepMonitoring:
+                continue
+            case .stopped:
+                return
+            case .unloaded:
                 #if DEBUG
                 print("🧹 [SpeechTranscriptionModel] 模型已因空闲自动卸载，释放内存")
                 #endif
+                return
             }
         }
     }
 
     /// 检查并卸载空闲模型
-    private func checkAndUnloadIfIdle() -> Bool {
-        guard let wrapper = wrapper,
-              let lastUse = lastUseTime else {
-            return false
+    private func checkInactivity(generation: Int) -> InactivityCheckResult {
+        guard generation == inactivityMonitorGeneration else {
+            return .stopped
+        }
+        guard wrapper != nil, let lastUse = lastUseTime else {
+            isInactivityMonitoringEnabled = false
+            return .stopped
         }
 
         let idleTime = Date().timeIntervalSince(lastUse)
@@ -114,27 +132,31 @@ actor SpeechTranscriptionModel {
             // 检查内存压力
             var info = mach_task_basic_info()
             var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
-            let result = withUnsafeMutablePointer(to: &info) {
+            let status = withUnsafeMutablePointer(to: &info) {
                 $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
                     task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
                 }
             }
 
             // 如果内存使用超过 4GB 或空闲超过阈值，卸载模型
-            let memoryUsedMB = UInt64(info.resident_size) / 1024 / 1024
+            let memoryUsedMB = status == KERN_SUCCESS ? UInt64(info.resident_size) / 1024 / 1024 : 0
             if memoryUsedMB > 4096 || idleTime > Self.inactivityThreshold {
                 self.wrapper = nil
                 self.lastUseTime = nil
-                return true
+                self.isInactivityMonitoringEnabled = false
+                self.inactivityMonitorGeneration += 1
+                return .unloaded
             }
         }
-        return false
+        return .keepMonitoring
     }
 
     /// 手动卸载模型（用于释放内存）
     func unloadModel() {
         wrapper = nil
         lastUseTime = nil
+        isInactivityMonitoringEnabled = false
+        inactivityMonitorGeneration += 1
         #if DEBUG
         print("🧹 [SpeechTranscriptionModel] 模型已手动卸载")
         #endif

@@ -8,8 +8,8 @@
 //     reserves room for traffic lights, provider-status pill (only when
 //     more than one provider is configured), New Chat action, the
 //     workspace-grouped session list with archived disclosure, and the
-//     per-row hover-revealed pin/archive actions. Owns its own collapse
-//     and "see more" toggle state.
+//     per-row hover-revealed pin/archive actions. Persists per-workspace
+//     collapse / "see more" / archived disclosure state.
 //   - `SidebarActionRow`: the small generic row used by the New Chat
 //     entry (icon + title + optional ⌘N shortcut, hover-tints the row
 //     background).
@@ -23,16 +23,16 @@ import SwiftUI
 
 struct AgentSessionsSidebar: View {
     @EnvironmentObject var appState: AppState
-    @State private var expandedWorkspaces: Set<String> = []
+    @State private var expandedWorkspaces = AgentSidebarWorkspaceStateStore.load(.expandedWorkspaces)
     /// Workspace keys the user has manually collapsed by clicking the
     /// folder icon — the whole group hides every session row and only
     /// the title line stays. Independent from `expandedWorkspaces` (that
     /// one controls the "more than 5 sessions → show all" toggle).
-    @State private var collapsedWorkspaces: Set<String> = []
+    @State private var collapsedWorkspaces = AgentSidebarWorkspaceStateStore.load(.collapsedWorkspaces)
     /// Workspace keys whose "已归档" sub-section is currently expanded.
     /// Archived sessions sit behind a disclosure row so they don't add
     /// noise to the main list but stay one click away.
-    @State private var expandedArchivedGroups: Set<String> = []
+    @State private var expandedArchivedGroups = AgentSidebarWorkspaceStateStore.load(.expandedArchivedGroups)
     /// The session row the mouse is hovering. Drives the on-row
     /// pin/archive button visibility — cursor-style "they only show up
     /// when you're aiming at them".
@@ -58,23 +58,29 @@ struct AgentSessionsSidebar: View {
             Color.clear.frame(height: trafficLightReserve)
             sidebarHeader
             providerStatusBar
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    primaryActions
-                    Spacer().frame(height: 18)
-                    AgentRoutinesSidebarSection()
-                    Spacer().frame(height: 4)
-                    workspacesSection
-                    if appState.agentSessions.isEmpty {
-                        Text(L10n.Sidebar.emptyState)
-                            .font(AgentDesign.secondaryFont)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 14)
-                            .padding(.top, 16)
+            TimelineView(.periodic(from: .now, by: 60)) { timeline in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        primaryActions
+                        Spacer().frame(height: 18)
+                        AgentRoutinesSidebarSection()
+                        Spacer().frame(height: 4)
+                        workspacesSection(now: timeline.date)
+                        if appState.agentSessions.isEmpty {
+                            Text(L10n.Sidebar.emptyState)
+                                .font(AgentDesign.secondaryFont)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 14)
+                                .padding(.top, 16)
+                        }
                     }
+                    .padding(.vertical, 8)
                 }
-                .padding(.vertical, 8)
             }
+        }
+        .onAppear(perform: prunePersistedWorkspaceStateIfNeeded)
+        .onChange(of: workspaceStatePruneKey) { _, _ in
+            prunePersistedWorkspaceStateIfNeeded()
         }
     }
 
@@ -152,7 +158,7 @@ struct AgentSessionsSidebar: View {
         }
     }
 
-    private var workspacesSection: some View {
+    private func workspacesSection(now: Date) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(L10n.Sidebar.workspaceHeader)
@@ -181,13 +187,13 @@ struct AgentSessionsSidebar: View {
             .padding(.bottom, 6)
 
             ForEach(groupedSessions, id: \.0) { workspace, sessions in
-                workspaceGroup(workspace: workspace, sessions: sessions)
+                workspaceGroup(workspace: workspace, sessions: sessions, now: now)
             }
         }
     }
 
     @ViewBuilder
-    private func workspaceGroup(workspace: String, sessions: [AgentSession]) -> some View {
+    private func workspaceGroup(workspace: String, sessions: [AgentSession], now: Date) -> some View {
         let activeSessions = sessions.filter { !$0.isArchived }
         let archivedSessions = sessions.filter { $0.isArchived }
             .sorted { ($0.archivedAt ?? .distantPast) > ($1.archivedAt ?? .distantPast) }
@@ -208,11 +214,7 @@ struct AgentSessionsSidebar: View {
                 // hitting the right-click menu still works as before.
                 Button {
                     withAnimation(.easeInOut(duration: 0.15)) {
-                        if isCollapsed {
-                            collapsedWorkspaces.remove(workspace)
-                        } else {
-                            collapsedWorkspaces.insert(workspace)
-                        }
+                        setWorkspaceCollapsed(workspace, collapsed: !isCollapsed)
                     }
                 } label: {
                     Image(systemName: remoteWorkspace == nil
@@ -277,16 +279,12 @@ struct AgentSessionsSidebar: View {
 
             if !isCollapsed {
                 ForEach(visible) { session in
-                    sessionRow(session)
+                    sessionRow(session, now: now)
                 }
 
                 if activeSessions.count > initialRowCount {
                     Button {
-                        if isExpanded {
-                            expandedWorkspaces.remove(workspace)
-                        } else {
-                            expandedWorkspaces.insert(workspace)
-                        }
+                        setWorkspaceExpanded(workspace, expanded: !isExpanded)
                     } label: {
                         Text(isExpanded ? L10n.Sidebar.sessionListShowLess : L10n.Sidebar.sessionListSeeMore)
                             .font(AgentDesign.secondaryFont)
@@ -301,7 +299,8 @@ struct AgentSessionsSidebar: View {
                     archivedDisclosure(
                         workspace: workspace,
                         sessions: archivedSessions,
-                        isExpanded: archivedExpanded
+                        isExpanded: archivedExpanded,
+                        now: now
                     )
                 }
             }
@@ -318,14 +317,11 @@ struct AgentSessionsSidebar: View {
     private func archivedDisclosure(
         workspace: String,
         sessions: [AgentSession],
-        isExpanded: Bool
+        isExpanded: Bool,
+        now: Date
     ) -> some View {
         Button {
-            if isExpanded {
-                expandedArchivedGroups.remove(workspace)
-            } else {
-                expandedArchivedGroups.insert(workspace)
-            }
+            setArchivedGroupExpanded(workspace, expanded: !isExpanded)
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
@@ -347,13 +343,13 @@ struct AgentSessionsSidebar: View {
 
         if isExpanded {
             ForEach(sessions) { session in
-                sessionRow(session)
+                sessionRow(session, now: now)
             }
         }
     }
 
     @ViewBuilder
-    private func sessionRow(_ session: AgentSession) -> some View {
+    private func sessionRow(_ session: AgentSession, now: Date) -> some View {
         let isActive = appState.activeAgentSessionID == session.id
         let isHovered = (hoveredSessionID == session.id)
 
@@ -387,7 +383,7 @@ struct AgentSessionsSidebar: View {
                     .help(L10n.Sidebar.sessionMenuRename)
                 Spacer(minLength: 0)
                 AgentSessionModeBadges(session: session)
-                sessionUpdatedLabel(session)
+                sessionUpdatedLabel(session, now: now)
                 sessionRowTrailingActions(session: session, isHovered: isHovered)
             }
             .padding(.horizontal, 28)
@@ -454,20 +450,18 @@ struct AgentSessionsSidebar: View {
     }
 
     @ViewBuilder
-    private func sessionUpdatedLabel(_ session: AgentSession) -> some View {
-        TimelineView(.periodic(from: .now, by: 60)) { timeline in
-            let label = AgentRelativeTimestamp.compactString(
-                since: session.lastActivityAt,
-                now: timeline.date
-            )
-            Text(label)
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.tertiary)
-                .monospacedDigit()
-                .lineLimit(1)
-                .frame(minWidth: 22, alignment: .trailing)
-                .help(L10n.Sidebar.sessionUpdatedTooltip(label))
-        }
+    private func sessionUpdatedLabel(_ session: AgentSession, now: Date) -> some View {
+        let label = AgentRelativeTimestamp.compactString(
+            since: session.lastActivityAt,
+            now: now
+        )
+        return Text(label)
+            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+            .foregroundStyle(.tertiary)
+            .monospacedDigit()
+            .lineLimit(1)
+            .frame(minWidth: 22, alignment: .trailing)
+            .help(L10n.Sidebar.sessionUpdatedTooltip(label))
     }
 
     /// Trailing icon cluster on each session row — pin & archive
@@ -560,6 +554,45 @@ struct AgentSessionsSidebar: View {
             }
     }
 
+    private var workspaceStatePruneKey: [String] {
+        Array(Set(appState.agentSessions.map(\.workspaceSidebarGroupKey))).sorted()
+    }
+
+    private func setWorkspaceExpanded(_ workspace: String, expanded: Bool) {
+        var updated = expandedWorkspaces
+        guard updateWorkspaceState(&updated, workspace: workspace, enabled: expanded) else { return }
+        expandedWorkspaces = updated
+        AgentSidebarWorkspaceStateStore.save(updated, kind: .expandedWorkspaces)
+    }
+
+    private func setWorkspaceCollapsed(_ workspace: String, collapsed: Bool) {
+        var updated = collapsedWorkspaces
+        guard updateWorkspaceState(&updated, workspace: workspace, enabled: collapsed) else { return }
+        collapsedWorkspaces = updated
+        AgentSidebarWorkspaceStateStore.save(updated, kind: .collapsedWorkspaces)
+    }
+
+    private func setArchivedGroupExpanded(_ workspace: String, expanded: Bool) {
+        var updated = expandedArchivedGroups
+        guard updateWorkspaceState(&updated, workspace: workspace, enabled: expanded) else { return }
+        expandedArchivedGroups = updated
+        AgentSidebarWorkspaceStateStore.save(updated, kind: .expandedArchivedGroups)
+    }
+
+    private func updateWorkspaceState(_ values: inout Set<String>, workspace: String, enabled: Bool) -> Bool {
+        if enabled {
+            return values.insert(workspace).inserted
+        }
+        return values.remove(workspace) != nil
+    }
+
+    private func prunePersistedWorkspaceStateIfNeeded() {
+        let valid = Set(workspaceStatePruneKey)
+        expandedWorkspaces = AgentSidebarWorkspaceStateStore.prune(expandedWorkspaces, to: valid, kind: .expandedWorkspaces)
+        collapsedWorkspaces = AgentSidebarWorkspaceStateStore.prune(collapsedWorkspaces, to: valid, kind: .collapsedWorkspaces)
+        expandedArchivedGroups = AgentSidebarWorkspaceStateStore.prune(expandedArchivedGroups, to: valid, kind: .expandedArchivedGroups)
+    }
+
     private func workspaceDisplayName(_ key: String) -> String {
         if key == AgentSession.noWorkspaceSidebarGroupKey { return "No workspace" }
         if let remote = remoteWorkspaceGroup(from: key) {
@@ -615,6 +648,51 @@ struct AgentSessionsSidebar: View {
         case (false, false):
             return lhs.lastActivityAt > rhs.lastActivityAt
         }
+    }
+}
+
+enum AgentSidebarWorkspaceStateStore {
+    enum Kind {
+        case expandedWorkspaces
+        case collapsedWorkspaces
+        case expandedArchivedGroups
+
+        var defaultsKey: String {
+            switch self {
+            case .expandedWorkspaces:
+                return "com.willdeep.sidebar.expandedWorkspaceKeys.v1"
+            case .collapsedWorkspaces:
+                return "com.willdeep.sidebar.collapsedWorkspaceKeys.v1"
+            case .expandedArchivedGroups:
+                return "com.willdeep.sidebar.expandedArchivedWorkspaceKeys.v1"
+            }
+        }
+    }
+
+    static func load(_ kind: Kind, defaults: UserDefaults = .standard) -> Set<String> {
+        Set(defaults.stringArray(forKey: kind.defaultsKey) ?? [])
+    }
+
+    static func save(_ values: Set<String>, kind: Kind, defaults: UserDefaults = .standard) {
+        let sorted = values.sorted()
+        if sorted.isEmpty {
+            defaults.removeObject(forKey: kind.defaultsKey)
+        } else {
+            defaults.set(sorted, forKey: kind.defaultsKey)
+        }
+    }
+
+    @discardableResult
+    static func prune(
+        _ values: Set<String>,
+        to validValues: Set<String>,
+        kind: Kind,
+        defaults: UserDefaults = .standard
+    ) -> Set<String> {
+        let pruned = values.intersection(validValues)
+        guard pruned != values else { return values }
+        save(pruned, kind: kind, defaults: defaults)
+        return pruned
     }
 }
 
