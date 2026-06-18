@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.90.0-rc5 - 2026-06-19
+
+### Fixed
+
+- **启动假死 / 转圈打不开** —— `MobileGatewayCoordinator.start()` 同步调 `Self.reapStaleGatewayProcesses(_:)`,后者在 main thread 上跑 `/bin/ps -axo pid=,ppid=,command=`,然后 `ps.waitUntilExit()` → `readDataToEndOfFile()`。当系统进程数足够多(~200+)、ps 输出超过 64KB pipe buffer 时:子进程写满 buffer 阻塞在 write,主线程在 waitUntilExit 上等子进程,谁也不读 → 互锁,启动那一刻就转圈不响应。采样 `WillDeep.app` (1.90.0-rc4) 4228 个 main-thread 采样 4225 个钉在 `mach_msg_trap` 上,调用栈就是这条路径。两个修复合一:
+  - **[Xedit/MobileGatewayCoordinator.swift:230](Xedit/MobileGatewayCoordinator.swift:230)**:reap 改成 `await Task.detached(priority: .utility) { ... }.value`,main thread 只在挂起点 await,detached 任务在后台跑 ps + kill,UI 期间空闲,启动可见即可点。
+  - **[Xedit/MobileGatewayCoordinator.swift:497](Xedit/MobileGatewayCoordinator.swift:497)** `currentProcessList()`:read 与 wait 顺序调换 —— `run()` → `readDataToEndOfFile()` → `waitUntilExit()`。read 持续清 pipe buffer,子进程不会被 buffer 卡住,EOF 就是子进程关 stdout 的时刻;之后 `waitUntilExit()` 拿退出码做兜底,基本立即返回。
+  - 顺手把 `reapStaleGatewayProcesses` / `currentProcessList` / `staleGatewayPIDs` / `terminateGatewayPID` 全部 `nonisolated` 化,让 detached task 能直接调,Swift 6 concurrency 也不会再警告。
+- 现有 `MobileGatewayCoordinatorTests.staleGatewayPIDs` 测试不受影响(本来就是纯 string 解析)。
+
+### 版本
+
+- bugfix,bump rc:1.90.0-rc4 → **1.90.0-rc5**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 四个 docs(MOBILE_GATEWAY / AGENT_HARNESS / CHROME / COLLAB)/ chrome-extension README 同步。
+
 ## 1.90.0-rc4 - 2026-06-18
 
 ### Added

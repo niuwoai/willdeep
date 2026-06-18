@@ -227,7 +227,16 @@ final class MobileGatewayCoordinator: ObservableObject {
             let desktopToken = try MobileGatewaySettingsStore.loadOrCreateDesktopToken()
             let tokenURL = try Self.writeDesktopTokenFile(desktopToken)
             tokenFileURL = tokenURL
-            Self.reapStaleGatewayProcesses(desktopTokenFilePath: tokenURL.path)
+            // 1.90.0-rc5：原本同步调 `reapStaleGatewayProcesses` 会在
+            // main thread 上 `ps.waitUntilExit()`，加上 `ps` stdout 超过 64KB
+            // pipe buffer 后又永远等不到 main thread 来读 → 互锁 → 启动转圈
+            // 假死。改成 detached utility 任务，主线程只 await 这个挂起
+            // 点，UI 期间是空闲的；且 currentProcessList() 内部也改成先读
+            // pipe 再 waitUntilExit，多一道兜底。
+            let tokenPath = tokenURL.path
+            await Task.detached(priority: .utility) {
+                Self.reapStaleGatewayProcesses(desktopTokenFilePath: tokenPath)
+            }.value
 
             // 默认端口 8877 常被占用(残留网关进程或其它 App),直接导致
             // 子进程以 status 1 退出。从配置端口起探测第一个可 bind 的
@@ -446,7 +455,7 @@ final class MobileGatewayCoordinator: ObservableObject {
         environment["XCTestConfigurationFilePath"] == nil
     }
 
-    static func staleGatewayPIDs(
+    nonisolated static func staleGatewayPIDs(
         from processList: String,
         desktopTokenFilePath: String,
         currentPID: pid_t = getpid()
@@ -472,14 +481,20 @@ final class MobileGatewayCoordinator: ObservableObject {
         }
     }
 
-    private static func reapStaleGatewayProcesses(desktopTokenFilePath: String) {
+    nonisolated private static func reapStaleGatewayProcesses(desktopTokenFilePath: String) {
         guard let processList = currentProcessList() else { return }
         for pid in staleGatewayPIDs(from: processList, desktopTokenFilePath: desktopTokenFilePath) {
             terminateGatewayPID(pid)
         }
     }
 
-    private static func currentProcessList() -> String? {
+    /// 1.90.0-rc5：原本「`run()` → `waitUntilExit()` → `readDataToEndOfFile()`」
+    /// 的写法在 `ps -axo` 输出 > 64KB pipe buffer 时会死锁 —— 子进程写满
+    /// buffer 阻塞 write，主线程在 `waitUntilExit()` 上等子进程，谁也读不
+    /// 走 buffer。改成 `run()` 完直接 `readDataToEndOfFile()`：read 在 EOF
+    /// 时（子进程关 stdout 即退出）才返回，期间持续清空 buffer，子进程不
+    /// 会卡。再 `waitUntilExit()` 拿退出码做兜底（此时基本立即返回）。
+    nonisolated private static func currentProcessList() -> String? {
         let ps = Process()
         ps.executableURL = URL(fileURLWithPath: "/bin/ps")
         ps.arguments = ["-axo", "pid=,ppid=,command="]
@@ -488,12 +503,12 @@ final class MobileGatewayCoordinator: ObservableObject {
         ps.standardError = Pipe()
         do {
             try ps.run()
-            ps.waitUntilExit()
         } catch {
             return nil
         }
-        guard ps.terminationStatus == 0 else { return nil }
         let data = output.fileHandleForReading.readDataToEndOfFile()
+        ps.waitUntilExit()
+        guard ps.terminationStatus == 0 else { return nil }
         return String(data: data, encoding: .utf8)
     }
 
@@ -505,7 +520,7 @@ final class MobileGatewayCoordinator: ObservableObject {
         kill(process.processIdentifier, SIGKILL)
     }
 
-    private static func terminateGatewayPID(_ pid: pid_t) {
+    nonisolated private static func terminateGatewayPID(_ pid: pid_t) {
         guard pid > 1, pid != getpid() else { return }
         guard kill(pid, SIGTERM) == 0 else { return }
         usleep(250_000)

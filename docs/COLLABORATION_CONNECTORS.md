@@ -1,6 +1,6 @@
 # Collaboration Connectors
 
-> Last updated: 2026-06-18 | Current version: v1.90.0-rc4
+> Last updated: 2026-06-19 | Current version: v1.90.0-rc5
 
 WillDeep treats Feishu, DingTalk, WeCom, and WeChat/Claw as collaboration
 connectors. The Mac app owns local user intent, preview, and Keychain-backed
