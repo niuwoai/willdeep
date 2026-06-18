@@ -23,13 +23,11 @@ enum AgentSkillCatalog {
         let query = arguments["query"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let skills = AgentSkillDirectory.list(includeDisabled: false).filter { record in
             guard let query, !query.isEmpty else { return true }
-            return record.identifier.lowercased().contains(query)
-                || record.name.lowercased().contains(query)
-                || record.description.lowercased().contains(query)
+            return AgentSkillLocalization.searchableText(for: record).contains(query)
         }
 
         let lines = skills.map { record in
-            "- \(record.identifier) | name=\(record.name) | \(record.description)"
+            "- \(record.identifier) | name=\(AgentSkillLocalization.displayName(for: record)) | \(AgentSkillLocalization.displayDescription(for: record))"
         }
         let payload = lines.isEmpty
             ? "No installed Codex skills found."

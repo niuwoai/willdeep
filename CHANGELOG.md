@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.89.0-rc6 - 2026-06-18
+
+### Fixed
+
+- **内置技能支持中英文展示与搜索**:新增 `AgentSkillLocalization`,为 bundled skills 提供英文默认元数据和简体中文名称/描述/别名。Settings → Skills 在中文系统下显示中文元数据,在其它语言下默认英文;搜索会同时匹配 identifier、英文描述、中文名称/别名和路径。
+- **Agent 技能工具搜索一致**:`list_skills` 复用同一套中英文搜索索引与展示描述,避免 UI 能搜到但模型工具搜不到内置技能。
+
+### 版本
+
+- bugfix/体验修复,只递增 rc:1.89.0-rc5 → **1.89.0-rc6**。pbxproj×6 / Go agent / Help Info.plist / README badge / product-overview / MOBILE_GATEWAY_REQUIREMENTS / AGENT_HARNESS_IMPROVEMENT_PRIORITIES 同步。
+
 ## 1.89.0-rc5 - 2026-06-18
 
 ### Fixed

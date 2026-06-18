@@ -35,10 +35,7 @@ struct AgentSkillSettingsView: View {
         let query = normalizedSearchQuery
         guard !query.isEmpty else { return skills }
         return skills.filter {
-            $0.identifier.lowercased().contains(query)
-                || $0.name.lowercased().contains(query)
-                || $0.description.lowercased().contains(query)
-                || $0.url.path.lowercased().contains(query)
+            AgentSkillLocalization.searchableText(for: $0).contains(query)
         }
     }
 
@@ -395,12 +392,23 @@ struct AgentSkillSettingsView: View {
     }
 
     private func skillRow(_ skill: AgentSkillEntry) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let displayName = skill.source == .bundled
+            ? AgentSkillLocalization.displayName(for: skill)
+            : skill.identifier
+        let displayDescription = skill.source == .bundled
+            ? AgentSkillLocalization.displayDescription(for: skill)
+            : skill.description
+        return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(skill.identifier)
+                    Text(displayName)
                         .font(.headline)
-                    Text(skill.description)
+                    if displayName != skill.identifier {
+                        Text(skill.identifier)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(displayDescription)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
