@@ -32,7 +32,12 @@ struct AgentTurnPostStrip: View {
     @State private var showReport = false
     @State private var showLearning = false
 
-    private var hasReport: Bool { report?.hasUsefulContent == true }
+    // 1.85.0-rc17:0 次工具调用就不显示 📋 turn report 图标了 ——
+    // 那种轮里指标全是 0,展开也只有 tokens / elapsed,基本没人会去看;
+    // 反而是个干扰项。`hasUsefulContent` 太宽,assistantMessageCount > 0
+    // 就放行,所以这里收成「至少打过一次工具」。learning 走自己的图标,
+    // 不会因此被藏掉。
+    private var hasReport: Bool { (report?.toolSummary.total ?? 0) > 0 }
     private var hasLearning: Bool { !learningEvents.isEmpty }
 
     var body: some View {

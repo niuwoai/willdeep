@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.85.0-rc17 - 2026-06-18
+
+### Changed
+
+- **0 次工具调用的轮次不再显示「Agent turn report」图标**。用户原话:「0 次 tool 调用,就不要显示 'agent turn report' 了吧」。
+  - [AgentTurnPostStrip](Xedit/AgentTurnPostStrip.swift) `hasReport` 闸从 `report?.hasUsefulContent == true` 收紧成 `report?.toolSummary.total ?? 0 > 0`。原来的 `hasUsefulContent` 太宽,assistantMessageCount > 0 就放行,导致纯文字应答的轮次也挂个 📋 图标,展开里指标全是 0,干扰多过收益。
+  - Learning 图标走自己的 gate(`learningEvents.isEmpty`),不受这次收紧影响。
+
+### 版本
+
+- bugfix,bump rc:1.85.0-rc16 → **1.85.0-rc17**。pbxproj×6 / Go agent / Help Info.plist / README / docs / product-overview 同步。
+
 ## 1.85.0-rc16 - 2026-06-18
 
 ### Changed
