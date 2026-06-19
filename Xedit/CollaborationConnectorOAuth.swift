@@ -64,6 +64,15 @@ enum CollaborationConnectorOAuthCoordinator {
         }
     }
 
+    static func defaultSetupURL(for platform: CollaborationConnectorPlatform) -> String? {
+        switch platform {
+        case .feishu:
+            return "\(defaultRelayBaseURL)/connectors/feishu/setup"
+        case .dingtalk, .wecom, .wechatClaw:
+            return nil
+        }
+    }
+
     static func pendingState(
         for platform: CollaborationConnectorPlatform,
         defaults: UserDefaults = .standard
@@ -88,7 +97,8 @@ enum CollaborationConnectorOAuthCoordinator {
         if prepared.credentialReference.isEmpty {
             prepared.credentialReference = credentialReference(platform: prepared.platform, kind: .clientSecret)
         }
-        prepared.connectionState = prepared.appID.isEmpty ? .notConfigured : .ready
+        let canUseCloudSetup = prepared.appID.isEmpty && defaultSetupURL(for: prepared.platform) != nil
+        prepared.connectionState = prepared.appID.isEmpty && !canUseCloudSetup ? .notConfigured : .ready
         prepared.updatedAt = Date()
 
         return CollaborationConnectorOAuthRequest(
@@ -158,6 +168,12 @@ enum CollaborationConnectorOAuthCoordinator {
         for connector: CollaborationConnectorConfig,
         state: String
     ) -> URL? {
+        if connector.platform == .feishu,
+           connector.appID.isEmpty,
+           let setupURL = cloudSetupURL(for: connector, state: state) {
+            return setupURL
+        }
+
         guard connector.authMode == .oauth,
               !connector.appID.isEmpty,
               !connector.redirectURI.isEmpty,
@@ -186,6 +202,23 @@ enum CollaborationConnectorOAuthCoordinator {
         var items = components.queryItems ?? []
         items.append(contentsOf: oauthQueryItems(for: connector, state: state))
         components.queryItems = items
+        return components.url
+    }
+
+    private static func cloudSetupURL(
+        for connector: CollaborationConnectorConfig,
+        state: String
+    ) -> URL? {
+        guard connector.authMode == .oauth,
+              let rawURL = defaultSetupURL(for: connector.platform),
+              var components = URLComponents(string: rawURL) else {
+            return nil
+        }
+        components.queryItems = [
+            URLQueryItem(name: "state", value: state),
+            URLQueryItem(name: "relay_callback", value: defaultRedirectURI(for: connector.platform)),
+            URLQueryItem(name: "desktop_callback", value: localCallbackURI(for: connector.platform))
+        ]
         return components.url
     }
 

@@ -38,6 +38,70 @@ func TestCollaborationRelayHealthIncludesCallbacks(t *testing.T) {
 	if callbacks["feishu"] != "https://fly.niuwoai.com/oauth/feishu/callback" {
 		t.Fatalf("feishu callback = %#v", callbacks["feishu"])
 	}
+	setupURLs, ok := data["setup_urls"].(map[string]any)
+	if !ok {
+		t.Fatalf("setup_urls = %#v", data["setup_urls"])
+	}
+	if setupURLs["feishu"] != "https://fly.niuwoai.com/connectors/feishu/setup" {
+		t.Fatalf("feishu setup url = %#v", setupURLs["feishu"])
+	}
+}
+
+func TestCollaborationRelayFeishuSetupRedirectsToAuthorization(t *testing.T) {
+	relay := newTestCollaborationRelay(t)
+	server := httptest.NewServer(relay.routes())
+	defer server.Close()
+
+	client := server.Client()
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	resp, err := client.Get(server.URL + "/connectors/feishu/setup?state=nonce")
+	if err != nil {
+		t.Fatalf("GET setup: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want 302", resp.StatusCode)
+	}
+	location := resp.Header.Get("Location")
+	if !strings.HasPrefix(location, "https://open.feishu.cn/open-apis/authen/v1/index?") {
+		t.Fatalf("Location = %q", location)
+	}
+	if !strings.Contains(location, "app_id=cli_test") {
+		t.Fatalf("Location missing app_id: %q", location)
+	}
+	if !strings.Contains(location, "redirect_uri=https%3A%2F%2Ffly.niuwoai.com%2Foauth%2Ffeishu%2Fcallback") {
+		t.Fatalf("Location missing redirect_uri: %q", location)
+	}
+	if !strings.Contains(location, "state=nonce") {
+		t.Fatalf("Location missing state: %q", location)
+	}
+}
+
+func TestCollaborationRelayFeishuSetupRequiresAppID(t *testing.T) {
+	cfg, err := NewCollaborationRelayConfig(CollaborationRelayConfigInput{
+		Host:          "127.0.0.1",
+		Port:          8898,
+		PublicBaseURL: "https://fly.niuwoai.com",
+		Token:         "relay-secret",
+		MaxEvents:     10,
+	})
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	relay := NewCollaborationRelay(cfg)
+	server := httptest.NewServer(relay.routes())
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/connectors/feishu/setup?state=nonce")
+	if err != nil {
+		t.Fatalf("GET setup: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", resp.StatusCode)
+	}
 }
 
 func TestCollaborationRelayOAuthCallbackRedirectsToDesktopScheme(t *testing.T) {
@@ -156,6 +220,7 @@ func newTestCollaborationRelay(t *testing.T) *CollaborationRelay {
 		Port:          8898,
 		PublicBaseURL: "https://fly.niuwoai.com",
 		Token:         "relay-secret",
+		FeishuAppID:   "cli_test",
 		MaxEvents:     10,
 	})
 	if err != nil {

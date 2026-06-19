@@ -146,11 +146,6 @@ struct CollaborationConnectorSettingsView: View {
 
     private func feishuAuthorizationSection(_ connector: CollaborationConnectorConfig) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            LabeledContent(L10n.Settings.Connectors.appIDLabel) {
-                TextField("", text: binding(for: connector, \.appID), prompt: Text(L10n.Settings.Connectors.appIDPrompt))
-                    .textFieldStyle(.roundedBorder)
-            }
-
             Text(L10n.Settings.Connectors.feishuQRCodeHelp)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -189,14 +184,12 @@ struct CollaborationConnectorSettingsView: View {
                 } label: {
                     Label(L10n.Settings.Connectors.generateQRCode, systemImage: "qrcode")
                 }
-                .disabled(connector.appID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                 Button {
                     prepareAuthorization(for: connector, openInBrowser: true)
                 } label: {
                     Label(L10n.Settings.Connectors.openAuthorization, systemImage: "safari")
                 }
-                .disabled(connector.appID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                 if let authorizationURL = currentAuthorizationURL(for: connector) {
                     Button {
@@ -215,6 +208,12 @@ struct CollaborationConnectorSettingsView: View {
             } label: {
                 Label(L10n.Settings.Connectors.advancedConfiguration, systemImage: "slider.horizontal.3")
             }
+        }
+        .onAppear {
+            ensureFeishuAuthorizationRequest(for: connector)
+        }
+        .onChange(of: connector.appID) { _ in
+            ensureFeishuAuthorizationRequest(for: settings.connector(for: connector.platform))
         }
     }
 
@@ -261,6 +260,13 @@ struct CollaborationConnectorSettingsView: View {
 
     private func advancedConfigurationFields(_ connector: CollaborationConnectorConfig) -> some View {
         VStack(alignment: .leading, spacing: 8) {
+            if connector.platform == .feishu {
+                LabeledContent(L10n.Settings.Connectors.appIDLabel) {
+                    TextField("", text: binding(for: connector, \.appID), prompt: Text(L10n.Settings.Connectors.appIDPrompt))
+                        .textFieldStyle(.roundedBorder)
+                }
+            }
+
             LabeledContent(L10n.Settings.Connectors.tenantIDLabel) {
                 TextField("", text: binding(for: connector, \.tenantID), prompt: Text(L10n.Settings.Connectors.tenantIDPrompt))
                     .textFieldStyle(.roundedBorder)
@@ -424,14 +430,15 @@ struct CollaborationConnectorSettingsView: View {
 
     private func prepareAuthorization(
         for connector: CollaborationConnectorConfig,
-        openInBrowser: Bool
+        openInBrowser: Bool,
+        updateStatus: Bool = true
     ) {
         let request = CollaborationConnectorOAuthCoordinator.prepareAuthorization(for: connector)
         authorizationRequest = request
         CollaborationConnectorSettingsStore.upsert(request.connector)
         settings = CollaborationConnectorSettingsStore.load()
 
-        guard !request.connector.appID.isEmpty else {
+        guard request.authorizationURL != nil || !request.connector.appID.isEmpty else {
             statusMessage = L10n.Settings.Connectors.authorizationNeedsAppID(connector.platform.displayName)
             return
         }
@@ -440,12 +447,20 @@ struct CollaborationConnectorSettingsView: View {
             if openInBrowser {
                 NSWorkspace.shared.open(authorizationURL)
                 statusMessage = L10n.Settings.Connectors.authorizationOpened(connector.platform.displayName)
-            } else {
+            } else if updateStatus {
                 statusMessage = L10n.Settings.Connectors.authorizationQRCodeReady(connector.platform.displayName)
             }
-        } else {
+        } else if updateStatus {
             statusMessage = L10n.Settings.Connectors.authorizationPrepared(connector.platform.displayName)
         }
+    }
+
+    private func ensureFeishuAuthorizationRequest(for connector: CollaborationConnectorConfig) {
+        guard connector.platform == .feishu,
+              currentAuthorizationURL(for: connector) == nil else {
+            return
+        }
+        prepareAuthorization(for: connector, openInBrowser: false, updateStatus: false)
     }
 
     private func currentAuthorizationURL(for connector: CollaborationConnectorConfig) -> URL? {

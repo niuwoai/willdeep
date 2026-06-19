@@ -1,6 +1,6 @@
 # Collaboration Connectors
 
-> Last updated: 2026-06-19 | Current version: v1.91.0-rc2
+> Last updated: 2026-06-19 | Current version: v1.91.0-rc3
 
 WillDeep treats Feishu, DingTalk, WeCom, and WeChat/Claw as collaboration
 connectors. The Mac app owns local user intent, preview, and Keychain-backed
@@ -22,6 +22,7 @@ willdeep-agent serve-collab-relay \
   --host 127.0.0.1 \
   --port 8899 \
   --public-base-url https://fly.niuwoai.com \
+  --feishu-app-id "$WILLDEEP_FEISHU_APP_ID" \
   --token-file /opt/willdeep/collab-relay.token
 ```
 
@@ -42,6 +43,9 @@ Sensitive values stay out of the app settings and source tree:
 - OAuth access/refresh tokens: macOS Keychain.
 - SaaS event verification secrets: future server-side secret store, not
   UserDefaults.
+- Feishu setup QR requires only the public app id on the relay
+  (`WILLDEEP_FEISHU_APP_ID` or `--feishu-app-id`). It does not require Redis or
+  a database; callback events are retained in the relay's in-memory queue.
 
 ## Feishu Target Depth
 
@@ -60,23 +64,26 @@ Expected capabilities:
 
 Implementation shape:
 
-1. Mac app prepares OAuth with redirect URI
-   `https://fly.niuwoai.com/oauth/feishu/callback`.
-2. Settings shows the generated Feishu authorization URL as a QR code, so the
-   user can scan it with Feishu instead of manually copying OAuth fields.
-3. Feishu redirects to the relay.
-4. Relay redirects the browser back to
+1. Mac app prepares a short-lived setup session.
+2. Settings immediately shows a WillDeep Cloud Relay setup QR code at
+   `https://fly.niuwoai.com/connectors/feishu/setup?...`, so the user can scan
+   it with Feishu without filling OAuth fields first.
+3. The setup page handles the Feishu app authorization path. Advanced users can
+   still provide a custom Feishu App ID to generate a direct Open Platform OAuth
+   URL.
+4. Feishu redirects to the relay.
+5. Relay redirects the browser back to
    `willdeep://oauth/feishu/callback?...`.
-5. Mac exchanges the authorization code for tokens and stores them in Keychain.
-6. AI produces an internal document plan.
-7. User previews the generated document.
-8. WillDeep writes blocks through Feishu Docs OpenAPI.
-9. WillDeep sends the link to the configured Feishu chat when approved.
+6. Mac exchanges the authorization code for tokens and stores them in Keychain.
+7. AI produces an internal document plan.
+8. User previews the generated document.
+9. WillDeep writes blocks through Feishu Docs OpenAPI.
+10. WillDeep sends the link to the configured Feishu chat when approved.
 
-For Feishu, the normal Settings path should expose only App ID plus QR/open/copy
-authorization actions. Tenant ID, redirect URI, authorization URL, Keychain
-reference, and credential cleanup are diagnostics and belong behind the advanced
-configuration disclosure.
+For Feishu, the normal Settings path should expose the QR code first, plus
+refresh/open/copy setup actions. App ID, tenant ID, redirect URI,
+authorization URL, Keychain reference, and credential cleanup are diagnostics
+and belong behind the advanced configuration disclosure.
 
 ### L5 Collaboration Agent
 

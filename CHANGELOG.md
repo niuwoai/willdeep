@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.91.0-rc3 - 2026-06-19
+
+### Fixed
+
+- **飞书连接器配置体验** —— Settings → Connectors → 飞书 现在打开配置页即自动生成 WillDeep Cloud Relay 配置二维码,不再要求用户先填写飞书 App ID 才能看到二维码。二维码指向 `https://fly.niuwoai.com/connectors/feishu/setup?...`,用于产品级扫码配置;自建飞书应用 App ID 仍保留在“高级配置”中,填写后可继续生成飞书开放平台直连 OAuth URL。
+- `willdeep-agent serve-collab-relay` 新增 `GET /connectors/feishu/setup` 和 `--feishu-app-id` / `WILLDEEP_FEISHU_APP_ID`;配置 app_id 后会把扫码配置请求跳转到飞书开放平台授权页。relay 仍使用内存事件队列,不需要 Redis 或数据库。
+- 飞书配置页的“生成二维码 / 打开授权页 / 复制授权链接”主流程不再因 App ID 为空禁用,文案同步改为“扫码配置优先,App ID 为高级自定义”。
+
+### Changed
+
+- `CollaborationConnectorOAuthCoordinator` 新增飞书 Cloud Relay setup URL 生成逻辑;空 App ID 时仍会进入 `.ready` 状态并生成短期 setup state,填 App ID 时保持原飞书 `app_id` OAuth 参数路径。
+- 版本号按 bugfix 递增为 **1.91.0-rc3**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 四个 docs(MOBILE_GATEWAY / AGENT_HARNESS / CHROME / COLLAB)/ chrome-extension README 同步。
+
 ## 1.91.0-rc2 - 2026-06-19
 
 ### Added

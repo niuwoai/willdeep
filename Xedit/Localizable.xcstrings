@@ -8655,8 +8655,8 @@
     "settings.connectors.feishu-qr-help" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter the Feishu app ID, generate a QR code, then scan it with Feishu to authorize WillDeep." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "填写飞书 App ID 后生成二维码，用飞书扫码即可授权 WillDeep。" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Scan this QR code with Feishu to configure WillDeep. Custom App ID setup is available under Advanced configuration." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用飞书扫描此二维码即可配置 WillDeep；自建应用 App ID 放在高级配置里。" } }
       }
     },
     "settings.connectors.feishu-qr-ready" : {
@@ -8690,8 +8690,8 @@
     "settings.connectors.feishu-qr-placeholder-description" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Generate a short-lived authorization link after entering the Feishu app ID." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "填写飞书 App ID 后生成短期授权链接。" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep prepares a short-lived setup link when this panel opens." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开此面板时 WillDeep 会自动准备短期配置链接。" } }
       }
     },
     "settings.connectors.authorization-prepared" : {
