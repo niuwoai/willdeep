@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.93.0-rc2 - 2026-06-20
+
+### Fixed
+
+- 修复 Composer 直接委派 Codex CLI / Claude Code 后台 job 完成后不会主动回写当前聊天的问题;完成回调现在会识别 WillDeep Composer 委派命令,把真实 final block 写成外部委派助手消息,并从下一轮待通知队列中移除该 job 避免重复提示。
+- Composer 外部执行器后台启动提示改为“完成后会自动回写结果”,避免继续暗示必须等下一轮模型通知。
+- 新增回归测试覆盖后台完成回写识别、单个完成事件消费和后台 completion final block 提取。
+
+### Changed
+
+- 版本号从 **1.93.0-rc1** 递增为 **1.93.0-rc2**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.93.0-rc1 - 2026-06-20
+
+### Added
+
+- Agent 会话进入等待工具授权、危险确认、`ask_user` 回答、patch 应用确认或 Plan 审批时,macOS Dock 图标会显示待处理会话数量徽标;处理完成后自动清除。
+- Dock 徽标复用侧栏“等待批准”判定逻辑,并订阅后台 runtime 状态变化,后台会话需要用户介入时也能及时更新。
+- 新增回归测试覆盖 Dock 徽标计数会使用实时 runtime 状态,并忽略归档会话。
+
+### Changed
+
+- 版本号从 **1.92.0-rc8** 提升为 **1.93.0-rc1**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.92.0-rc8 - 2026-06-20
+
+### Fixed
+
+- 修复 Composer 外部执行器后台化后,主对话可能把 delegated prompt 示例里的 `<concise user-facing answer...>` 占位块误解析成真实助手回答的问题;后台启动结果现在显示为“已在后台运行”,不会再扫描 command prompt 中的 final-response 示例。
+- `WILLDEEP_FINAL_RESPONSE` 解析器改为从后往前选择真实 final block,并显式跳过模板占位文本;delegated prompt 也不再嵌入完整可误匹配的示例块。
+- 新增回归测试覆盖后台 job 启动展示和占位 final block 跳过逻辑。
+
+### Changed
+
+- 版本号从 **1.92.0-rc7** 递增为 **1.92.0-rc8**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.92.0-rc7 - 2026-06-20
 
 ### Fixed

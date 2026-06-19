@@ -416,6 +416,41 @@ extension AppState {
         }
     }
 
+    func surfaceDelegatedBackgroundJobCompletionIfNeeded(_ job: AgentBackgroundJob) {
+        guard let executionAgent = Self.delegatedExecutionAgent(forBackgroundJobCommand: job.command),
+              let runtime = agentRuntimes[job.runtimeID] else {
+            return
+        }
+        if surfacedDelegatedBackgroundJobIDs.contains(job.id) {
+            agentJobRegistry.markCompletionSurfaced(id: job.id, forRuntime: job.runtimeID)
+            return
+        }
+
+        surfacedDelegatedBackgroundJobIDs.insert(job.id)
+        let output = agentJobRegistry.output(id: job.id)
+        let content = Self.delegatedBackgroundJobCompletionContent(
+            executionAgent: executionAgent,
+            job: job,
+            output: output
+        )
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            agentJobRegistry.markCompletionSurfaced(id: job.id, forRuntime: job.runtimeID)
+            return
+        }
+
+        runtime.messages.append(
+            AgentMessage(
+                role: .assistant,
+                content: trimmed,
+                origin: .delegatedExternal,
+                originLabel: executionAgent.displayName
+            )
+        )
+        persistAgentSession(runtime: runtime)
+        agentJobRegistry.markCompletionSurfaced(id: job.id, forRuntime: job.runtimeID)
+    }
+
     private func finishDelegatedAgentRecord(
         runtime: AgentRuntime,
         recordID: AgentToolCall.ID,
@@ -466,6 +501,13 @@ extension AppState {
         let label = executionAgent.displayName
         switch status {
         case .succeeded:
+            if let notice = delegatedAgentBackgroundStartNotice(
+                executionAgent: executionAgent,
+                result: result,
+                toolPayload: toolPayload
+            ) {
+                return notice
+            }
             let output = delegatedAgentReadableOutput(from: result?.payload ?? toolPayload)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !output.isEmpty {
@@ -494,6 +536,93 @@ extension AppState {
         }
     }
 
+    static func delegatedAgentBackgroundStartNotice(
+        executionAgent: AgentExecutionAgent,
+        result: AgentToolResult?,
+        toolPayload: String
+    ) -> String? {
+        let payload = toolPayload.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard payload.hasPrefix("Started background job ") else { return nil }
+
+        let firstLine = payload.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? ""
+        let handle = firstLine
+            .replacingOccurrences(of: "Started background job ", with: "")
+            .replacingOccurrences(of: ".", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let label = executionAgent.displayName
+        if handle.isEmpty {
+            return "\(label) 已在后台运行。完成后会自动回写结果。"
+        }
+        return "\(label) 已在后台运行（\(handle)）。完成后会自动回写结果。"
+    }
+
+    static func delegatedExecutionAgent(
+        forBackgroundJobCommand command: String
+    ) -> AgentExecutionAgent? {
+        guard command.contains("WillDeep Delegated Executor Context Package v1") else {
+            return nil
+        }
+        if command.contains("selected execution agent: \(AgentExecutionAgent.codexCLI.displayName)") {
+            return .codexCLI
+        }
+        if command.contains("selected execution agent: \(AgentExecutionAgent.claudeCode.displayName)") {
+            return .claudeCode
+        }
+        return nil
+    }
+
+    static func delegatedBackgroundJobCompletionContent(
+        executionAgent: AgentExecutionAgent,
+        job: AgentBackgroundJob,
+        output: String
+    ) -> String {
+        let label = executionAgent.displayName
+        let readableOutput = delegatedAgentReadableOutput(from: output)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if job.status == .completed {
+            if let final = delegatedAgentFinalResponse(from: readableOutput)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .nilIfEmpty {
+                return final
+            }
+            if !readableOutput.isEmpty {
+                return delegatedAgentVisibleOutputFallback(readableOutput)
+            }
+            return "\(label) 已完成（\(job.displayHandle)），但没有捕获到输出。"
+        }
+
+        let prefix: String
+        switch job.status {
+        case .running:
+            prefix = "\(label) 后台任务仍在运行（\(job.displayHandle)）。"
+        case .failed:
+            let exitText = job.exitCode.map { "exit \($0)" } ?? "exit unknown"
+            prefix = "\(label) 后台任务失败（\(job.displayHandle)，\(exitText)）。"
+        case .killed:
+            prefix = "\(label) 后台任务已停止（\(job.displayHandle)）。"
+        case .timedOut:
+            prefix = "\(label) 后台任务超时（\(job.displayHandle)）。"
+        case .launchFailed:
+            prefix = "\(label) 后台任务启动失败（\(job.displayHandle)）。"
+        case .completed:
+            prefix = "\(label) 已完成（\(job.displayHandle)）。"
+        }
+
+        let final = delegatedAgentFinalResponse(from: readableOutput)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        let detail = final ?? (
+            readableOutput.isEmpty
+                ? ""
+                : delegatedAgentVisibleErrorFallback(readableOutput)
+        )
+        if detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return prefix
+        }
+        return "\(prefix)\n\n\(detail)"
+    }
+
     nonisolated static func delegatedAgentReadableOutput(from payload: String) -> String {
         let stdoutMarker = "--- stdout ---"
         let stderrMarker = "--- stderr ---"
@@ -513,11 +642,19 @@ extension AppState {
     nonisolated static func delegatedAgentFinalResponse(from output: String) -> String {
         let startMarker = "WILLDEEP_FINAL_RESPONSE_BEGIN"
         let endMarker = "WILLDEEP_FINAL_RESPONSE_END"
-        guard let startRange = output.range(of: startMarker) else { return "" }
-        let bodyStart = startRange.upperBound
-        let bodyEnd = output.range(of: endMarker, range: bodyStart..<output.endIndex)?.lowerBound ?? output.endIndex
-        return String(output[bodyStart..<bodyEnd])
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let placeholder = "<concise user-facing answer, change summary, verification, and any important caveats>"
+        var searchEnd = output.endIndex
+        while let startRange = output.range(of: startMarker, options: .backwards, range: output.startIndex..<searchEnd) {
+            let bodyStart = startRange.upperBound
+            let bodyEnd = output.range(of: endMarker, range: bodyStart..<output.endIndex)?.lowerBound ?? output.endIndex
+            let body = String(output[bodyStart..<bodyEnd])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !body.isEmpty && body != placeholder {
+                return body
+            }
+            searchEnd = startRange.lowerBound
+        }
+        return ""
     }
 
     nonisolated static func delegatedAgentVisibleOutputFallback(_ output: String) -> String {
@@ -607,10 +744,7 @@ extension AppState {
             Work on the user's task end-to-end in the current workspace. If you change files, run the most relevant verification you can and summarize what changed.
             Keep raw logs, long command output, and implementation scratch notes outside the final response block. WillDeep keeps the full tool output separately; the main conversation should only receive a compact user-facing answer.
 
-            At the end of your stdout, emit exactly one final response block:
-            WILLDEEP_FINAL_RESPONSE_BEGIN
-            <concise user-facing answer, change summary, verification, and any important caveats>
-            WILLDEEP_FINAL_RESPONSE_END
+            At the end of your stdout, emit exactly one final response block by writing `WILLDEEP_FINAL_RESPONSE_BEGIN`, then your concise user-facing answer, then `WILLDEEP_FINAL_RESPONSE_END`. Do not copy placeholder text.
             """
         ]
         if let path = workspaceLocation?.path, !path.isEmpty {

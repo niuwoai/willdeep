@@ -83,6 +83,34 @@ struct AgentSessionStoreTests {
         ))
     }
 
+    @Test
+    func dockApprovalBadgeCountUsesRuntimeStateAndSkipsArchivedSessions() {
+        let liveSession = AgentSession(title: "Needs answer")
+        var archivedSession = AgentSession(title: "Archived plan")
+        archivedSession.archivedAt = Date()
+        archivedSession.currentPlan = AgentPlan(status: .proposed, steps: [], summary: "Review")
+
+        let runtime = AgentRuntime(session: liveSession)
+        runtime.toolCalls = [
+            AgentToolCall(
+                id: UUID(),
+                messageID: UUID(),
+                externalID: "call_ask_user",
+                toolName: "ask_user",
+                arguments: [:],
+                risk: .userInput,
+                status: .awaitingUserAnswer
+            )
+        ]
+
+        let count = AgentSessionApprovalBadgeLogic.pendingApprovalSessionCount(
+            sessions: [liveSession, archivedSession],
+            runtimes: [liveSession.id: runtime]
+        )
+
+        #expect(count == 1)
+    }
+
     /// Skip non-user roles when picking the title source.
     @Test
     func deriveTitleUsesFirstUserMessageNotAssistant() {

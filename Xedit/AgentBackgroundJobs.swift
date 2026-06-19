@@ -96,6 +96,10 @@ final class AgentJobRegistry: ObservableObject {
     /// each other's notifications.
     private var pendingCompletionEvents: [UUID: [UUID]] = [:]
 
+    /// Optional host hook for UI paths that need to surface a finished
+    /// background job without waiting for the next model turn.
+    var onJobFinished: ((AgentBackgroundJob) -> Void)?
+
     /// Live `Process` + buffer state, keyed by job id. Stripped from
     /// `jobs` (the publishable snapshot) so SwiftUI diffs only the
     /// cheap metadata.
@@ -346,6 +350,19 @@ final class AgentJobRegistry: ObservableObject {
         return ids.compactMap { id in jobs.first(where: { $0.id == id }) }
     }
 
+    /// Mark one completion event as already surfaced by a host-side
+    /// UI path. Other pending jobs for the same runtime stay queued for
+    /// the normal next-turn notification path.
+    func markCompletionSurfaced(id: UUID, forRuntime runtimeID: UUID) {
+        guard var ids = pendingCompletionEvents[runtimeID] else { return }
+        ids.removeAll { $0 == id }
+        if ids.isEmpty {
+            pendingCompletionEvents.removeValue(forKey: runtimeID)
+        } else {
+            pendingCompletionEvents[runtimeID] = ids
+        }
+    }
+
     /// Non-destructive peek for UI ("⚠ N untold completions") —
     /// currently unused but cheap to expose for the drawer badge.
     func pendingCompletionCount(forRuntime runtimeID: UUID) -> Int {
@@ -402,6 +419,7 @@ final class AgentJobRegistry: ObservableObject {
         pendingCompletionEvents[updated.runtimeID, default: []].append(id)
 
         AgentToolApprovalNotifier.notifyJobFinished(job: updated)
+        onJobFinished?(updated)
     }
 }
 

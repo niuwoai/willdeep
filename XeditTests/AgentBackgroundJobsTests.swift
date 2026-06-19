@@ -192,6 +192,37 @@ struct AgentBackgroundJobsTests {
         #expect(registry.consumePendingCompletions(forRuntime: runtimeID).isEmpty)
     }
 
+    /// Host-side transcript surfacing can consume exactly one finished
+    /// background job while leaving unrelated completions queued for
+    /// the normal next-turn agent notification path.
+    @Test
+    func markCompletionSurfacedRemovesOnlyThatJob() async throws {
+        let registry = AgentJobRegistry()
+        let runtimeID = UUID()
+        let surfacedJob = try registry.start(
+            command: "true",
+            workingDirectory: nil,
+            runtimeID: runtimeID,
+            timeoutSeconds: nil
+        )
+        let queuedJob = try registry.start(
+            command: "true",
+            workingDirectory: nil,
+            runtimeID: runtimeID,
+            timeoutSeconds: nil
+        )
+
+        _ = await waitUntilFinished(registry: registry, id: surfacedJob.id)
+        _ = await waitUntilFinished(registry: registry, id: queuedJob.id)
+
+        registry.markCompletionSurfaced(id: surfacedJob.id, forRuntime: runtimeID)
+
+        let pending = registry.consumePendingCompletions(forRuntime: runtimeID)
+        #expect(pending.count == 1)
+        #expect(pending.first?.id == queuedJob.id)
+        #expect(registry.consumePendingCompletions(forRuntime: runtimeID).isEmpty)
+    }
+
     /// A non-zero exit flips status to `.failed` (not `.completed`).
     /// The model uses this distinction to decide whether to react.
     @Test

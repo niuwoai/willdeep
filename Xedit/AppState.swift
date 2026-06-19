@@ -143,6 +143,11 @@ final class AppState: ObservableObject {
     /// `AgentBackgroundJobs.swift` for the lifecycle contract.
     let agentJobRegistry = AgentJobRegistry()
 
+    /// Composer-delegated Codex / Claude Code background jobs that
+    /// have already been written into the visible transcript by the
+    /// host completion hook.
+    var surfacedDelegatedBackgroundJobIDs: Set<UUID> = []
+
     /// Process-wide registry of `spawn_agent` subagent runs, scoped by
     /// parent runtime the same way jobs are. See `AgentSubagents.swift`
     /// for the lifecycle contract.
@@ -347,6 +352,9 @@ final class AppState: ObservableObject {
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
             }
+        agentJobRegistry.onJobFinished = { [weak self] job in
+            self?.surfaceDelegatedBackgroundJobCompletionIfNeeded(job)
+        }
         mobileGatewayCoordinator.autoStart()
     }
 

@@ -558,6 +558,95 @@ struct DelegatedAgentComposerOutputTests {
     }
 
     @Test
+    func delegatedAgentVisibleContentReportsBackgroundStartWithoutParsingPromptTemplate() {
+        let payload = """
+        Started background job job_abc123.
+        Command: codex exec WillDeep Delegated Executor Context Package v1
+        WILLDEEP_FINAL_RESPONSE_BEGIN
+        <concise user-facing answer, change summary, verification, and any important caveats>
+        WILLDEEP_FINAL_RESPONSE_END
+
+        The job is running.
+        """
+        let content = AppState.delegatedAgentVisibleContent(
+            executionAgent: .codexCLI,
+            status: .succeeded,
+            result: AgentToolResult(summary: "▶ job_abc123 started", payload: payload),
+            errorMessage: nil,
+            toolPayload: payload
+        )
+
+        #expect(content == "Codex 已在后台运行（job_abc123）。完成后会自动回写结果。")
+    }
+
+    @Test
+    func delegatedBackgroundJobCommandDetectionRecognizesComposerDelegationOnly() {
+        let codexCommand = """
+        codex exec 'WillDeep Delegated Executor Context Package v1
+        You are being invoked from WillDeep Composer as the selected execution agent: Codex.'
+        """
+        let claudeCommand = """
+        claude -p 'WillDeep Delegated Executor Context Package v1
+        You are being invoked from WillDeep Composer as the selected execution agent: Claude Code.'
+        """
+        let ordinaryCommand = "codex exec 'selected execution agent: Codex'"
+
+        #expect(AppState.delegatedExecutionAgent(forBackgroundJobCommand: codexCommand) == .codexCLI)
+        #expect(AppState.delegatedExecutionAgent(forBackgroundJobCommand: claudeCommand) == .claudeCode)
+        #expect(AppState.delegatedExecutionAgent(forBackgroundJobCommand: ordinaryCommand) == nil)
+    }
+
+    @Test
+    func delegatedBackgroundCompletionPrefersFinalResponseBlock() {
+        let job = AgentBackgroundJob(
+            id: UUID(),
+            shortID: "abc123",
+            command: "codex exec",
+            workingDirectoryPath: nil,
+            runtimeID: UUID(),
+            runtimeDisplayName: nil,
+            remoteRuntimeID: nil,
+            remotePID: nil,
+            startedAt: Date(),
+            pid: 123,
+            status: .completed,
+            exitCode: 0,
+            finishedAt: Date(),
+            outputByteCount: 100
+        )
+        let output = """
+        implementation logs
+        WILLDEEP_FINAL_RESPONSE_BEGIN
+        后台真实结果。
+        WILLDEEP_FINAL_RESPONSE_END
+        trailing logs
+        """
+
+        let content = AppState.delegatedBackgroundJobCompletionContent(
+            executionAgent: .codexCLI,
+            job: job,
+            output: output
+        )
+
+        #expect(content == "后台真实结果。")
+    }
+
+    @Test
+    func delegatedAgentFinalResponseIgnoresPromptPlaceholderAndUsesLatestRealBlock() {
+        let output = """
+        WILLDEEP_FINAL_RESPONSE_BEGIN
+        <concise user-facing answer, change summary, verification, and any important caveats>
+        WILLDEEP_FINAL_RESPONSE_END
+        logs...
+        WILLDEEP_FINAL_RESPONSE_BEGIN
+        这是实际回答。
+        WILLDEEP_FINAL_RESPONSE_END
+        """
+
+        #expect(AppState.delegatedAgentFinalResponse(from: output) == "这是实际回答。")
+    }
+
+    @Test
     func delegatedConversationContextExcludesCurrentTaskAndClipsHistory() {
         let longAssistant = String(repeating: "历史实现细节", count: 120)
         let messages = [

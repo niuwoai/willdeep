@@ -53,6 +53,7 @@ final class EditorAppStateRegistry: ObservableObject {
     func ensureHeadlessFallback() {
         guard current == nil else { return }
         current = AppState()
+        syncDockBadgeTracking()
     }
 
     /// Editor 窗口 onAppear 调用。注册自己;如果是第一个窗口,或者
@@ -63,6 +64,7 @@ final class EditorAppStateRegistry: ObservableObject {
         activeEditors[ObjectIdentifier(appState)] = appState
         if current == nil {
             current = appState
+            syncDockBadgeTracking()
             return
         }
         if let existing = current,
@@ -70,6 +72,7 @@ final class EditorAppStateRegistry: ObservableObject {
             // existing 是 orphan headless,优先切到刚注册的真 editor。
             current = appState
         }
+        syncDockBadgeTracking()
     }
 
     /// Editor 窗口的 NSWindow becomeKey 时调用。把本窗口提升为
@@ -86,6 +89,7 @@ final class EditorAppStateRegistry: ObservableObject {
         // 发，但比较一下能省 N 次 body 重算）。
         if current === appState { return }
         current = appState
+        syncDockBadgeTracking()
     }
 
     /// Editor 窗口 onDisappear 调用。摘掉自己;如果是 current,优先
@@ -105,6 +109,7 @@ final class EditorAppStateRegistry: ObservableObject {
             current = next
         }
         // 否则保留 current 指向 orphan,不主动置 nil。
+        syncDockBadgeTracking()
     }
 
     /// 找到拥有指定 runtimeID 的 AppState。1.84.0-rc2 起 `run_workflow`
@@ -136,5 +141,14 @@ final class EditorAppStateRegistry: ObservableObject {
     private final class WeakWindow {
         weak var window: NSWindow?
         init(_ window: NSWindow) { self.window = window }
+    }
+
+    private func syncDockBadgeTracking() {
+        var appStates = Array(activeEditors.values)
+        if let current,
+           !appStates.contains(where: { $0 === current }) {
+            appStates.append(current)
+        }
+        AgentDockBadgeCoordinator.shared.track(appStates: appStates)
     }
 }
