@@ -365,18 +365,78 @@ private struct AgentModelPrice {
 
 private enum AgentModelPricing {
     static func price(providerID: String, modelID: String) -> AgentModelPrice? {
-        let provider = providerID.lowercased()
+        let providerCandidates = providerCandidates(providerID: providerID, modelID: modelID)
         let model = modelID.lowercased()
-        return prices.first { price in
-            price.providerIDs.contains(provider)
-                && price.modelHints.contains { model.contains($0) }
+
+        for provider in providerCandidates {
+            if let match = prices.first(where: { price in
+                price.providerIDs.contains(provider)
+                    && price.modelHints.contains { model.contains($0) }
+            }) {
+                return match
+            }
         }
+        return nil
     }
 
+    private static func providerCandidates(providerID: String, modelID: String) -> [String] {
+        var candidates = OrderedStringSet()
+        let provider = providerID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        candidates.append(provider)
+        candidates.append(contentsOf: providerAliases[provider] ?? [])
+
+        let model = modelID.lowercased()
+        if model.contains("deepseek") {
+            candidates.append(AgentProviderPreset.deepSeekID)
+        }
+        if model.contains("qwen") || model.contains("qwq") {
+            candidates.append("dashscope")
+        }
+        if model.contains("claude") || model.contains("anthropic") {
+            candidates.append("claude")
+        }
+        if model.contains("gemini") {
+            candidates.append("gemini")
+        }
+        if model.hasPrefix("gpt-") || model.contains("/gpt-") || model.hasPrefix("o1") || model.hasPrefix("o3") || model.hasPrefix("o4") {
+            candidates.append(AgentProviderPreset.openAIID)
+            candidates.append("openai-responses")
+        }
+        return candidates.values.filter { !$0.isEmpty }
+    }
+
+    private static let providerAliases: [String: [String]] = [
+        "openai-chat": [AgentProviderPreset.openAIID],
+        "openai-compatible": [AgentProviderPreset.openAIID],
+        "openai-responses": [AgentProviderPreset.openAIID],
+        "custom": [AgentProviderPreset.openAIID, "dashscope", AgentProviderPreset.deepSeekID, "claude", "gemini"],
+        "dashscope-intl": ["dashscope"],
+        "aliyun": ["dashscope"],
+        "alibaba": ["dashscope"],
+        "qwen": ["dashscope"],
+        "deepseek-ai": [AgentProviderPreset.deepSeekID],
+        "anthropic": ["claude"],
+        "google": ["gemini"]
+    ]
+
+    // Built-in public price cache. Prices are USD per 1M tokens unless noted
+    // by the provider's public API pricing page. Keep model-specific rows
+    // before broader family rows so substring matching stays deterministic.
     private static let prices: [AgentModelPrice] = [
         AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5.5"], inputPerMillion: 5.0, cachedInputPerMillion: 0.5, cacheWritePerMillion: nil, outputPerMillion: 30.0),
         AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5.4-mini"], inputPerMillion: 0.75, cachedInputPerMillion: 0.075, cacheWritePerMillion: nil, outputPerMillion: 4.5),
         AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5.4"], inputPerMillion: 2.5, cachedInputPerMillion: 0.25, cacheWritePerMillion: nil, outputPerMillion: 15.0),
+        AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5-mini"], inputPerMillion: 0.25, cachedInputPerMillion: 0.025, cacheWritePerMillion: nil, outputPerMillion: 2.0),
+        AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5-nano"], inputPerMillion: 0.05, cachedInputPerMillion: 0.005, cacheWritePerMillion: nil, outputPerMillion: 0.4),
+        AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5-codex", "gpt-5"], inputPerMillion: 1.25, cachedInputPerMillion: 0.125, cacheWritePerMillion: nil, outputPerMillion: 10.0),
+        AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-4.1-mini"], inputPerMillion: 0.40, cachedInputPerMillion: 0.10, cacheWritePerMillion: nil, outputPerMillion: 1.60),
+        AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-4.1-nano"], inputPerMillion: 0.10, cachedInputPerMillion: 0.025, cacheWritePerMillion: nil, outputPerMillion: 0.40),
+        AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-4.1"], inputPerMillion: 2.00, cachedInputPerMillion: 0.50, cacheWritePerMillion: nil, outputPerMillion: 8.00),
+        AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-4o-mini"], inputPerMillion: 0.15, cachedInputPerMillion: 0.075, cacheWritePerMillion: nil, outputPerMillion: 0.60),
+        AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-4o"], inputPerMillion: 2.50, cachedInputPerMillion: 1.25, cacheWritePerMillion: nil, outputPerMillion: 10.00),
+        AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["o4-mini"], inputPerMillion: 1.10, cachedInputPerMillion: 0.275, cacheWritePerMillion: nil, outputPerMillion: 4.40),
+        AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["o3-mini"], inputPerMillion: 1.10, cachedInputPerMillion: 0.55, cacheWritePerMillion: nil, outputPerMillion: 4.40),
+        AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["o3"], inputPerMillion: 2.00, cachedInputPerMillion: 0.50, cacheWritePerMillion: nil, outputPerMillion: 8.00),
 
         AgentModelPrice(providerIDs: ["claude"], modelHints: ["claude-fable-5", "claude-mythos-5"], inputPerMillion: 10.0, cachedInputPerMillion: 1.0, cacheWritePerMillion: 12.5, outputPerMillion: 50.0),
         AgentModelPrice(providerIDs: ["claude"], modelHints: ["claude-opus-4.8", "claude-opus-4.7", "claude-opus-4.6", "claude-opus-4.5"], inputPerMillion: 5.0, cachedInputPerMillion: 0.5, cacheWritePerMillion: 6.25, outputPerMillion: 25.0),
@@ -392,6 +452,28 @@ private enum AgentModelPricing {
         AgentModelPrice(providerIDs: ["gemini"], modelHints: ["gemini-2.0-flash-lite"], inputPerMillion: 0.10, cachedInputPerMillion: 0.025, cacheWritePerMillion: nil, outputPerMillion: 0.40),
 
         AgentModelPrice(providerIDs: ["deepseek"], modelHints: ["deepseek-v4-pro"], inputPerMillion: 0.435, cachedInputPerMillion: 0.003625, cacheWritePerMillion: nil, outputPerMillion: 0.87),
-        AgentModelPrice(providerIDs: ["deepseek"], modelHints: ["deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"], inputPerMillion: 0.14, cachedInputPerMillion: 0.0028, cacheWritePerMillion: nil, outputPerMillion: 0.28)
+        AgentModelPrice(providerIDs: ["deepseek"], modelHints: ["deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"], inputPerMillion: 0.14, cachedInputPerMillion: 0.0028, cacheWritePerMillion: nil, outputPerMillion: 0.28),
+
+        AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen3-vl-plus", "qwen-vl-plus"], inputPerMillion: 0.11, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 0.28),
+        AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen-max", "qwen3-max"], inputPerMillion: 0.28, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 1.11),
+        AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen-plus", "qwen3-plus", "qwen2.5-plus"], inputPerMillion: 0.11, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 0.28),
+        AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen-turbo"], inputPerMillion: 0.042, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 0.083),
+        AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen-long"], inputPerMillion: 0.042, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 0.083),
+        AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwq"], inputPerMillion: 0.22, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 0.88)
     ]
+}
+
+private struct OrderedStringSet {
+    private(set) var values: [String] = []
+
+    mutating func append(_ value: String) {
+        guard !value.isEmpty, !values.contains(value) else { return }
+        values.append(value)
+    }
+
+    mutating func append(contentsOf newValues: [String]) {
+        for value in newValues {
+            append(value)
+        }
+    }
 }

@@ -159,20 +159,25 @@ extension AppState {
 
     /// Replace the body of older `tool` role messages with a tiny
     /// placeholder so they stop dominating the request payload. The most
-    /// recent `keepRecentToolMessages` tool messages are left untouched so
-    /// the model can still reason about what it just did.
+    /// recent `keepRecentToolMessages` tool messages before the latest user
+    /// turn are left untouched, and every tool result after the latest user
+    /// turn stays verbatim so the model can still reason about the work it
+    /// just did. This keeps the prompt prefix more stable across turns,
+    /// improving provider prompt-cache reuse without hiding current-round
+    /// evidence.
     nonisolated static func collapseOldToolResults(
         in messages: [AgentMessage],
-        keepRecentToolMessages: Int = 4
+        keepRecentToolMessages: Int = 2
     ) -> [AgentMessage] {
-        let toolIndices = messages.enumerated().compactMap { offset, message in
-            message.role == .tool ? offset : nil
+        let latestUserIndex = messages.lastIndex { $0.role == .user } ?? messages.count
+        let olderToolIndices = messages.enumerated().compactMap { offset, message in
+            message.role == .tool && offset < latestUserIndex ? offset : nil
         }
-        guard toolIndices.count > keepRecentToolMessages else { return messages }
-        let collapseUpTo = toolIndices[toolIndices.count - keepRecentToolMessages - 1]
+        guard olderToolIndices.count > keepRecentToolMessages else { return messages }
+        let collapsedOlderToolIndices = olderToolIndices.prefix(olderToolIndices.count - keepRecentToolMessages)
 
         var copy = messages
-        for index in 0...collapseUpTo where copy[index].role == .tool {
+        for index in collapsedOlderToolIndices {
             let original = copy[index]
             if original.content.hasPrefix("[tool result hidden") { continue }
             let bytes = original.content.utf8.count

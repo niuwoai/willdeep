@@ -396,12 +396,19 @@ extension WillDeepTests {
 
     // MARK: - Usage stats
 
-    private func makeSession(modelID: String?, messages: [AgentMessage]) -> AgentSession {
+    private func makeSession(
+        modelID: String?,
+        providerID: String? = nil,
+        providerDisplayName: String? = nil,
+        messages: [AgentMessage]
+    ) -> AgentSession {
         AgentSession(
             id: UUID(),
             title: "test",
             workspaceRootPath: nil,
             modelID: modelID,
+            providerID: providerID,
+            providerDisplayName: providerDisplayName,
             createdAt: Date(),
             updatedAt: Date(),
             messages: messages
@@ -414,6 +421,23 @@ extension WillDeepTests {
 
     private func assistantMessage(_ text: String, usage: Int?, at date: Date) -> AgentMessage {
         AgentMessage(role: .assistant, content: text, usageTokens: usage, createdAt: date)
+    }
+
+    private func meteredAssistantMessage(
+        prompt: Int,
+        completion: Int,
+        cachedPrompt: Int = 0,
+        cacheWritePrompt: Int = 0
+    ) -> AgentMessage {
+        AgentMessage(
+            role: .assistant,
+            content: "ok",
+            usageTokens: prompt + completion,
+            promptTokens: prompt,
+            completionTokens: completion,
+            cachedPromptTokens: cachedPrompt,
+            cacheWritePromptTokens: cacheWritePrompt
+        )
     }
 
     @Test("AgentUsageStats overview totals across sessions and prefers real usage")
@@ -500,6 +524,56 @@ extension WillDeepTests {
         let flat = cells.flatMap { $0 }
         let todayCell = flat.first { calendar.isDate($0.date, inSameDayAs: today) }
         #expect(todayCell?.count == 2)
+    }
+
+    @Test("AgentUsageStats falls back to built-in public prices for custom GPT models")
+    func testUsageStatsPublicPriceFallbackForGPTModels() {
+        let session = makeSession(
+            modelID: "openai/gpt-5.5",
+            providerID: "custom",
+            providerDisplayName: "Relay",
+            messages: [
+                meteredAssistantMessage(prompt: 1_000_000, completion: 1_000_000, cachedPrompt: 200_000)
+            ]
+        )
+
+        let row = AgentUsageStats.modelUsage(for: [session]).first
+
+        #expect(row?.providerID == "custom")
+        #expect(row?.modelID == "openai/gpt-5.5")
+        #expect(abs((row?.estimatedCostUSD ?? 0) - 34.1) < 0.000_001)
+    }
+
+    @Test("AgentUsageStats falls back to built-in public prices for DeepSeek aliases")
+    func testUsageStatsPublicPriceFallbackForDeepSeekAliases() {
+        let session = makeSession(
+            modelID: "deepseek-chat",
+            providerID: "openai-compatible",
+            messages: [
+                meteredAssistantMessage(prompt: 1_000_000, completion: 1_000_000, cachedPrompt: 500_000)
+            ]
+        )
+
+        let row = AgentUsageStats.modelUsage(for: [session]).first
+
+        #expect(row?.modelID == "deepseek-chat")
+        #expect(abs((row?.estimatedCostUSD ?? 0) - 0.3514) < 0.000_001)
+    }
+
+    @Test("AgentUsageStats falls back to built-in public prices for Qwen models")
+    func testUsageStatsPublicPriceFallbackForQwenModels() {
+        let session = makeSession(
+            modelID: "qwen-plus",
+            providerID: "custom",
+            messages: [
+                meteredAssistantMessage(prompt: 1_000_000, completion: 1_000_000)
+            ]
+        )
+
+        let row = AgentUsageStats.modelUsage(for: [session]).first
+
+        #expect(row?.modelID == "qwen-plus")
+        #expect(abs((row?.estimatedCostUSD ?? 0) - 0.39) < 0.000_001)
     }
 
     @Test("agent tool registry escalates dangerous run_command invocations to .danger")

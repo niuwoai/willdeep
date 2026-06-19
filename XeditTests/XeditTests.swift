@@ -1069,11 +1069,11 @@ struct WillDeepTests {
         #expect(AgentToolRegistry.descriptor(for: "call_mcp_tool")?.risk == .write)
     }
 
-    @Test("collapseOldToolResults keeps the most recent tool messages and replaces older ones with a placeholder")
+    @Test("collapseOldToolResults protects current-round tool messages and hides older tool payloads")
     func testCollapseOldToolResults() {
         var messages: [AgentMessage] = []
-        messages.append(AgentMessage(role: .user, content: "Find foo"))
-        for index in 0..<6 {
+        messages.append(AgentMessage(role: .user, content: "Find foo earlier"))
+        for index in 0..<5 {
             messages.append(AgentMessage(role: .assistant, content: "step \(index)"))
             messages.append(AgentMessage(
                 role: .tool,
@@ -1081,16 +1081,26 @@ struct WillDeepTests {
                 toolCallID: "call_\(index)"
             ))
         }
+        messages.append(AgentMessage(role: .user, content: "Now continue from the latest result"))
+        messages.append(AgentMessage(role: .assistant, content: "", toolCalls: [
+            AgentMessageToolCall(externalID: "call_current", toolName: "read_file", argumentsJSON: "{}")
+        ]))
+        messages.append(AgentMessage(
+            role: .tool,
+            content: String(repeating: "y", count: 500),
+            toolCallID: "call_current"
+        ))
 
         let collapsed = AppState.collapseOldToolResults(in: messages, keepRecentToolMessages: 2)
         let toolMessages = collapsed.filter { $0.role == .tool }
         #expect(toolMessages.count == 6)
 
         let placeholderCount = toolMessages.filter { $0.content.hasPrefix("[tool result hidden") }.count
-        #expect(placeholderCount == 4)
+        #expect(placeholderCount == 3)
 
-        // Final two tool messages should remain at full length.
-        let untouched = toolMessages.suffix(2)
+        // The latest two old tool messages plus the current-round tool
+        // result should remain at full length.
+        let untouched = toolMessages.suffix(3)
         for message in untouched {
             #expect(message.content.count == 500)
         }

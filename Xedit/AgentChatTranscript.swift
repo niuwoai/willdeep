@@ -125,12 +125,14 @@ struct AgentChatTranscript: View {
                             }
                         }
 
-                        // Tool call groups: older calls are summarized
-                        // inside the TextKit transcript; keep only the
-                        // most recent group as a SwiftUI card so the
-                        // user can still inspect exact arguments and
-                        // output without reintroducing a long list of
-                        // interactive views into the scroll path.
+                        // Tool call groups are a working-state surface.
+                        // While a turn is running, or while a tool is
+                        // waiting for the user, keep the newest details
+                        // interactive and inspectable. Once everything
+                        // settles, fold them back into the TextKit
+                        // history summary so the transcript reads like
+                        // the final assistant result rather than a log
+                        // dump of the execution path.
                         ForEach(toolCallGroupMessageIDs(in: rendered), id: \.self) { messageID in
                             let calls = toolCalls(for: messageID)
                             if !calls.isEmpty {
@@ -274,15 +276,21 @@ struct AgentChatTranscript: View {
     }
 
     private var visibleMessages: [AgentMessage] {
-        appState.agentMessages.filter { message in
+        appState.agentMessages.compactMap { message in
             // `.system` is reserved for host-injected notices (e.g.
             // background-task completion); the user reads those via the
             // right-side jobs drawer, not the transcript.
             // `.workflowReport` (1.81.0-rc1) is rendered as a custom card
             // — explicitly allowed through.
-            if message.role == .workflowReport { return true }
-            if message.role == .widget { return true }
-            return message.role != .tool && message.role != .system && !isEmptyThinkingPlaceholder(message)
+            if message.role == .workflowReport { return message }
+            if message.role == .widget { return message }
+            guard message.role != .tool,
+                  message.role != .system,
+                  !isEmptyThinkingPlaceholder(message),
+                  !isSettledToolCallOnlyMessage(message) else {
+                return nil
+            }
+            return resultPresentationMessage(message)
         }
     }
 
@@ -296,6 +304,37 @@ struct AgentChatTranscript: View {
 
     private func shouldShowMessageBubble(_ message: AgentMessage) -> Bool {
         !(message.role == .assistant && message.content.isEmpty && !message.toolCalls.isEmpty)
+    }
+
+    private func isSettledToolCallOnlyMessage(_ message: AgentMessage) -> Bool {
+        guard message.role == .assistant,
+              message.content.isEmpty,
+              !message.toolCalls.isEmpty,
+              !appState.isAgentResponding else {
+            return false
+        }
+        return !toolCalls(for: message.id).contains(where: isWorkingToolCall)
+    }
+
+    private func resultPresentationMessage(_ message: AgentMessage) -> AgentMessage {
+        guard message.role == .assistant,
+              !message.toolCalls.isEmpty,
+              !appState.isAgentResponding,
+              !toolCalls(for: message.id).contains(where: isWorkingToolCall) else {
+            return message
+        }
+        var copy = message
+        copy.toolCalls = []
+        return copy
+    }
+
+    private func isWorkingToolCall(_ call: AgentToolCall) -> Bool {
+        switch call.status {
+        case .pendingApproval, .awaitingConfirm, .awaitingUserAnswer, .running:
+            return true
+        case .succeeded, .failed, .denied:
+            return false
+        }
     }
 
     private func toolGroupScrollID(for messageID: AgentMessage.ID) -> String {
@@ -354,11 +393,18 @@ struct AgentChatTranscript: View {
         return rendered.filter { $0.id != streamingID }
     }
 
-    /// Show detailed, expandable SwiftUI tool cards only for the most
-    /// recent message with tool calls. Older calls are still visible in
-    /// the TextKit history summary.
+    /// Show detailed, expandable SwiftUI tool cards only while they are
+    /// part of the active working state. Older or fully-settled calls
+    /// remain visible in the TextKit history summary, which gives us the
+    /// Codex-like split: live execution gets rich progress, completed
+    /// turns collapse into a cleaned-up transcript.
     private func toolCallGroupMessageIDs(in rendered: [AgentMessage]) -> [AgentMessage.ID] {
-        guard let latest = rendered.reversed().first(where: { !toolCalls(for: $0.id).isEmpty }) else {
+        guard let latest = rendered.reversed().first(where: { message in
+            let calls = toolCalls(for: message.id)
+            guard !calls.isEmpty else { return false }
+            if appState.isAgentResponding { return true }
+            return calls.contains(where: isWorkingToolCall)
+        }) else {
             return []
         }
         return [latest.id]

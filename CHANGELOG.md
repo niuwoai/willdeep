@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.91.0-rc8 - 2026-06-19
+
+### Changed
+
+- Agent Models 用量统计在没有自定义计费规则时会回退到内置公开价格缓存,覆盖常用 OpenAI GPT/o 系列、DeepSeek V4/兼容别名和 DashScope/Qwen 常见模型;自定义或中转 provider 也会按模型名二次推断公开价,避免可识别模型继续显示未定价。
+- 内置价表扩展 provider 别名与模型别名匹配,并补充 GPT、DeepSeek、Qwen 三类默认计费单测。
+- 版本号按功能增强递增为 **1.91.0-rc8**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.91.0-rc7 - 2026-06-19
+
+### Fixed
+
+- Agent transcript 将工具执行明细改为“工作态视图”:turn 运行中、工具运行中或等待用户批准/回答时保留可展开工具卡;turn 完成且工具全部 settled 后,明细折回 TextKit 历史摘要,避免最终对话继续像执行日志一样占据底部。
+- Agent 主 transcript 进一步结果态化:完成后的 tool-call-only assistant 消息不再进入主结果流,带正文的 assistant 消息也会在工具全部 settled 后剥掉 inline 工具摘要;完整执行审计仍保留在会话数据和独立 transcript reader 中。
+
+### Changed
+
+- `collapseOldToolResults` 改成保护当前用户回合后的工具结果,只折叠最后一个用户消息之前的旧工具 payload,默认旧工具完整保留窗口从 4 条缩到 2 条,减少历史工具输出扰动 prompt 前缀,提升 provider prompt-cache 命中概率。
+- 版本号按 bugfix 递增为 **1.91.0-rc7**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.91.0-rc5 - 2026-06-19
 
 ### Added
