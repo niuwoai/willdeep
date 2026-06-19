@@ -41,6 +41,48 @@ struct AgentSessionStoreTests {
         #expect(!AgentSessionStore.isPlaceholderTitle("排查 CPU 负载"))
     }
 
+    @Test
+    func sidebarApprovalBadgeDetectsUserBlockingStates() {
+        let session = AgentSession(title: "Review tool call")
+
+        #expect(AgentSessionApprovalBadgeLogic.needsUserApproval(
+            session: session,
+            toolCallStatuses: [.pendingApproval]
+        ))
+        #expect(AgentSessionApprovalBadgeLogic.needsUserApproval(
+            session: session,
+            toolCallStatuses: [.awaitingConfirm]
+        ))
+        #expect(AgentSessionApprovalBadgeLogic.needsUserApproval(
+            session: session,
+            toolCallStatuses: [.awaitingUserAnswer]
+        ))
+        #expect(AgentSessionApprovalBadgeLogic.needsUserApproval(
+            session: session,
+            patchStatuses: [.pending]
+        ))
+        #expect(AgentSessionApprovalBadgeLogic.needsUserApproval(
+            session: session,
+            planStatus: .proposed
+        ))
+    }
+
+    @Test
+    func sidebarApprovalBadgeIgnoresFinishedStates() {
+        var session = AgentSession(title: "Finished work")
+        session.currentPlan = AgentPlan(status: .approved, steps: [], summary: "Ready")
+
+        #expect(!AgentSessionApprovalBadgeLogic.needsUserApproval(
+            session: session,
+            toolCallStatuses: [.running, .succeeded, .failed, .denied],
+            patchStatuses: [.applied, .rejected, .failed]
+        ))
+        #expect(!AgentSessionApprovalBadgeLogic.needsUserApproval(
+            session: session,
+            planStatus: .done
+        ))
+    }
+
     /// Skip non-user roles when picking the title source.
     @Test
     func deriveTitleUsesFirstUserMessageNotAssistant() {

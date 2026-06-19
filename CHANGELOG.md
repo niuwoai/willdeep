@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.91.0-rc2 - 2026-06-19
+
+### Added
+
+- **飞书扫码授权配置** —— Settings → Connectors 的飞书配置改为 App ID + 授权二维码主流程:WillDeep 自动使用 `https://open.feishu.cn/open-apis/authen/v1/index` 生成飞书 OAuth 授权链接,二维码可直接用飞书扫码授权,同时保留“打开授权页”和“复制授权链接”兜底。
+- 新增共享 `SettingsQRCodeView`,Mobile Gateway 配对二维码和协作连接器授权二维码共用同一套 Core Image 渲染逻辑,避免二维码实现分叉。
+- **侧栏等待批准徽标** —— 左侧 Agent 会话列表会为正在等待工具授权、危险确认、`ask_user` 回答、patch 应用确认或 Plan 审批的会话显示“等待批准”徽标,方便用户一眼找回需要处理的后台会话。
+
+### Changed
+
+- 飞书连接器把租户 ID、回调 URI、授权 URL、Keychain 凭据引用、清理凭据和打开文档入口收进“高级配置”,日常配置不再要求用户填写一排平台内部字段。
+- `CollaborationConnectorOAuthCoordinator` 为飞书提供默认授权入口,并按飞书 OAuth 约定使用 `app_id`、`redirect_uri` 和 `state` 查询参数生成授权 URL。
+- 版本号按新增功能提升为 **1.91.0-rc2**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 四个 docs(MOBILE_GATEWAY / AGENT_HARNESS / CHROME / COLLAB)/ chrome-extension README 同步。
+
 ## 1.90.0-rc5 - 2026-06-19
 
 ### Fixed

@@ -568,6 +568,8 @@ enum L10n {
         static let sessionRowPinTooltip = String(localized: "sidebar.session-row.pin-tooltip", defaultValue: "Pin")
         static let sessionRowUnarchiveTooltip = String(localized: "sidebar.session-row.unarchive-tooltip", defaultValue: "Unarchive")
         static let sessionRowUnpinTooltip = String(localized: "sidebar.session-row.unpin-tooltip", defaultValue: "Unpin")
+        static let sessionRowWaitingApproval = String(localized: "sidebar.session-row.waiting-approval", defaultValue: "Waiting approval")
+        static let sessionRowWaitingApprovalTooltip = String(localized: "sidebar.session-row.waiting-approval-tooltip", defaultValue: "This session is waiting for your approval or answer.")
         static func sessionUpdatedTooltip(_ a1: String) -> String {
             let template = String(localized: "sidebar.session-row.updated-tooltip", defaultValue: "Updated %@ ago")
             return String(format: template, a1)
@@ -1152,10 +1154,20 @@ enum L10n {
             static let secretStorageNote = String(localized: "settings.connectors.secret-storage-note", defaultValue: "Secrets and OAuth tokens should live in macOS Keychain. This panel stores only non-sensitive routing metadata.")
             static let authorizationURLHelp = String(localized: "settings.connectors.authorization-url-help", defaultValue: "Leave empty to only prepare the callback and Keychain reference. When filled, WillDeep appends standard OAuth query parameters unless placeholders are present.")
             static let prepareAuthorization = String(localized: "settings.connectors.prepare-authorization", defaultValue: "Prepare authorization")
+            static let generateQRCode = String(localized: "settings.connectors.generate-qr-code", defaultValue: "Generate QR code")
+            static let openAuthorization = String(localized: "settings.connectors.open-authorization", defaultValue: "Open authorization")
+            static let copyAuthorizationURL = String(localized: "settings.connectors.copy-authorization-url", defaultValue: "Copy authorization URL")
             static let copyRedirectURI = String(localized: "settings.connectors.copy-redirect-uri", defaultValue: "Copy redirect URI")
             static let clearCredentials = String(localized: "settings.connectors.clear-credentials", defaultValue: "Clear credentials")
             static let openDocs = String(localized: "settings.connectors.open-docs", defaultValue: "Open docs")
+            static let advancedConfiguration = String(localized: "settings.connectors.advanced-configuration", defaultValue: "Advanced configuration")
             static let feishuDocsNote = String(localized: "settings.connectors.feishu-docs-note", defaultValue: "Feishu document writing is feasible through OpenAPI after OAuth scopes are granted. WillDeep should preview generated docs before publishing.")
+            static let feishuQRCodeHelp = String(localized: "settings.connectors.feishu-qr-help", defaultValue: "Enter the Feishu app ID, generate a QR code, then scan it with Feishu to authorize WillDeep.")
+            static let feishuQRCodeReady = String(localized: "settings.connectors.feishu-qr-ready", defaultValue: "Ready to scan with Feishu")
+            static let feishuQRCodeAccessibilityLabel = String(localized: "settings.connectors.feishu-qr-accessibility-label", defaultValue: "Feishu authorization QR code")
+            static let feishuQRCodeUnavailable = String(localized: "settings.connectors.feishu-qr-unavailable", defaultValue: "Authorization QR code unavailable")
+            static let feishuQRCodePlaceholderTitle = String(localized: "settings.connectors.feishu-qr-placeholder-title", defaultValue: "No authorization QR yet")
+            static let feishuQRCodePlaceholderDescription = String(localized: "settings.connectors.feishu-qr-placeholder-description", defaultValue: "Generate a short-lived authorization link after entering the Feishu app ID.")
 
             static let platformFeishu = String(localized: "settings.connectors.platform.feishu", defaultValue: "Feishu")
             static let platformDingTalk = String(localized: "settings.connectors.platform.dingtalk", defaultValue: "DingTalk")
@@ -1212,6 +1224,14 @@ enum L10n {
             }
             static func authorizationOpened(_ a1: String) -> String {
                 let template = String(localized: "settings.connectors.authorization-opened", defaultValue: "%@ authorization page opened.")
+                return String(format: template, a1)
+            }
+            static func authorizationQRCodeReady(_ a1: String) -> String {
+                let template = String(localized: "settings.connectors.authorization-qr-ready", defaultValue: "%@ authorization QR code is ready.")
+                return String(format: template, a1)
+            }
+            static func authorizationURLCopied(_ a1: String) -> String {
+                let template = String(localized: "settings.connectors.authorization-url-copied", defaultValue: "%@ authorization URL copied.")
                 return String(format: template, a1)
             }
             static func authorizationNeedsAppID(_ a1: String) -> String {

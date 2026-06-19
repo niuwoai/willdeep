@@ -5,7 +5,6 @@
 //  Settings UI for LAN Mobile Gateway pairing and device control.
 //
 
-import CoreImage.CIFilterBuiltins
 import SwiftUI
 
 struct MobileGatewaySettingsView: View {
@@ -76,8 +75,12 @@ struct MobileGatewaySettingsView: View {
             Section(L10n.Settings.MobileGateway.pairingSection) {
                 if let payload = coordinator.pairingPayload {
                     VStack(spacing: 12) {
-                        MobileGatewayQRCodeView(text: payload.qrJSONString)
-                            .frame(width: 220, height: 220)
+                        SettingsQRCodeView(
+                            text: payload.qrJSONString,
+                            accessibilityLabel: L10n.Settings.MobileGateway.qrAccessibilityLabel,
+                            unavailableText: L10n.Settings.MobileGateway.qrUnavailable,
+                            pointSize: 220
+                        )
                         Text(L10n.Settings.MobileGateway.scanHint)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -291,35 +294,5 @@ struct MobileGatewaySettingsView: View {
             return L10n.Settings.MobileGateway.lastConnected(lastConnectedAt.formatted(date: .abbreviated, time: .shortened))
         }
         return L10n.Settings.MobileGateway.createdAt(device.createdAt.formatted(date: .abbreviated, time: .shortened))
-    }
-}
-
-private struct MobileGatewayQRCodeView: View {
-    let text: String
-    private let context = CIContext()
-    private let filter = CIFilter.qrCodeGenerator()
-
-    var body: some View {
-        if let image = makeImage() {
-            Image(nsImage: image)
-                .interpolation(.none)
-                .resizable()
-                .scaledToFit()
-                .accessibilityLabel(Text(L10n.Settings.MobileGateway.qrAccessibilityLabel))
-        } else {
-            Text(L10n.Settings.MobileGateway.qrUnavailable)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private func makeImage() -> NSImage? {
-        filter.message = Data(text.utf8)
-        filter.correctionLevel = "M"
-        guard let output = filter.outputImage,
-              let cgImage = context.createCGImage(output.transformed(by: CGAffineTransform(scaleX: 8, y: 8)), from: output.transformed(by: CGAffineTransform(scaleX: 8, y: 8)).extent) else {
-            return nil
-        }
-        return NSImage(cgImage: cgImage, size: NSSize(width: 168, height: 168))
     }
 }
