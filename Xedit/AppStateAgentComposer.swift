@@ -143,7 +143,7 @@ extension AppState {
             executionAgent: executionAgent,
             workspaceLocation: runtime.workspaceLocation ?? runtime.workspaceRootPath.map { .local(path: $0) }
         )
-        let arguments = delegatedAgentArguments(prompt: prompt, executionAgent: executionAgent)
+        let arguments = Self.delegatedAgentArguments(prompt: prompt, executionAgent: executionAgent)
         let externalID = "composer-\(executionAgent.rawValue)-\(UUID().uuidString)"
         let assistantMessage = AgentMessage(
             role: .assistant,
@@ -647,13 +647,13 @@ extension AppState {
         return blocks.joined(separator: "\n\n")
     }
 
-    private func delegatedAgentArguments(
+    static func delegatedAgentArguments(
         prompt: String,
         executionAgent: AgentExecutionAgent
     ) -> [String: AgentJSONValue] {
         var arguments: [String: AgentJSONValue] = [
             "prompt": .string(prompt),
-            "run_in_background": .bool(false),
+            "run_in_background": .bool(true),
         ]
         if let permissionMode = executionAgent.defaultPermissionMode {
             arguments["permission_mode"] = .string(permissionMode)

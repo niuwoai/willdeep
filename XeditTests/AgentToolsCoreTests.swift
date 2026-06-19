@@ -355,6 +355,17 @@ struct AgentToolsCoreTests {
     }
 
     @Test
+    func composerDelegatedAgentsDefaultToBackgroundJobs() {
+        let arguments = AppState.delegatedAgentArguments(
+            prompt: "delegate this task",
+            executionAgent: .codexCLI
+        )
+
+        #expect(arguments["run_in_background"]?.boolValue() == true)
+        #expect(arguments["permission_mode"]?.stringValue() == AgentExecutionAgent.codexCLI.defaultPermissionMode)
+    }
+
+    @Test
     func sandboxPolicyRequiresConfirmationForOutsideWorkspacePaths() {
         let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
         let decision = AgentSandboxPolicy.commandDecision(

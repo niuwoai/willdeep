@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.92.0-rc7 - 2026-06-20
+
+### Fixed
+
+- 修复 Composer 直接选择 Codex CLI / Claude Code 时仍以前台工具调用等待最终 CLI 退出的问题;该路径现在默认传 `run_in_background: true`,让 WillDeep 立即返回后台 job 句柄,结果完成后再经已有后台任务通知链路回填。
+- 新增回归测试锁定 Composer 外部执行器的后台默认值与 permission mode 转发,避免后续重构把它退回长时间 running 的前台等待模式。
+
+### Changed
+
+- 版本号从 **1.92.0-rc6** 递增为 **1.92.0-rc7**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.92.0-rc6 - 2026-06-19
 
 ### Fixed
