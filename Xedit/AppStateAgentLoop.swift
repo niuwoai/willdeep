@@ -340,7 +340,11 @@ extension AppState {
                 )
             }
 
-            let assistantMessage = AgentMessage(role: .assistant, content: "")
+            let assistantMessage = AgentMessage(
+                role: .assistant,
+                content: "",
+                origin: .nativeModel
+            )
             runtime.messages.append(assistantMessage)
             let assistantID = assistantMessage.id
             // Stamp the wall-clock start so we can attach an elapsed
@@ -381,6 +385,14 @@ extension AppState {
             }
             if let memoryContextBlock {
                 systemPrompt += "\n\n\(memoryContextBlock)"
+            }
+            let cacheDiagnostics = AgentContextBuilder.cacheDiagnostics(
+                for: systemPrompt,
+                toolsEnabled: true
+            )
+            if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }) {
+                runtime.messages[index].requestPrefixHash = cacheDiagnostics.hash
+                runtime.messages[index].requestStablePrefixCharacters = cacheDiagnostics.stableCharacters
             }
             let history = runtime.messages.filter { $0.id != assistantID }
             let collapsedHistory = Self.collapseOldToolResults(in: history)

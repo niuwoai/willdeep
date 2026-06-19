@@ -1069,7 +1069,7 @@ struct WillDeepTests {
         #expect(AgentToolRegistry.descriptor(for: "call_mcp_tool")?.risk == .write)
     }
 
-    @Test("collapseOldToolResults protects current-round tool messages and hides older tool payloads")
+    @Test("collapseOldToolResults protects current-round tool messages and summarizes older tool payloads")
     func testCollapseOldToolResults() {
         var messages: [AgentMessage] = []
         messages.append(AgentMessage(role: .user, content: "Find foo earlier"))
@@ -1095,8 +1095,10 @@ struct WillDeepTests {
         let toolMessages = collapsed.filter { $0.role == .tool }
         #expect(toolMessages.count == 6)
 
-        let placeholderCount = toolMessages.filter { $0.content.hasPrefix("[tool result hidden") }.count
-        #expect(placeholderCount == 3)
+        let summarizedCount = toolMessages.filter {
+            $0.content.hasPrefix("[tool result summarized for model context")
+        }.count
+        #expect(summarizedCount == 3)
 
         // The latest two old tool messages plus the current-round tool
         // result should remain at full length.

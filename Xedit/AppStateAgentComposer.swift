@@ -421,7 +421,12 @@ extension AppState {
         )
         if !visibleContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             runtime.messages.append(
-                AgentMessage(role: .assistant, content: visibleContent)
+                AgentMessage(
+                    role: .assistant,
+                    content: visibleContent,
+                    origin: .delegatedExternal,
+                    originLabel: executionAgent.displayName
+                )
             )
         }
     }

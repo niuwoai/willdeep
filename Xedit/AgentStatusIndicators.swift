@@ -300,13 +300,21 @@ struct AgentStatsDashboard: View {
         if row.cachedPromptTokens > 0 {
             parts.append(L10n.ModelUsage.cached(formatTokens(row.cachedPromptTokens)))
         }
+        if row.isDelegatedExternal {
+            parts.append(L10n.ModelUsage.sourceExternal)
+        }
+        if row.averageStablePrefixCharacters > 0 {
+            parts.append(L10n.ModelUsage.prefix(formatTokens(row.averageStablePrefixCharacters)))
+        }
         return parts.joined(separator: " · ")
     }
 
     private func modelUsageFootnote(_ rows: [AgentModelUsageRow]) -> some View {
         let hasUnknownPrice = rows.contains { $0.estimatedCostUSD == nil }
         let hasEstimatedUsage = rows.contains(where: \.hasEstimatedUsage)
+        let hasDelegatedExternal = rows.contains(where: \.isDelegatedExternal)
         let text: String? = {
+            if hasDelegatedExternal { return L10n.ModelUsage.footnoteExternalDelegated }
             if hasUnknownPrice && hasEstimatedUsage { return L10n.ModelUsage.footnoteUnknownAndEstimated }
             if hasUnknownPrice { return L10n.ModelUsage.footnoteUnknownPrice }
             if hasEstimatedUsage { return L10n.ModelUsage.footnoteEstimatedUsage }

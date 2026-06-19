@@ -59,10 +59,18 @@ struct AgentModelUsageRow: Identifiable, Equatable {
     var estimatedTokens: Int
     var estimatedCostUSD: Double?
     var hasEstimatedUsage: Bool
+    var isDelegatedExternal: Bool
+    var cacheDiagnosticTurns: Int
+    var stablePrefixCharactersTotal: Int
 
     var cacheHitRate: Double {
         guard promptTokens > 0 else { return 0 }
         return Double(cachedPromptTokens) / Double(promptTokens)
+    }
+
+    var averageStablePrefixCharacters: Int {
+        guard cacheDiagnosticTurns > 0 else { return 0 }
+        return stablePrefixCharactersTotal / cacheDiagnosticTurns
     }
 }
 
@@ -172,28 +180,33 @@ enum AgentUsageStats {
         var rows: [String: AgentModelUsageRow] = [:]
 
         for session in sessions {
-            let modelID = normalizedModelID(session.modelID)
-            let provider = providerSnapshot(for: session, modelID: modelID)
-            let key = "\(provider.id)|\(modelID)"
-            var row = rows[key] ?? AgentModelUsageRow(
-                providerID: provider.id,
-                providerName: provider.name,
-                modelID: modelID,
-                sessionCount: 0,
-                messageCount: 0,
-                promptTokens: 0,
-                completionTokens: 0,
-                cachedPromptTokens: 0,
-                cacheWritePromptTokens: 0,
-                reasoningTokens: 0,
-                totalTokens: 0,
-                estimatedTokens: 0,
-                estimatedCostUSD: nil,
-                hasEstimatedUsage: false
-            )
-            row.sessionCount += 1
+            var seenKeysInSession = Set<String>()
 
             for message in session.messages where message.role == .assistant {
+                let identity = usageIdentity(for: message, session: session)
+                let key = "\(identity.provider.id)|\(identity.modelID)"
+                var row = rows[key] ?? AgentModelUsageRow(
+                    providerID: identity.provider.id,
+                    providerName: identity.provider.name,
+                    modelID: identity.modelID,
+                    sessionCount: 0,
+                    messageCount: 0,
+                    promptTokens: 0,
+                    completionTokens: 0,
+                    cachedPromptTokens: 0,
+                    cacheWritePromptTokens: 0,
+                    reasoningTokens: 0,
+                    totalTokens: 0,
+                    estimatedTokens: 0,
+                    estimatedCostUSD: nil,
+                    hasEstimatedUsage: false,
+                    isDelegatedExternal: identity.isDelegatedExternal,
+                    cacheDiagnosticTurns: 0,
+                    stablePrefixCharactersTotal: 0
+                )
+                if seenKeysInSession.insert(key).inserted {
+                    row.sessionCount += 1
+                }
                 let usage = usageBreakdown(for: message)
                 row.messageCount += 1
                 row.promptTokens += usage.prompt
@@ -204,10 +217,14 @@ enum AgentUsageStats {
                 row.totalTokens += usage.total
                 row.estimatedTokens += usage.estimated
                 row.hasEstimatedUsage = row.hasEstimatedUsage || usage.isEstimated
+                if let stable = message.requestStablePrefixCharacters, stable > 0 {
+                    row.cacheDiagnosticTurns += 1
+                    row.stablePrefixCharactersTotal += stable
+                }
+                row.isDelegatedExternal = row.isDelegatedExternal || identity.isDelegatedExternal
+                row.estimatedCostUSD = estimatedCostUSD(for: row)
+                rows[key] = row
             }
-
-            row.estimatedCostUSD = estimatedCostUSD(for: row)
-            rows[key] = row
         }
 
         return rows.values
@@ -261,6 +278,19 @@ enum AgentUsageStats {
         return (inferred, AgentProviderPreset.preset(id: inferred)?.displayName ?? inferred)
     }
 
+    private static func usageIdentity(
+        for message: AgentMessage,
+        session: AgentSession
+    ) -> (provider: (id: String, name: String), modelID: String, isDelegatedExternal: Bool) {
+        if message.origin == .delegatedExternal {
+            let label = message.originLabel?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let model = label?.isEmpty == false ? label! : "External CLI"
+            return (("delegated-external", "Delegated CLI"), model, true)
+        }
+        let modelID = normalizedModelID(session.modelID)
+        return (providerSnapshot(for: session, modelID: modelID), modelID, false)
+    }
+
     private static func inferProviderID(from modelID: String) -> String {
         let id = modelID.lowercased()
         if id.contains("deepseek") { return AgentProviderPreset.deepSeekID }
@@ -306,6 +336,7 @@ enum AgentUsageStats {
     }
 
     private static func estimatedCostUSD(for row: AgentModelUsageRow) -> Double? {
+        guard !row.isDelegatedExternal else { return nil }
         guard let price = AgentModelPricing.price(providerID: row.providerID, modelID: row.modelID) else {
             return nil
         }

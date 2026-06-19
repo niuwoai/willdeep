@@ -38,6 +38,11 @@ enum AgentRole: String, Codable {
     case widget
 }
 
+enum AgentMessageOrigin: String, Codable, Equatable {
+    case nativeModel
+    case delegatedExternal
+}
+
 /// A user-attached image, encoded inline so it round-trips through session
 /// JSON without a separate blob store. `dataBase64` is the raw image bytes
 /// base64-encoded (no `data:` prefix); `mimeType` is e.g. `image/png`.
@@ -190,6 +195,17 @@ struct AgentMessage: Identifiable, Codable, Equatable {
     /// connect to `.finishedTurn`. Only set on assistant messages once
     /// the stream terminates.
     var elapsedSeconds: Double?
+    /// Distinguishes native provider turns from external CLI delegated
+    /// results so cache/cost analytics don't mix black-box CLI output
+    /// into WillDeep's provider-side cache rate.
+    var origin: AgentMessageOrigin?
+    var originLabel: String?
+    /// Compact cache diagnostics captured for the request that produced
+    /// this assistant message. The hash is a stable FNV-1a hex string
+    /// for the request prefix; stablePrefixCharacters is the length of
+    /// the fixed prefix before dynamic workspace/memory/history blocks.
+    var requestPrefixHash: String?
+    var requestStablePrefixCharacters: Int?
     /// 1.81.0-rc1：role == .workflowReport 时挂载的 workflow 运行数据。
     /// engine 边跑边 mutate 这里的字段（subAgents 状态、totalUsageTokens、
     /// summary 等），UI 卡片读它显示进度。其它 role 一定是 nil；旧版本
@@ -217,6 +233,10 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         cacheWritePromptTokens: Int? = nil,
         reasoningTokens: Int? = nil,
         elapsedSeconds: Double? = nil,
+        origin: AgentMessageOrigin? = nil,
+        originLabel: String? = nil,
+        requestPrefixHash: String? = nil,
+        requestStablePrefixCharacters: Int? = nil,
         workflowReport: WorkflowReport? = nil,
         widget: AgentWidget? = nil,
         createdAt: Date = Date()
@@ -236,6 +256,10 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         self.cacheWritePromptTokens = cacheWritePromptTokens
         self.reasoningTokens = reasoningTokens
         self.elapsedSeconds = elapsedSeconds
+        self.origin = origin
+        self.originLabel = originLabel
+        self.requestPrefixHash = requestPrefixHash
+        self.requestStablePrefixCharacters = requestStablePrefixCharacters
         self.workflowReport = workflowReport
         self.widget = widget
         self.createdAt = createdAt
@@ -248,6 +272,7 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         case usageTokens, promptTokens, completionTokens
         case cachedPromptTokens, cacheWritePromptTokens, reasoningTokens
         case elapsedSeconds
+        case origin, originLabel, requestPrefixHash, requestStablePrefixCharacters
         case createdAt
     }
 
@@ -268,6 +293,10 @@ struct AgentMessage: Identifiable, Codable, Equatable {
         cacheWritePromptTokens = try container.decodeIfPresent(Int.self, forKey: .cacheWritePromptTokens)
         reasoningTokens = try container.decodeIfPresent(Int.self, forKey: .reasoningTokens)
         elapsedSeconds = try container.decodeIfPresent(Double.self, forKey: .elapsedSeconds)
+        origin = try container.decodeIfPresent(AgentMessageOrigin.self, forKey: .origin)
+        originLabel = try container.decodeIfPresent(String.self, forKey: .originLabel)
+        requestPrefixHash = try container.decodeIfPresent(String.self, forKey: .requestPrefixHash)
+        requestStablePrefixCharacters = try container.decodeIfPresent(Int.self, forKey: .requestStablePrefixCharacters)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 }

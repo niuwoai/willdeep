@@ -117,7 +117,24 @@ extension AppState {
             content: """
             You compress a coding-agent conversation transcript into a tight summary.
             Goal: preserve enough state that the agent can continue without re-reading the old turns.
-            Cover, in this order: the user's goal, key decisions, file paths examined or modified, important findings, and any open questions. Skip pleasantries and verbatim quotes. Keep under 300 words. Output plain text, no preamble like "Here's the summary".
+            Output exactly these sections in this order, omitting bullets that do not apply:
+
+            User goal:
+            - ...
+
+            Decisions and constraints:
+            - ...
+
+            Files and commands:
+            - ...
+
+            Current state:
+            - ...
+
+            Open questions / next steps:
+            - ...
+
+            Skip pleasantries and verbatim quotes. Keep under 300 words. Output plain text only.
             """
         )
         let payload = AgentMessage(
@@ -157,41 +174,113 @@ extension AppState {
         runtime.toolCalls.removeAll { !liveMessageIDs.contains($0.messageID) }
     }
 
-    /// Replace the body of older `tool` role messages with a tiny
-    /// placeholder so they stop dominating the request payload. The most
-    /// recent `keepRecentToolMessages` tool messages before the latest user
-    /// turn are left untouched, and every tool result after the latest user
-    /// turn stays verbatim so the model can still reason about the work it
-    /// just did. This keeps the prompt prefix more stable across turns,
-    /// improving provider prompt-cache reuse without hiding current-round
-    /// evidence.
+    /// Replace model-facing `tool` message bodies with compact summaries
+    /// while preserving the persisted transcript/tool-card payloads. Short
+    /// results remain verbatim; long current-turn results keep head/tail
+    /// snippets and metadata; older long results collapse to tiny stable
+    /// placeholders. This keeps provider prompts small and more cacheable
+    /// without breaking assistant→tool_call_id pairing.
     nonisolated static func collapseOldToolResults(
         in messages: [AgentMessage],
         keepRecentToolMessages: Int = 2
     ) -> [AgentMessage] {
         let latestUserIndex = messages.lastIndex { $0.role == .user } ?? messages.count
+        let toolNameByExternalID = toolNameLookup(in: messages)
         let olderToolIndices = messages.enumerated().compactMap { offset, message in
             message.role == .tool && offset < latestUserIndex ? offset : nil
         }
-        guard olderToolIndices.count > keepRecentToolMessages else { return messages }
-        let collapsedOlderToolIndices = olderToolIndices.prefix(olderToolIndices.count - keepRecentToolMessages)
+        let collapsedOlderToolIndices = olderToolIndices.count > keepRecentToolMessages
+            ? Set(olderToolIndices.prefix(olderToolIndices.count - keepRecentToolMessages))
+            : Set<Int>()
 
         var copy = messages
-        for index in collapsedOlderToolIndices {
+        for index in copy.indices where copy[index].role == .tool {
             let original = copy[index]
-            if original.content.hasPrefix("[tool result hidden") { continue }
-            let bytes = original.content.utf8.count
-            let placeholder = "[tool result hidden — earlier turn, was \(bytes) bytes; ask the user or re-run the tool if you need it again]"
+            let isOlderCollapsed = collapsedOlderToolIndices.contains(index)
+            let isBeforeLatestUser = index < latestUserIndex
+            let toolName = original.toolCallID.flatMap { toolNameByExternalID[$0] }
+            let nextContent = modelFacingToolResultContent(
+                original.content,
+                toolName: toolName,
+                aggressivelyCollapse: isOlderCollapsed,
+                preferCompactSummary: isBeforeLatestUser
+            )
+            guard nextContent != original.content else { continue }
             copy[index] = AgentMessage(
                 id: original.id,
                 role: .tool,
-                content: placeholder,
+                content: nextContent,
+                reasoningContent: original.reasoningContent,
                 images: original.images,
+                textAttachments: original.textAttachments,
                 toolCalls: original.toolCalls,
                 toolCallID: original.toolCallID,
+                usageTokens: original.usageTokens,
+                promptTokens: original.promptTokens,
+                completionTokens: original.completionTokens,
+                cachedPromptTokens: original.cachedPromptTokens,
+                cacheWritePromptTokens: original.cacheWritePromptTokens,
+                reasoningTokens: original.reasoningTokens,
+                elapsedSeconds: original.elapsedSeconds,
+                origin: original.origin,
+                originLabel: original.originLabel,
+                requestPrefixHash: original.requestPrefixHash,
+                requestStablePrefixCharacters: original.requestStablePrefixCharacters,
                 createdAt: original.createdAt
             )
         }
         return copy
+    }
+
+    nonisolated private static func toolNameLookup(in messages: [AgentMessage]) -> [String: String] {
+        var lookup: [String: String] = [:]
+        for message in messages where message.role == .assistant {
+            for call in message.toolCalls {
+                lookup[call.externalID] = call.toolName
+            }
+        }
+        return lookup
+    }
+
+    nonisolated static func modelFacingToolResultContent(
+        _ content: String,
+        toolName: String?,
+        aggressivelyCollapse: Bool = false,
+        preferCompactSummary: Bool = false
+    ) -> String {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return content }
+
+        let bytes = trimmed.utf8.count
+        if aggressivelyCollapse {
+            return "[tool result summarized for model context — tool=\(toolName ?? "unknown"), original_bytes=\(bytes), earlier_turn=true]"
+        }
+
+        let verbatimLimit = preferCompactSummary ? 1_200 : 2_400
+        guard trimmed.count > verbatimLimit else { return content }
+
+        let snippetLimit = preferCompactSummary ? 700 : 1_800
+        let head = String(trimmed.prefix(snippetLimit))
+        let tail: String = {
+            guard trimmed.count > snippetLimit * 2 else { return "" }
+            return String(trimmed.suffix(snippetLimit))
+        }()
+        var lines = [
+            "[tool result summarized for model context]",
+            "tool: \(toolName ?? "unknown")",
+            "original_bytes: \(bytes)",
+            "summary_policy: \(preferCompactSummary ? "older-turn compact" : "current-turn head-tail")",
+            "",
+            "head:",
+            head
+        ]
+        if !tail.isEmpty {
+            lines.append("")
+            lines.append("tail:")
+            lines.append(tail)
+        }
+        lines.append("")
+        lines.append("[Full tool output remains available in the transcript/tool result; re-run or fetch targeted details if needed.]")
+        return lines.joined(separator: "\n")
     }
 }

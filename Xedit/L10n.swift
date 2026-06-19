@@ -442,6 +442,7 @@ enum L10n {
         static let costUnknown = String(localized: "model-usage.cost-unknown", defaultValue: "n/a")
         static let empty = String(localized: "model-usage.empty", defaultValue: "No model usage in this range yet.")
         static let footnoteEstimatedUsage = String(localized: "model-usage.footnote.estimated-usage", defaultValue: "≈ means token split was estimated from older session data.")
+        static let footnoteExternalDelegated = String(localized: "model-usage.footnote.external-delegated", defaultValue: "Delegated CLI calls are tracked separately because their real token usage and provider cache hits are not reported to WillDeep.")
         static let footnoteUnknownAndEstimated = String(localized: "model-usage.footnote.unknown-and-estimated", defaultValue: "n/a means no built-in price for that model; ≈ means older token data was estimated.")
         static let footnoteUnknownPrice = String(localized: "model-usage.footnote.unknown-price", defaultValue: "n/a means no built-in price for that model or relay.")
         static let headerCache = String(localized: "model-usage.header.cache", defaultValue: "Cache")
@@ -452,10 +453,15 @@ enum L10n {
             let template = String(localized: "model-usage.messages", defaultValue: "%@ messages")
             return String(format: template, a1)
         }
+        static let prefix = { (a1: String) -> String in
+            let template = String(localized: "model-usage.prefix", defaultValue: "%@ stable prefix")
+            return String(format: template, a1)
+        }
         static let reasoning = { (a1: String) -> String in
             let template = String(localized: "model-usage.reasoning", defaultValue: "%@ reasoning")
             return String(format: template, a1)
         }
+        static let sourceExternal = String(localized: "model-usage.source.external", defaultValue: "external")
         static let sessions = { (a1: String) -> String in
             let template = String(localized: "model-usage.sessions", defaultValue: "%@ sessions")
             return String(format: template, a1)

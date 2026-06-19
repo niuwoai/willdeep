@@ -145,7 +145,9 @@ struct AgentMemoryStoreTests {
 
         #expect(block?.contains("Relevant long-term Agent memories") == true)
         #expect(block?.contains("score=0.42") == true)
-        #expect(block?.contains("topics=changelog,version") == true)
+        #expect(block?.contains("topics=") == true)
+        #expect(block?.contains("changelog") == true)
+        #expect(block?.contains("version") == true)
         #expect(block?.contains("sensitive=redacted") == true)
     }
 

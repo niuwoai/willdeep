@@ -627,6 +627,88 @@ extension WillDeepTests {
         #expect(abs((row?.estimatedCostUSD ?? 0) - expected) < 0.000_001)
     }
 
+    @Test("AgentUsageStats keeps delegated external CLI usage separate")
+    func testUsageStatsSeparatesDelegatedExternalUsage() {
+        let delegated = AgentMessage(
+            role: .assistant,
+            content: "done by codex",
+            origin: .delegatedExternal,
+            originLabel: "Codex"
+        )
+        let session = makeSession(
+            modelID: "gpt-5",
+            providerID: "openai",
+            messages: [
+                meteredAssistantMessage(prompt: 1_000, completion: 200, cachedPrompt: 500),
+                delegated
+            ]
+        )
+
+        let rows = AgentUsageStats.modelUsage(for: [session])
+        let native = rows.first { $0.providerID == "openai" }
+        let external = rows.first { $0.providerID == "delegated-external" }
+
+        #expect(native?.messageCount == 1)
+        #expect(native?.cacheHitRate == 0.5)
+        #expect(external?.modelID == "Codex")
+        #expect(external?.isDelegatedExternal == true)
+        #expect(external?.estimatedCostUSD == nil)
+    }
+
+    @Test("AgentContextBuilder keeps a stable prefix before dynamic context")
+    func testAgentContextBuilderStablePrefix() {
+        let first = AgentContextBuilder.systemPrompt(
+            rootDirectory: URL(fileURLWithPath: "/tmp/project-a"),
+            openedFileURL: URL(fileURLWithPath: "/tmp/project-a/A.swift"),
+            fileContent: "let a = 1",
+            selectedText: "",
+            language: nil,
+            toolsEnabled: true,
+            approvalMode: .smart
+        )
+        let second = AgentContextBuilder.systemPrompt(
+            rootDirectory: URL(fileURLWithPath: "/tmp/project-b"),
+            openedFileURL: URL(fileURLWithPath: "/tmp/project-b/B.swift"),
+            fileContent: "let b = 2",
+            selectedText: "b",
+            language: nil,
+            toolsEnabled: true,
+            approvalMode: .requestEveryTime
+        )
+        let stable = AgentContextBuilder.stableSystemPromptPrefix(toolsEnabled: true)
+        let firstDiagnostics = AgentContextBuilder.cacheDiagnostics(for: first, toolsEnabled: true)
+        let secondDiagnostics = AgentContextBuilder.cacheDiagnostics(for: second, toolsEnabled: true)
+
+        #expect(first.hasPrefix(stable))
+        #expect(second.hasPrefix(stable))
+        #expect(firstDiagnostics.hash == secondDiagnostics.hash)
+        #expect(firstDiagnostics.stableCharacters == stable.count)
+    }
+
+    @Test("long tool results are summarized before entering model context")
+    func testLongToolResultsAreSummarizedForModelContext() {
+        let call = AgentMessageToolCall(
+            externalID: "tool-1",
+            toolName: "run_command",
+            argumentsJSON: "{\"command\":\"make test\"}"
+        )
+        let assistant = AgentMessage(role: .assistant, content: "", toolCalls: [call])
+        let longOutput = String(repeating: "build log line\n", count: 400)
+        let tool = AgentMessage(role: .tool, content: longOutput, toolCallID: "tool-1")
+        let messages = [
+            AgentMessage(role: .user, content: "run tests"),
+            assistant,
+            tool
+        ]
+
+        let collapsed = AppState.collapseOldToolResults(in: messages)
+        let collapsedTool = collapsed.last?.content ?? ""
+
+        #expect(collapsedTool.contains("[tool result summarized for model context]"))
+        #expect(collapsedTool.contains("tool: run_command"))
+        #expect(collapsedTool.contains("Full tool output remains available"))
+    }
+
     @Test("agent tool registry escalates dangerous run_command invocations to .danger")
     func testRunCommandRiskEscalatesForDestructiveShell() {
         let benignRisk = AgentToolRegistry.risk(

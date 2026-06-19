@@ -349,15 +349,30 @@ enum AgentMemoryEngine {
             "Relevant long-term Agent memories:",
             "Use these as durable user/project context. They may be stale; prefer current files and explicit user instructions when they conflict."
         ]
-        for (index, result) in results.enumerated() {
+        let stableResults = results
+            .sorted { lhs, rhs in
+                if lhs.score != rhs.score { return lhs.score > rhs.score }
+                if lhs.record.updatedAt != rhs.record.updatedAt { return lhs.record.updatedAt > rhs.record.updatedAt }
+                return lhs.record.id.uuidString < rhs.record.id.uuidString
+            }
+            .prefix(3)
+        for (index, result) in stableResults.enumerated() {
             let record = result.record
-            let topics = record.topics.isEmpty ? "" : " topics=\(record.topics.prefix(5).joined(separator: ","))"
+            let topics = record.topics.isEmpty ? "" : " topics=\(record.topics.sorted().prefix(5).joined(separator: ","))"
             let sensitive = record.containsSensitiveContent ? " sensitive=redacted" : ""
+            let content = limitForPrompt(record.content, maxCharacters: 360)
             lines.append(
-                "\(index + 1). [\(record.scope.rawValue) score=\(String(format: "%.2f", result.score))\(topics)\(sensitive)] \(record.content)"
+                "\(index + 1). [\(record.scope.rawValue) score=\(String(format: "%.2f", result.score))\(topics)\(sensitive)] \(content)"
             )
         }
         return lines.joined(separator: "\n")
+    }
+
+    private static func limitForPrompt(_ value: String, maxCharacters: Int) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > maxCharacters else { return trimmed }
+        let end = trimmed.index(trimmed.startIndex, offsetBy: maxCharacters)
+        return "\(trimmed[..<end]) [truncated]"
     }
 
     static func candidates(

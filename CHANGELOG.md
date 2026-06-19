@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.91.0-rc15 - 2026-06-19
+
+### Added
+
+- Agent system prompt 拆分为稳定前缀与动态上下文区,新增稳定前缀版本、请求前缀 hash 与稳定前缀长度诊断,用于提高 provider prompt cache 命中并辅助排查 cache miss。
+- Agent usage 统计将 `Claude Code` / `Codex` 等 delegated external CLI 结果单独归入 `Delegated CLI` 桶,不再混入 WillDeep native 模型缓存率;模型用量行新增稳定前缀诊断与 external 标记。
+
+### Changed
+
+- 模型请求前会把长工具结果转换为结构化摘要副本:短结果原样,当前 turn 长结果保留 head/tail 与 metadata,旧 turn 长结果折为稳定 placeholder;完整工具输出仍保留在 transcript/tool result 中。
+- 长期记忆注入固定最多 3 条、稳定排序并裁剪单条长度;自动上下文压缩改为固定结构摘要,减少动态块抖动。
+- 补充稳定前缀、工具结果摘要和 external CLI 统计单测;版本号递增为 **1.91.0-rc15**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.91.0-rc14 - 2026-06-19
 
 ### Added
