@@ -19,8 +19,11 @@ func TestCollaborationRelayHealthIncludesCallbacks(t *testing.T) {
 		t.Fatalf("GET health: %v", err)
 	}
 	defer resp.Body.Close()
-	if got := resp.Header.Get("X-App-Version"); got != Version {
-		t.Fatalf("X-App-Version = %q, want %q", got, Version)
+	if got := resp.Header.Get("X-WillDeep-App-Version"); got != Version {
+		t.Fatalf("X-WillDeep-App-Version = %q, want %q", got, Version)
+	}
+	if got := resp.Header.Get("X-App-Version"); got != "" {
+		t.Fatalf("X-App-Version = %q, want empty for relay responses", got)
 	}
 
 	var body APIResponse
