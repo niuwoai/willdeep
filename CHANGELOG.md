@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.91.0-rc14 - 2026-06-19
+
+### Added
+
+- Composer 选择 `Claude Code` / `Codex` 执行器时,新增 WillDeep Delegated Executor Context Package v1:委托 prompt 现在包含稳定模板、最近 6 条用户/助手消息的压缩上下文、当前 workspace、附件与图片 VL 摘要,避免第三方 CLI 因看不到 WillDeep 聊天历史而“断片”。
+- 外部执行器 stdout 新增 `WILLDEEP_FINAL_RESPONSE_BEGIN/END` 最终回答协议。WillDeep 优先把该区块作为普通 assistant 消息回灌主会话,完整 stdout/stderr 仍保存在工具结果里用于审计。
+
+### Changed
+
+- 外部执行器未按最终回答协议输出时,主会话只保留最多 6000 字符的兜底摘要,避免把长日志灌回后续上下文、拖低缓存率;完整输出仍可从工具卡查看。
+- 补充委托上下文包、最终回答解析与历史裁剪单测;版本号递增为 **1.91.0-rc14**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.91.0-rc13 - 2026-06-19
 
 ### Fixed

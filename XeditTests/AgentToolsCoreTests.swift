@@ -462,6 +462,49 @@ struct DelegatedAgentComposerOutputTests {
     }
 
     @Test
+    func delegatedAgentVisibleContentPrefersFinalResponseBlock() {
+        let payload = """
+        exit=0
+        --- stdout ---
+        Lots of implementation logs...
+        WILLDEEP_FINAL_RESPONSE_BEGIN
+        已完成上下文包优化，并补充测试。
+        WILLDEEP_FINAL_RESPONSE_END
+        trailing diagnostics
+        --- stderr ---
+
+        """
+        let content = AppState.delegatedAgentVisibleContent(
+            executionAgent: .codexCLI,
+            status: .succeeded,
+            result: AgentToolResult(summary: "exit 0", payload: payload),
+            errorMessage: nil,
+            toolPayload: payload
+        )
+
+        #expect(content == "已完成上下文包优化，并补充测试。")
+    }
+
+    @Test
+    func delegatedConversationContextExcludesCurrentTaskAndClipsHistory() {
+        let longAssistant = String(repeating: "历史实现细节", count: 120)
+        let messages = [
+            AgentMessage(role: .user, content: "前面说过优先保证缓存率"),
+            AgentMessage(role: .assistant, content: longAssistant),
+            AgentMessage(role: .user, content: "现在继续做")
+        ]
+
+        let context = AppState.delegatedConversationContextBlock(
+            from: messages,
+            currentUserText: "现在继续做"
+        ) ?? ""
+
+        #expect(context.contains("前面说过优先保证缓存率"))
+        #expect(context.contains("[truncated]"))
+        #expect(!context.contains("现在继续做"))
+    }
+
+    @Test
     func delegatedAgentVisibleContentShowsFailures() {
         let content = AppState.delegatedAgentVisibleContent(
             executionAgent: .claudeCode,

@@ -136,6 +136,7 @@ extension AppState {
 
         let prompt = delegatedAgentPrompt(
             userText: text,
+            conversationMessages: runtime.messages,
             textAttachments: textAttachments,
             images: images,
             imageDescriptions: nil,
@@ -228,6 +229,7 @@ extension AppState {
             }
             let prompt = delegatedAgentPrompt(
                 userText: userText,
+                conversationMessages: runtime.messages,
                 textAttachments: textAttachments,
                 images: images,
                 imageDescriptions: imageDescriptions,
@@ -437,7 +439,10 @@ extension AppState {
             let output = delegatedAgentReadableOutput(from: result?.payload ?? toolPayload)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !output.isEmpty {
-                return output
+                return delegatedAgentFinalResponse(from: output)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .nilIfEmpty
+                    ?? delegatedAgentVisibleOutputFallback(output)
             }
             return result?.summary.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
                 ?? "\(label) finished."
@@ -475,8 +480,77 @@ extension AppState {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    nonisolated static func delegatedAgentFinalResponse(from output: String) -> String {
+        let startMarker = "WILLDEEP_FINAL_RESPONSE_BEGIN"
+        let endMarker = "WILLDEEP_FINAL_RESPONSE_END"
+        guard let startRange = output.range(of: startMarker) else { return "" }
+        let bodyStart = startRange.upperBound
+        let bodyEnd = output.range(of: endMarker, range: bodyStart..<output.endIndex)?.lowerBound ?? output.endIndex
+        return String(output[bodyStart..<bodyEnd])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    nonisolated static func delegatedAgentVisibleOutputFallback(_ output: String) -> String {
+        let maxCharacters = 6_000
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > maxCharacters else { return trimmed }
+        let end = trimmed.index(trimmed.startIndex, offsetBy: maxCharacters)
+        return """
+        \(trimmed[..<end])
+
+        [Output truncated for the main conversation. Full delegated executor stdout is preserved in the tool result.]
+        """
+    }
+
+    nonisolated static func delegatedConversationContextBlock(
+        from messages: [AgentMessage],
+        currentUserText: String
+    ) -> String? {
+        let current = currentUserText.trimmingCharacters(in: .whitespacesAndNewlines)
+        var candidates: [(role: String, content: String)] = []
+        for message in messages {
+            guard message.role == .user || message.role == .assistant else { continue }
+            let content = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !content.isEmpty else { continue }
+            candidates.append((message.role.rawValue, content))
+        }
+        if let last = candidates.last, last.role == AgentRole.user.rawValue, last.content == current {
+            candidates.removeLast()
+        }
+        let recent = candidates.suffix(6)
+        guard !recent.isEmpty else { return nil }
+
+        var lines: [String] = []
+        var usedCharacters = 0
+        let totalLimit = 3_600
+        let perMessageLimit = 700
+        for item in recent {
+            let clipped = Self.clippedDelegatedContext(item.content, limit: perMessageLimit)
+            let line = "- \(item.role): \(clipped)"
+            guard usedCharacters + line.count <= totalLimit else {
+                lines.append("- [Earlier context omitted to keep the delegated prompt compact.]")
+                break
+            }
+            lines.append(line)
+            usedCharacters += line.count
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    nonisolated private static func clippedDelegatedContext(_ value: String, limit: Int) -> String {
+        let singleLine = value
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        guard singleLine.count > limit else { return singleLine }
+        let end = singleLine.index(singleLine.startIndex, offsetBy: limit)
+        return "\(singleLine[..<end]) [truncated]"
+    }
+
     private func delegatedAgentPrompt(
         userText: String,
+        conversationMessages: [AgentMessage],
         textAttachments: [AgentTextAttachment],
         images: [AgentImageAttachment],
         imageDescriptions: String?,
@@ -484,11 +558,33 @@ extension AppState {
         workspaceLocation: WorkspaceLocation?
     ) -> String {
         var blocks: [String] = [
-            "You are being invoked from WillDeep Composer as the selected execution agent: \(executionAgent.displayName).",
-            "Work on the user's task end-to-end in the current workspace. If you change files, run the most relevant verification you can and summarize what changed.",
+            """
+            WillDeep Delegated Executor Context Package v1
+
+            You are being invoked from WillDeep Composer as the selected execution agent: \(executionAgent.displayName).
+            Work on the user's task end-to-end in the current workspace. If you change files, run the most relevant verification you can and summarize what changed.
+            Keep raw logs, long command output, and implementation scratch notes outside the final response block. WillDeep keeps the full tool output separately; the main conversation should only receive a compact user-facing answer.
+
+            At the end of your stdout, emit exactly one final response block:
+            WILLDEEP_FINAL_RESPONSE_BEGIN
+            <concise user-facing answer, change summary, verification, and any important caveats>
+            WILLDEEP_FINAL_RESPONSE_END
+            """
         ]
         if let path = workspaceLocation?.path, !path.isEmpty {
             blocks.append("Workspace: \(path)")
+        }
+        if let conversationContext = Self.delegatedConversationContextBlock(
+            from: conversationMessages,
+            currentUserText: userText
+        ) {
+            blocks.append("""
+            ### Recent WillDeep conversation summary
+
+            The delegated CLI cannot see the WillDeep chat history. Use this compact summary for continuity; the current user task appears later and takes priority.
+
+            \(conversationContext)
+            """)
         }
         if !images.isEmpty {
             if let imageDescriptions, !imageDescriptions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -504,7 +600,7 @@ extension AppState {
         if !textAttachments.isEmpty {
             blocks.append(textAttachments.map(\.modelBlock).joined(separator: "\n\n"))
         }
-        blocks.append("---")
+        blocks.append("### Current user task")
         blocks.append(userText)
         return blocks.joined(separator: "\n\n")
     }
