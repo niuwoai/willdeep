@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.91.0-rc5 - 2026-06-19
+
+### Added
+
+- `willdeep-agent serve-collab-relay` 新增飞书官方 SDK 长连接接收事件模式:通过 `--feishu-long-connection` / `WILLDEEP_FEISHU_LONG_CONNECTION=1` 启用,使用 `WILLDEEP_FEISHU_APP_ID` 与 `WILLDEEP_FEISHU_APP_SECRET` 或 secret file 主动连接飞书,不再强制依赖公网事件回调域名。
+- 长连接默认注册 `im.message.receive_v1` 和 `application.bot.menu_v6`,也可用 `--feishu-long-connection-event-types` / `WILLDEEP_FEISHU_LONG_CONNECTION_EVENT_TYPES` 配置逗号分隔事件类型;收到的事件会进入现有 `/events/poll` 内存队列。
+
+### Changed
+
+- `/collab/health` 新增 `event_transports.feishu_long_connection`,暴露长连接启用状态、配置状态、连接状态、事件类型和最近错误,便于排查飞书后台“使用长连接接收事件”的配置。
+- 版本号递增为 **1.91.0-rc5**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.91.0-rc4 - 2026-06-19
 
 ### Fixed

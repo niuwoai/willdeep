@@ -1,11 +1,11 @@
 # Collaboration Connectors
 
-> Last updated: 2026-06-19 | Current version: v1.91.0-rc4
+> Last updated: 2026-06-19 | Current version: v1.91.0-rc5
 
 WillDeep treats Feishu, DingTalk, WeCom, and WeChat/Claw as collaboration
 connectors. The Mac app owns local user intent, preview, and Keychain-backed
-credentials. The public relay owns HTTPS callback endpoints required by SaaS
-platforms.
+credentials. The relay owns SaaS callback intake and optional long-connection
+clients for platforms that support server-initiated event delivery.
 
 ## Public Relay
 
@@ -23,6 +23,8 @@ willdeep-agent serve-collab-relay \
   --port 8899 \
   --public-base-url https://fly.niuwoai.com \
   --feishu-app-id "$WILLDEEP_FEISHU_APP_ID" \
+  --feishu-app-secret-file /opt/willdeep/feishu-app-secret \
+  --feishu-long-connection \
   --token-file /opt/willdeep/collab-relay.token
 ```
 
@@ -39,13 +41,33 @@ https://fly.niuwoai.com/events/dingtalk
 Sensitive values stay out of the app settings and source tree:
 
 - Relay poll token: file or environment on the server.
-- Feishu/DingTalk app secret: macOS Keychain via `AgentCredentialStore`.
+- Feishu/DingTalk app secret: macOS Keychain for desktop tokens, or a server
+  secret file/environment for relay long-connection mode.
 - OAuth access/refresh tokens: macOS Keychain.
 - SaaS event verification secrets: future server-side secret store, not
   UserDefaults.
 - Feishu setup QR requires only the public app id on the relay
   (`WILLDEEP_FEISHU_APP_ID` or `--feishu-app-id`). It does not require Redis or
   a database; callback events are retained in the relay's in-memory queue.
+
+### Feishu Event Delivery
+
+Feishu can deliver robot events in two ways:
+
+- **Long connection**: select "use long connection to receive events" in the
+  Feishu app console. The relay starts the official Feishu SDK client with
+  `WILLDEEP_FEISHU_APP_ID` plus `WILLDEEP_FEISHU_APP_SECRET` or
+  `--feishu-app-secret-file`, then queues events for `/events/poll`. This mode
+  does not require a public event callback URL or callback encryption strategy.
+- **HTTPS callback**: select "send events to developer server" and register
+  `https://fly.niuwoai.com/events/feishu`. This remains useful when the relay
+  should receive events through a public edge, but it requires reachable HTTPS
+  and production signature/encryption verification.
+
+The relay defaults long-connection subscriptions to `im.message.receive_v1` and
+`application.bot.menu_v6`. Override with
+`WILLDEEP_FEISHU_LONG_CONNECTION_EVENT_TYPES` or
+`--feishu-long-connection-event-types` when the app enables more Feishu events.
 
 ## Feishu Target Depth
 
@@ -95,9 +117,10 @@ GitHub issue -> generate Feishu PRD -> send review request -> collect comments
 ```
 
 The relay receives Feishu events, queues them, and exposes authenticated polling
-for the Mac side or a future worker. The current relay intentionally keeps an
-in-memory queue; production storage can become PostgreSQL/Redis once callback
-volume justifies it.
+for the Mac side or a future worker. Feishu events may arrive through either the
+public `/events/feishu` callback or the official SDK long connection. The
+current relay intentionally keeps an in-memory queue; production storage can
+become PostgreSQL/Redis once callback volume justifies it.
 
 ## DingTalk Target Depth
 
@@ -124,7 +147,8 @@ GET /collab/health
 ```
 
 Returns version, protocol, OAuth callback URLs, event callback URLs, and queue
-depth.
+depth. The response also includes event transport status such as
+`event_transports.feishu_long_connection`.
 
 ### OAuth Callback
 
@@ -173,9 +197,14 @@ Returns queued events and removes the returned batch from memory.
   `X-WillDeep-Server-Version`; upstream proxies may add their own
   `X-App-Version` / `X-Server-Version` headers.
 - [ ] OAuth redirect URLs are registered in Feishu and DingTalk app consoles.
-- [ ] Event callback URLs are registered in Feishu and DingTalk app consoles.
+- [ ] Feishu event delivery is configured as either long connection or HTTPS
+  callback.
+- [ ] Event callback URLs are registered in Feishu and DingTalk app consoles
+  when HTTPS callback delivery is selected.
 - [ ] Relay token is stored outside git.
 - [ ] Feishu/DingTalk app secrets are stored in macOS Keychain.
-- [ ] Feishu event signature verification is implemented before production.
+- [ ] Feishu app secret is stored outside git when long connection is enabled.
+- [ ] Feishu event signature verification is implemented before production when
+  HTTPS callback delivery is selected.
 - [ ] DingTalk encrypted callback verification is implemented before
   production.

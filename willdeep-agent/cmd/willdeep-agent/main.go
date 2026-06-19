@@ -132,6 +132,10 @@ func newServeCollabRelayCommand() *cobra.Command {
 	var token string
 	var tokenFile string
 	var feishuAppID string
+	var feishuAppSecret string
+	var feishuAppSecretFile string
+	var feishuLongConnection bool
+	var feishuLongConnectionEventTypes string
 	var maxEvents int
 
 	cmd := &cobra.Command{
@@ -139,13 +143,17 @@ func newServeCollabRelayCommand() *cobra.Command {
 		Short: "Start the public collaboration relay for Feishu, DingTalk, and WeCom callbacks",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := agent.NewCollaborationRelayConfig(agent.CollaborationRelayConfigInput{
-				Host:          host,
-				Port:          port,
-				PublicBaseURL: publicBaseURL,
-				Token:         token,
-				TokenFile:     tokenFile,
-				FeishuAppID:   feishuAppID,
-				MaxEvents:     maxEvents,
+				Host:                           host,
+				Port:                           port,
+				PublicBaseURL:                  publicBaseURL,
+				Token:                          token,
+				TokenFile:                      tokenFile,
+				FeishuAppID:                    feishuAppID,
+				FeishuAppSecret:                feishuAppSecret,
+				FeishuAppSecretFile:            feishuAppSecretFile,
+				FeishuLongConnectionEnabled:    feishuLongConnection,
+				FeishuLongConnectionEventTypes: feishuLongConnectionEventTypes,
+				MaxEvents:                      maxEvents,
 			})
 			if err != nil {
 				return err
@@ -162,8 +170,21 @@ func newServeCollabRelayCommand() *cobra.Command {
 	cmd.Flags().StringVar(&token, "token", "", "bearer token for polling queued events; generated if empty")
 	cmd.Flags().StringVar(&tokenFile, "token-file", "", "file containing bearer token for polling queued events")
 	cmd.Flags().StringVar(&feishuAppID, "feishu-app-id", os.Getenv("WILLDEEP_FEISHU_APP_ID"), "Feishu app_id used by the setup QR endpoint")
+	cmd.Flags().StringVar(&feishuAppSecret, "feishu-app-secret", os.Getenv("WILLDEEP_FEISHU_APP_SECRET"), "Feishu app_secret used for long connection; prefer --feishu-app-secret-file in production")
+	cmd.Flags().StringVar(&feishuAppSecretFile, "feishu-app-secret-file", os.Getenv("WILLDEEP_FEISHU_APP_SECRET_FILE"), "file containing Feishu app_secret for long connection")
+	cmd.Flags().BoolVar(&feishuLongConnection, "feishu-long-connection", envBool("WILLDEEP_FEISHU_LONG_CONNECTION"), "receive Feishu events through the official SDK long connection instead of requiring a public event callback")
+	cmd.Flags().StringVar(&feishuLongConnectionEventTypes, "feishu-long-connection-event-types", os.Getenv("WILLDEEP_FEISHU_LONG_CONNECTION_EVENT_TYPES"), "comma-separated Feishu event types registered on the long connection client")
 	cmd.Flags().IntVar(&maxEvents, "max-events", 500, "maximum in-memory callback events retained for polling")
 	return cmd
+}
+
+func envBool(name string) bool {
+	switch os.Getenv(name) {
+	case "1", "true", "TRUE", "yes", "YES", "on", "ON":
+		return true
+	default:
+		return false
+	}
 }
 
 func newChromeNativeHostCommand() *cobra.Command {

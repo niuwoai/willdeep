@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,30 +27,38 @@ const (
 )
 
 type CollaborationRelayConfigInput struct {
-	Host          string
-	Port          int
-	PublicBaseURL string
-	Token         string
-	TokenFile     string
-	FeishuAppID   string
-	MaxEvents     int
+	Host                           string
+	Port                           int
+	PublicBaseURL                  string
+	Token                          string
+	TokenFile                      string
+	FeishuAppID                    string
+	FeishuAppSecret                string
+	FeishuAppSecretFile            string
+	FeishuLongConnectionEnabled    bool
+	FeishuLongConnectionEventTypes string
+	MaxEvents                      int
 }
 
 type CollaborationRelayConfig struct {
-	Host          string
-	Port          int
-	PublicBaseURL string
-	Token         string
-	FeishuAppID   string
-	MaxEvents     int
+	Host                           string
+	Port                           int
+	PublicBaseURL                  string
+	Token                          string
+	FeishuAppID                    string
+	FeishuAppSecret                string
+	FeishuLongConnectionEnabled    bool
+	FeishuLongConnectionEventTypes []string
+	MaxEvents                      int
 }
 
 type CollaborationRelay struct {
 	config CollaborationRelayConfig
 
-	mu     sync.Mutex
-	events []CollaborationRelayEvent
-	now    func() time.Time
+	mu                         sync.Mutex
+	events                     []CollaborationRelayEvent
+	feishuLongConnectionStatus CollaborationRelayTransportStatus
+	now                        func() time.Time
 }
 
 type CollaborationRelayEvent struct {
@@ -60,6 +69,15 @@ type CollaborationRelayEvent struct {
 	RemoteAddr string          `json:"remote_addr"`
 	Headers    map[string]any  `json:"headers,omitempty"`
 	Body       json.RawMessage `json:"body,omitempty"`
+}
+
+type CollaborationRelayTransportStatus struct {
+	Enabled    bool      `json:"enabled"`
+	Configured bool      `json:"configured"`
+	State      string    `json:"state"`
+	EventTypes []string  `json:"event_types,omitempty"`
+	LastError  string    `json:"last_error,omitempty"`
+	UpdatedAt  time.Time `json:"updated_at,omitempty"`
 }
 
 type collaborationRelayPlatform struct {
@@ -99,22 +117,45 @@ func NewCollaborationRelayConfig(input CollaborationRelayConfigInput) (Collabora
 			return CollaborationRelayConfig{}, err
 		}
 	}
+	feishuAppID := strings.TrimSpace(input.FeishuAppID)
+	feishuAppSecret, err := loadSecret(input.FeishuAppSecret, input.FeishuAppSecretFile, "WILLDEEP_FEISHU_APP_SECRET")
+	if err != nil {
+		return CollaborationRelayConfig{}, err
+	}
+	feishuLongConnectionEventTypes := normalizeList(input.FeishuLongConnectionEventTypes)
+	if len(feishuLongConnectionEventTypes) == 0 {
+		feishuLongConnectionEventTypes = defaultFeishuLongConnectionEventTypes()
+	}
+	if input.FeishuLongConnectionEnabled {
+		if feishuAppID == "" {
+			return CollaborationRelayConfig{}, errors.New("feishu long connection requires feishu app id")
+		}
+		if feishuAppSecret == "" {
+			return CollaborationRelayConfig{}, errors.New("feishu long connection requires feishu app secret")
+		}
+	}
 	maxEvents := input.MaxEvents
 	if maxEvents <= 0 {
 		maxEvents = defaultCollaborationRelayMaxEvents
 	}
 	return CollaborationRelayConfig{
-		Host:          host,
-		Port:          port,
-		PublicBaseURL: baseURL,
-		Token:         token,
-		FeishuAppID:   strings.TrimSpace(input.FeishuAppID),
-		MaxEvents:     maxEvents,
+		Host:                           host,
+		Port:                           port,
+		PublicBaseURL:                  baseURL,
+		Token:                          token,
+		FeishuAppID:                    feishuAppID,
+		FeishuAppSecret:                feishuAppSecret,
+		FeishuLongConnectionEnabled:    input.FeishuLongConnectionEnabled,
+		FeishuLongConnectionEventTypes: feishuLongConnectionEventTypes,
+		MaxEvents:                      maxEvents,
 	}, nil
 }
 
 func ServeCollaborationRelay(ctx context.Context, config CollaborationRelayConfig) error {
 	relay := NewCollaborationRelay(config)
+	if err := relay.StartBackgroundTransports(ctx); err != nil {
+		return err
+	}
 	addr := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
 	httpServer := &http.Server{Addr: addr, Handler: relay.routes()}
 
@@ -140,10 +181,12 @@ func ServeCollaborationRelay(ctx context.Context, config CollaborationRelayConfi
 }
 
 func NewCollaborationRelay(config CollaborationRelayConfig) *CollaborationRelay {
-	return &CollaborationRelay{
+	relay := &CollaborationRelay{
 		config: config,
 		now:    time.Now,
 	}
+	relay.setFeishuLongConnectionStatus("disabled", "")
+	return relay
 }
 
 func (r *CollaborationRelay) routes() http.Handler {
@@ -175,6 +218,7 @@ func (r *CollaborationRelay) withAuth(next http.HandlerFunc) http.HandlerFunc {
 func (r *CollaborationRelay) handleHealth(w http.ResponseWriter, req *http.Request) {
 	r.mu.Lock()
 	queued := len(r.events)
+	feishuLongConnectionStatus := r.feishuLongConnectionStatus
 	r.mu.Unlock()
 	writeCollaborationRelayOK(w, map[string]any{
 		"version":          VersionInfo(),
@@ -192,6 +236,9 @@ func (r *CollaborationRelay) handleHealth(w http.ResponseWriter, req *http.Reque
 		},
 		"setup_urls": map[string]string{
 			"feishu": r.config.PublicBaseURL + "/connectors/feishu/setup",
+		},
+		"event_transports": map[string]any{
+			"feishu_long_connection": feishuLongConnectionStatus,
 		},
 		"queued_events": queued,
 	})
@@ -314,6 +361,19 @@ func (r *CollaborationRelay) enqueue(event CollaborationRelayEvent) {
 	r.events = append([]CollaborationRelayEvent(nil), r.events[drop:]...)
 }
 
+func (r *CollaborationRelay) setFeishuLongConnectionStatus(state string, lastError string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.feishuLongConnectionStatus = CollaborationRelayTransportStatus{
+		Enabled:    r.config.FeishuLongConnectionEnabled,
+		Configured: r.config.FeishuLongConnectionEnabled && r.config.FeishuAppID != "" && r.config.FeishuAppSecret != "",
+		State:      state,
+		EventTypes: append([]string(nil), r.config.FeishuLongConnectionEventTypes...),
+		LastError:  sanitizeRelayError(lastError),
+		UpdatedAt:  r.now().UTC(),
+	}
+}
+
 func writeCollaborationRelayOK(w http.ResponseWriter, data any) {
 	writeCollaborationRelayAPI(w, http.StatusOK, APIResponse{OK: true, Data: data})
 }
@@ -396,4 +456,50 @@ func stringValue(value any) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+func loadSecret(secret string, secretFile string, envName string) (string, error) {
+	if secret == "" && envName != "" {
+		secret = os.Getenv(envName)
+	}
+	if secret == "" && secretFile != "" {
+		data, err := os.ReadFile(secretFile)
+		if err != nil {
+			return "", fmt.Errorf("read secret file: %w", err)
+		}
+		secret = string(data)
+	}
+	return strings.TrimSpace(secret), nil
+}
+
+func normalizeList(value string) []string {
+	seen := map[string]bool{}
+	items := []string{}
+	for _, part := range strings.Split(value, ",") {
+		item := strings.TrimSpace(part)
+		if item == "" || seen[item] {
+			continue
+		}
+		seen[item] = true
+		items = append(items, item)
+	}
+	return items
+}
+
+func defaultFeishuLongConnectionEventTypes() []string {
+	return []string{
+		"im.message.receive_v1",
+		"application.bot.menu_v6",
+	}
+}
+
+func sanitizeRelayError(message string) string {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return ""
+	}
+	if len(message) > 240 {
+		return message[:240]
+	}
+	return message
 }
