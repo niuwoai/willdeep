@@ -270,20 +270,20 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "prompt", type: .string, description: "Self-contained task description. Include relevant file paths, acceptance criteria, and constraints — Claude Code cannot ask follow-up questions in headless mode.", required: true),
                 AgentToolParameter(name: "permission_mode", type: .string, description: "One of `plan` (read-only, returns a plan), `acceptEdits` (may create/edit files in the workspace), `default` (permission-needing actions are auto-denied). Defaults to acceptEdits.", required: false),
                 AgentToolParameter(name: "model", type: .string, description: "Optional Claude model alias forwarded as `--model` (e.g. `sonnet`, `opus`, `haiku`).", required: false),
-                AgentToolParameter(name: "run_in_background", type: .boolean, description: "Defaults to true: returns a job handle (job_xxxxxx) and the result arrives as a background-task notification; inspect progress with get_job_output. Set false only for quick questions (120s foreground ceiling).", required: false),
-                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Hard timeout. Background default 1800 (max 21600); foreground capped at 120.", required: false)
+                AgentToolParameter(name: "run_in_background", type: .boolean, description: "Defaults to true: returns a job handle (job_xxxxxx) and the result arrives as a background-task notification; inspect progress with get_job_output. Set false when the caller needs to wait for the final CLI response inline.", required: false),
+                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Optional hard timeout. Local/SSH background default has no hard timeout; delegated foreground default/cap is 21600 seconds.", required: false)
             ]
         ),
         AgentToolDescriptor(
             name: "codex_cli",
-            description: "Delegate a complex coding task to the locally installed Codex CLI (`codex exec`). Codex can inspect and edit the workspace, run commands, and work multi-step; use it for self-contained implementation or review tasks. Requires user approval. Use `permission_mode: \"plan\"` for a read-only plan. The prompt must be fully self-contained: Codex sees the workspace files but not this conversation.",
+            description: "Delegate a complex coding task to the locally installed Codex CLI (`codex -a never exec`). Codex can inspect and edit the workspace, run commands, and work multi-step; use it for self-contained implementation or review tasks. Requires user approval in WillDeep, then runs headless with Codex's internal approval prompts disabled while keeping Codex sandbox mode enabled. Use `permission_mode: \"plan\"` for a read-only plan. The prompt must be fully self-contained: Codex sees the workspace files but not this conversation.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "prompt", type: .string, description: "Self-contained task description. Include relevant file paths, acceptance criteria, and constraints — the delegated Codex CLI session cannot ask follow-up questions here.", required: true),
                 AgentToolParameter(name: "permission_mode", type: .string, description: "One of `plan` (read-only), `workspaceWrite` (may edit files inside the workspace), or `default` (alias for workspaceWrite). Defaults to workspaceWrite.", required: false),
                 AgentToolParameter(name: "model", type: .string, description: "Optional Codex model id forwarded with `--model`.", required: false),
-                AgentToolParameter(name: "run_in_background", type: .boolean, description: "Defaults to true: returns a job handle (job_xxxxxx) and the result arrives as a background-task notification; inspect progress with get_job_output. Set false only for quick questions (120s foreground ceiling).", required: false),
-                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Hard timeout. Background default 1800 (max 21600); foreground capped at 120.", required: false)
+                AgentToolParameter(name: "run_in_background", type: .boolean, description: "Defaults to true: returns a job handle (job_xxxxxx) and the result arrives as a background-task notification; inspect progress with get_job_output. Set false when the caller needs to wait for the final CLI response inline.", required: false),
+                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Optional hard timeout. Local/SSH background default has no hard timeout; delegated foreground default/cap is 21600 seconds.", required: false)
             ]
         ),
         AgentToolDescriptor(
@@ -294,8 +294,8 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "prompt", type: .string, description: "Self-contained task description. Include relevant file paths, acceptance criteria, and constraints — the delegated Cursor Agent session cannot ask follow-up questions here.", required: true),
                 AgentToolParameter(name: "permission_mode", type: .string, description: "One of `plan` (read-only planning), `ask` (read-only Q&A), or `default` (may edit files in the workspace under Cursor's sandbox). Defaults to default.", required: false),
                 AgentToolParameter(name: "model", type: .string, description: "Optional Cursor model id forwarded with `--model`.", required: false),
-                AgentToolParameter(name: "run_in_background", type: .boolean, description: "Defaults to true: returns a job handle (job_xxxxxx) and the result arrives as a background-task notification; inspect progress with get_job_output. Set false only for quick questions (120s foreground ceiling).", required: false),
-                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Hard timeout. Background default 1800 (max 21600); foreground capped at 120.", required: false)
+                AgentToolParameter(name: "run_in_background", type: .boolean, description: "Defaults to true: returns a job handle (job_xxxxxx) and the result arrives as a background-task notification; inspect progress with get_job_output. Set false when the caller needs to wait for the final CLI response inline.", required: false),
+                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Optional hard timeout. Local/SSH background default has no hard timeout; delegated foreground default/cap is 21600 seconds.", required: false)
             ]
         ),
         AgentToolDescriptor(
@@ -306,8 +306,8 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "prompt", type: .string, description: "Self-contained task description. Include relevant file paths, acceptance criteria, and constraints — the delegated Cline CLI session cannot ask follow-up questions here.", required: true),
                 AgentToolParameter(name: "permission_mode", type: .string, description: "One of `plan` (Cline plan mode), `act`, or `default` (alias for act). Defaults to act.", required: false),
                 AgentToolParameter(name: "model", type: .string, description: "Optional Cline model id forwarded with `--model`.", required: false),
-                AgentToolParameter(name: "run_in_background", type: .boolean, description: "Defaults to true: returns a job handle (job_xxxxxx) and the result arrives as a background-task notification; inspect progress with get_job_output. Set false only for quick questions (120s foreground ceiling).", required: false),
-                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Hard timeout. Background default 1800 (max 21600); foreground capped at 120.", required: false)
+                AgentToolParameter(name: "run_in_background", type: .boolean, description: "Defaults to true: returns a job handle (job_xxxxxx) and the result arrives as a background-task notification; inspect progress with get_job_output. Set false when the caller needs to wait for the final CLI response inline.", required: false),
+                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Optional hard timeout. Local/SSH background default has no hard timeout; delegated foreground default/cap is 21600 seconds.", required: false)
             ]
         ),
         AgentToolDescriptor(

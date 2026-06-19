@@ -206,7 +206,11 @@ extension AppState {
         let remoteRuntimeDescriptor: RuntimeDescriptor? = workspaceLocation?.remoteRuntimeID.flatMap {
             AgentRuntimeStore.descriptor(id: $0)
         }
-        let baseline = await Self.loadAgentWorktreeSnapshot(for: workspaceURL)
+        let baselineTask = workspaceURL.map { workspaceURL in
+            Task.detached(priority: .utility) {
+                await Self.loadAgentWorktreeSnapshot(for: workspaceURL)
+            }
+        }
 
         defer {
             runtime.isResponding = false
@@ -245,13 +249,7 @@ extension AppState {
         }
         if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
             runtime.toolCalls[index].arguments = arguments
-            runtime.toolCalls[index].status = .pendingApproval
         }
-        AgentToolApprovalNotifier.notifyIfBackgrounded(
-            toolName: toolName,
-            arguments: arguments,
-            status: .pendingApproval
-        )
 
         let risk = AgentToolRegistry.risk(
             for: toolName,
@@ -263,14 +261,7 @@ extension AppState {
             arguments: arguments,
             rootDirectory: workspaceURL
         )
-        let autoApproval = await autoApprovalSource(
-            toolName: toolName,
-            arguments: arguments,
-            risk: risk,
-            rootDirectory: workspaceURL,
-            interactionMode: runtime.interactionMode,
-            approvalMode: runtime.approvalMode
-        )
+        let autoApproval = Self.delegatedComposerApprovalSource(risk: risk)
 
         if risk != .read && runtime.isPlanGateActive {
             finishDelegatedAgentRecord(
@@ -287,6 +278,14 @@ extension AppState {
         }
 
         if risk != .read && autoApproval == nil {
+            if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                runtime.toolCalls[index].status = .pendingApproval
+            }
+            AgentToolApprovalNotifier.notifyIfBackgrounded(
+                toolName: toolName,
+                arguments: arguments,
+                status: .pendingApproval
+            )
             let decision = await awaitToolDecision(for: runtime, forCallID: recordID)
             if Task.isCancelled { return }
             if case .denied(let reason) = decision {
@@ -344,11 +343,6 @@ extension AppState {
                 approvalSource: approvalSource,
                 outcome: "succeeded"
             )
-            await refreshGitStatusAfterAgentTool(
-                for: runtime,
-                workspaceURL: workspaceURL,
-                baselineFingerprint: baseline.fingerprint
-            )
             finishDelegatedAgentRecord(
                 runtime: runtime,
                 recordID: recordID,
@@ -358,6 +352,11 @@ extension AppState {
                 result: result,
                 errorMessage: nil,
                 toolPayload: result.payload
+            )
+            refreshDelegatedAgentWorktreeInBackground(
+                runtimeID: runtime.id,
+                workspaceURL: workspaceURL,
+                baselineTask: baselineTask
             )
         } catch is CancellationError {
             finishDelegatedAgentRecord(
@@ -387,6 +386,32 @@ extension AppState {
                 result: nil,
                 errorMessage: error.localizedDescription,
                 toolPayload: "Tool error: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    nonisolated static func delegatedComposerApprovalSource(
+        risk: AgentToolRisk
+    ) -> AgentToolApprovalSource? {
+        risk == .read ? nil : .user
+    }
+
+    @MainActor
+    private func refreshDelegatedAgentWorktreeInBackground(
+        runtimeID: AgentSession.ID,
+        workspaceURL: URL?,
+        baselineTask: Task<AgentWorktreeSnapshot, Never>?
+    ) {
+        Task { @MainActor [weak self] in
+            let baselineFingerprint = await baselineTask?.value.fingerprint ?? ""
+            guard let self,
+                  let runtime = self.agentRuntimes[runtimeID] else {
+                return
+            }
+            await self.refreshGitStatusAfterAgentTool(
+                for: runtime,
+                workspaceURL: workspaceURL,
+                baselineFingerprint: baselineFingerprint
             )
         }
     }
@@ -459,7 +484,7 @@ extension AppState {
             if output.isEmpty || output == detail {
                 return "\(label) failed: \(detail)"
             }
-            return "\(label) failed: \(detail)\n\n\(output)"
+            return "\(label) failed: \(detail)\n\n\(delegatedAgentVisibleErrorFallback(output))"
         case .denied:
             let detail = errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
                 ?? "The delegated agent call was not approved."
@@ -504,6 +529,18 @@ extension AppState {
         \(trimmed[..<end])
 
         [Output truncated for the main conversation. Full delegated executor stdout is preserved in the tool result.]
+        """
+    }
+
+    nonisolated static func delegatedAgentVisibleErrorFallback(_ output: String) -> String {
+        let maxCharacters = 2_400
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > maxCharacters else { return trimmed }
+        let start = trimmed.index(trimmed.endIndex, offsetBy: -maxCharacters)
+        return """
+        [Earlier delegated executor output omitted. Full stdout/stderr is preserved in the tool result.]
+
+        \(trimmed[start...])
         """
     }
 
@@ -617,7 +654,6 @@ extension AppState {
         var arguments: [String: AgentJSONValue] = [
             "prompt": .string(prompt),
             "run_in_background": .bool(false),
-            "timeout_seconds": .number(1800),
         ]
         if let permissionMode = executionAgent.defaultPermissionMode {
             arguments["permission_mode"] = .string(permissionMode)

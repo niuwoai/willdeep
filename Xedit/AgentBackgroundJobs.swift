@@ -143,6 +143,7 @@ final class AgentJobRegistry: ObservableObject {
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
+        AgentToolRunner.closeStandardInput(for: process)
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 

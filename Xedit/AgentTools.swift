@@ -123,10 +123,15 @@ enum AgentToolRunner {
 
     private static func runCommand(
         arguments: [String: AgentJSONValue],
-        context: AgentToolContext
+        context: AgentToolContext,
+        foregroundMaxTimeout: TimeInterval = maxCommandTimeout
     ) async throws -> AgentToolResult {
         if let backend = context.remoteBackend {
-            return try await backend.runCommand(arguments: arguments, context: context)
+            return try await backend.runCommand(
+                arguments: arguments,
+                context: context,
+                foregroundMaxTimeout: foregroundMaxTimeout
+            )
         }
         let root = context.rootDirectory?.standardizedFileURL
             ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
@@ -135,7 +140,7 @@ enum AgentToolRunner {
             throw AgentToolError.missingArgument("command")
         }
         let timeoutArg = arguments["timeout_seconds"]?.intValue().map { Double($0) } ?? defaultCommandTimeout
-        let timeout = min(max(timeoutArg, 1), maxCommandTimeout)
+        let timeout = min(max(timeoutArg, 1), max(1, foregroundMaxTimeout))
 
         // Background path: hand the Process off to the registry, return
         // immediately with the job handle, let the agent loop pull the
@@ -192,6 +197,7 @@ enum AgentToolRunner {
 
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()
+            closeStandardInput(for: process)
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
             let outputLimit = maxCommandOutput
@@ -258,8 +264,7 @@ enum AgentToolRunner {
         let combined = "exit=\(status)\n--- stdout ---\n\(stdout)\n--- stderr ---\n\(stderr)"
         let trimmed: String
         if combined.count > maxCommandOutput {
-            let prefix = combined.prefix(maxCommandOutput)
-            trimmed = String(prefix) + "\n...[truncated]"
+            trimmed = trimDelegatedCommandPayload(combined, maxCharacters: maxCommandOutput)
         } else {
             trimmed = combined
         }
@@ -271,6 +276,28 @@ enum AgentToolRunner {
         let firstLine = stdout.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? ""
         let summary = "exit 0\(firstLine.isEmpty ? "" : ": " + firstLine.prefix(60))"
         return AgentToolResult(summary: summary, payload: trimmed)
+    }
+
+    nonisolated static func closeStandardInput(for process: Process) {
+        let stdinPipe = Pipe()
+        stdinPipe.fileHandleForWriting.closeFile()
+        process.standardInput = stdinPipe
+    }
+
+    nonisolated static func trimDelegatedCommandPayload(_ raw: String, maxCharacters: Int) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > maxCharacters, maxCharacters > 400 else { return trimmed }
+        let headCount = max(200, maxCharacters / 5)
+        let tailCount = maxCharacters - headCount - 96
+        let headEnd = trimmed.index(trimmed.startIndex, offsetBy: headCount)
+        let tailStart = trimmed.index(trimmed.endIndex, offsetBy: -tailCount)
+        return """
+        \(trimmed[..<headEnd])
+
+        [...middle output truncated; showing final diagnostics below...]
+
+        \(trimmed[tailStart...])
+        """
     }
 
     // MARK: claude_code
@@ -363,10 +390,35 @@ enum AgentToolRunner {
             model: arguments["model"]?.stringValue()
         )
 
-        // Claude Code tasks routinely run for minutes — default to the
-        // background path so the parent turn isn't pinned to the 120s
-        // foreground ceiling. Callers can still force foreground for
-        // genuinely quick questions.
+        // Claude Code tasks routinely run for minutes. Agent-initiated
+        // calls still default to background jobs, but Composer can force
+        // foreground and wait for the final response without inheriting
+        // the ordinary 120s shell-command ceiling.
+        var forwarded = delegatedAgentForwardedCommandArguments(
+            command: command,
+            sourceArguments: arguments
+        )
+        if context.daemonBackend != nil, forwarded["timeout_seconds"] == nil {
+            forwarded["timeout_seconds"] = .number(delegatedAgentForegroundTimeout)
+        }
+        return try await runCommand(
+            arguments: forwarded,
+            context: context,
+            foregroundMaxTimeout: delegatedAgentForegroundTimeout
+        )
+    }
+
+    // MARK: codex_cli / cursor_agent / cline_cli
+
+    nonisolated static let delegatedAgentForegroundTimeout: TimeInterval = 3600 * 6
+    nonisolated static let codexCLIPermissionModes: Set<String> = ["plan", "workspaceWrite", "default"]
+    nonisolated static let cursorAgentPermissionModes: Set<String> = ["plan", "ask", "default"]
+    nonisolated static let clineCLIPermissionModes: Set<String> = ["plan", "act", "default"]
+
+    nonisolated static func delegatedAgentForwardedCommandArguments(
+        command: String,
+        sourceArguments arguments: [String: AgentJSONValue]
+    ) -> [String: AgentJSONValue] {
         let runInBackground = arguments["run_in_background"]?.boolValue() ?? true
         var forwarded: [String: AgentJSONValue] = [
             "command": .string(command),
@@ -374,17 +426,11 @@ enum AgentToolRunner {
         ]
         if let timeout = arguments["timeout_seconds"]?.intValue() {
             forwarded["timeout_seconds"] = .number(Double(timeout))
-        } else if runInBackground {
-            forwarded["timeout_seconds"] = .number(1800)
+        } else if !runInBackground {
+            forwarded["timeout_seconds"] = .number(delegatedAgentForegroundTimeout)
         }
-        return try await runCommand(arguments: forwarded, context: context)
+        return forwarded
     }
-
-    // MARK: codex_cli / cursor_agent / cline_cli
-
-    nonisolated static let codexCLIPermissionModes: Set<String> = ["plan", "workspaceWrite", "default"]
-    nonisolated static let cursorAgentPermissionModes: Set<String> = ["plan", "ask", "default"]
-    nonisolated static let clineCLIPermissionModes: Set<String> = ["plan", "act", "default"]
 
     nonisolated static func codexCLIExecutablePath(
         environment: [String: String] = shellEnvironment(),
@@ -447,11 +493,11 @@ enum AgentToolRunner {
         let sandbox = permissionMode == "plan" ? "read-only" : "workspace-write"
         var parts = [
             shellQuoted(executable),
+            "-a", "never",
             "exec",
             "--color", "never",
             "--skip-git-repo-check",
             "--sandbox", sandbox,
-            "--ask-for-approval", "never",
         ]
         if let workspacePath, !workspacePath.isEmpty {
             parts += ["--cd", shellQuoted(workspacePath)]
@@ -633,17 +679,18 @@ enum AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
-        let runInBackground = arguments["run_in_background"]?.boolValue() ?? true
-        var forwarded: [String: AgentJSONValue] = [
-            "command": .string(command),
-            "run_in_background": .bool(runInBackground),
-        ]
-        if let timeout = arguments["timeout_seconds"]?.intValue() {
-            forwarded["timeout_seconds"] = .number(Double(timeout))
-        } else if runInBackground {
-            forwarded["timeout_seconds"] = .number(1800)
+        var forwarded = delegatedAgentForwardedCommandArguments(
+            command: command,
+            sourceArguments: arguments
+        )
+        if context.daemonBackend != nil, forwarded["timeout_seconds"] == nil {
+            forwarded["timeout_seconds"] = .number(delegatedAgentForegroundTimeout)
         }
-        return try await runCommand(arguments: forwarded, context: context)
+        return try await runCommand(
+            arguments: forwarded,
+            context: context,
+            foregroundMaxTimeout: delegatedAgentForegroundTimeout
+        )
     }
 
     // MARK: list_jobs / get_job_output / kill_job

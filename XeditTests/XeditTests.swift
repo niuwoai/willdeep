@@ -795,9 +795,10 @@ struct WillDeepTests {
             model: "gpt-5",
             workspacePath: "/tmp/Work Dir"
         )
-        #expect(command.hasPrefix("'/Applications/Codex.app/Contents/Resources/codex' exec "))
+        #expect(command.hasPrefix("'/Applications/Codex.app/Contents/Resources/codex' -a never exec "))
         #expect(command.contains("--sandbox workspace-write"))
-        #expect(command.contains("--ask-for-approval never"))
+        #expect(!command.contains("--ask-for-approval"))
+        #expect(command.contains("-a never"))
         #expect(command.contains("--cd '/tmp/Work Dir'"))
         #expect(command.contains("--model 'gpt-5'"))
         #expect(command.contains("'fix O'\\''Brien parser'"))

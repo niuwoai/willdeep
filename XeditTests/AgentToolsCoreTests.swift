@@ -71,6 +71,27 @@ struct AgentToolsCoreTests {
         }
     }
 
+    @Test
+    func delegatedComposerApprovalSourceTreatsExecutorSelectionAsUserApproval() {
+        #expect(AppState.delegatedComposerApprovalSource(risk: .read) == nil)
+        #expect(AppState.delegatedComposerApprovalSource(risk: .write) == .user)
+        #expect(AppState.delegatedComposerApprovalSource(risk: .danger) == .user)
+    }
+
+    @Test
+    func runCommandClosesStandardInputForHeadlessCLIs() async throws {
+        let result = try await AgentToolRunner.run(
+            name: "run_command",
+            arguments: [
+                "command": .string("read value || true; printf 'done:%s\\n' \"$value\""),
+                "timeout_seconds": .number(3),
+            ],
+            context: AgentToolContext(rootDirectory: nil, sandboxMode: .escalated)
+        )
+
+        #expect(result.payload.contains("done:"))
+    }
+
     // MARK: - AgentJSONValue.decode / wrap
 
     /// `decode(from:)` accepts a JSON fragment (an integer literal) and
@@ -291,6 +312,46 @@ struct AgentToolsCoreTests {
         #expect(decision.requiresUserApproval == true)
         #expect(decision.requiresTypedConfirmation == false)
         #expect(decision.prefixRule == ["gh", "auth"])
+    }
+
+    @Test
+    func externalAgentCLIsRunAfterApprovalWithTheirNativeHomeAndSandbox() {
+        for toolName in ["claude_code", "codex_cli", "cursor_agent", "cline_cli"] {
+            let decision = AgentSandboxPolicy.decision(
+                toolName: toolName,
+                arguments: [:],
+                rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-workspace")
+            )
+            #expect(decision.mode == .escalated, "\(toolName) must keep the native CLI auth/config home")
+            #expect(decision.requiresUserApproval == true)
+            #expect(decision.requiresTypedConfirmation == false)
+        }
+    }
+
+    @Test
+    func delegatedAgentCommandTimeoutDefaultsAvoidPrematureKills() {
+        let background = AgentToolRunner.delegatedAgentForwardedCommandArguments(
+            command: "codex exec task",
+            sourceArguments: [:]
+        )
+        #expect(background["run_in_background"]?.boolValue() == true)
+        #expect(background["timeout_seconds"] == nil)
+
+        let foreground = AgentToolRunner.delegatedAgentForwardedCommandArguments(
+            command: "codex exec task",
+            sourceArguments: ["run_in_background": .bool(false)]
+        )
+        #expect(foreground["run_in_background"]?.boolValue() == false)
+        #expect(foreground["timeout_seconds"]?.intValue() == Int(AgentToolRunner.delegatedAgentForegroundTimeout))
+
+        let explicitTimeout = AgentToolRunner.delegatedAgentForwardedCommandArguments(
+            command: "codex exec task",
+            sourceArguments: [
+                "run_in_background": .bool(true),
+                "timeout_seconds": .number(42)
+            ]
+        )
+        #expect(explicitTimeout["timeout_seconds"]?.intValue() == 42)
     }
 
     @Test
@@ -515,5 +576,29 @@ struct DelegatedAgentComposerOutputTests {
         )
 
         #expect(content.contains("Claude Code failed: CLI timed out"))
+    }
+
+    @Test
+    func delegatedAgentFailureOutputUsesTailFallback() {
+        let noisy = String(repeating: "bundled javascript noise ", count: 300)
+        let payload = """
+        exit=1
+        --- stdout ---
+
+        --- stderr ---
+        \(noisy)
+        actual useful error: authentication expired
+        """
+        let content = AppState.delegatedAgentVisibleContent(
+            executionAgent: .claudeCode,
+            status: .failed,
+            result: nil,
+            errorMessage: "Command exited with status 1",
+            toolPayload: payload
+        )
+
+        #expect(content.contains("Earlier delegated executor output omitted"))
+        #expect(content.contains("actual useful error: authentication expired"))
+        #expect(content.count < 3_000)
     }
 }

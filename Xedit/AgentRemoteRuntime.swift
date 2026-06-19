@@ -19,7 +19,11 @@ protocol AgentRemoteRuntimeBackend {
     func readFile(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult
     func listDirectory(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult
     func gitStatus() async throws -> AgentToolResult
-    func runCommand(arguments: [String: AgentJSONValue], context: AgentToolContext) async throws -> AgentToolResult
+    func runCommand(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext,
+        foregroundMaxTimeout: TimeInterval
+    ) async throws -> AgentToolResult
 }
 
 struct SSHRuntimeBackend: AgentRemoteRuntimeBackend {
@@ -194,10 +198,14 @@ struct SSHRuntimeBackend: AgentRemoteRuntimeBackend {
         )
     }
 
-    func runCommand(arguments: [String: AgentJSONValue], context: AgentToolContext) async throws -> AgentToolResult {
+    func runCommand(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext,
+        foregroundMaxTimeout: TimeInterval
+    ) async throws -> AgentToolResult {
         let command = try requiredString("command", in: arguments)
         let timeoutArg = arguments["timeout_seconds"]?.intValue().map { Double($0) } ?? defaultTimeout
-        let timeout = min(max(timeoutArg, 1), maxForegroundTimeout)
+        let timeout = min(max(timeoutArg, 1), max(1, foregroundMaxTimeout))
         let remoteCommand = workspaceWrappedCommand(command)
 
         let wantsBackground = arguments["run_in_background"]?.boolValue() ?? false
@@ -281,6 +289,7 @@ struct SSHRuntimeBackend: AgentRemoteRuntimeBackend {
 
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()
+            AgentToolRunner.closeStandardInput(for: process)
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
             let stdoutCollector = SSHCommandOutputCollector(limit: maxOutputBytes)
@@ -545,7 +554,11 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
         )
     }
 
-    func runCommand(arguments: [String: AgentJSONValue], context: AgentToolContext) async throws -> AgentToolResult {
+    func runCommand(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext,
+        foregroundMaxTimeout: TimeInterval
+    ) async throws -> AgentToolResult {
         let command = try requiredString("command", in: arguments)
         let timeoutArg = arguments["timeout_seconds"]?.intValue() ?? Int(defaultTimeout)
         let timeout = min(max(timeoutArg, 1), 3600 * 6)
@@ -564,7 +577,7 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
             return AgentToolResult(summary: "▶ \(job.id) started on \(descriptor.displayName)", payload: payload)
         }
 
-        let deadline = Date().addingTimeInterval(min(TimeInterval(timeout), maxForegroundTimeout))
+        let deadline = Date().addingTimeInterval(min(TimeInterval(timeout), max(1, foregroundMaxTimeout)))
         var latest = job
         while latest.exitCode == nil && Date() < deadline {
             try await Task.sleep(nanoseconds: 250_000_000)

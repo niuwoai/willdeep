@@ -157,8 +157,15 @@ enum AgentSandboxPolicy {
                     prefixRule: ["lark-cli"]
                 )
             }
-        case "call_mcp_tool", "claude_code", "codex_cli", "cursor_agent", "cline_cli", "kill_job",
-             "add_memory", "create_user_skill", "suggest_mcp_server":
+        case "claude_code", "codex_cli", "cursor_agent", "cline_cli":
+            return AgentSandboxDecision(
+                mode: .escalated,
+                requiresUserApproval: true,
+                requiresTypedConfirmation: false,
+                reason: "External agent CLIs need their own authenticated home/config and enforce their own permission mode.",
+                prefixRule: nil
+            )
+        case "call_mcp_tool", "kill_job", "add_memory", "create_user_skill", "suggest_mcp_server":
             return AgentSandboxDecision(
                 mode: .workspaceWrite,
                 requiresUserApproval: true,

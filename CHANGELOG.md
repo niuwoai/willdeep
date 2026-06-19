@@ -1,5 +1,63 @@
 # Changelog
 
+## 1.92.0-rc6 - 2026-06-19
+
+### Fixed
+
+- 修复 Codex CLI / Claude Code 等 headless CLI 在 WillDeep 前台执行时可能一直等待 stdin 的问题;本地 `run_command`、后台 job 与 SSH 命令现在都会显式关闭标准输入,让会读取 stdin 补充 prompt 的 CLI 立即收到 EOF。
+- 新增回归测试覆盖 `read` stdin 的 shell 命令必须立即返回,避免 GUI 进程继承 stdin 后把前台委派卡成“执行中”。
+
+### Changed
+
+- 版本号从 **1.92.0-rc5** 递增为 **1.92.0-rc6**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.92.0-rc5 - 2026-06-19
+
+### Fixed
+
+- 修复 Composer 直接选择 Codex CLI / Claude Code 外部执行器时仍重新进入 WillDeep 工具审批等待的问题;现在该路径把用户选择外部执行器视为本次明确授权,普通模型调用 `codex_cli` / `claude_code` 工具仍保留原审批。
+- 修复外部 agent CLI 已完成但聊天结果仍被 git status / diff 刷新挡住的问题;成功结果现在先写回对话,worktree 状态刷新改为后台执行。
+
+### Changed
+
+- 新增单测覆盖 Composer 外部执行器授权来源,避免后续重构把该路径重新退回 `pendingApproval`。
+- 版本号从 **1.92.0-rc4** 递增为 **1.92.0-rc5**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.92.0-rc4 - 2026-06-19
+
+### Fixed
+
+- 修复 Composer 调用 Codex CLI 时可能卡在 Codex 内部工具审批、直到 WillDeep 外层超时的问题;现在以 `codex -a never exec` 启动,让已由 WillDeep 批准的委派任务保持非交互执行,同时继续保留 Codex `--sandbox read-only|workspace-write` 边界。
+
+### Changed
+
+- 更新 `codex_cli` 工具说明和命令行组合测试,锁定 `-a never` 必须位于 `exec` 之前,避免回退到不兼容或会等待交互确认的参数布局。
+- 版本号从 **1.92.0-rc3** 递增为 **1.92.0-rc4**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.92.0-rc3 - 2026-06-19
+
+### Fixed
+
+- 修复 Composer 选择 Claude Code / Codex CLI 外部执行器时仍按普通 `run_command` 前台 120 秒上限超时的问题;外部执行器前台等待改走内部 6 小时上限。
+- 修复 `claude_code` / `codex_cli` / `cursor_agent` / `cline_cli` 后台委派默认注入 1800 秒硬超时的问题;本地/SSH 后台委派默认不设置硬超时,显式 `timeout_seconds` 仍会生效。
+
+### Changed
+
+- 工具声明更新外部执行器的 `run_in_background` 与 `timeout_seconds` 说明,避免模型继续主动传入 1800 秒暗雷。
+- 版本号从 **1.92.0-rc2** 递增为 **1.92.0-rc3**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.92.0-rc2 - 2026-06-19
+
+### Fixed
+
+- 修复 Codex CLI 委托执行失败:新版 `codex exec` 已移除 `--ask-for-approval`,现在只传 `--sandbox read-only|workspace-write` 和 workspace/model/prompt 等仍受控参数。
+- 修复 Codex / Claude Code 等外部 agent CLI 在通用命令沙盒里拿到临时 `HOME` 后无法初始化登录态、配置目录或 Codex app-server 的问题;这些委派工具现在仍需用户批准,但启动层使用原生 CLI 环境,权限收敛交给各 CLI 自己的 `permission_mode` / `--sandbox` 参数。
+- Claude Code / Codex 等外部执行器失败时,主对话只展示压缩后的尾部诊断,避免 CLI 内部 bundle、超长 stdout/stderr 或转译噪音整段刷屏;完整输出仍保留在工具结果卡里。
+
+### Changed
+
+- 版本号从 **1.92.0** 调整为 **1.92.0-rc2**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.92.0 - 2026-06-19
 
 ### Added
