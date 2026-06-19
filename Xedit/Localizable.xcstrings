@@ -13413,13 +13413,98 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enables the built-in web_search tool. Get a free key at brave.com/search/api — it is stored in the macOS Keychain. web_fetch needs no key and asks for approval per domain."
+            "value" : "Enables the built-in web_search tool. Auto tries Exa first, then Brave. API keys are stored in the macOS Keychain. web_fetch needs no key and asks for approval per domain."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "用于启用内置 web_search 搜索工具。可在 brave.com/search/api 免费申请，密钥保存在 macOS 钥匙串中。web_fetch 抓取网页无需密钥，按域名逐次授权。"
+            "value" : "用于启用内置 web_search 搜索工具。自动模式优先使用 Exa，然后回退到 Brave。密钥保存在 macOS 钥匙串中。web_fetch 抓取网页无需密钥，按域名逐次授权。"
+          }
+        }
+      }
+    },
+    "settings.web-tools.exa-api-key" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exa API Key"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exa API 密钥"
+          }
+        }
+      }
+    },
+    "settings.web-tools.provider" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search Provider"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索服务"
+          }
+        }
+      }
+    },
+    "settings.web-tools.provider.auto" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动"
+          }
+        }
+      }
+    },
+    "settings.web-tools.provider.brave" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brave"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brave"
+          }
+        }
+      }
+    },
+    "settings.web-tools.provider.exa" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exa"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exa"
           }
         }
       }

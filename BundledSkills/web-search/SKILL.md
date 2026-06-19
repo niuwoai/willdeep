@@ -3,71 +3,71 @@ name: web-search
 description: Search the web for information using the built-in WebSearch tool. Use when users ask questions requiring up-to-date information, research, or fact-checking.
 allowed-tools:
   - Bash
-  - WebSearch
-  - WebFetch
+  - web_search
+  - web_fetch
 ---
 
 # Web Search Skill
 
-Search the web using the **built-in WebSearch tool**. It uses Electron's BrowserWindow to perform searches, handling JavaScript-rendered search results and bypassing basic anti-bot measures. This is NOT a simple HTTP request — it opens the page in a real browser window, performs the search, and extracts results from the rendered page.
+Search the web using WillDeep's built-in **web_search** tool. It uses the configured search provider from Settings → Agent → Web tools:
 
-## WebSearch Tool (Primary)
+- **Auto**: tries Exa first when an Exa key is present, then Brave.
+- **Exa**: AI-oriented search with highlights and metadata.
+- **Brave**: standard web/news search fallback for existing setups.
+
+Use this skill when a task needs fresh public information, current documentation, release notes, error messages, product comparisons, or fact-checking beyond the local workspace.
+
+## web_search Tool (Primary)
 
 ```
-WebSearch(query="your search query", max_results=5)
+web_search(query="your search query", count=5)
 ```
 
-- Supports multiple search engines (Google, Bing, DuckDuckGo, etc.)
-- Handles JavaScript-rendered pages
-- Returns structured results with title, URL, snippet, and markdown content
-- Automatic CAPTCHA detection and user notification
+- Returns structured results with title, URL, snippet/highlight, and available metadata.
+- Requires an Exa or Brave key in Settings → Agent → Web tools.
+- Is read-only and safe for public lookups.
+- Does not use the user's browser session or cookies.
 
 ## Fetching Page Content
 
-After finding URLs from search, use the **WebFetch** tool to get the actual page content:
+After finding URLs from search, use **web_fetch** to get the actual public page content:
 
 ```
-WebFetch(url="https://example.com/article", prompt="Extract the main content")
+web_fetch(url="https://example.com/article", max_chars=20000)
 ```
 
-- Renders pages in a real browser with full JavaScript execution
-- Handles SPAs, dynamic content, and anti-bot protections
-- Returns clean markdown
+- Fetches public http(s) URLs only.
+- Refuses private, loopback, and link-local hosts.
+- Reduces HTML to readable text; JSON/plain text passes through.
+- Requires user approval per domain.
 
-## Browser Skill (Fallback)
+## Chrome Relay / Browser Fallback
 
-If WebSearch or WebFetch fail (e.g., page requires login, CAPTCHA, or multi-step navigation), fall back to the Browser Skill:
+If a page requires login, user cookies, CAPTCHA handling, or multi-step browser navigation, use the Chrome Relay / browser tools instead of `web_fetch`. Those tools operate in the user's real browser context and are the right path for authenticated or JavaScript-heavy pages.
 
-```bash
-# Open URL in a real Chrome browser tab
-alma browser open "https://example.com"
-
-# Read the page content as markdown
-alma browser read <tabId>
-```
-
-The Browser Skill uses Chrome Relay to control the user's real Chrome browser with existing sessions, cookies, and logins.
+Do not ask `web_fetch` to access internal network targets, local services, or authenticated pages.
 
 ## Tips
 
-- For complex queries, try multiple search approaches
+- For complex questions, issue several focused searches rather than one huge query.
 - Always summarize findings for the user rather than dumping raw results
 - For freshness queries (`today`, `latest`, `今天`, `最新`), use the **current year** from runtime context instead of hardcoding a fixed year
-- Use `max_results` to control the number of search results returned
+- Use `count` to control the number of search results returned
+- Prefer primary sources for technical, legal, medical, financial, or vendor-specific claims.
 
 ## Examples
 
 **"Latest AI news":**
 ```
-WebSearch(query="latest AI news <current_year>", max_results=5)
+web_search(query="latest AI news <current_year>", count=5)
 ```
 
 **"Python 3.13 new features":**
 ```
-WebSearch(query="python 3.13 new features", max_results=5)
+web_search(query="python 3.13 new features", count=5)
 ```
 
 **Fetch a specific article after search:**
 ```
-WebFetch(url="https://docs.python.org/3.13/whatsnew/3.13.html", prompt="Summarize the new features")
+web_fetch(url="https://docs.python.org/3.13/whatsnew/3.13.html", max_chars=20000)
 ```

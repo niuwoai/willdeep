@@ -459,6 +459,224 @@ enum AgentSkillMarketplaceStore {
                 credentialRequirements: []
             ),
             AgentSkillMarketplaceEntry(
+                id: "static-site-publisher",
+                skillName: "static-site-publisher",
+                displayName: "Static Site Publisher",
+                tagline: "Find, build, and publish static frontends conservatively.",
+                detail: "Provider-neutral workflow for identifying deployable build outputs, running safe builds, and handing off preview URLs.",
+                version: "1.0.0",
+                author: "WillDeep",
+                category: "Deployment",
+                tags: ["Static Site", "Build", "Deploy"],
+                minimumAppVersion: "1.91.0",
+                skillDescription: "Use when preparing, previewing, or publishing a static frontend build directory such as dist, build, out, public, _site, or docs; also use when a user asks for a shareable preview URL and the project may be a static site.",
+                skillBody: """
+                # Static Site Publisher
+
+                Use this skill when the user wants to deploy, preview, publish, or share a static frontend.
+
+                ## Workflow
+
+                1. Identify the target directory. If the user named one, verify it exists and contains `index.html`.
+                2. If no target is named, check only common build output directories: `dist`, `build`, `out`, `output`, `public`, `.next/out`, `.output/public`, `_site`, `www`, and `docs`.
+                3. If exactly one deployable directory is found, use it. If multiple are found, ask the user to choose.
+                4. If none is found, inspect `package.json` for a standard static build script: `build`, `build:prod`, `build:production`, `generate`, or `export`.
+                5. Prefer the package manager implied by the lockfile. If dependencies are missing, ask before installing them.
+                6. Run the build script only when it is explicit. Do not invent build commands.
+                7. Re-scan the allowlisted output directories after a successful build.
+                8. Serve or deploy the chosen directory through the available local or remote publishing mechanism.
+
+                ## Guardrails
+
+                - Static assets only. Stop if the app requires SSR, a backend process, a database, or runtime secrets.
+                - Do not recursively scan the whole repository looking for random `index.html` files.
+                - Do not upload `.env`, private keys, database dumps, source maps with secrets, or build caches.
+                - If the deployment target is unclear, report the candidate directories and ask for one decision.
+
+                ## Handoff
+
+                Tell the user the chosen directory, build command used, preview/deploy URL if available, and any limitation that prevented publishing.
+                """,
+                supportFiles: [:],
+                credentialRequirements: []
+            ),
+            AgentSkillMarketplaceEntry(
+                id: "feishu-ops-playbook",
+                skillName: "feishu-ops-playbook",
+                displayName: "Feishu Ops Playbook",
+                tagline: "Operate Feishu docs, messages, sheets, and apps with less guesswork.",
+                detail: "A WillDeep-native Feishu/Lark operating guide focused on setup checks, identity choice, schema inspection, and safe collaboration actions.",
+                version: "1.0.0",
+                author: "WillDeep",
+                category: "Collaboration",
+                tags: ["Feishu", "Lark", "Docs"],
+                minimumAppVersion: "1.91.0",
+                skillDescription: "Use when working with Feishu or Lark messages, documents, sheets, calendars, tasks, wiki spaces, files, bot events, or app setup; also use when choosing between WillDeep connectors, lark-cli, or manual Feishu open-platform configuration.",
+                skillBody: """
+                # Feishu Ops Playbook
+
+                Use this skill for Feishu/Lark collaboration work: messages, docs, sheets, files, wiki, tasks, calendars, bot events, and app setup.
+
+                ## Setup Order
+
+                1. Prefer an already configured WillDeep connector or MCP tool when one is available.
+                2. If using a CLI, first check whether it is installed and configured; do not start an interactive setup command that requires a TTY unless the user is ready to scan or authorize.
+                3. Keep secrets out of prompts, command arguments, and logs. Store app secrets, webhook tokens, and user tokens in Keychain or `.env` files that are ignored by git.
+                4. For self-built apps, record the App ID, enabled capabilities, permission scopes, event transport mode, and callback/long-connection choice.
+
+                ## Identity Choice
+
+                - Use bot identity for group messages, event handling, app-owned docs, and automation.
+                - Use user identity only when the operation must happen as the user, such as personal drive files or calendar access.
+                - Before write actions, confirm the target chat, document, sheet, base, or wiki space.
+
+                ## API Work
+
+                1. Inspect the target API schema or CLI help before calling low-level commands.
+                2. Prefer high-level shortcuts for common operations; use raw APIs only when the shortcut does not cover the task.
+                3. Treat IDs carefully: `chat_id`, `message_id`, `document_id`, `file_token`, `spreadsheet_token`, `sheet_id`, `base_id`, `table_id`, and `event_id` are not interchangeable.
+                4. Paginate list/search calls and summarize results before mutating anything.
+
+                ## Common Tasks
+
+                - Send a message: identify chat, choose text/card/file format, send as bot unless user identity is required.
+                - Create a doc: create the document, write structured content, set permissions, and return the share link.
+                - Work with sheets: read headers first, map columns by name, append/update rows, then verify the affected range.
+                - Configure bot events: choose callback or long connection, subscribe only required events, test with a small message, and expose health status.
+
+                ## Safety
+
+                Never invent successful Feishu URLs. If an API call fails, report the error code, permission hint, and exact next setup step.
+                """,
+                supportFiles: [:],
+                credentialRequirements: []
+            ),
+            AgentSkillMarketplaceEntry(
+                id: "fullstack-delivery-guard",
+                skillName: "fullstack-delivery-guard",
+                displayName: "Fullstack Delivery Guard",
+                tagline: "Ship backend plus frontend work with contracts, tests, and handoff.",
+                detail: "A compact delivery guard for APIs, frontends, auth, realtime, config, and production hardening.",
+                version: "1.0.0",
+                author: "WillDeep",
+                category: "Engineering",
+                tags: ["Fullstack", "API", "Testing"],
+                minimumAppVersion: "1.91.0",
+                skillDescription: "Use when building or reviewing a full-stack app, REST API plus frontend integration, backend service, CRUD workflow, auth flow, file upload, realtime feature, service layer, API client, configuration, or production hardening.",
+                skillBody: """
+                # Fullstack Delivery Guard
+
+                Use this skill when a task crosses the frontend/backend boundary.
+
+                ## Before Coding
+
+                Decide or infer:
+
+                1. Service shape: API-only, monolith, or separated frontend/backend.
+                2. Backend stack and frontend stack.
+                3. Data store and migration strategy.
+                4. API style: REST, GraphQL, tRPC, gRPC, or simple server actions.
+                5. Auth: none, session, JWT plus refresh, OAuth, or hosted auth.
+                6. Realtime: none, polling, SSE, or WebSocket.
+
+                State these decisions briefly before large edits.
+
+                ## Architecture Rules
+
+                - Organize by feature when the app has multiple domains.
+                - Controllers/handlers parse, validate, and call services; they do not hold business logic.
+                - Services do not import HTTP request/response types.
+                - Repositories or data clients hide SQL/API details from services.
+                - Validate all input at the boundary.
+                - Centralize config and fail fast when required env vars are missing.
+                - Use structured errors and a consistent API error shape.
+                - Add request IDs and structured logs for server code.
+
+                ## Frontend Integration
+
+                - Keep API base URLs in env/config, not hardcoded source.
+                - Use a typed client, OpenAPI-generated client, tRPC, or a small fetch wrapper with consistent errors.
+                - Handle loading, empty, and error states on every user-visible async path.
+                - Keep auth tokens out of localStorage when the app needs strong security; prefer httpOnly refresh cookies.
+
+                ## Verification
+
+                Run the narrowest meaningful checks:
+
+                1. Backend build/test.
+                2. Frontend build/test.
+                3. Smoke a health endpoint.
+                4. Smoke one happy-path API plus the UI path that consumes it.
+                5. For realtime, verify behavior in two clients.
+
+                ## Handoff
+
+                Summarize endpoints, key files, run commands, env vars, tests run, and known gaps.
+                """,
+                supportFiles: [:],
+                credentialRequirements: []
+            ),
+            AgentSkillMarketplaceEntry(
+                id: "mcp-builder",
+                skillName: "mcp-builder",
+                displayName: "MCP Builder",
+                tagline: "Design MCP servers that agents can actually use.",
+                detail: "A compact MCP server construction guide adapted for WillDeep: tool naming, schemas, transport choice, auth, pagination, error messages, and evaluation questions.",
+                version: "1.0.0",
+                author: "WillDeep",
+                category: "Integration",
+                tags: ["MCP", "Tools", "API"],
+                minimumAppVersion: "1.91.0",
+                skillDescription: "Use when building, reviewing, or planning an MCP server for an external API or internal service, including Python FastMCP, TypeScript MCP SDK, stdio servers, streamable HTTP servers, tool schemas, resources, prompts, auth, and evaluations.",
+                skillBody: """
+                # MCP Builder
+
+                Use this skill when creating or reviewing an MCP server.
+
+                ## Design First
+
+                1. Read the target service's API docs and authentication model.
+                2. Choose transport:
+                   - `stdio` for local developer tools.
+                   - Streamable HTTP for remote/team services.
+                3. Choose language:
+                   - TypeScript when SDK compatibility and schema ergonomics matter most.
+                   - Python/FastMCP when the service ecosystem or existing scripts are Python-first.
+                4. Decide whether to expose workflow tools, endpoint-shaped tools, or both.
+
+                ## Tool Design
+
+                - Use action-oriented names with a consistent prefix, such as `github_list_issues` or `feishu_create_doc`.
+                - Keep descriptions concise but explicit about side effects.
+                - Use structured input schemas with constraints and examples.
+                - Return focused data. Paginate or filter large result sets.
+                - Include annotations: read-only, destructive, idempotent, and open-world hints when supported.
+                - Error messages must say what failed, why it likely failed, and what the agent should try next.
+
+                ## Security
+
+                - Never hardcode tokens.
+                - Support env vars or a credential store.
+                - Mask secrets in logs and tool results.
+                - Separate read tools from write/destructive tools.
+                - For user-scoped APIs, make the acting identity visible in tool output.
+
+                ## Implementation Checklist
+
+                1. Shared API client with auth, timeout, retry, and pagination helpers.
+                2. Tool modules grouped by domain.
+                3. Consistent response formatting with both human-readable text and structured content when available.
+                4. Unit tests for schema validation and client error handling.
+                5. Inspector smoke test or equivalent local MCP client test.
+
+                ## Evaluations
+
+                Create 5 to 10 realistic read-only questions that require multiple tool calls. Each answer should be stable, independently verifiable, and not dependent on time-sensitive live data unless the test fixture freezes it.
+                """,
+                supportFiles: [:],
+                credentialRequirements: []
+            ),
+            AgentSkillMarketplaceEntry(
                 id: "swiftui-polish-review",
                 skillName: "swiftui-polish-review",
                 displayName: "SwiftUI Polish Review",

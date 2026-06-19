@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.91.0-rc12 - 2026-06-19
+
+### Added
+
+- Settings → Agent → Web tools 新增 `Auto / Exa / Brave` 搜索服务选择和 Exa API Key 配置;`web_search` 对外工具名与参数保持不变,Auto 模式优先使用 Exa,没有 Exa key 时回退 Brave。
+- `web_search` 新增 Exa Search API POST 路由与响应格式化,返回标题、URL、highlight/snippet、发布时间、作者和 provider cost estimate(若 Exa 返回);Brave 作为兼容 fallback 保留。
+
+### Changed
+
+- 内置 `web-search` skill 从旧的 Electron BrowserWindow 说明更新为 WillDeep 当前 `web_search` / `web_fetch` 工具说明,并明确登录态/JS-heavy 页面应走 Chrome Relay / Browser fallback。
+- `AgentWebToolsTests` 增加 Exa 格式化、空结果、坏 JSON 与 registry 描述覆盖;版本号按功能增强递增为 **1.91.0-rc12**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.91.0-rc11 - 2026-06-19
+
+### Added
+
+- Settings → Skills 的静态 Marketplace 新增 4 个从 WorkBuddy 技能体系提炼出的 WillDeep 版技能:`Static Site Publisher`、`Feishu Ops Playbook`、`Fullstack Delivery Guard` 和 `MCP Builder`。
+- 新技能只吸收可复用的工作流与质量门禁,不复制 WorkBuddy 私有工具、云端 token 流程或 Internal license 内容;安装后仍写入 `~/.willdeep/skills/<slug>/SKILL.md`,通过现有 `list_skills` / `read_skill` 与 composer `@` 选择器使用。
+
+### Changed
+
+- Marketplace catalog 单测补充新技能覆盖。
+- 版本号按功能增强递增为 **1.91.0-rc11**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.91.0-rc10 - 2026-06-19
 
 ### Added

@@ -3,9 +3,9 @@
 //  XeditTests
 //
 //  Network-free coverage for the web_search / web_fetch tool layer:
-//  SSRF host denylist, URL validation, the HTML→text reducer, Brave
-//  response formatting, and the registry / authorization / subagent
-//  wiring invariants.
+//  SSRF host denylist, URL validation, the HTML→text reducer, Exa /
+//  Brave response formatting, and the registry / authorization /
+//  subagent wiring invariants.
 //
 
 import Testing
@@ -23,6 +23,8 @@ struct AgentWebToolsTests {
         let search = try #require(AgentToolRegistry.descriptor(for: "web_search"))
         #expect(search.risk == .read)
         #expect(search.parameters.contains { $0.name == "query" && $0.required })
+        #expect(search.description.contains("Exa"))
+        #expect(search.description.contains("Brave"))
 
         let fetch = try #require(AgentToolRegistry.descriptor(for: "web_fetch"))
         #expect(fetch.risk == .write)
@@ -77,7 +79,7 @@ struct AgentWebToolsTests {
     @Test
     func publicHostsAreAllowed() {
         let allowed = [
-            "example.com", "api.search.brave.com", "8.8.8.8",
+            "example.com", "api.exa.ai", "api.search.brave.com", "8.8.8.8",
             "172.32.0.1", "172.15.0.1", "192.169.1.1",
             "2606:4700::6810:84e5",
         ]
@@ -140,6 +142,64 @@ struct AgentWebToolsTests {
         let html = "<p>a</p>\n\n\n\n<p>b    c</p>"
         let extraction = AgentWebTools.extractReadableText(fromHTML: html)
         #expect(extraction.text == "a\n\nb c")
+    }
+
+    // MARK: - Exa response formatting
+
+    private let exaFixture = """
+    {
+      "results": [
+        {
+          "title": "Swift.org - <strong>Welcome</strong>",
+          "url": "https://swift.org/",
+          "publishedDate": "2026-01-02",
+          "author": "Swift Team",
+          "highlights": ["Swift is a <strong>general-purpose</strong> language &amp; more."]
+        },
+        {
+          "title": "The Swift Programming Language",
+          "url": "https://docs.swift.org/swift-book/",
+          "summary": "Official book."
+        }
+      ],
+      "costDollars": { "total": 0.00123 }
+    }
+    """
+
+    @Test
+    func formatsExaResultsWithHighlightsAndMetadata() throws {
+        let result = try AgentWebTools.formatExaResults(
+            data: Data(exaFixture.utf8),
+            query: "swift language"
+        )
+        #expect(result.summary.contains("2 Exa results"))
+        #expect(result.payload.contains("Web search results for \"swift language\" (Exa):"))
+        #expect(result.payload.contains("1. Swift.org - Welcome"))
+        #expect(result.payload.contains("https://swift.org/"))
+        #expect(result.payload.contains("published: 2026-01-02"))
+        #expect(result.payload.contains("author: Swift Team"))
+        #expect(result.payload.contains("general-purpose language & more"))
+        #expect(result.payload.contains("Provider cost estimate: $0.001230"))
+        #expect(!result.payload.contains("<strong>"))
+    }
+
+    @Test
+    func emptyExaResultsReturnFriendlyMessage() throws {
+        let result = try AgentWebTools.formatExaResults(
+            data: Data("{\"results\": []}".utf8),
+            query: "nothing"
+        )
+        #expect(result.payload.contains("no results"))
+    }
+
+    @Test
+    func malformedExaResponseThrows() {
+        #expect(throws: AgentToolError.self) {
+            _ = try AgentWebTools.formatExaResults(
+                data: Data("not json".utf8),
+                query: "x"
+            )
+        }
     }
 
     // MARK: - Brave response formatting

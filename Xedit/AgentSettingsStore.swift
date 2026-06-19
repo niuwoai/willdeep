@@ -8,6 +8,14 @@
 import Foundation
 import Security
 
+enum AgentWebSearchProvider: String, CaseIterable, Codable, Identifiable {
+    case auto
+    case exa
+    case brave
+
+    var id: String { rawValue }
+}
+
 enum AgentSettingsStore {
     private static let defaultsKey = "com.willdeep.agentSettings.v1"
     private static let knownModelsKey = "com.willdeep.agentSettings.knownModels.v1"
@@ -15,6 +23,7 @@ enum AgentSettingsStore {
     private static let autoApproveKey = "com.willdeep.agentSettings.autoApproveSafeCommands.v1"
     private static let perProviderConcurrencyKey = "com.willdeep.agentSettings.perProviderConcurrencyLimit.v1"
     private static let chatBaseFontSizeKey = "com.willdeep.agentSettings.chatBaseFontSize.v1"
+    private static let webSearchProviderKey = "com.willdeep.agentSettings.webSearchProvider.v1"
     /// Global toggle: 关掉后 plan 自动执行 banner 不再做 destructive keyword
     /// 扫描，所有 plan 都跑倒计时自动执行。默认开。
     private static let planAutoExecuteDangerScanKey = "com.willdeep.agentSettings.planAutoExecuteDangerScan.v1"
@@ -42,6 +51,8 @@ enum AgentSettingsStore {
     private static let libraryEntryKeychainPrefix = "library-entry-"
     /// Brave Search API key for the built-in `web_search` tool.
     private static let braveSearchKeychainAccount = "brave-search-api-key"
+    /// Exa API key for the built-in `web_search` tool.
+    private static let exaSearchKeychainAccount = "exa-search-api-key"
 
     /// Test-only override for the Keychain service name. Production code
     /// never touches this — it stays nil and `keychainService` returns
@@ -374,6 +385,35 @@ enum AgentSettingsStore {
     }
 
     // MARK: - Web tools
+
+    /// Preferred backend for `web_search`. Auto tries Exa first when
+    /// configured, then Brave, which preserves old installs while making
+    /// Exa the default path for new setups.
+    static func loadWebSearchProvider() -> AgentWebSearchProvider {
+        guard let raw = defaults.string(forKey: webSearchProviderKey),
+              let provider = AgentWebSearchProvider(rawValue: raw) else {
+            return .auto
+        }
+        return provider
+    }
+
+    static func saveWebSearchProvider(_ provider: AgentWebSearchProvider) {
+        defaults.set(provider.rawValue, forKey: webSearchProviderKey)
+    }
+
+    /// Exa API key consumed by `web_search` at call time. Empty string
+    /// means "not configured" — the tool surfaces a setup hint to the
+    /// model instead of failing silently.
+    static func loadExaSearchAPIKey() -> String {
+        loadAPIKey(account: exaSearchKeychainAccount)
+    }
+
+    static func saveExaSearchAPIKey(_ key: String) {
+        saveAPIKey(
+            key.trimmingCharacters(in: .whitespacesAndNewlines),
+            account: exaSearchKeychainAccount
+        )
+    }
 
     /// Brave Search API key consumed by `web_search` at call time. Empty
     /// string means "not configured" — the tool surfaces a setup hint to

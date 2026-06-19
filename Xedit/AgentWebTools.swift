@@ -2,16 +2,18 @@
 //  AgentWebTools.swift
 //  WillDeep
 //
-//  Built-in network tools: `web_search` (Brave Search API) and
-//  `web_fetch` (GET a public URL, reduce HTML to readable text).
+//  Built-in network tools: `web_search` (configured Exa / Brave
+//  provider) and `web_fetch` (GET a public URL, reduce HTML to readable
+//  text).
 //
 //  Risk posture mirrors the run_command classifier's stance on
 //  curl/wget (both are flagged dangerous there): arbitrary fetching is
 //  an exfiltration channel once hostile instructions are in context,
 //  so `web_fetch` stays write-tier — per-call Allow, pinnable per
 //  domain via the `web_fetch:<host>` signature, auto-approved in Goal
-//  mode. `web_search` only ships the query string to a single
-//  well-known endpoint, so it rides the read tier like search_files.
+//  mode. `web_search` only ships the query string to one configured
+//  search provider endpoint, so it rides the read tier like
+//  search_files.
 //
 //  Both tools refuse loopback / RFC1918 / link-local hosts (and
 //  redirects onto them) so the agent can't probe the user's LAN or
@@ -39,6 +41,7 @@ enum AgentWebTools {
     /// no-bytes timeout would feel like a hang.
     private static let fetchTimeout: TimeInterval = 30
 
+    private static let exaSearchEndpoint = "https://api.exa.ai/search"
     private static let braveSearchEndpoint = "https://api.search.brave.com/res/v1/web/search"
 
     // MARK: - web_fetch
@@ -141,12 +144,96 @@ enum AgentWebTools {
         }
         let count = clampSearchCount(arguments["count"]?.intValue())
 
-        let apiKey = AgentSettingsStore.loadBraveSearchAPIKey()
-        guard !apiKey.isEmpty else {
+        let provider = resolveSearchProvider()
+        guard let provider else {
             throw AgentToolError.invalidArgument(
-                "No Brave Search API key configured. Ask the user to add one in Settings → Agent → Web tools (free tier available at https://brave.com/search/api/)."
+                "No web search API key configured. Ask the user to add an Exa API key in Settings → Agent → Web tools, or choose Brave and add a Brave Search API key."
             )
         }
+
+        switch provider {
+        case let .exa(apiKey):
+            return try await performExaSearch(query: query, count: count, apiKey: apiKey)
+        case let .brave(apiKey):
+            return try await performBraveSearch(query: query, count: count, apiKey: apiKey)
+        }
+    }
+
+    private enum ResolvedSearchProvider {
+        case exa(apiKey: String)
+        case brave(apiKey: String)
+    }
+
+    private static func resolveSearchProvider() -> ResolvedSearchProvider? {
+        let selected = AgentSettingsStore.loadWebSearchProvider()
+        let exaKey = AgentSettingsStore.loadExaSearchAPIKey()
+        let braveKey = AgentSettingsStore.loadBraveSearchAPIKey()
+
+        switch selected {
+        case .exa:
+            return exaKey.isEmpty ? nil : .exa(apiKey: exaKey)
+        case .brave:
+            return braveKey.isEmpty ? nil : .brave(apiKey: braveKey)
+        case .auto:
+            if !exaKey.isEmpty { return .exa(apiKey: exaKey) }
+            if !braveKey.isEmpty { return .brave(apiKey: braveKey) }
+            return nil
+        }
+    }
+
+    private static func performExaSearch(query: String, count: Int, apiKey: String) async throws -> AgentToolResult {
+        guard let url = URL(string: exaSearchEndpoint) else {
+            throw AgentToolError.invalidArgument("Invalid Exa Search endpoint.")
+        }
+        let body = ExaSearchRequest(
+            query: query,
+            numResults: count,
+            type: "auto",
+            contents: ExaSearchRequest.Contents(highlights: true)
+        )
+        let encodedBody: Data
+        do {
+            encodedBody = try JSONEncoder().encode(body)
+        } catch {
+            throw AgentToolError.invalidArgument("Could not encode Exa Search request: \(error.localizedDescription)")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = fetchTimeout
+        request.httpBody = encodedBody
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        AgentNetworkSupport.applyStandardHeaders(to: &request)
+
+        let session = makeSession()
+        defer { session.finishTasksAndInvalidate() }
+        let (data, response) = try await session.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw AgentToolError.invalidArgument("Non-HTTP response from Exa Search API.")
+        }
+        switch http.statusCode {
+        case 200..<300:
+            break
+        case 401, 403:
+            throw AgentToolError.invalidArgument(
+                "Exa Search API rejected the key (HTTP \(http.statusCode)). Ask the user to re-check it in Settings → Agent → Web tools."
+            )
+        case 429:
+            throw AgentToolError.invalidArgument(
+                "Exa Search API rate limit hit (HTTP 429). Wait a moment before searching again."
+            )
+        default:
+            let body = String(data: data.prefix(400), encoding: .utf8) ?? ""
+            throw AgentToolError.httpFailed(http.statusCode, "Exa Search API: \(body)")
+        }
+
+        return try formatExaResults(data: data, query: query)
+    }
+
+    private static func performBraveSearch(query: String, count: Int, apiKey: String) async throws -> AgentToolResult {
 
         var components = URLComponents(string: braveSearchEndpoint)!
         components.queryItems = [
@@ -188,6 +275,95 @@ enum AgentWebTools {
         }
 
         return try formatBraveResults(data: data, query: query)
+    }
+
+    // MARK: - Exa response parsing (split out for tests)
+
+    private struct ExaSearchRequest: Encodable {
+        struct Contents: Encodable {
+            var highlights: Bool
+        }
+
+        var query: String
+        var numResults: Int
+        var type: String
+        var contents: Contents
+    }
+
+    private struct ExaResponse: Decodable {
+        struct Cost: Decodable {
+            var total: Double?
+        }
+
+        struct Item: Decodable {
+            var title: String?
+            var url: String?
+            var publishedDate: String?
+            var author: String?
+            var text: String?
+            var highlights: [String]?
+            var summary: String?
+        }
+
+        var results: [Item]
+        var costDollars: Cost?
+    }
+
+    static func formatExaResults(data: Data, query: String) throws -> AgentToolResult {
+        let decoded: ExaResponse
+        do {
+            decoded = try JSONDecoder().decode(ExaResponse.self, from: data)
+        } catch {
+            throw AgentToolError.invalidArgument("Could not parse Exa Search response: \(error.localizedDescription)")
+        }
+
+        guard !decoded.results.isEmpty else {
+            return AgentToolResult(
+                summary: "No Exa results for “\(query)”",
+                payload: "Exa web search for \"\(query)\" returned no results. Try different keywords."
+            )
+        }
+
+        var lines: [String] = ["Web search results for \"\(query)\" (Exa):", ""]
+        for (index, item) in decoded.results.enumerated() {
+            let title = condenseWhitespace(decodeHTMLEntities(stripTags(item.title ?? "")))
+            lines.append("\(index + 1). \(title.isEmpty ? "(untitled)" : title)")
+            lines.append("   \(item.url ?? "")")
+
+            var metadata: [String] = []
+            if let publishedDate = item.publishedDate, !publishedDate.isEmpty {
+                metadata.append("published: \(publishedDate)")
+            }
+            if let author = item.author, !author.isEmpty {
+                metadata.append("author: \(condenseWhitespace(author))")
+            }
+            if !metadata.isEmpty {
+                lines.append("   \(metadata.joined(separator: " | "))")
+            }
+
+            let snippet = exaSnippet(for: item)
+            if !snippet.isEmpty {
+                lines.append("   \(snippet)")
+            }
+            lines.append("")
+        }
+        if let total = decoded.costDollars?.total {
+            lines.append("Provider cost estimate: $\(String(format: "%.6f", total))")
+        }
+        return AgentToolResult(
+            summary: "\(decoded.results.count) Exa result\(decoded.results.count == 1 ? "" : "s") for “\(query)”",
+            payload: lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    private static func exaSnippet(for item: ExaResponse.Item) -> String {
+        let raw = item.highlights?.first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+            ?? item.summary
+            ?? item.text
+            ?? ""
+        let cleaned = condenseWhitespace(decodeHTMLEntities(stripTags(raw)))
+        guard cleaned.count > 360 else { return cleaned }
+        return String(cleaned.prefix(357)) + "..."
     }
 
     // MARK: - Brave response parsing (split out for tests)

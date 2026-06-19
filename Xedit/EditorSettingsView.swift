@@ -45,12 +45,17 @@ struct EditorSettingsView: View {
     /// AppStateAgentTitleSummarizer.
     @State private var agentTitleModelBuffer: String = ""
     @State private var agentSaveStatus: String = ""
-    // Brave Search key for the built-in web_search tool. Saved/loaded
-    // straight through AgentSettingsStore (Keychain) — it has no slot
-    // in AgentConfiguration, so it stays out of commitAgentBuffers.
+    // Web search provider preference plus provider keys for the
+    // built-in web_search tool. Saved/loaded straight through
+    // AgentSettingsStore — these have no slot in AgentConfiguration, so
+    // they stay out of commitAgentBuffers.
+    @State private var webSearchProviderBuffer: AgentWebSearchProvider = .auto
+    @State private var webSearchProviderSaved: AgentWebSearchProvider = .auto
+    @State private var exaSearchAPIKeyBuffer: String = ""
+    @State private var exaSearchAPIKeySaved: String = ""
     @State private var braveSearchAPIKeyBuffer: String = ""
     @State private var braveSearchAPIKeySaved: String = ""
-    @State private var braveSearchSaveStatus: String = ""
+    @State private var webSearchSaveStatus: String = ""
     @State private var discoveredLocalAgents: [LocalAgentCLI.Discovery] = LocalAgentCLI.discoverAll()
 
     // 1.79.0-rc2 Plan 自动执行 banner 的设置项。@State 缓存当前值，
@@ -303,21 +308,36 @@ struct EditorSettingsView: View {
             }
 
             Section(L10n.Settings.sectionWebTools) {
+                Picker(L10n.Settings.WebTools.providerLabel, selection: $webSearchProviderBuffer) {
+                    ForEach(AgentWebSearchProvider.allCases) { provider in
+                        Text(L10n.Settings.WebTools.providerName(provider)).tag(provider)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                LabeledContent(L10n.Settings.WebTools.exaKeyLabel) {
+                    RevealableSecretField(
+                        text: $exaSearchAPIKeyBuffer,
+                        placeholder: "",
+                        onCommit: { commitWebSearchSettings() }
+                    )
+                }
+
                 LabeledContent(L10n.Settings.WebTools.braveKeyLabel) {
                     RevealableSecretField(
                         text: $braveSearchAPIKeyBuffer,
                         placeholder: "",
-                        onCommit: { commitBraveSearchAPIKey() }
+                        onCommit: { commitWebSearchSettings() }
                     )
                 }
                 HStack {
                     Button(L10n.Settings.buttonSave) {
-                        commitBraveSearchAPIKey()
+                        commitWebSearchSettings()
                     }
-                    .disabled(braveSearchAPIKeyBuffer == braveSearchAPIKeySaved)
+                    .disabled(!webSearchSettingsDiffer)
 
-                    if !braveSearchSaveStatus.isEmpty {
-                        Text(braveSearchSaveStatus)
+                    if !webSearchSaveStatus.isEmpty {
+                        Text(webSearchSaveStatus)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -422,19 +442,35 @@ struct EditorSettingsView: View {
         imageModelBuffer = configuration.imageDescription.model
         imageAPIKeyBuffer = configuration.imageDescription.apiKey
         agentTitleModelBuffer = configuration.titleModel
+        webSearchProviderSaved = AgentSettingsStore.loadWebSearchProvider()
+        webSearchProviderBuffer = webSearchProviderSaved
+        exaSearchAPIKeySaved = AgentSettingsStore.loadExaSearchAPIKey()
+        exaSearchAPIKeyBuffer = exaSearchAPIKeySaved
         braveSearchAPIKeySaved = AgentSettingsStore.loadBraveSearchAPIKey()
         braveSearchAPIKeyBuffer = braveSearchAPIKeySaved
     }
 
-    private func commitBraveSearchAPIKey() {
+    private var webSearchSettingsDiffer: Bool {
+        webSearchProviderBuffer != webSearchProviderSaved
+            || exaSearchAPIKeyBuffer != exaSearchAPIKeySaved
+            || braveSearchAPIKeyBuffer != braveSearchAPIKeySaved
+    }
+
+    private func commitWebSearchSettings() {
+        let exaTrimmed = exaSearchAPIKeyBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmed = braveSearchAPIKeyBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+        AgentSettingsStore.saveWebSearchProvider(webSearchProviderBuffer)
+        AgentSettingsStore.saveExaSearchAPIKey(exaTrimmed)
         AgentSettingsStore.saveBraveSearchAPIKey(trimmed)
+        webSearchProviderSaved = webSearchProviderBuffer
+        exaSearchAPIKeyBuffer = exaTrimmed
+        exaSearchAPIKeySaved = exaTrimmed
         braveSearchAPIKeyBuffer = trimmed
         braveSearchAPIKeySaved = trimmed
-        braveSearchSaveStatus = L10n.Settings.savedStatus
+        webSearchSaveStatus = L10n.Settings.savedStatus
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_800_000_000)
-            if braveSearchSaveStatus == L10n.Settings.savedStatus { braveSearchSaveStatus = "" }
+            if webSearchSaveStatus == L10n.Settings.savedStatus { webSearchSaveStatus = "" }
         }
     }
 

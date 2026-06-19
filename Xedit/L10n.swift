@@ -765,8 +765,24 @@ enum L10n {
         }
 
         enum WebTools {
+            static let providerLabel = String(localized: "settings.web-tools.provider", defaultValue: "Search Provider")
+            static let providerAuto = String(localized: "settings.web-tools.provider.auto", defaultValue: "Auto")
+            static let providerExa = String(localized: "settings.web-tools.provider.exa", defaultValue: "Exa")
+            static let providerBrave = String(localized: "settings.web-tools.provider.brave", defaultValue: "Brave")
+            static let exaKeyLabel = String(localized: "settings.web-tools.exa-api-key", defaultValue: "Exa API Key")
             static let braveKeyLabel = String(localized: "settings.web-tools.brave-api-key", defaultValue: "Brave Search API Key")
-            static let description = String(localized: "settings.web-tools.description", defaultValue: "Enables the built-in web_search tool. Get a free key at brave.com/search/api — it is stored in the macOS Keychain. web_fetch needs no key and asks for approval per domain.")
+            static let description = String(localized: "settings.web-tools.description", defaultValue: "Enables the built-in web_search tool. Auto tries Exa first, then Brave. API keys are stored in the macOS Keychain. web_fetch needs no key and asks for approval per domain.")
+
+            static func providerName(_ provider: AgentWebSearchProvider) -> String {
+                switch provider {
+                case .auto:
+                    return providerAuto
+                case .exa:
+                    return providerExa
+                case .brave:
+                    return providerBrave
+                }
+            }
         }
 
         enum ImageUnderstanding {

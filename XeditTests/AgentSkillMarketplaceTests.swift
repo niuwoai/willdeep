@@ -62,6 +62,10 @@ struct AgentSkillMarketplaceTests {
         #expect(ids.contains("ppt-story-architect"))
         #expect(ids.contains("pdf-design"))
         #expect(ids.contains("image-processing"))
+        #expect(ids.contains("static-site-publisher"))
+        #expect(ids.contains("feishu-ops-playbook"))
+        #expect(ids.contains("fullstack-delivery-guard"))
+        #expect(ids.contains("mcp-builder"))
     }
 
     @Test
