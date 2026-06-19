@@ -13,6 +13,8 @@ struct CollaborationConnectorSettingsView: View {
     @State private var selectedPlatform: CollaborationConnectorPlatform = .feishu
     @State private var statusMessage = L10n.Settings.allChangesSaved
     @State private var authorizationRequest: CollaborationConnectorOAuthRequest?
+    @State private var larkCLIAuthorizationURL: URL?
+    @State private var larkCLIIsWorking = false
     @AppStorage("com.willdeep.connectors.showAdvancedConfiguration") private var showAdvancedConfiguration = false
 
     private var enabledCount: Int {
@@ -119,7 +121,7 @@ struct CollaborationConnectorSettingsView: View {
     private func connectorDetailSection(_ connector: CollaborationConnectorConfig) -> some View {
         Section {
             Picker(L10n.Settings.Connectors.authModeLabel, selection: binding(for: connector, \.authMode)) {
-                ForEach(CollaborationConnectorAuthMode.allCases) { mode in
+                ForEach(authModes(for: connector)) { mode in
                     Text(mode.displayName).tag(mode)
                 }
             }
@@ -136,6 +138,8 @@ struct CollaborationConnectorSettingsView: View {
 
             if connector.platform == .feishu {
                 feishuAuthorizationSection(connector)
+            } else if connector.platform == .dingtalk && connector.authMode == .officialMCP {
+                dingtalkMCPSection(connector)
             } else {
                 standardOAuthFields(connector)
             }
@@ -146,7 +150,9 @@ struct CollaborationConnectorSettingsView: View {
 
     private func feishuAuthorizationSection(_ connector: CollaborationConnectorConfig) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.Settings.Connectors.feishuQRCodeHelp)
+            Text(connector.authMode == .officialLarkCLI
+                ? L10n.Settings.Connectors.larkCLIHelp
+                : L10n.Settings.Connectors.feishuQRCodeHelp)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -179,16 +185,34 @@ struct CollaborationConnectorSettingsView: View {
             }
 
             HStack {
-                Button {
-                    prepareAuthorization(for: connector, openInBrowser: false)
-                } label: {
-                    Label(L10n.Settings.Connectors.generateQRCode, systemImage: "qrcode")
+                if connector.authMode == .officialLarkCLI {
+                    Button {
+                        startLarkCLIConfig(for: connector)
+                    } label: {
+                        Label(L10n.Settings.Connectors.larkCLIConfigureApp, systemImage: "sparkles")
+                    }
+                    .disabled(larkCLIIsWorking)
+
+                    Button {
+                        startLarkCLILogin(for: connector)
+                    } label: {
+                        Label(L10n.Settings.Connectors.larkCLILogin, systemImage: "person.badge.key")
+                    }
+                    .disabled(larkCLIIsWorking)
                 }
 
-                Button {
-                    prepareAuthorization(for: connector, openInBrowser: true)
-                } label: {
-                    Label(L10n.Settings.Connectors.openAuthorization, systemImage: "safari")
+                if connector.authMode != .officialLarkCLI {
+                    Button {
+                        prepareAuthorization(for: connector, openInBrowser: false)
+                    } label: {
+                        Label(L10n.Settings.Connectors.generateQRCode, systemImage: "qrcode")
+                    }
+
+                    Button {
+                        prepareAuthorization(for: connector, openInBrowser: true)
+                    } label: {
+                        Label(L10n.Settings.Connectors.openAuthorization, systemImage: "safari")
+                    }
                 }
 
                 if let authorizationURL = currentAuthorizationURL(for: connector) {
@@ -200,6 +224,10 @@ struct CollaborationConnectorSettingsView: View {
                 }
 
                 Spacer()
+            }
+
+            if connector.authMode == .officialLarkCLI {
+                larkCLISection(connector)
             }
 
             DisclosureGroup(isExpanded: $showAdvancedConfiguration) {
@@ -214,6 +242,77 @@ struct CollaborationConnectorSettingsView: View {
         }
         .onChange(of: connector.appID) { _ in
             ensureFeishuAuthorizationRequest(for: settings.connector(for: connector.platform))
+        }
+    }
+
+    private func larkCLISection(_ connector: CollaborationConnectorConfig) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.Settings.Connectors.larkCLIHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Button {
+                    installLarkCLI(for: connector)
+                } label: {
+                    Label(L10n.Settings.Connectors.larkCLIInstall, systemImage: "arrow.down.circle")
+                }
+                .disabled(larkCLIIsWorking)
+
+                Button {
+                    verifyLarkCLIStatus(for: connector)
+                } label: {
+                    Label(L10n.Settings.Connectors.larkCLIVerify, systemImage: "checkmark.seal")
+                }
+                .disabled(larkCLIIsWorking)
+
+                if let executable = AgentLarkCLI.executablePath() {
+                    Text(L10n.Settings.Connectors.larkCLIInstalled(executable))
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                } else {
+                    Text(L10n.Settings.Connectors.larkCLINotInstalled)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private func dingtalkMCPSection(_ connector: CollaborationConnectorConfig) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(L10n.Settings.Connectors.dingtalkMCPHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Button {
+                    openDingTalkMCPDraft(for: connector)
+                } label: {
+                    Label(L10n.Settings.Connectors.dingtalkMCPConfigure, systemImage: "server.rack")
+                }
+
+                if let docsURL = connector.platform.documentationURL {
+                    Button {
+                        NSWorkspace.shared.open(docsURL)
+                    } label: {
+                        Label(L10n.Settings.Connectors.openDocs, systemImage: "safari")
+                    }
+                }
+
+                Spacer()
+            }
+
+            DisclosureGroup(isExpanded: $showAdvancedConfiguration) {
+                standardOAuthFields(connector)
+                    .padding(.top, 6)
+            } label: {
+                Label(L10n.Settings.Connectors.advancedConfiguration, systemImage: "slider.horizontal.3")
+            }
         }
     }
 
@@ -428,6 +527,19 @@ struct CollaborationConnectorSettingsView: View {
         statusMessage = L10n.Settings.allChangesSaved
     }
 
+    private func authModes(for connector: CollaborationConnectorConfig) -> [CollaborationConnectorAuthMode] {
+        CollaborationConnectorAuthMode.allCases.filter { mode in
+            switch mode {
+            case .officialLarkCLI:
+                return connector.platform == .feishu
+            case .officialMCP:
+                return connector.platform == .dingtalk
+            default:
+                return true
+            }
+        }
+    }
+
     private func prepareAuthorization(
         for connector: CollaborationConnectorConfig,
         openInBrowser: Bool,
@@ -457,6 +569,7 @@ struct CollaborationConnectorSettingsView: View {
 
     private func ensureFeishuAuthorizationRequest(for connector: CollaborationConnectorConfig) {
         guard connector.platform == .feishu,
+              connector.authMode != .officialLarkCLI,
               currentAuthorizationURL(for: connector) == nil else {
             return
         }
@@ -464,6 +577,17 @@ struct CollaborationConnectorSettingsView: View {
     }
 
     private func currentAuthorizationURL(for connector: CollaborationConnectorConfig) -> URL? {
+        if connector.platform == .feishu,
+           connector.authMode == .officialLarkCLI,
+           let larkCLIAuthorizationURL {
+            return larkCLIAuthorizationURL
+        }
+        if connector.platform == .feishu,
+           connector.authMode == .officialLarkCLI,
+           let raw = connector.authorizationURL,
+           let url = URL(string: raw) {
+            return url
+        }
         guard let request = authorizationRequest,
               request.connector.platform == connector.platform,
               request.connector.appID == connector.appID.trimmingCharacters(in: .whitespacesAndNewlines) else {
@@ -512,5 +636,141 @@ struct CollaborationConnectorSettingsView: View {
             connector.authMode.displayName,
             "\(connector.enabledCapabilities.count)"
         )
+    }
+
+    private func installLarkCLI(for connector: CollaborationConnectorConfig) {
+        guard !larkCLIIsWorking else { return }
+        larkCLIIsWorking = true
+        statusMessage = L10n.Settings.Connectors.larkCLIInstalling
+        Task {
+            let result = await AgentLarkCLI.installOfficialCLI()
+            await MainActor.run {
+                larkCLIIsWorking = false
+                if result.isSuccess {
+                    update(connector) { draft in
+                        draft.authMode = .officialLarkCLI
+                        draft.connectionState = .ready
+                    }
+                    statusMessage = L10n.Settings.Connectors.larkCLIInstallSucceeded
+                } else {
+                    statusMessage = L10n.Settings.Connectors.larkCLICommandFailed(shortProcessOutput(result))
+                }
+            }
+        }
+    }
+
+    private func startLarkCLIConfig(for connector: CollaborationConnectorConfig) {
+        runLarkCLIInteractiveCommand(
+            for: connector,
+            arguments: ["config", "init", "--new"],
+            startedMessage: L10n.Settings.Connectors.larkCLIConfigStarted,
+            successMessage: L10n.Settings.Connectors.larkCLIConfigFinished,
+            markConnected: false
+        )
+    }
+
+    private func startLarkCLILogin(for connector: CollaborationConnectorConfig) {
+        runLarkCLIInteractiveCommand(
+            for: connector,
+            arguments: ["auth", "login", "--recommend", "--no-wait"],
+            startedMessage: L10n.Settings.Connectors.larkCLILoginStarted,
+            successMessage: L10n.Settings.Connectors.larkCLILoginFinished,
+            markConnected: false
+        )
+    }
+
+    private func verifyLarkCLIStatus(for connector: CollaborationConnectorConfig) {
+        runLarkCLIInteractiveCommand(
+            for: connector,
+            arguments: ["auth", "status"],
+            startedMessage: L10n.Settings.Connectors.larkCLIVerifying,
+            successMessage: L10n.Settings.Connectors.larkCLIVerified,
+            markConnected: true
+        )
+    }
+
+    private func openDingTalkMCPDraft(for connector: CollaborationConnectorConfig) {
+        update(connector) { draft in
+            draft.authMode = .officialMCP
+            if draft.connectionState == .notConfigured {
+                draft.connectionState = .ready
+            }
+        }
+        AgentMCPServerCreationCoordinator.shared.open(with: AgentLearningMCPDraft(
+            capability: L10n.Settings.Connectors.dingtalkMCPCapability,
+            serverName: "dingtalk",
+            installHint: L10n.Settings.Connectors.dingtalkMCPInstallHint,
+            searchQuery: "open-dingtalk dingtalk-mcp",
+            transport: .stdio,
+            command: "npx",
+            args: ["-y", "dingtalk-mcp@latest"],
+            env: [
+                "DINGTALK_Client_ID": connector.appID,
+                "DINGTALK_Client_Secret": ""
+            ],
+            url: nil,
+            headers: nil,
+            startupTimeout: 60,
+            reason: L10n.Settings.Connectors.dingtalkMCPReason
+        ))
+        statusMessage = L10n.Settings.Connectors.dingtalkMCPDraftOpened
+    }
+
+    private func runLarkCLIInteractiveCommand(
+        for connector: CollaborationConnectorConfig,
+        arguments: [String],
+        startedMessage: String,
+        successMessage: String,
+        markConnected: Bool
+    ) {
+        guard !larkCLIIsWorking else { return }
+        guard let executable = AgentLarkCLI.executablePath() else {
+            statusMessage = L10n.Settings.Connectors.larkCLINotInstalled
+            return
+        }
+        larkCLIIsWorking = true
+        statusMessage = startedMessage
+        Task {
+            let result = await AgentLarkCLI.runCapture(
+                executable: executable,
+                arguments: arguments,
+                timeout: arguments == ["auth", "status"] ? 20 : 10
+            )
+            let url = AgentLarkCLI.firstURL(in: result.combinedOutput)
+            await MainActor.run {
+                larkCLIIsWorking = false
+                if let url {
+                    larkCLIAuthorizationURL = url
+                    update(connector) { draft in
+                        draft.authMode = .officialLarkCLI
+                        draft.authorizationURL = url.absoluteString
+                        draft.connectionState = .ready
+                    }
+                    statusMessage = L10n.Settings.Connectors.larkCLIQRCodeReady
+                    return
+                }
+                if result.isSuccess || result.timedOut {
+                    update(connector) { draft in
+                        draft.authMode = .officialLarkCLI
+                        if markConnected {
+                            draft.connectionState = .connected
+                        } else if draft.connectionState == .notConfigured {
+                            draft.connectionState = .ready
+                        }
+                    }
+                    statusMessage = successMessage
+                } else {
+                    statusMessage = L10n.Settings.Connectors.larkCLICommandFailed(shortProcessOutput(result))
+                }
+            }
+        }
+    }
+
+    private func shortProcessOutput(_ result: AgentLarkCLI.ProcessResult) -> String {
+        let output = result.combinedOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !output.isEmpty else {
+            return "exit=\(result.exitStatus)"
+        }
+        return output.count > 180 ? String(output.prefix(180)) + "..." : output
     }
 }

@@ -1183,6 +1183,27 @@ enum L10n {
             static let clearCredentials = String(localized: "settings.connectors.clear-credentials", defaultValue: "Clear credentials")
             static let openDocs = String(localized: "settings.connectors.open-docs", defaultValue: "Open docs")
             static let advancedConfiguration = String(localized: "settings.connectors.advanced-configuration", defaultValue: "Advanced configuration")
+            static let larkCLIConfigureApp = String(localized: "settings.connectors.lark-cli.configure-app", defaultValue: "Configure app")
+            static let larkCLILogin = String(localized: "settings.connectors.lark-cli.login", defaultValue: "Login")
+            static let larkCLIInstall = String(localized: "settings.connectors.lark-cli.install", defaultValue: "Install lark-cli")
+            static let larkCLIVerify = String(localized: "settings.connectors.lark-cli.verify", defaultValue: "Verify status")
+            static let larkCLIHelp = String(localized: "settings.connectors.lark-cli.help", defaultValue: "Official lark-cli is the recommended local bridge for active Feishu operations. It stores credentials in the OS keychain and lets WillDeep call Feishu with structured commands instead of raw shell.")
+            static let larkCLINotInstalled = String(localized: "settings.connectors.lark-cli.not-installed", defaultValue: "lark-cli not found")
+            static let larkCLIInstalling = String(localized: "settings.connectors.lark-cli.installing", defaultValue: "Installing official lark-cli...")
+            static let larkCLIInstallSucceeded = String(localized: "settings.connectors.lark-cli.install-succeeded", defaultValue: "Official lark-cli installed.")
+            static let larkCLIConfigStarted = String(localized: "settings.connectors.lark-cli.config-started", defaultValue: "Starting lark-cli app configuration...")
+            static let larkCLIConfigFinished = String(localized: "settings.connectors.lark-cli.config-finished", defaultValue: "lark-cli app configuration finished.")
+            static let larkCLILoginStarted = String(localized: "settings.connectors.lark-cli.login-started", defaultValue: "Starting lark-cli login...")
+            static let larkCLILoginFinished = String(localized: "settings.connectors.lark-cli.login-finished", defaultValue: "lark-cli login command finished.")
+            static let larkCLIVerifying = String(localized: "settings.connectors.lark-cli.verifying", defaultValue: "Checking lark-cli authorization...")
+            static let larkCLIVerified = String(localized: "settings.connectors.lark-cli.verified", defaultValue: "lark-cli authorization verified.")
+            static let larkCLIQRCodeReady = String(localized: "settings.connectors.lark-cli.qr-ready", defaultValue: "lark-cli authorization QR code is ready.")
+            static let dingtalkMCPConfigure = String(localized: "settings.connectors.dingtalk-mcp.configure", defaultValue: "Configure official MCP")
+            static let dingtalkMCPHelp = String(localized: "settings.connectors.dingtalk-mcp.help", defaultValue: "DingTalk does not currently expose a lark-cli-style official CLI. Use the official DingTalk MCP server as the preferred local tool bridge; event intake can still use Stream SDK or relay callbacks.")
+            static let dingtalkMCPCapability = String(localized: "settings.connectors.dingtalk-mcp.capability", defaultValue: "DingTalk official MCP tools")
+            static let dingtalkMCPInstallHint = String(localized: "settings.connectors.dingtalk-mcp.install-hint", defaultValue: "Uses stdio: npx -y dingtalk-mcp@latest. Fill DINGTALK_Client_ID and DINGTALK_Client_Secret from the DingTalk developer console; keep secrets out of git.")
+            static let dingtalkMCPReason = String(localized: "settings.connectors.dingtalk-mcp.reason", defaultValue: "DingTalk's practical official integration path is MCP for active tool calls, plus Stream SDK or relay callbacks for incoming events.")
+            static let dingtalkMCPDraftOpened = String(localized: "settings.connectors.dingtalk-mcp.draft-opened", defaultValue: "Opened DingTalk MCP setup draft.")
             static let feishuDocsNote = String(localized: "settings.connectors.feishu-docs-note", defaultValue: "Feishu document writing is feasible through OpenAPI after OAuth scopes are granted. WillDeep should preview generated docs before publishing.")
             static let feishuQRCodeHelp = String(localized: "settings.connectors.feishu-qr-help", defaultValue: "Scan this QR code with Feishu to configure WillDeep. Custom App ID setup is available under Advanced configuration.")
             static let feishuQRCodeReady = String(localized: "settings.connectors.feishu-qr-ready", defaultValue: "Ready to scan with Feishu")
@@ -1201,10 +1222,14 @@ enum L10n {
             static let summaryWechatClaw = String(localized: "settings.connectors.summary.wechat-claw", defaultValue: "Desktop automation bridge for personal workflows; keep it out of production defaults.")
 
             static let authWebhook = String(localized: "settings.connectors.auth.webhook", defaultValue: "Webhook")
+            static let authOfficialLarkCLI = String(localized: "settings.connectors.auth.official-lark-cli", defaultValue: "Official lark-cli")
+            static let authOfficialMCP = String(localized: "settings.connectors.auth.official-mcp", defaultValue: "Official MCP")
             static let authOAuth = String(localized: "settings.connectors.auth.oauth", defaultValue: "OAuth")
             static let authCloudRelay = String(localized: "settings.connectors.auth.cloud-relay", defaultValue: "Cloud Relay")
             static let authDesktopAutomation = String(localized: "settings.connectors.auth.desktop-automation", defaultValue: "Desktop automation")
             static let authWebhookHelp = String(localized: "settings.connectors.auth.webhook-help", defaultValue: "One-way robot messages and simple slash-like workflows. Fast to set up, limited user context.")
+            static let authOfficialLarkCLIHelp = String(localized: "settings.connectors.auth.official-lark-cli-help", defaultValue: "Use Feishu/Lark's official CLI for local app setup, OAuth login, and active docs/messages/calendar operations.")
+            static let authOfficialMCPHelp = String(localized: "settings.connectors.auth.official-mcp-help", defaultValue: "Use the platform's official MCP server as the active tool bridge. Credentials still need explicit user configuration.")
             static let authOAuthHelp = String(localized: "settings.connectors.auth.oauth-help", defaultValue: "User-authorized access for docs, drive, chat, and future write actions. Tokens belong in Keychain.")
             static let authCloudRelayHelp = String(localized: "settings.connectors.auth.cloud-relay-help", defaultValue: "Public event callbacks land in WillDeep Cloud Relay, then forward to the Mac app.")
             static let authDesktopAutomationHelp = String(localized: "settings.connectors.auth.desktop-automation-help", defaultValue: "Local GUI automation for personal workflows. Useful as a fallback, fragile for teams.")
@@ -1266,6 +1291,14 @@ enum L10n {
             }
             static func credentialsCleared(_ a1: String) -> String {
                 let template = String(localized: "settings.connectors.credentials-cleared", defaultValue: "%@ local credentials cleared.")
+                return String(format: template, a1)
+            }
+            static func larkCLIInstalled(_ a1: String) -> String {
+                let template = String(localized: "settings.connectors.lark-cli.installed", defaultValue: "Installed: %@")
+                return String(format: template, a1)
+            }
+            static func larkCLICommandFailed(_ a1: String) -> String {
+                let template = String(localized: "settings.connectors.lark-cli.command-failed", defaultValue: "lark-cli failed: %@")
                 return String(format: template, a1)
             }
         }

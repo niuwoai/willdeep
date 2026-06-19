@@ -58,6 +58,24 @@ enum WorkflowRegistry {
         VideoWatermarkWorkflow(),
         VideoSpeedupWorkflow(),
         VideoSubtitleWorkflow(),
+        VideoSubtitleExportWorkflow(),
+        // 1.92.0: deterministic image toolbox. These are native
+        // AppKit/CoreGraphics/Vision workflows, so common image jobs do
+        // not need ImageMagick, Pillow, or a model call.
+        ImageConvertWorkflow(),
+        ImageResizeWorkflow(),
+        ImageCropWorkflow(),
+        ImageCompressWorkflow(),
+        ImageBackgroundRemoveWorkflow(),
+        ImageTrimPadWorkflow(),
+        ImageWatermarkWorkflow(),
+        ImageOCRWorkflow(),
+        ImageRedactWorkflow(),
+        ImageContactSheetWorkflow(),
+        ImagePaletteWorkflow(),
+        ImageCompareWorkflow(),
+        ImageAltTextWorkflow(),
+        ScreenshotToCodeWorkflow(),
     ]
 
     /// 全部 workflow：内置在前，用户自定义在后（同一 slash 用户不可覆盖

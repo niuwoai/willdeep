@@ -40,6 +40,8 @@ enum AgentToolRunner {
             return try await cursorAgent(arguments: arguments, context: context)
         case "cline_cli":
             return try await clineCLI(arguments: arguments, context: context)
+        case "lark_cli":
+            return try await larkCLI(arguments: arguments)
         case "list_jobs":
             return try await listJobs(arguments: arguments, context: context)
         case "get_job_output":
@@ -413,7 +415,7 @@ enum AgentToolRunner {
         ], environment: environment, isExecutable: isExecutable)
     }
 
-    nonisolated private static func executablePath(
+    nonisolated static func executablePath(
         commandName: String,
         preferredPaths: [String],
         environment: [String: String],
@@ -645,6 +647,24 @@ enum AgentToolRunner {
     }
 
     // MARK: list_jobs / get_job_output / kill_job
+
+    // MARK: lark_cli
+
+    private static func larkCLI(
+        arguments: [String: AgentJSONValue]
+    ) async throws -> AgentToolResult {
+        guard let cliArguments = arguments["arguments"]?.stringArrayValue() else {
+            throw AgentToolError.missingArgument("arguments")
+        }
+        let normalized = AgentLarkCLI.normalizedArguments(cliArguments)
+        guard !normalized.isEmpty else {
+            throw AgentToolError.invalidArgument("arguments must include at least one lark-cli subcommand.")
+        }
+        return try await AgentLarkCLI.run(
+            arguments: normalized,
+            timeoutSeconds: arguments["timeout_seconds"]?.intValue()
+        )
+    }
 
     /// Snapshot of background jobs for the current runtime. Returns a
     /// stable text format (one job per line) so the model can quote

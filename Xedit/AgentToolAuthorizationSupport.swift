@@ -75,6 +75,9 @@ enum AgentSandboxAuditLog {
             let tool = arguments["tool"]?.stringValue() ?? "?"
             return "\(server).\(tool)"
         }
+        if toolName == "lark_cli" {
+            return AgentLarkCLI.commandPreview(arguments: arguments["arguments"]?.stringArrayValue() ?? [])
+        }
         return toolName
     }
 
@@ -238,6 +241,15 @@ enum AgentToolAuthorization {
                 return nil
             }
             return "mcp:\(server.lowercased()):\(tool)"
+        case "lark_cli":
+            let cliArguments = AgentLarkCLI.normalizedArguments(arguments["arguments"]?.stringArrayValue() ?? [])
+            guard let first = cliArguments.first else { return nil }
+            var parts = [first]
+            if let second = cliArguments.dropFirst().first {
+                parts.append(second)
+            }
+            let scope = parts.map { $0.lowercased() }.joined(separator: ":")
+            return scope.isEmpty ? nil : "lark_cli:\(scope)"
         case "claude_code":
             let mode = arguments["permission_mode"]?.stringValue()?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? "acceptEdits"

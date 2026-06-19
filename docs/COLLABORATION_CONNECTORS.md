@@ -1,11 +1,46 @@
 # Collaboration Connectors
 
-> Last updated: 2026-06-19 | Current version: v1.91.0-rc15
+> Last updated: 2026-06-19 | Current version: v1.92.0
 
 WillDeep treats Feishu, DingTalk, WeCom, and WeChat/Claw as collaboration
 connectors. The Mac app owns local user intent, preview, and Keychain-backed
 credentials. The relay owns SaaS callback intake and optional long-connection
 clients for platforms that support server-initiated event delivery.
+
+## Official Feishu/Lark CLI
+
+Feishu defaults to the official `@larksuite/cli` path in the Mac settings UI.
+This keeps app creation/configuration, user login, schema discovery, and most
+document/message operations inside the official local CLI instead of asking the
+model to assemble ad-hoc shell commands.
+
+Recommended local setup:
+
+```bash
+npx @larksuite/cli@latest install
+lark-cli config init --new
+lark-cli auth login --recommend
+lark-cli auth status
+```
+
+WillDeep exposes the same capability to the Agent through the dedicated
+`lark_cli` tool. Models pass only argument arrays, for example
+`["auth", "status"]` or `["docs", "+create", "--dry-run"]`; the app adds the
+`lark-cli` executable, renders a safe command preview, and classifies approval
+risk before execution.
+
+Approval rules:
+
+- `auth status`, `config show`, `schema`, `--help`, and `--dry-run` are read-only.
+- Create, send, update, publish, approve, and reject style operations require
+  normal write approval because they can mutate Feishu data.
+- Delete, revoke, permission, role, scope, token, and secret operations require
+  dangerous confirmation.
+
+The public relay remains useful for OAuth callback intake, QR setup pages, and
+server-side long-connection event delivery. The official CLI path is the
+preferred local setup and operation path when the user has Feishu installed and
+can scan/login interactively.
 
 ## Public Relay
 
@@ -128,15 +163,24 @@ DingTalk is the second priority connector.
 
 Expected capabilities:
 
+- Active tool calls through the official DingTalk MCP server:
+  `npx -y dingtalk-mcp@latest`.
+- The MCP server is configured as a stdio user MCP with
+  `DINGTALK_Client_ID` and `DINGTALK_Client_Secret` environment variables from
+  the DingTalk developer console. Keep the secret in Keychain or local private
+  config, never in git.
 - OAuth callback through `https://fly.niuwoai.com/oauth/dingtalk/callback`.
 - Bot/webhook notifications for build results, review requests, and task
   summaries.
 - Event callback intake through `https://fly.niuwoai.com/events/dingtalk`.
 - Approval/task workflow hooks after the bot and event paths stabilize.
 
-DingTalk callback encryption/signature verification should be enabled before
-production traffic. The current relay stores selected headers and raw JSON so
-the verification layer can be added without changing the Mac app contract.
+DingTalk does not currently have a lark-cli-style official CLI in WillDeep's
+integration model. Prefer MCP for active operations, and use DingTalk Stream
+Mode SDK or relay callbacks for inbound robot events. Callback
+encryption/signature verification should be enabled before production traffic.
+The current relay stores selected headers and raw JSON so the verification
+layer can be added without changing the Mac app contract.
 
 ## Relay API
 

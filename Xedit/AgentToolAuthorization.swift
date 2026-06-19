@@ -129,6 +129,34 @@ enum AgentSandboxPolicy {
                 reason: "Network access to an arbitrary URL requires approval.",
                 prefixRule: nil
             )
+        case "lark_cli":
+            let arguments = arguments["arguments"]?.stringArrayValue() ?? []
+            switch AgentLarkCLI.risk(arguments: arguments) {
+            case .read:
+                return AgentSandboxDecision(
+                    mode: .readOnly,
+                    requiresUserApproval: false,
+                    requiresTypedConfirmation: false,
+                    reason: "lark-cli local status, schema, help, or dry-run operation.",
+                    prefixRule: nil
+                )
+            case .danger:
+                return AgentSandboxDecision(
+                    mode: .escalated,
+                    requiresUserApproval: true,
+                    requiresTypedConfirmation: true,
+                    reason: "lark-cli operation may delete data, change permissions, or expose credentials.",
+                    prefixRule: ["lark-cli"]
+                )
+            case .write, .userInput:
+                return AgentSandboxDecision(
+                    mode: .escalated,
+                    requiresUserApproval: true,
+                    requiresTypedConfirmation: false,
+                    reason: "lark-cli write operation acts on Feishu/Lark data outside the workspace.",
+                    prefixRule: ["lark-cli"]
+                )
+            }
         case "call_mcp_tool", "claude_code", "codex_cli", "cursor_agent", "cline_cli", "kill_job",
              "add_memory", "create_user_skill", "suggest_mcp_server":
             return AgentSandboxDecision(

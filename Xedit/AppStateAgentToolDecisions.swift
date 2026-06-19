@@ -266,7 +266,7 @@ extension AppState {
         arguments: [String: AgentJSONValue]
     ) -> Bool {
         switch toolName {
-        case "run_command", "kill_job", "claude_code", "codex_cli", "cursor_agent", "cline_cli", "web_fetch",
+        case "run_command", "kill_job", "claude_code", "codex_cli", "cursor_agent", "cline_cli", "lark_cli", "web_fetch",
              "add_memory", "create_user_skill", "suggest_mcp_server":
             return true
         case "call_mcp_tool":

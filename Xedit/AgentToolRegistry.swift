@@ -254,6 +254,15 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "lark_cli",
+            description: "Run the official Feishu/Lark CLI (`lark-cli`) with structured argument-array input. Use for Feishu/Lark docs, messages, calendar, sheets, Base, mail, tasks, meetings, wiki, and raw OpenAPI access after the connector has been configured. Pass only subcommand arguments, not `lark-cli` itself. Prefer read commands first; use `--dry-run` for write commands when supported. WillDeep classifies read/write/danger operations before execution.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "arguments", type: .stringArray, description: "Arguments after `lark-cli`, e.g. [`auth`, `status`] or [`docs`, `+create`, `--api-version`, `v2`, `--doc-format`, `markdown`, `--content`, `...`]. Do not include shell syntax.", required: true),
+                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Hard timeout in seconds. Defaults to 120, capped at 600.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "claude_code",
             description: "Delegate a complex coding task to the locally installed Claude Code CLI (headless `claude -p`). Unlike spawn_agent, Claude Code CAN edit files, run builds/tests, and work multi-step inside the workspace — use it for self-contained implementation tasks you want done end-to-end. Requires user approval. The prompt must be fully self-contained: Claude Code sees the workspace files but not this conversation. Prefer `permission_mode: \"plan\"` when you only want an implementation plan without any file changes.",
             risk: .write,
@@ -364,6 +373,9 @@ enum AgentToolRegistry {
                 return .write
             }
             return .read
+        }
+        if descriptor.name == "lark_cli" {
+            return AgentLarkCLI.risk(arguments: arguments["arguments"]?.stringArrayValue() ?? [])
         }
         return descriptor.risk
     }

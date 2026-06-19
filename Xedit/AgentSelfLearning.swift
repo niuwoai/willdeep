@@ -80,6 +80,13 @@ struct AgentLearningMCPDraft: Codable, Equatable {
     var serverName: String
     var installHint: String?
     var searchQuery: String?
+    var transport: AgentMCPTransport?
+    var command: String?
+    var args: [String]?
+    var env: [String: String]?
+    var url: String?
+    var headers: [String: String]?
+    var startupTimeout: TimeInterval?
     var reason: String
 }
 

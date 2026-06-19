@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.92.0 - 2026-06-19
+
+### Added
+
+- 新增内置图片 workflow 工具箱:`/image-convert`、`/image-resize`、`/image-crop`、`/image-compress`、`/image-bg-remove`、`/image-trim-pad`、`/image-watermark`、`/image-ocr`、`/image-redact`、`/image-contact-sheet`、`/image-palette`、`/image-compare`、`/image-alt-text` 和 `/screenshot-to-code`。常见机械图片处理走 AppKit/CoreGraphics/ImageIO/Vision 本地完成,截图理解/代码生成优先复用既有 Image Understanding/VL 配置。
+- 新增 `ImageWorkflowSupport`,统一图片 workflow 的 shell-like 参数解析、图片读写、格式转换、透明背景处理、OCR、隐私打码、调色板提取、contact sheet 和视觉 diff helper。
+- 新增 `/video-subtitle-export <path> [format=srt|vtt]`,用本地 SenseVoice 转录视频音轨并导出 sidecar 字幕文件,补齐“只导出字幕、不烧进视频”的剪辑链路。
+
+### Changed
+
+- Workflow palette 扩展为媒体工具箱形态:视频保留 ffmpeg/SenseVoice 系列,图片新增确定性本地处理系列,让轻量裁剪、压缩、打码、OCR 和格式转换不必消耗模型上下文;`/image-alt-text` 与 `/screenshot-to-code` 会优先调用 VL 图片说明,失败时退回 OCR/调色板信号并明确不确定性。
+- 版本号从 **1.91.0-rc17** 提升为 **1.92.0**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.91.0-rc17 - 2026-06-19
+
+### Added
+
+- 钉钉连接器新增“官方 MCP”认证方式并设为默认路径;Settings → Connectors 中钉钉页提供“Configure official MCP”入口,会打开 MCP 新服务器 sheet 并预填 `npx -y dingtalk-mcp@latest`、`DINGTALK_Client_ID`、`DINGTALK_Client_Secret` 与 60 秒启动超时。
+- MCP 建议草稿新增 transport / command / args / env / url / headers / timeout 预填字段,让自动建议或连接器入口能真正带入可编辑配置,不用只给用户一段安装说明。
+
+### Changed
+
+- Agent 稳定工具契约明确:钉钉操作优先使用已配置的 DingTalk MCP server,不要臆造 `dingtalk-cli`;未配置时先走 MCP discovery / suggestion。
+- 协作连接器文档更新钉钉路线:主动工具调用走 `open-dingtalk/dingtalk-mcp`,入站事件继续走 Stream SDK 或 relay callback。
+- 补充钉钉默认认证方式与 MCP 草稿 Codable 单测;版本号递增为 **1.91.0-rc17**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.91.0-rc16 - 2026-06-19
+
+### Added
+
+- 新增官方飞书/Lark CLI 集成:内置 `lark_cli` Agent 工具,通过结构化参数调用本机 `lark-cli`,优先用于飞书配置、登录、schema 查询和文档/消息操作,避免模型把飞书命令拼成自由 shell 字符串。
+- Settings → Connectors 的飞书默认认证方式切到“官方 Lark CLI”,提供安装、配置应用、登录、验证入口;CLI 输出授权 URL 时会自动记录并展示,非飞书平台会自动回落到自身默认认证方式。
+
+### Changed
+
+- `lark_cli` 工具按参数动态分级:help/status/schema/dry-run 为只读,创建/发送/更新为写入审批,删除、撤权、token/secret/权限变更进入危险确认;Always Allow 签名按前两级子命令收敛。
+- Agent 稳定工具契约明确优先使用 `lark_cli` 处理飞书/Lark 操作,减少 `run_command` 自由 shell 对审批、缓存和上下文的扰动。
+- 补充 `lark_cli` 风险分级、命令预览、授权 URL 提取和连接器默认值单测;版本号递增为 **1.91.0-rc16**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.91.0-rc15 - 2026-06-19
 
 ### Added

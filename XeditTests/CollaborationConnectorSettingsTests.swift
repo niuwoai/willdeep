@@ -28,7 +28,8 @@ final class CollaborationConnectorSettingsTests: XCTestCase {
         let platforms = settings.connectors.map(\.platform)
 
         XCTAssertEqual(platforms, CollaborationConnectorPlatform.allCases)
-        XCTAssertEqual(settings.connector(for: .feishu).authMode, .oauth)
+        XCTAssertEqual(settings.connector(for: .feishu).authMode, .officialLarkCLI)
+        XCTAssertEqual(settings.connector(for: .dingtalk).authMode, .officialMCP)
         XCTAssertEqual(settings.connector(for: .wechatClaw).authMode, .desktopAutomation)
     }
 
@@ -65,6 +66,7 @@ final class CollaborationConnectorSettingsTests: XCTestCase {
 
     func testPrepareAuthorizationFillsRedirectAndKeychainReference() {
         var connector = CollaborationConnectorConfig(platform: .feishu)
+        connector.authMode = .oauth
         connector.appID = "cli_test"
         connector.authorizationURL = "https://example.com/oauth"
 
@@ -89,6 +91,7 @@ final class CollaborationConnectorSettingsTests: XCTestCase {
 
     func testPrepareAuthorizationUsesDefaultFeishuQRCodeURL() throws {
         var connector = CollaborationConnectorConfig(platform: .feishu)
+        connector.authMode = .oauth
         connector.appID = " cli_test "
 
         let request = CollaborationConnectorOAuthCoordinator.prepareAuthorization(
@@ -112,7 +115,8 @@ final class CollaborationConnectorSettingsTests: XCTestCase {
     }
 
     func testPrepareAuthorizationUsesCloudSetupQRCodeURLWithoutAppID() throws {
-        let connector = CollaborationConnectorConfig(platform: .feishu)
+        var connector = CollaborationConnectorConfig(platform: .feishu)
+        connector.authMode = .oauth
 
         let request = CollaborationConnectorOAuthCoordinator.prepareAuthorization(
             for: connector,

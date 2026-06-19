@@ -68,7 +68,11 @@ enum CollaborationConnectorPlatform: String, Codable, CaseIterable, Identifiable
 
     var defaultAuthMode: CollaborationConnectorAuthMode {
         switch self {
-        case .feishu, .dingtalk, .wecom:
+        case .feishu:
+            return .officialLarkCLI
+        case .dingtalk:
+            return .officialMCP
+        case .wecom:
             return .oauth
         case .wechatClaw:
             return .desktopAutomation
@@ -94,6 +98,8 @@ enum CollaborationConnectorPlatform: String, Codable, CaseIterable, Identifiable
 }
 
 enum CollaborationConnectorAuthMode: String, Codable, CaseIterable, Identifiable {
+    case officialLarkCLI
+    case officialMCP
     case webhook
     case oauth
     case cloudRelay
@@ -103,6 +109,8 @@ enum CollaborationConnectorAuthMode: String, Codable, CaseIterable, Identifiable
 
     var displayName: String {
         switch self {
+        case .officialLarkCLI: return L10n.Settings.Connectors.authOfficialLarkCLI
+        case .officialMCP: return L10n.Settings.Connectors.authOfficialMCP
         case .webhook: return L10n.Settings.Connectors.authWebhook
         case .oauth: return L10n.Settings.Connectors.authOAuth
         case .cloudRelay: return L10n.Settings.Connectors.authCloudRelay
@@ -112,6 +120,8 @@ enum CollaborationConnectorAuthMode: String, Codable, CaseIterable, Identifiable
 
     var helpText: String {
         switch self {
+        case .officialLarkCLI: return L10n.Settings.Connectors.authOfficialLarkCLIHelp
+        case .officialMCP: return L10n.Settings.Connectors.authOfficialMCPHelp
         case .webhook: return L10n.Settings.Connectors.authWebhookHelp
         case .oauth: return L10n.Settings.Connectors.authOAuthHelp
         case .cloudRelay: return L10n.Settings.Connectors.authCloudRelayHelp
@@ -257,6 +267,12 @@ struct CollaborationConnectorConfig: Identifiable, Codable, Equatable {
         copy.authorizationURL = copy.authorizationURL?.trimmingCharacters(in: .whitespacesAndNewlines)
         if copy.authorizationURL?.isEmpty == true {
             copy.authorizationURL = nil
+        }
+        if copy.platform != .feishu && copy.authMode == .officialLarkCLI {
+            copy.authMode = copy.platform.defaultAuthMode
+        }
+        if copy.platform != .dingtalk && copy.authMode == .officialMCP {
+            copy.authMode = copy.platform.defaultAuthMode
         }
         copy.defaultSpace = copy.defaultSpace.trimmingCharacters(in: .whitespacesAndNewlines)
         copy.defaultChat = copy.defaultChat.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -927,6 +927,80 @@ struct WillDeepTests {
         ) == "cline_cli:act")
     }
 
+    @Test("lark-cli tool is registered and scoped behind Feishu approval")
+    func testLarkCLIToolRiskClassification() {
+        let descriptor = AgentToolRegistry.descriptor(for: "lark_cli")
+        #expect(descriptor?.risk == .write)
+        #expect(AgentToolRegistry.risk(for: "lark_cli", arguments: [
+            "arguments": .array([.string("auth"), .string("status")])
+        ]) == .read)
+        #expect(AgentToolRegistry.risk(for: "lark_cli", arguments: [
+            "arguments": .array([.string("schema"), .string("im.messages.list")])
+        ]) == .read)
+        #expect(AgentToolRegistry.risk(for: "lark_cli", arguments: [
+            "arguments": .array([.string("im"), .string("+messages-send"), .string("--text"), .string("hello")])
+        ]) == .write)
+        #expect(AgentToolRegistry.risk(for: "lark_cli", arguments: [
+            "arguments": .array([.string("im"), .string("messages"), .string("delete")])
+        ]) == .danger)
+        #expect(AgentToolAuthorization.signature(toolName: "lark_cli", arguments: [
+            "arguments": .array([.string("docs"), .string("+create")])
+        ]) == "lark_cli:docs:+create")
+    }
+
+    @Test("lark-cli command preview, URL extraction, and connector defaults are stable")
+    func testLarkCLICommandPreviewURLAndConnectorDefaults() throws {
+        let preview = AgentLarkCLI.commandPreview(arguments: [
+            "docs",
+            "+create",
+            "--content",
+            "Weekly's report",
+        ])
+        #expect(preview.contains("'Weekly'\\''s report'"))
+
+        let url = try #require(AgentLarkCLI.firstURL(in: "open https://example.com/setup?code=abc to continue"))
+        #expect(url.absoluteString == "https://example.com/setup?code=abc")
+        #expect(CollaborationConnectorPlatform.feishu.defaultAuthMode == .officialLarkCLI)
+
+        let normalized = CollaborationConnectorConfig(
+            platform: .dingtalk,
+            authMode: .officialLarkCLI
+        ).normalized
+        #expect(normalized.authMode == .officialMCP)
+    }
+
+    @Test("MCP drafts preserve stdio command and environment prefill metadata")
+    func testMCPDraftPreservesPrefillMetadata() throws {
+        let draft = AgentLearningMCPDraft(
+            capability: "DingTalk official MCP tools",
+            serverName: "dingtalk",
+            installHint: "npx -y dingtalk-mcp@latest",
+            searchQuery: "open-dingtalk dingtalk-mcp",
+            transport: .stdio,
+            command: "npx",
+            args: ["-y", "dingtalk-mcp@latest"],
+            env: [
+                "DINGTALK_Client_ID": "cid",
+                "DINGTALK_Client_Secret": ""
+            ],
+            url: nil,
+            headers: nil,
+            startupTimeout: 60,
+            reason: "Use official MCP instead of an unavailable DingTalk CLI."
+        )
+
+        let decoded = try JSONDecoder().decode(
+            AgentLearningMCPDraft.self,
+            from: JSONEncoder().encode(draft)
+        )
+        #expect(decoded.transport == .stdio)
+        #expect(decoded.command == "npx")
+        #expect(decoded.args == ["-y", "dingtalk-mcp@latest"])
+        #expect(decoded.env?["DINGTALK_Client_ID"] == "cid")
+        #expect(decoded.startupTimeout == 60)
+        #expect(CollaborationConnectorPlatform.dingtalk.defaultAuthMode == .officialMCP)
+    }
+
     @Test("subagent tool surface is read-only and cannot nest or ask")
     @MainActor
     func testSubagentToolSurfaceIsRestricted() {

@@ -552,11 +552,45 @@ private struct AgentMCPServerCreationSheet: View {
         if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             name = initialDraft.serverName
         }
+        if let draftTransport = initialDraft.transport {
+            transport = draftTransport
+        }
+        if let draftURL = initialDraft.url,
+           url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            transport = .streamableHTTP
+            url = draftURL
+        }
+        if let draftCommand = initialDraft.command,
+           command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            transport = .stdio
+            command = draftCommand
+        }
+        if let draftArgs = initialDraft.args,
+           args.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            args = draftArgs.joined(separator: " ")
+        }
+        if let draftEnv = initialDraft.env,
+           envLines.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            envLines = keyValueLines(draftEnv)
+        }
+        if let draftHeaders = initialDraft.headers,
+           headerLines.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            headerLines = keyValueLines(draftHeaders)
+        }
+        if let draftTimeout = initialDraft.startupTimeout {
+            timeout = min(max(draftTimeout, 1), 180)
+        }
         if let suggestedURL = suggestedURL(from: initialDraft),
            url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             transport = .streamableHTTP
             url = suggestedURL
         }
+    }
+
+    private func keyValueLines(_ values: [String: String]) -> String {
+        values.keys.sorted().map { key in
+            "\(key)=\(values[key] ?? "")"
+        }.joined(separator: "\n")
     }
 
     private func suggestedURL(from draft: AgentLearningMCPDraft) -> String? {
