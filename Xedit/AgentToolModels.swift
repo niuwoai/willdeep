@@ -218,7 +218,7 @@ struct AgentToolCall: Identifiable, Equatable {
     /// Provider-issued tool_call id (used to thread results back).
     let externalID: String
     let toolName: String
-    let arguments: [String: AgentJSONValue]
+    var arguments: [String: AgentJSONValue]
     let risk: AgentToolRisk
     var status: AgentToolCallStatus
     var result: AgentToolResult?

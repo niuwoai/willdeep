@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.91.0-rc10 - 2026-06-19
+
+### Added
+
+- Agent Composer 在模型选择与模式选择之间新增执行器选择器,可为当前会话选择 `WillDeep`、`Claude Code` 或 `Codex` 来执行下一轮任务;默认保持 WillDeep 自身执行。
+- 选择 Claude Code / Codex 时,发送内容会直接走现有 `claude_code` / `codex_cli` 委派工具,复用工具审批、Workspace Access 自动放行、后台 job、审计日志和 git 变更刷新链路。
+- 外部执行器路径支持图片预处理:Composer 带图时会先用现有 Image Understanding/VL 模型生成图片说明,再把说明拼进 Claude Code / Codex 的委托 prompt。
+- 会话持久化新增 `executionAgent` 字段,旧会话默认回落到 WillDeep;排队消息会记录发送当时的执行器,避免后续切换导致队列执行者变化。
+
+### Changed
+
+- 补充执行器持久化与队列默认行为单测。
+- 版本号按功能增强递增为 **1.91.0-rc10**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.91.0-rc9 - 2026-06-19
 
 ### Changed

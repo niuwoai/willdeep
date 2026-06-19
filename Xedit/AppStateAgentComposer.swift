@@ -21,6 +21,7 @@ extension AppState {
         let skills = runtime.pendingSkills
         let files = runtime.pendingFiles
         let includeWorkspaceOverview = runtime.pendingIncludeWorkspaceOverview
+        let executionAgent = runtime.executionAgent
         guard !userText.isEmpty
                 || !images.isEmpty
                 || !textAttachments.isEmpty
@@ -48,19 +49,420 @@ extension AppState {
                     text: prompt,
                     images: images,
                     textAttachments: textAttachments,
-                    attachedSkills: skills
+                    attachedSkills: skills,
+                    executionAgent: executionAgent
                 )
             )
             return
         }
 
-        dispatchAgentMessage(
+        dispatchAgentMessageUsingSelectedExecutor(
+            executionAgent,
             for: runtime,
             text: prompt,
             images: images,
             textAttachments: textAttachments,
             attachedSkills: skills
         )
+    }
+
+    func dispatchAgentMessageUsingSelectedExecutor(
+        _ executionAgent: AgentExecutionAgent,
+        for runtime: AgentRuntime,
+        text: String,
+        images: [AgentImageAttachment],
+        textAttachments: [AgentTextAttachment] = [],
+        attachedSkills: [AgentSkillEntry] = []
+    ) {
+        switch executionAgent {
+        case .willDeep:
+            dispatchAgentMessage(
+                for: runtime,
+                text: text,
+                images: images,
+                textAttachments: textAttachments,
+                attachedSkills: attachedSkills
+            )
+        case .claudeCode, .codexCLI:
+            dispatchDelegatedAgentMessage(
+                for: runtime,
+                text: text,
+                images: images,
+                textAttachments: textAttachments,
+                attachedSkills: attachedSkills,
+                executionAgent: executionAgent
+            )
+        }
+    }
+
+    func dispatchDelegatedAgentMessage(
+        for runtime: AgentRuntime,
+        text: String,
+        images: [AgentImageAttachment],
+        textAttachments: [AgentTextAttachment] = [],
+        attachedSkills: [AgentSkillEntry] = [],
+        executionAgent: AgentExecutionAgent
+    ) {
+        guard let toolName = executionAgent.toolName else {
+            dispatchAgentMessage(
+                for: runtime,
+                text: text,
+                images: images,
+                textAttachments: textAttachments,
+                attachedSkills: attachedSkills
+            )
+            return
+        }
+
+        rejectPendingAgentPatchProposals(
+            for: runtime,
+            statusMessage: "Superseded by a newer message."
+        )
+
+        runtime.errorMessage = nil
+        runtime.errorDetails = nil
+        runtime.isResponding = true
+        runtime.turnStartedAt = Date()
+        runtime.currentTurnAttachedSkills = attachedSkills
+
+        let userMessage = AgentMessage(
+            role: .user,
+            content: text,
+            images: images,
+            textAttachments: textAttachments
+        )
+        runtime.messages.append(userMessage)
+        runtime.latestTurnRecall = nil
+
+        let prompt = delegatedAgentPrompt(
+            userText: text,
+            textAttachments: textAttachments,
+            images: images,
+            imageDescriptions: nil,
+            executionAgent: executionAgent,
+            workspaceLocation: runtime.workspaceLocation ?? runtime.workspaceRootPath.map { .local(path: $0) }
+        )
+        let arguments = delegatedAgentArguments(prompt: prompt, executionAgent: executionAgent)
+        let externalID = "composer-\(executionAgent.rawValue)-\(UUID().uuidString)"
+        let assistantMessage = AgentMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [
+                AgentMessageToolCall(
+                    externalID: externalID,
+                    toolName: toolName,
+                    argumentsJSON: Self.agentArgumentsJSONString(arguments)
+                )
+            ]
+        )
+        runtime.messages.append(assistantMessage)
+
+        let record = AgentToolCall(
+            messageID: assistantMessage.id,
+            externalID: externalID,
+            toolName: toolName,
+            arguments: arguments,
+            risk: .write,
+            status: .running
+        )
+        runtime.toolCalls.append(record)
+        let recordID = record.id
+        persistAgentSession(runtime: runtime)
+
+        runtime.requestTask?.cancel()
+        runtime.requestTask = Task { [weak self, weak runtime] in
+            guard let self, let runtime else { return }
+            await self.runDelegatedAgentToolCall(
+                toolName: toolName,
+                arguments: arguments,
+                userText: text,
+                textAttachments: textAttachments,
+                images: images,
+                executionAgent: executionAgent,
+                recordID: recordID,
+                externalID: externalID,
+                runtime: runtime
+            )
+        }
+    }
+
+    @MainActor
+    private func runDelegatedAgentToolCall(
+        toolName: String,
+        arguments initialArguments: [String: AgentJSONValue],
+        userText: String,
+        textAttachments: [AgentTextAttachment],
+        images: [AgentImageAttachment],
+        executionAgent: AgentExecutionAgent,
+        recordID: AgentToolCall.ID,
+        externalID: String,
+        runtime: AgentRuntime
+    ) async {
+        var arguments = initialArguments
+        let workspaceLocation = runtime.workspaceLocation
+            ?? runtime.workspaceRootPath.map { .local(path: $0) }
+        let workspaceURL = workspaceLocation?.localPath.map { URL(fileURLWithPath: $0) }
+        let remoteRuntimeDescriptor: RuntimeDescriptor? = workspaceLocation?.remoteRuntimeID.flatMap {
+            AgentRuntimeStore.descriptor(id: $0)
+        }
+        let baseline = await Self.loadAgentWorktreeSnapshot(for: workspaceURL)
+
+        defer {
+            runtime.isResponding = false
+            runtime.turnStartedAt = nil
+            runtime.requestTask = nil
+            persistAgentSession(runtime: runtime)
+            consumeNextQueuedMessageIfNeeded(for: runtime)
+        }
+
+        if !images.isEmpty {
+            let imageDescriptions: String
+            do {
+                let configuration = agentConfiguration.normalized.imageDescription.agentConfiguration
+                imageDescriptions = try await describeImagesForTextOnlyProvider(
+                    images,
+                    configuration: configuration
+                )
+            } catch {
+                imageDescriptions = "Image description failed: \(error.localizedDescription)"
+            }
+            let prompt = delegatedAgentPrompt(
+                userText: userText,
+                textAttachments: textAttachments,
+                images: images,
+                imageDescriptions: imageDescriptions,
+                executionAgent: executionAgent,
+                workspaceLocation: workspaceLocation
+            )
+            arguments["prompt"] = .string(prompt)
+            if let messageIndex = runtime.messages.firstIndex(where: {
+                $0.toolCalls.contains(where: { $0.externalID == externalID })
+            }), let callIndex = runtime.messages[messageIndex].toolCalls.firstIndex(where: { $0.externalID == externalID }) {
+                runtime.messages[messageIndex].toolCalls[callIndex].argumentsJSON = Self.agentArgumentsJSONString(arguments)
+            }
+        }
+        if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+            runtime.toolCalls[index].arguments = arguments
+            runtime.toolCalls[index].status = .pendingApproval
+        }
+        AgentToolApprovalNotifier.notifyIfBackgrounded(
+            toolName: toolName,
+            arguments: arguments,
+            status: .pendingApproval
+        )
+
+        let risk = AgentToolRegistry.risk(
+            for: toolName,
+            arguments: arguments,
+            rootDirectory: workspaceURL
+        )
+        let sandboxDecision = AgentSandboxPolicy.decision(
+            toolName: toolName,
+            arguments: arguments,
+            rootDirectory: workspaceURL
+        )
+        let autoApproval = await autoApprovalSource(
+            toolName: toolName,
+            arguments: arguments,
+            risk: risk,
+            rootDirectory: workspaceURL,
+            interactionMode: runtime.interactionMode,
+            approvalMode: runtime.approvalMode
+        )
+
+        if risk != .read && runtime.isPlanGateActive {
+            finishDelegatedAgentRecord(
+                runtime: runtime,
+                recordID: recordID,
+                externalID: externalID,
+                status: .denied,
+                result: nil,
+                errorMessage: "Plan mode: needs user approval",
+                toolPayload: "Blocked: Plan mode is active and no plan has been approved yet."
+            )
+            return
+        }
+
+        if risk != .read && autoApproval == nil {
+            let decision = await awaitToolDecision(for: runtime, forCallID: recordID)
+            if Task.isCancelled { return }
+            if case .denied(let reason) = decision {
+                AgentSandboxAuditLog.append(
+                    toolName: toolName,
+                    arguments: arguments,
+                    decision: sandboxDecision,
+                    approvalSource: nil,
+                    outcome: "denied"
+                )
+                finishDelegatedAgentRecord(
+                    runtime: runtime,
+                    recordID: recordID,
+                    externalID: externalID,
+                    status: .denied,
+                    result: nil,
+                    errorMessage: reason,
+                    toolPayload: "Delegated agent call denied by the user."
+                )
+                return
+            }
+        }
+
+        let approvalSource: AgentToolApprovalSource? = autoApproval
+            ?? (risk == .read ? nil : (sandboxDecision.mode == .escalated ? .escalated : .user))
+        if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+            runtime.toolCalls[index].status = .running
+            runtime.toolCalls[index].approvalSource = approvalSource
+        }
+
+        let context = AgentToolContext(
+            rootDirectory: workspaceURL,
+            workspaceLocation: workspaceLocation,
+            runtimeDescriptor: remoteRuntimeDescriptor,
+            runtimeID: runtime.id,
+            jobRegistry: agentJobRegistry,
+            sandboxMode: sandboxModeForToolExecution(
+                risk: risk,
+                approvalSource: approvalSource,
+                sandboxDecision: sandboxDecision
+            )
+        )
+
+        do {
+            let result = try await AgentToolRunner.run(
+                name: toolName,
+                arguments: arguments,
+                context: context
+            )
+            AgentSandboxAuditLog.append(
+                toolName: toolName,
+                arguments: arguments,
+                decision: sandboxDecision,
+                approvalSource: approvalSource,
+                outcome: "succeeded"
+            )
+            await refreshGitStatusAfterAgentTool(
+                for: runtime,
+                workspaceURL: workspaceURL,
+                baselineFingerprint: baseline.fingerprint
+            )
+            finishDelegatedAgentRecord(
+                runtime: runtime,
+                recordID: recordID,
+                externalID: externalID,
+                status: .succeeded,
+                result: result,
+                errorMessage: nil,
+                toolPayload: result.payload
+            )
+        } catch is CancellationError {
+            finishDelegatedAgentRecord(
+                runtime: runtime,
+                recordID: recordID,
+                externalID: externalID,
+                status: .failed,
+                result: nil,
+                errorMessage: "Cancelled",
+                toolPayload: "Delegated agent cancelled."
+            )
+        } catch {
+            AgentSandboxAuditLog.append(
+                toolName: toolName,
+                arguments: arguments,
+                decision: sandboxDecision,
+                approvalSource: approvalSource,
+                outcome: "failed"
+            )
+            finishDelegatedAgentRecord(
+                runtime: runtime,
+                recordID: recordID,
+                externalID: externalID,
+                status: .failed,
+                result: nil,
+                errorMessage: error.localizedDescription,
+                toolPayload: "Tool error: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func finishDelegatedAgentRecord(
+        runtime: AgentRuntime,
+        recordID: AgentToolCall.ID,
+        externalID: String,
+        status: AgentToolCallStatus,
+        result: AgentToolResult?,
+        errorMessage: String?,
+        toolPayload: String
+    ) {
+        if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+            runtime.toolCalls[index].status = status
+            runtime.toolCalls[index].result = result
+            runtime.toolCalls[index].errorMessage = errorMessage
+        }
+        appendToolMessage(
+            for: runtime,
+            toolCallID: externalID,
+            payload: toolPayload,
+            source: status == .succeeded ? .toolOutput : .systemNotice
+        )
+    }
+
+    private func delegatedAgentPrompt(
+        userText: String,
+        textAttachments: [AgentTextAttachment],
+        images: [AgentImageAttachment],
+        imageDescriptions: String?,
+        executionAgent: AgentExecutionAgent,
+        workspaceLocation: WorkspaceLocation?
+    ) -> String {
+        var blocks: [String] = [
+            "You are being invoked from WillDeep Composer as the selected execution agent: \(executionAgent.displayName).",
+            "Work on the user's task end-to-end in the current workspace. If you change files, run the most relevant verification you can and summarize what changed.",
+        ]
+        if let path = workspaceLocation?.path, !path.isEmpty {
+            blocks.append("Workspace: \(path)")
+        }
+        if !images.isEmpty {
+            if let imageDescriptions, !imageDescriptions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                blocks.append("""
+                ### Image descriptions generated by WillDeep VL model
+
+                \(imageDescriptions)
+                """)
+            } else {
+                blocks.append("WillDeep is preparing descriptions for \(images.count) image attachment(s) before this delegated CLI task runs.")
+            }
+        }
+        if !textAttachments.isEmpty {
+            blocks.append(textAttachments.map(\.modelBlock).joined(separator: "\n\n"))
+        }
+        blocks.append("---")
+        blocks.append(userText)
+        return blocks.joined(separator: "\n\n")
+    }
+
+    private func delegatedAgentArguments(
+        prompt: String,
+        executionAgent: AgentExecutionAgent
+    ) -> [String: AgentJSONValue] {
+        var arguments: [String: AgentJSONValue] = [
+            "prompt": .string(prompt),
+            "run_in_background": .bool(true),
+            "timeout_seconds": .number(1800),
+        ]
+        if let permissionMode = executionAgent.defaultPermissionMode {
+            arguments["permission_mode"] = .string(permissionMode)
+        }
+        return arguments
+    }
+
+    nonisolated private static func agentArgumentsJSONString(_ arguments: [String: AgentJSONValue]) -> String {
+        let raw = arguments.mapValues(\.rawAny)
+        guard JSONSerialization.isValidJSONObject(raw),
+              let data = try? JSONSerialization.data(withJSONObject: raw, options: [.sortedKeys]),
+              let string = String(data: data, encoding: .utf8) else {
+            return "{}"
+        }
+        return string
     }
 
     func activeRuntimeAfterCreatingNewSession() -> AgentRuntime? {

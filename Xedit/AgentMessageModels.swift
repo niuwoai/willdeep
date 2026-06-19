@@ -314,18 +314,21 @@ struct AgentQueuedMessage: Identifiable, Equatable {
     var images: [AgentImageAttachment]
     var textAttachments: [AgentTextAttachment]
     var attachedSkills: [AgentSkillEntry]
+    var executionAgent: AgentExecutionAgent
 
     init(
         id: UUID = UUID(),
         text: String,
         images: [AgentImageAttachment] = [],
         textAttachments: [AgentTextAttachment] = [],
-        attachedSkills: [AgentSkillEntry] = []
+        attachedSkills: [AgentSkillEntry] = [],
+        executionAgent: AgentExecutionAgent = .willDeep
     ) {
         self.id = id
         self.text = text
         self.images = images
         self.textAttachments = textAttachments
         self.attachedSkills = attachedSkills
+        self.executionAgent = executionAgent
     }
 }

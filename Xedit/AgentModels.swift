@@ -43,6 +43,9 @@ struct AgentSession: Identifiable, Codable, Equatable {
     /// Per-session tool approval behavior. Defaults to smart approval
     /// for backwards compatibility with existing sessions.
     var approvalMode: AgentApprovalMode
+    /// Which execution backend the composer should use for the next
+    /// user turn. Defaults to WillDeep's native agent loop.
+    var executionAgent: AgentExecutionAgent
     /// Plan-mode state (proposed → approved → done). Nil outside Plan
     /// mode, or when Plan mode is on but no plan has been drafted yet.
     var currentPlan: AgentPlan?
@@ -95,6 +98,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         agentEditedPaths: [String] = [],
         interactionMode: AgentInteractionMode = .normal,
         approvalMode: AgentApprovalMode = .smart,
+        executionAgent: AgentExecutionAgent = .willDeep,
         currentPlan: AgentPlan? = nil,
         currentGoal: AgentGoal? = nil,
         learningEvents: [AgentLearningEvent] = [],
@@ -117,6 +121,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.agentEditedPaths = agentEditedPaths
         self.interactionMode = interactionMode
         self.approvalMode = approvalMode
+        self.executionAgent = executionAgent
         self.currentPlan = currentPlan
         self.currentGoal = currentGoal
         self.learningEvents = learningEvents
@@ -181,7 +186,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         case id, title, workspaceRootPath, workspaceLocation, modelID
         case providerID, providerDisplayName
         case createdAt, updatedAt, messages
-        case didEditFiles, agentEditedPaths, interactionMode, approvalMode, currentPlan, currentGoal, learningEvents, latestTurnRecall
+        case didEditFiles, agentEditedPaths, interactionMode, approvalMode, executionAgent, currentPlan, currentGoal, learningEvents, latestTurnRecall
         case pinnedAt, archivedAt, titleIsUserSet
     }
 
@@ -202,6 +207,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.agentEditedPaths = try c.decodeIfPresent([String].self, forKey: .agentEditedPaths) ?? []
         self.interactionMode = try c.decodeIfPresent(AgentInteractionMode.self, forKey: .interactionMode) ?? .normal
         self.approvalMode = try c.decodeIfPresent(AgentApprovalMode.self, forKey: .approvalMode) ?? .smart
+        self.executionAgent = try c.decodeIfPresent(AgentExecutionAgent.self, forKey: .executionAgent) ?? .willDeep
         self.currentPlan = try c.decodeIfPresent(AgentPlan.self, forKey: .currentPlan)
         self.currentGoal = try c.decodeIfPresent(AgentGoal.self, forKey: .currentGoal)
         self.learningEvents = try c.decodeIfPresent([AgentLearningEvent].self, forKey: .learningEvents) ?? []
@@ -284,6 +290,63 @@ enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable {
         case .requestEveryTime: return "hand.raised"
         case .smart: return "checkmark.shield"
         case .workspaceAccess: return "shield.lefthalf.filled"
+        }
+    }
+}
+
+/// Composer-level execution backend for a user turn.
+///
+/// This is deliberately separate from the model/provider picker: providers
+/// choose the LLM API used by WillDeep itself, while this chooses whether
+/// the submitted task is handled by WillDeep or delegated to an external
+/// coding agent CLI through the existing tool/approval boundary.
+enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiable {
+    case willDeep
+    case claudeCode
+    case codexCLI
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .willDeep: return "WillDeep"
+        case .claudeCode: return "Claude Code"
+        case .codexCLI: return "Codex"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .willDeep:
+            return "使用当前会话自己的模型和工具循环。"
+        case .claudeCode:
+            return "通过本机 Claude Code CLI 执行这轮任务。"
+        case .codexCLI:
+            return "通过本机 Codex CLI 执行这轮任务。"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .willDeep: return "sparkles"
+        case .claudeCode: return "sparkles.rectangle.stack"
+        case .codexCLI: return "terminal"
+        }
+    }
+
+    var toolName: String? {
+        switch self {
+        case .willDeep: return nil
+        case .claudeCode: return "claude_code"
+        case .codexCLI: return "codex_cli"
+        }
+    }
+
+    var defaultPermissionMode: String? {
+        switch self {
+        case .willDeep: return nil
+        case .claudeCode: return "acceptEdits"
+        case .codexCLI: return "workspaceWrite"
         }
     }
 }

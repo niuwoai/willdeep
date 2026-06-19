@@ -2,7 +2,7 @@
 //  AgentComposerPickers.swift
 //  WillDeep
 //
-//  The three pill-shaped pickers in the composer row, split out of
+//  The pill-shaped pickers in the composer row, split out of
 //  AgentModeComposerView.swift in rc42:
 //   - `WorkspacePickerPill`: folder dropdown — current-folder Finder /
 //     copy-path / copy-branch + a deduped list of known workspaces +
@@ -12,6 +12,8 @@
 //     on macOS dismiss on the slightest hover drift). Has a
 //     "Recently fetched" tail menu for ad-hoc model IDs not in the
 //     library entries.
+//   - `AgentExecutionPickerPill`: WillDeep / Claude Code / Codex
+//     execution backend selector for the next composer turn.
 //   - `AgentModePickerPill`: Normal / Plan / Goal selector. Plan locks
 //     writes until approval; Goal gathers the objective through chat
 //     and pins it to every reply once defined.
@@ -698,6 +700,72 @@ struct ModelPickerPill: View {
 
 extension String {
     fileprivate var nilIfEmpty: String? { isEmpty ? nil : self }
+}
+
+// MARK: - Execution picker (WillDeep / external coding agents)
+
+struct AgentExecutionPickerPill: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        Menu {
+            ForEach(AgentExecutionAgent.allCases) { agent in
+                Button {
+                    appState.setAgentExecutionAgent(agent)
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Image(systemName: agent.symbol)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(agent.displayName)
+                            Text(agent.summary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        if appState.agentExecutionAgent == agent {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: appState.agentExecutionAgent.symbol)
+                    .font(.system(size: 10, weight: .semibold))
+                Text(appState.agentExecutionAgent.displayName)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .foregroundStyle(pillForeground)
+            .background(Capsule(style: .continuous).fill(pillBackground))
+            .overlay(Capsule(style: .continuous).stroke(pillBorder, lineWidth: 1))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("选择这一轮由 WillDeep 自己执行，还是委托给本机 Claude Code / Codex CLI。")
+    }
+
+    private var pillForeground: Color {
+        appState.agentExecutionAgent == .willDeep ? Color.secondary : Color.white
+    }
+
+    private var pillBackground: Color {
+        switch appState.agentExecutionAgent {
+        case .willDeep: return Color.secondary.opacity(0.10)
+        case .claudeCode: return Color.purple
+        case .codexCLI: return Color.accentColor
+        }
+    }
+
+    private var pillBorder: Color {
+        appState.agentExecutionAgent == .willDeep
+            ? Color.secondary.opacity(0.25)
+            : Color.clear
+    }
 }
 
 // MARK: - Mode picker (Normal / Plan / Goal)

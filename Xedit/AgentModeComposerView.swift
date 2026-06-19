@@ -454,6 +454,7 @@ private struct ComposerCard: View {
                 AttachButton(action: attachImageFromPanel)
                 WorkspacePickerPill()
                 ModelPickerPill()
+                AgentExecutionPickerPill()
                 AgentModePickerPill()
                 AgentApprovalModePickerPill()
                 AgentPluginPickerPill()

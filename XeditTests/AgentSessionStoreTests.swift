@@ -152,7 +152,8 @@ struct AgentSessionStoreTests {
                 AgentMessage(role: .user, content: "ping"),
                 AgentMessage(role: .assistant, content: "pong")
             ],
-            didEditFiles: true
+            didEditFiles: true,
+            executionAgent: .codexCLI
         )
 
         let encoder = JSONEncoder()
@@ -168,6 +169,23 @@ struct AgentSessionStoreTests {
         #expect(decoded.title == original.title)
         #expect(decoded.messages.count == 2)
         #expect(decoded.didEditFiles == true)
+        #expect(decoded.executionAgent == .codexCLI)
+    }
+
+    @Test
+    func legacySessionDecodesDefaultExecutionAgent() throws {
+        let json = """
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "title": "Legacy",
+          "createdAt": "2026-06-19T00:00:00Z",
+          "updatedAt": "2026-06-19T00:00:00Z",
+          "messages": []
+        }
+        """
+
+        let decoded = try JSONDecoder.iso8601Decoder.decode(AgentSession.self, from: Data(json.utf8))
+        #expect(decoded.executionAgent == .willDeep)
     }
 
     /// Corrupt JSON must throw a DecodingError — `loadAll` then catches

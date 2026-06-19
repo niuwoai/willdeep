@@ -107,6 +107,12 @@ extension AppState {
         set { activeRuntime?.approvalMode = newValue }
     }
 
+    /// Per-session execution backend selected in the composer.
+    var agentExecutionAgent: AgentExecutionAgent {
+        get { activeRuntime?.executionAgent ?? .willDeep }
+        set { activeRuntime?.executionAgent = newValue }
+    }
+
     /// Current proposed/approved plan for Plan mode.
     var agentCurrentPlan: AgentPlan? {
         get { activeRuntime?.currentPlan }

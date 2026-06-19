@@ -203,7 +203,8 @@ extension AppState {
         guard !runtime.isResponding, !runtime.isCompressingContext else { return }
         guard let next = runtime.queuedMessages.first else { return }
         runtime.queuedMessages.removeFirst()
-        dispatchAgentMessage(
+        dispatchAgentMessageUsingSelectedExecutor(
+            next.executionAgent,
             for: runtime,
             text: next.text,
             images: next.images,

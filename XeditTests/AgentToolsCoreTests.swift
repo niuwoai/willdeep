@@ -413,6 +413,10 @@ struct AgentQueueModeTests {
         }
 
         let queued = AgentQueuedMessage(id: UUID(), text: "next please")
+        #expect(queued.executionAgent == .willDeep)
+        let delegated = AgentQueuedMessage(id: UUID(), text: "fix it", executionAgent: .claudeCode)
+        #expect(delegated.executionAgent == .claudeCode)
+
         runtime.isResponding = true
         runtime.queuedMessages = [queued]
         runtime.toolCalls = [

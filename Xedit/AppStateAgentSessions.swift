@@ -116,6 +116,16 @@ extension AppState {
         persistActiveAgentSession()
     }
 
+    /// Choose which execution backend the composer should use for this
+    /// session. Provider/model selection remains separate; this only
+    /// controls whether the next user turn runs natively or delegates to
+    /// an external coding-agent CLI.
+    func setAgentExecutionAgent(_ agent: AgentExecutionAgent) {
+        guard agentExecutionAgent != agent else { return }
+        agentExecutionAgent = agent
+        persistActiveAgentSession()
+    }
+
     /// User clicks Approve on the proposed plan — flips it to approved
     /// so the next turn's system prompt unlocks write tools.
     func approveAgentPlan() {
