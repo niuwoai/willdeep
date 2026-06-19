@@ -576,6 +576,57 @@ extension WillDeepTests {
         #expect(abs((row?.estimatedCostUSD ?? 0) - 0.39) < 0.000_001)
     }
 
+    @Test("AgentUsageStats falls back to built-in public prices for Kimi models")
+    func testUsageStatsPublicPriceFallbackForKimiModels() {
+        let session = makeSession(
+            modelID: "kimi-k2.6",
+            providerID: "openai-compatible",
+            messages: [
+                meteredAssistantMessage(prompt: 1_000_000, completion: 1_000_000, cachedPrompt: 500_000)
+            ]
+        )
+
+        let row = AgentUsageStats.modelUsage(for: [session]).first
+        let expected = 30.8 / 7.2
+
+        #expect(row?.modelID == "kimi-k2.6")
+        #expect(abs((row?.estimatedCostUSD ?? 0) - expected) < 0.000_001)
+    }
+
+    @Test("AgentUsageStats falls back to built-in public prices for Moonshot V1 models")
+    func testUsageStatsPublicPriceFallbackForMoonshotModels() {
+        let session = makeSession(
+            modelID: "moonshot-v1-8k",
+            providerID: "custom",
+            messages: [
+                meteredAssistantMessage(prompt: 1_000_000, completion: 1_000_000)
+            ]
+        )
+
+        let row = AgentUsageStats.modelUsage(for: [session]).first
+        let expected = 12.0 / 7.2
+
+        #expect(row?.modelID == "moonshot-v1-8k")
+        #expect(abs((row?.estimatedCostUSD ?? 0) - expected) < 0.000_001)
+    }
+
+    @Test("AgentUsageStats falls back to built-in public prices for GLM models")
+    func testUsageStatsPublicPriceFallbackForGLMModels() {
+        let session = makeSession(
+            modelID: "glm-4.5",
+            providerID: "custom",
+            messages: [
+                meteredAssistantMessage(prompt: 1_000_000, completion: 1_000_000)
+            ]
+        )
+
+        let row = AgentUsageStats.modelUsage(for: [session]).first
+        let expected = 2.8 / 7.2
+
+        #expect(row?.modelID == "glm-4.5")
+        #expect(abs((row?.estimatedCostUSD ?? 0) - expected) < 0.000_001)
+    }
+
     @Test("agent tool registry escalates dangerous run_command invocations to .danger")
     func testRunCommandRiskEscalatesForDestructiveShell() {
         let benignRisk = AgentToolRegistry.risk(

@@ -398,6 +398,16 @@ private enum AgentModelPricing {
         if model.contains("gemini") {
             candidates.append("gemini")
         }
+        if model.contains("kimi") {
+            candidates.append("kimi")
+        }
+        if model.contains("moonshot") {
+            candidates.append("moonshot")
+        }
+        if model.contains("glm-") || model.contains("chatglm") {
+            candidates.append("zhipu")
+            candidates.append("bigmodel")
+        }
         if model.hasPrefix("gpt-") || model.contains("/gpt-") || model.hasPrefix("o1") || model.hasPrefix("o3") || model.hasPrefix("o4") {
             candidates.append(AgentProviderPreset.openAIID)
             candidates.append("openai-responses")
@@ -409,15 +419,25 @@ private enum AgentModelPricing {
         "openai-chat": [AgentProviderPreset.openAIID],
         "openai-compatible": [AgentProviderPreset.openAIID],
         "openai-responses": [AgentProviderPreset.openAIID],
-        "custom": [AgentProviderPreset.openAIID, "dashscope", AgentProviderPreset.deepSeekID, "claude", "gemini"],
+        "custom": [AgentProviderPreset.openAIID, "dashscope", AgentProviderPreset.deepSeekID, "claude", "gemini", "kimi", "moonshot", "zhipu", "bigmodel"],
         "dashscope-intl": ["dashscope"],
         "aliyun": ["dashscope"],
         "alibaba": ["dashscope"],
         "qwen": ["dashscope"],
         "deepseek-ai": [AgentProviderPreset.deepSeekID],
         "anthropic": ["claude"],
-        "google": ["gemini"]
+        "google": ["gemini"],
+        "moonshot-ai": ["kimi", "moonshot"],
+        "z.ai": ["zhipu", "bigmodel"],
+        "zai": ["zhipu", "bigmodel"],
+        "zhipuai": ["zhipu", "bigmodel"],
+        "chatglm": ["zhipu", "bigmodel"],
+        "glm": ["zhipu", "bigmodel"]
     ]
+
+    private static func cny(_ yuanPerMillion: Double) -> Double {
+        yuanPerMillion / 7.2
+    }
 
     // Built-in public price cache. Prices are USD per 1M tokens unless noted
     // by the provider's public API pricing page. Keep model-specific rows
@@ -459,7 +479,17 @@ private enum AgentModelPricing {
         AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen-plus", "qwen3-plus", "qwen2.5-plus"], inputPerMillion: 0.11, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 0.28),
         AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen-turbo"], inputPerMillion: 0.042, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 0.083),
         AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen-long"], inputPerMillion: 0.042, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 0.083),
-        AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwq"], inputPerMillion: 0.22, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 0.88)
+        AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwq"], inputPerMillion: 0.22, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 0.88),
+
+        AgentModelPrice(providerIDs: ["kimi", "moonshot"], modelHints: ["kimi-k2.7-code-highspeed"], inputPerMillion: cny(13.0), cachedInputPerMillion: cny(2.6), cacheWritePerMillion: nil, outputPerMillion: cny(54.0)),
+        AgentModelPrice(providerIDs: ["kimi", "moonshot"], modelHints: ["kimi-k2.7-code"], inputPerMillion: cny(6.5), cachedInputPerMillion: cny(1.3), cacheWritePerMillion: nil, outputPerMillion: cny(27.0)),
+        AgentModelPrice(providerIDs: ["kimi", "moonshot"], modelHints: ["kimi-k2.6"], inputPerMillion: cny(6.5), cachedInputPerMillion: cny(1.1), cacheWritePerMillion: nil, outputPerMillion: cny(27.0)),
+        AgentModelPrice(providerIDs: ["kimi", "moonshot"], modelHints: ["kimi-k2.5"], inputPerMillion: cny(4.0), cachedInputPerMillion: cny(0.7), cacheWritePerMillion: nil, outputPerMillion: cny(21.0)),
+        AgentModelPrice(providerIDs: ["kimi", "moonshot"], modelHints: ["moonshot-v1-128k"], inputPerMillion: cny(10.0), cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: cny(30.0)),
+        AgentModelPrice(providerIDs: ["kimi", "moonshot"], modelHints: ["moonshot-v1-32k"], inputPerMillion: cny(5.0), cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: cny(20.0)),
+        AgentModelPrice(providerIDs: ["kimi", "moonshot"], modelHints: ["moonshot-v1-8k"], inputPerMillion: cny(2.0), cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: cny(10.0)),
+
+        AgentModelPrice(providerIDs: ["zhipu", "bigmodel"], modelHints: ["glm-4.5"], inputPerMillion: cny(0.8), cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: cny(2.0))
     ]
 }
 

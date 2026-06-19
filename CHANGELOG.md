@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.91.0-rc9 - 2026-06-19
+
+### Changed
+
+- Agent Models 内置公开价格缓存继续扩展 Kimi / Moonshot 与 GLM:覆盖 `kimi-k2.5`、`kimi-k2.6`、`kimi-k2.7-code`/HighSpeed、`moonshot-v1-*` 和已明确公开价格的 `glm-4.5` 系列;人民币公开价按固定汇率快照折算进现有 USD 成本列。
+- 公开价兜底增加 Kimi、Moonshot、Zhipu/BigModel/GLM provider 别名和模型名二次推断,中转或自定义 provider 只要模型名可识别就能估算。
+- 补充 Kimi、Moonshot V1 和 GLM 的默认计费单测。
+- 版本号按功能增强递增为 **1.91.0-rc9**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.91.0-rc8 - 2026-06-19
 
 ### Changed
