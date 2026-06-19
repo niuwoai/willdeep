@@ -12,6 +12,8 @@ struct CollaborationConnectorSettingsView: View {
     @State private var settings = CollaborationConnectorSettingsStore.load()
     @State private var selectedPlatform: CollaborationConnectorPlatform = .feishu
     @State private var statusMessage = L10n.Settings.allChangesSaved
+    @State private var authorizationRequest: CollaborationConnectorOAuthRequest?
+    @AppStorage("com.willdeep.connectors.showAdvancedConfiguration") private var showAdvancedConfiguration = false
 
     private var enabledCount: Int {
         settings.connectors.filter(\.isEnabled).count
@@ -132,11 +134,133 @@ struct CollaborationConnectorSettingsView: View {
                 }
             }
 
+            if connector.platform == .feishu {
+                feishuAuthorizationSection(connector)
+            } else {
+                standardOAuthFields(connector)
+            }
+        } header: {
+            Text(L10n.Settings.Connectors.configurationSection(connector.platform.displayName))
+        }
+    }
+
+    private func feishuAuthorizationSection(_ connector: CollaborationConnectorConfig) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
             LabeledContent(L10n.Settings.Connectors.appIDLabel) {
                 TextField("", text: binding(for: connector, \.appID), prompt: Text(L10n.Settings.Connectors.appIDPrompt))
                     .textFieldStyle(.roundedBorder)
             }
 
+            Text(L10n.Settings.Connectors.feishuQRCodeHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack(alignment: .top, spacing: 16) {
+                if let authorizationURL = currentAuthorizationURL(for: connector) {
+                    SettingsQRCodeView(
+                        text: authorizationURL.absoluteString,
+                        accessibilityLabel: L10n.Settings.Connectors.feishuQRCodeAccessibilityLabel,
+                        unavailableText: L10n.Settings.Connectors.feishuQRCodeUnavailable,
+                        pointSize: 172
+                    )
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(L10n.Settings.Connectors.feishuQRCodeReady)
+                            .font(.headline)
+                        Text(authorizationURL.absoluteString)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .lineLimit(4)
+                    }
+                } else {
+                    ContentUnavailableView(
+                        L10n.Settings.Connectors.feishuQRCodePlaceholderTitle,
+                        systemImage: "qrcode",
+                        description: Text(L10n.Settings.Connectors.feishuQRCodePlaceholderDescription)
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
+            HStack {
+                Button {
+                    prepareAuthorization(for: connector, openInBrowser: false)
+                } label: {
+                    Label(L10n.Settings.Connectors.generateQRCode, systemImage: "qrcode")
+                }
+                .disabled(connector.appID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                Button {
+                    prepareAuthorization(for: connector, openInBrowser: true)
+                } label: {
+                    Label(L10n.Settings.Connectors.openAuthorization, systemImage: "safari")
+                }
+                .disabled(connector.appID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                if let authorizationURL = currentAuthorizationURL(for: connector) {
+                    Button {
+                        copyAuthorizationURL(authorizationURL, for: connector)
+                    } label: {
+                        Label(L10n.Settings.Connectors.copyAuthorizationURL, systemImage: "doc.on.doc")
+                    }
+                }
+
+                Spacer()
+            }
+
+            DisclosureGroup(isExpanded: $showAdvancedConfiguration) {
+                advancedConfigurationFields(connector)
+                    .padding(.top, 6)
+            } label: {
+                Label(L10n.Settings.Connectors.advancedConfiguration, systemImage: "slider.horizontal.3")
+            }
+        }
+    }
+
+    private func standardOAuthFields(_ connector: CollaborationConnectorConfig) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            LabeledContent(L10n.Settings.Connectors.appIDLabel) {
+                TextField("", text: binding(for: connector, \.appID), prompt: Text(L10n.Settings.Connectors.appIDPrompt))
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            advancedConfigurationFields(connector)
+
+            HStack {
+                Button {
+                    prepareAuthorization(for: connector, openInBrowser: true)
+                } label: {
+                    Label(L10n.Settings.Connectors.prepareAuthorization, systemImage: "person.badge.key")
+                }
+
+                Button {
+                    copyRedirectURI(for: connector)
+                } label: {
+                    Label(L10n.Settings.Connectors.copyRedirectURI, systemImage: "doc.on.doc")
+                }
+
+                Button(role: .destructive) {
+                    clearCredentials(for: connector)
+                } label: {
+                    Label(L10n.Settings.Connectors.clearCredentials, systemImage: "key.slash")
+                }
+
+                if let docsURL = connector.platform.documentationURL {
+                    Button {
+                        NSWorkspace.shared.open(docsURL)
+                    } label: {
+                        Label(L10n.Settings.Connectors.openDocs, systemImage: "safari")
+                    }
+                }
+
+                Spacer()
+            }
+        }
+    }
+
+    private func advancedConfigurationFields(_ connector: CollaborationConnectorConfig) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
             LabeledContent(L10n.Settings.Connectors.tenantIDLabel) {
                 TextField("", text: binding(for: connector, \.tenantID), prompt: Text(L10n.Settings.Connectors.tenantIDPrompt))
                     .textFieldStyle(.roundedBorder)
@@ -165,37 +289,31 @@ struct CollaborationConnectorSettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            HStack {
-                Button {
-                    prepareAuthorization(for: connector)
-                } label: {
-                    Label(L10n.Settings.Connectors.prepareAuthorization, systemImage: "person.badge.key")
-                }
-
-                Button {
-                    copyRedirectURI(for: connector)
-                } label: {
-                    Label(L10n.Settings.Connectors.copyRedirectURI, systemImage: "doc.on.doc")
-                }
-
-                Button(role: .destructive) {
-                    clearCredentials(for: connector)
-                } label: {
-                    Label(L10n.Settings.Connectors.clearCredentials, systemImage: "key.slash")
-                }
-
-                if let docsURL = connector.platform.documentationURL {
+            if connector.platform == .feishu {
+                HStack {
                     Button {
-                        NSWorkspace.shared.open(docsURL)
+                        copyRedirectURI(for: connector)
                     } label: {
-                        Label(L10n.Settings.Connectors.openDocs, systemImage: "safari")
+                        Label(L10n.Settings.Connectors.copyRedirectURI, systemImage: "doc.on.doc")
                     }
-                }
 
-                Spacer()
+                    Button(role: .destructive) {
+                        clearCredentials(for: connector)
+                    } label: {
+                        Label(L10n.Settings.Connectors.clearCredentials, systemImage: "key.slash")
+                    }
+
+                    if let docsURL = connector.platform.documentationURL {
+                        Button {
+                            NSWorkspace.shared.open(docsURL)
+                        } label: {
+                            Label(L10n.Settings.Connectors.openDocs, systemImage: "safari")
+                        }
+                    }
+
+                    Spacer()
+                }
             }
-        } header: {
-            Text(L10n.Settings.Connectors.configurationSection(connector.platform.displayName))
         }
     }
 
@@ -304,8 +422,12 @@ struct CollaborationConnectorSettingsView: View {
         statusMessage = L10n.Settings.allChangesSaved
     }
 
-    private func prepareAuthorization(for connector: CollaborationConnectorConfig) {
+    private func prepareAuthorization(
+        for connector: CollaborationConnectorConfig,
+        openInBrowser: Bool
+    ) {
         let request = CollaborationConnectorOAuthCoordinator.prepareAuthorization(for: connector)
+        authorizationRequest = request
         CollaborationConnectorSettingsStore.upsert(request.connector)
         settings = CollaborationConnectorSettingsStore.load()
 
@@ -315,11 +437,30 @@ struct CollaborationConnectorSettingsView: View {
         }
 
         if let authorizationURL = request.authorizationURL {
-            NSWorkspace.shared.open(authorizationURL)
-            statusMessage = L10n.Settings.Connectors.authorizationOpened(connector.platform.displayName)
+            if openInBrowser {
+                NSWorkspace.shared.open(authorizationURL)
+                statusMessage = L10n.Settings.Connectors.authorizationOpened(connector.platform.displayName)
+            } else {
+                statusMessage = L10n.Settings.Connectors.authorizationQRCodeReady(connector.platform.displayName)
+            }
         } else {
             statusMessage = L10n.Settings.Connectors.authorizationPrepared(connector.platform.displayName)
         }
+    }
+
+    private func currentAuthorizationURL(for connector: CollaborationConnectorConfig) -> URL? {
+        guard let request = authorizationRequest,
+              request.connector.platform == connector.platform,
+              request.connector.appID == connector.appID.trimmingCharacters(in: .whitespacesAndNewlines) else {
+            return nil
+        }
+        return request.authorizationURL
+    }
+
+    private func copyAuthorizationURL(_ url: URL, for connector: CollaborationConnectorConfig) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+        statusMessage = L10n.Settings.Connectors.authorizationURLCopied(connector.platform.displayName)
     }
 
     private func copyRedirectURI(for connector: CollaborationConnectorConfig) {

@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.91.0-rc2 - 2026-06-19
+
+### Added
+
+- **飞书扫码授权配置** —— Settings → Connectors 的飞书配置改为 App ID + 授权二维码主流程:WillDeep 自动使用 `https://open.feishu.cn/open-apis/authen/v1/index` 生成飞书 OAuth 授权链接,二维码可直接用飞书扫码授权,同时保留“打开授权页”和“复制授权链接”兜底。
+- 新增共享 `SettingsQRCodeView`,Mobile Gateway 配对二维码和协作连接器授权二维码共用同一套 Core Image 渲染逻辑,避免二维码实现分叉。
+- **侧栏等待批准徽标** —— 左侧 Agent 会话列表会为正在等待工具授权、危险确认、`ask_user` 回答、patch 应用确认或 Plan 审批的会话显示“等待批准”徽标,方便用户一眼找回需要处理的后台会话。
+
+### Changed
+
+- 飞书连接器把租户 ID、回调 URI、授权 URL、Keychain 凭据引用、清理凭据和打开文档入口收进“高级配置”,日常配置不再要求用户填写一排平台内部字段。
+- `CollaborationConnectorOAuthCoordinator` 为飞书提供默认授权入口,并按飞书 OAuth 约定使用 `app_id`、`redirect_uri` 和 `state` 查询参数生成授权 URL。
+- 版本号按新增功能提升为 **1.91.0-rc2**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 四个 docs(MOBILE_GATEWAY / AGENT_HARNESS / CHROME / COLLAB)/ chrome-extension README 同步。
+
+## 1.90.0-rc5 - 2026-06-19
+
+### Fixed
+
+- **启动假死 / 转圈打不开** —— `MobileGatewayCoordinator.start()` 同步调 `Self.reapStaleGatewayProcesses(_:)`,后者在 main thread 上跑 `/bin/ps -axo pid=,ppid=,command=`,然后 `ps.waitUntilExit()` → `readDataToEndOfFile()`。当系统进程数足够多(~200+)、ps 输出超过 64KB pipe buffer 时:子进程写满 buffer 阻塞在 write,主线程在 waitUntilExit 上等子进程,谁也不读 → 互锁,启动那一刻就转圈不响应。采样 `WillDeep.app` (1.90.0-rc4) 4228 个 main-thread 采样 4225 个钉在 `mach_msg_trap` 上,调用栈就是这条路径。两个修复合一:
+  - **[Xedit/MobileGatewayCoordinator.swift:230](Xedit/MobileGatewayCoordinator.swift:230)**:reap 改成 `await Task.detached(priority: .utility) { ... }.value`,main thread 只在挂起点 await,detached 任务在后台跑 ps + kill,UI 期间空闲,启动可见即可点。
+  - **[Xedit/MobileGatewayCoordinator.swift:497](Xedit/MobileGatewayCoordinator.swift:497)** `currentProcessList()`:read 与 wait 顺序调换 —— `run()` → `readDataToEndOfFile()` → `waitUntilExit()`。read 持续清 pipe buffer,子进程不会被 buffer 卡住,EOF 就是子进程关 stdout 的时刻;之后 `waitUntilExit()` 拿退出码做兜底,基本立即返回。
+  - 顺手把 `reapStaleGatewayProcesses` / `currentProcessList` / `staleGatewayPIDs` / `terminateGatewayPID` 全部 `nonisolated` 化,让 detached task 能直接调,Swift 6 concurrency 也不会再警告。
+- 现有 `MobileGatewayCoordinatorTests.staleGatewayPIDs` 测试不受影响(本来就是纯 string 解析)。
+
+### 版本
+
+- bugfix,bump rc:1.90.0-rc4 → **1.90.0-rc5**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 四个 docs(MOBILE_GATEWAY / AGENT_HARNESS / CHROME / COLLAB)/ chrome-extension README 同步。
+
 ## 1.90.0-rc4 - 2026-06-18
 
 ### Added

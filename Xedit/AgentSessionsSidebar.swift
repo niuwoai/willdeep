@@ -381,6 +381,10 @@ struct AgentSessionsSidebar: View {
                     // button's single-click select for two-tap sequences.
                     .onTapGesture(count: 2) { presentRenameAlert(for: session) }
                     .help(L10n.Sidebar.sessionMenuRename)
+                AgentSessionApprovalBadge(
+                    session: session,
+                    runtime: appState.agentRuntimes[session.id]
+                )
                 Spacer(minLength: 0)
                 AgentSessionModeBadges(session: session)
                 sessionUpdatedLabel(session, now: now)

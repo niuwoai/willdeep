@@ -8547,6 +8547,27 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "准备授权" } }
       }
     },
+    "settings.connectors.generate-qr-code" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Generate QR code" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "生成二维码" } }
+      }
+    },
+    "settings.connectors.open-authorization" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open authorization" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开授权页" } }
+      }
+    },
+    "settings.connectors.copy-authorization-url" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy authorization URL" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复制授权链接" } }
+      }
+    },
     "settings.connectors.copy-redirect-uri" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8566,6 +8587,13 @@
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Open docs" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开文档" } }
+      }
+    },
+    "settings.connectors.advanced-configuration" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Advanced configuration" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "高级配置" } }
       }
     },
     "settings.connectors.default-space" : {
@@ -8624,6 +8652,48 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "飞书文档写入可在 OAuth 授权范围齐全后通过 OpenAPI 实现。WillDeep 应在发布前先预览生成文档。" } }
       }
     },
+    "settings.connectors.feishu-qr-help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter the Feishu app ID, generate a QR code, then scan it with Feishu to authorize WillDeep." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "填写飞书 App ID 后生成二维码，用飞书扫码即可授权 WillDeep。" } }
+      }
+    },
+    "settings.connectors.feishu-qr-ready" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ready to scan with Feishu" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "可用飞书扫码授权" } }
+      }
+    },
+    "settings.connectors.feishu-qr-accessibility-label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Feishu authorization QR code" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "飞书授权二维码" } }
+      }
+    },
+    "settings.connectors.feishu-qr-unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Authorization QR code unavailable" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "授权二维码不可用" } }
+      }
+    },
+    "settings.connectors.feishu-qr-placeholder-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No authorization QR yet" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "尚未生成授权二维码" } }
+      }
+    },
+    "settings.connectors.feishu-qr-placeholder-description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Generate a short-lived authorization link after entering the Feishu app ID." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "填写飞书 App ID 后生成短期授权链接。" } }
+      }
+    },
     "settings.connectors.authorization-prepared" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8636,6 +8706,20 @@
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ authorization page opened." } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 授权页面已打开。" } }
+      }
+    },
+    "settings.connectors.authorization-qr-ready" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ authorization QR code is ready." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 授权二维码已生成。" } }
+      }
+    },
+    "settings.connectors.authorization-url-copied" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ authorization URL copied." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 授权链接已复制。" } }
       }
     },
     "settings.connectors.authorization-needs-app-id" : {
@@ -13755,6 +13839,42 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "取消置顶"
+          }
+        }
+      }
+    },
+    "sidebar.session-row.waiting-approval" : {
+      "comment" : "compact badge shown on a session row when a tool, patch, plan, or ask_user prompt is waiting for the user",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting approval"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待批准"
+          }
+        }
+      }
+    },
+    "sidebar.session-row.waiting-approval-tooltip" : {
+      "comment" : ".help() for the waiting-approval badge on a session row",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This session is waiting for your approval or answer."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此会话正在等待你的批准或回答。"
           }
         }
       }

@@ -55,6 +55,15 @@ enum CollaborationConnectorOAuthCoordinator {
         "willdeep://oauth/\(platform.rawValue)/callback"
     }
 
+    static func defaultAuthorizationURL(for platform: CollaborationConnectorPlatform) -> String? {
+        switch platform {
+        case .feishu:
+            return "https://open.feishu.cn/open-apis/authen/v1/index"
+        case .dingtalk, .wecom, .wechatClaw:
+            return nil
+        }
+    }
+
     static func pendingState(
         for platform: CollaborationConnectorPlatform,
         defaults: UserDefaults = .standard
@@ -72,6 +81,9 @@ enum CollaborationConnectorOAuthCoordinator {
         var prepared = connector.normalized
         if prepared.redirectURI.isEmpty {
             prepared.redirectURI = defaultRedirectURI(for: prepared.platform)
+        }
+        if prepared.authorizationURL?.isEmpty ?? true {
+            prepared.authorizationURL = defaultAuthorizationURL(for: prepared.platform)
         }
         if prepared.credentialReference.isEmpty {
             prepared.credentialReference = credentialReference(platform: prepared.platform, kind: .clientSecret)
@@ -172,12 +184,30 @@ enum CollaborationConnectorOAuthCoordinator {
 
         guard var components = URLComponents(string: rawURL) else { return nil }
         var items = components.queryItems ?? []
-        items.append(URLQueryItem(name: "client_id", value: connector.appID))
-        items.append(URLQueryItem(name: "redirect_uri", value: connector.redirectURI))
-        items.append(URLQueryItem(name: "response_type", value: "code"))
-        items.append(URLQueryItem(name: "state", value: state))
+        items.append(contentsOf: oauthQueryItems(for: connector, state: state))
         components.queryItems = items
         return components.url
+    }
+
+    private static func oauthQueryItems(
+        for connector: CollaborationConnectorConfig,
+        state: String
+    ) -> [URLQueryItem] {
+        switch connector.platform {
+        case .feishu:
+            return [
+                URLQueryItem(name: "app_id", value: connector.appID),
+                URLQueryItem(name: "redirect_uri", value: connector.redirectURI),
+                URLQueryItem(name: "state", value: state)
+            ]
+        case .dingtalk, .wecom, .wechatClaw:
+            return [
+                URLQueryItem(name: "client_id", value: connector.appID),
+                URLQueryItem(name: "redirect_uri", value: connector.redirectURI),
+                URLQueryItem(name: "response_type", value: "code"),
+                URLQueryItem(name: "state", value: state)
+            ]
+        }
     }
 
     private static func pendingStateKey(for platform: CollaborationConnectorPlatform) -> String {
