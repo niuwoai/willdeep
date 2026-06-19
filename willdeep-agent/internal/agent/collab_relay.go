@@ -154,7 +154,7 @@ func (r *CollaborationRelay) routes() http.Handler {
 	mux.HandleFunc("POST /events/{platform}", r.handleEvent)
 	mux.HandleFunc("GET /events/poll", r.withAuth(r.handlePollEvents))
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		writeVersionHeaders(w)
+		writeCollaborationRelayVersionHeaders(w)
 		mux.ServeHTTP(w, req)
 	})
 }
@@ -165,7 +165,7 @@ func (r *CollaborationRelay) withAuth(next http.HandlerFunc) http.HandlerFunc {
 		queryToken := req.URL.Query().Get("token")
 		want := r.config.Token
 		if auth != "Bearer "+want && subtle.ConstantTimeCompare([]byte(queryToken), []byte(want)) != 1 {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
+			writeCollaborationRelayError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 		next(w, req)
@@ -176,7 +176,7 @@ func (r *CollaborationRelay) handleHealth(w http.ResponseWriter, req *http.Reque
 	r.mu.Lock()
 	queued := len(r.events)
 	r.mu.Unlock()
-	writeOK(w, map[string]any{
+	writeCollaborationRelayOK(w, map[string]any{
 		"version":          VersionInfo(),
 		"protocol_version": CollaborationRelayProtocolVersion,
 		"public_base_url":  r.config.PublicBaseURL,
@@ -200,12 +200,12 @@ func (r *CollaborationRelay) handleHealth(w http.ResponseWriter, req *http.Reque
 func (r *CollaborationRelay) handleFeishuSetup(w http.ResponseWriter, req *http.Request) {
 	appID := strings.TrimSpace(r.config.FeishuAppID)
 	if appID == "" {
-		writeError(w, http.StatusServiceUnavailable, "feishu app id is not configured")
+		writeCollaborationRelayError(w, http.StatusServiceUnavailable, "feishu app id is not configured")
 		return
 	}
 	state := strings.TrimSpace(req.URL.Query().Get("state"))
 	if state == "" {
-		writeError(w, http.StatusBadRequest, "missing state")
+		writeCollaborationRelayError(w, http.StatusBadRequest, "missing state")
 		return
 	}
 
@@ -215,7 +215,7 @@ func (r *CollaborationRelay) handleFeishuSetup(w http.ResponseWriter, req *http.
 		state,
 	)
 	if req.URL.Query().Get("format") == "json" {
-		writeOK(w, map[string]any{
+		writeCollaborationRelayOK(w, map[string]any{
 			"configured":        true,
 			"authorization_url": authorizationURL,
 		})
@@ -227,7 +227,7 @@ func (r *CollaborationRelay) handleFeishuSetup(w http.ResponseWriter, req *http.
 func (r *CollaborationRelay) handleOAuthCallback(w http.ResponseWriter, req *http.Request) {
 	platform, ok := collaborationRelayPlatformFor(req.PathValue("platform"))
 	if !ok {
-		writeError(w, http.StatusNotFound, "unknown collaboration platform")
+		writeCollaborationRelayError(w, http.StatusNotFound, "unknown collaboration platform")
 		return
 	}
 
@@ -238,7 +238,7 @@ func (r *CollaborationRelay) handleOAuthCallback(w http.ResponseWriter, req *htt
 		RawQuery: req.URL.RawQuery,
 	}
 	if req.URL.Query().Get("format") == "json" {
-		writeOK(w, map[string]any{"redirect_url": callbackURL.String()})
+		writeCollaborationRelayOK(w, map[string]any{"redirect_url": callbackURL.String()})
 		return
 	}
 	http.Redirect(w, req, callbackURL.String(), http.StatusFound)
@@ -247,28 +247,28 @@ func (r *CollaborationRelay) handleOAuthCallback(w http.ResponseWriter, req *htt
 func (r *CollaborationRelay) handleEvent(w http.ResponseWriter, req *http.Request) {
 	platform, ok := collaborationRelayPlatformFor(req.PathValue("platform"))
 	if !ok {
-		writeError(w, http.StatusNotFound, "unknown collaboration platform")
+		writeCollaborationRelayError(w, http.StatusNotFound, "unknown collaboration platform")
 		return
 	}
 
 	body, err := io.ReadAll(http.MaxBytesReader(w, req.Body, collaborationRelayMaxBodyBytes))
 	if err != nil {
-		writeError(w, http.StatusRequestEntityTooLarge, "event body too large")
+		writeCollaborationRelayError(w, http.StatusRequestEntityTooLarge, "event body too large")
 		return
 	}
 	if len(strings.TrimSpace(string(body))) == 0 {
-		writeError(w, http.StatusBadRequest, "empty event body")
+		writeCollaborationRelayError(w, http.StatusBadRequest, "empty event body")
 		return
 	}
 
 	var envelope map[string]any
 	if err := json.Unmarshal(body, &envelope); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json event body")
+		writeCollaborationRelayError(w, http.StatusBadRequest, "invalid json event body")
 		return
 	}
 	if challenge, ok := stringValue(envelope["challenge"]); ok && challenge != "" {
 		w.Header().Set("Content-Type", "application/json")
-		writeVersionHeaders(w)
+		writeCollaborationRelayVersionHeaders(w)
 		_ = json.NewEncoder(w).Encode(map[string]string{"challenge": challenge})
 		return
 	}
@@ -283,7 +283,7 @@ func (r *CollaborationRelay) handleEvent(w http.ResponseWriter, req *http.Reques
 		Body:       append(json.RawMessage(nil), body...),
 	}
 	r.enqueue(event)
-	writeOK(w, map[string]any{"event_id": event.ID, "queued": true})
+	writeCollaborationRelayOK(w, map[string]any{"event_id": event.ID, "queued": true})
 }
 
 func (r *CollaborationRelay) handlePollEvents(w http.ResponseWriter, req *http.Request) {
@@ -297,7 +297,7 @@ func (r *CollaborationRelay) handlePollEvents(w http.ResponseWriter, req *http.R
 	remaining := len(r.events)
 	r.mu.Unlock()
 
-	writeOK(w, map[string]any{
+	writeCollaborationRelayOK(w, map[string]any{
 		"events":    events,
 		"remaining": remaining,
 	})
@@ -312,6 +312,26 @@ func (r *CollaborationRelay) enqueue(event CollaborationRelayEvent) {
 	}
 	drop := len(r.events) - r.config.MaxEvents
 	r.events = append([]CollaborationRelayEvent(nil), r.events[drop:]...)
+}
+
+func writeCollaborationRelayOK(w http.ResponseWriter, data any) {
+	writeCollaborationRelayAPI(w, http.StatusOK, APIResponse{OK: true, Data: data})
+}
+
+func writeCollaborationRelayError(w http.ResponseWriter, status int, message string) {
+	writeCollaborationRelayAPI(w, status, APIResponse{OK: false, Error: message})
+}
+
+func writeCollaborationRelayAPI(w http.ResponseWriter, status int, response APIResponse) {
+	w.Header().Set("Content-Type", "application/json")
+	writeCollaborationRelayVersionHeaders(w)
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(response)
+}
+
+func writeCollaborationRelayVersionHeaders(w http.ResponseWriter) {
+	w.Header().Set("X-WillDeep-App-Version", Version)
+	w.Header().Set("X-WillDeep-Server-Version", Version)
 }
 
 func collaborationRelayPlatformFor(value string) (collaborationRelayPlatform, bool) {

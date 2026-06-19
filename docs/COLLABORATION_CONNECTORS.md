@@ -1,6 +1,6 @@
 # Collaboration Connectors
 
-> Last updated: 2026-06-19 | Current version: v1.91.0-rc3
+> Last updated: 2026-06-19 | Current version: v1.91.0-rc4
 
 WillDeep treats Feishu, DingTalk, WeCom, and WeChat/Claw as collaboration
 connectors. The Mac app owns local user intent, preview, and Keychain-backed
@@ -169,7 +169,9 @@ Returns queued events and removes the returned batch from memory.
 
 - [ ] DNS `fly.niuwoai.com` points to the relay edge.
 - [ ] TLS certificate is active.
-- [ ] `/collab/health` returns `X-App-Version` and `X-Server-Version`.
+- [ ] `/collab/health` returns `X-WillDeep-App-Version` and
+  `X-WillDeep-Server-Version`; upstream proxies may add their own
+  `X-App-Version` / `X-Server-Version` headers.
 - [ ] OAuth redirect URLs are registered in Feishu and DingTalk app consoles.
 - [ ] Event callback URLs are registered in Feishu and DingTalk app consoles.
 - [ ] Relay token is stored outside git.

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.91.0-rc4 - 2026-06-19
+
+### Fixed
+
+- Collaboration Relay 不再输出通用 `X-App-Version` / `X-Server-Version`,避免与 SSLcat 或其他转发层追加的同名 header 叠在一起。relay 自身版本改为 `X-WillDeep-App-Version` / `X-WillDeep-Server-Version`,响应 body 中的 `version` 字段保持不变。
+
+### Changed
+
+- 版本号按 bugfix 递增为 **1.91.0-rc4**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 四个 docs(MOBILE_GATEWAY / AGENT_HARNESS / CHROME / COLLAB)/ chrome-extension README 同步。
+
 ## 1.91.0-rc3 - 2026-06-19
 
 ### Fixed
