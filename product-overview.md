@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-19 | Current version: v1.91.0-rc12
+> Last updated: 2026-06-19 | Current version: v1.91.0-rc13
 
 ## Positioning
 
@@ -26,6 +26,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **协作连接器管理（1.90.0-rc3）** —— Settings 新增 Connectors 标签页,集中管理飞书、钉钉、企业微信和微信/Claw 实验入口。每个平台可配置授权方式(Webhook/OAuth/Cloud Relay/桌面自动化)、连接状态、App ID、租户/企业 ID、回调 URI、授权 URL、默认文档空间、默认会话、能力开关和写入策略;本地只持久化非敏感元数据,secret/token 预留给 macOS Keychain。OAuth 默认回调切到 `https://fly.niuwoai.com/oauth/<platform>/callback`,公网 relay 再转回 `willdeep://oauth/<platform>/callback`;`willdeep-agent serve-collab-relay` 提供健康检查、OAuth 回调、飞书/钉钉/企业微信事件入口和 token 保护的事件轮询。飞书默认开启消息、指令和文档创建/编辑/导入能力,作为后续“AI 生成并发布飞书文档”的首选集成骨架。
 - **飞书扫码授权与长连接事件（1.91.0-rc1，1.91.0-rc3 改为首屏云端扫码，1.91.0-rc5 支持长连接）** —— Settings → Connectors 的飞书配置从“多字段 OAuth 表单”改为授权二维码主流程。rc3 起打开飞书配置页会自动生成 `https://fly.niuwoai.com/connectors/feishu/setup?...` 的 WillDeep Cloud Relay 配置二维码,用户直接用飞书扫码即可进入配置;Go relay 新增对应 setup endpoint,通过 `WILLDEEP_FEISHU_APP_ID` / `--feishu-app-id` 生成飞书开放平台授权跳转,不需要 Redis 或数据库。rc5 起 `willdeep-agent serve-collab-relay` 支持飞书官方 SDK 长连接事件模式,用 `--feishu-long-connection` 和服务器侧 App Secret 主动连接飞书,可在飞书后台选择“使用长连接接收事件”,不再强制要求公网事件回调域名。“刷新二维码”“打开授权页”“复制授权链接”作为兜底。自建飞书应用 App ID、租户 ID、回调 URI、授权 URL、Keychain 凭据引用、清理凭据、打开开放平台文档等排查项收进高级配置。填写自建 App ID 时仍可生成飞书开放平台直连授权 URL。二维码渲染抽为 `SettingsQRCodeView`,与 Mobile Gateway 配对二维码共用实现。
 - **侧栏等待批准徽标（1.91.0-rc2）** —— Agent 左侧会话列表新增“等待批准”绿色胶囊徽标。只要会话的 live runtime 正在等待工具授权、危险确认、`ask_user` 回答、patch 应用确认,或持久化/实时 Plan 仍处于 proposed 状态,该会话行标题后就会显示徽标;后台会话也通过单行 runtime observer 刷新,避免把整条侧栏拖进高频重绘。
+- **Composer 外部执行器结果可见性修复（1.91.0-rc13）** —— 修复选择 `Claude Code` / `Codex` 执行下一轮任务时,工具调用完成后最终 transcript 为空的问题。外部执行器现在默认前台等待 CLI 返回,并把 CLI stdout、失败原因或拒绝原因整理成普通 assistant 消息追加到会话;工具卡、授权、审计与 git 刷新链路仍保留,但结果态不会再被纯工具调用过滤逻辑吞掉。
 - **Exa/Brave 双 provider Web Search（1.91.0-rc12）** —— Settings → Agent → Web tools 新增 `Auto / Exa / Brave` 搜索服务选择、Exa API Key 与既有 Brave Search Key 双配置;密钥继续写入 macOS Keychain。`web_search` 对外工具名和参数保持不变,Auto 模式优先用 Exa Search API 返回 AI-friendly highlights、发布时间、作者和 cost estimate,没有 Exa key 时回退 Brave,避免旧用户断流。Bundled `web-search` skill 同步改成当前 `web_search` / `web_fetch` 说明,登录态或 JS-heavy 页面明确走 Chrome Relay / Browser fallback。
 - **WorkBuddy 技能吸收版 Marketplace 扩展（1.91.0-rc11）** —— Settings → Skills 的静态 Marketplace 从本机 WorkBuddy 内置/市场技能中提炼可复用方法论,新增 `Static Site Publisher`、`Feishu Ops Playbook`、`Fullstack Delivery Guard` 和 `MCP Builder` 四个 WillDeep 版技能。它们只保留部署检查、飞书操作、全栈交付和 MCP 构建的通用 SOP 与质量门禁,不复制 WorkBuddy 私有工具、云端 token 流程或 Internal license 内容;安装后仍落到 `~/.willdeep/skills/<slug>/SKILL.md`,通过 `list_skills` / `read_skill` 与 composer `@` 选择器使用。
 - **Agent Composer 执行器选择（1.91.0-rc10）** —— Composer 在 Model 与 Mode 之间新增执行器 pill,可按会话选择由 WillDeep 自身、Claude Code CLI 或 Codex CLI 执行下一轮任务,默认保持 WillDeep。选择外部执行器时,发送内容会直接转成 `claude_code` / `codex_cli` 工具调用,复用现有工具审批、Workspace Access 自动放行、后台 job、审计日志、git 变更刷新和 transcript 工具卡展示;如果 Composer 带图,会先调用现有 Image Understanding/VL 配置生成图片说明,再把说明拼进外部 CLI 的委托 prompt。会话持久化 `executionAgent`,排队消息记录发送当时的执行器,避免队列执行时被后续 UI 切换影响。

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.91.0-rc13 - 2026-06-19
+
+### Fixed
+
+- 修复 Composer 选择 `Claude Code` / `Codex` 执行器后工具实际运行、但最终 transcript 没有任何可见 assistant 回复的问题。外部执行器完成后会把 CLI stdout/失败原因整理成普通 assistant 消息追加到会话,不再被“已完成纯工具调用”过滤逻辑吞掉。
+- Composer 主动选择外部执行器时默认前台等待 CLI 返回,避免简单问答被后台 job 启动提示替代;工具审计卡与授权链路保持不变。
+
+### Changed
+
+- 补充外部执行器结果可见性单测;版本号按 bugfix 递增为 **1.91.0-rc13**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.91.0-rc12 - 2026-06-19
 
 ### Added

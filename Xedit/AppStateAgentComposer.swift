@@ -275,6 +275,7 @@ extension AppState {
                 runtime: runtime,
                 recordID: recordID,
                 externalID: externalID,
+                executionAgent: executionAgent,
                 status: .denied,
                 result: nil,
                 errorMessage: "Plan mode: needs user approval",
@@ -298,6 +299,7 @@ extension AppState {
                     runtime: runtime,
                     recordID: recordID,
                     externalID: externalID,
+                    executionAgent: executionAgent,
                     status: .denied,
                     result: nil,
                     errorMessage: reason,
@@ -349,6 +351,7 @@ extension AppState {
                 runtime: runtime,
                 recordID: recordID,
                 externalID: externalID,
+                executionAgent: executionAgent,
                 status: .succeeded,
                 result: result,
                 errorMessage: nil,
@@ -359,6 +362,7 @@ extension AppState {
                 runtime: runtime,
                 recordID: recordID,
                 externalID: externalID,
+                executionAgent: executionAgent,
                 status: .failed,
                 result: nil,
                 errorMessage: "Cancelled",
@@ -376,6 +380,7 @@ extension AppState {
                 runtime: runtime,
                 recordID: recordID,
                 externalID: externalID,
+                executionAgent: executionAgent,
                 status: .failed,
                 result: nil,
                 errorMessage: error.localizedDescription,
@@ -388,6 +393,7 @@ extension AppState {
         runtime: AgentRuntime,
         recordID: AgentToolCall.ID,
         externalID: String,
+        executionAgent: AgentExecutionAgent,
         status: AgentToolCallStatus,
         result: AgentToolResult?,
         errorMessage: String?,
@@ -404,6 +410,69 @@ extension AppState {
             payload: toolPayload,
             source: status == .succeeded ? .toolOutput : .systemNotice
         )
+        let visibleContent = Self.delegatedAgentVisibleContent(
+            executionAgent: executionAgent,
+            status: status,
+            result: result,
+            errorMessage: errorMessage,
+            toolPayload: toolPayload
+        )
+        if !visibleContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            runtime.messages.append(
+                AgentMessage(role: .assistant, content: visibleContent)
+            )
+        }
+    }
+
+    static func delegatedAgentVisibleContent(
+        executionAgent: AgentExecutionAgent,
+        status: AgentToolCallStatus,
+        result: AgentToolResult?,
+        errorMessage: String?,
+        toolPayload: String
+    ) -> String {
+        let label = executionAgent.displayName
+        switch status {
+        case .succeeded:
+            let output = delegatedAgentReadableOutput(from: result?.payload ?? toolPayload)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !output.isEmpty {
+                return output
+            }
+            return result?.summary.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                ?? "\(label) finished."
+        case .failed:
+            let detail = errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                ?? "Unknown error"
+            let output = delegatedAgentReadableOutput(from: toolPayload)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if output.isEmpty || output == detail {
+                return "\(label) failed: \(detail)"
+            }
+            return "\(label) failed: \(detail)\n\n\(output)"
+        case .denied:
+            let detail = errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                ?? "The delegated agent call was not approved."
+            return "\(label) did not run: \(detail)"
+        case .pendingApproval, .awaitingConfirm, .awaitingUserAnswer, .running:
+            return ""
+        }
+    }
+
+    nonisolated static func delegatedAgentReadableOutput(from payload: String) -> String {
+        let stdoutMarker = "--- stdout ---"
+        let stderrMarker = "--- stderr ---"
+        guard let stdoutRange = payload.range(of: stdoutMarker),
+              let stderrRange = payload.range(of: stderrMarker, range: stdoutRange.upperBound..<payload.endIndex) else {
+            return payload
+        }
+        let stdout = String(payload[stdoutRange.upperBound..<stderrRange.lowerBound])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !stdout.isEmpty {
+            return stdout
+        }
+        return String(payload[stderrRange.upperBound...])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func delegatedAgentPrompt(
@@ -446,7 +515,7 @@ extension AppState {
     ) -> [String: AgentJSONValue] {
         var arguments: [String: AgentJSONValue] = [
             "prompt": .string(prompt),
-            "run_in_background": .bool(true),
+            "run_in_background": .bool(false),
             "timeout_seconds": .number(1800),
         ]
         if let permissionMode = executionAgent.defaultPermissionMode {
@@ -686,4 +755,8 @@ extension AppState {
     func toggleAgentWorkspaceOverview() {
         agentPendingIncludeWorkspaceOverview.toggle()
     }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

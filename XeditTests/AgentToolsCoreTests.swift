@@ -437,3 +437,40 @@ struct AgentQueueModeTests {
         #expect(runtime.queuedMessages.first?.id == queued.id)
     }
 }
+
+@Suite
+@MainActor
+struct DelegatedAgentComposerOutputTests {
+    @Test
+    func delegatedAgentVisibleContentUsesCommandStdout() {
+        let payload = """
+        exit=0
+        --- stdout ---
+        今天是星期五。
+        --- stderr ---
+
+        """
+        let content = AppState.delegatedAgentVisibleContent(
+            executionAgent: .codexCLI,
+            status: .succeeded,
+            result: AgentToolResult(summary: "exit 0", payload: payload),
+            errorMessage: nil,
+            toolPayload: payload
+        )
+
+        #expect(content == "今天是星期五。")
+    }
+
+    @Test
+    func delegatedAgentVisibleContentShowsFailures() {
+        let content = AppState.delegatedAgentVisibleContent(
+            executionAgent: .claudeCode,
+            status: .failed,
+            result: nil,
+            errorMessage: "CLI timed out",
+            toolPayload: "Tool error: CLI timed out"
+        )
+
+        #expect(content.contains("Claude Code failed: CLI timed out"))
+    }
+}
