@@ -111,6 +111,29 @@ final class CollaborationConnectorSettingsTests: XCTestCase {
         XCTAssertEqual(queryItems["state"], request.state)
     }
 
+    func testPrepareAuthorizationUsesCloudSetupQRCodeURLWithoutAppID() throws {
+        let connector = CollaborationConnectorConfig(platform: .feishu)
+
+        let request = CollaborationConnectorOAuthCoordinator.prepareAuthorization(
+            for: connector,
+            defaults: defaults
+        )
+
+        let url = try XCTUnwrap(request.authorizationURL)
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let queryItems = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).compactMap { item in
+            item.value.map { (item.name, $0) }
+        })
+
+        XCTAssertEqual(url.host, "fly.niuwoai.com")
+        XCTAssertEqual(url.path, "/connectors/feishu/setup")
+        XCTAssertEqual(request.connector.connectionState, .ready)
+        XCTAssertEqual(queryItems["state"], request.state)
+        XCTAssertEqual(queryItems["relay_callback"], "https://fly.niuwoai.com/oauth/feishu/callback")
+        XCTAssertEqual(queryItems["desktop_callback"], "willdeep://oauth/feishu/callback")
+        XCTAssertNil(queryItems["app_id"])
+    }
+
     func testHandleOAuthCallbackRequiresPendingState() {
         var connector = CollaborationConnectorConfig(platform: .feishu)
         connector.appID = "cli_test"

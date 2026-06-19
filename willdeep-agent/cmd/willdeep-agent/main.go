@@ -131,6 +131,7 @@ func newServeCollabRelayCommand() *cobra.Command {
 	var publicBaseURL string
 	var token string
 	var tokenFile string
+	var feishuAppID string
 	var maxEvents int
 
 	cmd := &cobra.Command{
@@ -143,6 +144,7 @@ func newServeCollabRelayCommand() *cobra.Command {
 				PublicBaseURL: publicBaseURL,
 				Token:         token,
 				TokenFile:     tokenFile,
+				FeishuAppID:   feishuAppID,
 				MaxEvents:     maxEvents,
 			})
 			if err != nil {
@@ -159,6 +161,7 @@ func newServeCollabRelayCommand() *cobra.Command {
 	cmd.Flags().StringVar(&publicBaseURL, "public-base-url", "https://fly.niuwoai.com", "public HTTPS base URL used in platform callbacks")
 	cmd.Flags().StringVar(&token, "token", "", "bearer token for polling queued events; generated if empty")
 	cmd.Flags().StringVar(&tokenFile, "token-file", "", "file containing bearer token for polling queued events")
+	cmd.Flags().StringVar(&feishuAppID, "feishu-app-id", os.Getenv("WILLDEEP_FEISHU_APP_ID"), "Feishu app_id used by the setup QR endpoint")
 	cmd.Flags().IntVar(&maxEvents, "max-events", 500, "maximum in-memory callback events retained for polling")
 	return cmd
 }

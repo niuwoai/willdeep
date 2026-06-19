@@ -31,6 +31,7 @@ type CollaborationRelayConfigInput struct {
 	PublicBaseURL string
 	Token         string
 	TokenFile     string
+	FeishuAppID   string
 	MaxEvents     int
 }
 
@@ -39,6 +40,7 @@ type CollaborationRelayConfig struct {
 	Port          int
 	PublicBaseURL string
 	Token         string
+	FeishuAppID   string
 	MaxEvents     int
 }
 
@@ -106,6 +108,7 @@ func NewCollaborationRelayConfig(input CollaborationRelayConfigInput) (Collabora
 		Port:          port,
 		PublicBaseURL: baseURL,
 		Token:         token,
+		FeishuAppID:   strings.TrimSpace(input.FeishuAppID),
 		MaxEvents:     maxEvents,
 	}, nil
 }
@@ -146,6 +149,7 @@ func NewCollaborationRelay(config CollaborationRelayConfig) *CollaborationRelay 
 func (r *CollaborationRelay) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /collab/health", r.handleHealth)
+	mux.HandleFunc("GET /connectors/feishu/setup", r.handleFeishuSetup)
 	mux.HandleFunc("GET /oauth/{platform}/callback", r.handleOAuthCallback)
 	mux.HandleFunc("POST /events/{platform}", r.handleEvent)
 	mux.HandleFunc("GET /events/poll", r.withAuth(r.handlePollEvents))
@@ -186,8 +190,38 @@ func (r *CollaborationRelay) handleHealth(w http.ResponseWriter, req *http.Reque
 			"dingtalk": r.config.PublicBaseURL + "/events/dingtalk",
 			"wecom":    r.config.PublicBaseURL + "/events/wecom",
 		},
+		"setup_urls": map[string]string{
+			"feishu": r.config.PublicBaseURL + "/connectors/feishu/setup",
+		},
 		"queued_events": queued,
 	})
+}
+
+func (r *CollaborationRelay) handleFeishuSetup(w http.ResponseWriter, req *http.Request) {
+	appID := strings.TrimSpace(r.config.FeishuAppID)
+	if appID == "" {
+		writeError(w, http.StatusServiceUnavailable, "feishu app id is not configured")
+		return
+	}
+	state := strings.TrimSpace(req.URL.Query().Get("state"))
+	if state == "" {
+		writeError(w, http.StatusBadRequest, "missing state")
+		return
+	}
+
+	authorizationURL := feishuAuthorizationURL(
+		appID,
+		r.config.PublicBaseURL+"/oauth/feishu/callback",
+		state,
+	)
+	if req.URL.Query().Get("format") == "json" {
+		writeOK(w, map[string]any{
+			"configured":        true,
+			"authorization_url": authorizationURL,
+		})
+		return
+	}
+	http.Redirect(w, req, authorizationURL, http.StatusFound)
 }
 
 func (r *CollaborationRelay) handleOAuthCallback(w http.ResponseWriter, req *http.Request) {
@@ -319,6 +353,20 @@ func relayEventKind(envelope map[string]any) string {
 
 func newRelayEventID(platform string, now time.Time) string {
 	return fmt.Sprintf("%s-%d", platform, now.UTC().UnixNano())
+}
+
+func feishuAuthorizationURL(appID string, redirectURI string, state string) string {
+	authorizationURL := url.URL{
+		Scheme: "https",
+		Host:   "open.feishu.cn",
+		Path:   "/open-apis/authen/v1/index",
+	}
+	query := authorizationURL.Query()
+	query.Set("app_id", appID)
+	query.Set("redirect_uri", redirectURI)
+	query.Set("state", state)
+	authorizationURL.RawQuery = query.Encode()
+	return authorizationURL.String()
 }
 
 func stringValue(value any) (string, bool) {
