@@ -958,6 +958,8 @@ struct WillDeepTests {
             "Weekly's report",
         ])
         #expect(preview.contains("'Weekly'\\''s report'"))
+        #expect(AgentLarkCLI.installNpxArguments == ["--yes", "@larksuite/cli@latest", "install"])
+        #expect(AgentLarkCLI.installCommand == "npx --yes @larksuite/cli@latest install")
 
         let url = try #require(AgentLarkCLI.firstURL(in: "open https://example.com/setup?code=abc to continue"))
         #expect(url.absoluteString == "https://example.com/setup?code=abc")

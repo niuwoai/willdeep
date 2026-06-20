@@ -36,7 +36,11 @@ enum AgentLarkCLI {
     }
 
     nonisolated static var installCommand: String {
-        "npx @larksuite/cli@latest install"
+        (["npx"] + installNpxArguments).joined(separator: " ")
+    }
+
+    nonisolated static var installNpxArguments: [String] {
+        ["--yes", "@larksuite/cli@latest", "install"]
     }
 
     nonisolated static func commandPreview(arguments: [String]) -> String {
@@ -129,7 +133,7 @@ enum AgentLarkCLI {
     static func installOfficialCLI() async -> ProcessResult {
         await runCapture(
             executable: "/usr/bin/env",
-            arguments: ["npx", "@larksuite/cli@latest", "install"],
+            arguments: ["npx"] + installNpxArguments,
             timeout: 600
         )
     }

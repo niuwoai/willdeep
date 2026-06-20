@@ -82,6 +82,7 @@ struct AgentTurnReportCard: View {
                     .foregroundStyle(didCopy ? Color.green : Color.secondary)
             }
             .buttonStyle(.plain)
+            .focusable(false)
             .help(didCopy ? L10n.Transcript.turnReportCopied : L10n.Transcript.turnReportCopyHelp)
         }
         .contentShape(Rectangle())

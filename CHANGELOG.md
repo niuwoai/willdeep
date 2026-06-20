@@ -10,9 +10,64 @@
 
 ### Changed
 
-- 版本号从 **1.93.0-rc2** 提升为 **1.96.0-rc2**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / chrome-extension README 同步。
+- 版本号从 **1.96.0-rc1** 提升为 **1.96.0-rc2**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / chrome-extension README 同步。
 - `fireRoutine(id:force:)` 返回类型从 `Bool` 改为 `AgentSession.ID?`,scheduler 回调适配为 `!= nil`,为"立即运行→切会话"提供新建 session 的 id。
 
+## 1.96.0-rc1 - 2026-06-20
+
+### Added
+
+- Agent 侧边栏会话行新增 Plan/Goal todo 摘要:显示完成数/总数和当前进行中或下一条待办文本,让多步任务进度不用打开 transcript 也能看到。
+- 新增 sidebar todo 摘要逻辑测试,覆盖 Plan in-progress、Goal 下一条未完成和 rejected/empty 隐藏逻辑。
+
+### Changed
+
+- 保留原有 Plan/Goal 卡完整控制能力,侧边栏只做轻量预览;有 todo 的会话行自动增高,普通会话仍保持紧凑行高。
+- 版本号从 **1.95.0-rc1** 提升为 **1.96.0-rc1**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.95.0-rc1 - 2026-06-20
+
+### Added
+
+- Agent `@file` 附件新增 provider-agnostic 本地检索层:大附件会按用户当前问题切块召回相关片段,让 DeepSeek V4 Pro、GLM 和自定义 OpenAI-compatible provider 无需原生 `file_search` 也能使用附件重点内容。
+- 新增附件本地检索回归测试,覆盖大附件命中召回和小附件完整注入两条路径。
+
+### Changed
+
+- 附件 prompt 注入改为先走本地解析,再根据内容长度选择全文或本地检索结果;PDF/DOCX/XLSX 办公文件和普通文本共享同一套检索压缩策略。
+- 版本号从 **1.94.0-rc1** 提升为 **1.95.0-rc1**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.94.0-rc1 - 2026-06-20
+
+### Added
+
+- Agent `@file` 附件新增本地办公文件解析:PDF 抽取页面文本,DOCX 抽取段落文本,XLSX 抽取工作簿/工作表/前若干行样例,让办公文件能作为模型可读上下文进入会话。
+- 新增 DOCX/XLSX 附件解析回归测试,覆盖 Word 段落和 Excel sheet/sample rows 的摘要输出。
+
+### Changed
+
+- 版本号从 **1.93.0-rc4** 提升为 **1.94.0-rc1**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.93.0-rc4 - 2026-06-20
+
+### Fixed
+
+- 修复 Settings → Connectors 中安装官方 `lark-cli` 时 `npx` 会停在 `Ok to proceed? (y)` 交互确认的问题;安装命令现在使用 `npx --yes @larksuite/cli@latest install`,GUI 内无需用户手工输入。
+- 新增回归测试锁定 Lark CLI 安装参数必须包含 `--yes`,避免后续改动重新引入交互式 `npx` 提示。
+
+### Changed
+
+- 版本号从 **1.93.0-rc3** 递增为 **1.93.0-rc4**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.93.0-rc3 - 2026-06-20
+
+### Fixed
+
+- 修复 Agent turn report 右上角复制按钮会自动进入键盘焦点链的问题;报告卡片出现后不再给复制图标显示突兀的紫色 focus ring,复制、完成态和 tooltip 行为保持不变。
+
+### Changed
+
+- 版本号从 **1.93.0-rc2** 递增为 **1.93.0-rc3**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
 
 ## 1.93.0-rc2 - 2026-06-20
 

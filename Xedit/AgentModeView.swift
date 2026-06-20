@@ -88,6 +88,7 @@ enum AgentDesign {
     static let headerHeight: CGFloat = 42
     static let statusBarHeight: CGFloat = 26
     static let sidebarRowHeight: CGFloat = 26
+    static let sidebarTodoRowHeight: CGFloat = 42
 
     // Typography.
     static let titleFont = Font.system(size: 13, weight: .semibold)
@@ -97,5 +98,4 @@ enum AgentDesign {
     static let sidebarSectionFont = Font.system(size: 11, weight: .semibold)
     static let sidebarRowFont = Font.system(size: 12)
 }
-
 

@@ -1,6 +1,6 @@
 # Collaboration Connectors
 
-> Last updated: 2026-06-20 | Current version: v1.93.0-rc2
+> Last updated: 2026-06-20 | Current version: v1.93.0-rc4
 
 WillDeep treats Feishu, DingTalk, WeCom, and WeChat/Claw as collaboration
 connectors. The Mac app owns local user intent, preview, and Keychain-backed
@@ -17,7 +17,7 @@ model to assemble ad-hoc shell commands.
 Recommended local setup:
 
 ```bash
-npx @larksuite/cli@latest install
+npx --yes @larksuite/cli@latest install
 lark-cli config init --new
 lark-cli auth login --recommend
 lark-cli auth status

@@ -352,46 +352,58 @@ struct AgentSessionsSidebar: View {
     private func sessionRow(_ session: AgentSession, now: Date) -> some View {
         let isActive = appState.activeAgentSessionID == session.id
         let isHovered = (hoveredSessionID == session.id)
+        let observedRuntime = appState.agentRuntimes[session.id]
+        let displaySession = observedRuntime?.session ?? session
+        let todoSummary = AgentSessionTodoSummaryLogic.summary(for: displaySession)
 
         Button {
             appState.selectAgentSession(id: session.id)
         } label: {
-            HStack(spacing: 6) {
-                // The status dot has three lives:
-                //   • active session       → accent color (no animation)
-                //   • runtime mid-turn     → green pulse (background runner)
-                //   • runtime awaits user  → amber pulse (needs your eyes)
-                //   • idle / cold          → default grey
-                // Pulled out to its own view because we need to observe
-                // the per-session runtime (if there is one); a static
-                // expression here would only refresh when the row's
-                // session changes, not when the runtime's `isResponding`
-                // flips mid-stream.
-                AgentSessionRowStatusDot(
-                    runtime: appState.agentRuntimes[session.id],
-                    isActive: isActive
-                )
-                Text(session.title)
-                    .font(AgentDesign.sidebarRowFont)
-                    .foregroundStyle(isActive ? .primary : .secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    // Double-click the title to rename — same dialog as the
-                    // context-menu "Rename". Takes priority over the row
-                    // button's single-click select for two-tap sequences.
-                    .onTapGesture(count: 2) { presentRenameAlert(for: session) }
-                    .help(L10n.Sidebar.sessionMenuRename)
-                AgentSessionApprovalBadge(
-                    session: session,
-                    runtime: appState.agentRuntimes[session.id]
-                )
-                Spacer(minLength: 0)
-                AgentSessionModeBadges(session: session)
-                sessionUpdatedLabel(session, now: now)
-                sessionRowTrailingActions(session: session, isHovered: isHovered)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    // The status dot has three lives:
+                    //   • active session       → accent color (no animation)
+                    //   • runtime mid-turn     → green pulse (background runner)
+                    //   • runtime awaits user  → amber pulse (needs your eyes)
+                    //   • idle / cold          → default grey
+                    // Pulled out to its own view because we need to observe
+                    // the per-session runtime (if there is one); a static
+                    // expression here would only refresh when the row's
+                    // session changes, not when the runtime's `isResponding`
+                    // flips mid-stream.
+                    AgentSessionRowStatusDot(
+                        runtime: observedRuntime,
+                        isActive: isActive
+                    )
+                    Text(session.title)
+                        .font(AgentDesign.sidebarRowFont)
+                        .foregroundStyle(isActive ? .primary : .secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        // Double-click the title to rename — same dialog as the
+                        // context-menu "Rename". Takes priority over the row
+                        // button's single-click select for two-tap sequences.
+                        .onTapGesture(count: 2) { presentRenameAlert(for: session) }
+                        .help(L10n.Sidebar.sessionMenuRename)
+                    AgentSessionApprovalBadge(
+                        session: session,
+                        runtime: observedRuntime
+                    )
+                    Spacer(minLength: 0)
+                    AgentSessionModeBadges(session: displaySession)
+                    sessionUpdatedLabel(session, now: now)
+                    sessionRowTrailingActions(session: session, isHovered: isHovered)
+                }
+                if let todoSummary {
+                    AgentSessionTodoSummaryContainer(
+                        session: displaySession,
+                        runtime: observedRuntime,
+                        fallbackSummary: todoSummary
+                    )
+                }
             }
             .padding(.horizontal, 28)
-            .frame(height: AgentDesign.sidebarRowHeight)
+            .frame(height: todoSummary == nil ? AgentDesign.sidebarRowHeight : AgentDesign.sidebarTodoRowHeight)
             .contentShape(Rectangle())
             .background(isActive ? Color.accentColor.opacity(0.12) : Color.clear)
         }
@@ -453,7 +465,6 @@ struct AgentSessionsSidebar: View {
         appState.renameAgentSession(id: session.id, to: input.stringValue)
     }
 
-    @ViewBuilder
     private func sessionUpdatedLabel(_ session: AgentSession, now: Date) -> some View {
         let label = AgentRelativeTimestamp.compactString(
             since: session.lastActivityAt,

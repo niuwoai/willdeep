@@ -445,3 +445,149 @@ struct AgentSessionModeBadges: View {
         }
     }
 }
+
+struct AgentSessionTodoSummary: Equatable {
+    enum Kind: Equatable { case plan, goal }
+
+    let kind: Kind
+    let completed: Int
+    let total: Int
+    let text: String
+    let isBlocked: Bool
+    let isComplete: Bool
+}
+
+enum AgentSessionTodoSummaryLogic {
+    static func summary(for session: AgentSession) -> AgentSessionTodoSummary? {
+        if let plan = session.currentPlan,
+           !plan.steps.isEmpty,
+           plan.status != .rejected {
+            return planSummary(plan)
+        }
+        if let goal = session.currentGoal,
+           !goal.checklist.isEmpty {
+            return goalSummary(goal)
+        }
+        return nil
+    }
+
+    private static func planSummary(_ plan: AgentPlan) -> AgentSessionTodoSummary? {
+        let completed = plan.steps.filter { $0.status == .done || $0.status == .skipped }.count
+        let current = plan.steps.first { $0.status == .inProgress }
+            ?? plan.steps.first { $0.status == .pending }
+            ?? plan.steps.first { $0.status == .failed }
+            ?? plan.steps.last
+        guard let current else { return nil }
+        return AgentSessionTodoSummary(
+            kind: .plan,
+            completed: completed,
+            total: plan.steps.count,
+            text: current.text,
+            isBlocked: plan.status == .proposed || plan.steps.contains(where: { $0.status == .failed }),
+            isComplete: plan.status == .done || completed == plan.steps.count
+        )
+    }
+
+    private static func goalSummary(_ goal: AgentGoal) -> AgentSessionTodoSummary? {
+        let completed = goal.checklist.filter(\.done).count
+        let current = goal.checklist.first { !$0.done } ?? goal.checklist.last
+        guard let current else { return nil }
+        return AgentSessionTodoSummary(
+            kind: .goal,
+            completed: completed,
+            total: goal.checklist.count,
+            text: current.text,
+            isBlocked: false,
+            isComplete: completed == goal.checklist.count
+        )
+    }
+}
+
+struct AgentSessionTodoSummaryRow: View {
+    let summary: AgentSessionTodoSummary
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: iconName)
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 12)
+            Text("\(summary.completed)/\(summary.total)")
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundStyle(tint)
+                .monospacedDigit()
+            Text(summary.text)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 0)
+        }
+        .padding(.leading, 20)
+        .help(helpText)
+        .accessibilityLabel(Text(helpText))
+    }
+
+    private var iconName: String {
+        if summary.isComplete { return "checkmark.circle.fill" }
+        if summary.isBlocked { return "exclamationmark.circle.fill" }
+        switch summary.kind {
+        case .plan: return "circle.dotted"
+        case .goal: return "target"
+        }
+    }
+
+    private var tint: Color {
+        if summary.isComplete { return .green }
+        if summary.isBlocked { return .orange }
+        switch summary.kind {
+        case .plan: return .accentColor
+        case .goal: return .purple
+        }
+    }
+
+    private var helpText: String {
+        switch summary.kind {
+        case .plan:
+            return L10n.Sidebar.sessionTodoPlanTooltip(
+                "\(summary.completed)",
+                "\(summary.total)",
+                summary.text
+            )
+        case .goal:
+            return L10n.Sidebar.sessionTodoGoalTooltip(
+                "\(summary.completed)",
+                "\(summary.total)",
+                summary.text
+            )
+        }
+    }
+}
+
+struct AgentSessionTodoSummaryContainer: View {
+    let session: AgentSession
+    let runtime: AgentRuntime?
+    let fallbackSummary: AgentSessionTodoSummary
+
+    var body: some View {
+        if let runtime {
+            ObservedAgentSessionTodoSummaryRow(
+                runtime: runtime,
+                fallbackSummary: fallbackSummary
+            )
+        } else {
+            AgentSessionTodoSummaryRow(summary: fallbackSummary)
+        }
+    }
+}
+
+private struct ObservedAgentSessionTodoSummaryRow: View {
+    @ObservedObject var runtime: AgentRuntime
+    let fallbackSummary: AgentSessionTodoSummary
+
+    var body: some View {
+        AgentSessionTodoSummaryRow(
+            summary: AgentSessionTodoSummaryLogic.summary(for: runtime.session) ?? fallbackSummary
+        )
+    }
+}

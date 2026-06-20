@@ -856,10 +856,15 @@ extension AppState {
 
         for file in files {
             let body = readAttachedFileBody(at: file.url)
+            let renderedBody = AgentLocalAttachmentRetriever.renderAttachment(
+                relativePath: file.relativePath,
+                body: body,
+                query: userText
+            )
             blocks.append("""
             ### File: \(file.relativePath)
 
-            \(body)
+            \(renderedBody)
             """)
         }
 
@@ -871,7 +876,11 @@ extension AppState {
     }
 
     func readAttachedFileBody(at url: URL) -> String {
-        let maxChars = 20_000
+        if let officeBody = AgentOfficeAttachmentReader.read(url: url) {
+            return officeBody
+        }
+
+        let maxChars = 120_000
         guard let data = try? Data(contentsOf: url),
               let text = String(data: data, encoding: .utf8) else {
             return "```\n(file unreadable or binary)\n```"
