@@ -232,9 +232,9 @@ enum AgentInteractionMode: String, Codable, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .normal: return "Normal"
-        case .plan: return "Plan"
-        case .goal: return "Goal"
+        case .normal: return L10n.InteractionMode.normal
+        case .plan: return L10n.InteractionMode.plan
+        case .goal: return L10n.InteractionMode.goal
         }
     }
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.96.0-rc3 - 2026-06-21
+
+### Fixed
+
+- Agent composer 输入框旁边的三档模式 badge(Normal / Plan / Goal)走 L10n,简体中文显示"普通 / 计划 / 目标",和 ApprovalMode 一致。AgentInteractionMode.displayName 改用 L10n.InteractionMode.* 而不是硬编码英文字符串。
+
+### Changed
+
+- 版本号从 **1.96.0-rc2** 提升为 **1.96.0-rc3**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.96.0-rc2 - 2026-06-20
 
 ### Fixed

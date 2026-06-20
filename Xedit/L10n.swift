@@ -56,6 +56,14 @@ enum L10n {
         static let untitledFile = String(localized: "agent-selection.untitled-file", defaultValue: "Untitled")
     }
 
+    enum InteractionMode {
+        // 1.96.0-rc3:composer 上的 Normal / Plan / Goal 三档 badge 文案。
+        // 之前是硬编码英文 displayName,简体中文用户看着突兀。
+        static let normal = String(localized: "interaction-mode.normal", defaultValue: "Normal")
+        static let plan = String(localized: "interaction-mode.plan", defaultValue: "Plan")
+        static let goal = String(localized: "interaction-mode.goal", defaultValue: "Goal")
+    }
+
     enum ApprovalMode {
         static let pickerHelp = String(localized: "approval-mode.picker-help", defaultValue: "Choose how this session approves Agent tool calls.")
         static let requestEveryTime = String(localized: "approval-mode.request-every-time", defaultValue: "Ask every time")
