@@ -156,6 +156,8 @@ private struct AgentLearningEventRow: View {
 
             // rc16:正向操作(Approve ✓)放最右、拒绝(Reject 垃圾桶)放
             // 最左,避免误触;Copy 中性放中间。
+            // 1.96.0-rc2:全部 .focusable(false) —— 否则 SwiftUI popover 打开时
+            // 会自动把焦点环聚到第一个 button(用户反馈"图标自动聚焦")。
             if let onReject {
                 Button(action: onReject) {
                     Image(systemName: "trash")
@@ -163,6 +165,7 @@ private struct AgentLearningEventRow: View {
                         .foregroundStyle(Color.secondary)
                 }
                 .buttonStyle(.plain)
+                .focusable(false)
                 .help(L10n.Transcript.learningRejectHelp)
             }
 
@@ -173,6 +176,7 @@ private struct AgentLearningEventRow: View {
                         .foregroundStyle(didCopy ? Color.green : Color.secondary)
                 }
                 .buttonStyle(.plain)
+                .focusable(false)
                 .help(didCopy ? L10n.Transcript.learningCopied : L10n.Transcript.learningCopyHelp)
             }
 
@@ -183,6 +187,7 @@ private struct AgentLearningEventRow: View {
                         .foregroundStyle(Color.green)
                 }
                 .buttonStyle(.plain)
+                .focusable(false)
                 .help(L10n.Transcript.learningApproveHelp)
             }
         }

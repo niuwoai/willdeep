@@ -463,14 +463,16 @@ enum AgentSelfLearning {
             events.append(AgentLearningEvent(
                 kind: .memory,
                 status: .suggested,
-                title: "Suggested \(drafts.count) self-learning memor\(drafts.count == 1 ? "y" : "ies") (pending your Approve)",
+                title: L10n.Transcript.learningEventTitleSelfLearningMemories(String(drafts.count)),
                 detail: preview,
                 action: AgentLearningAction(
                     kind: .saveMemory,
                     commandName: "add_memory",
-                    target: scope == .global ? "global memory" : "project memory",
-                    reason: "The turn contained durable self-learning policy or integration guidance.",
-                    nextStep: "Click Approve in the learning popover to save these into your memory store.",
+                    target: scope == .global
+                        ? L10n.Transcript.learningTargetGlobalMemory
+                        : L10n.Transcript.learningTargetProjectMemory,
+                    reason: L10n.Transcript.learningReasonSelfLearningPolicy,
+                    nextStep: L10n.Transcript.learningNextStepApprovePopover,
                     requiresUserConfirmation: true
                 ),
                 memoryDrafts: drafts
@@ -480,7 +482,7 @@ enum AgentSelfLearning {
             events.append(AgentLearningEvent(
                 kind: .mcpSuggestion,
                 status: .suggested,
-                title: "Suggested MCP discovery for \(mcpSuggestion.capability)",
+                title: L10n.Transcript.learningEventTitleMCPDiscovery(mcpSuggestion.capability),
                 detail: [
                     "Search query: \(mcpSuggestion.searchQuery)",
                     "Reason: \(mcpSuggestion.reason)",
@@ -500,7 +502,7 @@ enum AgentSelfLearning {
                         reason: mcpSuggestion.reason
                     ),
                     reason: mcpSuggestion.reason,
-                    nextStep: "Run search_mcp_servers, review candidates, then ask the user before installing or adding credentials.",
+                    nextStep: L10n.Transcript.learningNextStepRunSearchMCP,
                     requiresUserConfirmation: true
                 )
             ))
@@ -560,7 +562,7 @@ enum AgentSelfLearning {
                 AgentLearningEvent(
                     kind: .skill,
                     status: .skipped,
-                    title: "Skipped automatic skill creation",
+                    title: L10n.Transcript.learningEventTitleSkippedAutoSkill,
                     detail: [
                         "Reusable-workflow signal was present, but this turn only had \(audit.relevantToolCallCount) relevant tool call(s). Minimum required: \(settings.minimumToolCallCount).",
                         "Source: \(skillSourceSummary(for: audit))"
@@ -568,8 +570,8 @@ enum AgentSelfLearning {
                     action: AgentLearningAction(
                         kind: .proposeSkill,
                         commandName: "create_user_skill",
-                        reason: "The turn mentioned reusable skills, but there was not enough executed tool evidence to safely create one.",
-                        nextStep: "Wait for a completed multi-tool workflow, or explicitly ask to create a skill from this lighter evidence."
+                        reason: L10n.Transcript.learningReasonSkillEvidenceTooThin,
+                        nextStep: L10n.Transcript.learningNextStepWaitForWorkflow
                     )
                 )
             ]
@@ -585,7 +587,7 @@ enum AgentSelfLearning {
                 AgentLearningEvent(
                     kind: .skill,
                     status: .created,
-                    title: "Created user skill \(url.deletingLastPathComponent().lastPathComponent)",
+                    title: L10n.Transcript.learningEventTitleCreatedSkill(url.deletingLastPathComponent().lastPathComponent),
                     detail: [
                         candidate.reason,
                         "Source: \(skillSourceSummary(for: audit))",
@@ -601,7 +603,7 @@ enum AgentSelfLearning {
                             body: candidate.body
                         ),
                         reason: candidate.reason,
-                        nextStep: "Future turns can discover this skill through list_skills or attach it from the skill picker."
+                        nextStep: L10n.Transcript.learningNextStepFutureTurnDiscover
                     )
                 )
             ]
@@ -610,7 +612,7 @@ enum AgentSelfLearning {
                 AgentLearningEvent(
                     kind: .skill,
                     status: .skipped,
-                    title: "Skipped existing user skill \(slug)",
+                    title: L10n.Transcript.learningEventTitleSkippedExistingSkill(slug),
                     detail: [
                         "A skill with the same generated name already exists; the existing skill was left untouched.",
                         "Source: \(skillSourceSummary(for: audit))",
@@ -625,8 +627,8 @@ enum AgentSelfLearning {
                             description: candidate.description,
                             body: candidate.body
                         ),
-                        reason: "A reusable workflow was detected, but the matching skill already exists.",
-                        nextStep: "Reuse or manually edit the existing skill instead of overwriting it."
+                        reason: L10n.Transcript.learningReasonSkillAlreadyExists,
+                        nextStep: L10n.Transcript.learningNextStepReuseExisting
                     )
                 )
             ]
@@ -635,7 +637,7 @@ enum AgentSelfLearning {
                 AgentLearningEvent(
                     kind: .skill,
                     status: .failed,
-                    title: "Automatic skill creation failed",
+                    title: L10n.Transcript.learningEventTitleAutoSkillFailed,
                     detail: [
                         error.localizedDescription,
                         "Source: \(skillSourceSummary(for: audit))",
@@ -650,8 +652,8 @@ enum AgentSelfLearning {
                             description: candidate.description,
                             body: candidate.body
                         ),
-                        reason: "A reusable workflow was detected, but writing the user skill failed.",
-                        nextStep: "Review the error, fix local skill storage access, then retry if the workflow is still useful.",
+                        reason: L10n.Transcript.learningReasonSkillWriteFailed,
+                        nextStep: L10n.Transcript.learningNextStepRetryAfterFix,
                         requiresUserConfirmation: true
                     )
                 )

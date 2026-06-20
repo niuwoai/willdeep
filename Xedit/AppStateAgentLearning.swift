@@ -138,14 +138,16 @@ extension AppState {
             AgentLearningEvent(
                 kind: .memory,
                 status: .suggested,
-                title: "Suggested \(drafts.count) conversation memor\(drafts.count == 1 ? "y" : "ies") (pending your Approve)",
+                title: L10n.Transcript.learningEventTitleConversationMemories(String(drafts.count)),
                 detail: preview,
                 action: AgentLearningAction(
                     kind: .saveMemory,
                     commandName: "add_memory",
-                    target: workspaceURL == nil ? "global memory" : "project memory",
-                    reason: "The latest turn exposed durable conversation context.",
-                    nextStep: "Click Approve in the learning popover to save these into your memory store.",
+                    target: workspaceURL == nil
+                        ? L10n.Transcript.learningTargetGlobalMemory
+                        : L10n.Transcript.learningTargetProjectMemory,
+                    reason: L10n.Transcript.learningReasonConversationContext,
+                    nextStep: L10n.Transcript.learningNextStepApprovePopover,
                     requiresUserConfirmation: true
                 ),
                 memoryDrafts: drafts

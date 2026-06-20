@@ -939,30 +939,39 @@ extension AppState {
 
     /// User-driven manual fire ("Run now" button in editor or sidebar).
     /// Ignores `isEnabled` — a disabled routine can still be run on demand.
+    ///
+    /// 1.96.0-rc2:点完"立即运行"以后立刻把活动会话切到新建的 routine
+    /// 会话 —— 否则用户什么反馈都看不到,体感是"按了没反应"。
+    /// 调度器自动触发(`force == false`)不走这条路,继续保持后台运行。
     func runAgentRoutineNow(id: AgentRoutine.ID) {
-        _ = fireRoutine(id: id, force: true)
+        guard let newSessionID = fireRoutine(id: id, force: true) else { return }
+        if appMode != .agent {
+            setAppMode(.agent)
+        }
+        selectAgentSession(id: newSessionID)
     }
 
-    /// Scheduler entry point. Returns true if the routine actually
-    /// started a session; false if the routine was empty / missing
+    /// Scheduler entry point. Returns the new session ID when the routine
+    /// actually started a session; nil if the routine was empty / missing
     /// (the scheduler will retry next tick if appropriate).
     ///
-    /// Concurrency model (rc3+): routines spawn a background runtime
-    /// rather than yanking the user's UI. They do NOT change
-    /// `activeAgentSessionID` and do NOT flip `appMode`. The user
-    /// keeps working in whatever session they had on screen; the
-    /// routine's session shows up in the sidebar (with a "busy" dot
-    /// once rc4 lands) and they can click into it later to inspect.
+    /// Concurrency model (rc3+): scheduler-driven fires spawn a background
+    /// runtime rather than yanking the user's UI — they do NOT change
+    /// `activeAgentSessionID` and do NOT flip `appMode`. The user keeps
+    /// working in whatever session they had on screen; the routine's
+    /// session shows up in the sidebar and they can click into it later.
+    /// Manual "Run now" (`runAgentRoutineNow`) does switch the active
+    /// session — that path is handled by the wrapper above.
     @discardableResult
-    func fireRoutine(id: AgentRoutine.ID, force: Bool = false) -> Bool {
+    func fireRoutine(id: AgentRoutine.ID, force: Bool = false) -> AgentSession.ID? {
         _ = force // The per-provider concurrency cap replaces the old
                   // "is anyone responding?" gate; manual "Run now"
                   // doesn't need to bypass anything different.
 
-        guard let index = agentRoutines.firstIndex(where: { $0.id == id }) else { return false }
+        guard let index = agentRoutines.firstIndex(where: { $0.id == id }) else { return nil }
         let routine = agentRoutines[index]
         let prompt = routine.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !prompt.isEmpty else { return false }
+        guard !prompt.isEmpty else { return nil }
 
         // Build the session and its runtime, but DO NOT touch
         // activeAgentSessionID or appMode — that would yank the user
@@ -1010,7 +1019,7 @@ extension AppState {
         // empty, which is fine: persist is a no-op-cheap copy in that
         // case and the drain will re-trigger this path soon.
         persistAgentSession(runtime: runtime)
-        return true
+        return session.id
     }
 
     /// Toggle pin state. Pinned sessions float to the top of their

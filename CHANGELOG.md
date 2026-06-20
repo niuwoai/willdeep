@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.96.0-rc2 - 2026-06-20
+
+### Fixed
+
+- Agent 学习面板（"Agent saved N items this turn" popover）UI 文案全面补 zh-Hans:footer 一行字、card 标题/状态/置信度/操作/字段标签、event title（"建议保存 N 条对话记忆"等）、reason / nextStep / target 内容都按当前语言渲染;简体中文用户不再看到英文模板。
+- 学习面板里的 trash / copy / approve 按钮加 `.focusable(false)`,popover 打开时不再自动把焦点环聚焦到第一个图标。
+- 自动化 Routine "立即运行"按钮（侧边栏/编辑器/上下文菜单）现在会立刻把活动会话切到新建的 routine 会话(必要时同步切到 Agent 模式),否则用户点完没反应、看不到正在跑什么。调度器自动触发仍然保持后台运行,不打扰用户。
+
+### Changed
+
+- 版本号从 **1.93.0-rc2** 提升为 **1.96.0-rc2**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / chrome-extension README 同步。
+- `fireRoutine(id:force:)` 返回类型从 `Bool` 改为 `AgentSession.ID?`,scheduler 回调适配为 `!= nil`,为"立即运行→切会话"提供新建 session 的 id。
+
+
 ## 1.93.0-rc2 - 2026-06-20
 
 ### Fixed

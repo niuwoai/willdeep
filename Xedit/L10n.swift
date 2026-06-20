@@ -576,6 +576,14 @@ enum L10n {
         static let sessionRowUnpinTooltip = String(localized: "sidebar.session-row.unpin-tooltip", defaultValue: "Unpin")
         static let sessionRowWaitingApproval = String(localized: "sidebar.session-row.waiting-approval", defaultValue: "Waiting approval")
         static let sessionRowWaitingApprovalTooltip = String(localized: "sidebar.session-row.waiting-approval-tooltip", defaultValue: "This session is waiting for your approval or answer.")
+        static func sessionTodoPlanTooltip(_ a1: String, _ a2: String, _ a3: String) -> String {
+            let template = String(localized: "sidebar.session-todo.plan-tooltip", defaultValue: "Plan progress: %@ of %@ done. Current: %@")
+            return String(format: template, a1, a2, a3)
+        }
+        static func sessionTodoGoalTooltip(_ a1: String, _ a2: String, _ a3: String) -> String {
+            let template = String(localized: "sidebar.session-todo.goal-tooltip", defaultValue: "Goal progress: %@ of %@ done. Current: %@")
+            return String(format: template, a1, a2, a3)
+        }
         static func sessionUpdatedTooltip(_ a1: String) -> String {
             let template = String(localized: "sidebar.session-row.updated-tooltip", defaultValue: "Updated %@ ago")
             return String(format: template, a1)
@@ -1709,6 +1717,43 @@ enum L10n {
         static let learningRecallStrengthWeak = String(localized: "transcript.learning.recall-strength.weak", defaultValue: "weak")
         static let learningCopyHelp = String(localized: "transcript.learning.copy-help", defaultValue: "Copy learning event details")
         static let learningCopied = String(localized: "transcript.learning.copied", defaultValue: "Copied")
+        // 1.96.0-rc2:event title / 字段内容也走 i18n,简体中文用户
+        // 看不懂英文模板;这些 key 在 Localizable.xcstrings 同步加了 zh-Hans。
+        static func learningEventTitleConversationMemories(_ a1: String) -> String {
+            let template = String(localized: "transcript.learning.event-title.conversation-memories", defaultValue: "Suggested %@ conversation memory item(s) (pending your Approve)")
+            return String(format: template, a1)
+        }
+        static func learningEventTitleSelfLearningMemories(_ a1: String) -> String {
+            let template = String(localized: "transcript.learning.event-title.self-learning-memories", defaultValue: "Suggested %@ self-learning memory item(s) (pending your Approve)")
+            return String(format: template, a1)
+        }
+        static func learningEventTitleMCPDiscovery(_ a1: String) -> String {
+            let template = String(localized: "transcript.learning.event-title.mcp-discovery", defaultValue: "Suggested MCP discovery for %@")
+            return String(format: template, a1)
+        }
+        static func learningEventTitleSkippedExistingSkill(_ a1: String) -> String {
+            let template = String(localized: "transcript.learning.event-title.skipped-existing-skill", defaultValue: "Skipped existing user skill %@")
+            return String(format: template, a1)
+        }
+        static let learningEventTitleSkippedAutoSkill = String(localized: "transcript.learning.event-title.skipped-auto-skill", defaultValue: "Skipped automatic skill creation")
+        static func learningEventTitleCreatedSkill(_ a1: String) -> String {
+            let template = String(localized: "transcript.learning.event-title.created-skill", defaultValue: "Created user skill %@")
+            return String(format: template, a1)
+        }
+        static let learningEventTitleAutoSkillFailed = String(localized: "transcript.learning.event-title.auto-skill-failed", defaultValue: "Automatic skill creation failed")
+        static let learningTargetGlobalMemory = String(localized: "transcript.learning.target.global-memory", defaultValue: "global memory")
+        static let learningTargetProjectMemory = String(localized: "transcript.learning.target.project-memory", defaultValue: "project memory")
+        static let learningReasonConversationContext = String(localized: "transcript.learning.reason.conversation-context", defaultValue: "The latest turn exposed durable conversation context.")
+        static let learningReasonSelfLearningPolicy = String(localized: "transcript.learning.reason.self-learning-policy", defaultValue: "The turn contained durable self-learning policy or integration guidance.")
+        static let learningReasonSkillEvidenceTooThin = String(localized: "transcript.learning.reason.skill-evidence-too-thin", defaultValue: "The turn mentioned reusable skills, but there was not enough executed tool evidence to safely create one.")
+        static let learningReasonSkillAlreadyExists = String(localized: "transcript.learning.reason.skill-already-exists", defaultValue: "A reusable workflow was detected, but the matching skill already exists.")
+        static let learningReasonSkillWriteFailed = String(localized: "transcript.learning.reason.skill-write-failed", defaultValue: "A reusable workflow was detected, but writing the user skill failed.")
+        static let learningNextStepApprovePopover = String(localized: "transcript.learning.next-step.approve-popover", defaultValue: "Click Approve in the learning popover to save these into your memory store.")
+        static let learningNextStepRunSearchMCP = String(localized: "transcript.learning.next-step.run-search-mcp", defaultValue: "Run search_mcp_servers, review candidates, then ask the user before installing or adding credentials.")
+        static let learningNextStepWaitForWorkflow = String(localized: "transcript.learning.next-step.wait-for-workflow", defaultValue: "Wait for a completed multi-tool workflow, or explicitly ask to create a skill from this lighter evidence.")
+        static let learningNextStepFutureTurnDiscover = String(localized: "transcript.learning.next-step.future-turn-discover", defaultValue: "Future turns can discover this skill through list_skills or attach it from the skill picker.")
+        static let learningNextStepReuseExisting = String(localized: "transcript.learning.next-step.reuse-existing", defaultValue: "Reuse or manually edit the existing skill instead of overwriting it.")
+        static let learningNextStepRetryAfterFix = String(localized: "transcript.learning.next-step.retry-after-fix", defaultValue: "Review the error, fix local skill storage access, then retry if the workflow is still useful.")
         // 1.85.0-rc13:popover 策略下的 footer 图标 / 单行摘要 / reject 按钮文案
         static let postTurnReportTooltip = String(localized: "transcript.post-turn.report-tooltip", defaultValue: "Turn audit report")
         static let postTurnLearningTooltip = String(localized: "transcript.post-turn.learning-tooltip", defaultValue: "Memory / skill / MCP suggestions saved this turn")

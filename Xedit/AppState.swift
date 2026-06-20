@@ -343,7 +343,7 @@ final class AppState: ObservableObject {
         pruneEmptyAgentSessions()
         self.agentRoutines = AgentRoutineStore.loadAll()
         agentRoutineScheduler.start(initialRoutines: agentRoutines) { [weak self] routineID in
-            self?.fireRoutine(id: routineID) ?? false
+            self?.fireRoutine(id: routineID) != nil
         }
         // No initial subscriptions to set up: runtimes are created
         // lazily as the user opens sessions, and `subscribeToRuntime`
