@@ -15999,12 +15999,19 @@
       }
     },
     "sidebar.workspace-menu.remove" : {
-      "extractionState" : "extracted_with_value",
+      "comment" : "context menu item for workspace group",
+      "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
-            "state" : "new",
+            "state" : "translated",
             "value" : "Remove from List"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从列表移除"
           }
         }
       }

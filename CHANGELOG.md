@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.99.1-rc3 - 2026-06-21
+
+### Fixed
+
+- 修复 workspace 分组右键菜单 `Remove from List` 缺少简体中文翻译的问题,中文环境下现在显示为“从列表移除”。
+
+### Changed
+
+- 版本号从 **1.99.1-rc2** 提升为 **1.99.1-rc3**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.99.1-rc2 - 2026-06-21
 
 ### Fixed
