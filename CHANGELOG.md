@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.96.0-rc4 - 2026-06-21
+
+### Fixed
+
+- 修复 Mobile Gateway 设置页在运行时可能让 WillDeep 主线程持续高 CPU 转圈的问题:二维码改为按 payload 缓存渲染,长日志/URL/可执行路径改为固定尺寸的轻量可复制展示,避免 SwiftUI sheet/Form 在 CoreText 文本测量上反复重排。
+
+### Changed
+
+- 版本号从 **1.96.0-rc3** 递增为 **1.96.0-rc4**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.96.0-rc3 - 2026-06-21
 
 ### Fixed

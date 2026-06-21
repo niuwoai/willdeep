@@ -21,6 +21,10 @@ struct MobileGatewaySettingsView: View {
         appState.mobileGatewayCoordinator
     }
 
+    private var gatewayLogPreview: String {
+        String(coordinator.recentOutput.suffix(2_000))
+    }
+
     var body: some View {
         Form {
             // 1.85.0-rc10:网关总是自启动,这里只展示状态 + 提供 Refresh /
@@ -29,7 +33,7 @@ struct MobileGatewaySettingsView: View {
                 LabeledContent(L10n.Settings.MobileGateway.statusLabel) {
                     Text(statusText)
                         .foregroundStyle(statusColor)
-                        .textSelection(.enabled)
+                        .lineLimit(2)
                         .multilineTextAlignment(.trailing)
                 }
 
@@ -59,11 +63,7 @@ struct MobileGatewaySettingsView: View {
             if !coordinator.recentOutput.isEmpty {
                 Section(L10n.Settings.MobileGateway.logSection) {
                     ScrollView {
-                        Text(coordinator.recentOutput)
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        MobileGatewayMonospacedPreview(text: gatewayLogPreview)
                     }
                     .frame(maxHeight: 140)
                 }
@@ -115,25 +115,22 @@ struct MobileGatewaySettingsView: View {
             if showAdvanced {
                 Section(L10n.Settings.MobileGateway.listenSection) {
                     LabeledContent(L10n.Settings.MobileGateway.addressLabel) {
-                        Text(coordinator.displayBaseURL?.absoluteString ?? L10n.Settings.MobileGateway.notRunning)
-                            .textSelection(.enabled)
+                        MobileGatewayCopyableValue(
+                            text: coordinator.displayBaseURL?.absoluteString ?? L10n.Settings.MobileGateway.notRunning
+                        )
                     }
 
                     LabeledContent(L10n.Settings.MobileGateway.protocolLabel) {
-                        Text(coordinator.health?.protocolVersion ?? "mobile-gateway.v1")
-                            .textSelection(.enabled)
+                        MobileGatewayCopyableValue(text: coordinator.health?.protocolVersion ?? "mobile-gateway.v1")
                     }
 
                     if let payload = coordinator.pairingPayload {
                         LabeledContent(L10n.Settings.MobileGateway.pairingBaseURLLabel) {
-                            Text(payload.baseURL)
-                                .textSelection(.enabled)
+                            MobileGatewayCopyableValue(text: payload.baseURL)
                         }
                         if !payload.fallbackBaseURLs.isEmpty {
                             LabeledContent(L10n.Settings.MobileGateway.fallbackBaseURLsLabel) {
-                                Text(payload.fallbackBaseURLs.joined(separator: "\n"))
-                                    .textSelection(.enabled)
-                                    .multilineTextAlignment(.trailing)
+                                MobileGatewayCopyableValue(text: payload.fallbackBaseURLs.joined(separator: "\n"))
                             }
                         }
                     }
@@ -183,10 +180,10 @@ struct MobileGatewaySettingsView: View {
                     .textFieldStyle(.roundedBorder)
 
                     if let resolved = coordinator.resolvedExecutablePath {
-                        Text(L10n.Settings.MobileGateway.resolvedExecutable(resolved))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
+                        MobileGatewayCopyableValue(
+                            text: L10n.Settings.MobileGateway.resolvedExecutable(resolved),
+                            font: .caption
+                        )
                     }
 
                     Text(L10n.Settings.MobileGateway.listenDescription)
@@ -294,5 +291,39 @@ struct MobileGatewaySettingsView: View {
             return L10n.Settings.MobileGateway.lastConnected(lastConnectedAt.formatted(date: .abbreviated, time: .shortened))
         }
         return L10n.Settings.MobileGateway.createdAt(device.createdAt.formatted(date: .abbreviated, time: .shortened))
+    }
+}
+
+private struct MobileGatewayCopyableValue: View {
+    let text: String
+    var font: Font = .body
+
+    var body: some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        } label: {
+            Text(text)
+                .font(font)
+                .lineLimit(2)
+                .truncationMode(.middle)
+                .multilineTextAlignment(.trailing)
+                .frame(maxWidth: 320, alignment: .trailing)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+    }
+}
+
+private struct MobileGatewayMonospacedPreview: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 10, design: .monospaced))
+            .foregroundStyle(.secondary)
+            .lineLimit(24)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
