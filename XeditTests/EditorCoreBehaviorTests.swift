@@ -792,4 +792,55 @@ struct EditorCoreBehaviorTests {
         #expect(EditorDefinitionResolver.definition(for: "spring.datasource.url", from: javaFile, rootDirectory: root)?.url.standardizedFileURL == appConfig.standardizedFileURL)
         #expect(EditorDefinitionResolver.definition(for: "API_TOKEN", from: tsFile, rootDirectory: root)?.url.standardizedFileURL == envFile.standardizedFileURL)
     }
+
+    @Test("editor terminal parses env and discovers package plus Go commands")
+    func testEditorTerminalProjectCommandDiscovery() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_terminal_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try """
+        {
+          "scripts": {
+            "build": "vite build",
+            "dev": "vite --host 127.0.0.1",
+            "lint": "eslint ."
+          },
+          "devDependencies": {
+            "vite": "^6.0.0"
+          }
+        }
+        """.write(to: root.appendingPathComponent("package.json"), atomically: true, encoding: .utf8)
+        try "".write(to: root.appendingPathComponent("yarn.lock"), atomically: true, encoding: .utf8)
+        try """
+        package main
+
+        func main() {}
+        """.write(to: root.appendingPathComponent("main.go"), atomically: true, encoding: .utf8)
+
+        let cmdServer = root.appendingPathComponent("cmd/server", isDirectory: true)
+        try FileManager.default.createDirectory(at: cmdServer, withIntermediateDirectories: true)
+        try """
+        package main
+
+        func main() {}
+        """.write(to: cmdServer.appendingPathComponent("main.go"), atomically: true, encoding: .utf8)
+
+        let env = EditorTerminalEnvironmentParser.parse("""
+        API_TOKEN=abc123
+        QUOTED="hello world"
+        # ignored
+        EMPTY=
+        """)
+        #expect(env["API_TOKEN"] == "abc123")
+        #expect(env["QUOTED"] == "hello world")
+        #expect(env["EMPTY"] == "")
+
+        let commands = EditorProjectCommandResolver.commands(rootDirectory: root, openedFileURL: nil)
+        #expect(commands.contains { $0.title == "package.json: dev" && $0.command == "yarn run dev" })
+        #expect(commands.contains { $0.title == "package.json: build" && $0.command == "yarn run build" })
+        #expect(commands.contains { $0.title == "Go run main.go" && $0.command == "go run main.go" })
+        #expect(commands.contains { $0.title == "Go run ./cmd/server" && $0.command == "go run ./cmd/server" })
+    }
 }

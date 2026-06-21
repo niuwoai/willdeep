@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.99.0 - 2026-06-21
+
+### Added
+
+- 编辑器新增底部 Terminal 面板:可从状态栏、命令面板或文件树打开,按当前 workspace / 文件目录设置 working dir,通过 `openpty` 启动真实伪终端 shell,键盘输入和粘贴直写 PTY,项目命令会在同一个交互式 shell 中执行,长任务可停止、输出可清空。
+- Settings 新增 Terminal 配置:支持 shell 路径、字体、字号、Midnight / Graphite / Solar / Orchard 四套配色 schema,以及按 `KEY=value` 编写的环境变量注入。
+- Terminal 项目命令菜单新增前端和 Go 项目识别:`package.json` scripts 按 dev/start/build/test/lint 优先排序,自动选择 yarn/pnpm/npm/bun;Vite 项目可补 dev 命令;Go 项目识别根目录 `main.go` 和 `cmd/*/main.go`。
+- 新增回归测试覆盖 Terminal 环境变量解析、package.json script 识别和 Go main 命令发现。
+
+### Changed
+
+- 版本号从 **1.98.0** 提升为 **1.99.0**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.98.0 - 2026-06-21
 
 ### Added

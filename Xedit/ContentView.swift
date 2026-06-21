@@ -289,6 +289,11 @@ struct ContentView: View {
                         }
                     }
 
+                    if appState.isEditorTerminalVisible && !appState.isFocusModeEnabled {
+                        EditorTerminalPane()
+                            .environmentObject(appState)
+                    }
+
                     if !appState.isFocusModeEnabled {
                         EditorStatusBar(language: editorLanguage)
                             .environmentObject(appState)

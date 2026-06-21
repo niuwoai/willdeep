@@ -95,6 +95,14 @@ struct EditorStatusBar: View {
             if let branchName = appState.gitStatus.branchName {
                 Text(L10n.EditorStatusBar.gitBranch(branchName))
             }
+            Button {
+                appState.openTerminalHere(appState.openedFileURL ?? appState.rootDirectory)
+            } label: {
+                Image(systemName: appState.isEditorTerminalVisible ? "terminal.fill" : "terminal")
+                    .font(.system(size: 11))
+            }
+            .buttonStyle(.borderless)
+            .help("Open editor terminal")
             Text(language?.displayName ?? L10n.EditorStatusBar.plainText)
             Text(fileSizeText)
             Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")")

@@ -690,6 +690,7 @@ enum L10n {
         static let tabConnectors = String(localized: "settings.tab.connectors", defaultValue: "Connectors")
         static let tabMcp = String(localized: "settings.tab.mcp", defaultValue: "MCP")
         static let tabTools = String(localized: "settings.tab.tools", defaultValue: "Tools")
+        static let tabTerminal = String(localized: "settings.tab.terminal", defaultValue: "Terminal")
         static let tabLocalAgents = String(localized: "settings.tab.local-agents", defaultValue: "Local Agents")
         static let tabRemoteRuntimes = String(localized: "settings.tab.remote-runtimes", defaultValue: "Runtimes")
         static let tabMobileGateway = String(localized: "settings.tab.mobile-gateway", defaultValue: "Mobile Gateway")

@@ -25,6 +25,7 @@ enum EditorSettingsTab: Hashable {
     case connectors
     case mcp
     case tools
+    case terminal
     case voice
 }
 
