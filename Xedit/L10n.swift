@@ -173,6 +173,21 @@ enum L10n {
         static let stopHelp = String(localized: "composer.stop.help", defaultValue: "Stop the current Agent turn")
     }
 
+    enum ComposerWorkspace {
+        static let chooseFolder = String(localized: "composer.workspace.choose-folder", defaultValue: "Choose folder…")
+        static let chooseWorkspaceHelp = String(localized: "composer.workspace.choose-workspace.help", defaultValue: "Choose a workspace for this chat")
+        static let copyBranchName = String(localized: "composer.workspace.copy-branch-name", defaultValue: "Copy branch name")
+        static let copyPath = String(localized: "composer.workspace.copy-path", defaultValue: "Copy path")
+        static let gitWorktrees = String(localized: "composer.workspace.git-worktrees", defaultValue: "Git worktrees")
+        static let newWorktree = String(localized: "composer.workspace.new-worktree", defaultValue: "New worktree…")
+        static let pickFolder = String(localized: "composer.workspace.pick-folder", defaultValue: "Pick folder")
+        static let pruneStaleWorktrees = String(localized: "composer.workspace.prune-stale-worktrees", defaultValue: "Prune stale worktrees")
+        static let remoteRuntimes = String(localized: "composer.workspace.remote-runtimes", defaultValue: "Remote runtimes")
+        static let removeCurrentWorktree = String(localized: "composer.workspace.remove-current-worktree", defaultValue: "Remove current worktree…")
+        static let showInFinder = String(localized: "composer.workspace.show-in-finder", defaultValue: "Show in Finder")
+        static let switchWorkspace = String(localized: "composer.workspace.switch-workspace", defaultValue: "Switch workspace")
+    }
+
     enum Command {
         static let closeTabShortcut = String(localized: "command.close-tab.shortcut", defaultValue: "⌘W")
         static let closeTabSubtitle = String(localized: "command.close-tab.subtitle", defaultValue: "Close the active tab")
@@ -251,6 +266,7 @@ enum L10n {
         static let plainText = String(localized: "editor-status-bar.plain-text", defaultValue: "Plain Text")
         static let reloadButton = String(localized: "editor-status-bar.reload-button", defaultValue: "Reload")
         static let saved = String(localized: "editor-status-bar.saved", defaultValue: "Saved")
+        static let toggleTerminalHelp = String(localized: "editor-status-bar.toggle-terminal.help", defaultValue: "Show or hide the editor terminal")
         static func selection(_ a1: String) -> String {
             let template = String(localized: "editor-status-bar.selection", defaultValue: "chars")
             return String(format: template, a1)
@@ -355,6 +371,10 @@ enum L10n {
         static let openSidePanel = String(localized: "header.open-side-panel", defaultValue: "Open Side Panel")
     }
 
+    enum Workspace {
+        static let noWorkspace = String(localized: "workspace.no-workspace", defaultValue: "No workspace")
+    }
+
     enum AgentSidePanel {
         static let preview = String(localized: "agent-side-panel.preview", defaultValue: "Preview")
         static let diff = String(localized: "agent-side-panel.diff", defaultValue: "Diff")
@@ -376,6 +396,12 @@ enum L10n {
         static let previewEmpty = String(localized: "agent-side-panel.preview-empty", defaultValue: "Pick a markdown or HTML file to preview.")
         static let previewChoose = String(localized: "agent-side-panel.preview-choose", defaultValue: "Choose File…")
         static let previewUnsupported = String(localized: "agent-side-panel.preview-unsupported", defaultValue: "Only Markdown and HTML can be previewed here.")
+    }
+
+    enum AgentPanel {
+        static let activeFileIncludedHint = String(localized: "agent-panel.active-file-included-hint", defaultValue: "Active file included · Tools available")
+        static let openFolderHint = String(localized: "agent-panel.open-folder-hint", defaultValue: "Open a folder to enable tools")
+        static let selectionIncludedHint = String(localized: "agent-panel.selection-included-hint", defaultValue: "Selection included · Tools available")
     }
 
     enum HeatmapCell {
@@ -420,12 +446,14 @@ enum L10n {
         static let fileSaveAs = String(localized: "menu.file.save-as", defaultValue: "Save As…")
         static let viewOpenContainingFolder = String(localized: "menu.view.open-containing-folder", defaultValue: "Open Containing Folder")
         static let viewOpenSplitFile = String(localized: "menu.view.open-split-file", defaultValue: "Open Split File…")
+        static let viewShowEditor = String(localized: "menu.view.show-editor", defaultValue: "Show Editor")
         static let viewSwitchToAgentMode = String(localized: "menu.view.switch-to-agent-mode", defaultValue: "Switch to Agent Mode")
         static let viewSwitchToEditorMode = String(localized: "menu.view.switch-to-editor-mode", defaultValue: "Switch to Editor Mode")
         static let viewToggleAgent = String(localized: "menu.view.toggle-agent", defaultValue: "Toggle Agent")
         static let viewToggleFocusMode = String(localized: "menu.view.toggle-focus-mode", defaultValue: "Toggle Focus Mode")
         static let viewToggleInspector = String(localized: "menu.view.toggle-inspector", defaultValue: "Toggle Inspector")
         static let viewTogglePreview = String(localized: "menu.view.toggle-preview", defaultValue: "Toggle Preview")
+        static let viewToggleTerminal = String(localized: "menu.view.toggle-terminal", defaultValue: "Toggle Terminal")
         static let windowCloseTab = String(localized: "menu.window.close-tab", defaultValue: "Close Tab")
         static let windowNextTab = String(localized: "menu.window.next-tab", defaultValue: "Next Tab")
         static let windowPreviousTab = String(localized: "menu.window.previous-tab", defaultValue: "Previous Tab")
@@ -477,6 +505,14 @@ enum L10n {
         static let tokensHelp = { (a1: String, a2: String) -> String in
             let template = String(localized: "model-usage.tokens-help", defaultValue: "%@ input tokens, %@ output tokens")
             return String(format: template, a1, a2)
+        }
+        static let warAndPeaceMoreTokens = { (a1: String) -> String in
+            let template = String(localized: "model-usage.war-and-peace.more-tokens", defaultValue: "You've used ~%@× more tokens than War and Peace.")
+            return String(format: template, a1)
+        }
+        static let warAndPeacePercent = { (a1: String) -> String in
+            let template = String(localized: "model-usage.war-and-peace.percent", defaultValue: "You've used about %@%% of War and Peace in tokens so far.")
+            return String(format: template, a1)
         }
     }
 
@@ -690,6 +726,7 @@ enum L10n {
         static let tabConnectors = String(localized: "settings.tab.connectors", defaultValue: "Connectors")
         static let tabMcp = String(localized: "settings.tab.mcp", defaultValue: "MCP")
         static let tabTools = String(localized: "settings.tab.tools", defaultValue: "Tools")
+        static let tabTerminal = String(localized: "settings.tab.terminal", defaultValue: "Terminal")
         static let tabLocalAgents = String(localized: "settings.tab.local-agents", defaultValue: "Local Agents")
         static let tabRemoteRuntimes = String(localized: "settings.tab.remote-runtimes", defaultValue: "Runtimes")
         static let tabMobileGateway = String(localized: "settings.tab.mobile-gateway", defaultValue: "Mobile Gateway")
@@ -700,6 +737,8 @@ enum L10n {
         static let sectionTypography = String(localized: "settings.section.typography", defaultValue: "Typography")
         static let sectionEditorText = String(localized: "settings.section.editor-text", defaultValue: "Editor Text")
         static let sectionWorkspaceText = String(localized: "settings.section.workspace-text", defaultValue: "Workspace List")
+        static let sectionInterfaceSkin = String(localized: "settings.section.interface-skin", defaultValue: "Interface Skin")
+        static let interfaceSkinHelp = String(localized: "settings.interface-skin.help", defaultValue: "Choose a full-window skin. Skin changes apply to window chrome, sidebars, panels, selection color, and the recommended editor theme.")
         static let sectionColorStyle = String(localized: "settings.section.color-style", defaultValue: "Color Style")
         static let sectionEditorBackground = String(localized: "settings.section.editor-background", defaultValue: "Editor Background")
         static let sectionEditor = String(localized: "settings.section.editor", defaultValue: "Editor")
@@ -749,6 +788,50 @@ enum L10n {
         static let chooseBackgroundImageTitle = String(localized: "settings.choose-background-image.title", defaultValue: "Choose Editor Background Image")
         static let savedStatus = String(localized: "settings.saved-status", defaultValue: "Saved.")
         static let allChangesSaved = String(localized: "settings.all-changes-saved", defaultValue: "All changes saved")
+
+        enum InterfaceSkin {
+            static func name(_ skin: EditorInterfaceSkin) -> String {
+                switch skin.id {
+                case EditorInterfaceSkin.system.id:
+                    return String(localized: "settings.interface-skin.system.name", defaultValue: "System Default")
+                case EditorInterfaceSkin.mistForest.id:
+                    return String(localized: "settings.interface-skin.mist-forest.name", defaultValue: "Mist Forest")
+                case EditorInterfaceSkin.ricePaper.id:
+                    return String(localized: "settings.interface-skin.rice-paper.name", defaultValue: "Rice Paper")
+                case EditorInterfaceSkin.sciFiRaster.id:
+                    return String(localized: "settings.interface-skin.sci-fi-raster.name", defaultValue: "Sci-Fi Raster")
+                case EditorInterfaceSkin.midnightSlate.id:
+                    return String(localized: "settings.interface-skin.midnight-slate.name", defaultValue: "Midnight Slate")
+                case EditorInterfaceSkin.auroraNight.id:
+                    return String(localized: "settings.interface-skin.aurora-night.name", defaultValue: "Aurora Night")
+                case EditorInterfaceSkin.emberGraphite.id:
+                    return String(localized: "settings.interface-skin.ember-graphite.name", defaultValue: "Ember Graphite")
+                default:
+                    return skin.id
+                }
+            }
+
+            static func summary(_ skin: EditorInterfaceSkin) -> String {
+                switch skin.id {
+                case EditorInterfaceSkin.system.id:
+                    return String(localized: "settings.interface-skin.system.summary", defaultValue: "Follows macOS with stable native contrast.")
+                case EditorInterfaceSkin.mistForest.id:
+                    return String(localized: "settings.interface-skin.mist-forest.summary", defaultValue: "Soft green and warm mist for calm long sessions.")
+                case EditorInterfaceSkin.ricePaper.id:
+                    return String(localized: "settings.interface-skin.rice-paper.summary", defaultValue: "Low-saturation ink and paper tones with a quiet reading feel.")
+                case EditorInterfaceSkin.sciFiRaster.id:
+                    return String(localized: "settings.interface-skin.sci-fi-raster.summary", defaultValue: "Deep cyan neon with a compact terminal-like atmosphere.")
+                case EditorInterfaceSkin.midnightSlate.id:
+                    return String(localized: "settings.interface-skin.midnight-slate.summary", defaultValue: "Blue-black depth for longer night coding.")
+                case EditorInterfaceSkin.auroraNight.id:
+                    return String(localized: "settings.interface-skin.aurora-night.summary", defaultValue: "Dark green-blue with clear aurora accents.")
+                case EditorInterfaceSkin.emberGraphite.id:
+                    return String(localized: "settings.interface-skin.ember-graphite.summary", defaultValue: "Graphite warmth with ember highlights.")
+                default:
+                    return skin.id
+                }
+            }
+        }
 
         enum LearningReview {
             static let section = String(localized: "settings.learning-review.section", defaultValue: "Learning Review")

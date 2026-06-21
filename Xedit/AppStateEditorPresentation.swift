@@ -212,6 +212,14 @@ extension AppState {
         isAgentPanelVisible.toggle()
     }
 
+    func showEditor() {
+        isAgentPanelVisible = false
+        isPreviewVisible = false
+        isEditorTerminalVisible = false
+        isFocusModeEnabled = false
+        EditorAppStateRegistry.shared.focusCurrentEditorWindow()
+    }
+
     func togglePreview() {
         guard canShowPreview else { return }
         isPreviewVisible.toggle()

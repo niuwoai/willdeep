@@ -159,8 +159,10 @@ struct EditorCoreBehaviorTests {
         #expect(settings.orderedInspectorModes == [.minimap, .structure])
         #expect(settings.trimsTrailingWhitespaceOnSave == false)
         #expect(settings.ensuresFinalNewlineOnSave == false)
+        #expect(settings.interfaceSkinID == EditorInterfaceSkin.system.id)
         #expect(EditorTheme.byID(settings.themeID) != nil)
         #expect(EditorFontChoice.byID(settings.fontID) != nil)
+        #expect(EditorInterfaceSkin.byID(settings.interfaceSkinID) != nil)
     }
 
     @Test("editor settings normalize invalid persisted values")
@@ -184,6 +186,7 @@ struct EditorCoreBehaviorTests {
             editorGlassMaterial: .hudWindow,
             editorGlassOpacity: 9,
             editorSurfaceOpacity: 9,
+            interfaceSkinID: "missing-skin",
             trimsTrailingWhitespaceOnSave: true,
             ensuresFinalNewlineOnSave: true
         ).normalized()
@@ -207,6 +210,7 @@ struct EditorCoreBehaviorTests {
         #expect(settings.editorGlassMaterial == .hudWindow)
         #expect(settings.editorGlassOpacity == 1)
         #expect(settings.editorSurfaceOpacity == 1)
+        #expect(settings.interfaceSkinID == EditorSettings.default.interfaceSkinID)
         #expect(settings.trimsTrailingWhitespaceOnSave == true)
         #expect(settings.ensuresFinalNewlineOnSave == true)
     }
@@ -234,6 +238,22 @@ struct EditorCoreBehaviorTests {
         #expect(settings.fileTreeLineHeightMultiple == EditorSettings.default.fileTreeLineHeightMultiple)
         #expect(settings.preferredInspectorMode == EditorSettings.default.preferredInspectorMode)
         #expect(settings.inspectorPanelOrder == EditorSettings.default.inspectorPanelOrder)
+        #expect(settings.interfaceSkinID == EditorSettings.default.interfaceSkinID)
+    }
+
+    @Test("interface skins are registered with localized names and editor themes")
+    func testInterfaceSkinsAreRegistered() {
+        #expect(EditorInterfaceSkin.allCases.count == 7)
+
+        let ids = Set(EditorInterfaceSkin.allCases.map(\.id))
+        #expect(ids.count == EditorInterfaceSkin.allCases.count)
+
+        for skin in EditorInterfaceSkin.allCases {
+            #expect(EditorInterfaceSkin.byID(skin.id)?.id == skin.id)
+            #expect(EditorTheme.byID(skin.recommendedThemeID) != nil)
+            #expect(!L10n.Settings.InterfaceSkin.name(skin).isEmpty)
+            #expect(!L10n.Settings.InterfaceSkin.summary(skin).isEmpty)
+        }
     }
 
     @Test("changing editor settings refreshes the active editor")
@@ -791,5 +811,56 @@ struct EditorCoreBehaviorTests {
         #expect(EditorDefinitionResolver.definition(for: "connect", from: tsFile, rootDirectory: root)?.url.standardizedFileURL == tsFile.standardizedFileURL)
         #expect(EditorDefinitionResolver.definition(for: "spring.datasource.url", from: javaFile, rootDirectory: root)?.url.standardizedFileURL == appConfig.standardizedFileURL)
         #expect(EditorDefinitionResolver.definition(for: "API_TOKEN", from: tsFile, rootDirectory: root)?.url.standardizedFileURL == envFile.standardizedFileURL)
+    }
+
+    @Test("editor terminal parses env and discovers package plus Go commands")
+    func testEditorTerminalProjectCommandDiscovery() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_terminal_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try """
+        {
+          "scripts": {
+            "build": "vite build",
+            "dev": "vite --host 127.0.0.1",
+            "lint": "eslint ."
+          },
+          "devDependencies": {
+            "vite": "^6.0.0"
+          }
+        }
+        """.write(to: root.appendingPathComponent("package.json"), atomically: true, encoding: .utf8)
+        try "".write(to: root.appendingPathComponent("yarn.lock"), atomically: true, encoding: .utf8)
+        try """
+        package main
+
+        func main() {}
+        """.write(to: root.appendingPathComponent("main.go"), atomically: true, encoding: .utf8)
+
+        let cmdServer = root.appendingPathComponent("cmd/server", isDirectory: true)
+        try FileManager.default.createDirectory(at: cmdServer, withIntermediateDirectories: true)
+        try """
+        package main
+
+        func main() {}
+        """.write(to: cmdServer.appendingPathComponent("main.go"), atomically: true, encoding: .utf8)
+
+        let env = EditorTerminalEnvironmentParser.parse("""
+        API_TOKEN=abc123
+        QUOTED="hello world"
+        # ignored
+        EMPTY=
+        """)
+        #expect(env["API_TOKEN"] == "abc123")
+        #expect(env["QUOTED"] == "hello world")
+        #expect(env["EMPTY"] == "")
+
+        let commands = EditorProjectCommandResolver.commands(rootDirectory: root, openedFileURL: nil)
+        #expect(commands.contains { $0.title == "package.json: dev" && $0.command == "yarn run dev" })
+        #expect(commands.contains { $0.title == "package.json: build" && $0.command == "yarn run build" })
+        #expect(commands.contains { $0.title == "Go run main.go" && $0.command == "go run main.go" })
+        #expect(commands.contains { $0.title == "Go run ./cmd/server" && $0.command == "go run ./cmd/server" })
     }
 }

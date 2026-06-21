@@ -53,10 +53,29 @@ ARCHIVE_PATH="${BUILD_DIR}/${PRODUCT_NAME}.xcarchive"
 EXPORT_DIR="${BUILD_DIR}/export"
 EXPORT_OPTIONS_PLIST="${BUILD_DIR}/ExportOptions.plist"
 APP_PATH="${EXPORT_DIR}/${PRODUCT_NAME}.app"
+APP_ICONSET_DIR="${ROOT_DIR}/Xedit/Assets.xcassets/AppIcon.appiconset"
+DMG_VOLUME_TIFF="${BUILD_DIR}/${PRODUCT_NAME}Dmg.tiff"
+DMG_VOLUME_ICON="${BUILD_DIR}/${PRODUCT_NAME}Dmg.icns"
 # 历史发布产物归档区（每个版本一个子目录）。`build/release` 会在每次
 # release 开头被 `rm -rf` 清空，所以备份要放在它的同级目录 `build/
 # release-history`，避免被新一轮的清理一并干掉。
 BACKUP_ROOT="${ROOT_DIR}/build/release-history"
+
+create_dmg_volume_icon() {
+  if ! command -v sips >/dev/null 2>&1 || ! command -v tiff2icns >/dev/null 2>&1; then
+    echo "❌ 找不到 sips/tiff2icns，无法从 AppIcon 生成 DMG 卷图标"
+    exit 1
+  fi
+  if [[ ! -f "${APP_ICONSET_DIR}/icon_1024x1024.png" ]]; then
+    echo "❌ 找不到 AppIcon 源图：${APP_ICONSET_DIR}/icon_1024x1024.png"
+    exit 1
+  fi
+
+  rm -f "$DMG_VOLUME_TIFF" "$DMG_VOLUME_ICON"
+  sips -s format tiff "${APP_ICONSET_DIR}/icon_1024x1024.png" --out "$DMG_VOLUME_TIFF" >/dev/null
+  tiff2icns "$DMG_VOLUME_TIFF" "$DMG_VOLUME_ICON"
+  echo "  · DMG 卷图标：${DMG_VOLUME_ICON}"
+}
 
 # ----- 解析参数 -------------------------------------------------------------
 SKIP_NOTARIZE=0
@@ -236,10 +255,12 @@ fi
 # ----- Step 3: 打包 DMG -----------------------------------------------------
 echo ""
 echo "[3/8] 打包 DMG ..."
+create_dmg_volume_icon
 if command -v create-dmg >/dev/null 2>&1; then
   # 拖拽安装页面：背景图可选，没设的话用纯白
   create-dmg \
     --volname "$DMG_VOLUME_NAME" \
+    --volicon "$DMG_VOLUME_ICON" \
     --window-pos 200 120 \
     --window-size 600 400 \
     --icon-size 100 \
@@ -255,6 +276,12 @@ else
   rm -rf "$TMP_DMG_SRC"
   mkdir -p "$TMP_DMG_SRC"
   cp -R "$APP_PATH" "$TMP_DMG_SRC/"
+  cp "$DMG_VOLUME_ICON" "$TMP_DMG_SRC/.VolumeIcon.icns"
+  if command -v SetFile >/dev/null 2>&1; then
+    SetFile -a C "$TMP_DMG_SRC" || true
+  elif xcrun -find SetFile >/dev/null 2>&1; then
+    xcrun SetFile -a C "$TMP_DMG_SRC" || true
+  fi
   ln -s /Applications "$TMP_DMG_SRC/Applications"
   hdiutil create \
     -volname "$DMG_VOLUME_NAME" \

@@ -1,5 +1,132 @@
 # Changelog
 
+## 1.100.0-rc2 - 2026-06-21
+
+### Fixed
+
+- release 打包流程新增 DMG volume icon 生成：从当前 App 启动/Dock 使用的 `Xedit/Assets.xcassets/AppIcon.appiconset` 自动生成 `.icns`,并在 `create-dmg` 打包时通过 `--volicon` 应用；`hdiutil` fallback 也会写入 `.VolumeIcon.icns` 并尽量设置自定义图标属性。
+
+### Changed
+
+- 版本号从 **1.100.0-rc1** 提升为 **1.100.0-rc2**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.100.0-rc1 - 2026-06-21
+
+### Fixed
+
+- 修复 Settings → Format 切换界面皮肤后独立 Agent mode 窗口没有完整即时换肤的问题；Agent mode 的主背景、会话侧栏、聊天面、Composer、底部状态栏、右侧辅助面板和常用 pill/卡片现在直接读取当前 `EditorSettings.interfaceSkin.palette`。
+
+### Changed
+
+- 版本号从 **1.100.0** 提升为 **1.100.0-rc1**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.100.0 - 2026-06-21
+
+### Added
+
+- Settings → Format 新增“Interface Skin”界面皮肤选择器,采用卡片网格预览,内置系统默认、淡雾森林、水墨宣纸、科幻光栅、午夜岩蓝、极光暗夜、烽火石墨七套皮肤。
+- 皮肤配置持久化到 `EditorSettings.interfaceSkinID`,并应用到窗口背景、编辑区背景、文件树侧栏、选中态、Agent panel、强调色和深浅色偏好;点选皮肤时同步切换推荐编辑器代码主题。
+
+### Changed
+
+- 版本号从 **1.99.1-rc8** 提升为 **1.100.0**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.99.1-rc8 - 2026-06-21
+
+### Fixed
+
+- 进一步收紧 `WindowRootView` 的 URL 处理：目录 URL 统一在当前窗口加载，不再从 `handleExternalURL` 内调用 `openWindow(value:)`，彻底避开目录 URL 递归投递导致的 `openWindow` 崩溃点。
+
+### Changed
+
+- 版本号从 **1.99.1-rc7** 提升为 **1.99.1-rc8**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.99.1-rc7 - 2026-06-21
+
+### Fixed
+
+- 修复关闭所有编辑器窗口后通过 `⌘N` 新建编辑器会先弹目录选择的问题；现在 `⌘N` 直接打开空编辑器窗口。
+- 修复选择目录打开新窗口时 URL WindowGroup 初始加载目录又递归 `openWindow(value:)`，导致持续创建/调度窗口并进入转圈状态的问题。
+
+### Changed
+
+- 版本号从 **1.99.1-rc6** 提升为 **1.99.1-rc7**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.99.1-rc6 - 2026-06-21
+
+### Fixed
+
+- Agent 顶部“切换到 Editor Mode”按钮图标从分屏样式改为 `pencil.and.outline`,更明确表达回到编辑器书写/编辑的语义。
+
+### Changed
+
+- 版本号从 **1.99.1-rc5** 提升为 **1.99.1-rc6**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.99.1-rc5 - 2026-06-21
+
+### Fixed
+
+- 补齐模型用量热力图的 War and Peace 趣味提示、Composer/侧栏“无工作区”状态文案的简体中文本地化。
+- Composer context hint 的 `Open a folder to enable tools`、`Selection included · Tools available`、`Active file included · Tools available` 改走本地化资源。
+
+### Changed
+
+- 版本号从 **1.99.1-rc4** 提升为 **1.99.1-rc5**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.99.1-rc4 - 2026-06-21
+
+### Fixed
+
+- Composer workspace 选择菜单的可见文案改走本地化,补齐 `Pick folder`、`Choose folder…`、`Switch workspace`、`Remote runtimes`、worktree 操作和路径/分支复制菜单的简体中文翻译。
+
+### Changed
+
+- 版本号从 **1.99.1-rc3** 提升为 **1.99.1-rc4**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.99.1-rc3 - 2026-06-21
+
+### Fixed
+
+- 修复 workspace 分组右键菜单 `Remove from List` 缺少简体中文翻译的问题,中文环境下现在显示为“从列表移除”。
+
+### Changed
+
+- 版本号从 **1.99.1-rc2** 提升为 **1.99.1-rc3**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.99.1-rc2 - 2026-06-21
+
+### Fixed
+
+- macOS `显示` 菜单新增明确的 Show Editor（⌥⌘E）入口,用于从 Agent panel、Preview、Terminal 或 focus mode 回到普通编辑器视图,并聚焦对应 editor 窗口。
+
+### Changed
+
+- 版本号从 **1.99.1-rc1** 提升为 **1.99.1-rc2**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.99.1-rc1 - 2026-06-21
+
+### Fixed
+
+- 补齐编辑器 Terminal 的可发现入口:macOS `显示` 菜单新增 Toggle Terminal（⌘J）,可直接显示/隐藏底部伪终端面板。
+- 编辑器底部状态栏 Terminal 图标改为真正的切换按钮,可再次点击收起面板,并在打开状态显示强调色选中态。
+
+### Changed
+
+- 版本号从 **1.99.0** 提升为 **1.99.1-rc1**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.99.0 - 2026-06-21
+
+### Added
+
+- 编辑器新增底部 Terminal 面板:可从状态栏、命令面板或文件树打开,按当前 workspace / 文件目录设置 working dir,通过 `openpty` 启动真实伪终端 shell,键盘输入和粘贴直写 PTY,项目命令会在同一个交互式 shell 中执行,长任务可停止、输出可清空。
+- Settings 新增 Terminal 配置:支持 shell 路径、字体、字号、Midnight / Graphite / Solar / Orchard 四套配色 schema,以及按 `KEY=value` 编写的环境变量注入。
+- Terminal 项目命令菜单新增前端和 Go 项目识别:`package.json` scripts 按 dev/start/build/test/lint 优先排序,自动选择 yarn/pnpm/npm/bun;Vite 项目可补 dev 命令;Go 项目识别根目录 `main.go` 和 `cmd/*/main.go`。
+- 新增回归测试覆盖 Terminal 环境变量解析、package.json script 识别和 Go main 命令发现。
+
+### Changed
+
+- 版本号从 **1.98.0** 提升为 **1.99.0**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.98.0 - 2026-06-21
 
 ### Added

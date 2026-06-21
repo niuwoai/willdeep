@@ -156,7 +156,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         if let workspaceLocation {
             return workspaceLocation.displayName
         }
-        guard let path = workspaceRootPath, !path.isEmpty else { return "No workspace" }
+        guard let path = workspaceRootPath, !path.isEmpty else { return L10n.Workspace.noWorkspace }
         return URL(fileURLWithPath: path).lastPathComponent
     }
 

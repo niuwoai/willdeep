@@ -24,8 +24,10 @@ import AppKit
 /// any panel. Used as the bottom layer before the editor area paints
 /// itself.
 struct WorkspaceWindowBackground: View {
+    let settings: EditorSettings
+
     var body: some View {
-        Color(nsColor: .windowBackgroundColor)
+        settings.interfaceSkin.windowBackground
             .ignoresSafeArea()
     }
 }
@@ -41,7 +43,7 @@ struct EditorAreaBackground: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                Color(nsColor: .windowBackgroundColor)
+                settings.interfaceSkin.windowBackground
 
                 if let image = backgroundImage {
                     imageView(image, in: proxy.size)

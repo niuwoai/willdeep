@@ -57,6 +57,7 @@ final class AppState: ObservableObject {
     @Published var isSplitEditorVisible = false
     @Published var splitFileURL: URL?
     @Published var splitFileContent = ""
+    @Published var isEditorTerminalVisible = false
     @Published var isQuickOpenVisible = false
     @Published var quickOpenQuery = ""
     @Published var isGoToLineVisible = false
@@ -196,6 +197,17 @@ final class AppState: ObservableObject {
             scheduleEditorSettingsSideEffects()
         }
     }
+    @Published var editorTerminalSettings: EditorTerminalSettings = EditorTerminalSettingsStore.load() {
+        didSet {
+            let normalized = editorTerminalSettings.normalized()
+            if normalized != editorTerminalSettings {
+                editorTerminalSettings = normalized
+                return
+            }
+            EditorTerminalSettingsStore.save(normalized)
+        }
+    }
+    var editorTerminalSession = EditorTerminalSession()
 
     /// Internal flag to suppress re-entrant `onChange` processing when a URL
     /// change is a programmatic revert (e.g. binary file rejected, user cancelled).
@@ -226,6 +238,7 @@ final class AppState: ObservableObject {
     /// inside `AgentSessionRowStatusDot`, so background runtime
     /// changes only repaint that one row.
     private var activeRuntimeSubscription: AnyCancellable?
+    private var terminalSessionSubscription: AnyCancellable?
     /// Republishes background job registry changes through AppState so
     /// any view binding `appState.*` repaints when a job starts /
     /// finishes / streams output. Views that need finer-grained
@@ -353,6 +366,10 @@ final class AppState: ObservableObject {
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
             }
+        terminalSessionSubscription = editorTerminalSession.objectWillChange
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
         agentJobRegistry.onJobFinished = { [weak self] job in
             self?.surfaceDelegatedBackgroundJobCompletionIfNeeded(job)
         }
@@ -365,6 +382,7 @@ final class AppState: ObservableObject {
         agentRequestTask?.cancel()
         activeRuntimeSubscription?.cancel()
         jobRegistrySubscription?.cancel()
+        terminalSessionSubscription?.cancel()
         // rc38 attempted to cancel every background runtime's
         // requestTask here via `MainActor.assumeIsolated { … }`, which
         // works in production (AppState is held by SwiftUI as a
@@ -630,10 +648,20 @@ final class AppState: ObservableObject {
 
     func openTerminalHere(_ url: URL? = nil) {
         let targetURL = terminalTargetURL(for: url)
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        process.arguments = ["-a", "Terminal", targetURL.path]
-        try? process.run()
+        editorTerminalSession.setWorkingDirectory(targetURL)
+        isEditorTerminalVisible = true
+    }
+
+    func toggleEditorTerminal(_ url: URL? = nil) {
+        if isEditorTerminalVisible {
+            isEditorTerminalVisible = false
+            return
+        }
+        openTerminalHere(url)
+    }
+
+    func openTerminalSettings() {
+        EditorSettingsNavigation.shared.open(.terminal)
     }
 
     func copyPath(_ url: URL) {

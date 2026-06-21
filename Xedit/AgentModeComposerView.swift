@@ -363,6 +363,7 @@ private struct ComposerCard: View {
     }
 
     var body: some View {
+        let palette = appState.editorSettings.interfaceSkin.palette
         VStack(alignment: .leading, spacing: 8) {
             if !appState.agentPendingImages.isEmpty {
                 AgentComposerImageStrip(images: appState.agentPendingImages) { id in
@@ -468,11 +469,11 @@ private struct ComposerCard: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(AgentDesign.cardBackground)
+        .background(palette.controlFill)
         .clipShape(RoundedRectangle(cornerRadius: AgentDesign.inputCornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: AgentDesign.inputCornerRadius)
-                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                .stroke(palette.hairline, lineWidth: 1)
         )
         .onAppear { inputFocused = true }
     }
@@ -615,6 +616,7 @@ struct AgentChatStatusBar: View {
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
+        let palette = appState.editorSettings.interfaceSkin.palette
         HStack(spacing: 14) {
             if activeRemoteWorkspaceLabel == nil, let branch = appState.gitStatus.branchName {
                 HStack(spacing: 4) {
@@ -644,7 +646,7 @@ struct AgentChatStatusBar: View {
                         .truncationMode(.middle)
                 }
             } else {
-                Text("No workspace")
+                Text(L10n.Workspace.noWorkspace)
             }
 
             if appState.agentSessionDidEditFiles && !appState.agentWorktreeChanges.isEmpty {
@@ -683,8 +685,8 @@ struct AgentChatStatusBar: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, 18)
         .frame(height: AgentDesign.statusBarHeight)
-        .background(AgentDesign.statusBarBackground)
-        .overlay(Divider(), alignment: .top)
+        .background(palette.panelFill)
+        .overlay(Rectangle().fill(palette.hairline).frame(height: 1), alignment: .top)
     }
 
     private var activeRemoteWorkspaceLabel: String? {

@@ -144,6 +144,12 @@ struct EditorSettingsView: View {
                     Label(L10n.Settings.tabTools, systemImage: "terminal")
                 }
 
+            terminalSettings
+                .tag(EditorSettingsTab.terminal)
+                .tabItem {
+                    Label(L10n.Settings.tabTerminal, systemImage: "rectangle.bottomthird.inset.filled")
+                }
+
             VoiceSettingsView()
                 .tag(EditorSettingsTab.voice)
                 .tabItem {

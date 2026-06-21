@@ -14,7 +14,7 @@ struct WillDeepApp: App {
     @NSApplicationDelegateAdaptor(WillDeepAppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: EditorWindowID.value) {
             WindowRootView()
         }
         .windowStyle(.hiddenTitleBar)
@@ -46,6 +46,10 @@ enum AgentWindowID {
     static let value = "agent-window"
 }
 
+enum EditorWindowID {
+    static let value = "editor-window"
+}
+
 /// 菜单命令独立成 Commands 结构体，@FocusedObject 只能放这里、
 /// 不能放回 App 顶层：@FocusedObject 订阅 AppState.objectWillChange，
 /// 挂在 App 上时每次 publish（流式期间每个 token、动画期间每帧的
@@ -60,7 +64,7 @@ private struct WillDeepCommands: Commands {
     var body: some Commands {
             CommandGroup(replacing: .newItem) {
                 Button(L10n.Menu.fileNewWindow) {
-                    chooseFolderForNewWindow()
+                    openWindow(id: EditorWindowID.value)
                 }
                 .keyboardShortcut("n", modifiers: .command)
 
@@ -168,6 +172,17 @@ private struct WillDeepCommands: Commands {
                 .keyboardShortcut("r", modifiers: [.command, .option])
                 .disabled(appState?.canShowPreview != true)
 
+                Button(L10n.Menu.viewShowEditor) {
+                    appState?.showEditor()
+                }
+                .keyboardShortcut("e", modifiers: [.command, .option])
+
+                Button(L10n.Menu.viewToggleTerminal) {
+                    appState?.toggleEditorTerminal(appState?.openedFileURL ?? appState?.rootDirectory)
+                }
+                .keyboardShortcut("j", modifiers: .command)
+                .disabled(appState?.rootDirectory == nil && appState?.openedFileURL == nil)
+
                 Button(L10n.Menu.viewOpenSplitFile) {
                     appState?.openSplitFile()
                 }
@@ -233,18 +248,9 @@ private struct WillDeepCommands: Commands {
             }
     }
 
-    private func chooseFolderForNewWindow() {
-        let panel = AppState.folderOpenPanel()
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            appState?.registerRecentFolder(url)
-            openWindow(value: url)
-        }
-    }
 }
 
 private struct WindowRootView: View {
-    @Environment(\.openWindow) private var openWindow
     @StateObject private var appState = AppState()
     /// 桥到 NSWindow.didBecomeKeyNotification，本窗口被聚焦时把
     /// self.appState 写到 EditorAppStateRegistry —— 这样独立的 Agent
@@ -298,11 +304,6 @@ private struct WindowRootView: View {
 
     private func handleExternalURL(_ url: URL) {
         if CollaborationConnectorOAuthCoordinator.handleCallback(url) {
-            return
-        }
-        if AppState.isExistingDirectory(url) {
-            appState.registerRecentFolder(url)
-            openWindow(value: url)
             return
         }
         appState.openExternalURL(url)

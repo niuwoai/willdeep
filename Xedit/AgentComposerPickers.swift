@@ -65,7 +65,7 @@ struct WorkspacePickerPill: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(AgentDesign.subtleBackground)
+            .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
             .clipShape(RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius))
         }
         .menuStyle(.borderlessButton)
@@ -88,7 +88,7 @@ struct WorkspacePickerPill: View {
             let root = URL(fileURLWithPath: localPath)
             return root.lastPathComponent.isEmpty ? localPath : root.lastPathComponent
         }
-        return "Pick folder"
+        return L10n.ComposerWorkspace.pickFolder
     }
 
     private var helpText: String {
@@ -101,7 +101,7 @@ struct WorkspacePickerPill: View {
         if appState.activeRuntime == nil, let root = appState.rootDirectory {
             return root.path
         }
-        return "Choose a workspace for this chat"
+        return L10n.ComposerWorkspace.chooseWorkspaceHelp
     }
 
     @ViewBuilder
@@ -112,12 +112,12 @@ struct WorkspacePickerPill: View {
                 Button {
                     appState.revealInFinder(root)
                 } label: {
-                    Label("Show in Finder", systemImage: "folder")
+                    Label(L10n.ComposerWorkspace.showInFinder, systemImage: "folder")
                 }
                 Button {
                     appState.copyPath(root)
                 } label: {
-                    Label("Copy path", systemImage: "doc.on.doc")
+                    Label(L10n.ComposerWorkspace.copyPath, systemImage: "doc.on.doc")
                 }
                 if let branch = appState.gitStatus.branchName, !branch.isEmpty {
                     Button {
@@ -125,7 +125,7 @@ struct WorkspacePickerPill: View {
                         pb.clearContents()
                         pb.setString(branch, forType: .string)
                     } label: {
-                        Label("Copy branch name", systemImage: "arrow.triangle.branch")
+                        Label(L10n.ComposerWorkspace.copyBranchName, systemImage: "arrow.triangle.branch")
                     }
                 }
             }
@@ -133,11 +133,11 @@ struct WorkspacePickerPill: View {
         }
 
         if appState.gitStatus.isRepository {
-            Section("Git worktrees") {
+            Section(L10n.ComposerWorkspace.gitWorktrees) {
                 Button {
                     appState.createAgentGitWorktreeFromActiveWorkspace()
                 } label: {
-                    Label("New worktree…", systemImage: "arrow.triangle.branch")
+                    Label(L10n.ComposerWorkspace.newWorktree, systemImage: "arrow.triangle.branch")
                 }
 
                 ForEach(appState.agentGitWorktrees) { worktree in
@@ -163,7 +163,7 @@ struct WorkspacePickerPill: View {
                     Button(role: .destructive) {
                         appState.removeAgentGitWorktree(removable)
                     } label: {
-                        Label("Remove current worktree…", systemImage: "trash")
+                        Label(L10n.ComposerWorkspace.removeCurrentWorktree, systemImage: "trash")
                     }
                 }
 
@@ -171,7 +171,7 @@ struct WorkspacePickerPill: View {
                     Button {
                         appState.pruneAgentGitWorktrees()
                     } label: {
-                        Label("Prune stale worktrees", systemImage: "scissors")
+                        Label(L10n.ComposerWorkspace.pruneStaleWorktrees, systemImage: "scissors")
                     }
                 }
             }
@@ -182,7 +182,7 @@ struct WorkspacePickerPill: View {
         // the current root so the active folder doesn't double up.
         let knownRoots = sortedKnownWorkspaces()
         if !knownRoots.isEmpty {
-            Section("Switch workspace") {
+            Section(L10n.ComposerWorkspace.switchWorkspace) {
                 ForEach(knownRoots, id: \.self) { url in
                     Button {
                         appState.moveActiveAgentSessionToWorkspace(at: url.standardizedFileURL.path)
@@ -202,7 +202,7 @@ struct WorkspacePickerPill: View {
         let remoteRuntimes = AgentRuntimeStore.loadDescriptors()
             .filter { $0.transport == .ssh && !$0.defaultWorkspacePath.isEmpty }
         if !remoteRuntimes.isEmpty {
-            Section("Remote runtimes") {
+            Section(L10n.ComposerWorkspace.remoteRuntimes) {
                 ForEach(remoteRuntimes) { runtime in
                     Button {
                         appState.moveActiveAgentSessionToRemoteWorkspace(
@@ -233,7 +233,7 @@ struct WorkspacePickerPill: View {
         Button {
             appState.openFolderAndStartAgentSession()
         } label: {
-            Label("Choose folder…", systemImage: "folder.badge.plus")
+            Label(L10n.ComposerWorkspace.chooseFolder, systemImage: "folder.badge.plus")
         }
     }
 
@@ -578,7 +578,7 @@ struct ModelPickerPill: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(AgentDesign.subtleBackground)
+            .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
             .clipShape(RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius))
         }
         .menuStyle(.borderlessButton)

@@ -48,13 +48,14 @@ struct AgentSidePanelHost: View {
     @Binding var selectedFile: URL?
 
     var body: some View {
+        let palette = appState.editorSettings.interfaceSkin.palette
         VStack(spacing: 0) {
             header
-            Divider()
+            Rectangle().fill(palette.hairline).frame(height: 1)
             content
         }
         .frame(width: 320)
-        .background(AgentDesign.cardBackground.opacity(0.4))
+        .background(palette.panelFill)
     }
 
     private var header: some View {

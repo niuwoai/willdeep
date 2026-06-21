@@ -22,12 +22,13 @@ struct AgentModeView: View {
     @State private var sidePanelFile: URL?
 
     var body: some View {
+        let skin = appState.editorSettings.interfaceSkin
         HStack(spacing: 0) {
             AgentSessionsSidebar()
                 .frame(width: sidebarWidth)
                 .background(
-                    AgentDesign.sidebarBackground
-                        .overlay(AgentDesign.sidebarTint)
+                    skin.sidebarBackground
+                        .overlay(skin.palette.hoverFill.opacity(0.35))
                 )
 
             Divider()
@@ -40,7 +41,7 @@ struct AgentModeView: View {
                 AgentChatStatusBar()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(AgentDesign.chatBackground)
+            .background(skin.windowBackground)
 
             if sidePanel != nil {
                 Divider()
@@ -48,7 +49,7 @@ struct AgentModeView: View {
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .background(AgentDesign.chatBackground)
+        .background(skin.windowBackground)
         .animation(.easeInOut(duration: 0.18), value: sidePanel)
     }
 }
@@ -60,21 +61,6 @@ struct AgentModeView: View {
 // appearance (light / dark) automatically.
 
 enum AgentDesign {
-    // Backgrounds — semantic so light/dark adapt for free. Earlier
-    // revisions used `underPageBackgroundColor` for the sidebar and the
-    // status bar; on light appearance that paints a fairly dark grey
-    // band that fights with the white chat area. Now everything sits on
-    // a single `windowBackgroundColor` plane, separated by dividers and
-    // very light overlays so the eye reads it as one calm canvas.
-    static let chatBackground = Color(nsColor: .windowBackgroundColor)
-    static let sidebarBackground = Color(nsColor: .windowBackgroundColor)
-    static let statusBarBackground = Color(nsColor: .windowBackgroundColor)
-    static let cardBackground = Color(nsColor: .controlBackgroundColor)
-    static let subtleBackground = Color(nsColor: .quaternaryLabelColor).opacity(0.18)
-    /// Very faint tint to set the sidebar apart from the chat without
-    /// the heavy grey of `underPageBackgroundColor`.
-    static let sidebarTint = Color(nsColor: .labelColor).opacity(0.025)
-
     // Corner radii.
     static let cardCornerRadius: CGFloat = 8
     static let pillCornerRadius: CGFloat = 6
@@ -98,4 +84,3 @@ enum AgentDesign {
     static let sidebarSectionFont = Font.system(size: 11, weight: .semibold)
     static let sidebarRowFont = Font.system(size: 12)
 }
-

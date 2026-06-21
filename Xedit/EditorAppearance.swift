@@ -7,6 +7,7 @@
 
 import AppKit
 import Foundation
+import SwiftUI
 
 struct EditorSettings: Codable, Equatable {
     var fontID: String
@@ -27,6 +28,7 @@ struct EditorSettings: Codable, Equatable {
     var editorGlassMaterial: EditorGlassMaterial
     var editorGlassOpacity: Double
     var editorSurfaceOpacity: Double
+    var interfaceSkinID: String
     var trimsTrailingWhitespaceOnSave: Bool
     var ensuresFinalNewlineOnSave: Bool
 
@@ -49,6 +51,7 @@ struct EditorSettings: Codable, Equatable {
         editorGlassMaterial: .contentBackground,
         editorGlassOpacity: 0.75,
         editorSurfaceOpacity: 0.82,
+        interfaceSkinID: EditorInterfaceSkin.system.id,
         trimsTrailingWhitespaceOnSave: false,
         ensuresFinalNewlineOnSave: false
     )
@@ -72,6 +75,7 @@ struct EditorSettings: Codable, Equatable {
         editorGlassMaterial: EditorGlassMaterial,
         editorGlassOpacity: Double,
         editorSurfaceOpacity: Double,
+        interfaceSkinID: String,
         trimsTrailingWhitespaceOnSave: Bool,
         ensuresFinalNewlineOnSave: Bool
     ) {
@@ -93,6 +97,7 @@ struct EditorSettings: Codable, Equatable {
         self.editorGlassMaterial = editorGlassMaterial
         self.editorGlassOpacity = editorGlassOpacity
         self.editorSurfaceOpacity = editorSurfaceOpacity
+        self.interfaceSkinID = interfaceSkinID
         self.trimsTrailingWhitespaceOnSave = trimsTrailingWhitespaceOnSave
         self.ensuresFinalNewlineOnSave = ensuresFinalNewlineOnSave
     }
@@ -119,6 +124,7 @@ struct EditorSettings: Codable, Equatable {
         editorGlassMaterial = try container.decodeIfPresent(EditorGlassMaterial.self, forKey: .editorGlassMaterial) ?? fallback.editorGlassMaterial
         editorGlassOpacity = try container.decodeIfPresent(Double.self, forKey: .editorGlassOpacity) ?? fallback.editorGlassOpacity
         editorSurfaceOpacity = try container.decodeIfPresent(Double.self, forKey: .editorSurfaceOpacity) ?? fallback.editorSurfaceOpacity
+        interfaceSkinID = try container.decodeIfPresent(String.self, forKey: .interfaceSkinID) ?? fallback.interfaceSkinID
         trimsTrailingWhitespaceOnSave = try container.decodeIfPresent(Bool.self, forKey: .trimsTrailingWhitespaceOnSave) ?? fallback.trimsTrailingWhitespaceOnSave
         ensuresFinalNewlineOnSave = try container.decodeIfPresent(Bool.self, forKey: .ensuresFinalNewlineOnSave) ?? fallback.ensuresFinalNewlineOnSave
     }
@@ -153,6 +159,9 @@ extension EditorSettings {
         if EditorTheme.byID(result.themeID) == nil {
             result.themeID = EditorSettings.default.themeID
         }
+        if EditorInterfaceSkin.byID(result.interfaceSkinID) == nil {
+            result.interfaceSkinID = EditorSettings.default.interfaceSkinID
+        }
         result.fontSize = min(max(result.fontSize, 10), 28)
         result.lineHeightMultiple = min(max(result.lineHeightMultiple, 1.0), 1.8)
         result.fileTreeFontSize = min(max(result.fileTreeFontSize, 10), 16)
@@ -175,6 +184,10 @@ extension EditorSettings {
         EditorTheme.byID(themeID) ?? .paper
     }
 
+    var interfaceSkin: EditorInterfaceSkin {
+        EditorInterfaceSkin.byID(interfaceSkinID) ?? .system
+    }
+
     func editorFont() -> NSFont {
         fontChoice.font(size: CGFloat(fontSize))
     }
@@ -187,6 +200,256 @@ extension EditorSettings {
 
     var orderedInspectorModes: [EditorInspectorMode] {
         inspectorPanelOrder.modes
+    }
+}
+
+struct EditorInterfaceSkin: Identifiable, CaseIterable {
+    let id: String
+    let symbolName: String
+    let preferredColorScheme: ColorScheme?
+    let recommendedThemeID: String
+    let palette: EditorInterfaceSkinPalette
+
+    static let system = EditorInterfaceSkin(
+        id: "system",
+        symbolName: "macwindow",
+        preferredColorScheme: nil,
+        recommendedThemeID: EditorTheme.paper.id,
+        palette: EditorInterfaceSkinPalette(
+            windowColors: [
+                Color(nsColor: .windowBackgroundColor),
+                Color(nsColor: .windowBackgroundColor),
+            ],
+            sidebarColors: [
+                Color(nsColor: .controlBackgroundColor),
+                Color(nsColor: .controlBackgroundColor),
+            ],
+            panelFill: Color(nsColor: .controlBackgroundColor).opacity(0.62),
+            controlFill: Color(nsColor: .textBackgroundColor),
+            selectionFill: Color.accentColor.opacity(0.16),
+            hoverFill: Color.primary.opacity(0.07),
+            hairline: Color.secondary.opacity(0.14),
+            primaryText: Color.primary,
+            secondaryText: Color.secondary,
+            accent: Color.accentColor,
+            secondaryAccent: Color.secondary,
+            previewBase: Color(nsColor: .textBackgroundColor),
+            previewInk: Color.primary
+        )
+    )
+
+    static let mistForest = EditorInterfaceSkin(
+        id: "mist-forest",
+        symbolName: "leaf",
+        preferredColorScheme: nil,
+        recommendedThemeID: EditorTheme.harbor.id,
+        palette: EditorInterfaceSkinPalette(
+            windowColors: [
+                Color(red: 0.94, green: 0.98, blue: 0.95),
+                Color(red: 0.98, green: 0.95, blue: 0.91),
+                Color(red: 0.90, green: 0.96, blue: 0.98),
+            ],
+            sidebarColors: [
+                Color(red: 0.90, green: 0.97, blue: 0.92).opacity(0.94),
+                Color(red: 0.98, green: 0.93, blue: 0.88).opacity(0.84),
+            ],
+            panelFill: Color.white.opacity(0.58),
+            controlFill: Color.white.opacity(0.74),
+            selectionFill: Color(red: 0.23, green: 0.48, blue: 0.42).opacity(0.18),
+            hoverFill: Color(red: 0.77, green: 0.46, blue: 0.35).opacity(0.10),
+            hairline: Color(red: 0.28, green: 0.43, blue: 0.36).opacity(0.18),
+            primaryText: Color(red: 0.12, green: 0.23, blue: 0.20),
+            secondaryText: Color(red: 0.34, green: 0.47, blue: 0.40),
+            accent: Color(red: 0.23, green: 0.48, blue: 0.42),
+            secondaryAccent: Color(red: 0.77, green: 0.46, blue: 0.35),
+            previewBase: Color(red: 0.88, green: 0.95, blue: 0.88),
+            previewInk: Color(red: 0.19, green: 0.34, blue: 0.30)
+        )
+    )
+
+    static let ricePaper = EditorInterfaceSkin(
+        id: "rice-paper",
+        symbolName: "paintbrush.pointed",
+        preferredColorScheme: nil,
+        recommendedThemeID: EditorTheme.paper.id,
+        palette: EditorInterfaceSkinPalette(
+            windowColors: [
+                Color(red: 0.95, green: 0.93, blue: 0.86),
+                Color(red: 0.88, green: 0.90, blue: 0.84),
+                Color(red: 0.98, green: 0.95, blue: 0.89),
+            ],
+            sidebarColors: [
+                Color(red: 0.89, green: 0.89, blue: 0.83).opacity(0.95),
+                Color(red: 0.78, green: 0.82, blue: 0.78).opacity(0.84),
+            ],
+            panelFill: Color(red: 0.98, green: 0.96, blue: 0.90).opacity(0.52),
+            controlFill: Color(red: 0.97, green: 0.95, blue: 0.88).opacity(0.78),
+            selectionFill: Color(red: 0.18, green: 0.25, blue: 0.31).opacity(0.14),
+            hoverFill: Color.black.opacity(0.07),
+            hairline: Color(red: 0.22, green: 0.25, blue: 0.24).opacity(0.20),
+            primaryText: Color(red: 0.17, green: 0.20, blue: 0.20),
+            secondaryText: Color(red: 0.42, green: 0.43, blue: 0.38),
+            accent: Color(red: 0.18, green: 0.25, blue: 0.31),
+            secondaryAccent: Color(red: 0.58, green: 0.43, blue: 0.23),
+            previewBase: Color(red: 0.91, green: 0.89, blue: 0.80),
+            previewInk: Color(red: 0.20, green: 0.26, blue: 0.30)
+        )
+    )
+
+    static let sciFiRaster = EditorInterfaceSkin(
+        id: "sci-fi-raster",
+        symbolName: "sparkles",
+        preferredColorScheme: .dark,
+        recommendedThemeID: EditorTheme.graphite.id,
+        palette: EditorInterfaceSkinPalette(
+            windowColors: [
+                Color(red: 0.07, green: 0.10, blue: 0.12),
+                Color(red: 0.04, green: 0.17, blue: 0.18),
+                Color(red: 0.12, green: 0.11, blue: 0.08),
+            ],
+            sidebarColors: [
+                Color(red: 0.05, green: 0.12, blue: 0.14).opacity(0.97),
+                Color(red: 0.10, green: 0.09, blue: 0.08).opacity(0.93),
+            ],
+            panelFill: Color(red: 0.07, green: 0.13, blue: 0.14).opacity(0.88),
+            controlFill: Color(red: 0.12, green: 0.20, blue: 0.21).opacity(0.84),
+            selectionFill: Color(red: 0.00, green: 0.58, blue: 0.64).opacity(0.23),
+            hoverFill: Color(red: 0.00, green: 0.58, blue: 0.64).opacity(0.13),
+            hairline: Color(red: 0.15, green: 0.84, blue: 0.88).opacity(0.24),
+            primaryText: Color(red: 0.85, green: 0.96, blue: 0.95),
+            secondaryText: Color(red: 0.48, green: 0.68, blue: 0.67),
+            accent: Color(red: 0.00, green: 0.72, blue: 0.76),
+            secondaryAccent: Color(red: 0.91, green: 0.45, blue: 0.18),
+            previewBase: Color(red: 0.04, green: 0.12, blue: 0.14),
+            previewInk: Color(red: 0.60, green: 0.95, blue: 0.91)
+        )
+    )
+
+    static let midnightSlate = EditorInterfaceSkin(
+        id: "midnight-slate",
+        symbolName: "moon.stars",
+        preferredColorScheme: .dark,
+        recommendedThemeID: EditorTheme.graphite.id,
+        palette: EditorInterfaceSkinPalette(
+            windowColors: [
+                Color(red: 0.13, green: 0.17, blue: 0.25),
+                Color(red: 0.16, green: 0.21, blue: 0.31),
+                Color(red: 0.10, green: 0.13, blue: 0.20),
+            ],
+            sidebarColors: [
+                Color(red: 0.11, green: 0.15, blue: 0.23).opacity(0.98),
+                Color(red: 0.18, green: 0.22, blue: 0.31).opacity(0.92),
+            ],
+            panelFill: Color(red: 0.12, green: 0.16, blue: 0.24).opacity(0.90),
+            controlFill: Color(red: 0.09, green: 0.12, blue: 0.18).opacity(0.85),
+            selectionFill: Color(red: 0.42, green: 0.53, blue: 0.96).opacity(0.25),
+            hoverFill: Color(red: 0.42, green: 0.53, blue: 0.96).opacity(0.13),
+            hairline: Color(red: 0.50, green: 0.60, blue: 0.82).opacity(0.22),
+            primaryText: Color(red: 0.88, green: 0.92, blue: 0.98),
+            secondaryText: Color(red: 0.56, green: 0.62, blue: 0.72),
+            accent: Color(red: 0.42, green: 0.53, blue: 0.96),
+            secondaryAccent: Color(red: 0.54, green: 0.72, blue: 1.0),
+            previewBase: Color(red: 0.08, green: 0.11, blue: 0.18),
+            previewInk: Color(red: 0.72, green: 0.80, blue: 1.0)
+        )
+    )
+
+    static let auroraNight = EditorInterfaceSkin(
+        id: "aurora-night",
+        symbolName: "waveform.path.ecg",
+        preferredColorScheme: .dark,
+        recommendedThemeID: EditorTheme.graphite.id,
+        palette: EditorInterfaceSkinPalette(
+            windowColors: [
+                Color(red: 0.04, green: 0.12, blue: 0.13),
+                Color(red: 0.10, green: 0.24, blue: 0.20),
+                Color(red: 0.03, green: 0.10, blue: 0.16),
+            ],
+            sidebarColors: [
+                Color(red: 0.04, green: 0.16, blue: 0.15).opacity(0.98),
+                Color(red: 0.08, green: 0.22, blue: 0.18).opacity(0.92),
+            ],
+            panelFill: Color(red: 0.05, green: 0.17, blue: 0.16).opacity(0.90),
+            controlFill: Color(red: 0.03, green: 0.12, blue: 0.16).opacity(0.86),
+            selectionFill: Color(red: 0.23, green: 0.86, blue: 0.55).opacity(0.23),
+            hoverFill: Color(red: 0.16, green: 0.74, blue: 0.94).opacity(0.13),
+            hairline: Color(red: 0.25, green: 0.92, blue: 0.70).opacity(0.22),
+            primaryText: Color(red: 0.82, green: 0.98, blue: 0.92),
+            secondaryText: Color(red: 0.45, green: 0.72, blue: 0.66),
+            accent: Color(red: 0.23, green: 0.86, blue: 0.55),
+            secondaryAccent: Color(red: 0.16, green: 0.74, blue: 0.94),
+            previewBase: Color(red: 0.02, green: 0.12, blue: 0.15),
+            previewInk: Color(red: 0.56, green: 0.96, blue: 0.78)
+        )
+    )
+
+    static let emberGraphite = EditorInterfaceSkin(
+        id: "ember-graphite",
+        symbolName: "flame",
+        preferredColorScheme: .dark,
+        recommendedThemeID: EditorTheme.ember.id,
+        palette: EditorInterfaceSkinPalette(
+            windowColors: [
+                Color(red: 0.20, green: 0.17, blue: 0.15),
+                Color(red: 0.26, green: 0.22, blue: 0.18),
+                Color(red: 0.14, green: 0.12, blue: 0.11),
+            ],
+            sidebarColors: [
+                Color(red: 0.18, green: 0.15, blue: 0.13).opacity(0.98),
+                Color(red: 0.26, green: 0.21, blue: 0.17).opacity(0.92),
+            ],
+            panelFill: Color(red: 0.20, green: 0.16, blue: 0.14).opacity(0.90),
+            controlFill: Color(red: 0.10, green: 0.09, blue: 0.08).opacity(0.86),
+            selectionFill: Color(red: 1.00, green: 0.58, blue: 0.18).opacity(0.24),
+            hoverFill: Color(red: 1.00, green: 0.58, blue: 0.18).opacity(0.12),
+            hairline: Color(red: 1.00, green: 0.66, blue: 0.30).opacity(0.20),
+            primaryText: Color(red: 0.95, green: 0.91, blue: 0.84),
+            secondaryText: Color(red: 0.65, green: 0.58, blue: 0.50),
+            accent: Color(red: 1.00, green: 0.58, blue: 0.18),
+            secondaryAccent: Color(red: 0.95, green: 0.38, blue: 0.14),
+            previewBase: Color(red: 0.11, green: 0.09, blue: 0.08),
+            previewInk: Color(red: 1.00, green: 0.69, blue: 0.35)
+        )
+    )
+
+    static let allCases: [EditorInterfaceSkin] = [
+        .system,
+        .mistForest,
+        .ricePaper,
+        .sciFiRaster,
+        .midnightSlate,
+        .auroraNight,
+        .emberGraphite,
+    ]
+
+    static func byID(_ id: String) -> EditorInterfaceSkin? {
+        allCases.first { $0.id == id }
+    }
+}
+
+struct EditorInterfaceSkinPalette {
+    let windowColors: [Color]
+    let sidebarColors: [Color]
+    let panelFill: Color
+    let controlFill: Color
+    let selectionFill: Color
+    let hoverFill: Color
+    let hairline: Color
+    let primaryText: Color
+    let secondaryText: Color
+    let accent: Color
+    let secondaryAccent: Color
+    let previewBase: Color
+    let previewInk: Color
+}
+
+extension EditorInterfaceSkin {
+    var windowBackground: LinearGradient {
+        LinearGradient(colors: palette.windowColors, startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    var sidebarBackground: LinearGradient {
+        LinearGradient(colors: palette.sidebarColors, startPoint: .top, endPoint: .bottom)
     }
 }
 

@@ -25,6 +25,9 @@
     "@%@" : {
 
     },
+    "/bin/zsh" : {
+
+    },
     "%@  %lld" : {
       "localizations" : {
         "en" : {
@@ -361,6 +364,60 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "查看后台任务"
+          }
+        }
+      }
+    },
+    "agent-panel.active-file-included-hint" : {
+      "comment" : "composer context hint when the active file is attached",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active file included · Tools available"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已包含当前文件 · 工具可用"
+          }
+        }
+      }
+    },
+    "agent-panel.open-folder-hint" : {
+      "comment" : "composer context hint when no workspace is open",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open a folder to enable tools"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开文件夹后可启用工具"
+          }
+        }
+      }
+    },
+    "agent-panel.selection-included-hint" : {
+      "comment" : "composer context hint when selected text is attached",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selection included · Tools available"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已包含选区 · 工具可用"
           }
         }
       }
@@ -2089,7 +2146,7 @@
     "Cancel" : {
 
     },
-    "Choose folder…" : {
+    "Clear" : {
 
     },
     "Clear Chat" : {
@@ -2104,10 +2161,16 @@
     "Click Download for the full file, or import a copy you already have from fastv (no bytes transferred)." : {
 
     },
+    "Close" : {
+
+    },
     "Close Agent" : {
 
     },
     "Collapse widget" : {
+
+    },
+    "Color scheme" : {
 
     },
     "command-palette.placeholder" : {
@@ -3190,6 +3253,222 @@
         }
       }
     },
+    "composer.workspace.choose-folder" : {
+      "comment" : "Composer workspace picker menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose folder…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择文件夹…"
+          }
+        }
+      }
+    },
+    "composer.workspace.choose-workspace.help" : {
+      "comment" : "Composer workspace picker tooltip when no workspace is selected",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a workspace for this chat"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为此聊天选择工作区"
+          }
+        }
+      }
+    },
+    "composer.workspace.copy-branch-name" : {
+      "comment" : "Composer workspace picker menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy branch name"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制分支名"
+          }
+        }
+      }
+    },
+    "composer.workspace.copy-path" : {
+      "comment" : "Composer workspace picker menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy path"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制路径"
+          }
+        }
+      }
+    },
+    "composer.workspace.git-worktrees" : {
+      "comment" : "Composer workspace picker section title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git worktrees"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git worktree"
+          }
+        }
+      }
+    },
+    "composer.workspace.new-worktree" : {
+      "comment" : "Composer workspace picker menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New worktree…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建 worktree…"
+          }
+        }
+      }
+    },
+    "composer.workspace.pick-folder" : {
+      "comment" : "Composer workspace picker button label when no workspace is selected",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pick folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择文件夹"
+          }
+        }
+      }
+    },
+    "composer.workspace.prune-stale-worktrees" : {
+      "comment" : "Composer workspace picker menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prune stale worktrees"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清理失效 worktree"
+          }
+        }
+      }
+    },
+    "composer.workspace.remote-runtimes" : {
+      "comment" : "Composer workspace picker section title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remote runtimes"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程运行环境"
+          }
+        }
+      }
+    },
+    "composer.workspace.remove-current-worktree" : {
+      "comment" : "Composer workspace picker destructive menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove current worktree…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除当前 worktree…"
+          }
+        }
+      }
+    },
+    "composer.workspace.show-in-finder" : {
+      "comment" : "Composer workspace picker menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show in Finder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Finder 中显示"
+          }
+        }
+      }
+    },
+    "composer.workspace.switch-workspace" : {
+      "comment" : "Composer workspace picker section title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switch workspace"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换工作区"
+          }
+        }
+      }
+    },
     "Compress" : {
 
     },
@@ -3215,16 +3494,10 @@
     "Copy" : {
 
     },
-    "Copy branch name" : {
-
-    },
     "Copy code" : {
 
     },
     "Copy message" : {
-
-    },
-    "Copy path" : {
 
     },
     "Copy Path" : {
@@ -3418,6 +3691,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "行被选中"
+          }
+        }
+      }
+    },
+    "editor-status-bar.toggle-terminal.help" : {
+      "comment" : "Status bar terminal button tooltip",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show or hide the editor terminal"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示或隐藏编辑器终端"
           }
         }
       }
@@ -3872,6 +4163,9 @@
         }
       }
     },
+    "Environment" : {
+
+    },
     "exit %d" : {
 
     },
@@ -4040,7 +4334,7 @@
         }
       }
     },
-    "Git worktrees" : {
+    "Font" : {
 
     },
     "go-to-line.placeholder" : {
@@ -4468,6 +4762,57 @@
         }
       }
     },
+    "interaction-mode.goal" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Goal"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目标"
+          }
+        }
+      }
+    },
+    "interaction-mode.normal" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Normal"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "普通"
+          }
+        }
+      }
+    },
+    "interaction-mode.plan" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plan"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "计划"
+          }
+        }
+      }
+    },
     "Loaded in memory" : {
 
     },
@@ -4809,6 +5154,24 @@
         }
       }
     },
+    "menu.view.show-editor" : {
+      "comment" : "Button label in View menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Editor"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示 Editor"
+          }
+        }
+      }
+    },
     "menu.view.switch-to-agent-mode" : {
       "comment" : "Button label (conditional) in View menu",
       "extractionState" : "manual",
@@ -4913,6 +5276,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "切换预览"
+          }
+        }
+      }
+    },
+    "menu.view.toggle-terminal" : {
+      "comment" : "Button label in View menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toggle Terminal"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换终端"
           }
         }
       }
@@ -5361,13 +5742,46 @@
         }
       }
     },
+    "model-usage.war-and-peace.more-tokens" : {
+      "comment" : "usage heatmap fun fact comparing total tokens to War and Peace",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You've used ~%@× more tokens than War and Peace."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你使用的 token 约为《战争与和平》的 %@ 倍。"
+          }
+        }
+      }
+    },
+    "model-usage.war-and-peace.percent" : {
+      "comment" : "usage heatmap fun fact for totals below one War and Peace equivalent",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You've used about %@%% of War and Peace in tokens so far."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目前已使用的 token 约为《战争与和平》的 %@%%。"
+          }
+        }
+      }
+    },
     "New File" : {
 
     },
     "New Folder" : {
-
-    },
-    "New worktree…" : {
 
     },
     "No matching commands" : {
@@ -5376,16 +5790,19 @@
     "No matching skills, files, or shortcuts" : {
 
     },
-    "No providers configured. Open Settings → Agent." : {
+    "No project commands found" : {
 
     },
-    "No workspace" : {
+    "No providers configured. Open Settings → Agent." : {
 
     },
     "Not in memory" : {
 
     },
     "On-device Voice (SenseVoice)" : {
+
+    },
+    "One KEY=value per line. These values are added to commands launched from the editor terminal." : {
 
     },
     "Open in Terminal" : {
@@ -6184,9 +6601,6 @@
         }
       }
     },
-    "Prune stale worktrees" : {
-
-    },
     "Push-to-talk in the composer transcribes 100% on-device. Nothing leaves your Mac." : {
 
     },
@@ -6454,16 +6868,13 @@
     "Reject" : {
 
     },
-    "Remote runtimes" : {
-
-    },
-    "Remove current worktree…" : {
-
-    },
     "Remove image" : {
 
     },
     "Reveal in Finder" : {
+
+    },
+    "Run" : {
 
     },
     "Scope" : {
@@ -13310,6 +13721,118 @@
         }
       }
     },
+    "settings.interface-skin.aurora-night.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Aurora Night" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "极光暗夜" } }
+      }
+    },
+    "settings.interface-skin.aurora-night.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Dark green-blue with clear aurora accents." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "黑绿暗底配青绿高光，清爽但不刺眼。" } }
+      }
+    },
+    "settings.interface-skin.ember-graphite.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ember Graphite" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "烽火石墨" } }
+      }
+    },
+    "settings.interface-skin.ember-graphite.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Graphite warmth with ember highlights." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "炭黑底色配暖橙强调，深色但有温度。" } }
+      }
+    },
+    "settings.interface-skin.help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose a full-window skin. Skin changes apply to window chrome, sidebars, panels, selection color, and the recommended editor theme." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择整窗界面皮肤。皮肤会应用到窗口、侧栏、面板、选中态，并同步推荐的编辑器主题。" } }
+      }
+    },
+    "settings.interface-skin.midnight-slate.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Midnight Slate" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "午夜岩蓝" } }
+      }
+    },
+    "settings.interface-skin.midnight-slate.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Blue-black depth for longer night coding." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "深蓝黑底配浅色文字，长时间使用更稳。" } }
+      }
+    },
+    "settings.interface-skin.mist-forest.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Mist Forest" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "淡雾森林" } }
+      }
+    },
+    "settings.interface-skin.mist-forest.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Soft green and warm mist for calm long sessions." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "浅绿、暖白和柔和雾气感。" } }
+      }
+    },
+    "settings.interface-skin.rice-paper.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Rice Paper" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "水墨宣纸" } }
+      }
+    },
+    "settings.interface-skin.rice-paper.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Low-saturation ink and paper tones with a quiet reading feel." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "黑白层次低饱和纸底，安静有质感。" } }
+      }
+    },
+    "settings.interface-skin.sci-fi-raster.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sci-Fi Raster" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "科幻光栅" } }
+      }
+    },
+    "settings.interface-skin.sci-fi-raster.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Deep cyan neon with a compact terminal-like atmosphere." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "深色界面配冷光和少量霓虹点缀。" } }
+      }
+    },
+    "settings.interface-skin.system.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "System Default" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "系统默认" } }
+      }
+    },
+    "settings.interface-skin.system.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Follows macOS with stable native contrast." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "跟随 macOS 原生外观，稳定克制。" } }
+      }
+    },
+    "settings.section.interface-skin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Interface Skin" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "界面皮肤" } }
+      }
+    },
     "settings.section.color-style" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -14378,6 +14901,17 @@
         }
       }
     },
+    "settings.tab.terminal" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Terminal"
+          }
+        }
+      }
+    },
     "settings.tab.tools" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -15317,10 +15851,10 @@
         }
       }
     },
-    "Show Diff" : {
+    "Shell" : {
 
     },
-    "Show in Finder" : {
+    "Show Diff" : {
 
     },
     "sidebar.archived-sessions.header" : {
@@ -15850,12 +16384,19 @@
       }
     },
     "sidebar.workspace-menu.remove" : {
-      "extractionState" : "extracted_with_value",
+      "comment" : "context menu item for workspace group",
+      "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
-            "state" : "new",
+            "state" : "translated",
             "value" : "Remove from List"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从列表移除"
           }
         }
       }
@@ -15896,6 +16437,9 @@
         }
       }
     },
+    "Size" : {
+
+    },
     "sk-…" : {
 
     },
@@ -15919,6 +16463,9 @@
           }
         }
       }
+    },
+    "Start Shell" : {
+
     },
     "stat-cell.active-days" : {
       "comment" : "stats grid cell title",
@@ -16175,9 +16722,6 @@
     "Summarize older messages to free context budget" : {
 
     },
-    "Switch workspace" : {
-
-    },
     "symbol-jump.no-symbols" : {
       "comment" : "Message when no symbols found",
       "extractionState" : "manual",
@@ -16233,6 +16777,12 @@
       }
     },
     "Symlink an existing fastv model copy — no download." : {
+
+    },
+    "Terminal" : {
+
+    },
+    "Terminal Settings" : {
 
     },
     "The agent can read files, search, list directories, run commands (with approval), and check Git status." : {
@@ -16601,7 +17151,6 @@
       }
     },
     "transcript.learning.action.command" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16618,7 +17167,6 @@
       }
     },
     "transcript.learning.action.confidence" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16635,7 +17183,6 @@
       }
     },
     "transcript.learning.action.create-skill" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16652,7 +17199,6 @@
       }
     },
     "transcript.learning.action.needs-confirmation" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16669,7 +17215,6 @@
       }
     },
     "transcript.learning.action.next-step" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16686,7 +17231,6 @@
       }
     },
     "transcript.learning.action.propose-skill" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16703,7 +17247,6 @@
       }
     },
     "transcript.learning.action.reason" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16720,7 +17263,6 @@
       }
     },
     "transcript.learning.action.save-memory" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16737,7 +17279,6 @@
       }
     },
     "transcript.learning.action.search-mcp" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16754,7 +17295,6 @@
       }
     },
     "transcript.learning.action.search-query" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16771,7 +17311,6 @@
       }
     },
     "transcript.learning.action.suggest-mcp-install" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16788,7 +17327,6 @@
       }
     },
     "transcript.learning.action.target" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16805,7 +17343,6 @@
       }
     },
     "transcript.learning.action.why" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16822,7 +17359,6 @@
       }
     },
     "transcript.learning.approve-help" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16839,7 +17375,6 @@
       }
     },
     "transcript.learning.confidence.high" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16856,7 +17391,6 @@
       }
     },
     "transcript.learning.confidence.low" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16873,7 +17407,6 @@
       }
     },
     "transcript.learning.confidence.medium" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16890,7 +17423,6 @@
       }
     },
     "transcript.learning.copied" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16907,7 +17439,6 @@
       }
     },
     "transcript.learning.copy-help" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16923,8 +17454,126 @@
         }
       }
     },
+    "transcript.learning.event-title.auto-skill-failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatic skill creation failed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动技能创建失败"
+          }
+        }
+      }
+    },
+    "transcript.learning.event-title.conversation-memories" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suggested %@ conversation memory item(s) (pending your Approve)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "建议保存 %@ 条对话记忆（待你审阅）"
+          }
+        }
+      }
+    },
+    "transcript.learning.event-title.created-skill" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Created user skill %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已创建用户技能 %@"
+          }
+        }
+      }
+    },
+    "transcript.learning.event-title.mcp-discovery" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suggested MCP discovery for %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为 %@ 建议 MCP 发现"
+          }
+        }
+      }
+    },
+    "transcript.learning.event-title.self-learning-memories" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suggested %@ self-learning memory item(s) (pending your Approve)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "建议保存 %@ 条自学习记忆（待你审阅）"
+          }
+        }
+      }
+    },
+    "transcript.learning.event-title.skipped-auto-skill" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skipped automatic skill creation"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已跳过自动技能创建"
+          }
+        }
+      }
+    },
+    "transcript.learning.event-title.skipped-existing-skill" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skipped existing user skill %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已跳过已存在的用户技能 %@"
+          }
+        }
+      }
+    },
     "transcript.learning.explanation.automatic-step-failed" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16941,7 +17590,6 @@
       }
     },
     "transcript.learning.explanation.completed" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16958,7 +17606,6 @@
       }
     },
     "transcript.learning.explanation.completed-from-direct-evidence" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16975,7 +17622,6 @@
       }
     },
     "transcript.learning.explanation.could-not-finish" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -16992,7 +17638,6 @@
       }
     },
     "transcript.learning.explanation.draft-needs-review" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17009,7 +17654,6 @@
       }
     },
     "transcript.learning.explanation.mcp-needs-confirmation" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17026,7 +17670,6 @@
       }
     },
     "transcript.learning.explanation.needs-review" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17043,7 +17686,6 @@
       }
     },
     "transcript.learning.explanation.not-enough-evidence" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17060,7 +17702,6 @@
       }
     },
     "transcript.learning.explanation.signal-too-thin" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17077,7 +17718,6 @@
       }
     },
     "transcript.learning.kind.mcp" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17094,7 +17734,6 @@
       }
     },
     "transcript.learning.kind.memory" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17111,7 +17750,6 @@
       }
     },
     "transcript.learning.kind.skill" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17128,7 +17766,6 @@
       }
     },
     "transcript.learning.more" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17144,8 +17781,194 @@
         }
       }
     },
+    "transcript.learning.next-step.approve-popover" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Click Approve in the learning popover to save these into your memory store."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在学习面板点 Approve（绿勾）把它们写入你的 memory 仓库。"
+          }
+        }
+      }
+    },
+    "transcript.learning.next-step.future-turn-discover" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Future turns can discover this skill through list_skills or attach it from the skill picker."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "后续会话可通过 list_skills 发现该技能，或在技能选择器里手动挂载。"
+          }
+        }
+      }
+    },
+    "transcript.learning.next-step.retry-after-fix" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review the error, fix local skill storage access, then retry if the workflow is still useful."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先看错误，修好本地技能存储权限，如果流程仍然有用再重试。"
+          }
+        }
+      }
+    },
+    "transcript.learning.next-step.reuse-existing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reuse or manually edit the existing skill instead of overwriting it."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复用或手动编辑已有技能，不要覆盖。"
+          }
+        }
+      }
+    },
+    "transcript.learning.next-step.run-search-mcp" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Run search_mcp_servers, review candidates, then ask the user before installing or adding credentials."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先运行 search_mcp_servers 看候选，安装或填凭据前一定要问过用户。"
+          }
+        }
+      }
+    },
+    "transcript.learning.next-step.wait-for-workflow" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wait for a completed multi-tool workflow, or explicitly ask to create a skill from this lighter evidence."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等到出现完整的多工具流程后再创建，或者明确要求用现有较薄证据创建。"
+          }
+        }
+      }
+    },
+    "transcript.learning.reason.conversation-context" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The latest turn exposed durable conversation context."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近一轮暴露了值得长期记住的对话上下文。"
+          }
+        }
+      }
+    },
+    "transcript.learning.reason.self-learning-policy" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The turn contained durable self-learning policy or integration guidance."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本轮包含值得长期保留的自学习策略或集成指引。"
+          }
+        }
+      }
+    },
+    "transcript.learning.reason.skill-already-exists" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A reusable workflow was detected, but the matching skill already exists."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检测到可复用的流程，但同名技能已经存在。"
+          }
+        }
+      }
+    },
+    "transcript.learning.reason.skill-evidence-too-thin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The turn mentioned reusable skills, but there was not enough executed tool evidence to safely create one."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本轮提到了可复用的技能，但实际工具执行证据不足，不能安全自动创建。"
+          }
+        }
+      }
+    },
+    "transcript.learning.reason.skill-write-failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A reusable workflow was detected, but writing the user skill failed."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检测到可复用的流程，但写入用户技能失败。"
+          }
+        }
+      }
+    },
     "transcript.learning.recall-linked-tag" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17162,7 +17985,6 @@
       }
     },
     "transcript.learning.recall-near-miss" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17179,7 +18001,6 @@
       }
     },
     "transcript.learning.recall-no-learning" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17196,7 +18017,6 @@
       }
     },
     "transcript.learning.recall-reason.keywords" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17213,7 +18033,6 @@
       }
     },
     "transcript.learning.recall-reason.title" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17230,7 +18049,6 @@
       }
     },
     "transcript.learning.recall-reason.with-recall" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17247,7 +18065,6 @@
       }
     },
     "transcript.learning.recall-strength.related" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17264,7 +18081,6 @@
       }
     },
     "transcript.learning.recall-strength.strong" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17281,7 +18097,6 @@
       }
     },
     "transcript.learning.recall-strength.weak" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17298,7 +18113,6 @@
       }
     },
     "transcript.learning.recall-utilization" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17315,7 +18129,6 @@
       }
     },
     "transcript.learning.reject-help" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17332,7 +18145,6 @@
       }
     },
     "transcript.learning.related-recall" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17349,7 +18161,6 @@
       }
     },
     "transcript.learning.status.created" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17366,7 +18177,6 @@
       }
     },
     "transcript.learning.status.failed" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17383,7 +18193,6 @@
       }
     },
     "transcript.learning.status.saved" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17400,7 +18209,6 @@
       }
     },
     "transcript.learning.status.skipped" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17417,7 +18225,6 @@
       }
     },
     "transcript.learning.status.suggested" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17434,7 +18241,6 @@
       }
     },
     "transcript.learning.subtitle" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17450,8 +18256,41 @@
         }
       }
     },
+    "transcript.learning.target.global-memory" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "global memory"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全局记忆"
+          }
+        }
+      }
+    },
+    "transcript.learning.target.project-memory" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "project memory"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目记忆"
+          }
+        }
+      }
+    },
     "transcript.learning.title" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17540,7 +18379,6 @@
       }
     },
     "transcript.post-turn.learning-summary" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17557,7 +18395,6 @@
       }
     },
     "transcript.post-turn.learning-tooltip" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17574,7 +18411,6 @@
       }
     },
     "transcript.post-turn.report-tooltip" : {
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -18256,6 +19092,27 @@
         }
       }
     },
+    "working directory" : {
+
+    },
+    "workspace.no-workspace" : {
+      "comment" : "generic label for sessions or composer state without an attached workspace",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No workspace"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无工作区"
+          }
+        }
+      }
+    },
     "You're all set" : {
 
     },
@@ -18324,397 +19181,6 @@
     },
     "隐藏详细错误信息" : {
 
-    },
-    "transcript.learning.event-title.conversation-memories" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Suggested %@ conversation memory item(s) (pending your Approve)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "建议保存 %@ 条对话记忆（待你审阅）"
-          }
-        }
-      }
-    },
-    "transcript.learning.event-title.self-learning-memories" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Suggested %@ self-learning memory item(s) (pending your Approve)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "建议保存 %@ 条自学习记忆（待你审阅）"
-          }
-        }
-      }
-    },
-    "transcript.learning.event-title.mcp-discovery" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Suggested MCP discovery for %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "为 %@ 建议 MCP 发现"
-          }
-        }
-      }
-    },
-    "transcript.learning.event-title.skipped-existing-skill" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Skipped existing user skill %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已跳过已存在的用户技能 %@"
-          }
-        }
-      }
-    },
-    "transcript.learning.event-title.skipped-auto-skill" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Skipped automatic skill creation"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已跳过自动技能创建"
-          }
-        }
-      }
-    },
-    "transcript.learning.event-title.created-skill" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Created user skill %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已创建用户技能 %@"
-          }
-        }
-      }
-    },
-    "transcript.learning.event-title.auto-skill-failed" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Automatic skill creation failed"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自动技能创建失败"
-          }
-        }
-      }
-    },
-    "transcript.learning.target.global-memory" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "global memory"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全局记忆"
-          }
-        }
-      }
-    },
-    "transcript.learning.target.project-memory" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "project memory"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "项目记忆"
-          }
-        }
-      }
-    },
-    "transcript.learning.reason.conversation-context" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The latest turn exposed durable conversation context."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最近一轮暴露了值得长期记住的对话上下文。"
-          }
-        }
-      }
-    },
-    "transcript.learning.reason.self-learning-policy" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The turn contained durable self-learning policy or integration guidance."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "本轮包含值得长期保留的自学习策略或集成指引。"
-          }
-        }
-      }
-    },
-    "transcript.learning.reason.skill-evidence-too-thin" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The turn mentioned reusable skills, but there was not enough executed tool evidence to safely create one."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "本轮提到了可复用的技能，但实际工具执行证据不足，不能安全自动创建。"
-          }
-        }
-      }
-    },
-    "transcript.learning.reason.skill-already-exists" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A reusable workflow was detected, but the matching skill already exists."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "检测到可复用的流程，但同名技能已经存在。"
-          }
-        }
-      }
-    },
-    "transcript.learning.reason.skill-write-failed" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A reusable workflow was detected, but writing the user skill failed."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "检测到可复用的流程，但写入用户技能失败。"
-          }
-        }
-      }
-    },
-    "transcript.learning.next-step.approve-popover" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Click Approve in the learning popover to save these into your memory store."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在学习面板点 Approve（绿勾）把它们写入你的 memory 仓库。"
-          }
-        }
-      }
-    },
-    "transcript.learning.next-step.run-search-mcp" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Run search_mcp_servers, review candidates, then ask the user before installing or adding credentials."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "先运行 search_mcp_servers 看候选，安装或填凭据前一定要问过用户。"
-          }
-        }
-      }
-    },
-    "transcript.learning.next-step.wait-for-workflow" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wait for a completed multi-tool workflow, or explicitly ask to create a skill from this lighter evidence."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "等到出现完整的多工具流程后再创建，或者明确要求用现有较薄证据创建。"
-          }
-        }
-      }
-    },
-    "transcript.learning.next-step.future-turn-discover" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Future turns can discover this skill through list_skills or attach it from the skill picker."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "后续会话可通过 list_skills 发现该技能，或在技能选择器里手动挂载。"
-          }
-        }
-      }
-    },
-    "transcript.learning.next-step.reuse-existing" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reuse or manually edit the existing skill instead of overwriting it."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "复用或手动编辑已有技能，不要覆盖。"
-          }
-        }
-      }
-    },
-    "transcript.learning.next-step.retry-after-fix" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Review the error, fix local skill storage access, then retry if the workflow is still useful."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "先看错误，修好本地技能存储权限，如果流程仍然有用再重试。"
-          }
-        }
-      }
-    },
-    "interaction-mode.normal" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Normal"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "普通"
-          }
-        }
-      }
-    },
-    "interaction-mode.plan" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Plan"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "计划"
-          }
-        }
-      }
-    },
-    "interaction-mode.goal" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Goal"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "目标"
-          }
-        }
-      }
     }
   },
   "version" : "1.0"

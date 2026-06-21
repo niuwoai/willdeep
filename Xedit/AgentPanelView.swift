@@ -33,7 +33,7 @@ struct AgentPanelView: View {
             }
         }
         .frame(minWidth: isJobsDrawerOpen ? 560 : 300)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(appState.editorSettings.interfaceSkin.palette.panelFill)
         .overlay(alignment: .leading) {
             Divider()
         }
@@ -253,20 +253,20 @@ struct AgentPanelView: View {
         if let rootDirectory = appState.rootDirectory {
             return rootDirectory.lastPathComponent
         }
-        return "No workspace"
+        return L10n.Workspace.noWorkspace
     }
 
     private var contextHint: String {
         if appState.rootDirectory == nil {
-            return "Open a folder to enable tools"
+            return L10n.AgentPanel.openFolderHint
         }
         if !appState.agentPendingTextAttachments.isEmpty {
             return L10n.AgentSelection.selectionAttachedHint
         }
         if appState.selectedCharacterCount > 0 {
-            return "Selection included · Tools available"
+            return L10n.AgentPanel.selectionIncludedHint
         }
-        return "Active file included · Tools available"
+        return L10n.AgentPanel.activeFileIncludedHint
     }
 
     // MARK: - Background jobs header toggle

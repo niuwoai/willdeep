@@ -33,7 +33,7 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            WorkspaceWindowBackground()
+            WorkspaceWindowBackground(settings: appState.editorSettings)
 
             // 1.80.0-rc1：Agent 不再在 editor 窗口内 toggle 全屏，已经
             // 拆成独立的 singleton Window scene（见 XeditApp.swift +
@@ -49,6 +49,8 @@ struct ContentView: View {
             }
 
         }
+        .tint(appState.editorSettings.interfaceSkin.palette.accent)
+        .preferredColorScheme(appState.editorSettings.interfaceSkin.preferredColorScheme)
         .ignoresSafeArea(.container, edges: .top)
         .onChange(of: appState.rootDirectory) { _, newDirectory in
             if let dir = newDirectory {
@@ -123,7 +125,7 @@ struct ContentView: View {
         .padding(.top, shouldShowSidebar ? sidebarTopPadding : 0)
         .frame(width: shouldShowSidebar ? sidebarWidth : 0)
         .frame(maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(appState.editorSettings.interfaceSkin.sidebarBackground)
         .clipped()
     }
 
@@ -287,6 +289,11 @@ struct ContentView: View {
                                 .environmentObject(appState)
                                 .frame(width: 330)
                         }
+                    }
+
+                    if appState.isEditorTerminalVisible && !appState.isFocusModeEnabled {
+                        EditorTerminalPane()
+                            .environmentObject(appState)
                     }
 
                     if !appState.isFocusModeEnabled {

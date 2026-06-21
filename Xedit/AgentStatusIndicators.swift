@@ -64,6 +64,7 @@ struct AgentStatsDashboard: View {
     }
 
     var body: some View {
+        let palette = appState.editorSettings.interfaceSkin.palette
         VStack(alignment: .leading, spacing: 12) {
             tabBar
             if selectedTab == .overview {
@@ -77,11 +78,11 @@ struct AgentStatsDashboard: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(AgentDesign.cardBackground.opacity(0.55))
+                .fill(palette.panelFill)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.primary.opacity(0.05), lineWidth: 1)
+                .stroke(palette.hairline, lineWidth: 1)
         )
     }
 
@@ -97,7 +98,7 @@ struct AgentStatsDashboard: View {
                             .padding(.vertical, 4)
                             .background(
                                 selectedTab == tab
-                                    ? AnyShapeStyle(AgentDesign.cardBackground)
+                                    ? AnyShapeStyle(appState.editorSettings.interfaceSkin.palette.controlFill)
                                     : AnyShapeStyle(Color.clear)
                             )
                             .foregroundStyle(selectedTab == tab ? .primary : .secondary)
@@ -367,10 +368,10 @@ struct AgentStatsDashboard: View {
 
     private func funFactString(ratio: Double) -> String {
         if ratio >= 1 {
-            return String(format: "You've used ~%.1f× more tokens than War and Peace.", ratio)
+            return L10n.ModelUsage.warAndPeaceMoreTokens(String(format: "%.1f", ratio))
         }
         let pct = Int(ratio * 100)
-        return "You've used about \(pct)% of War and Peace in tokens so far."
+        return L10n.ModelUsage.warAndPeacePercent("\(pct)")
     }
 
     private func formatCompact(_ count: Int) -> String {
@@ -408,6 +409,8 @@ struct AgentStatsDashboard: View {
 }
 
 struct StatCell: View {
+    @EnvironmentObject var appState: AppState
+
     let title: String
     let value: String
 
@@ -427,7 +430,7 @@ struct StatCell: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(AgentDesign.cardBackground.opacity(0.6))
+        .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }

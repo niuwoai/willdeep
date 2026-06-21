@@ -69,6 +69,30 @@ extension EditorSettingsView {
 
     @ViewBuilder
     var editorFormatSections: some View {
+        Section {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 158, maximum: 220), spacing: 12)],
+                alignment: .leading,
+                spacing: 12
+            ) {
+                ForEach(EditorInterfaceSkin.allCases) { skin in
+                    InterfaceSkinCard(
+                        skin: skin,
+                        isSelected: appState.editorSettings.interfaceSkinID == skin.id
+                    ) {
+                        selectInterfaceSkin(skin)
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+
+            Text(L10n.Settings.interfaceSkinHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } header: {
+            Text(L10n.Settings.sectionInterfaceSkin)
+        }
+
         Section(L10n.Settings.sectionColorStyle) {
             Picker(L10n.Settings.labelTheme, selection: setting(\.themeID)) {
                 ForEach(EditorTheme.all) { theme in
@@ -224,6 +248,13 @@ extension EditorSettingsView {
         }
     }
 
+    func selectInterfaceSkin(_ skin: EditorInterfaceSkin) {
+        var settings = appState.editorSettings
+        settings.interfaceSkinID = skin.id
+        settings.themeID = skin.recommendedThemeID
+        appState.editorSettings = settings.normalized()
+    }
+
     func setting<Value>(_ keyPath: WritableKeyPath<EditorSettings, Value>) -> Binding<Value> {
         Binding {
             appState.editorSettings[keyPath: keyPath]
@@ -236,6 +267,94 @@ extension EditorSettingsView {
         var settings = appState.editorSettings
         settings[keyPath: keyPath] = value
         appState.editorSettings = settings.normalized()
+    }
+}
+
+private struct InterfaceSkinCard: View {
+    let skin: EditorInterfaceSkin
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 9) {
+                preview
+
+                HStack(alignment: .top, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(L10n.Settings.InterfaceSkin.name(skin))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(skin.palette.primaryText)
+                            .lineLimit(1)
+                        Text(L10n.Settings.InterfaceSkin.summary(skin))
+                            .font(.system(size: 10))
+                            .foregroundStyle(skin.palette.secondaryText)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(skin.palette.accent)
+                    }
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, minHeight: 132, maxHeight: 132, alignment: .topLeading)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(skin.palette.panelFill)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isSelected ? skin.palette.accent : skin.palette.hairline, lineWidth: isSelected ? 1.6 : 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(L10n.Settings.InterfaceSkin.name(skin))
+    }
+
+    private var preview: some View {
+        ZStack(alignment: .topTrailing) {
+            RoundedRectangle(cornerRadius: 6)
+                .fill(skin.palette.controlFill)
+                .frame(height: 50)
+                .overlay(alignment: .leading) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        HStack(spacing: 5) {
+                            Circle()
+                                .fill(skin.palette.accent)
+                                .frame(width: 7, height: 7)
+                            Circle()
+                                .fill(skin.palette.secondaryAccent)
+                                .frame(width: 7, height: 7)
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(skin.palette.secondaryText.opacity(0.28))
+                                .frame(width: 38, height: 7)
+                        }
+                        HStack(spacing: 6) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(skin.palette.secondaryText.opacity(0.46))
+                                .frame(width: 50, height: 6)
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(skin.palette.secondaryText.opacity(0.24))
+                                .frame(width: 28, height: 6)
+                        }
+                    }
+                    .padding(.leading, 10)
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(skin.palette.hairline, lineWidth: 1)
+                )
+
+            Image(systemName: skin.symbolName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(skin.palette.accent)
+                .padding(9)
+        }
     }
 }
 

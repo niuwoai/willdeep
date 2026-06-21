@@ -95,6 +95,21 @@ struct EditorStatusBar: View {
             if let branchName = appState.gitStatus.branchName {
                 Text(L10n.EditorStatusBar.gitBranch(branchName))
             }
+            Button {
+                appState.toggleEditorTerminal(appState.openedFileURL ?? appState.rootDirectory)
+            } label: {
+                Image(systemName: appState.isEditorTerminalVisible ? "terminal.fill" : "terminal")
+                    .font(.system(size: 11, weight: appState.isEditorTerminalVisible ? .semibold : .regular))
+                    .foregroundStyle(appState.isEditorTerminalVisible ? Color.accentColor : Color.secondary)
+                    .frame(width: 22, height: 18)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(appState.isEditorTerminalVisible ? Color.accentColor.opacity(0.14) : Color.clear)
+                    )
+            }
+            .buttonStyle(.borderless)
+            .disabled(appState.rootDirectory == nil && appState.openedFileURL == nil)
+            .help(L10n.EditorStatusBar.toggleTerminalHelp)
             Text(language?.displayName ?? L10n.EditorStatusBar.plainText)
             Text(fileSizeText)
             Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")")

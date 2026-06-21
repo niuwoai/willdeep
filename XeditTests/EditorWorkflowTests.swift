@@ -488,6 +488,7 @@ extension WillDeepTests {
             editorGlassMaterial: EditorSettings.default.editorGlassMaterial,
             editorGlassOpacity: EditorSettings.default.editorGlassOpacity,
             editorSurfaceOpacity: EditorSettings.default.editorSurfaceOpacity,
+            interfaceSkinID: EditorSettings.default.interfaceSkinID,
             trimsTrailingWhitespaceOnSave: true,
             ensuresFinalNewlineOnSave: true
         )
