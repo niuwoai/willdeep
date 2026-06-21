@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.99.1-rc1 - 2026-06-21
+
+### Fixed
+
+- 补齐编辑器 Terminal 的可发现入口:macOS `显示` 菜单新增 Toggle Terminal（⌘J）,可直接显示/隐藏底部伪终端面板。
+- 编辑器底部状态栏 Terminal 图标改为真正的切换按钮,可再次点击收起面板,并在打开状态显示强调色选中态。
+
+### Changed
+
+- 版本号从 **1.99.0** 提升为 **1.99.1-rc1**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.99.0 - 2026-06-21
 
 ### Added

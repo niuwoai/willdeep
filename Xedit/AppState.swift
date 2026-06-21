@@ -652,6 +652,14 @@ final class AppState: ObservableObject {
         isEditorTerminalVisible = true
     }
 
+    func toggleEditorTerminal(_ url: URL? = nil) {
+        if isEditorTerminalVisible {
+            isEditorTerminalVisible = false
+            return
+        }
+        openTerminalHere(url)
+    }
+
     func openTerminalSettings() {
         EditorSettingsNavigation.shared.open(.terminal)
     }

@@ -251,6 +251,7 @@ enum L10n {
         static let plainText = String(localized: "editor-status-bar.plain-text", defaultValue: "Plain Text")
         static let reloadButton = String(localized: "editor-status-bar.reload-button", defaultValue: "Reload")
         static let saved = String(localized: "editor-status-bar.saved", defaultValue: "Saved")
+        static let toggleTerminalHelp = String(localized: "editor-status-bar.toggle-terminal.help", defaultValue: "Show or hide the editor terminal")
         static func selection(_ a1: String) -> String {
             let template = String(localized: "editor-status-bar.selection", defaultValue: "chars")
             return String(format: template, a1)
@@ -426,6 +427,7 @@ enum L10n {
         static let viewToggleFocusMode = String(localized: "menu.view.toggle-focus-mode", defaultValue: "Toggle Focus Mode")
         static let viewToggleInspector = String(localized: "menu.view.toggle-inspector", defaultValue: "Toggle Inspector")
         static let viewTogglePreview = String(localized: "menu.view.toggle-preview", defaultValue: "Toggle Preview")
+        static let viewToggleTerminal = String(localized: "menu.view.toggle-terminal", defaultValue: "Toggle Terminal")
         static let windowCloseTab = String(localized: "menu.window.close-tab", defaultValue: "Close Tab")
         static let windowNextTab = String(localized: "menu.window.next-tab", defaultValue: "Next Tab")
         static let windowPreviousTab = String(localized: "menu.window.previous-tab", defaultValue: "Previous Tab")

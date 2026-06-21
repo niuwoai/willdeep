@@ -168,6 +168,12 @@ private struct WillDeepCommands: Commands {
                 .keyboardShortcut("r", modifiers: [.command, .option])
                 .disabled(appState?.canShowPreview != true)
 
+                Button(L10n.Menu.viewToggleTerminal) {
+                    appState?.toggleEditorTerminal(appState?.openedFileURL ?? appState?.rootDirectory)
+                }
+                .keyboardShortcut("j", modifiers: .command)
+                .disabled(appState?.rootDirectory == nil && appState?.openedFileURL == nil)
+
                 Button(L10n.Menu.viewOpenSplitFile) {
                     appState?.openSplitFile()
                 }
