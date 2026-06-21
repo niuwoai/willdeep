@@ -4896,6 +4896,24 @@
         }
       }
     },
+    "menu.view.show-editor" : {
+      "comment" : "Button label in View menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Editor"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示 Editor"
+          }
+        }
+      }
+    },
     "menu.view.switch-to-agent-mode" : {
       "comment" : "Button label (conditional) in View menu",
       "extractionState" : "manual",

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.99.1-rc2 - 2026-06-21
+
+### Fixed
+
+- macOS `显示` 菜单新增明确的 Show Editor（⌥⌘E）入口,用于从 Agent panel、Preview、Terminal 或 focus mode 回到普通编辑器视图,并聚焦对应 editor 窗口。
+
+### Changed
+
+- 版本号从 **1.99.1-rc1** 提升为 **1.99.1-rc2**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.99.1-rc1 - 2026-06-21
 
 ### Fixed
