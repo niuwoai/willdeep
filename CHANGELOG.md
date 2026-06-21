@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.99.1-rc7 - 2026-06-21
+
+### Fixed
+
+- 修复关闭所有编辑器窗口后通过 `⌘N` 新建编辑器会先弹目录选择的问题；现在 `⌘N` 直接打开空编辑器窗口。
+- 修复选择目录打开新窗口时 URL WindowGroup 初始加载目录又递归 `openWindow(value:)`，导致持续创建/调度窗口并进入转圈状态的问题。
+
+### Changed
+
+- 版本号从 **1.99.1-rc6** 提升为 **1.99.1-rc7**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.99.1-rc6 - 2026-06-21
 
 ### Fixed

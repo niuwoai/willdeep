@@ -14,7 +14,7 @@ struct WillDeepApp: App {
     @NSApplicationDelegateAdaptor(WillDeepAppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: EditorWindowID.value) {
             WindowRootView()
         }
         .windowStyle(.hiddenTitleBar)
@@ -46,6 +46,10 @@ enum AgentWindowID {
     static let value = "agent-window"
 }
 
+enum EditorWindowID {
+    static let value = "editor-window"
+}
+
 /// 菜单命令独立成 Commands 结构体，@FocusedObject 只能放这里、
 /// 不能放回 App 顶层：@FocusedObject 订阅 AppState.objectWillChange，
 /// 挂在 App 上时每次 publish（流式期间每个 token、动画期间每帧的
@@ -60,7 +64,7 @@ private struct WillDeepCommands: Commands {
     var body: some Commands {
             CommandGroup(replacing: .newItem) {
                 Button(L10n.Menu.fileNewWindow) {
-                    chooseFolderForNewWindow()
+                    openWindow(id: EditorWindowID.value)
                 }
                 .keyboardShortcut("n", modifiers: .command)
 
@@ -244,14 +248,6 @@ private struct WillDeepCommands: Commands {
             }
     }
 
-    private func chooseFolderForNewWindow() {
-        let panel = AppState.folderOpenPanel()
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            appState?.registerRecentFolder(url)
-            openWindow(value: url)
-        }
-    }
 }
 
 private struct WindowRootView: View {
@@ -284,7 +280,7 @@ private struct WindowRootView: View {
                 }
             )
             .onOpenURL { url in
-                handleExternalURL(url)
+                handleExternalURL(url, opensDirectoryInNewWindow: true)
             }
             .onAppear {
                 // 注册到全局 registry —— 第一个 editor 窗口顺便会被
@@ -293,7 +289,7 @@ private struct WindowRootView: View {
                 EditorAppStateRegistry.shared.register(appState)
                 if !didHandleInitialExternalURL, let initialExternalURL {
                     didHandleInitialExternalURL = true
-                    handleExternalURL(initialExternalURL)
+                    handleExternalURL(initialExternalURL, opensDirectoryInNewWindow: false)
                 }
                 onboarding.presentIfNeeded()
             }
@@ -307,13 +303,17 @@ private struct WindowRootView: View {
             }
     }
 
-    private func handleExternalURL(_ url: URL) {
+    private func handleExternalURL(_ url: URL, opensDirectoryInNewWindow: Bool) {
         if CollaborationConnectorOAuthCoordinator.handleCallback(url) {
             return
         }
         if AppState.isExistingDirectory(url) {
-            appState.registerRecentFolder(url)
-            openWindow(value: url)
+            if opensDirectoryInNewWindow {
+                appState.registerRecentFolder(url)
+                openWindow(value: url)
+            } else {
+                appState.openExternalURL(url)
+            }
             return
         }
         appState.openExternalURL(url)
