@@ -37,6 +37,7 @@ final class AppState: ObservableObject {
     @Published private(set) var editorRenderRevision = 0
     @Published private(set) var editorHighlightRevision = 0
     @Published private(set) var editorNavigationRequest: EditorNavigationRequest?
+    var pendingDefinitionNavigation: EditorDefinitionLocation?
     @Published var isFindBarVisible = false
     @Published var findQuery = "" {
         didSet {

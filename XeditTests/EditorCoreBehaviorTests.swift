@@ -741,4 +741,55 @@ struct EditorCoreBehaviorTests {
         #expect(items.map(\.title).contains("div.hero.primary"))
         #expect(items.map(\.title).contains("section Feature list"))
     }
+
+    @Test("definition resolver finds Go Java TypeScript and config symbols")
+    func testDefinitionResolverFindsProjectSymbols() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_definition_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let goFile = root.appendingPathComponent("service.go")
+        try """
+        package demo
+
+        type Worker struct {}
+
+        func (w Worker) Run() {}
+        """.write(to: goFile, atomically: true, encoding: .utf8)
+
+        let javaFile = root.appendingPathComponent("WorkerService.java")
+        try """
+        package demo;
+
+        public class WorkerService {
+            public void start() {}
+        }
+        """.write(to: javaFile, atomically: true, encoding: .utf8)
+
+        let tsFile = root.appendingPathComponent("client.ts")
+        try """
+        export interface ClientOptions {}
+        export function connect() {}
+        """.write(to: tsFile, atomically: true, encoding: .utf8)
+
+        let appConfig = root.appendingPathComponent("application.yml")
+        try """
+        spring:
+          datasource:
+            url: jdbc:postgresql://localhost/app
+        """.write(to: appConfig, atomically: true, encoding: .utf8)
+
+        let envFile = root.appendingPathComponent(".env")
+        try """
+        API_TOKEN=secret
+        """.write(to: envFile, atomically: true, encoding: .utf8)
+
+        #expect(EditorDefinitionResolver.definition(for: "Worker", from: goFile, rootDirectory: root)?.url.standardizedFileURL == goFile.standardizedFileURL)
+        #expect(EditorDefinitionResolver.definition(for: "Run", from: goFile, rootDirectory: root)?.line == 4)
+        #expect(EditorDefinitionResolver.definition(for: "WorkerService", from: javaFile, rootDirectory: root)?.url.standardizedFileURL == javaFile.standardizedFileURL)
+        #expect(EditorDefinitionResolver.definition(for: "connect", from: tsFile, rootDirectory: root)?.url.standardizedFileURL == tsFile.standardizedFileURL)
+        #expect(EditorDefinitionResolver.definition(for: "spring.datasource.url", from: javaFile, rootDirectory: root)?.url.standardizedFileURL == appConfig.standardizedFileURL)
+        #expect(EditorDefinitionResolver.definition(for: "API_TOKEN", from: tsFile, rootDirectory: root)?.url.standardizedFileURL == envFile.standardizedFileURL)
+    }
 }

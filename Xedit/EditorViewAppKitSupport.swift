@@ -55,6 +55,7 @@ final class WillDeepTextView: NSTextView {
     var onSyntaxHighlightingChange: ((SyntaxHighlightingSelection) -> Void)?
     var onAddSelectionToAgentConversation: ((AgentEditorSelectionContext) -> Void)?
     var onAskSelectionInAgentPanel: ((AgentEditorSelectionContext) -> Void)?
+    var onGoToDefinition: ((String) -> Void)?
     private var foldedGuides: Set<ScopeGuide> = []
 
     /// Tracks whether the layout currently reflects `foldedGuides`. While this is
@@ -82,6 +83,15 @@ final class WillDeepTextView: NSTextView {
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = super.menu(for: event) ?? NSMenu()
+        if let symbol = definitionSymbol(at: event) {
+            if menu.items.isEmpty == false {
+                menu.addItem(.separator())
+            }
+            let item = NSMenuItem(title: "Go to Definition", action: #selector(goToDefinition(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = symbol
+            menu.addItem(item)
+        }
         if currentAgentSelectionContext() != nil {
             if menu.items.isEmpty == false {
                 menu.addItem(.separator())
@@ -100,6 +110,15 @@ final class WillDeepTextView: NSTextView {
         }
         menu.addItem(syntaxHighlightingMenuItem())
         return menu
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.command),
+           let symbol = definitionSymbol(at: event) {
+            onGoToDefinition?(symbol)
+            return
+        }
+        super.mouseDown(with: event)
     }
 
     /// Always paste as plain text so external rich text (HTML / RTF /
@@ -143,6 +162,71 @@ final class WillDeepTextView: NSTextView {
     @objc private func askSelectionInAgentPanel(_ sender: NSMenuItem) {
         guard let context = currentAgentSelectionContext() else { return }
         onAskSelectionInAgentPanel?(context)
+    }
+
+    @objc private func goToDefinition(_ sender: NSMenuItem) {
+        guard let symbol = sender.representedObject as? String else { return }
+        onGoToDefinition?(symbol)
+    }
+
+    private func definitionSymbol(at event: NSEvent) -> String? {
+        if let selected = selectedSymbol(), !selected.isEmpty {
+            return selected
+        }
+        let pointInView = convert(event.locationInWindow, from: nil)
+        guard let index = characterIndex(at: pointInView) else { return nil }
+        return symbol(at: index)
+    }
+
+    private func selectedSymbol() -> String? {
+        let selected = selectedRange()
+        guard selected.length > 0 else { return nil }
+        let nsText = string as NSString
+        guard NSMaxRange(selected) <= nsText.length else { return nil }
+        let value = nsText.substring(with: selected)
+            .trimmingCharacters(in: CharacterSet(charactersIn: " \n\t\r`'\"()[]{}<>:,;"))
+        return value.isEmpty ? nil : value
+    }
+
+    private func characterIndex(at point: NSPoint) -> Int? {
+        guard let layoutManager, let textContainer else { return nil }
+        var containerPoint = point
+        containerPoint.x -= textContainerOrigin.x
+        containerPoint.y -= textContainerOrigin.y
+        let glyphIndex = layoutManager.glyphIndex(for: containerPoint, in: textContainer)
+        let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+        guard characterIndex >= 0, characterIndex < (string as NSString).length else { return nil }
+        return characterIndex
+    }
+
+    private func symbol(at index: Int) -> String? {
+        let nsText = string as NSString
+        guard nsText.length > 0 else { return nil }
+        let bounded = min(max(0, index), nsText.length - 1)
+        let scalars = string.utf16.map { unichar($0) }
+        guard scalars.indices.contains(bounded), Self.isSymbolCharacter(scalars[bounded]) else { return nil }
+
+        var start = bounded
+        var end = bounded
+        while start > 0, Self.isSymbolCharacter(scalars[start - 1]) {
+            start -= 1
+        }
+        while end + 1 < scalars.count, Self.isSymbolCharacter(scalars[end + 1]) {
+            end += 1
+        }
+
+        let raw = nsText.substring(with: NSRange(location: start, length: end - start + 1))
+        let trimmed = raw.trimmingCharacters(in: CharacterSet(charactersIn: ".-$"))
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func isSymbolCharacter(_ character: unichar) -> Bool {
+        switch character {
+        case 45, 46, 48...57, 65...90, 95, 97...122:
+            return true
+        default:
+            return false
+        }
     }
 
     private func agentSelectionMenuItem(title: String, action: Selector) -> NSMenuItem {

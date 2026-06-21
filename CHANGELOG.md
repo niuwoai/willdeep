@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.98.0 - 2026-06-21
+
+### Added
+
+- 编辑器新增项目内 Go to Definition 本地解析底座:在 Go、Java、TypeScript/JavaScript 项目中可通过右键菜单或 Command-click 对类名、类型名、函数/方法名、常量/变量名跳转到定义位置。
+- Spring Boot `application.yml` / `application.properties` / `application.ini` 以及 `.env` 文件纳入定义解析,支持 `spring.datasource.url`、`API_TOKEN` 这类配置 key / 环境变量从代码或选中文本跳到声明处。
+- 新增本地定义解析回归测试,覆盖 Go receiver 方法、Java class、TS export、Spring YAML dotted key 和 `.env` 环境变量。
+
+### Changed
+
+- 版本号从 **1.97.0** 提升为 **1.98.0**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.97.0 - 2026-06-21
 
 ### Added

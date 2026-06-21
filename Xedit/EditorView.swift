@@ -65,6 +65,10 @@ struct EditorView: NSViewRepresentable {
     /// stage the current text selection as context for a question.
     var onAskSelectionInAgentPanel: ((AgentEditorSelectionContext) -> Void)?
 
+    /// Called when the user asks to jump to the project-local definition of a
+    /// symbol under the cursor.
+    var onGoToDefinition: ((String) -> Void)?
+
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
@@ -108,6 +112,9 @@ struct EditorView: NSViewRepresentable {
         }
         textView.onAskSelectionInAgentPanel = { [weak coordinator = context.coordinator] selection in
             coordinator?.parent.onAskSelectionInAgentPanel?(selection)
+        }
+        textView.onGoToDefinition = { [weak coordinator = context.coordinator] symbol in
+            coordinator?.parent.onGoToDefinition?(symbol)
         }
 
         let ruler = LineNumberRulerView(scrollView: scrollView, textView: textView)
@@ -155,6 +162,9 @@ struct EditorView: NSViewRepresentable {
         }
         textView.onAskSelectionInAgentPanel = { [weak coordinator = context.coordinator] selection in
             coordinator?.parent.onAskSelectionInAgentPanel?(selection)
+        }
+        textView.onGoToDefinition = { [weak coordinator = context.coordinator] symbol in
+            coordinator?.parent.onGoToDefinition?(symbol)
         }
         // `applyAppearance` sets a dozen NSTextView properties (font, theme,
         // typingAttributes, paragraph style) and re-tiles the line-number ruler

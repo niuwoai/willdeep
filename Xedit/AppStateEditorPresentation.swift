@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 extension AppState {
     var primaryAgentChangedFile: AgentFileChangeSummary? {
@@ -180,6 +181,27 @@ extension AppState {
     func hideSymbolJump() {
         isSymbolJumpVisible = false
         symbolJumpQuery = ""
+    }
+
+    func goToDefinition(symbol: String) {
+        guard let location = EditorDefinitionResolver.definition(
+            for: symbol,
+            from: openedFileURL,
+            rootDirectory: rootDirectory
+        ) else {
+            NSSound.beep()
+            return
+        }
+
+        if openedFileURL?.standardizedFileURL == location.url.standardizedFileURL {
+            navigateEditor(toLine: location.line)
+            return
+        }
+
+        pendingDefinitionNavigation = location
+        registerRecentFile(location.url)
+        registerRecentFolder(location.url.deletingLastPathComponent())
+        openedFileURL = location.url
     }
 
     func toggleFocusMode() {

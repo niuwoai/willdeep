@@ -252,6 +252,12 @@ extension AppState {
         registerRecentFile(url)
         registerRecentFolder(url.deletingLastPathComponent())
         persistSession()
+
+        if let pendingDefinitionNavigation,
+           pendingDefinitionNavigation.url.standardizedFileURL == url.standardizedFileURL {
+            self.pendingDefinitionNavigation = nil
+            navigateEditor(toLine: pendingDefinitionNavigation.line)
+        }
     }
 
     func loadSplitFile(from url: URL) {

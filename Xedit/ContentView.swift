@@ -241,6 +241,9 @@ struct ContentView: View {
                             },
                             onAskSelectionInAgentPanel: { selection in
                                 appState.askAgentAboutEditorSelection(selection)
+                            },
+                            onGoToDefinition: { symbol in
+                                appState.goToDefinition(symbol: symbol)
                             }
                         )
                         .editorGlassBackground(settings: appState.editorSettings)
