@@ -39,7 +39,7 @@ struct AgentLearningActionPresentationTests {
 
         #expect(lines.contains(L10n.Transcript.learningActionReason("The workflow repeated across multiple tool calls.")))
         #expect(lines.contains(L10n.Transcript.learningActionConfidence(L10n.Transcript.learningConfidenceMedium)))
-        #expect(lines.contains { $0.contains("draft a skill") })
+        #expect(lines.contains(L10n.Transcript.learningActionWhy(L10n.Transcript.learningExplanationDraftNeedsReview)))
         #expect(AgentLearningActionPresentation.copyText(for: event).contains("Source: explicit user request"))
     }
 
@@ -61,7 +61,7 @@ struct AgentLearningActionPresentationTests {
         let explanation = AgentLearningActionPresentation.explanation(for: event)
 
         #expect(explanation.confidence == .low)
-        #expect(explanation.rationale.contains("not enough executed tool evidence"))
+        #expect(explanation.rationale == L10n.Transcript.learningExplanationNotEnoughEvidence)
     }
 
     @Test
@@ -82,8 +82,8 @@ struct AgentLearningActionPresentationTests {
 
         let text = AgentLearningActionPresentation.copyText(for: event)
 
-        #expect(text.contains("Reason: The turn contained durable self-learning policy or integration guidance."))
-        #expect(text.contains("Confidence: High confidence"))
-        #expect(text.contains("completed automatically"))
+        #expect(text.contains(L10n.Transcript.learningActionReason("The turn contained durable self-learning policy or integration guidance.")))
+        #expect(text.contains(L10n.Transcript.learningActionConfidence(L10n.Transcript.learningConfidenceHigh)))
+        #expect(text.contains(L10n.Transcript.learningExplanationCompletedFromDirectEvidence))
     }
 }

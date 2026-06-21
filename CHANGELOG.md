@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.100.0-rc2 - 2026-06-21
+
+### Fixed
+
+- release 打包流程新增 DMG volume icon 生成：从当前 App 启动/Dock 使用的 `Xedit/Assets.xcassets/AppIcon.appiconset` 自动生成 `.icns`,并在 `create-dmg` 打包时通过 `--volicon` 应用；`hdiutil` fallback 也会写入 `.VolumeIcon.icns` 并尽量设置自定义图标属性。
+
+### Changed
+
+- 版本号从 **1.100.0-rc1** 提升为 **1.100.0-rc2**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.100.0-rc1 - 2026-06-21
+
+### Fixed
+
+- 修复 Settings → Format 切换界面皮肤后独立 Agent mode 窗口没有完整即时换肤的问题；Agent mode 的主背景、会话侧栏、聊天面、Composer、底部状态栏、右侧辅助面板和常用 pill/卡片现在直接读取当前 `EditorSettings.interfaceSkin.palette`。
+
+### Changed
+
+- 版本号从 **1.100.0** 提升为 **1.100.0-rc1**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.100.0 - 2026-06-21
+
+### Added
+
+- Settings → Format 新增“Interface Skin”界面皮肤选择器,采用卡片网格预览,内置系统默认、淡雾森林、水墨宣纸、科幻光栅、午夜岩蓝、极光暗夜、烽火石墨七套皮肤。
+- 皮肤配置持久化到 `EditorSettings.interfaceSkinID`,并应用到窗口背景、编辑区背景、文件树侧栏、选中态、Agent panel、强调色和深浅色偏好;点选皮肤时同步切换推荐编辑器代码主题。
+
+### Changed
+
+- 版本号从 **1.99.1-rc8** 提升为 **1.100.0**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.99.1-rc8 - 2026-06-21
 
 ### Fixed

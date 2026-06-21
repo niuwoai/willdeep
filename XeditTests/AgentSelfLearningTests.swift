@@ -790,7 +790,7 @@ struct AgentSelfLearningTests {
         // Verbatim title match is the strongest signal.
         #expect(links.first?.score == 0.9)
         #expect(links.first?.strength == .strong)
-        #expect(links.first?.reason?.contains("by name") == true)
+        #expect(links.first?.reason == L10n.Transcript.learningRecallReasonTitle(skillItem.title))
     }
 
     @Test
@@ -840,7 +840,7 @@ struct AgentSelfLearningTests {
         let link = AgentSelfLearning.relatedRecallLinks(for: event, in: snapshot).first
         #expect(link?.score == 0.62)
         #expect(link?.strength == .related)
-        #expect(link?.reason?.contains("recalled at 0.90") == true)
+        #expect(link?.reason?.contains("0.90") == true)
     }
 
     @Test
@@ -961,7 +961,7 @@ struct AgentSelfLearningTests {
 
         let summary = AgentLearningActionPresentation.relatedRecallSummary(for: event)
         #expect(summary?.contains("Deployment rollback") == true)
-        #expect(AgentLearningActionPresentation.copyText(for: event).contains("Related recall"))
+        #expect(AgentLearningActionPresentation.copyText(for: event).contains(L10n.Transcript.learningRelatedRecall("").trimmingCharacters(in: .whitespaces)))
     }
 
     private func temporarySkillRoot() throws -> URL {

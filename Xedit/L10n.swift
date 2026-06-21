@@ -737,6 +737,8 @@ enum L10n {
         static let sectionTypography = String(localized: "settings.section.typography", defaultValue: "Typography")
         static let sectionEditorText = String(localized: "settings.section.editor-text", defaultValue: "Editor Text")
         static let sectionWorkspaceText = String(localized: "settings.section.workspace-text", defaultValue: "Workspace List")
+        static let sectionInterfaceSkin = String(localized: "settings.section.interface-skin", defaultValue: "Interface Skin")
+        static let interfaceSkinHelp = String(localized: "settings.interface-skin.help", defaultValue: "Choose a full-window skin. Skin changes apply to window chrome, sidebars, panels, selection color, and the recommended editor theme.")
         static let sectionColorStyle = String(localized: "settings.section.color-style", defaultValue: "Color Style")
         static let sectionEditorBackground = String(localized: "settings.section.editor-background", defaultValue: "Editor Background")
         static let sectionEditor = String(localized: "settings.section.editor", defaultValue: "Editor")
@@ -786,6 +788,50 @@ enum L10n {
         static let chooseBackgroundImageTitle = String(localized: "settings.choose-background-image.title", defaultValue: "Choose Editor Background Image")
         static let savedStatus = String(localized: "settings.saved-status", defaultValue: "Saved.")
         static let allChangesSaved = String(localized: "settings.all-changes-saved", defaultValue: "All changes saved")
+
+        enum InterfaceSkin {
+            static func name(_ skin: EditorInterfaceSkin) -> String {
+                switch skin.id {
+                case EditorInterfaceSkin.system.id:
+                    return String(localized: "settings.interface-skin.system.name", defaultValue: "System Default")
+                case EditorInterfaceSkin.mistForest.id:
+                    return String(localized: "settings.interface-skin.mist-forest.name", defaultValue: "Mist Forest")
+                case EditorInterfaceSkin.ricePaper.id:
+                    return String(localized: "settings.interface-skin.rice-paper.name", defaultValue: "Rice Paper")
+                case EditorInterfaceSkin.sciFiRaster.id:
+                    return String(localized: "settings.interface-skin.sci-fi-raster.name", defaultValue: "Sci-Fi Raster")
+                case EditorInterfaceSkin.midnightSlate.id:
+                    return String(localized: "settings.interface-skin.midnight-slate.name", defaultValue: "Midnight Slate")
+                case EditorInterfaceSkin.auroraNight.id:
+                    return String(localized: "settings.interface-skin.aurora-night.name", defaultValue: "Aurora Night")
+                case EditorInterfaceSkin.emberGraphite.id:
+                    return String(localized: "settings.interface-skin.ember-graphite.name", defaultValue: "Ember Graphite")
+                default:
+                    return skin.id
+                }
+            }
+
+            static func summary(_ skin: EditorInterfaceSkin) -> String {
+                switch skin.id {
+                case EditorInterfaceSkin.system.id:
+                    return String(localized: "settings.interface-skin.system.summary", defaultValue: "Follows macOS with stable native contrast.")
+                case EditorInterfaceSkin.mistForest.id:
+                    return String(localized: "settings.interface-skin.mist-forest.summary", defaultValue: "Soft green and warm mist for calm long sessions.")
+                case EditorInterfaceSkin.ricePaper.id:
+                    return String(localized: "settings.interface-skin.rice-paper.summary", defaultValue: "Low-saturation ink and paper tones with a quiet reading feel.")
+                case EditorInterfaceSkin.sciFiRaster.id:
+                    return String(localized: "settings.interface-skin.sci-fi-raster.summary", defaultValue: "Deep cyan neon with a compact terminal-like atmosphere.")
+                case EditorInterfaceSkin.midnightSlate.id:
+                    return String(localized: "settings.interface-skin.midnight-slate.summary", defaultValue: "Blue-black depth for longer night coding.")
+                case EditorInterfaceSkin.auroraNight.id:
+                    return String(localized: "settings.interface-skin.aurora-night.summary", defaultValue: "Dark green-blue with clear aurora accents.")
+                case EditorInterfaceSkin.emberGraphite.id:
+                    return String(localized: "settings.interface-skin.ember-graphite.summary", defaultValue: "Graphite warmth with ember highlights.")
+                default:
+                    return skin.id
+                }
+            }
+        }
 
         enum LearningReview {
             static let section = String(localized: "settings.learning-review.section", defaultValue: "Learning Review")

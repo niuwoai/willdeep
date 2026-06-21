@@ -159,8 +159,10 @@ struct EditorCoreBehaviorTests {
         #expect(settings.orderedInspectorModes == [.minimap, .structure])
         #expect(settings.trimsTrailingWhitespaceOnSave == false)
         #expect(settings.ensuresFinalNewlineOnSave == false)
+        #expect(settings.interfaceSkinID == EditorInterfaceSkin.system.id)
         #expect(EditorTheme.byID(settings.themeID) != nil)
         #expect(EditorFontChoice.byID(settings.fontID) != nil)
+        #expect(EditorInterfaceSkin.byID(settings.interfaceSkinID) != nil)
     }
 
     @Test("editor settings normalize invalid persisted values")
@@ -184,6 +186,7 @@ struct EditorCoreBehaviorTests {
             editorGlassMaterial: .hudWindow,
             editorGlassOpacity: 9,
             editorSurfaceOpacity: 9,
+            interfaceSkinID: "missing-skin",
             trimsTrailingWhitespaceOnSave: true,
             ensuresFinalNewlineOnSave: true
         ).normalized()
@@ -207,6 +210,7 @@ struct EditorCoreBehaviorTests {
         #expect(settings.editorGlassMaterial == .hudWindow)
         #expect(settings.editorGlassOpacity == 1)
         #expect(settings.editorSurfaceOpacity == 1)
+        #expect(settings.interfaceSkinID == EditorSettings.default.interfaceSkinID)
         #expect(settings.trimsTrailingWhitespaceOnSave == true)
         #expect(settings.ensuresFinalNewlineOnSave == true)
     }
@@ -234,6 +238,22 @@ struct EditorCoreBehaviorTests {
         #expect(settings.fileTreeLineHeightMultiple == EditorSettings.default.fileTreeLineHeightMultiple)
         #expect(settings.preferredInspectorMode == EditorSettings.default.preferredInspectorMode)
         #expect(settings.inspectorPanelOrder == EditorSettings.default.inspectorPanelOrder)
+        #expect(settings.interfaceSkinID == EditorSettings.default.interfaceSkinID)
+    }
+
+    @Test("interface skins are registered with localized names and editor themes")
+    func testInterfaceSkinsAreRegistered() {
+        #expect(EditorInterfaceSkin.allCases.count == 7)
+
+        let ids = Set(EditorInterfaceSkin.allCases.map(\.id))
+        #expect(ids.count == EditorInterfaceSkin.allCases.count)
+
+        for skin in EditorInterfaceSkin.allCases {
+            #expect(EditorInterfaceSkin.byID(skin.id)?.id == skin.id)
+            #expect(EditorTheme.byID(skin.recommendedThemeID) != nil)
+            #expect(!L10n.Settings.InterfaceSkin.name(skin).isEmpty)
+            #expect(!L10n.Settings.InterfaceSkin.summary(skin).isEmpty)
+        }
     }
 
     @Test("changing editor settings refreshes the active editor")

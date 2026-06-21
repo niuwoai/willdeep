@@ -27,6 +27,8 @@ struct AgentWindowRootView: View {
             if let appState = registry.current {
                 AgentModeView()
                     .environmentObject(appState)
+                    .tint(appState.editorSettings.interfaceSkin.palette.accent)
+                    .preferredColorScheme(appState.editorSettings.interfaceSkin.preferredColorScheme)
                     // Force-rebuild AgentModeView when the source AppState
                     // changes — otherwise SwiftUI re-uses the same view
                     // instances and the AgentSessionsSidebar / Composer

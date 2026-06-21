@@ -148,7 +148,7 @@ struct AgentRoutinesSidebarSection: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
-            .background(AgentDesign.subtleBackground)
+            .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
             .clipShape(RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)

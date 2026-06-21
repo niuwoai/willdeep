@@ -368,6 +368,60 @@
         }
       }
     },
+    "agent-panel.active-file-included-hint" : {
+      "comment" : "composer context hint when the active file is attached",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active file included · Tools available"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已包含当前文件 · 工具可用"
+          }
+        }
+      }
+    },
+    "agent-panel.open-folder-hint" : {
+      "comment" : "composer context hint when no workspace is open",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open a folder to enable tools"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开文件夹后可启用工具"
+          }
+        }
+      }
+    },
+    "agent-panel.selection-included-hint" : {
+      "comment" : "composer context hint when selected text is attached",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selection included · Tools available"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已包含选区 · 工具可用"
+          }
+        }
+      }
+    },
     "agent-selection.add-to-conversation" : {
       "comment" : "Editor context menu item that stages selected text as Agent chat context",
       "extractionState" : "manual",
@@ -582,60 +636,6 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "No workspace selected for this session."
-          }
-        }
-      }
-    },
-    "agent-panel.active-file-included-hint" : {
-      "comment" : "composer context hint when the active file is attached",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Active file included · Tools available"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已包含当前文件 · 工具可用"
-          }
-        }
-      }
-    },
-    "agent-panel.open-folder-hint" : {
-      "comment" : "composer context hint when no workspace is open",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open a folder to enable tools"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "打开文件夹后可启用工具"
-          }
-        }
-      }
-    },
-    "agent-panel.selection-included-hint" : {
-      "comment" : "composer context hint when selected text is attached",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Selection included · Tools available"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已包含选区 · 工具可用"
           }
         }
       }
@@ -2146,9 +2146,6 @@
     "Cancel" : {
 
     },
-    "Choose folder…" : {
-
-    },
     "Clear" : {
 
     },
@@ -3260,96 +3257,216 @@
       "comment" : "Composer workspace picker menu item",
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose folder…" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择文件夹…" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose folder…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择文件夹…"
+          }
+        }
       }
     },
     "composer.workspace.choose-workspace.help" : {
       "comment" : "Composer workspace picker tooltip when no workspace is selected",
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose a workspace for this chat" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "为此聊天选择工作区" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a workspace for this chat"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为此聊天选择工作区"
+          }
+        }
       }
     },
     "composer.workspace.copy-branch-name" : {
       "comment" : "Composer workspace picker menu item",
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy branch name" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复制分支名" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy branch name"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制分支名"
+          }
+        }
       }
     },
     "composer.workspace.copy-path" : {
       "comment" : "Composer workspace picker menu item",
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy path" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复制路径" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy path"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制路径"
+          }
+        }
       }
     },
     "composer.workspace.git-worktrees" : {
       "comment" : "Composer workspace picker section title",
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Git worktrees" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Git worktree" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git worktrees"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git worktree"
+          }
+        }
       }
     },
     "composer.workspace.new-worktree" : {
       "comment" : "Composer workspace picker menu item",
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "New worktree…" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "新建 worktree…" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New worktree…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建 worktree…"
+          }
+        }
       }
     },
     "composer.workspace.pick-folder" : {
       "comment" : "Composer workspace picker button label when no workspace is selected",
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pick folder" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择文件夹" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pick folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择文件夹"
+          }
+        }
       }
     },
     "composer.workspace.prune-stale-worktrees" : {
       "comment" : "Composer workspace picker menu item",
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Prune stale worktrees" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清理失效 worktree" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prune stale worktrees"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清理失效 worktree"
+          }
+        }
       }
     },
     "composer.workspace.remote-runtimes" : {
       "comment" : "Composer workspace picker section title",
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remote runtimes" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "远程运行环境" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remote runtimes"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程运行环境"
+          }
+        }
       }
     },
     "composer.workspace.remove-current-worktree" : {
       "comment" : "Composer workspace picker destructive menu item",
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove current worktree…" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除当前 worktree…" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove current worktree…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除当前 worktree…"
+          }
+        }
       }
     },
     "composer.workspace.show-in-finder" : {
       "comment" : "Composer workspace picker menu item",
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show in Finder" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 Finder 中显示" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show in Finder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Finder 中显示"
+          }
+        }
       }
     },
     "composer.workspace.switch-workspace" : {
       "comment" : "Composer workspace picker section title",
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Switch workspace" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "切换工作区" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switch workspace"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换工作区"
+          }
+        }
       }
     },
     "Compress" : {
@@ -3377,16 +3494,10 @@
     "Copy" : {
 
     },
-    "Copy branch name" : {
-
-    },
     "Copy code" : {
 
     },
     "Copy message" : {
-
-    },
-    "Copy path" : {
 
     },
     "Copy Path" : {
@@ -3548,24 +3659,6 @@
         }
       }
     },
-    "editor-status-bar.toggle-terminal.help" : {
-      "comment" : "Status bar terminal button tooltip",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Show or hide the editor terminal"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "显示或隐藏编辑器终端"
-          }
-        }
-      }
-    },
     "editor-status-bar.selection" : {
       "comment" : "Selected characters count",
       "extractionState" : "manual",
@@ -3598,6 +3691,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "行被选中"
+          }
+        }
+      }
+    },
+    "editor-status-bar.toggle-terminal.help" : {
+      "comment" : "Status bar terminal button tooltip",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show or hide the editor terminal"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示或隐藏编辑器终端"
           }
         }
       }
@@ -4224,9 +4335,6 @@
       }
     },
     "Font" : {
-
-    },
-    "Git worktrees" : {
 
     },
     "go-to-line.placeholder" : {
@@ -5676,9 +5784,6 @@
     "New Folder" : {
 
     },
-    "New worktree…" : {
-
-    },
     "No matching commands" : {
 
     },
@@ -5691,9 +5796,6 @@
     "No providers configured. Open Settings → Agent." : {
 
     },
-    "No workspace" : {
-
-    },
     "Not in memory" : {
 
     },
@@ -5701,9 +5803,6 @@
 
     },
     "One KEY=value per line. These values are added to commands launched from the editor terminal." : {
-
-    },
-    "Open editor terminal" : {
 
     },
     "Open in Terminal" : {
@@ -6502,9 +6601,6 @@
         }
       }
     },
-    "Prune stale worktrees" : {
-
-    },
     "Push-to-talk in the composer transcribes 100% on-device. Nothing leaves your Mac." : {
 
     },
@@ -6770,12 +6866,6 @@
 
     },
     "Reject" : {
-
-    },
-    "Remote runtimes" : {
-
-    },
-    "Remove current worktree…" : {
 
     },
     "Remove image" : {
@@ -13631,6 +13721,118 @@
         }
       }
     },
+    "settings.interface-skin.aurora-night.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Aurora Night" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "极光暗夜" } }
+      }
+    },
+    "settings.interface-skin.aurora-night.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Dark green-blue with clear aurora accents." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "黑绿暗底配青绿高光，清爽但不刺眼。" } }
+      }
+    },
+    "settings.interface-skin.ember-graphite.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ember Graphite" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "烽火石墨" } }
+      }
+    },
+    "settings.interface-skin.ember-graphite.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Graphite warmth with ember highlights." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "炭黑底色配暖橙强调，深色但有温度。" } }
+      }
+    },
+    "settings.interface-skin.help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose a full-window skin. Skin changes apply to window chrome, sidebars, panels, selection color, and the recommended editor theme." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择整窗界面皮肤。皮肤会应用到窗口、侧栏、面板、选中态，并同步推荐的编辑器主题。" } }
+      }
+    },
+    "settings.interface-skin.midnight-slate.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Midnight Slate" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "午夜岩蓝" } }
+      }
+    },
+    "settings.interface-skin.midnight-slate.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Blue-black depth for longer night coding." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "深蓝黑底配浅色文字，长时间使用更稳。" } }
+      }
+    },
+    "settings.interface-skin.mist-forest.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Mist Forest" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "淡雾森林" } }
+      }
+    },
+    "settings.interface-skin.mist-forest.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Soft green and warm mist for calm long sessions." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "浅绿、暖白和柔和雾气感。" } }
+      }
+    },
+    "settings.interface-skin.rice-paper.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Rice Paper" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "水墨宣纸" } }
+      }
+    },
+    "settings.interface-skin.rice-paper.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Low-saturation ink and paper tones with a quiet reading feel." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "黑白层次低饱和纸底，安静有质感。" } }
+      }
+    },
+    "settings.interface-skin.sci-fi-raster.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sci-Fi Raster" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "科幻光栅" } }
+      }
+    },
+    "settings.interface-skin.sci-fi-raster.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Deep cyan neon with a compact terminal-like atmosphere." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "深色界面配冷光和少量霓虹点缀。" } }
+      }
+    },
+    "settings.interface-skin.system.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "System Default" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "系统默认" } }
+      }
+    },
+    "settings.interface-skin.system.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Follows macOS with stable native contrast." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "跟随 macOS 原生外观，稳定克制。" } }
+      }
+    },
+    "settings.section.interface-skin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Interface Skin" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "界面皮肤" } }
+      }
+    },
     "settings.section.color-style" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -15655,9 +15857,6 @@
     "Show Diff" : {
 
     },
-    "Show in Finder" : {
-
-    },
     "sidebar.archived-sessions.header" : {
       "comment" : "disclosure button for archived sessions",
       "extractionState" : "manual",
@@ -16238,24 +16437,6 @@
         }
       }
     },
-    "workspace.no-workspace" : {
-      "comment" : "generic label for sessions or composer state without an attached workspace",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No workspace"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无工作区"
-          }
-        }
-      }
-    },
     "Size" : {
 
     },
@@ -16539,9 +16720,6 @@
       }
     },
     "Summarize older messages to free context budget" : {
-
-    },
-    "Switch workspace" : {
 
     },
     "symbol-jump.no-symbols" : {
@@ -18916,6 +19094,24 @@
     },
     "working directory" : {
 
+    },
+    "workspace.no-workspace" : {
+      "comment" : "generic label for sessions or composer state without an attached workspace",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No workspace"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无工作区"
+          }
+        }
+      }
     },
     "You're all set" : {
 

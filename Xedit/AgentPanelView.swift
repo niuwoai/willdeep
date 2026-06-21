@@ -33,7 +33,7 @@ struct AgentPanelView: View {
             }
         }
         .frame(minWidth: isJobsDrawerOpen ? 560 : 300)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(appState.editorSettings.interfaceSkin.palette.panelFill)
         .overlay(alignment: .leading) {
             Divider()
         }

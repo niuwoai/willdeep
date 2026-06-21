@@ -116,10 +116,11 @@ struct AgentSessionsSidebar: View {
                     }
                 }
             } label: {
+                let palette = appState.editorSettings.interfaceSkin.palette
                 HStack(spacing: 5) {
                     Image(systemName: "sparkle")
                         .font(.system(size: 10))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(palette.accent)
                     Text(activeProviderLabel)
                         .font(.system(size: 11, weight: .medium))
                         .lineLimit(1)
@@ -131,7 +132,7 @@ struct AgentSessionsSidebar: View {
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
-                .background(AgentDesign.subtleBackground)
+                .background(palette.controlFill.opacity(0.72))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
             .menuStyle(.borderlessButton)
@@ -744,6 +745,8 @@ enum AgentRelativeTimestamp {
 }
 
 struct SidebarActionRow: View {
+    @EnvironmentObject var appState: AppState
+
     let icon: String
     let title: String
     let shortcut: String?
@@ -772,7 +775,7 @@ struct SidebarActionRow: View {
             .padding(.horizontal, 14)
             .frame(height: 28)
             .contentShape(Rectangle())
-            .background(isHovered ? AgentDesign.subtleBackground : Color.clear)
+            .background(isHovered ? appState.editorSettings.interfaceSkin.palette.hoverFill : Color.clear)
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }

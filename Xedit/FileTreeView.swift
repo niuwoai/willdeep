@@ -37,7 +37,7 @@ struct FileTreeView: View {
             .padding(.leading, treeContentLeadingPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(appState.editorSettings.interfaceSkin.sidebarBackground)
         .onAppear {
             root.isExpanded = true
             root.loadChildren()
@@ -81,7 +81,7 @@ private struct FileNodeRow: View {
                     .contentShape(Rectangle())
                     .background(
                         selectedFolderURL == node.url
-                            ? Color.accentColor.opacity(0.16)
+                            ? appState.editorSettings.interfaceSkin.palette.selectionFill
                             : Color.clear
                     )
                 }
@@ -129,7 +129,7 @@ private struct FileNodeRow: View {
                 .contentShape(Rectangle())
                 .background(
                     selectedURL == node.url || appState.selectedSidebarFileURL == node.url
-                        ? Color.accentColor.opacity(0.3)
+                        ? appState.editorSettings.interfaceSkin.palette.selectionFill
                         : Color.clear
                 )
             }

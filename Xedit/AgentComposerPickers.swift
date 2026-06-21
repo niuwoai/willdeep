@@ -65,7 +65,7 @@ struct WorkspacePickerPill: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(AgentDesign.subtleBackground)
+            .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
             .clipShape(RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius))
         }
         .menuStyle(.borderlessButton)
@@ -578,7 +578,7 @@ struct ModelPickerPill: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(AgentDesign.subtleBackground)
+            .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
             .clipShape(RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius))
         }
         .menuStyle(.borderlessButton)
