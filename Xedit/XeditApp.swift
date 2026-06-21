@@ -251,7 +251,6 @@ private struct WillDeepCommands: Commands {
 }
 
 private struct WindowRootView: View {
-    @Environment(\.openWindow) private var openWindow
     @StateObject private var appState = AppState()
     /// 桥到 NSWindow.didBecomeKeyNotification，本窗口被聚焦时把
     /// self.appState 写到 EditorAppStateRegistry —— 这样独立的 Agent
@@ -280,7 +279,7 @@ private struct WindowRootView: View {
                 }
             )
             .onOpenURL { url in
-                handleExternalURL(url, opensDirectoryInNewWindow: true)
+                handleExternalURL(url)
             }
             .onAppear {
                 // 注册到全局 registry —— 第一个 editor 窗口顺便会被
@@ -289,7 +288,7 @@ private struct WindowRootView: View {
                 EditorAppStateRegistry.shared.register(appState)
                 if !didHandleInitialExternalURL, let initialExternalURL {
                     didHandleInitialExternalURL = true
-                    handleExternalURL(initialExternalURL, opensDirectoryInNewWindow: false)
+                    handleExternalURL(initialExternalURL)
                 }
                 onboarding.presentIfNeeded()
             }
@@ -303,17 +302,8 @@ private struct WindowRootView: View {
             }
     }
 
-    private func handleExternalURL(_ url: URL, opensDirectoryInNewWindow: Bool) {
+    private func handleExternalURL(_ url: URL) {
         if CollaborationConnectorOAuthCoordinator.handleCallback(url) {
-            return
-        }
-        if AppState.isExistingDirectory(url) {
-            if opensDirectoryInNewWindow {
-                appState.registerRecentFolder(url)
-                openWindow(value: url)
-            } else {
-                appState.openExternalURL(url)
-            }
             return
         }
         appState.openExternalURL(url)

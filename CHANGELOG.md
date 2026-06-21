@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.99.1-rc8 - 2026-06-21
+
+### Fixed
+
+- 进一步收紧 `WindowRootView` 的 URL 处理：目录 URL 统一在当前窗口加载，不再从 `handleExternalURL` 内调用 `openWindow(value:)`，彻底避开目录 URL 递归投递导致的 `openWindow` 崩溃点。
+
+### Changed
+
+- 版本号从 **1.99.1-rc7** 提升为 **1.99.1-rc8**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.99.1-rc7 - 2026-06-21
 
 ### Fixed
