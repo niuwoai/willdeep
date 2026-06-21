@@ -672,24 +672,58 @@ struct MarkdownCodeBlockView: View {
         case "java": return .java
         case "js", "javascript", "jsx", "mjs", "cjs", "node": return .javascript
         case "ts", "typescript", "tsx": return .typescript
+        case "kt", "kts", "kotlin": return .kotlin
+        case "scala", "sc": return .scala
+        case "dart": return .dart
         case "go", "golang": return .go
         case "html", "htm": return .html
         case "css", "scss", "sass", "less": return .css
+        case "vue": return .vue
+        case "svelte": return .svelte
+        case "astro": return .astro
         case "json", "json5": return .json
         case "md", "markdown": return .markdown
         case "sh", "bash", "zsh", "shell", "console", "shellsession": return .shell
+        case "ps1", "powershell", "pwsh": return .powershell
         case "yml", "yaml": return .yaml
         case "toml": return .toml
         case "xml", "svg", "plist": return .xml
         case "sql": return .sql
         case "dockerfile", "docker": return .dockerfile
         case "makefile", "make", "mk": return .makefile
+        case "cmake": return .cmake
         case "ini", "conf", "config": return .ini
         case "env", "dotenv": return .env
         case "rs", "rust": return .rust
         case "c", "h": return .c
         case "cpp", "c++", "cxx", "cc", "hpp", "hxx": return .cpp
+        case "m", "objc", "objective-c": return .objectiveC
+        case "mm", "objcpp", "objective-c++": return .objectiveCpp
         case "cs", "csharp", "c#": return .csharp
+        case "fs", "fsi", "fsx", "fsharp", "f#": return .fsharp
+        case "vb", "visualbasic": return .visualBasic
+        case "lua": return .lua
+        case "pl", "pm", "perl": return .perl
+        case "r": return .r
+        case "jl", "julia": return .julia
+        case "ex", "exs", "elixir", "heex": return .elixir
+        case "erl", "erlang": return .erlang
+        case "hs", "haskell": return .haskell
+        case "clj", "cljs", "clojure", "edn": return .clojure
+        case "tf", "tfvars", "hcl", "terraform": return .terraform
+        case "gql", "graphql": return .graphql
+        case "proto", "protobuf": return .protobuf
+        case "nginx": return .nginx
+        case "apache", "htaccess": return .apache
+        case "nix": return .nix
+        case "sol", "solidity": return .solidity
+        case "zig": return .zig
+        case "nim": return .nim
+        case "d": return .dlang
+        case "matlab": return .matlab
+        case "f90", "fortran": return .fortran
+        case "pas", "pascal": return .pascal
+        case "asm", "assembly": return .assembly
         case "diff", "patch", "udiff": return .diff
         default: return nil
         }

@@ -20,24 +20,58 @@ enum Language: String, CaseIterable {
     case java
     case javascript
     case typescript
+    case kotlin
+    case scala
+    case dart
     case go
     case html
     case css
+    case vue
+    case svelte
+    case astro
     case json
     case markdown
     case shell
+    case powershell
     case yaml
     case toml
     case xml
     case sql
     case dockerfile
     case makefile
+    case cmake
     case ini
     case env
     case rust
     case c
     case cpp
+    case objectiveC
+    case objectiveCpp
     case csharp
+    case fsharp
+    case visualBasic
+    case lua
+    case perl
+    case r
+    case julia
+    case elixir
+    case erlang
+    case haskell
+    case clojure
+    case terraform
+    case graphql
+    case protobuf
+    case nginx
+    case apache
+    case nix
+    case solidity
+    case zig
+    case nim
+    case dlang
+    case matlab
+    case fortran
+    case pascal
+    case assembly
     case diff
 
     /// Maps a file extension (including the dot) to a language.
@@ -52,12 +86,19 @@ enum Language: String, CaseIterable {
         case ".java":   return .java
         case ".js", ".mjs", ".cjs", ".jsx": return .javascript
         case ".ts", ".mts", ".cts", ".tsx": return .typescript
+        case ".kt", ".kts": return .kotlin
+        case ".scala", ".sc": return .scala
+        case ".dart": return .dart
         case ".go":     return .go
         case ".html", ".htm", ".xhtml": return .html
         case ".css", ".scss", ".sass", ".less": return .css
+        case ".vue": return .vue
+        case ".svelte": return .svelte
+        case ".astro": return .astro
         case ".json", ".jsonc", ".jsonl": return .json
-        case ".md", ".markdown": return .markdown
+        case ".md", ".markdown", ".mdx", ".rmd": return .markdown
         case ".sh", ".bash", ".zsh", ".ksh": return .shell
+        case ".ps1", ".psm1", ".psd1": return .powershell
         case ".yml", ".yaml": return .yaml
         case ".toml": return .toml
         case ".xml", ".plist", ".svg", ".xib", ".storyboard": return .xml
@@ -67,7 +108,32 @@ enum Language: String, CaseIterable {
         case ".rs": return .rust
         case ".c", ".h": return .c
         case ".cc", ".cpp", ".cxx", ".hpp", ".hh", ".hxx": return .cpp
+        case ".m": return .objectiveC
+        case ".mm": return .objectiveCpp
         case ".cs": return .csharp
+        case ".fs", ".fsi", ".fsx": return .fsharp
+        case ".vb": return .visualBasic
+        case ".lua": return .lua
+        case ".pl", ".pm", ".t": return .perl
+        case ".r": return .r
+        case ".jl": return .julia
+        case ".ex", ".exs", ".heex", ".leex": return .elixir
+        case ".erl", ".hrl": return .erlang
+        case ".hs", ".lhs": return .haskell
+        case ".clj", ".cljs", ".cljc", ".edn": return .clojure
+        case ".tf", ".tfvars", ".hcl": return .terraform
+        case ".graphql", ".gql": return .graphql
+        case ".proto": return .protobuf
+        case ".cmake": return .cmake
+        case ".nix": return .nix
+        case ".sol": return .solidity
+        case ".zig": return .zig
+        case ".nim", ".nims": return .nim
+        case ".d": return .dlang
+        case ".mlx": return .matlab
+        case ".f", ".for", ".f90", ".f95", ".f03", ".f08": return .fortran
+        case ".pas", ".pp": return .pascal
+        case ".asm", ".s": return .assembly
         case ".diff", ".patch": return .diff
         default:        return nil
         }
@@ -81,6 +147,12 @@ enum Language: String, CaseIterable {
             return .dockerfile
         case "makefile", "gnumakefile":
             return .makefile
+        case "cmakelists.txt":
+            return .cmake
+        case "nginx.conf":
+            return .nginx
+        case ".htaccess":
+            return .apache
         case ".bashrc", ".bash_profile", ".bash_aliases", ".zshrc", ".profile":
             return .shell
         case ".env":
@@ -101,24 +173,58 @@ extension Language {
         case .java: return "Java"
         case .javascript: return "JavaScript"
         case .typescript: return "TypeScript"
+        case .kotlin: return "Kotlin"
+        case .scala: return "Scala"
+        case .dart: return "Dart"
         case .go: return "Go"
         case .html: return "HTML"
         case .css: return "CSS"
+        case .vue: return "Vue"
+        case .svelte: return "Svelte"
+        case .astro: return "Astro"
         case .json: return "JSON"
         case .markdown: return "Markdown"
         case .shell: return "Shell"
+        case .powershell: return "PowerShell"
         case .yaml: return "YAML"
         case .toml: return "TOML"
         case .xml: return "XML"
         case .sql: return "SQL"
         case .dockerfile: return "Dockerfile"
         case .makefile: return "Makefile"
+        case .cmake: return "CMake"
         case .ini: return "INI"
         case .env: return "env"
         case .rust: return "Rust"
         case .c: return "C"
         case .cpp: return "C++"
+        case .objectiveC: return "Objective-C"
+        case .objectiveCpp: return "Objective-C++"
         case .csharp: return "C#"
+        case .fsharp: return "F#"
+        case .visualBasic: return "Visual Basic"
+        case .lua: return "Lua"
+        case .perl: return "Perl"
+        case .r: return "R"
+        case .julia: return "Julia"
+        case .elixir: return "Elixir"
+        case .erlang: return "Erlang"
+        case .haskell: return "Haskell"
+        case .clojure: return "Clojure"
+        case .terraform: return "Terraform/HCL"
+        case .graphql: return "GraphQL"
+        case .protobuf: return "Protocol Buffers"
+        case .nginx: return "Nginx"
+        case .apache: return "Apache"
+        case .nix: return "Nix"
+        case .solidity: return "Solidity"
+        case .zig: return "Zig"
+        case .nim: return "Nim"
+        case .dlang: return "D"
+        case .matlab: return "MATLAB"
+        case .fortran: return "Fortran"
+        case .pascal: return "Pascal"
+        case .assembly: return "Assembly"
         case .diff: return "Diff"
         }
     }
@@ -192,24 +298,58 @@ enum SyntaxHighlighter {
         case .java:        return javaRules(theme: theme)
         case .javascript:  return javascriptRules(theme: theme)
         case .typescript:  return typescriptRules(theme: theme)
+        case .kotlin:      return kotlinRules(theme: theme)
+        case .scala:       return scalaRules(theme: theme)
+        case .dart:        return dartRules(theme: theme)
         case .go:          return goRules(theme: theme)
         case .html:        return htmlRules(theme: theme)
         case .css:         return cssRules(theme: theme)
+        case .vue:         return componentMarkupRules(theme: theme)
+        case .svelte:      return componentMarkupRules(theme: theme)
+        case .astro:       return componentMarkupRules(theme: theme)
         case .json:        return jsonRules(theme: theme)
         case .markdown:    return markdownRules(theme: theme, font: font)
         case .shell:       return shellRules(theme: theme)
+        case .powershell:  return powershellRules(theme: theme)
         case .yaml:        return yamlRules(theme: theme)
         case .toml:        return tomlRules(theme: theme)
         case .xml:         return xmlRules(theme: theme)
         case .sql:         return sqlRules(theme: theme)
         case .dockerfile:  return dockerfileRules(theme: theme)
         case .makefile:    return makefileRules(theme: theme)
+        case .cmake:       return cmakeRules(theme: theme)
         case .ini:         return iniRules(theme: theme)
         case .env:         return envRules(theme: theme)
         case .rust:        return rustRules(theme: theme)
         case .c:           return cRules(theme: theme)
         case .cpp:         return cppRules(theme: theme)
+        case .objectiveC:  return objectiveCRules(theme: theme)
+        case .objectiveCpp: return objectiveCppRules(theme: theme)
         case .csharp:      return csharpRules(theme: theme)
+        case .fsharp:      return fsharpRules(theme: theme)
+        case .visualBasic: return visualBasicRules(theme: theme)
+        case .lua:         return luaRules(theme: theme)
+        case .perl:        return perlRules(theme: theme)
+        case .r:           return rRules(theme: theme)
+        case .julia:       return juliaRules(theme: theme)
+        case .elixir:      return elixirRules(theme: theme)
+        case .erlang:      return erlangRules(theme: theme)
+        case .haskell:     return haskellRules(theme: theme)
+        case .clojure:     return clojureRules(theme: theme)
+        case .terraform:   return terraformRules(theme: theme)
+        case .graphql:     return graphqlRules(theme: theme)
+        case .protobuf:    return protobufRules(theme: theme)
+        case .nginx:       return nginxRules(theme: theme)
+        case .apache:      return apacheRules(theme: theme)
+        case .nix:         return nixRules(theme: theme)
+        case .solidity:    return solidityRules(theme: theme)
+        case .zig:         return zigRules(theme: theme)
+        case .nim:         return nimRules(theme: theme)
+        case .dlang:       return dlangRules(theme: theme)
+        case .matlab:      return matlabRules(theme: theme)
+        case .fortran:     return fortranRules(theme: theme)
+        case .pascal:      return pascalRules(theme: theme)
+        case .assembly:    return assemblyRules(theme: theme)
         case .diff:        return diffRules(theme: theme)
         }
     }
@@ -747,6 +887,369 @@ enum SyntaxHighlighter {
             HighlightRule(pattern: "\\b-?(?:0b[01_]+|0x[0-9a-fA-F_]+|(?:\\d[\\d_]*\\.?[\\d_]*|\\.\\d[\\d_]*)(?:[eE][+-]?\\d+)?)[uUlLfFdDmM]*\\b", attributes: [.foregroundColor: theme.numberColor]),
             HighlightRule(pattern: keywordPattern(for: keywords), attributes: [.foregroundColor: theme.keywordColor]),
             HighlightRule(pattern: "\\b[A-Z][A-Za-z0-9_]*\\b", attributes: [.foregroundColor: theme.typeNameColor]),
+        ]
+    }
+
+    private static func kotlinRules(theme: EditorTheme) -> [HighlightRule] {
+        cFamilyRules(theme: theme, keywords: [
+            "as", "break", "class", "continue", "data", "do", "else",
+            "false", "for", "fun", "if", "in", "interface", "is", "null",
+            "object", "out", "package", "private", "protected", "public",
+            "return", "sealed", "super", "this", "throw", "true", "try",
+            "typealias", "val", "var", "when", "where", "while"
+        ])
+    }
+
+    private static func scalaRules(theme: EditorTheme) -> [HighlightRule] {
+        cFamilyRules(theme: theme, keywords: [
+            "abstract", "case", "catch", "class", "def", "do", "else",
+            "enum", "export", "extends", "false", "final", "finally", "for",
+            "given", "if", "implicit", "import", "lazy", "match", "new",
+            "null", "object", "opaque", "override", "package", "private",
+            "protected", "return", "sealed", "super", "then", "this", "throw",
+            "trait", "true", "try", "type", "val", "var", "while", "with",
+            "yield"
+        ])
+    }
+
+    private static func dartRules(theme: EditorTheme) -> [HighlightRule] {
+        cFamilyRules(theme: theme, keywords: [
+            "abstract", "as", "assert", "async", "await", "base", "break",
+            "case", "catch", "class", "const", "continue", "default", "do",
+            "dynamic", "else", "enum", "export", "extends", "extension",
+            "false", "final", "finally", "for", "if", "implements", "import",
+            "in", "interface", "is", "late", "library", "mixin", "new", "null",
+            "operator", "part", "required", "return", "sealed", "static",
+            "super", "switch", "this", "throw", "true", "try", "var", "void",
+            "while", "with", "yield"
+        ])
+    }
+
+    private static func objectiveCRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "@[A-Za-z_][A-Za-z0-9_]*", attributes: [.foregroundColor: theme.keywordColor]),
+        ] + cFamilyRules(theme: theme, keywords: [
+            "@interface", "@implementation", "@protocol", "@end", "@property",
+            "@synthesize", "@dynamic", "@selector", "@class", "@public",
+            "@private", "@protected", "@try", "@catch", "@finally", "@throw",
+            "BOOL", "NO", "YES", "SEL", "break", "case", "char", "const",
+            "continue", "default", "do", "double", "else", "enum", "extern",
+            "float", "for", "id", "if", "int", "long", "nil", "return",
+            "self", "short", "static", "struct", "super", "switch", "typedef",
+            "void", "while"
+        ])
+    }
+
+    private static func objectiveCppRules(theme: EditorTheme) -> [HighlightRule] {
+        objectiveCRules(theme: theme) + cppRules(theme: theme)
+    }
+
+    private static func solidityRules(theme: EditorTheme) -> [HighlightRule] {
+        cFamilyRules(theme: theme, keywords: [
+            "address", "anonymous", "assembly", "bool", "break", "bytes",
+            "calldata", "case", "constant", "constructor", "contract",
+            "continue", "default", "delete", "do", "else", "emit", "enum",
+            "event", "external", "fallback", "false", "for", "function", "if",
+            "import", "indexed", "interface", "internal", "is", "library",
+            "mapping", "memory", "modifier", "payable", "private", "public",
+            "pure", "receive", "return", "returns", "storage", "struct",
+            "true", "uint", "using", "view", "virtual", "while"
+        ])
+    }
+
+    private static func zigRules(theme: EditorTheme) -> [HighlightRule] {
+        cFamilyRules(theme: theme, keywords: [
+            "addrspace", "align", "allowzero", "and", "anyframe", "anytype",
+            "asm", "async", "await", "break", "catch", "comptime", "const",
+            "continue", "defer", "else", "enum", "errdefer", "error", "export",
+            "extern", "false", "fn", "for", "if", "inline", "linksection",
+            "noalias", "null", "or", "orelse", "packed", "pub", "return",
+            "resume", "struct", "suspend", "switch", "test", "threadlocal",
+            "true", "try", "union", "unreachable", "usingnamespace", "var",
+            "volatile", "while"
+        ])
+    }
+
+    private static func dlangRules(theme: EditorTheme) -> [HighlightRule] {
+        cFamilyRules(theme: theme, keywords: [
+            "abstract", "alias", "align", "asm", "assert", "auto", "body",
+            "break", "case", "cast", "catch", "class", "const", "continue",
+            "debug", "default", "delegate", "delete", "deprecated", "do",
+            "else", "enum", "export", "extern", "false", "final", "finally",
+            "for", "foreach", "function", "if", "immutable", "import", "in",
+            "interface", "is", "mixin", "module", "new", "nothrow", "null",
+            "override", "package", "private", "protected", "public", "return",
+            "shared", "static", "struct", "super", "switch", "synchronized",
+            "template", "this", "throw", "true", "try", "typedef", "union",
+            "unittest", "version", "while", "with"
+        ])
+    }
+
+    private static func hashCommentRules(theme: EditorTheme, keywords: [String]) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "#.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "'(?:\\\\.|[^'\\\\])*'", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\b-?(?:0x[0-9a-fA-F_]+|(?:\\d[\\d_]*\\.?[\\d_]*|\\.\\d[\\d_]*)(?:[eE][+-]?\\d+)?)\\b", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: keywordPattern(for: keywords), attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "\\b[A-Z][A-Za-z0-9_]*\\b", attributes: [.foregroundColor: theme.typeNameColor]),
+        ]
+    }
+
+    private static func powershellRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "#.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "<#[\\s\\S]*?#>", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:`.|[^\"`])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "'[^']*'", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\$[A-Za-z_][A-Za-z0-9_:-]*", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\b(?:begin|break|catch|class|continue|data|do|dynamicparam|else|elseif|end|enum|exit|filter|finally|for|foreach|from|function|if|in|param|process|return|switch|throw|trap|try|until|using|while)\\b", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "\\b[A-Z][A-Za-z0-9_.-]+-[A-Z][A-Za-z0-9_.-]+\\b", attributes: [.foregroundColor: theme.typeNameColor]),
+        ]
+    }
+
+    private static func componentMarkupRules(theme: EditorTheme) -> [HighlightRule] {
+        htmlRules(theme: theme) + [
+            HighlightRule(pattern: "\\{[#/:@]?[A-Za-z_][^}]*\\}", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "(?m)^\\s*(?:export\\s+)?(?:let|const|var|function|interface|type)\\b", attributes: [.foregroundColor: theme.keywordColor]),
+        ]
+    }
+
+    private static func cmakeRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "#.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\$\\{[^}]+\\}", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\b(?:add_compile_definitions|add_custom_command|add_custom_target|add_executable|add_library|cmake_minimum_required|configure_file|else|elseif|endforeach|endif|endfunction|endmacro|find_package|foreach|function|get_filename_component|if|include|install|macro|message|option|project|set|target_compile_definitions|target_compile_options|target_include_directories|target_link_libraries)\\b", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "\\b[A-Z][A-Z0-9_]+\\b", attributes: [.foregroundColor: theme.typeNameColor]),
+        ]
+    }
+
+    private static func luaRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "--\\[\\[[\\s\\S]*?\\]\\]", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "--.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "'(?:\\\\.|[^'\\\\])*'", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\b-?(?:0x[0-9a-fA-F]+|(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?)\\b", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\b(?:and|break|do|else|elseif|end|false|for|function|goto|if|in|local|nil|not|or|repeat|return|then|true|until|while)\\b", attributes: [.foregroundColor: theme.keywordColor]),
+        ]
+    }
+
+    private static func perlRules(theme: EditorTheme) -> [HighlightRule] {
+        hashCommentRules(theme: theme, keywords: [
+            "bless", "caller", "continue", "do", "else", "elsif", "eval", "for",
+            "foreach", "given", "if", "last", "local", "my", "next", "no",
+            "our", "package", "redo", "require", "return", "state", "sub",
+            "unless", "until", "use", "when", "while"
+        ]) + [
+            HighlightRule(pattern: "[$@%][A-Za-z_][A-Za-z0-9_]*", attributes: [.foregroundColor: theme.numberColor]),
+        ]
+    }
+
+    private static func rRules(theme: EditorTheme) -> [HighlightRule] {
+        hashCommentRules(theme: theme, keywords: [
+            "break", "else", "FALSE", "for", "function", "if", "Inf", "NA",
+            "NaN", "next", "NULL", "repeat", "return", "TRUE", "while"
+        ])
+    }
+
+    private static func juliaRules(theme: EditorTheme) -> [HighlightRule] {
+        hashCommentRules(theme: theme, keywords: [
+            "abstract", "baremodule", "begin", "break", "catch", "const",
+            "continue", "do", "else", "elseif", "end", "export", "false",
+            "finally", "for", "function", "global", "if", "import", "let",
+            "local", "macro", "module", "mutable", "primitive", "quote",
+            "return", "struct", "true", "try", "using", "while"
+        ])
+    }
+
+    private static func elixirRules(theme: EditorTheme) -> [HighlightRule] {
+        hashCommentRules(theme: theme, keywords: [
+            "after", "alias", "and", "case", "catch", "cond", "def", "defimpl",
+            "defmacro", "defmodule", "defp", "defprotocol", "do", "else", "end",
+            "false", "fn", "for", "if", "import", "in", "nil", "not", "or",
+            "quote", "raise", "receive", "require", "rescue", "super", "true",
+            "try", "unless", "unquote", "use", "when", "with"
+        ]) + [
+            HighlightRule(pattern: ":[A-Za-z_][A-Za-z0-9_!?]*", attributes: [.foregroundColor: theme.typeNameColor]),
+        ]
+    }
+
+    private static func erlangRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "%.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "'(?:\\\\.|[^'\\\\])*'", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\b-?(?:\\d+\\.\\d+|\\d+)\\b", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\b(?:after|and|andalso|band|begin|bnot|bor|bsl|bsr|bxor|case|catch|cond|div|end|fun|if|let|not|of|or|orelse|receive|rem|try|when|xor)\\b", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "-[A-Za-z_][A-Za-z0-9_]*", attributes: [.foregroundColor: theme.keywordColor]),
+        ]
+    }
+
+    private static func haskellRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "--.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\\{-[\\s\\S]*?-\\}", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "'(?:\\\\.|[^'\\\\])+'", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\b-?(?:0x[0-9a-fA-F]+|\\d+(?:\\.\\d+)?)\\b", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\b(?:case|class|data|default|deriving|do|else|family|forall|foreign|hiding|if|import|in|infix|infixl|infixr|instance|let|module|newtype|of|qualified|then|type|where)\\b", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "\\b[A-Z][A-Za-z0-9_']*\\b", attributes: [.foregroundColor: theme.typeNameColor]),
+        ]
+    }
+
+    private static func clojureRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: ";.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: ":[A-Za-z0-9_.*+!?<>=/-]+", attributes: [.foregroundColor: theme.typeNameColor]),
+            HighlightRule(pattern: "\\b-?(?:0x[0-9a-fA-F]+|\\d+(?:\\.\\d+)?)\\b", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\b(?:def|defn|defmacro|defmethod|defmulti|defrecord|deftype|do|doseq|fn|for|if|if-let|import|let|letfn|loop|ns|quote|recur|require|try|when|when-let)\\b", attributes: [.foregroundColor: theme.keywordColor]),
+        ]
+    }
+
+    private static func fsharpRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "//.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\\(\\*[\\s\\S]*?\\*\\)", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\b-?(?:\\d+\\.\\d+|\\d+)\\b", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\b(?:abstract|and|as|assert|base|begin|class|default|delegate|do|done|downcast|downto|elif|else|end|exception|extern|false|finally|for|fun|function|global|if|in|inherit|inline|interface|internal|lazy|let|match|member|module|mutable|namespace|new|not|null|of|open|or|override|private|public|rec|return|static|struct|then|to|true|try|type|upcast|use|val|void|when|while|with|yield)\\b", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "\\b[A-Z][A-Za-z0-9_']*\\b", attributes: [.foregroundColor: theme.typeNameColor]),
+        ]
+    }
+
+    private static func visualBasicRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "'.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:\"\"|[^\"])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\b-?(?:\\d+\\.\\d+|\\d+)\\b", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\b(?:AddHandler|And|As|Boolean|ByRef|ByVal|Call|Case|Catch|Class|Const|Continue|Dim|Do|Each|Else|ElseIf|End|Enum|Error|Event|Exit|False|Finally|For|Friend|Function|Get|Global|GoTo|Handles|If|Implements|Imports|In|Inherits|Integer|Interface|Is|Let|Loop|Me|Module|MustInherit|MustOverride|MyBase|Namespace|New|Next|Not|Nothing|Of|On|Option|Or|Overloads|Overrides|Private|Property|Protected|Public|RaiseEvent|ReadOnly|ReDim|RemoveHandler|Resume|Return|Select|Set|Shadows|Shared|Static|Step|String|Structure|Sub|SyncLock|Then|Throw|To|True|Try|Using|Wend|While|With|WriteOnly|Xor)\\b", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "\\b[A-Z][A-Za-z0-9_]*\\b", attributes: [.foregroundColor: theme.typeNameColor]),
+        ]
+    }
+
+    private static func terraformRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "#.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "//.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "/\\*[\\s\\S]*?\\*/", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\$\\{[^}]+\\}", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\b-?(?:\\d+\\.\\d+|\\d+)\\b", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\b(?:data|dynamic|locals|module|output|provider|resource|terraform|variable|true|false|null)\\b", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "\\b[A-Za-z_][A-Za-z0-9_-]*(?=\\s*=)", attributes: [.foregroundColor: theme.typeNameColor]),
+        ]
+    }
+
+    private static func graphqlRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "#.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"\"\"[\\s\\S]*?\"\"\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\b-?(?:\\d+\\.\\d+|\\d+)\\b", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\b(?:directive|enum|extend|fragment|implements|input|interface|mutation|on|query|scalar|schema|subscription|type|union)\\b", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "@[A-Za-z_][A-Za-z0-9_]*", attributes: [.foregroundColor: theme.typeNameColor]),
+            HighlightRule(pattern: "\\b[A-Z][A-Za-z0-9_]*\\b", attributes: [.foregroundColor: theme.typeNameColor]),
+        ]
+    }
+
+    private static func protobufRules(theme: EditorTheme) -> [HighlightRule] {
+        cFamilyRules(theme: theme, keywords: [
+            "bool", "bytes", "double", "enum", "extend", "extensions", "false",
+            "fixed32", "fixed64", "float", "import", "int32", "int64", "map",
+            "message", "oneof", "optional", "package", "public", "repeated",
+            "reserved", "returns", "rpc", "service", "sfixed32", "sfixed64",
+            "sint32", "sint64", "stream", "string", "syntax", "true", "uint32",
+            "uint64"
+        ])
+    }
+
+    private static func nginxRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "#.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "'[^']*'", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\$[A-Za-z_][A-Za-z0-9_]*", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "(?m)^\\s*(?:events|http|location|mail|server|stream|upstream)\\b", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "(?m)^\\s*[A-Za-z_][A-Za-z0-9_]*(?=\\s+)", attributes: [.foregroundColor: theme.typeNameColor]),
+        ]
+    }
+
+    private static func apacheRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "#.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "<\\/?[A-Za-z][A-Za-z0-9]+[^>]*>", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "(?m)^\\s*[A-Za-z][A-Za-z0-9]+\\b", attributes: [.foregroundColor: theme.typeNameColor]),
+        ]
+    }
+
+    private static func nixRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "#.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "/\\*[\\s\\S]*?\\*/", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "''[\\s\\S]*?''", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\$\\{[^}]+\\}", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\b(?:assert|else|false|if|in|inherit|let|null|or|rec|then|true|with)\\b", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "\\b[A-Za-z_][A-Za-z0-9_.-]*(?=\\s*=)", attributes: [.foregroundColor: theme.typeNameColor]),
+        ]
+    }
+
+    private static func nimRules(theme: EditorTheme) -> [HighlightRule] {
+        hashCommentRules(theme: theme, keywords: [
+            "addr", "and", "as", "asm", "bind", "block", "break", "case",
+            "cast", "concept", "const", "continue", "converter", "defer",
+            "discard", "distinct", "div", "do", "elif", "else", "end", "enum",
+            "except", "export", "false", "finally", "for", "from", "func",
+            "if", "import", "in", "include", "interface", "is", "isnot", "iterator",
+            "let", "macro", "method", "mixin", "mod", "nil", "not", "notin",
+            "object", "of", "or", "out", "proc", "ptr", "raise", "ref", "return",
+            "shl", "shr", "static", "template", "true", "try", "tuple", "type",
+            "using", "var", "when", "while", "xor", "yield"
+        ])
+    }
+
+    private static func matlabRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "%.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "'(?:''|[^'])*'", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\b-?(?:\\d+\\.\\d+|\\d+)\\b", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\b(?:break|case|catch|classdef|continue|else|elseif|end|for|function|global|if|otherwise|parfor|persistent|return|spmd|switch|try|while)\\b", attributes: [.foregroundColor: theme.keywordColor]),
+        ]
+    }
+
+    private static func fortranRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "!.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "'(?:''|[^'])*'", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\b-?(?:\\d+\\.\\d+|\\d+)\\b", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\b(?:allocatable|allocate|call|case|contains|cycle|data|deallocate|do|else|elseif|end|endif|entry|equivalence|exit|external|function|if|implicit|in|include|integer|interface|module|none|only|parameter|program|real|recursive|return|select|subroutine|then|type|use|where|while)\\b", attributes: [.foregroundColor: theme.keywordColor]),
+        ]
+    }
+
+    private static func pascalRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: "\\{[\\s\\S]*?\\}", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\\(\\*[\\s\\S]*?\\*\\)", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "'(?:''|[^'])*'", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\b-?(?:\\d+\\.\\d+|\\d+)\\b", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\b(?:and|array|begin|case|class|const|constructor|destructor|div|do|downto|else|end|except|exports|file|finalization|finally|for|function|goto|if|implementation|in|inherited|initialization|inline|interface|label|library|mod|nil|not|object|of|or|packed|procedure|program|property|raise|record|repeat|resourcestring|set|shl|shr|string|then|threadvar|to|try|type|unit|until|uses|var|while|with|xor)\\b", attributes: [.foregroundColor: theme.keywordColor]),
+        ]
+    }
+
+    private static func assemblyRules(theme: EditorTheme) -> [HighlightRule] {
+        [
+            HighlightRule(pattern: ";.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "#.*", attributes: [.foregroundColor: theme.commentColor]),
+            HighlightRule(pattern: "\"(?:\\\\.|[^\"\\\\])*\"", attributes: [.foregroundColor: theme.stringColor]),
+            HighlightRule(pattern: "\\b(?:0x[0-9a-fA-F]+|\\d+)\\b", attributes: [.foregroundColor: theme.numberColor]),
+            HighlightRule(pattern: "\\.[A-Za-z_][A-Za-z0-9_]*", attributes: [.foregroundColor: theme.keywordColor]),
+            HighlightRule(pattern: "%?[re]?(?:ax|bx|cx|dx|si|di|sp|bp|ip)\\b|%?r(?:[0-9]|1[0-5])\\b", attributes: [.foregroundColor: theme.typeNameColor]),
         ]
     }
 

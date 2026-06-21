@@ -28,12 +28,12 @@ enum ScopeGuideCalculator {
         switch language {
         case .python, .yaml:
             return indentationGuides(in: source, language: language)
-        case .ruby:
+        case .ruby, .lua, .elixir:
             return explicitEndGuides(
                 in: source,
-                openers: rubyOpeners,
+                openers: language == .ruby ? rubyOpeners : endDelimitedOpeners,
                 closers: ["end"],
-                lineCommentPrefixes: ["#"]
+                lineCommentPrefixes: language == .lua ? ["--"] : ["#"]
             )
         case .shell:
             return shellGuides(in: source)
@@ -55,9 +55,9 @@ enum ScopeGuideCalculator {
             return markupGuides(in: source)
         case .markdown:
             return markdownGuides(in: source)
-        case .toml, .ini:
+        case .toml, .ini, .terraform, .nix:
             return sectionGuides(in: source)
-        case .env, .dockerfile, .diff:
+        case .env, .dockerfile, .diff, .nginx, .apache, .assembly:
             return []
         default:
             return braceGuides(in: source, language: language)
@@ -78,6 +78,10 @@ enum ScopeGuideCalculator {
 
     private nonisolated static let rubyOpeners: Set<String> = [
         "begin", "case", "class", "def", "do", "for", "if", "module", "unless", "until", "while"
+    ]
+
+    private nonisolated static let endDelimitedOpeners: Set<String> = [
+        "case", "class", "def", "defmodule", "defp", "do", "for", "function", "if", "unless", "while"
     ]
 
     private struct Line {

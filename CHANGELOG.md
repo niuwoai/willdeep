@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.97.0 - 2026-06-21
+
+### Added
+
+- 编辑器语法高亮从 26 种扩展到 60 种语言/文件类型,新增 Kotlin、Scala、Dart、Vue、Svelte、Astro、PowerShell、CMake、Objective-C/C++、F#、VB、Lua、Perl、R、Julia、Elixir、Erlang、Haskell、Clojure、Terraform/HCL、GraphQL、Protocol Buffers、Nginx、Apache、Nix、Solidity、Zig、Nim、D、MATLAB、Fortran、Pascal、Assembly 等常见源码/配置格式。
+- Agent 聊天历史与 Markdown 预览的围栏代码块同步支持新增语言别名,例如 `kotlin`、`terraform`、`graphql`、`proto`、`powershell`、`vue`、`svelte`、`astro`。
+- 新增回归测试覆盖新增扩展名识别、特殊文件名识别和代表性关键词高亮。
+
+### Changed
+
+- 版本号从 **1.96.0-rc4** 提升为 **1.97.0**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.96.0-rc4 - 2026-06-21
 
 ### Fixed

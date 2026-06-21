@@ -88,6 +88,11 @@ nonisolated enum EditorOutlineExtractor {
                 OutlineSpec(pattern: "^\\s*(?:export\\s+)?(?:async\\s+)?function\\s+([A-Za-z_$][A-Za-z0-9_$]*)", kind: .function),
                 OutlineSpec(pattern: "^\\s*(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][A-Za-z0-9_$]*)\\s*=\\s*(?:async\\s*)?\\(?", kind: .function),
             ])
+        case .kotlin, .scala, .dart:
+            return regexOutline(source, specs: [
+                OutlineSpec(pattern: "^\\s*(?:public\\s+|private\\s+|protected\\s+|internal\\s+|sealed\\s+|data\\s+|abstract\\s+|final\\s+)*\\b(?:class|interface|enum|object|trait)\\s+([A-Za-z_][A-Za-z0-9_]*)", kind: .type),
+                OutlineSpec(pattern: "^\\s*(?:public\\s+|private\\s+|protected\\s+|internal\\s+|static\\s+|override\\s+|async\\s+)*\\b(?:fun|def|function)\\s+([A-Za-z_][A-Za-z0-9_]*)", kind: .function),
+            ])
         case .ruby:
             return regexOutline(source, specs: [
                 OutlineSpec(pattern: "^\\s*(?:class|module)\\s+([A-Za-z_][A-Za-z0-9_:]*)", kind: .type),
@@ -108,7 +113,7 @@ nonisolated enum EditorOutlineExtractor {
                 OutlineSpec(pattern: "^\\s*func\\s+(?:\\([^)]*\\)\\s*)?([A-Za-z_][A-Za-z0-9_]*)", kind: .function),
                 OutlineSpec(pattern: "^\\s*type\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+(?:struct|interface)", kind: .type),
             ])
-        case .html:
+        case .html, .vue, .svelte, .astro:
             return htmlOutline(source)
         case .css:
             return regexOutline(source, specs: [
@@ -127,25 +132,32 @@ nonisolated enum EditorOutlineExtractor {
                 OutlineSpec(pattern: "^\\s*class\\s+([A-Za-z_][A-Za-z0-9_]*)", kind: .type),
                 OutlineSpec(pattern: "^\\s*(?:async\\s+)?def\\s+([A-Za-z_][A-Za-z0-9_]*)", kind: .function),
             ])
-        case .shell:
+        case .shell, .powershell:
             return regexOutline(source, specs: [
                 OutlineSpec(pattern: "^\\s*(?:function\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*\\(\\)\\s*\\{", kind: .function),
+                OutlineSpec(pattern: "^\\s*function\\s+([A-Za-z_][A-Za-z0-9_-]*)\\b", kind: .function),
             ])
         case .rust:
             return regexOutline(source, specs: [
                 OutlineSpec(pattern: "^\\s*(?:pub\\s+)?(?:struct|enum|trait|impl)\\s+([A-Za-z_][A-Za-z0-9_]*)", kind: .type),
                 OutlineSpec(pattern: "^\\s*(?:pub\\s+)?(?:async\\s+)?fn\\s+([A-Za-z_][A-Za-z0-9_]*)", kind: .function),
             ])
-        case .c, .cpp, .csharp:
+        case .c, .cpp, .objectiveC, .objectiveCpp, .csharp, .fsharp, .visualBasic, .solidity, .zig, .nim, .dlang, .fortran, .pascal:
             return regexOutline(source, specs: [
-                OutlineSpec(pattern: "^\\s*(?:public\\s+|private\\s+|protected\\s+)?(?:class|struct|enum|interface)\\s+([A-Za-z_][A-Za-z0-9_]*)", kind: .type),
-                OutlineSpec(pattern: "^\\s*(?:public\\s+|private\\s+|protected\\s+|static\\s+|virtual\\s+|override\\s+)*[A-Za-z_][A-Za-z0-9_<>,:*&?\\[\\] ]+\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(", kind: .function),
+                OutlineSpec(pattern: "^\\s*(?:@interface\\s+|@implementation\\s+|public\\s+|private\\s+|protected\\s+|internal\\s+)?(?:class|struct|enum|interface|contract|module|program|record|object|type)\\s+([A-Za-z_][A-Za-z0-9_]*)", kind: .type),
+                OutlineSpec(pattern: "^\\s*(?:public\\s+|private\\s+|protected\\s+|static\\s+|virtual\\s+|override\\s+|pub\\s+|function\\s+|procedure\\s+|subroutine\\s+)*[A-Za-z_][A-Za-z0-9_<>,:*&?\\[\\] ]+\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(", kind: .function),
+            ])
+        case .lua, .perl, .r, .julia, .elixir, .erlang, .haskell, .clojure, .matlab:
+            return regexOutline(source, specs: [
+                OutlineSpec(pattern: "^\\s*(?:classdef|defmodule|module|data|type|defrecord|defprotocol)\\s+([A-Za-z_][A-Za-z0-9_.:]*)", kind: .type),
+                OutlineSpec(pattern: "^\\s*(?:function|sub|def|defp|defn|fn)\\s+([A-Za-z_][A-Za-z0-9_.'!?-]*)", kind: .function),
+                OutlineSpec(pattern: "^\\s*([A-Za-z_][A-Za-z0-9_.]*)\\s*<-\\s*function\\b", kind: .function),
             ])
         case .yaml:
             return regexOutline(source, specs: [
                 OutlineSpec(pattern: "^\\s*([A-Za-z0-9_.-]+)\\s*:", kind: .key),
             ])
-        case .toml, .ini, .env:
+        case .toml, .ini, .env, .terraform, .nix:
             return regexOutline(source, specs: [
                 OutlineSpec(pattern: "^\\s*\\[([^\\]]+)\\]", kind: .section),
                 OutlineSpec(pattern: "^\\s*([A-Za-z_][A-Za-z0-9_.-]*)(?=\\s*[=:])", kind: .key),
@@ -162,9 +174,27 @@ nonisolated enum EditorOutlineExtractor {
             return regexOutline(source, specs: [
                 OutlineSpec(pattern: "^\\s*(FROM|RUN|CMD|ENTRYPOINT|COPY|ADD|ENV|ARG|WORKDIR|EXPOSE)\\b", kind: .section),
             ])
-        case .makefile:
+        case .makefile, .cmake:
             return regexOutline(source, specs: [
                 OutlineSpec(pattern: "^\\s*([A-Za-z0-9_./%-]+)\\s*:(?!=)", kind: .section),
+                OutlineSpec(pattern: "^\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\(", kind: .section),
+            ])
+        case .graphql:
+            return regexOutline(source, specs: [
+                OutlineSpec(pattern: "^\\s*(?:type|interface|input|enum|union|scalar|query|mutation|subscription)\\s+([A-Za-z_][A-Za-z0-9_]*)", kind: .section),
+            ])
+        case .protobuf:
+            return regexOutline(source, specs: [
+                OutlineSpec(pattern: "^\\s*(?:message|service|enum)\\s+([A-Za-z_][A-Za-z0-9_]*)", kind: .section),
+                OutlineSpec(pattern: "^\\s*rpc\\s+([A-Za-z_][A-Za-z0-9_]*)", kind: .function),
+            ])
+        case .nginx, .apache:
+            return regexOutline(source, specs: [
+                OutlineSpec(pattern: "^\\s*(?:server|location|upstream|events|http|<VirtualHost|<Directory)\\b\\s*([^\\{>]*)", kind: .section),
+            ])
+        case .assembly:
+            return regexOutline(source, specs: [
+                OutlineSpec(pattern: "^\\s*([A-Za-z_.$][A-Za-z0-9_.$]*):", kind: .section),
             ])
         case .diff:
             return []
