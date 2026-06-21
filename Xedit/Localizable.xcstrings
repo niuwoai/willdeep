@@ -3202,6 +3202,102 @@
         }
       }
     },
+    "composer.workspace.choose-folder" : {
+      "comment" : "Composer workspace picker menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose folder…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择文件夹…" } }
+      }
+    },
+    "composer.workspace.choose-workspace.help" : {
+      "comment" : "Composer workspace picker tooltip when no workspace is selected",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose a workspace for this chat" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "为此聊天选择工作区" } }
+      }
+    },
+    "composer.workspace.copy-branch-name" : {
+      "comment" : "Composer workspace picker menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy branch name" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复制分支名" } }
+      }
+    },
+    "composer.workspace.copy-path" : {
+      "comment" : "Composer workspace picker menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy path" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复制路径" } }
+      }
+    },
+    "composer.workspace.git-worktrees" : {
+      "comment" : "Composer workspace picker section title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Git worktrees" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Git worktree" } }
+      }
+    },
+    "composer.workspace.new-worktree" : {
+      "comment" : "Composer workspace picker menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New worktree…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "新建 worktree…" } }
+      }
+    },
+    "composer.workspace.pick-folder" : {
+      "comment" : "Composer workspace picker button label when no workspace is selected",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pick folder" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择文件夹" } }
+      }
+    },
+    "composer.workspace.prune-stale-worktrees" : {
+      "comment" : "Composer workspace picker menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Prune stale worktrees" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清理失效 worktree" } }
+      }
+    },
+    "composer.workspace.remote-runtimes" : {
+      "comment" : "Composer workspace picker section title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remote runtimes" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "远程运行环境" } }
+      }
+    },
+    "composer.workspace.remove-current-worktree" : {
+      "comment" : "Composer workspace picker destructive menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove current worktree…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除当前 worktree…" } }
+      }
+    },
+    "composer.workspace.show-in-finder" : {
+      "comment" : "Composer workspace picker menu item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show in Finder" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 Finder 中显示" } }
+      }
+    },
+    "composer.workspace.switch-workspace" : {
+      "comment" : "Composer workspace picker section title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Switch workspace" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "切换工作区" } }
+      }
+    },
     "Compress" : {
 
     },

@@ -173,6 +173,21 @@ enum L10n {
         static let stopHelp = String(localized: "composer.stop.help", defaultValue: "Stop the current Agent turn")
     }
 
+    enum ComposerWorkspace {
+        static let chooseFolder = String(localized: "composer.workspace.choose-folder", defaultValue: "Choose folder…")
+        static let chooseWorkspaceHelp = String(localized: "composer.workspace.choose-workspace.help", defaultValue: "Choose a workspace for this chat")
+        static let copyBranchName = String(localized: "composer.workspace.copy-branch-name", defaultValue: "Copy branch name")
+        static let copyPath = String(localized: "composer.workspace.copy-path", defaultValue: "Copy path")
+        static let gitWorktrees = String(localized: "composer.workspace.git-worktrees", defaultValue: "Git worktrees")
+        static let newWorktree = String(localized: "composer.workspace.new-worktree", defaultValue: "New worktree…")
+        static let pickFolder = String(localized: "composer.workspace.pick-folder", defaultValue: "Pick folder")
+        static let pruneStaleWorktrees = String(localized: "composer.workspace.prune-stale-worktrees", defaultValue: "Prune stale worktrees")
+        static let remoteRuntimes = String(localized: "composer.workspace.remote-runtimes", defaultValue: "Remote runtimes")
+        static let removeCurrentWorktree = String(localized: "composer.workspace.remove-current-worktree", defaultValue: "Remove current worktree…")
+        static let showInFinder = String(localized: "composer.workspace.show-in-finder", defaultValue: "Show in Finder")
+        static let switchWorkspace = String(localized: "composer.workspace.switch-workspace", defaultValue: "Switch workspace")
+    }
+
     enum Command {
         static let closeTabShortcut = String(localized: "command.close-tab.shortcut", defaultValue: "⌘W")
         static let closeTabSubtitle = String(localized: "command.close-tab.subtitle", defaultValue: "Close the active tab")

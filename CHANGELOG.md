@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.99.1-rc4 - 2026-06-21
+
+### Fixed
+
+- Composer workspace 选择菜单的可见文案改走本地化,补齐 `Pick folder`、`Choose folder…`、`Switch workspace`、`Remote runtimes`、worktree 操作和路径/分支复制菜单的简体中文翻译。
+
+### Changed
+
+- 版本号从 **1.99.1-rc3** 提升为 **1.99.1-rc4**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.99.1-rc3 - 2026-06-21
 
 ### Fixed
