@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.99.1-rc6 - 2026-06-21
+
+### Fixed
+
+- Agent 顶部“切换到 Editor Mode”按钮图标从分屏样式改为 `pencil.and.outline`,更明确表达回到编辑器书写/编辑的语义。
+
+### Changed
+
+- 版本号从 **1.99.1-rc5** 提升为 **1.99.1-rc6**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.99.1-rc5 - 2026-06-21
 
 ### Fixed

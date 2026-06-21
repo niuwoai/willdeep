@@ -33,7 +33,7 @@ struct AgentChatHeader: View {
                 // 跟踪。
                 EditorAppStateRegistry.shared.focusCurrentEditorWindow()
             } label: {
-                Image(systemName: "rectangle.split.2x1")
+                Image(systemName: "pencil.and.outline")
             }
             .buttonStyle(.plain)
             .focusable(false)
