@@ -644,7 +644,7 @@ struct AgentChatStatusBar: View {
                         .truncationMode(.middle)
                 }
             } else {
-                Text("No workspace")
+                Text(L10n.Workspace.noWorkspace)
             }
 
             if appState.agentSessionDidEditFiles && !appState.agentWorktreeChanges.isEmpty {

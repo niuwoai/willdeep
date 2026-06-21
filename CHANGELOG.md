@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.99.1-rc5 - 2026-06-21
+
+### Fixed
+
+- 补齐模型用量热力图的 War and Peace 趣味提示、Composer/侧栏“无工作区”状态文案的简体中文本地化。
+- Composer context hint 的 `Open a folder to enable tools`、`Selection included · Tools available`、`Active file included · Tools available` 改走本地化资源。
+
+### Changed
+
+- 版本号从 **1.99.1-rc4** 提升为 **1.99.1-rc5**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.99.1-rc4 - 2026-06-21
 
 ### Fixed

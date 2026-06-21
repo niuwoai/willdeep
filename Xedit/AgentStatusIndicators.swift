@@ -367,10 +367,10 @@ struct AgentStatsDashboard: View {
 
     private func funFactString(ratio: Double) -> String {
         if ratio >= 1 {
-            return String(format: "You've used ~%.1f× more tokens than War and Peace.", ratio)
+            return L10n.ModelUsage.warAndPeaceMoreTokens(String(format: "%.1f", ratio))
         }
         let pct = Int(ratio * 100)
-        return "You've used about \(pct)% of War and Peace in tokens so far."
+        return L10n.ModelUsage.warAndPeacePercent("\(pct)")
     }
 
     private func formatCompact(_ count: Int) -> String {

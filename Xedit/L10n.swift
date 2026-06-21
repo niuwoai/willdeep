@@ -371,6 +371,10 @@ enum L10n {
         static let openSidePanel = String(localized: "header.open-side-panel", defaultValue: "Open Side Panel")
     }
 
+    enum Workspace {
+        static let noWorkspace = String(localized: "workspace.no-workspace", defaultValue: "No workspace")
+    }
+
     enum AgentSidePanel {
         static let preview = String(localized: "agent-side-panel.preview", defaultValue: "Preview")
         static let diff = String(localized: "agent-side-panel.diff", defaultValue: "Diff")
@@ -392,6 +396,12 @@ enum L10n {
         static let previewEmpty = String(localized: "agent-side-panel.preview-empty", defaultValue: "Pick a markdown or HTML file to preview.")
         static let previewChoose = String(localized: "agent-side-panel.preview-choose", defaultValue: "Choose File…")
         static let previewUnsupported = String(localized: "agent-side-panel.preview-unsupported", defaultValue: "Only Markdown and HTML can be previewed here.")
+    }
+
+    enum AgentPanel {
+        static let activeFileIncludedHint = String(localized: "agent-panel.active-file-included-hint", defaultValue: "Active file included · Tools available")
+        static let openFolderHint = String(localized: "agent-panel.open-folder-hint", defaultValue: "Open a folder to enable tools")
+        static let selectionIncludedHint = String(localized: "agent-panel.selection-included-hint", defaultValue: "Selection included · Tools available")
     }
 
     enum HeatmapCell {
@@ -495,6 +505,14 @@ enum L10n {
         static let tokensHelp = { (a1: String, a2: String) -> String in
             let template = String(localized: "model-usage.tokens-help", defaultValue: "%@ input tokens, %@ output tokens")
             return String(format: template, a1, a2)
+        }
+        static let warAndPeaceMoreTokens = { (a1: String) -> String in
+            let template = String(localized: "model-usage.war-and-peace.more-tokens", defaultValue: "You've used ~%@× more tokens than War and Peace.")
+            return String(format: template, a1)
+        }
+        static let warAndPeacePercent = { (a1: String) -> String in
+            let template = String(localized: "model-usage.war-and-peace.percent", defaultValue: "You've used about %@%% of War and Peace in tokens so far.")
+            return String(format: template, a1)
         }
     }
 

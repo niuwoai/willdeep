@@ -609,7 +609,7 @@ struct AgentSessionsSidebar: View {
     }
 
     private func workspaceDisplayName(_ key: String) -> String {
-        if key == AgentSession.noWorkspaceSidebarGroupKey { return "No workspace" }
+        if key == AgentSession.noWorkspaceSidebarGroupKey { return L10n.Workspace.noWorkspace }
         if let remote = remoteWorkspaceGroup(from: key) {
             let runtime = AgentRuntimeStore.descriptor(id: remote.runtimeID)
             return WorkspacePresentation.remoteDisplayName(runtime: runtime, path: remote.path)

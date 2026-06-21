@@ -586,6 +586,60 @@
         }
       }
     },
+    "agent-panel.active-file-included-hint" : {
+      "comment" : "composer context hint when the active file is attached",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active file included · Tools available"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已包含当前文件 · 工具可用"
+          }
+        }
+      }
+    },
+    "agent-panel.open-folder-hint" : {
+      "comment" : "composer context hint when no workspace is open",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open a folder to enable tools"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开文件夹后可启用工具"
+          }
+        }
+      }
+    },
+    "agent-panel.selection-included-hint" : {
+      "comment" : "composer context hint when selected text is attached",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selection included · Tools available"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已包含选区 · 工具可用"
+          }
+        }
+      }
+    },
     "agent-side-panel.plan" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
@@ -5576,6 +5630,42 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 输入令牌，%@ 输出令牌"
+          }
+        }
+      }
+    },
+    "model-usage.war-and-peace.more-tokens" : {
+      "comment" : "usage heatmap fun fact comparing total tokens to War and Peace",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You've used ~%@× more tokens than War and Peace."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你使用的 token 约为《战争与和平》的 %@ 倍。"
+          }
+        }
+      }
+    },
+    "model-usage.war-and-peace.percent" : {
+      "comment" : "usage heatmap fun fact for totals below one War and Peace equivalent",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You've used about %@%% of War and Peace in tokens so far."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目前已使用的 token 约为《战争与和平》的 %@%%。"
           }
         }
       }
@@ -16144,6 +16234,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "展开会话列表"
+          }
+        }
+      }
+    },
+    "workspace.no-workspace" : {
+      "comment" : "generic label for sessions or composer state without an attached workspace",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No workspace"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无工作区"
           }
         }
       }
