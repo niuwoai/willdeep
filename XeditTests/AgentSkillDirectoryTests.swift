@@ -35,4 +35,54 @@ struct AgentSkillDirectoryTests {
         #expect(settingsList.contains { $0.identifier == "browser" && !$0.isEnabled })
         #expect(!agentList.contains { $0.identifier == "browser" })
     }
+
+    @Test
+    func userSkillDeleteRemovesSkillDirectory() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WillDeepSkillDeleteTests-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        let skillURL = try AgentSkillFileManager.createUserSkill(
+            name: "Delete Me",
+            description: "Temporary skill",
+            body: "Use only inside this test.",
+            root: root
+        )
+        let skillDirectory = skillURL.deletingLastPathComponent()
+        let entry = AgentSkillEntry(
+            identifier: "delete-me",
+            name: "Delete Me",
+            description: "Temporary skill",
+            url: skillURL,
+            source: .user,
+            isEnabled: true
+        )
+
+        try AgentSkillFileManager.deleteUserSkill(entry, allowedRoots: [root])
+
+        #expect(!FileManager.default.fileExists(atPath: skillDirectory.path))
+    }
+
+    @Test
+    func deleteRejectsNonUserSkills() throws {
+        let entry = AgentSkillEntry(
+            identifier: "browser",
+            name: "browser",
+            description: "",
+            url: URL(fileURLWithPath: "/Applications/WillDeep.app/Contents/Resources/BundledSkills/browser/SKILL.md"),
+            source: .bundled,
+            isEnabled: true
+        )
+
+        do {
+            try AgentSkillFileManager.deleteUserSkill(entry)
+            Issue.record("Expected bundled skill deletion to fail.")
+        } catch AgentSkillFileError.notUserSkill {
+            #expect(true)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
 }

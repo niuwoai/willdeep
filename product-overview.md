@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-23 | Current version: v1.103.0-rc1
+> Last updated: 2026-06-23 | Current version: v1.103.0-rc2
 
 ## Positioning
 
@@ -33,6 +33,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **内置技能内容展开命中区修复（1.102.0-rc16）** —— Settings → Skills 的“查看内容”文字现在和前置展开箭头一样可点击,内置/用户/插件技能都可直接点文字展开或收起 SKILL.md 内容。
 - **Mobile Gateway 配对刷新修复（1.102.0-rc17）** —— Settings → Mobile Gateway 的“刷新”在配对 token 过期或已被领用时会自动 rotate 生成新二维码,不再只显示“当前不可配对”。
 - **Editor 唤回与默认全局提示词（1.103.0-rc1）** —— “显示 Editor”菜单和 Agent mode 笔形按钮在原 editor 窗口已关闭时会重新打开主 editor 窗口；Settings → Rules 对新用户默认生成 `~/.willdeep/CLAUDE.md`,内置 Codex/Alma 风格全局规则模板,并继续允许用户改路径和编辑内容。
+- **用户技能可删除（1.103.0-rc2）** —— Settings → Skills 的用户技能行新增删除入口，删除前会确认，并只允许移除 `~/.willdeep/skills` 或 legacy `~/.codex/skills` 下的用户技能目录；内置技能和插件技能不会被误删。
 - **Composer 模型热门/上新分组（1.102.0-rc7）** —— Agent composer 模型菜单消费 some.im `/v1/models` / 公开模型定价里的 `is_hot`、`is_new` 标记,在 Recently used 后展示 Hot / New 分组,并与 Recently fetched 去重。
 - **CLI 缺失文件新建（1.102.0-rc2）** —— `willdeep <path>` 现在通过 `willdeep://open?path=...` 把路径交给 App 处理,不存在但父目录存在的文件会自动创建空文件并打开,避免 macOS `open` 在 App 启动前直接报 "does not exist"。
 - **some.im 多模态整合（1.102.0-rc1）** —— Settings 与 Onboarding 新增 some.im 配置入口,API Key 存 Keychain,可拉取模型并设置图片/视频生成首选与优先模型；内置 `generate_image` 工具在 some.im 配置后直接调用 relay 图片生成接口,默认 `gpt-image-2`,并且 OpenAI Chat 兼容请求会过滤 `.widget` / `.workflowReport` 本地卡片,避免 UI-only role 泄漏给 some.im。

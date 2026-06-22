@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.103.0-rc2 - 2026-06-23
+
+### Added
+
+- Settings → Skills 的用户技能行新增删除入口，删除前会弹出确认，并只允许删除用户技能目录，内置技能和插件技能不显示该动作。
+
+### Changed
+
+- 版本号从 **1.103.0-rc1** 提升为 **1.103.0-rc2**（用户技能删除能力）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
 ## 1.103.0-rc1 - 2026-06-23
 
 ### Added

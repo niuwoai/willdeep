@@ -432,6 +432,16 @@ struct AgentSkillSettingsView: View {
                     }
                 ))
                 .labelsHidden()
+
+                if skill.source == .user {
+                    Button(role: .destructive) {
+                        deleteUserSkill(skill, displayName: displayName)
+                    } label: {
+                        Label(L10n.Settings.Skill.deleteUserSkill, systemImage: "trash")
+                    }
+                    .help(L10n.Settings.Skill.deleteUserSkillHelp)
+                    .buttonStyle(.borderless)
+                }
             }
 
             DisclosureGroup(isExpanded: skillContentExpansionBinding(for: skill.identifier)) {
@@ -532,6 +542,29 @@ struct AgentSkillSettingsView: View {
         } catch {
             statusMessage = error.localizedDescription
         }
+    }
+
+    private func deleteUserSkill(_ skill: AgentSkillEntry, displayName: String) {
+        guard confirmDeleteUserSkill(displayName: displayName) else { return }
+        do {
+            try AgentSkillFileManager.deleteUserSkill(skill)
+            AgentSkillSettingsStore.setSkillEnabled(identifier: skill.identifier, enabled: true)
+            expandedSkillIdentifiers.remove(skill.identifier)
+            refreshSkills()
+            statusMessage = L10n.Settings.Skill.deletedUserSkill(displayName)
+        } catch {
+            statusMessage = L10n.Settings.Skill.deleteUserSkillFailed(error.localizedDescription)
+        }
+    }
+
+    private func confirmDeleteUserSkill(displayName: String) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L10n.Settings.Skill.deleteUserSkillTitle(displayName)
+        alert.informativeText = L10n.Settings.Skill.deleteUserSkillMessage
+        alert.addButton(withTitle: L10n.Settings.Skill.deleteUserSkillConfirm)
+        alert.addButton(withTitle: L10n.Settings.Skill.cancelButton)
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     private func openUserSkillsFolder() {

@@ -145,6 +145,27 @@ enum AgentSkillFileManager {
         return skillURL
     }
 
+    static func deleteUserSkill(
+        _ skill: AgentSkillEntry,
+        allowedRoots: [URL] = [userSkillsRoot, legacyCodexSkillsRoot]
+    ) throws {
+        guard skill.source == .user else {
+            throw AgentSkillFileError.notUserSkill
+        }
+
+        let skillURL = skill.url.standardizedFileURL
+        guard skillURL.lastPathComponent == "SKILL.md" else {
+            throw AgentSkillFileError.unsafeDeletePath
+        }
+
+        let skillDirectory = skillURL.deletingLastPathComponent().standardizedFileURL
+        guard isSkillDirectory(skillDirectory, inside: allowedRoots) else {
+            throw AgentSkillFileError.unsafeDeletePath
+        }
+
+        try FileManager.default.removeItem(at: skillDirectory)
+    }
+
     private static func skillSlug(from name: String) -> String {
         let lowercased = name.lowercased()
         var slug = ""
@@ -160,11 +181,21 @@ enum AgentSkillFileManager {
         }
         return slug.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
     }
+
+    private static func isSkillDirectory(_ directory: URL, inside allowedRoots: [URL]) -> Bool {
+        let directoryPath = directory.standardizedFileURL.path
+        return allowedRoots.contains { root in
+            let rootPath = root.standardizedFileURL.path
+            return directoryPath.hasPrefix(rootPath + "/")
+        }
+    }
 }
 
 enum AgentSkillFileError: LocalizedError {
     case invalidName
     case alreadyExists(String)
+    case notUserSkill
+    case unsafeDeletePath
 
     var errorDescription: String? {
         switch self {
@@ -172,6 +203,10 @@ enum AgentSkillFileError: LocalizedError {
             return "Skill name is required."
         case .alreadyExists(let slug):
             return "A user skill named \(slug) already exists."
+        case .notUserSkill:
+            return "Only user skills can be deleted."
+        case .unsafeDeletePath:
+            return "The skill path is outside the user skills folder."
         }
     }
 }

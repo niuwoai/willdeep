@@ -1521,6 +1521,10 @@ enum L10n {
             static let noSkills = String(localized: "settings.skill.no-skills", defaultValue: "No skills in this group.")
             static let viewContent = String(localized: "settings.skill.view-content", defaultValue: "View content")
             static let unableToRead = String(localized: "settings.skill.unable-to-read", defaultValue: "Unable to read skill content.")
+            static let deleteUserSkill = String(localized: "settings.skill.delete-user-skill", defaultValue: "Delete")
+            static let deleteUserSkillHelp = String(localized: "settings.skill.delete-user-skill-help", defaultValue: "Delete this user skill")
+            static let deleteUserSkillMessage = String(localized: "settings.skill.delete-user-skill-message", defaultValue: "This removes the user skill folder from disk. Built-in and plugin skills are not affected.")
+            static let deleteUserSkillConfirm = String(localized: "settings.skill.delete-user-skill-confirm", defaultValue: "Delete")
             static let newUserSkillTitle = String(localized: "settings.skill.new-user-skill", defaultValue: "New User Skill")
             static let skillNamePlaceholder = String(localized: "settings.skill.name-placeholder", defaultValue: "Skill name")
             static let descriptionPlaceholder = String(localized: "settings.skill.description-placeholder", defaultValue: "Description")
@@ -1530,6 +1534,18 @@ enum L10n {
             static let openedFolder = String(localized: "settings.skill.opened-folder", defaultValue: "Opened user skills folder.")
             static func createdSkill(_ a1: String) -> String {
                 let template = String(localized: "settings.skill.created", defaultValue: "Created %@.")
+                return String(format: template, a1)
+            }
+            static func deleteUserSkillTitle(_ a1: String) -> String {
+                let template = String(localized: "settings.skill.delete-user-skill-title", defaultValue: "Delete %@?")
+                return String(format: template, a1)
+            }
+            static func deletedUserSkill(_ a1: String) -> String {
+                let template = String(localized: "settings.skill.deleted-user-skill", defaultValue: "Deleted %@.")
+                return String(format: template, a1)
+            }
+            static func deleteUserSkillFailed(_ a1: String) -> String {
+                let template = String(localized: "settings.skill.delete-user-skill-failed", defaultValue: "Could not delete skill: %@")
                 return String(format: template, a1)
             }
         }
