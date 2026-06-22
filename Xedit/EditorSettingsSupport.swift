@@ -16,6 +16,7 @@ enum EditorSettingsTab: Hashable {
     case appearance
     case workspace
     case agent
+    case someIM
     case localAgents
     case remoteRuntimes
     case mobileGateway

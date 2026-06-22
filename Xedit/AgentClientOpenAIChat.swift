@@ -290,6 +290,11 @@ struct OpenAIChatAdapter {
         while index < messages.count {
             let message = messages[index]
 
+            if message.role == .workflowReport || message.role == .widget {
+                index += 1
+                continue
+            }
+
             if message.role == .tool {
                 index += 1
                 continue

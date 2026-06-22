@@ -16,6 +16,53 @@ private enum EditorWorkflowTestError: Error {
 }
 
 extension WillDeepTests {
+    @Test("willdeep open URL decodes a file path")
+    func testWillDeepOpenURLDecodesPath() throws {
+        let path = "/tmp/willdeep cli path/\u{4e2d}\u{6587}.txt"
+        var components = URLComponents()
+        components.scheme = "willdeep"
+        components.host = "open"
+        components.queryItems = [URLQueryItem(name: "path", value: path)]
+
+        let url = try #require(components.url)
+        let decoded = try #require(WillDeepExternalURLParser.fileURL(fromOpenURL: url))
+
+        #expect(decoded.path == path)
+    }
+
+    @MainActor
+    @Test("external CLI open creates a missing file when the parent exists")
+    func testOpenExternalURLCreatesMissingFile() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_cli_create_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let fileURL = tempDir.appendingPathComponent("limit.maxfiles.plist")
+        let appState = AppState()
+
+        appState.openExternalURL(fileURL, createsMissingFileIfNeeded: true)
+
+        #expect(FileManager.default.fileExists(atPath: fileURL.path))
+        #expect(appState.openedFileURL == fileURL)
+    }
+
+    @MainActor
+    @Test("missing external file draft opens as edited without touching disk")
+    func testMissingExternalFileDraftOpensEditedTab() {
+        let fileURL = URL(fileURLWithPath: "/tmp/willdeep_cli_draft_\(UUID().uuidString).plist")
+        let appState = AppState()
+
+        appState.openMissingExternalFileDraft(at: fileURL)
+
+        #expect(appState.openedFileURL == fileURL)
+        #expect(appState.fileContent.isEmpty)
+        #expect(appState.isEdited == true)
+        #expect(appState.activeTab?.url == fileURL)
+        #expect(appState.activeTab?.isEdited == true)
+        #expect(!FileManager.default.fileExists(atPath: fileURL.path))
+    }
+
     // MARK: - File Loading Timing (c1)
 
     // This drives loadFile's async DispatchQueue.global → DispatchQueue.main

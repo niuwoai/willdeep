@@ -153,6 +153,14 @@ enum L10n {
         }
     }
 
+    enum Onboarding {
+        enum SomeIM {
+            static let title = String(localized: "onboarding.some-im.title", defaultValue: "Connect some.im")
+            static let subtitle = String(localized: "onboarding.some-im.subtitle", defaultValue: "Optional. Add your relay key so image, video, and future multimodal skills can route to the right model automatically.")
+            static let note = String(localized: "onboarding.some-im.note", defaultValue: "You can skip this and configure it later in Settings -> some.im. The image default is gpt-image-2.")
+        }
+    }
+
     enum PluginPicker {
         static let help = String(localized: "plugin-picker.help", defaultValue: "Browse installed plugin skills and MCP capabilities.")
         static func installedPlugins(_ a1: String) -> String {
@@ -657,6 +665,7 @@ enum L10n {
     }
 
     enum StatsDashboard {
+        static let range24h = String(localized: "stats-dashboard.range.24h", defaultValue: "24h")
         static let range30d = String(localized: "stats-dashboard.range.30d", defaultValue: "30d")
         static let range7d = String(localized: "stats-dashboard.range.7d", defaultValue: "7d")
         static let rangeAll = String(localized: "stats-dashboard.range.all", defaultValue: "All")
@@ -720,6 +729,7 @@ enum L10n {
         static let tabAppearance = String(localized: "settings.tab.appearance", defaultValue: "Format")
         static let tabWorkspace = String(localized: "settings.tab.workspace", defaultValue: "Workspace")
         static let tabAgent = String(localized: "settings.tab.agent", defaultValue: "AI Providers")
+        static let tabSomeIM = String(localized: "settings.tab.some-im", defaultValue: "some.im")
         static let tabMemory = String(localized: "settings.tab.memory", defaultValue: "Memory")
         static let tabRules = String(localized: "settings.tab.rules", defaultValue: "Rules")
         static let tabSkills = String(localized: "settings.tab.skills", defaultValue: "Skills")
@@ -887,6 +897,27 @@ enum L10n {
                 case .brave:
                     return providerBrave
                 }
+            }
+        }
+
+        enum SomeIM {
+            static let connectionSection = String(localized: "settings.some-im.connection-section", defaultValue: "some.im Integration")
+            static let enabledToggle = String(localized: "settings.some-im.enabled-toggle", defaultValue: "Use some.im for multimodal generation")
+            static let baseURLLabel = String(localized: "settings.some-im.base-url", defaultValue: "Base URL")
+            static let apiKeyLabel = String(localized: "settings.some-im.api-key", defaultValue: "API Key")
+            static let fetchModels = String(localized: "settings.some-im.fetch-models", defaultValue: "Fetch Models")
+            static let fetchingModels = String(localized: "settings.some-im.fetching-models", defaultValue: "Fetching...")
+            static let description = String(localized: "settings.some-im.description", defaultValue: "Stores your some.im key in Keychain and lets WillDeep route image/video generation to the relay instead of guessing whether the active chat model supports generation.")
+            static let imageSection = String(localized: "settings.some-im.image-section", defaultValue: "Image generation")
+            static let videoSection = String(localized: "settings.some-im.video-section", defaultValue: "Video generation")
+            static let imageModelLabel = String(localized: "settings.some-im.image-model", defaultValue: "Image Model")
+            static let videoModelLabel = String(localized: "settings.some-im.video-model", defaultValue: "Video Model")
+            static let priorityPlaceholder = String(localized: "settings.some-im.priority-placeholder", defaultValue: "Priority models, comma-separated")
+            static let imageHelp = String(localized: "settings.some-im.image-help", defaultValue: "Image generation tools prefer this list. Default is gpt-image-2 when some.im is configured.")
+            static let videoHelp = String(localized: "settings.some-im.video-help", defaultValue: "Video generation tools will use this priority list once video workflows are connected.")
+            static func fetchedModels(_ a1: String) -> String {
+                let template = String(localized: "settings.some-im.fetched-models", defaultValue: "Fetched %@ models.")
+                return String(format: template, a1)
             }
         }
 

@@ -308,7 +308,9 @@ struct EditorCoreBehaviorTests {
         let script = CommandLineToolInstaller.scriptContent(appBundleURL: appURL)
 
         #expect(script.hasPrefix("#!/bin/zsh"))
-        #expect(script.contains("/usr/bin/open -a \"$app_path\" -- \"$@\""))
+        #expect(script.contains("encode_path()"))
+        #expect(script.contains("willdeep://open?path=$encoded_path"))
+        #expect(script.contains("/usr/bin/open -a \"$app_path\" \"$target\""))
         #expect(script.contains("app_path='/Applications/WillDeep.app'"))
     }
 

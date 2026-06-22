@@ -131,6 +131,18 @@ extension AppState {
         set { activeRuntime?.learningEvents = newValue }
     }
 
+    /// Learning events captured strictly within the CURRENT turn (>= 最近一条
+    /// user message 的 createdAt)。`agentLearningEvents` 本身是 runtime 上
+    /// 跨轮累计的最近 24 条,直接拿来当"本轮"会让 footer popover 把上一轮
+    /// 的事件也算进去 —— 1.102.0-rc1 修复(原 rc2 修复并入本版本)。
+    var agentCurrentTurnLearningEvents: [AgentLearningEvent] {
+        guard let runtime = activeRuntime else { return [] }
+        guard let latestUser = runtime.messages.last(where: { $0.role == .user }) else {
+            return []
+        }
+        return runtime.learningEvents.filter { $0.createdAt >= latestUser.createdAt }
+    }
+
     /// True when Plan mode is on and no approved plan exists. While true,
     /// all write/exec tools and patch application are blocked.
     var isPlanGateActive: Bool {

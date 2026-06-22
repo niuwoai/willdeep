@@ -303,10 +303,29 @@ private struct WindowRootView: View {
     }
 
     private func handleExternalURL(_ url: URL) {
+        if let fileURL = WillDeepExternalURLParser.fileURL(fromOpenURL: url) {
+            appState.openExternalURL(fileURL, createsMissingFileIfNeeded: true)
+            return
+        }
+
         if CollaborationConnectorOAuthCoordinator.handleCallback(url) {
             return
         }
         appState.openExternalURL(url)
+    }
+}
+
+enum WillDeepExternalURLParser {
+    static func fileURL(fromOpenURL url: URL) -> URL? {
+        guard url.scheme == "willdeep",
+              url.host == "open",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let path = components.queryItems?.first(where: { $0.name == "path" })?.value,
+              !path.isEmpty else {
+            return nil
+        }
+
+        return URL(fileURLWithPath: path).standardizedFileURL
     }
 }
 

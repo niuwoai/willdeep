@@ -1,5 +1,54 @@
 # Changelog
 
+## 1.102.0-rc3 - 2026-06-22
+
+### Fixed
+
+- some.im 在 Onboarding / Settings 保存 API Key 后会自动同步到 AI Providers：创建或更新 `some-im` provider,填入同一个 Base URL / API Key,并默认激活 `deepseek-v4-flash` / `deepseek-v4-pro` 作为 Flash / Pro 聊天模型。
+
+### Changed
+
+- some.im provider preset 默认聊天模型从空值改为 `deepseek-v4-flash`,Pro 默认改为 `deepseek-v4-pro`。
+- 版本号从 **1.102.0-rc2** 提升为 **1.102.0-rc3**（bugfix）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.102.0-rc2 - 2026-06-22
+
+### Fixed
+
+- 修复 `willdeep <missing-file>` 通过 macOS `open -a` 启动时,不存在的文件会在 App 接手前被系统直接拦截并报 "does not exist" 的问题。CLI 现在把路径编码为 `willdeep://open?path=...`,由 App 侧判断并在父目录存在时自动创建空文件后打开。
+
+### Changed
+
+- 版本号从 **1.102.0-rc1** 提升为 **1.102.0-rc2**（bugfix）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.102.0-rc1 - 2026-06-22
+
+### Added
+
+- 新增 Settings → some.im 整合页,支持保存 some.im API Key、配置 Base URL、拉取模型列表,并分别设置图片生成与视频生成的首选模型/优先模型列表。
+- 首次启动 Onboarding 新增 some.im 可选配置步骤,方便新用户在初始化时直接填入 relay key 与默认图片/视频模型。
+- 新增内置 `generate_image` Agent 工具,在 some.im 已配置时通过 relay 调用图片生成接口并默认使用 `gpt-image-2`,生成结果保存到 Downloads；内置 `image-gen` skill 优先走该工具,再回落到旧 `alma image` CLI。
+
+### Fixed
+
+- 修复 OpenAI Chat 兼容请求会把本地 `.widget` / `.workflowReport` transcript 卡片作为 `messages[].role` 发给 some.im 的问题；这些 UI-only 消息现在在共享请求归一化层过滤,不会泄漏进外部请求体。
+- 修复 transcript 底部"Agent 本轮保存了 N 条建议"图标条统计的是 runtime 跨轮累计的最近 24 条 learning events,而不是当前轮 —— 用户看到 5 条但其中包含上一轮的建议。现在按"最近一条 user message 的 createdAt"过滤,与 `AgentTurnReport.latest` 的本轮口径一致(`AppStateAgentRuntimeAccessors.agentCurrentTurnLearningEvents`)。
+- 修复点开"本轮保存建议"和"turn report" popover 时,5 条建议或多工具汇总会把面板撑出屏幕、底部内容看不全的问题。两个 popover 现在都套了 `ScrollView` + `maxHeight`(learning 520pt / report 560pt),溢出时显示原生滚动条。
+
+### Changed
+
+- 版本号从 **1.101.0-rc1** 提升为 **1.102.0-rc1**（功能新增,中间过渡的 rc2 bugfix 已并入本版本）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
+## 1.101.0-rc1 - 2026-06-21
+
+### Added
+
+- 使用统计仪表盘新增 **24 小时** 时间范围筛选项，与现有的"全部 / 30 天 / 7 天"并列，方便查看当天的 token 用量和费用。
+
+### Changed
+
+- 版本号从 **1.100.0-rc2** 提升为 **1.101.0-rc1**（功能新增）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs / chrome-extension README 同步。
+
 ## 1.100.0-rc2 - 2026-06-21
 
 ### Fixed

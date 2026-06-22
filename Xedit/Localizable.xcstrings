@@ -6474,6 +6474,57 @@
         }
       }
     },
+    "onboarding.some-im.note" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can skip this and configure it later in Settings -> some.im. The image default is gpt-image-2."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可以先跳过，之后在 Settings → some.im 里配置。图片默认模型是 gpt-image-2。"
+          }
+        }
+      }
+    },
+    "onboarding.some-im.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optional. Add your relay key so image, video, and future multimodal skills can route to the right model automatically."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可选。填入 relay key 后，图片、视频以及后续多模态技能就能自动路由到合适模型。"
+          }
+        }
+      }
+    },
+    "onboarding.some-im.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect some.im"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接 some.im"
+          }
+        }
+      }
+    },
     "plugin-picker.help" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -14743,6 +14794,261 @@
         }
       }
     },
+    "settings.some-im.api-key" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API Key"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API Key"
+          }
+        }
+      }
+    },
+    "settings.some-im.base-url" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Base URL"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "基础地址"
+          }
+        }
+      }
+    },
+    "settings.some-im.connection-section" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im Integration"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im 整合"
+          }
+        }
+      }
+    },
+    "settings.some-im.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stores your some.im key in Keychain and lets WillDeep route image/video generation to the relay instead of guessing whether the active chat model supports generation."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im key 会存入 Keychain；WillDeep 会把图片/视频生成路由到 relay，而不是猜当前聊天模型是否支持生成。"
+          }
+        }
+      }
+    },
+    "settings.some-im.enabled-toggle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use some.im for multimodal generation"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 some.im 进行多模态生成"
+          }
+        }
+      }
+    },
+    "settings.some-im.fetch-models" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fetch Models"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拉取模型"
+          }
+        }
+      }
+    },
+    "settings.some-im.fetched-models" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fetched %@ models."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已拉取 %@ 个模型。"
+          }
+        }
+      }
+    },
+    "settings.some-im.fetching-models" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fetching..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在拉取..."
+          }
+        }
+      }
+    },
+    "settings.some-im.image-help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Image generation tools prefer this list. Default is gpt-image-2 when some.im is configured."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "图片生成工具会优先使用这个列表。配置 some.im 后默认使用 gpt-image-2。"
+          }
+        }
+      }
+    },
+    "settings.some-im.image-model" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Image Model"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "图片模型"
+          }
+        }
+      }
+    },
+    "settings.some-im.image-section" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Image generation"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "图片生成"
+          }
+        }
+      }
+    },
+    "settings.some-im.priority-placeholder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Priority models, comma-separated"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "优先模型，用英文逗号分隔"
+          }
+        }
+      }
+    },
+    "settings.some-im.video-help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Video generation tools will use this priority list once video workflows are connected."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "后续视频生成 workflow 接入后，会使用这个优先列表。"
+          }
+        }
+      }
+    },
+    "settings.some-im.video-model" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Video Model"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "视频模型"
+          }
+        }
+      }
+    },
+    "settings.some-im.video-section" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Video generation"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "视频生成"
+          }
+        }
+      }
+    },
     "settings.tab.agent" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -14897,6 +15203,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "技能"
+          }
+        }
+      }
+    },
+    "settings.tab.some-im" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im"
           }
         }
       }
@@ -16625,6 +16948,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "令牌数（估计）"
+          }
+        }
+      }
+    },
+    "stats-dashboard.range.24h" : {
+      "comment" : "date range selector",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "24h"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "24 小时"
           }
         }
       }

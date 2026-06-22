@@ -940,7 +940,8 @@ struct AgentProviderPreset: Identifiable, Equatable {
             id: "some-im",
             displayName: "some.im (Rocky's relay)",
             baseURL: "https://some.im/v1",
-            defaultModel: "",
+            defaultModel: "deepseek-v4-flash",
+            defaultProModel: "deepseek-v4-pro",
             supportsModelFetch: true,
             modelHints: []
         ),

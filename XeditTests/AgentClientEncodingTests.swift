@@ -123,6 +123,24 @@ struct AgentClientEncodingTests {
     }
 
     @Test
+    func providerReadyMessagesDropsLocalOnlyCards() throws {
+        let widget = AgentWidget(title: "Demo", html: "<p>local only</p>")
+        let messages: [AgentMessage] = [
+            AgentMessage(role: .user, content: "please continue"),
+            AgentMessage(role: .widget, content: "", widget: widget),
+            AgentMessage(role: .workflowReport, content: ""),
+            AgentMessage(role: .assistant, content: "ok")
+        ]
+        let out = AgentClient.providerReadyMessages(messages)
+        #expect(out.map(\.role) == [.user, .assistant])
+
+        let data = try AgentClient.encodeChatRequest(model: "x", messages: messages, tools: [])
+        let dict = try parseJSONObject(data)
+        let encoded = dict["messages"] as? [[String: Any]] ?? []
+        #expect(encoded.map { $0["role"] as? String } == ["user", "assistant"])
+    }
+
+    @Test
     func pastedTextThresholdOnlyCapturesLargeInput() {
         #expect(AgentTextAttachment.shouldCapturePaste("普通一小段文本") == false)
         let longText = String(repeating: "a", count: AgentTextAttachment.largePasteCharacterThreshold)

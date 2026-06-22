@@ -233,7 +233,7 @@ struct AgentChatTranscript: View {
                     // 紧凑的图标条 + popover —— 详见 AgentTurnPostStrip。
                     AgentTurnPostStrip(
                         report: appState.agentLatestTurnReport,
-                        learningEvents: appState.agentLearningEvents,
+                        learningEvents: appState.agentCurrentTurnLearningEvents,
                         onApproveMemory: { event in
                             appState.applyAgentMemoryDrafts(for: event)
                         }

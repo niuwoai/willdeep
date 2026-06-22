@@ -27,6 +27,9 @@ struct OnboardingView: View {
     @State private var apiKey: String = ""
     @State private var model: String = "claude-sonnet-4-5"
     @State private var providerSaveError: String?
+    @State private var someIMSettings = SomeIMIntegrationStore.loadSettings()
+    @State private var someIMAPIKey = SomeIMIntegrationStore.loadAPIKey()
+    @State private var someIMStatus = ""
 
     private let curatedPresets: [AgentProviderPreset] = AgentProviderPreset.all.filter {
         ["claude", "openai", "deepseek", "openrouter", "dashscope", AgentProviderPreset.customID].contains($0.id)
@@ -52,7 +55,8 @@ struct OnboardingView: View {
         switch currentStep {
         case 0: welcomeStep
         case 1: providerStep
-        case 2: voiceStep
+        case 2: someIMStep
+        case 3: voiceStep
         default: doneStep
         }
     }
@@ -185,7 +189,67 @@ struct OnboardingView: View {
         return nil
     }
 
-    // MARK: - Step 3: Voice
+    // MARK: - Step 3: some.im
+
+    private var someIMStep: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            stepHeader(
+                L10n.Onboarding.SomeIM.title,
+                subtitle: L10n.Onboarding.SomeIM.subtitle
+            )
+
+            VStack(alignment: .leading, spacing: 12) {
+                Toggle(L10n.Settings.SomeIM.enabledToggle, isOn: $someIMSettings.enabled)
+
+                LabeledContent(L10n.Settings.SomeIM.baseURLLabel) {
+                    TextField("", text: $someIMSettings.baseURL)
+                        .textFieldStyle(.roundedBorder)
+                        .disableAutocorrection(true)
+                }
+
+                LabeledContent(L10n.Settings.SomeIM.apiKeyLabel) {
+                    SecureField("", text: $someIMAPIKey)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                LabeledContent(L10n.Settings.SomeIM.imageModelLabel) {
+                    TextField("", text: $someIMSettings.preferredImageModel)
+                        .textFieldStyle(.roundedBorder)
+                        .disableAutocorrection(true)
+                }
+
+                LabeledContent(L10n.Settings.SomeIM.videoModelLabel) {
+                    TextField("", text: $someIMSettings.preferredVideoModel)
+                        .textFieldStyle(.roundedBorder)
+                        .disableAutocorrection(true)
+                }
+            }
+
+            Text(L10n.Onboarding.SomeIM.note)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if !someIMStatus.isEmpty {
+                Text(someIMStatus)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+    }
+
+    private func commitSomeIM() {
+        let normalized = someIMSettings.normalized
+        someIMSettings = normalized
+        let trimmedKey = someIMAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        SomeIMIntegrationStore.saveSettings(normalized)
+        SomeIMIntegrationStore.saveAPIKey(trimmedKey)
+        appState.syncSomeIMProvider(settings: normalized, apiKey: trimmedKey)
+        someIMStatus = L10n.Settings.savedStatus
+    }
+
+    // MARK: - Step 4: Voice
 
     private var voiceStep: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -285,7 +349,7 @@ struct OnboardingView: View {
         return mb >= 100 ? String(format: "%.0f MB", mb) : String(format: "%.1f MB", mb)
     }
 
-    // MARK: - Step 4: Done
+    // MARK: - Step 5: Done
 
     private var doneStep: some View {
         VStack(spacing: 20) {
@@ -335,7 +399,7 @@ struct OnboardingView: View {
         HStack(spacing: 12) {
             stepDots
             Spacer()
-            if currentStep > 0 && currentStep < 3 {
+            if currentStep > 0 && currentStep < 4 {
                 Button("Back") { currentStep -= 1 }
             }
             if currentStep == 1 {
@@ -345,6 +409,9 @@ struct OnboardingView: View {
                 }
             }
             if currentStep == 2 {
+                Button("Skip") { currentStep += 1 }
+            }
+            if currentStep == 3 {
                 Button("Skip") { currentStep += 1 }
             }
             Button(primaryButtonTitle) {
@@ -359,7 +426,7 @@ struct OnboardingView: View {
 
     private var stepDots: some View {
         HStack(spacing: 6) {
-            ForEach(0..<4, id: \.self) { i in
+            ForEach(0..<5, id: \.self) { i in
                 Circle()
                     .fill(i == currentStep ? Color.accentColor : Color.secondary.opacity(0.4))
                     .frame(width: 7, height: 7)
@@ -371,7 +438,8 @@ struct OnboardingView: View {
         switch currentStep {
         case 0: return "Continue"
         case 1: return apiKey.isEmpty ? "Continue" : "Save & Continue"
-        case 2: return "Continue"
+        case 2: return someIMAPIKey.isEmpty ? "Continue" : "Save & Continue"
+        case 3: return "Continue"
         default: return "Get started"
         }
     }
@@ -388,7 +456,12 @@ struct OnboardingView: View {
             providerSaveError = nil
             currentStep = 2
         case 2:
+            if !someIMAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                commitSomeIM()
+            }
             currentStep = 3
+        case 3:
+            currentStep = 4
         default:
             controller.markCompleted()
         }

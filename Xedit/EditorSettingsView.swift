@@ -90,6 +90,12 @@ struct EditorSettingsView: View {
                     Label(L10n.Settings.tabAgent, systemImage: "sparkles")
                 }
 
+            SomeIMIntegrationSettingsView()
+                .tag(EditorSettingsTab.someIM)
+                .tabItem {
+                    Label(L10n.Settings.tabSomeIM, systemImage: "sparkles.square.filled.on.square")
+                }
+
             localAgentSettings
                 .tag(EditorSettingsTab.localAgents)
                 .tabItem {

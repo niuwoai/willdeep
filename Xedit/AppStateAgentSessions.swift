@@ -73,6 +73,40 @@ extension AppState {
         }
     }
 
+    func syncSomeIMProvider(settings: SomeIMIntegrationSettings, apiKey: String, activate: Bool = true) {
+        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedKey.isEmpty else { return }
+
+        let normalizedSettings = settings.normalized
+        let presetID = "some-im"
+        let existing = agentProviderLibrary.entries.first { entry in
+            entry.providerID == presetID
+                || entry.baseURL.trimmingCharacters(in: .whitespacesAndNewlines) == normalizedSettings.baseURL
+        }
+
+        let entryID = existing?.id ?? UUID()
+        let entry = AgentProviderEntry(
+            id: entryID,
+            providerID: presetID,
+            displayName: existing?.displayName ?? AgentProviderPreset.preset(id: presetID)?.displayName,
+            baseURL: normalizedSettings.baseURL,
+            apiKey: trimmedKey,
+            flashPrimary: "deepseek-v4-flash",
+            flashAlternates: existing?.flashAlternates ?? [],
+            proPrimary: "deepseek-v4-pro",
+            proAlternates: existing?.proAlternates ?? [],
+            routingMode: existing?.routingMode ?? .auto
+        )
+
+        agentProviderLibrary.upsert(entry)
+        if activate {
+            agentProviderLibrary.setActive(entryID)
+        }
+        if agentProviderLibrary.activeID == entryID {
+            applyActiveProviderLibraryEntry()
+        }
+    }
+
     /// Remove a library entry. The library auto-repoints `activeID`
     /// to the next entry; if nothing remains the live configuration
     /// is left as-is (the Settings UI is expected to require at

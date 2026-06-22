@@ -64,6 +64,8 @@ enum AgentToolRunner {
             return try await AgentWebTools.webSearch(arguments: arguments)
         case "web_fetch":
             return try await AgentWebTools.webFetch(arguments: arguments)
+        case "generate_image":
+            return try await generateImage(arguments: arguments)
         case "chrome_status":
             return try await AgentChromeTools.status(arguments: arguments)
         case "chrome_read_page":
@@ -91,6 +93,27 @@ enum AgentToolRunner {
         default:
             throw AgentToolError.unknownTool(name)
         }
+    }
+
+    private static func generateImage(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        guard let prompt = arguments["prompt"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !prompt.isEmpty else {
+            throw AgentToolError.missingArgument("prompt")
+        }
+        let rawSize = arguments["size"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let size = rawSize.isEmpty ? "1024x1024" : rawSize
+        let rawModel = arguments["model"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let model = rawModel.isEmpty ? nil : rawModel
+        let image = try await SomeIMClient.generateImage(prompt: prompt, size: size, model: model)
+        return AgentToolResult(
+            summary: "Generated image: \(image.fileURL.lastPathComponent)",
+            payload: """
+            Generated image with some.im model `\(image.model)`.
+
+            Local file:
+            \(image.fileURL.path)
+            """
+        )
     }
 
     // MARK: run_command
