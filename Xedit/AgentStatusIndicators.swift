@@ -46,12 +46,14 @@ struct AgentStatsDashboard: View {
         case all = "All"
         case days30 = "30d"
         case days7 = "7d"
+        case hours24 = "24h"
         var id: String { rawValue }
         var title: String {
             switch self {
             case .all: return L10n.StatsDashboard.rangeAll
             case .days30: return L10n.StatsDashboard.range30d
             case .days7: return L10n.StatsDashboard.range7d
+            case .hours24: return L10n.StatsDashboard.range24h
             }
         }
         var days: Int? {
@@ -59,6 +61,7 @@ struct AgentStatsDashboard: View {
             case .all: return nil
             case .days30: return 30
             case .days7: return 7
+            case .hours24: return 1
             }
         }
     }

@@ -2,11 +2,26 @@
 name: image-gen
 description: "Generate and edit images using AI. Use when users ask to: create/draw/generate images, edit/modify photos, change backgrounds, add elements to images, create avatars, make logos, etc. Covers requests like 'draw a cat', 'change the background to blue', 'generate a logo'. NOT for selfies — use the selfie skill for 'send a selfie', 'send me a selfie', 'take a selfie'."
 allowed-tools:
+  - generate_image
   - Bash
   - Read
 ---
 
 # Image Generation & Editing Skill
+
+## Preferred WillDeep Path
+
+If the user has configured **Settings → some.im**, use the built-in `generate_image` tool for image creation. It keeps the some.im API key in Keychain and defaults to `gpt-image-2` unless the user selected another image model.
+
+Example tool call intent:
+
+```text
+generate_image(prompt: "detailed prompt describing the image", size: "1024x1024")
+```
+
+Return the generated local file path to the user. Do not send `widget` transcript cards or UI-only messages to external model APIs.
+
+## Fallback CLI Path
 
 Use the `alma image` command to generate or edit images. It handles API keys, model selection, and everything automatically.
 

@@ -108,7 +108,23 @@ enum CommandLineToolInstaller {
           exec /usr/bin/open -a "$app_path"
         fi
 
-        exec /usr/bin/open -a "$app_path" -- "$@"
+        encode_path() {
+          /usr/bin/perl -CS -MEncode=encode -e '$s = encode("UTF-8", $ARGV[0]); $s =~ s/([^A-Za-z0-9_.~-])/sprintf("%%%02X", ord($1))/eg; print $s' "$1"
+        }
+
+        for target in "$@"; do
+          if [[ "$target" == *"://"* ]]; then
+            /usr/bin/open -a "$app_path" "$target"
+            continue
+          fi
+
+          if [[ "$target" != /* ]]; then
+            target="$PWD/$target"
+          fi
+
+          encoded_path="$(encode_path "$target")"
+          /usr/bin/open -a "$app_path" "willdeep://open?path=$encoded_path"
+        done
         """
     }
 

@@ -510,10 +510,13 @@ final class AppState: ObservableObject {
         openFolderURL(url, openInNewWindow: openInNewWindow)
     }
 
-    func openExternalURL(_ url: URL) {
+    func openExternalURL(_ url: URL, createsMissingFileIfNeeded: Bool = false) {
         let fileURL = url.isFileURL ? url : URL(fileURLWithPath: url.path)
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory) else {
+            if createsMissingFileIfNeeded {
+                createMissingExternalFile(at: fileURL)
+            }
             return
         }
 
@@ -534,6 +537,52 @@ final class AppState: ObservableObject {
         // huge dir like ~/Downloads. The sidebar only appears now when the
         // user explicitly opens a folder (⇧⌘O / Open Folder…).
         openedFileURL = fileURL
+        persistSession()
+    }
+
+    func createMissingExternalFile(at fileURL: URL) {
+        let parentURL = fileURL.deletingLastPathComponent()
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: parentURL.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            showFileOperationError("The parent folder does not exist: \(parentURL.path)")
+            return
+        }
+
+        do {
+            try Data().write(to: fileURL, options: [.atomic])
+            registerRecentFile(fileURL)
+            registerRecentFolder(parentURL)
+            openedFileURL = fileURL
+            persistSession()
+        } catch {
+            openMissingExternalFileDraft(at: fileURL)
+            showFileOperationError("Opened an unsaved file for \"\(fileURL.path)\" because it could not be created yet: \(error.localizedDescription)")
+        }
+    }
+
+    func openMissingExternalFileDraft(at fileURL: URL) {
+        if let index = tabs.firstIndex(where: { $0.url == fileURL }) {
+            activeTabID = tabs[index].id
+        } else {
+            let tab = EditorTab(url: fileURL, content: "", savedContent: "", isEdited: true)
+            tabs.append(tab)
+            activeTabID = tab.id
+        }
+
+        imagePreviewURL = nil
+        selectedSidebarFileURL = fileURL
+        registerRecentFolder(fileURL.deletingLastPathComponent())
+
+        isApplyingTabSnapshot = true
+        suppressURLChangeProcessing = true
+        openedFileURL = fileURL
+        fileContent = ""
+        isEdited = true
+        isApplyingTabSnapshot = false
+        bumpEditorRenderRevision()
+        bumpEditorHighlightRevision()
+        updateWindowTitle(url: fileURL, isEdited: true)
         persistSession()
     }
 

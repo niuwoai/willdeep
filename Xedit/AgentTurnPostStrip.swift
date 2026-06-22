@@ -73,9 +73,15 @@ struct AgentTurnPostStrip: View {
         .buttonStyle(.plain)
         .help(L10n.Transcript.postTurnReportTooltip)
         .popover(isPresented: $showReport, arrowEdge: .top) {
-            AgentTurnReportCard(report: report, initiallyExpanded: true)
-                .padding(12)
-                .frame(width: 520)
+            // 1.102.0-rc1:工具数多/有 recall 摘要时 report 卡片也会撑出屏幕,
+            // 顺手套上 ScrollView + maxHeight,行为与下方 learning popover 一致。
+            ScrollView {
+                AgentTurnReportCard(report: report, initiallyExpanded: true)
+                    .padding(12)
+                    .frame(width: 520, alignment: .leading)
+            }
+            .frame(width: 520)
+            .frame(maxHeight: 560)
         }
     }
 
@@ -97,16 +103,23 @@ struct AgentTurnPostStrip: View {
         .buttonStyle(.plain)
         .help(L10n.Transcript.postTurnLearningTooltip)
         .popover(isPresented: $showLearning, arrowEdge: .top) {
-            AgentLearningEventsCard(
-                events: learningEvents,
-                onReject: { event in
-                    AgentLearningReviewStore.mark(id: event.id, decision: .dismissed)
-                },
-                onApprove: onApproveMemory,
-                capItems: false
-            )
-            .padding(12)
+            // 1.102.0-rc1:5 条建议每条都可能展开 4 行 detail + 多行 action
+            // 摘要,popover 没有 ScrollView 时直接撑出屏幕,用户反馈"看不全"。
+            // 这里给定 maxHeight,溢出走原生滚动条。
+            ScrollView {
+                AgentLearningEventsCard(
+                    events: learningEvents,
+                    onReject: { event in
+                        AgentLearningReviewStore.mark(id: event.id, decision: .dismissed)
+                    },
+                    onApprove: onApproveMemory,
+                    capItems: false
+                )
+                .padding(12)
+                .frame(width: 480, alignment: .leading)
+            }
             .frame(width: 480)
+            .frame(maxHeight: 520)
         }
     }
 }

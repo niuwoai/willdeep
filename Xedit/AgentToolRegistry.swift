@@ -178,6 +178,16 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "generate_image",
+            description: "Generate an image through the configured some.im relay. Use this for image creation requests when Settings -> some.im is configured; it defaults to the user's image model preference, normally gpt-image-2. Returns a local file path in Downloads.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "prompt", type: .string, description: "Detailed prompt for the image generator.", required: true),
+                AgentToolParameter(name: "size", type: .string, description: "Optional output size such as 1024x1024. Defaults to 1024x1024.", required: false),
+                AgentToolParameter(name: "model", type: .string, description: "Optional some.im image model override. Leave empty to use Settings -> some.im priority, default gpt-image-2.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "chrome_status",
             description: "Check whether the WillDeep Browser Chrome extension native bridge is reachable on localhost and return protocol/version/capability details. Read-only.",
             risk: .read,

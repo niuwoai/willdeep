@@ -247,4 +247,42 @@ struct AgentProviderLibraryTests {
         #expect(n.flashModel == "weird-internal-model")
         #expect(n.proModel == "weird-internal-pro")
     }
+
+    @Test
+    func someIMPresetDefaultsToDeepSeekChatModels() {
+        let preset = AgentProviderPreset.preset(id: "some-im")
+
+        #expect(preset?.defaultModel == "deepseek-v4-flash")
+        #expect(preset?.defaultProModel == "deepseek-v4-pro")
+    }
+
+    @MainActor
+    @Test
+    func syncingSomeIMProviderCreatesActiveChatProvider() {
+        let sandbox = KeychainSandbox()
+        _ = sandbox
+
+        let appState = AppState()
+        let settings = SomeIMIntegrationSettings(
+            enabled: true,
+            baseURL: "https://some.im/v1",
+            preferredImageModel: "gpt-image-2",
+            preferredImageModels: ["gpt-image-2"],
+            preferredVideoModel: "",
+            preferredVideoModels: []
+        )
+
+        appState.syncSomeIMProvider(settings: settings, apiKey: " sk-some-im ")
+
+        let active = appState.agentProviderLibrary.active
+        #expect(active?.providerID == "some-im")
+        #expect(active?.baseURL == "https://some.im/v1")
+        #expect(active?.apiKey == "sk-some-im")
+        #expect(active?.flashPrimary == "deepseek-v4-flash")
+        #expect(active?.proPrimary == "deepseek-v4-pro")
+        #expect(appState.agentConfiguration.providerID == "some-im")
+        #expect(appState.agentConfiguration.apiKey == "sk-some-im")
+        #expect(appState.agentConfiguration.flashModel == "deepseek-v4-flash")
+        #expect(appState.agentConfiguration.proModel == "deepseek-v4-pro")
+    }
 }
