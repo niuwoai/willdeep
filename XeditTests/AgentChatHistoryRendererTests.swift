@@ -65,6 +65,51 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func preservesUserMessageLineBreaksInHistory() {
+        let message = AgentMessage(
+            role: .user,
+            content: """
+            lsof /dev/ttys* 2>/dev/null | awk '{print $1}' | sort | uniq -c | sort -rn
+
+            16 zsh 3 sort 2 sleep 2 bash 1 uniq 1 lsof 1 COMMAND 1 awk
+            """
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
+
+        #expect(rendered.string.contains("sort -rn\n\n16 zsh"))
+    }
+
+    @Test
+    func rendersPastedTextAttachmentsAsClickableLinks() throws {
+        let attachment = AgentTextAttachment(
+            filename: "已粘贴的文本.txt",
+            content: "line one\nline two"
+        )
+        let message = AgentMessage(
+            role: .user,
+            content: "",
+            textAttachments: [attachment]
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
+        let range = try #require(firstAttributeRange(
+            .agentChatHistoryTextAttachment,
+            containing: "已粘贴的文本.txt",
+            in: rendered
+        ))
+        let payload = try #require(rendered.attribute(
+            .agentChatHistoryTextAttachment,
+            at: range.location,
+            effectiveRange: nil
+        ) as? AgentTextAttachment)
+
+        #expect(payload.id == attachment.id)
+        #expect(payload.content == "line one\nline two")
+        #expect(rendered.attribute(.link, at: range.location, effectiveRange: nil) as? String == AgentChatHistoryTextAttachmentLink.value)
+    }
+
+    @Test
     func rendersToolCallOnlyAssistantMessageAsToolEvent() {
         let id = UUID()
         let message = AgentMessage(

@@ -390,6 +390,11 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             return true
         }
 
+        if let attachment = textStorage.attribute(.agentChatHistoryTextAttachment, at: charIndex, effectiveRange: nil) as? AgentTextAttachment {
+            AgentTextAttachmentReaderWindowRegistry.shared.open(attachment: attachment)
+            return true
+        }
+
         return isInternalActionLink(link)
     }
 
@@ -412,6 +417,7 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             AgentChatHistoryFooterChrome.copyLinkValue,
             AgentChatHistoryFooterChrome.retryLinkValue,
             AgentChatHistoryTableLink.value,
+            AgentChatHistoryTextAttachmentLink.value,
             "agent-chat-history-tool-group",
         ].contains(value)
     }
@@ -482,6 +488,10 @@ enum AgentChatHistoryTableLink {
     static let value = "agent-chat-history-table"
 }
 
+enum AgentChatHistoryTextAttachmentLink {
+    static let value = "agent-chat-history-text-attachment"
+}
+
 extension NSAttributedString.Key {
     static let agentChatHistoryBubbleKind = NSAttributedString.Key("AgentChatHistoryBubbleKind")
     static let agentChatHistoryCodeBlockID = NSAttributedString.Key("AgentChatHistoryCodeBlockID")
@@ -490,6 +500,7 @@ extension NSAttributedString.Key {
     static let agentChatHistoryRetryLastTurn = NSAttributedString.Key("AgentChatHistoryRetryLastTurn")
     static let agentChatHistoryTableBlockID = NSAttributedString.Key("AgentChatHistoryTableBlockID")
     static let agentChatHistoryTablePayload = NSAttributedString.Key("AgentChatHistoryTablePayload")
+    static let agentChatHistoryTextAttachment = NSAttributedString.Key("AgentChatHistoryTextAttachment")
     static let agentChatHistoryToolGroupID = NSAttributedString.Key("AgentChatHistoryToolGroupID")
     static let agentChatHistoryUserMessageID = NSAttributedString.Key("AgentChatHistoryUserMessageID")
     /// Markup so the formatter's `applyBubbleChrome` step can swap in a

@@ -285,6 +285,9 @@ extension AgentChatHistoryRenderer {
                 attributes: [
                     .font: NSFont.systemFont(ofSize: 12, weight: .medium),
                     .foregroundColor: secondaryColor,
+                    .underlineStyle: 0,
+                    .link: AgentChatHistoryTextAttachmentLink.value,
+                    .agentChatHistoryTextAttachment: attachment,
                 ]
             ))
         }

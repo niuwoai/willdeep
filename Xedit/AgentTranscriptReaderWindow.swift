@@ -334,3 +334,118 @@ final class AgentSingleMessageReaderWindowController: NSWindowController, NSWind
         AgentChatHistoryRenderer.render(messages: [message], isDark: false)
     }
 }
+
+// MARK: - Text attachment reader
+
+@MainActor
+final class AgentTextAttachmentReaderWindowRegistry {
+    static let shared = AgentTextAttachmentReaderWindowRegistry()
+    private var windows: [UUID: AgentTextAttachmentReaderWindowController] = [:]
+
+    func open(attachment: AgentTextAttachment) {
+        if let existing = windows[attachment.id] {
+            existing.refresh(with: attachment)
+            existing.showWindow(nil)
+            existing.window?.makeKeyAndOrderFront(nil)
+            return
+        }
+        let controller = AgentTextAttachmentReaderWindowController(attachment: attachment)
+        controller.onClose = { [weak self] id in
+            self?.windows.removeValue(forKey: id)
+        }
+        windows[attachment.id] = controller
+        controller.showWindow(nil)
+        controller.window?.makeKeyAndOrderFront(nil)
+    }
+}
+
+@MainActor
+final class AgentTextAttachmentReaderWindowController: NSWindowController, NSWindowDelegate {
+    var onClose: ((UUID) -> Void)?
+    private let attachmentID: UUID
+    private var keyMonitor: Any?
+
+    init(attachment: AgentTextAttachment) {
+        self.attachmentID = attachment.id
+
+        let textView = NSTextView()
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.drawsBackground = true
+        textView.backgroundColor = .textBackgroundColor
+        textView.allowsUndo = false
+        textView.isRichText = false
+        textView.usesFindBar = true
+        textView.isIncrementalSearchingEnabled = true
+        textView.usesFontPanel = false
+        textView.usesRuler = false
+        textView.usesInspectorBar = false
+        textView.importsGraphics = false
+        textView.font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        textView.textColor = .labelColor
+        textView.textContainerInset = NSSize(width: 16, height: 16)
+        textView.textContainer?.widthTracksTextView = true
+        textView.autoresizingMask = [.width]
+        textView.translatesAutoresizingMaskIntoConstraints = true
+        textView.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+        textView.minSize = NSSize(width: 0, height: 0)
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.textContainer?.containerSize = NSSize(width: 800, height: CGFloat.greatestFiniteMagnitude)
+
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.borderType = .noBorder
+        scrollView.autohidesScrollers = true
+        scrollView.documentView = textView
+        scrollView.drawsBackground = true
+        scrollView.backgroundColor = .textBackgroundColor
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 640),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = Self.windowTitle(for: attachment)
+        window.contentView = scrollView
+        window.center()
+        window.isReleasedWhenClosed = false
+
+        super.init(window: window)
+        window.delegate = self
+        keyMonitor = AuxiliaryWindowCloseShortcut.install(on: window, closesOnEscape: false)
+        textView.string = attachment.content
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) not used")
+    }
+
+    func refresh(with attachment: AgentTextAttachment) {
+        guard let scrollView = window?.contentView as? NSScrollView,
+              let textView = scrollView.documentView as? NSTextView else { return }
+        window?.title = Self.windowTitle(for: attachment)
+        textView.string = attachment.content
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+            self.keyMonitor = nil
+        }
+        onClose?(attachmentID)
+    }
+
+    deinit {
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+        }
+    }
+
+    private static func windowTitle(for attachment: AgentTextAttachment) -> String {
+        "\(attachment.displayName) · \(attachment.byteLabel)"
+    }
+}

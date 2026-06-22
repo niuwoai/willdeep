@@ -309,6 +309,13 @@ enum AgentChatHistoryRenderer {
                 let bodyStart = result.length
                 if useMono {
                     appendPlainBody(body, to: result, font: monoFont, color: bodyColor)
+                } else if message.role == .user {
+                    appendPlainBody(
+                        AgentLongTokenBreaker.inject(into: body),
+                        to: result,
+                        font: bodyFont,
+                        color: bodyColor
+                    )
                 } else {
                     appendMarkdownBody(
                         body,

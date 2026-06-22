@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.102.0-rc5 - 2026-06-22
+
+### Fixed
+- Agent 历史对话中的“已粘贴的文本.txt”附件条目现在可点击,会打开只读内容窗口查看完整粘贴文本,不再只是不可交互的占位 label。
+
+### Changed
+- 版本号从 **1.102.0-rc4** 提升为 **1.102.0-rc5**（bugfix）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
+## 1.102.0-rc4 - 2026-06-22
+
+### Fixed
+- Agent 历史对话中的用户消息不再走 Markdown 段落解析,改为 plain text 渲染并保留原始换行/空行,修复 composer 粘贴多行命令输出后历史气泡把换行压没的问题。
+
+### Changed
+- 版本号从 **1.102.0-rc3** 提升为 **1.102.0-rc4**（bugfix）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
 ## 1.102.0-rc3 - 2026-06-22
 
 ### Fixed
