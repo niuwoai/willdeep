@@ -15,6 +15,22 @@ private enum EditorWorkflowTestError: Error {
     case loadTimedOut
 }
 
+@MainActor
+private func waitForEditorLoad(
+    _ appState: AppState,
+    expectedContent: String,
+    timeout: TimeInterval = 10.0
+) async throws {
+    let start = CFAbsoluteTimeGetCurrent()
+    while (CFAbsoluteTimeGetCurrent() - start) < timeout {
+        if appState.fileContent == expectedContent && appState.isEdited == false {
+            return
+        }
+        try await Task.sleep(nanoseconds: 5_000_000)
+    }
+    throw EditorWorkflowTestError.loadTimedOut
+}
+
 extension WillDeepTests {
     @Test("willdeep open URL decodes a file path")
     func testWillDeepOpenURLDecodesPath() throws {
@@ -61,6 +77,50 @@ extension WillDeepTests {
         #expect(appState.activeTab?.url == fileURL)
         #expect(appState.activeTab?.isEdited == true)
         #expect(!FileManager.default.fileExists(atPath: fileURL.path))
+    }
+
+    @MainActor
+    @Test("external file open loads content without view onChange")
+    func testExternalFileOpenLoadsContentWithoutViewChange() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_external_load_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let fileURL = tempDir.appendingPathComponent("note.md")
+        let content = "# Loaded\n\nThis should appear in the editor."
+        try content.write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let appState = AppState()
+        appState.openExternalURL(fileURL)
+
+        try await waitForEditorLoad(appState, expectedContent: content)
+        #expect(appState.activeTab?.url.standardizedFileURL.path == fileURL.standardizedFileURL.path)
+        #expect(appState.activeTab?.content == content)
+    }
+
+    @MainActor
+    @Test("reopening an empty unedited tab reloads file content")
+    func testReopeningEmptyUneditedTabReloadsFileContent() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_empty_tab_reload_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let fileURL = tempDir.appendingPathComponent("note.md")
+        let content = "content that should replace the placeholder tab"
+        try content.write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let appState = AppState()
+        appState.beginOpeningTab(for: fileURL)
+        #expect(appState.fileContent.isEmpty)
+        #expect(appState.activeTab?.isEdited == false)
+
+        appState.openExternalURL(fileURL)
+
+        try await waitForEditorLoad(appState, expectedContent: content)
+        #expect(appState.activeTab?.content == content)
+        #expect(appState.isEdited == false)
     }
 
     // MARK: - File Loading Timing (c1)

@@ -126,6 +126,11 @@ struct AgentSelfLearningTests {
         let memoryEvent = try #require(events.first { $0.kind == .memory })
         #expect(memoryEvent.status == .suggested)
         #expect(memoryEvent.action?.requiresUserConfirmation == true)
+        #expect(memoryEvent.title == L10n.Transcript.learningEventTitleSuggestedMemories(String(memoryEvent.pendingMemoryDrafts.count)))
+        #expect(memoryEvent.detail.contains(L10n.Transcript.learningMemorySuggestionUse))
+        #expect(memoryEvent.detail.contains(L10n.Transcript.learningMemorySuggestionAction))
+        #expect(!memoryEvent.detail.contains(L10n.Transcript.learningNextStepApprovePopover))
+        #expect(!memoryEvent.detail.contains(L10n.Transcript.learningReasonSelfLearningPolicy))
         let drafts = memoryEvent.pendingMemoryDrafts
         #expect(!drafts.isEmpty)
         #expect(drafts.allSatisfy { $0.scope == .project })

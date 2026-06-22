@@ -91,6 +91,7 @@ struct AgentGlobalRulesSettingsView: View {
 
     private func loadRulesText() {
         saveSettings()
+        AgentGlobalRulesStore.ensureDefaultRulesFileIfNeeded(settings: settings)
         let url = AgentGlobalRulesStore.resolvedURL(for: settings.filePath)
         rulesText = AgentGlobalRulesStore.readRulesFileText(at: url) ?? ""
         statusMessage = rulesText.isEmpty

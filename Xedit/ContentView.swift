@@ -52,7 +52,7 @@ struct ContentView: View {
         .tint(appState.editorSettings.interfaceSkin.palette.accent)
         .preferredColorScheme(appState.editorSettings.interfaceSkin.preferredColorScheme)
         .ignoresSafeArea(.container, edges: .top)
-        .onChange(of: appState.rootDirectory) { _, newDirectory in
+        .onCompatibleChange(of: appState.rootDirectory) { _, newDirectory in
             if let dir = newDirectory {
                 let node = FileSystemNode(url: dir)
                 node.loadChildren()
@@ -66,10 +66,10 @@ struct ContentView: View {
                 appState.selectedFolderURL = nil
             }
         }
-        .onChange(of: appState.openedFileURL) { oldValue, newValue in
+        .onCompatibleChange(of: appState.openedFileURL) { oldValue, newValue in
             handleFileSelectionChange(oldValue: oldValue, newValue: newValue)
         }
-        .onChange(of: appState.fileContent) { _, _ in
+        .onCompatibleChange(of: appState.fileContent) { _, _ in
             appState.refreshExternalFileStatus()
         }
         .onReceive(Timer.publish(every: 10, on: .main, in: .common).autoconnect()) { _ in
@@ -370,14 +370,19 @@ struct ContentView: View {
     // MARK: - File Selection Handling
 
     /// Handles changes to `appState.openedFileURL`:
-    /// - Unsaved-change prompt (Save / Discard / Cancel).
-    /// - Binary file detection.
-    /// - Delegates actual file reading to `AppState.loadFile(from:)`.
+    /// - Binding-driven file-tree changes are forwarded into the same
+    ///   AppState-owned open pipeline used by menus, CLI, and Finder opens.
     private func handleFileSelectionChange(oldValue: URL?, newValue: URL?) {
         // Guard against re-entrant calls from programmatic reverts.
         if appState.suppressURLChangeProcessing {
             appState.suppressURLChangeProcessing = false
-            return
+            let activeURL = appState.activeTab?.url
+            let activeTabAlreadyMatches = activeURL
+                .map { active in newValue.map { AppState.sameFileURL(active, $0) } ?? false } ?? false
+            let clearedEditorAlreadyMatches = newValue == nil && appState.activeTabID == nil
+            if activeTabAlreadyMatches || clearedEditorAlreadyMatches {
+                return
+            }
         }
 
         guard let newURL = newValue else {
@@ -395,52 +400,7 @@ struct ContentView: View {
         // Skip if the URL didn't actually change (e.g. click same file twice).
         if newURL == oldValue { return }
 
-        appState.imagePreviewURL = nil
-        appState.selectedSidebarFileURL = newURL
-
-        if appState.activateTab(for: newURL) {
-            return
-        }
-
-        // --- Binary file detection (c5) ---
-        if AppState.isBinaryFile(at: newURL) {
-            let alert = NSAlert()
-            alert.messageText = L10n.Alert.binaryFileTitle
-            alert.informativeText = L10n.Alert.binaryFileMessage(newURL.lastPathComponent)
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: L10n.Alert.binaryFileButtonOk)
-            alert.runModal()
-
-            // Revert selection to the previous URL (or nil).
-            appState.suppressURLChangeProcessing = true
-            appState.openedFileURL = oldValue
-            return
-        }
-
-        // --- File size guard (c1) ---
-        var allowLargeFile = false
-        if AppState.shouldRequireLargeFileConfirmation(at: newURL) {
-            let alert = NSAlert()
-            alert.messageText = L10n.Alert.largeFileTitle
-            alert.informativeText = L10n.Alert.largeFileMessage(newURL.lastPathComponent)
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: L10n.Alert.largeFileButtonOpenAnyway)
-            alert.addButton(withTitle: L10n.Alert.largeFileButtonCancel)
-            let response = alert.runModal()
-            if response == .alertSecondButtonReturn {
-                // Cancel — revert selection.
-                appState.suppressURLChangeProcessing = true
-                appState.openedFileURL = oldValue
-                return
-            }
-            allowLargeFile = true
-        }
-
-        // --- Load the file (c1, c2) ---
-        appState.registerRecentFile(newURL)
-        appState.registerRecentFolder(newURL.deletingLastPathComponent())
-        appState.beginOpeningTab(for: newURL)
-        appState.loadFile(from: newURL, fallbackURL: oldValue, allowLargeFile: allowLargeFile)
+        appState.openEditorFile(newURL, fallbackURL: oldValue)
     }
 }
 
@@ -655,7 +615,7 @@ private struct CommandPalettePanel: View {
                         .padding(.vertical, 4)
                     }
                     .frame(maxHeight: 300)
-                    .onChange(of: selectedCommandIndex) { _, newValue in
+                    .onCompatibleChange(of: selectedCommandIndex) { _, newValue in
                         scrollSelectedCommandIntoView(with: proxy, index: newValue)
                     }
                 }
@@ -677,10 +637,10 @@ private struct CommandPalettePanel: View {
             queryFocused = true
             resetSelection()
         }
-        .onChange(of: appState.commandPaletteQuery) { _, _ in
+        .onCompatibleChange(of: appState.commandPaletteQuery) { _, _ in
             resetSelection()
         }
-        .onChange(of: filteredCommands.count) { _, _ in
+        .onCompatibleChange(of: filteredCommands.count) { _, _ in
             clampSelection()
         }
     }
@@ -928,7 +888,7 @@ private struct SymbolJumpPanel: View {
                             .padding(.vertical, 4)
                         }
                         .frame(maxHeight: 320)
-                        .onChange(of: selectedIndex) { _, newValue in
+                        .onCompatibleChange(of: selectedIndex) { _, newValue in
                             scrollSelectionIntoView(with: proxy, index: newValue)
                         }
                     }
@@ -952,18 +912,18 @@ private struct SymbolJumpPanel: View {
             allSymbols = extractOutline()
             resetSelection()
         }
-        .onChange(of: appState.fileContent) { _, _ in
+        .onCompatibleChange(of: appState.fileContent) { _, _ in
             allSymbols = extractOutline()
             clampSelection()
         }
-        .onChange(of: appState.effectiveLanguage) { _, _ in
+        .onCompatibleChange(of: appState.effectiveLanguage) { _, _ in
             allSymbols = extractOutline()
             clampSelection()
         }
-        .onChange(of: appState.symbolJumpQuery) { _, _ in
+        .onCompatibleChange(of: appState.symbolJumpQuery) { _, _ in
             resetSelection()
         }
-        .onChange(of: symbols.count) { _, _ in
+        .onCompatibleChange(of: symbols.count) { _, _ in
             clampSelection()
         }
     }
@@ -1230,7 +1190,7 @@ private struct QuickOpenPanel: View {
     private func open(_ url: URL?) {
         guard let url else { return }
         appState.hideQuickOpen()
-        appState.openedFileURL = url
+        appState.openEditorFile(url)
     }
 
     private func relativePath(for url: URL) -> String {

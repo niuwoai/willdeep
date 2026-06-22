@@ -94,7 +94,7 @@ struct AgentStreamingCursor: View {
         Image(systemName: "rectangle.portrait.fill")
             .font(.system(size: 11))
             .foregroundStyle(Color.accentColor.opacity(0.85))
-            .symbolEffect(.pulse)
+            .symbolPulseCompat()
             .frame(width: 7, height: 14)
     }
 }

@@ -173,7 +173,9 @@ private struct WillDeepCommands: Commands {
                 .disabled(appState?.canShowPreview != true)
 
                 Button(L10n.Menu.viewShowEditor) {
-                    appState?.showEditor()
+                    if appState?.showEditor() != true {
+                        openWindow(id: EditorWindowID.value)
+                    }
                 }
                 .keyboardShortcut("e", modifiers: [.command, .option])
 

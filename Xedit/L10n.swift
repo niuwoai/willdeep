@@ -903,6 +903,7 @@ enum L10n {
         enum SomeIM {
             static let connectionSection = String(localized: "settings.some-im.connection-section", defaultValue: "some.im Integration")
             static let enabledToggle = String(localized: "settings.some-im.enabled-toggle", defaultValue: "Use some.im for multimodal generation")
+            static let regionLabel = String(localized: "settings.some-im.region", defaultValue: "Region")
             static let baseURLLabel = String(localized: "settings.some-im.base-url", defaultValue: "Base URL")
             static let apiKeyLabel = String(localized: "settings.some-im.api-key", defaultValue: "API Key")
             static let fetchModels = String(localized: "settings.some-im.fetch-models", defaultValue: "Fetch Models")
@@ -914,10 +915,20 @@ enum L10n {
             static let videoModelLabel = String(localized: "settings.some-im.video-model", defaultValue: "Video Model")
             static let priorityPlaceholder = String(localized: "settings.some-im.priority-placeholder", defaultValue: "Priority models, comma-separated")
             static let imageHelp = String(localized: "settings.some-im.image-help", defaultValue: "Image generation tools prefer this list. Default is gpt-image-2 when some.im is configured.")
-            static let videoHelp = String(localized: "settings.some-im.video-help", defaultValue: "Video generation tools will use this priority list once video workflows are connected.")
+            static let videoHelp = String(localized: "settings.some-im.video-help", defaultValue: "Video generation is still in development. Model selection is shown for future use and is disabled for now.")
             static func fetchedModels(_ a1: String) -> String {
                 let template = String(localized: "settings.some-im.fetched-models", defaultValue: "Fetched %@ models.")
                 return String(format: template, a1)
+            }
+            static func regionName(_ region: SomeIMRelayRegion) -> String {
+                switch region {
+                case .china:
+                    return String(localized: "settings.some-im.region.china", defaultValue: "China (api.niuwoai.com)")
+                case .international:
+                    return String(localized: "settings.some-im.region.international", defaultValue: "International (some.im)")
+                case .custom:
+                    return String(localized: "settings.some-im.region.custom", defaultValue: "Custom")
+                }
             }
         }
 
@@ -1771,6 +1782,9 @@ enum L10n {
         static let learningConfidenceLow = String(localized: "transcript.learning.confidence.low", defaultValue: "Low confidence")
         static let learningConfidenceMedium = String(localized: "transcript.learning.confidence.medium", defaultValue: "Medium confidence")
         static let learningConfidenceHigh = String(localized: "transcript.learning.confidence.high", defaultValue: "High confidence")
+        static let learningConfidenceLowShort = String(localized: "transcript.learning.confidence.low.short", defaultValue: "L")
+        static let learningConfidenceMediumShort = String(localized: "transcript.learning.confidence.medium.short", defaultValue: "M")
+        static let learningConfidenceHighShort = String(localized: "transcript.learning.confidence.high.short", defaultValue: "H")
         static let learningExplanationCompleted = String(localized: "transcript.learning.explanation.completed", defaultValue: "This learning event was completed automatically and persisted successfully.")
         static let learningExplanationNeedsReview = String(localized: "transcript.learning.explanation.needs-review", defaultValue: "The turn produced a visible suggestion, but it still expects user review before anything changes.")
         static let learningExplanationCouldNotFinish = String(localized: "transcript.learning.explanation.could-not-finish", defaultValue: "The system recorded the signal, but it could not safely finish the intended learning step.")
@@ -1849,6 +1863,10 @@ enum L10n {
             let template = String(localized: "transcript.learning.event-title.self-learning-memories", defaultValue: "Suggested %@ self-learning memory item(s) (pending your Approve)")
             return String(format: template, a1)
         }
+        static func learningEventTitleSuggestedMemories(_ a1: String) -> String {
+            let template = String(localized: "transcript.learning.event-title.suggested-memories", defaultValue: "Suggest saving %@ memory item(s)")
+            return String(format: template, a1)
+        }
         static func learningEventTitleMCPDiscovery(_ a1: String) -> String {
             let template = String(localized: "transcript.learning.event-title.mcp-discovery", defaultValue: "Suggested MCP discovery for %@")
             return String(format: template, a1)
@@ -1870,6 +1888,12 @@ enum L10n {
         static let learningReasonSkillEvidenceTooThin = String(localized: "transcript.learning.reason.skill-evidence-too-thin", defaultValue: "The turn mentioned reusable skills, but there was not enough executed tool evidence to safely create one.")
         static let learningReasonSkillAlreadyExists = String(localized: "transcript.learning.reason.skill-already-exists", defaultValue: "A reusable workflow was detected, but the matching skill already exists.")
         static let learningReasonSkillWriteFailed = String(localized: "transcript.learning.reason.skill-write-failed", defaultValue: "A reusable workflow was detected, but writing the user skill failed.")
+        static let learningMemorySuggestionUse = String(localized: "transcript.learning.memory-suggestion.use", defaultValue: "Use: Refer to this in future related turns.")
+        static let learningMemorySuggestionAction = String(localized: "transcript.learning.memory-suggestion.action", defaultValue: "Action: Save to memory after confirmation.")
+        static func learningMemorySuggestionMore(_ a1: String) -> String {
+            let template = String(localized: "transcript.learning.memory-suggestion.more", defaultValue: "+%@ more")
+            return String(format: template, a1)
+        }
         static let learningNextStepApprovePopover = String(localized: "transcript.learning.next-step.approve-popover", defaultValue: "Click Approve in the learning popover to save these into your memory store.")
         static let learningNextStepRunSearchMCP = String(localized: "transcript.learning.next-step.run-search-mcp", defaultValue: "Run search_mcp_servers, review candidates, then ask the user before installing or adding credentials.")
         static let learningNextStepWaitForWorkflow = String(localized: "transcript.learning.next-step.wait-for-workflow", defaultValue: "Wait for a completed multi-tool workflow, or explicitly ask to create a skill from this lighter evidence.")

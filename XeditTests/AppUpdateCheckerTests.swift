@@ -35,7 +35,7 @@ struct AppUpdateCheckerTests {
           "version": "1.63.0-rc1",
           "download_url": "https://meta.niuwoai.com/willdeep/WillDeep.dmg",
           "release_notes_url": "https://meta.niuwoai.com/willdeep/releases/1.63.0-rc1.html",
-          "minimum_system_version": "14.6",
+          "minimum_system_version": "13.7",
           "notes": "自动更新测试"
         }
         """.data(using: .utf8))
@@ -45,7 +45,7 @@ struct AppUpdateCheckerTests {
         #expect(meta.version == "1.63.0-rc1")
         #expect(meta.downloadURL.absoluteString == "https://meta.niuwoai.com/willdeep/WillDeep.dmg")
         #expect(meta.releaseNotesURL?.absoluteString == "https://meta.niuwoai.com/willdeep/releases/1.63.0-rc1.html")
-        #expect(meta.minimumSystemVersion == "14.6")
+        #expect(meta.minimumSystemVersion == "13.7")
         #expect(meta.notes == "自动更新测试")
     }
 

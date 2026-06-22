@@ -83,7 +83,6 @@ struct EditorView: NSViewRepresentable {
         // along the top edge — it peeked out above the gutter ruler as a stray
         // line sitting just over line "1". Drop it.
         scrollView.borderType = .noBorder
-        scrollView.documentView = textView
         scrollView.autoresizingMask = [.width, .height]
         scrollView.contentView.postsBoundsChangedNotifications = true
 
@@ -94,6 +93,7 @@ struct EditorView: NSViewRepresentable {
         textView.allowsUndo = true
         textView.textContainerInset = NSSize(width: 12, height: 8)
         textView.textContainer?.lineFragmentPadding = 0
+        configureTextViewGeometry(textView, in: scrollView)
         textView.delegate = context.coordinator
         textView.layoutManager?.delegate = context.coordinator
         // NOTE: non-contiguous layout was tried here to speed up tab switching,
@@ -128,6 +128,7 @@ struct EditorView: NSViewRepresentable {
         )
 
         context.coordinator.applyAppearance(to: textView, in: scrollView)
+        scrollView.documentView = textView
         return scrollView
     }
 
@@ -135,6 +136,7 @@ struct EditorView: NSViewRepresentable {
         guard let textView = nsView.documentView as? WillDeepTextView else { return }
 
         context.coordinator.parent = self
+        configureTextViewGeometry(textView, in: nsView)
 
         let langChanged = context.coordinator.currentLanguage != language
         let settingsChanged = context.coordinator.currentSettings != settings
@@ -205,6 +207,22 @@ struct EditorView: NSViewRepresentable {
         }
     }
 
+    private func configureTextViewGeometry(_ textView: WillDeepTextView, in scrollView: NSScrollView) {
+        textView.minSize = NSSize(width: 0, height: scrollView.contentSize.height)
+        textView.maxSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.containerSize = NSSize(
+            width: max(1, scrollView.contentSize.width),
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.textContainer?.widthTracksTextView = true
+    }
+
     // MARK: - Coordinator
 
     final class Coordinator: NSObject, NSLayoutManagerDelegate, NSTextViewDelegate {
@@ -243,6 +261,11 @@ struct EditorView: NSViewRepresentable {
         /// multi-line tokens (block comments, multi-line strings) resolve and
         /// pre-warms scrolling so highlight rarely "pops" in.
         private static let viewportHighlightMargin = 8_000
+
+        /// Bootstrap enough layout after a fresh text-storage swap that older
+        /// AppKit builds have a concrete first viewport even before SwiftUI has
+        /// delivered a non-zero visible rect.
+        private static let initialLayoutCharacterLimit = 20_000
 
         /// Debounced viewport re-highlight on scroll.
         private var viewportHighlightWorkItem: DispatchWorkItem?
@@ -552,6 +575,13 @@ struct EditorView: NSViewRepresentable {
             let visibleRect = textView.visibleRect
             if visibleRect.width > 0, visibleRect.height > 0 {
                 layoutManager.ensureLayout(forBoundingRect: visibleRect, in: textContainer)
+            } else if let length = textView.textStorage?.length, length > 0 {
+                let characterRange = NSRange(location: 0, length: min(length, Self.initialLayoutCharacterLimit))
+                let glyphRange = layoutManager.glyphRange(
+                    forCharacterRange: characterRange,
+                    actualCharacterRange: nil
+                )
+                layoutManager.ensureLayout(forGlyphRange: glyphRange)
             }
             textView.needsDisplay = true
             textView.enclosingScrollView?.contentView.needsDisplay = true

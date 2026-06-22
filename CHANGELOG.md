@@ -1,5 +1,127 @@
 # Changelog
 
+## 1.103.0-rc1 - 2026-06-23
+
+### Added
+
+- 新用户默认全局提示词：Settings → Rules 使用默认路径 `~/.willdeep/CLAUDE.md` 时，若文件不存在会自动写入一份 Codex/Alma 风格规则模板；用户仍可在设置页修改路径、编辑内容、启用或停用。
+
+### Fixed
+
+- “显示 Editor”菜单和 Agent mode 顶部笔形按钮在原 editor 窗口已关闭时，会重新打开主 editor 窗口，不再只尝试聚焦一个已经不存在的窗口。
+
+### Changed
+
+- 版本号从 **1.102.0-rc17** 提升为 **1.103.0-rc1**（新增默认全局提示词 + editor 唤回修复）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
+## 1.102.0-rc17 - 2026-06-23
+
+### Fixed
+
+- Mobile Gateway 设置页点击“刷新”时，如果当前配对二维码已过期或已被领用，会自动调用配对 rotate 生成新的二维码，并同步刷新 health 状态，避免运行中网关仍显示“当前不可配对”。
+
+### Changed
+
+- 版本号从 **1.102.0-rc16** 提升为 **1.102.0-rc17**（bugfix）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
+## 1.102.0-rc16 - 2026-06-23
+
+### Fixed
+
+- Settings → Skills 的“查看内容”文字现在也会触发展开/收起，不再只能点前面的展开箭头才能查看内置技能内容。
+
+### Changed
+
+- 版本号从 **1.102.0-rc15** 提升为 **1.102.0-rc16**（bugfix）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
+## 1.102.0-rc15 - 2026-06-23
+
+### Fixed
+
+- Agent memory 学习建议进一步降噪：标题统一为“建议保存 N 条记忆”，正文只展示候选内容、用途和确认后写入 memory 的操作说明；内部的下一步、理由、置信度和原因说明只保留在复制/审计文本里。
+
+### Changed
+
+- 版本号从 **1.102.0-rc14** 提升为 **1.102.0-rc15**（bugfix）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
+## 1.102.0-rc14 - 2026-06-23
+
+### Fixed
+
+- Agent 学习卡片和 Memory 审核列表的置信度改为高/中/低短标签并按强度着色；可见详情不再重复展示下一步、理由、置信度和原因说明，降低自动学习卡片噪音。
+
+### Changed
+
+- 版本号从 **1.102.0-rc13** 提升为 **1.102.0-rc14**（bugfix）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
+## 1.102.0-rc13 - 2026-06-22
+
+### Changed
+
+- Deployment target 从 macOS 14.6 降到 macOS 13.7,README、更新元数据示例和测试样例同步标记为 macOS 13.7+。
+- Agent 独立窗口状态栏的 Settings / Mobile Gateway 按钮在 macOS 14+ 继续使用 SwiftUI `openSettings`;macOS 13.7 上降级到 AppKit 设置窗口 fallback,避免 `openSettings` availability 阻塞构建。
+- SwiftUI 兼容层新增 `onCompatibleChange` / `focusEffectDisabledCompat` / `symbolPulseCompat`,并把 `ContentUnavailableView` 替换为本地 fallback;macOS 13.7 上保留功能,只降级部分焦点效果、空状态样式和消息光标动效。
+- 版本号从 **1.102.0-rc12** 提升为 **1.102.0-rc13**（bugfix）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
+## 1.102.0-rc12 - 2026-06-22
+
+### Fixed
+
+- Onboarding 保存 some.im API Key 时会同步预填图像理解配置,使用 some.im 国内 relay `https://api.niuwoai.com/v1` 与 `qwen3-vl-plus`,避免用户还要再去 Settings 手动配置图片理解模型。
+
+### Changed
+
+- 版本号从 **1.102.0-rc11** 提升为 **1.102.0-rc12**（bugfix）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
+## 1.102.0-rc11 - 2026-06-22
+
+### Fixed
+
+- Editor 的 `NSTextView` 现在显式配置可伸缩尺寸、text container 宽度跟随和首屏布局 bootstrap,降低 macOS 14.6/Intel 上文件内容已加载但 TextKit 首屏未铺开而显示空白的风险。
+
+### Changed
+
+- 版本号从 **1.102.0-rc10** 提升为 **1.102.0-rc11**（bugfix）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
+## 1.102.0-rc10 - 2026-06-22
+
+### Fixed
+
+- Mobile Gateway 不再随 App 启动自动启动,避免普通编辑器用户一打开 WillDeep 就触发 `com.willdeep.mobile-gateway` 钥匙串授权弹窗。
+
+### Changed
+
+- Settings → Mobile Gateway 标签页首次出现时才懒启动本地网关并读取 desktop peer token;启动后本次 App 生命周期内保持运行,保证用户扫码配对后关闭设置页手机仍可继续连接。
+- `MobileGatewayCoordinator.start()` 增加 starting 状态重入保护,避免 Settings 标签快速重绘时重复启动网关。
+- 版本号从 **1.102.0-rc9** 提升为 **1.102.0-rc10**（bugfix）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
+## 1.102.0-rc9 - 2026-06-22
+
+### Fixed
+
+- 修复 editor 模式打开文件偶发空白:文件打开入口现在由 `AppState.openEditorFile` 直接创建/激活 tab 并读盘,不再依赖 SwiftUI `onChange` 才进入 `loadFile`;已有空未编辑 tab 会重新从磁盘加载,避免空 tab 粘住。
+- `suppressURLChangeProcessing` 只在 active tab 已匹配当前 URL 时吞掉程序化回声,避免陈旧 suppress 标记跳过下一次真实文件选择。
+
+### Changed
+
+- 版本号从 **1.102.0-rc8** 提升为 **1.102.0-rc9**（bugfix）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
+## 1.102.0-rc8 - 2026-06-22
+
+### Changed
+
+- some.im 集成在 Settings 与 Onboarding 中新增区域选择：国内用户可选择 `https://api.niuwoai.com/v1`,国际用户可选择 `https://some.im/v1`;保留 Base URL 输入以支持自定义 relay。
+- some.im 视频生成设置暂时标记为开发中并禁用模型/优先级输入,避免用户误以为视频工作流已经接通。
+- 版本号从 **1.102.0-rc7** 提升为 **1.102.0-rc8**（bugfix）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
+## 1.102.0-rc7 - 2026-06-22
+
+### Changed
+
+- Agent composer 模型菜单新增 Hot / New 分组,读取 some.im `/v1/models` 扩展字段与 `/api/v1/public/model-pricing` 的 `is_hot` / `is_new` 元数据,并按 Recently used → Hot → New → Recently fetched 顺序去重展示。
+- AI Providers / some.im 集成拉取模型时会持久化模型热门、上新标记,供 composer 后续快速分组使用。
+- 版本号从 **1.102.0-rc6** 提升为 **1.102.0-rc7**（bugfix）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
 ## 1.102.0-rc6 - 2026-06-22
 
 ### Fixed

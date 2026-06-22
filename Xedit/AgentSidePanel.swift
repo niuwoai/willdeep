@@ -173,7 +173,7 @@ struct AgentSidePanelDiffView: View {
         .task(id: refreshTick) {
             await reload()
         }
-        .onChange(of: appState.activeAgentSessionID) { _, _ in
+        .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in
             refreshTick &+= 1
         }
     }
@@ -326,8 +326,8 @@ struct AgentSidePanelFilesView: View {
             }
         }
         .onAppear { rebuildIfNeeded() }
-        .onChange(of: appState.activeAgentSessionID) { _, _ in rebuildIfNeeded() }
-        .onChange(of: selectedFile) { _, newValue in
+        .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in rebuildIfNeeded() }
+        .onCompatibleChange(of: selectedFile) { _, newValue in
             // 用户点的若是 markdown / html,顺手把面板切到 Preview,
             // 看效果不用再切菜单。其它文件类型保持在 Files 内,
             // 避免误切到 Preview 又显示「unsupported」。
@@ -432,8 +432,8 @@ struct AgentSidePanelPreviewView: View {
             previewBody
         }
         .onAppear { syncFromBinding() }
-        .onChange(of: selectedFile) { _, _ in syncFromBinding() }
-        .onChange(of: appState.activeAgentSessionID) { _, _ in
+        .onCompatibleChange(of: selectedFile) { _, _ in syncFromBinding() }
+        .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in
             selectedFile = nil
             loadedURL = nil
             content = ""

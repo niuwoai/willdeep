@@ -100,6 +100,9 @@ final class AppState: ObservableObject {
     /// Model IDs the user has previously fetched in Settings — surfaced in
     /// the Agent-mode model picker as a quick switcher.
     @Published var agentKnownModelIDs: [String] = []
+    /// Hot/new flags discovered from provider model metadata. some.im
+    /// exposes these through public pricing and `/v1/models` extensions.
+    @Published var agentDiscoveredModelMetadata: [AgentModelDiscovery] = []
     /// Model IDs explicitly chosen in the composer, most-recently-used
     /// first. This is separate from fetched IDs so a large /models
     /// result doesn't drown out the handful of models the user actually
@@ -354,6 +357,7 @@ final class AppState: ObservableObject {
             }
         self.agentSessions = AgentSessionStore.loadAll()
         self.agentKnownModelIDs = AgentSettingsStore.loadKnownModelIDs()
+        self.agentDiscoveredModelMetadata = AgentSettingsStore.loadDiscoveredModelMetadata()
         self.agentRecentlyUsedModelIDs = AgentSettingsStore.loadRecentlyUsedModelIDs()
         self.agentAlwaysAllowedCommands = AgentSettingsStore.loadAlwaysAllowedCommands()
         // Sweep persisted "New Chat" rows that never received a user
@@ -379,7 +383,6 @@ final class AppState: ObservableObject {
         agentJobRegistry.onJobFinished = { [weak self] job in
             self?.surfaceDelegatedBackgroundJobCompletionIfNeeded(job)
         }
-        mobileGatewayCoordinator.autoStart()
     }
 
     deinit {
@@ -426,6 +429,18 @@ final class AppState: ObservableObject {
     var activeTab: EditorTab? {
         guard let activeTabID else { return nil }
         return tabs.first { $0.id == activeTabID }
+    }
+
+    nonisolated static func sameFileURL(_ lhs: URL, _ rhs: URL) -> Bool {
+        lhs.standardizedFileURL.path == rhs.standardizedFileURL.path
+    }
+
+    func tabIndex(for url: URL) -> Array<EditorTab>.Index? {
+        tabs.firstIndex { Self.sameFileURL($0.url, url) }
+    }
+
+    func isOpenedFile(_ url: URL) -> Bool {
+        openedFileURL.map { Self.sameFileURL($0, url) } ?? false
     }
 
     /// Memoization slot for `findMatchRanges`. Pre-rc38 the computed
@@ -508,8 +523,7 @@ final class AppState: ObservableObject {
     }
 
     func openRecentFile(_ url: URL) {
-        registerRecentFile(url)
-        openedFileURL = url
+        openEditorFile(url)
     }
 
     func openRecentFolder(_ url: URL, openInNewWindow: ((URL) -> Void)? = nil) {
@@ -535,15 +549,12 @@ final class AppState: ObservableObject {
             return
         }
 
-        registerRecentFile(fileURL)
-        registerRecentFolder(fileURL.deletingLastPathComponent())
         // Don't auto-promote the file's parent to `rootDirectory`. That used to
         // load the whole FileTree + run a recursive Quick Open scan + git
         // status for every "open file" — fatal latency when the parent is a
         // huge dir like ~/Downloads. The sidebar only appears now when the
         // user explicitly opens a folder (⇧⌘O / Open Folder…).
-        openedFileURL = fileURL
-        persistSession()
+        openEditorFile(fileURL)
     }
 
     func createMissingExternalFile(at fileURL: URL) {
@@ -557,9 +568,7 @@ final class AppState: ObservableObject {
 
         do {
             try Data().write(to: fileURL, options: [.atomic])
-            registerRecentFile(fileURL)
-            registerRecentFolder(parentURL)
-            openedFileURL = fileURL
+            openEditorFile(fileURL, performsSafetyChecks: false)
             persistSession()
         } catch {
             openMissingExternalFileDraft(at: fileURL)
@@ -628,8 +637,7 @@ final class AppState: ObservableObject {
 
     func openAgentChangedFile(_ relativePath: String) {
         guard let url = agentChangedFileURL(relativePath) else { return }
-        registerRecentFile(url)
-        openedFileURL = url
+        openEditorFile(url)
         // 1.80.0-rc1：editor / agent 已经分窗口，老的 setAppMode(.editor)
         // 切回路径不再有意义；改成把当前跟随中的 editor 窗口抬到前
         // 台，让用户看到刚打开的那个文件。
@@ -749,8 +757,7 @@ final class AppState: ObservableObject {
 
             do {
                 try Data().write(to: fileURL)
-                registerRecentFile(fileURL)
-                openedFileURL = fileURL
+                openEditorFile(fileURL)
                 refreshGitStatus()
                 completion?()
             } catch {
@@ -1081,9 +1088,10 @@ final class AppState: ObservableObject {
 
     @discardableResult
     func activateTab(for url: URL) -> Bool {
-        guard let tab = tabs.first(where: { $0.url == url }) else {
+        guard let index = tabIndex(for: url) else {
             return false
         }
+        let tab = tabs[index]
         return activateTab(id: tab.id)
     }
 

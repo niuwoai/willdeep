@@ -12,6 +12,7 @@ import SwiftUI
 
 struct AgentChatHeader: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.openWindow) private var openWindow
     @Binding var sidePanel: AgentSidePanelKind?
 
     var body: some View {
@@ -30,8 +31,10 @@ struct AgentChatHeader: View {
                 // 语义从「切回 editor 模式」变成「把对应的 editor
                 // 窗口抬到前台」。当前 AppState（agent 窗口跟随的）
                 // 对应的 editor NSWindow 由 EditorAppStateRegistry
-                // 跟踪。
-                EditorAppStateRegistry.shared.focusCurrentEditorWindow()
+                // 跟踪。若 editor 窗口此前已关闭,则重新打开主窗口。
+                if !appState.showEditor() {
+                    openWindow(id: EditorWindowID.value)
+                }
             } label: {
                 Image(systemName: "pencil.and.outline")
             }

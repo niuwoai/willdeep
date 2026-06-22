@@ -111,6 +111,21 @@ struct AgentClient {
         }
     }
 
+    func fetchModelDiscoveries() async throws -> [AgentModelDiscovery] {
+        switch configuration.providerKind {
+        case .openAIChat:
+            return try await OpenAIChatAdapter(configuration: configuration, session: session)
+                .fetchModelDiscoveries()
+        case .openAIResponses:
+            return try await OpenAIResponsesAdapter(configuration: configuration, session: session)
+                .fetchModelDiscoveries()
+        case .anthropicMessages, .geminiGenerateContent:
+            return try await fetchModels().map {
+                AgentModelDiscovery(id: $0, isHot: false, isNew: false)
+            }
+        }
+    }
+
     /// Fold tool calls + their tool-result replies into a contiguous
     /// assistant→tool→tool… sub-sequence and drop orphaned tool
     /// messages. Used by AppState both as a pre-request normalization

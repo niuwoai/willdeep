@@ -9,6 +9,7 @@ import SwiftUI
 
 struct MobileGatewaySettingsView: View {
     @EnvironmentObject private var appState: AppState
+    @ObservedObject private var settingsNavigation = EditorSettingsNavigation.shared
     @State private var draft = MobileGatewaySettingsStore.load()
     @State private var portText = String(MobileGatewaySettingsStore.load().port)
     @FocusState private var portFieldFocused: Bool
@@ -27,8 +28,9 @@ struct MobileGatewaySettingsView: View {
 
     var body: some View {
         Form {
-            // 1.85.0-rc10:网关总是自启动,这里只展示状态 + 提供 Refresh /
-            // Restart;不再有「启用/停用」开关和 Start/Stop 按钮。
+            // Mobile Gateway is lazy-started when the user opens this tab.
+            // After that it stays alive for this app session so a paired
+            // phone keeps working after Settings is closed.
             Section(L10n.Settings.MobileGateway.controlSection) {
                 LabeledContent(L10n.Settings.MobileGateway.statusLabel) {
                     Text(statusText)
@@ -155,7 +157,7 @@ struct MobileGatewaySettingsView: View {
                         .onSubmit {
                             commitPortText()
                         }
-                        .onChange(of: portFieldFocused) { _, isFocused in
+                        .onCompatibleChange(of: portFieldFocused) { _, isFocused in
                             if !isFocused {
                                 commitPortText()
                             }
@@ -225,9 +227,13 @@ struct MobileGatewaySettingsView: View {
         }
         .formStyle(.grouped)
         .onAppear {
-            draft = coordinator.settings
-            portText = String(draft.port)
-            Task { await coordinator.refresh() }
+            syncDraftFromCoordinator()
+            startGatewayIfSelected()
+        }
+        .onCompatibleChange(of: settingsNavigation.selectedTab) { _, selectedTab in
+            guard selectedTab == .mobileGateway else { return }
+            syncDraftFromCoordinator()
+            startGatewayIfSelected()
         }
     }
 
@@ -284,6 +290,16 @@ struct MobileGatewaySettingsView: View {
         }
         draft.port = port
         saveDraft()
+    }
+
+    private func syncDraftFromCoordinator() {
+        draft = coordinator.settings
+        portText = String(draft.port)
+    }
+
+    private func startGatewayIfSelected() {
+        guard settingsNavigation.selectedTab == .mobileGateway else { return }
+        Task { await coordinator.start() }
     }
 
     private func deviceSubtitle(_ device: MobileGatewayDevice) -> String {

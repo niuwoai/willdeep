@@ -16,6 +16,7 @@ struct AgentSkillSettingsView: View {
     @State private var searchQuery = ""
     @State private var isCreatingSkill = false
     @State private var statusMessage = L10n.Settings.allChangesSaved
+    @State private var expandedSkillIdentifiers: Set<String> = []
 
     private var filteredMarketplaceEntries: [AgentSkillMarketplaceEntry] {
         let query = normalizedSearchQuery
@@ -433,7 +434,7 @@ struct AgentSkillSettingsView: View {
                 .labelsHidden()
             }
 
-            DisclosureGroup(L10n.Settings.Skill.viewContent) {
+            DisclosureGroup(isExpanded: skillContentExpansionBinding(for: skill.identifier)) {
                 ScrollView {
                     Text(AgentSkillDirectory.loadBody(for: skill, maxCharacters: 12_000) ?? L10n.Settings.Skill.unableToRead)
                         .font(.system(size: 11, design: .monospaced))
@@ -444,9 +445,37 @@ struct AgentSkillSettingsView: View {
                 .frame(minHeight: 120, maxHeight: 240)
                 .background(Color(nsColor: .textBackgroundColor).opacity(0.65))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
+            } label: {
+                Button {
+                    toggleSkillContentExpansion(for: skill.identifier)
+                } label: {
+                    Text(L10n.Settings.Skill.viewContent)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(.vertical, 6)
+    }
+
+    private func skillContentExpansionBinding(for identifier: String) -> Binding<Bool> {
+        Binding {
+            expandedSkillIdentifiers.contains(identifier)
+        } set: { isExpanded in
+            if isExpanded {
+                expandedSkillIdentifiers.insert(identifier)
+            } else {
+                expandedSkillIdentifiers.remove(identifier)
+            }
+        }
+    }
+
+    private func toggleSkillContentExpansion(for identifier: String) {
+        if expandedSkillIdentifiers.contains(identifier) {
+            expandedSkillIdentifiers.remove(identifier)
+        } else {
+            expandedSkillIdentifiers.insert(identifier)
+        }
     }
 
     private func setting<Value>(_ keyPath: WritableKeyPath<AgentSkillSettings, Value>) -> Binding<Value> {

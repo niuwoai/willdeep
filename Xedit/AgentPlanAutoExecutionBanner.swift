@@ -96,7 +96,7 @@ struct AgentPlanAutoExecutionBanner: View {
                 }
                 .toggleStyle(.checkbox)
                 .controlSize(.small)
-                .onChange(of: rememberChoice) { _, newValue in
+                .onCompatibleChange(of: rememberChoice) { _, newValue in
                     onRememberChange(newValue)
                 }
 

@@ -47,7 +47,7 @@ struct AgentRuntimeSettingsView: View {
                 loadSelectedRuntime()
             }
         }
-        .onChange(of: selectedRuntimeID) { _, _ in
+        .onCompatibleChange(of: selectedRuntimeID) { _, _ in
             loadSelectedRuntime()
         }
     }
@@ -244,12 +244,12 @@ struct AgentRuntimeSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .onChange(of: transport) { _, newTransport in
+        .onCompatibleChange(of: transport) { _, newTransport in
             if newTransport == .ssh && identityFilePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 identityFilePath = defaultSSHIdentityFilePath
             }
         }
-        .onChange(of: port) { _, newPort in
+        .onCompatibleChange(of: port) { _, newPort in
             port = clampedPort(newPort)
         }
     }

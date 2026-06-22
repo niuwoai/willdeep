@@ -17731,6 +17731,22 @@
         }
       }
     },
+    "transcript.learning.confidence.high.short" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "H"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高"
+          }
+        }
+      }
+    },
     "transcript.learning.confidence.low" : {
       "localizations" : {
         "en" : {
@@ -17747,6 +17763,22 @@
         }
       }
     },
+    "transcript.learning.confidence.low.short" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "低"
+          }
+        }
+      }
+    },
     "transcript.learning.confidence.medium" : {
       "localizations" : {
         "en" : {
@@ -17759,6 +17791,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "中置信度"
+          }
+        }
+      }
+    },
+    "transcript.learning.confidence.medium.short" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "M"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中"
           }
         }
       }
@@ -17876,6 +17924,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "建议保存 %@ 条自学习记忆（待你审阅）"
+          }
+        }
+      }
+    },
+    "transcript.learning.event-title.suggested-memories" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suggest saving %@ memory item(s)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "建议保存 %@ 条记忆"
           }
         }
       }
@@ -18118,6 +18182,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "另有 %@ 条学习事件未展开"
+          }
+        }
+      }
+    },
+    "transcript.learning.memory-suggestion.action" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Action: Save to memory after confirmation."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "操作：确认后写入 memory。"
+          }
+        }
+      }
+    },
+    "transcript.learning.memory-suggestion.more" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%@ more"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "另有 %@ 条"
+          }
+        }
+      }
+    },
+    "transcript.learning.memory-suggestion.use" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use: Refer to this in future related turns."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用途：后续处理相关问题时参考。"
           }
         }
       }

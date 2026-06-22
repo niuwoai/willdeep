@@ -10,8 +10,8 @@
 //   - `ModelPickerPill`: provider/model selector. Flat Section per
 //     provider with Flash and Pro models as direct rows (nested Menus
 //     on macOS dismiss on the slightest hover drift). Has
-//     "Recently used" and "Recently fetched" tail menus for ad-hoc
-//     model IDs not in the library entries.
+//     "Recently used", "Hot", "New", and "Recently fetched" tail
+//     menus for ad-hoc model IDs not in the library entries.
 //   - `AgentExecutionPickerPill`: WillDeep / Claude Code / Codex
 //     execution backend selector for the next composer turn.
 //   - `AgentModePickerPill`: Normal / Plan / Goal selector. Plan locks
@@ -75,7 +75,7 @@ struct WorkspacePickerPill: View {
         .onAppear {
             appState.refreshAgentGitWorktrees()
         }
-        .onChange(of: appState.rootDirectory) { _, _ in
+        .onCompatibleChange(of: appState.rootDirectory) { _, _ in
             appState.refreshAgentGitWorktrees()
         }
     }
@@ -544,17 +544,33 @@ struct ModelPickerPill: View {
 
             // Tail: ad-hoc models that don't belong to any library
             // entry's primary/alternates list. Recently used comes
-            // first, then older fetched-only ids, so a new pull does
-            // not bury the models the user actually picked.
+            // first, then provider-supplied catalog highlights, then
+            // older fetched-only ids.
             let libraryModels = libraryModelSet
             let used = adHocModels(from: appState.agentRecentlyUsedModelIDs, excluding: libraryModels)
-            let fetched = adHocModels(from: appState.agentKnownModelIDs, excluding: libraryModels.union(used))
-            if !used.isEmpty || !fetched.isEmpty {
+            let hot = adHocModels(from: catalogModelIDs(where: \.isHot), excluding: libraryModels.union(used))
+            let newModels = adHocModels(from: catalogModelIDs(where: \.isNew), excluding: libraryModels.union(used).union(hot))
+            let fetched = adHocModels(from: appState.agentKnownModelIDs, excluding: libraryModels.union(used).union(hot).union(newModels))
+            if !used.isEmpty || !hot.isEmpty || !newModels.isEmpty || !fetched.isEmpty {
                 Divider()
             }
             if !used.isEmpty {
                 Menu("Recently used") {
                     ForEach(used, id: \.self) { model in
+                        adHocModelButton(model)
+                    }
+                }
+            }
+            if !hot.isEmpty {
+                Menu("Hot") {
+                    ForEach(hot, id: \.self) { model in
+                        adHocModelButton(model)
+                    }
+                }
+            }
+            if !newModels.isEmpty {
+                Menu("New") {
+                    ForEach(newModels, id: \.self) { model in
                         adHocModelButton(model)
                     }
                 }
@@ -701,6 +717,12 @@ struct ModelPickerPill: View {
             guard seen.insert(key).inserted else { return nil }
             return model
         }
+    }
+
+    private func catalogModelIDs(where flag: (AgentModelDiscovery) -> Bool) -> [String] {
+        appState.agentDiscoveredModelMetadata
+            .filter(flag)
+            .map(\.id)
     }
 
     private func isKnownModelRelevantToActiveProvider(_ model: String) -> Bool {

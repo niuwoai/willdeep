@@ -117,9 +117,7 @@ private struct AgentLearningEventRow: View {
                     Text(statusLabel)
                         .font(AgentDesign.captionFont)
                         .foregroundStyle(.secondary)
-                    Text(AgentLearningActionPresentation.confidence(for: event).label)
-                        .font(AgentDesign.captionFont)
-                        .foregroundStyle(confidenceTint)
+                    confidenceTag
                     Spacer(minLength: 0)
                 }
 
@@ -245,12 +243,24 @@ private struct AgentLearningEventRow: View {
     private var confidenceTint: Color {
         switch AgentLearningActionPresentation.confidence(for: event) {
         case .low:
-            return .orange
+            return .red
         case .medium:
-            return .secondary
+            return .orange
         case .high:
             return .green
         }
+    }
+
+    private var confidenceTag: some View {
+        Text(AgentLearningActionPresentation.confidence(for: event).shortLabel)
+            .font(AgentDesign.captionFont)
+            .fontWeight(.semibold)
+            .foregroundStyle(confidenceTint)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(confidenceTint.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .help(AgentLearningActionPresentation.confidence(for: event).label)
     }
 }
 
@@ -288,7 +298,7 @@ private struct AgentLearningActionSummary: View {
 
     private var secondaryLines: [String] {
         guard action != nil else { return [] }
-        return AgentLearningActionPresentation.summaryLines(for: event)
+        return AgentLearningActionPresentation.conciseSummaryLines(for: event)
             .dropFirst()
             .filter { $0 != L10n.Transcript.learningActionNeedsConfirmation }
     }

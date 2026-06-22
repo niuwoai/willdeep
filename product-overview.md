@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-22 | Current version: v1.102.0-rc6
+> Last updated: 2026-06-23 | Current version: v1.103.0-rc1
 
 ## Positioning
 
@@ -22,6 +22,18 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **历史对话保留用户换行（1.102.0-rc4）** —— 用户粘贴到 composer 的多行文本在沉淀到 Agent 历史气泡后按原文保留换行和空行,命令输出、日志片段不会被 Markdown 段落规则压成一行。
 - **历史粘贴文本可查看（1.102.0-rc5）** —— 历史气泡中的“已粘贴的文本.txt”附件条目可点击打开只读内容窗口,方便回看大段粘贴日志或命令输出。
 - **Composer 模型 Recently Used（1.102.0-rc6）** —— Agent composer 模型菜单新增 Recently used 分组,按用户最近实际选择排序,并与 Recently fetched 去重,避免新拉取的大模型列表淹没常用模型。
+- **some.im 区域选择（1.102.0-rc8）** —— Settings 与 Onboarding 的 some.im 集成新增国内/国际 relay 区域选择,中国用户可一键使用 `https://api.niuwoai.com/v1`,国际用户使用 `https://some.im/v1`;视频生成设置暂时显示为开发中并禁用输入。
+- **Editor 文件打开兜底（1.102.0-rc9）** —— 文件打开入口统一走 `AppState.openEditorFile`,菜单、CLI/Finder URL、Recent、Quick Open 和文件树选择都会直接创建/激活 tab 并读盘,不再依赖 SwiftUI `onChange` 才进入 `loadFile`;已有空未编辑 tab 会重新从磁盘加载,避免 editor 模式打开文件只剩空白。
+- **Mobile Gateway 懒启动（1.102.0-rc10）** —— App 启动时不再自动启动手机网关,也不会主动读取 `com.willdeep.mobile-gateway` 钥匙串项;用户进入 Settings → Mobile Gateway 标签时才启动网关并显示配对二维码,启动后本次 App 生命周期内保持运行以支持手机继续连接。
+- **Editor TextKit 布局兜底（1.102.0-rc11）** —— `NSTextView` 明确配置可伸缩尺寸、容器宽度跟随和首屏布局 bootstrap,避免 macOS 14.6/Intel 上文件内容已加载但首屏未被 TextKit 正确铺开而显示空白。
+- **some.im 图像理解预填（1.102.0-rc12）** —— Onboarding 保存 some.im API Key 时会同步预填 Image Understanding 配置,使用 some.im 国内 relay `https://api.niuwoai.com/v1` 和 `qwen3-vl-plus`,让截图/图片理解能力跟随 some.im 集成一起可用。
+- **macOS 13.7 兼容（1.102.0-rc13）** —— Deployment target 降到 macOS 13.7,Agent 状态栏 Settings / Mobile Gateway 按钮在 macOS 14+ 继续使用 SwiftUI `openSettings`,在 macOS 13.7 降级到 AppKit 设置窗口 fallback；两参数 `onChange`、`focusEffectDisabled`、`symbolEffect(.pulse)` 和 `ContentUnavailableView` 走本地兼容层,主编辑器和本地网关保持可用,旧系统只降级部分焦点/动效/空状态视觉。
+- **Agent 学习卡片降噪（1.102.0-rc14）** —— transcript 学习卡和 Memory 审核列表把置信度收成高/中/低短标签,并从可见详情里移除下一步、理由、置信度和原因说明；复制文本仍保留审计信息。
+- **Agent memory 建议精简（1.102.0-rc15）** —— memory 学习建议标题统一为“建议保存 N 条记忆”,正文只展示候选内容、用途和确认后写入 memory 的操作说明,避免把内部判断过程直接露给用户。
+- **内置技能内容展开命中区修复（1.102.0-rc16）** —— Settings → Skills 的“查看内容”文字现在和前置展开箭头一样可点击,内置/用户/插件技能都可直接点文字展开或收起 SKILL.md 内容。
+- **Mobile Gateway 配对刷新修复（1.102.0-rc17）** —— Settings → Mobile Gateway 的“刷新”在配对 token 过期或已被领用时会自动 rotate 生成新二维码,不再只显示“当前不可配对”。
+- **Editor 唤回与默认全局提示词（1.103.0-rc1）** —— “显示 Editor”菜单和 Agent mode 笔形按钮在原 editor 窗口已关闭时会重新打开主 editor 窗口；Settings → Rules 对新用户默认生成 `~/.willdeep/CLAUDE.md`,内置 Codex/Alma 风格全局规则模板,并继续允许用户改路径和编辑内容。
+- **Composer 模型热门/上新分组（1.102.0-rc7）** —— Agent composer 模型菜单消费 some.im `/v1/models` / 公开模型定价里的 `is_hot`、`is_new` 标记,在 Recently used 后展示 Hot / New 分组,并与 Recently fetched 去重。
 - **CLI 缺失文件新建（1.102.0-rc2）** —— `willdeep <path>` 现在通过 `willdeep://open?path=...` 把路径交给 App 处理,不存在但父目录存在的文件会自动创建空文件并打开,避免 macOS `open` 在 App 启动前直接报 "does not exist"。
 - **some.im 多模态整合（1.102.0-rc1）** —— Settings 与 Onboarding 新增 some.im 配置入口,API Key 存 Keychain,可拉取模型并设置图片/视频生成首选与优先模型；内置 `generate_image` 工具在 some.im 配置后直接调用 relay 图片生成接口,默认 `gpt-image-2`,并且 OpenAI Chat 兼容请求会过滤 `.widget` / `.workflowReport` 本地卡片,避免 UI-only role 泄漏给 some.im。
 - **DMG 图标同步（1.100.0-rc2）** —— release 打包流程会从 `Xedit/Assets.xcassets/AppIcon.appiconset` 自动生成临时 `.icns`,并把它用作 DMG volume icon；DMG 内的 `.app` 图标和安装包自身图标都跟当前 App 启动/Dock 图标保持一致。
@@ -209,7 +221,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **Global Agent Rules（1.64.0-rc1）** — Settings 新增 Rules 标签页，可启用/停用全局规则文件、选择任意 Markdown 路径并直接编辑保存。默认路径为 `~/.willdeep/CLAUDE.md`；每轮 Agent system prompt 会先注入全局规则，再注入当前仓库的 `AGENTS.md` / `CLAUDE.md` / README / product overview，让个人偏好跨项目生效，同时保留项目规则的更具体约束。
 - **Agent Sandbox & Escalation（1.60.0-rc27）** — Agent 工具执行新增 Codex-style 沙箱策略：只读命令默认使用脱敏环境与临时 HOME，并在 macOS 可用时通过 `sandbox-exec` 禁止网络和越权写入；workspace-write 命令仍需审批，只允许 workspace / 临时目录写入；网络、凭据/macOS Keychain、系统路径和破坏性 shell 形态进入 escalated 模式。Goal mode 会自动放行 write 层动作，并额外允许通过公共 URL 校验的 `web_fetch` 网络读取；Workspace Access 仍不静默放行 escalated。工具卡展示 `_sandbox`、`_approval_reason`、`_prefix_rule`，执行结果写入 `~/Library/Application Support/WillDeep/AgentAudit/sandbox.jsonl` 并对 token/secret 脱敏。rc27 修正风险分级边界：forceful git 操作仍为 danger，workspace 外只读/重定向为普通 write 审批，`git -C <workspace>` 只读命令可回到 read 风险；1.65.0-rc3 起，公网 `curl` GET/HEAD 与 `ssh host "只读命令"` 也可降为 read 风险，POST/上传/输出文件/私网 URL/远端危险命令仍需审批或确认；1.65.0-rc4 起，`go build/test` 与常见 `yarn/npm/pnpm run dev/build/test/lint/typecheck` 作为低风险 workspace-write 自动放行。
 - **Static Skill Marketplace（1.60.0-rc20）** — Settings → Skills 新增静态 Skill Marketplace 区域，首批内置 WillDeep 官方 skill 条目支持搜索、安装、更新和卸载；安装器将条目写入 `~/.codex/skills/<slug>/SKILL.md`，用 frontmatter 记录 marketplace id/version，并保护同名用户 skill 不被覆盖。rc20 扩展 PDF Design 与 Image Processing 条目，其中 Image Processing 会随安装写入 `scripts/process_image.py`，支持裁剪、缩放、格式转换、透明色处理、透明边裁切、画布填充与扁平化。安装后复用既有 `AgentSkillDirectory`，立即进入 Agent 工具、Settings 技能列表和 composer `@` 选择器。
-- **Large workspace guardrails（1.60.0-rc17）** — Editor 文件树、Quick Open、跨文件夹查找替换、Agent 本地工具和远端 daemon 均跳过常见依赖/构建目录（如 `node_modules` / `.git` / `target` / `.gradle` / `.terraform` / `.dart_tool` / `DerivedData` / `Pods` / `vendor`），并对目录项、遍历节点数和搜索文件数设硬上限，避免打开或扫描大目录时内存暴涨。macOS deployment target 同步降为 14.6，便于在 Sonoma 14.6+ 运行。**1.60.0-rc15** 同步修复 chat history copy chrome 测试：代码块和消息 footer 的复制按钮现在按 attributed string 的 link / payload / hidden style 断言，不再依赖 SF Symbol 附件在 `.string` 中呈现为固定 glyph；background job lifecycle 测试改用带 `TERM` trap 的长跑样本，减少全量并发测试中的时序误报。
+- **Large workspace guardrails（1.60.0-rc17）** — Editor 文件树、Quick Open、跨文件夹查找替换、Agent 本地工具和远端 daemon 均跳过常见依赖/构建目录（如 `node_modules` / `.git` / `target` / `.gradle` / `.terraform` / `.dart_tool` / `DerivedData` / `Pods` / `vendor`），并对目录项、遍历节点数和搜索文件数设硬上限，避免打开或扫描大目录时内存暴涨。macOS deployment target 当时同步降为 14.6，便于在 Sonoma 14.6+ 运行；当前版本已进一步兼容到 macOS 13.7+。**1.60.0-rc15** 同步修复 chat history copy chrome 测试：代码块和消息 footer 的复制按钮现在按 attributed string 的 link / payload / hidden style 断言，不再依赖 SF Symbol 附件在 `.string` 中呈现为固定 glyph；background job lifecycle 测试改用带 `TERM` trap 的长跑样本，减少全量并发测试中的时序误报。
 - **@MainActor isolation** — AppState 本身是 `@MainActor`，所有 `@Published` mutation 必须在主线程发生。runtime 的 hot 字段亦然，但 `AgentClient` 的 URLSession 流式回调跨线程时通过 `Task { @MainActor in ... }` 拥抱主线程。`AppState.deinit` 不能 cancel runtime——rc38 曾尝试 `MainActor.assumeIsolated` 但 Swift Testing 在非主线程 release 触发 precondition fail，rc41 回退；清理走 session 显式删除路径。
 - **Per-provider concurrency cap** — 多 runtime 并发跑时，同一 provider 的活跃请求按 `AgentSettingsStore` 的 `concurrencyLimit`（默认 3，1–8 可调）FIFO 排队；不同 provider 互不阻塞。这样自动化集中触发也不会冲烂同一家 API 的速率。
 - **find/replace 内容哈希缓存** — `AppState.findMatchRanges` 与 `changedLineNumbers` 用 `(content.hashValue, query/savedContent)` 双键缓存（rc39 落地）。SwiftUI body 多次读这俩属性时不再每次重扫全文。

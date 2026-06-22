@@ -11,6 +11,61 @@ import SwiftUI
 import AppKit
 import Combine
 
+extension View {
+    @ViewBuilder
+    func focusEffectDisabledCompat() -> some View {
+        if #available(macOS 14.0, *) {
+            focusEffectDisabled()
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    func symbolPulseCompat() -> some View {
+        if #available(macOS 14.0, *) {
+            symbolEffect(.pulse)
+        } else {
+            self
+        }
+    }
+
+    func onCompatibleChange<Value: Equatable>(
+        of value: Value,
+        perform action: @escaping (Value) -> Void
+    ) -> some View {
+        onChange(of: value, perform: action)
+    }
+
+    func onCompatibleChange<Value: Equatable>(
+        of value: Value,
+        perform action: @escaping (Value, Value) -> Void
+    ) -> some View {
+        modifier(CompatibleChangeModifier(value: value, action: action))
+    }
+}
+
+private struct CompatibleChangeModifier<Value: Equatable>: ViewModifier {
+    let value: Value
+    let action: (Value, Value) -> Void
+
+    @State private var previousValue: Value?
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                previousValue = value
+            }
+            .onChange(of: value, perform: handleChange)
+    }
+
+    private func handleChange(_ newValue: Value) {
+        let oldValue = previousValue ?? newValue
+        previousValue = newValue
+        action(oldValue, newValue)
+    }
+}
+
 enum EditorSettingsTab: Hashable {
     case typography
     case appearance
@@ -35,19 +90,48 @@ final class EditorSettingsNavigation: ObservableObject {
     static let shared = EditorSettingsNavigation()
 
     @Published var selectedTab: EditorSettingsTab = .typography
+    private var fallbackSettingsWindowController: NSWindowController?
 
     private init() {}
 
-    func open(_ tab: EditorSettingsTab) {
+    func open(_ tab: EditorSettingsTab, appState: AppState? = nil) {
         selectedTab = tab
-        openWindow()
+        openWindow(appState: appState)
     }
 
     /// Open the settings window without changing the selected tab — used
     /// by the Agent status-bar gear so it lands on whatever section the
     /// user last had open.
-    func openWindow() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+    func openWindow(appState: AppState? = nil) {
+        if NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        openFallbackSettingsWindow(appState: appState)
+    }
+
+    private func openFallbackSettingsWindow(appState: AppState?) {
+        if let window = fallbackSettingsWindowController?.window {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let state = appState ?? AppState()
+        let content = EditorSettingsView()
+            .environmentObject(state)
+        let window = NSWindow(contentViewController: NSHostingController(rootView: content))
+        window.title = L10n.Settings.windowTitle
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.contentMinSize = NSSize(width: 560, height: 520)
+        window.setContentSize(NSSize(width: 760, height: 680))
+        window.center()
+        window.isReleasedWhenClosed = false
+
+        let controller = NSWindowController(window: window)
+        fallbackSettingsWindowController = controller
+        controller.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 }

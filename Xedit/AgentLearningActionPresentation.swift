@@ -23,6 +23,17 @@ enum AgentLearningActionPresentation {
                 return L10n.Transcript.learningConfidenceHigh
             }
         }
+
+        var shortLabel: String {
+            switch self {
+            case .low:
+                return L10n.Transcript.learningConfidenceLowShort
+            case .medium:
+                return L10n.Transcript.learningConfidenceMediumShort
+            case .high:
+                return L10n.Transcript.learningConfidenceHighShort
+            }
+        }
     }
 
     static func label(for kind: AgentLearningActionKind) -> String {
@@ -71,6 +82,40 @@ enum AgentLearningActionPresentation {
         lines.append(L10n.Transcript.learningActionConfidence(explanation.confidence.label))
         lines.append(L10n.Transcript.learningActionWhy(explanation.rationale))
         return lines
+    }
+
+    static func conciseSummaryLines(for event: AgentLearningEvent) -> [String] {
+        guard let action = event.action else { return [] }
+
+        var lines = [label(for: action.kind)]
+        if let commandName = compact(action.commandName) {
+            lines.append(L10n.Transcript.learningActionCommand(commandName))
+        }
+        if let target = compact(action.target) {
+            lines.append(L10n.Transcript.learningActionTarget(target))
+        }
+        if let searchQuery = compact(action.searchQuery) {
+            lines.append(L10n.Transcript.learningActionSearchQuery(searchQuery))
+        }
+        if action.requiresUserConfirmation {
+            lines.append(L10n.Transcript.learningActionNeedsConfirmation)
+        }
+        return lines
+    }
+
+    static func memorySuggestionDetail(for drafts: [AgentMemoryDraft]) -> String {
+        let shownDrafts = drafts.prefix(3)
+        let contentLines: [String]
+        if drafts.count == 1, let first = shownDrafts.first {
+            contentLines = ["`\(clip(first.content, limit: 180))`"]
+        } else {
+            contentLines = shownDrafts.map { "- `\(clip($0.content, limit: 160))`" }
+                + hiddenMemoryCountLine(totalCount: drafts.count, shownCount: shownDrafts.count)
+        }
+        return (contentLines + [
+            L10n.Transcript.learningMemorySuggestionUse,
+            L10n.Transcript.learningMemorySuggestionAction
+        ]).joined(separator: "\n")
     }
 
     static func confidence(for event: AgentLearningEvent) -> Confidence {
@@ -122,6 +167,12 @@ enum AgentLearningActionPresentation {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count > limit else { return trimmed }
         return String(trimmed.prefix(limit)) + "…"
+    }
+
+    private static func hiddenMemoryCountLine(totalCount: Int, shownCount: Int) -> [String] {
+        let hiddenCount = totalCount - shownCount
+        guard hiddenCount > 0 else { return [] }
+        return [L10n.Transcript.learningMemorySuggestionMore(String(hiddenCount))]
     }
 
     static func copyText(for event: AgentLearningEvent) -> String {

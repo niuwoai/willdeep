@@ -118,7 +118,7 @@ struct AgentLearningReviewSettingsSection: View {
                     tag(kindLabel(for: item.event), color: tint(for: item.event))
                     tag(statusLabel(for: item.event), color: .secondary)
                     tag(
-                        AgentLearningActionPresentation.confidence(for: item.event).label,
+                        AgentLearningActionPresentation.confidence(for: item.event).shortLabel,
                         color: confidenceColor(for: item.event)
                     )
                     if item.decision != .pending {
@@ -346,7 +346,7 @@ struct AgentLearningReviewSettingsSection: View {
     }
 
     private func actionDetailLines(for event: AgentLearningEvent) -> [String] {
-        AgentLearningActionPresentation.summaryLines(for: event)
+        AgentLearningActionPresentation.conciseSummaryLines(for: event)
             .dropFirst()
             .filter { $0 != L10n.Transcript.learningActionNeedsConfirmation }
     }
@@ -387,9 +387,9 @@ struct AgentLearningReviewSettingsSection: View {
     private func confidenceColor(for event: AgentLearningEvent) -> Color {
         switch AgentLearningActionPresentation.confidence(for: event) {
         case .low:
-            return .orange
+            return .red
         case .medium:
-            return .secondary
+            return .orange
         case .high:
             return .green
         }

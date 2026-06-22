@@ -42,7 +42,7 @@ struct AgentProviderLibrarySection: View {
             }
         }
         .onAppear(perform: ensureSelection)
-        .onChange(of: appState.agentProviderLibrary.activeID) { _, _ in
+        .onCompatibleChange(of: appState.agentProviderLibrary.activeID) { _, _ in
             ensureSelection()
         }
     }
@@ -264,7 +264,7 @@ private struct AgentProviderEntryEditor: View {
             .padding(.trailing, 4)
         }
         .onAppear(perform: loadFromEntry)
-        .onChange(of: entry.id) { _, _ in loadFromEntry() }
+        .onCompatibleChange(of: entry.id) { _, _ in loadFromEntry() }
     }
 
     // MARK: - Connection
@@ -280,7 +280,7 @@ private struct AgentProviderEntryEditor: View {
                     fieldRow(L10n.Settings.Provider.displayNameLabel) {
                         TextField(L10n.Settings.Provider.displayNamePlaceholder, text: $displayName, onCommit: commit)
                             .textFieldStyle(.roundedBorder)
-                            .onChange(of: displayName) { _, _ in commit() }
+                            .onCompatibleChange(of: displayName) { _, _ in commit() }
                     }
                     fieldRow(L10n.Settings.Provider.presetLabel) {
                         Picker("", selection: $providerID) {
@@ -289,7 +289,7 @@ private struct AgentProviderEntryEditor: View {
                             }
                         }
                         .labelsHidden()
-                        .onChange(of: providerID) { _, newID in
+                        .onCompatibleChange(of: providerID) { _, newID in
                             // Snap to preset defaults so the user doesn't have
                             // to retype everything when switching brands.
                             if let preset = AgentProviderPreset.preset(id: newID), preset.id != AgentProviderPreset.customID {
@@ -318,7 +318,7 @@ private struct AgentProviderEntryEditor: View {
                     fieldRow(L10n.Settings.Provider.baseURLLabel) {
                         TextField(baseURLPlaceholder, text: $baseURL, onCommit: commit)
                             .textFieldStyle(.roundedBorder)
-                            .onChange(of: baseURL) { _, _ in commit() }
+                            .onCompatibleChange(of: baseURL) { _, _ in commit() }
                     }
                     baseURLStatusRow
                     fieldRow(L10n.Settings.Provider.apiKeyLabel) {
@@ -327,7 +327,7 @@ private struct AgentProviderEntryEditor: View {
                             placeholder: "",
                             onCommit: commit
                         )
-                        .onChange(of: apiKey) { _, _ in commit() }
+                        .onCompatibleChange(of: apiKey) { _, _ in commit() }
                     }
                     apiKeyHint
                 }
@@ -354,7 +354,7 @@ private struct AgentProviderEntryEditor: View {
                     Text("OpenAI Responses").tag(AgentProviderKind?.some(.openAIResponses))
                 }
                 .labelsHidden()
-                .onChange(of: customKindOverride) { _, _ in commit() }
+                .onCompatibleChange(of: customKindOverride) { _, _ in commit() }
             }
         }
     }
@@ -531,7 +531,7 @@ private struct AgentProviderEntryEditor: View {
                         }
                         .labelsHidden()
                         .pickerStyle(.segmented)
-                        .onChange(of: routingMode) { _, _ in commit() }
+                        .onCompatibleChange(of: routingMode) { _, _ in commit() }
                     }
                     Text(routingMode.description)
                         .font(.caption)
@@ -664,7 +664,7 @@ private struct AgentProviderEntryEditor: View {
                                 .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 5))
-                        .onChange(of: alternatesBinding.wrappedValue) { _, _ in commit() }
+                        .onCompatibleChange(of: alternatesBinding.wrappedValue) { _, _ in commit() }
                     Text(L10n.Settings.Provider.alternatesHint)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -693,7 +693,7 @@ private struct AgentProviderEntryEditor: View {
                 .help(L10n.Settings.Provider.pickFromFetched)
             }
         }
-        .onChange(of: text.wrappedValue) { _, _ in commit() }
+        .onCompatibleChange(of: text.wrappedValue) { _, _ in commit() }
     }
 
     private func loadFromEntry() {

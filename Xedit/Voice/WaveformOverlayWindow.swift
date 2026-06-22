@@ -192,7 +192,7 @@ struct WaveformOverlayView: View {
                                 }
                             }
                             .onAppear { animateBars() }
-                            .onChange(of: manager.audioLevel) { _, level in
+                            .onCompatibleChange(of: manager.audioLevel) { _, level in
                                 updateBars(level)
                             }
                         }

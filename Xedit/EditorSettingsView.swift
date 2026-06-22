@@ -291,7 +291,7 @@ struct EditorSettingsView: View {
 
             Section(L10n.PlanAutoExecutionSettings.sectionTitle) {
                 Toggle(L10n.PlanAutoExecutionSettings.dangerScanToggle, isOn: $planDangerScanEnabled)
-                    .onChange(of: planDangerScanEnabled) { _, newValue in
+                    .onCompatibleChange(of: planDangerScanEnabled) { _, newValue in
                         AgentSettingsStore.savePlanAutoExecuteDangerScanEnabled(newValue)
                     }
                 Text(L10n.PlanAutoExecutionSettings.dangerScanHelp)
@@ -412,7 +412,7 @@ struct EditorSettingsView: View {
                 workspacePath: appState.rootDirectory?.path
             )
         }
-        .onChange(of: appState.agentConfiguration) { _, _ in
+        .onCompatibleChange(of: appState.agentConfiguration) { _, _ in
             // External writes (e.g. fetchModels picking a default) should
             // refresh the buffers — but only when they currently match
             // what we last saved, so the user's in-flight typing isn't
@@ -421,7 +421,7 @@ struct EditorSettingsView: View {
                 loadAgentBuffersFromAppState()
             }
         }
-        .onChange(of: appState.rootDirectory?.path) { _, newPath in
+        .onCompatibleChange(of: appState.rootDirectory?.path) { _, newPath in
             planSilentlyApprovedForWorkspace = AgentSettingsStore.loadPlanAutoExecuteSilently(
                 workspacePath: newPath
             )
@@ -728,9 +728,9 @@ struct EditorSettingsView: View {
         let configuration = appState.agentConfiguration.normalized
 
         Task {
-            let result: Result<[String], Error>
+            let result: Result<[AgentModelDiscovery], Error>
             do {
-                let models = try await AgentClient(configuration: configuration).fetchModels()
+                let models = try await AgentClient(configuration: configuration).fetchModelDiscoveries()
                 result = .success(models)
             } catch {
                 result = .failure(error)
@@ -739,19 +739,20 @@ struct EditorSettingsView: View {
             await MainActor.run {
                 isFetchingAgentModels = false
                 switch result {
-                case .success(let models):
-                    fetchedAgentModels = models
-                    appState.recordFetchedAgentModels(models)
-                    if models.isEmpty {
+                case .success(let discoveries):
+                    let modelIDs = discoveries.map(\.id)
+                    fetchedAgentModels = modelIDs
+                    appState.recordFetchedAgentModelDiscoveries(discoveries)
+                    if modelIDs.isEmpty {
                         agentModelFetchMessage = "No models returned."
                     } else {
-                        agentModelFetchMessage = "Fetched \(models.count) models."
+                        agentModelFetchMessage = "Fetched \(modelIDs.count) models."
                         if agentFlashModelBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                           let firstModel = models.first {
+                           let firstModel = modelIDs.first {
                             agentFlashModelBuffer = firstModel
                         }
                         if agentProModelBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                           let firstModel = models.first {
+                           let firstModel = modelIDs.first {
                             agentProModelBuffer = firstModel
                         }
                     }
@@ -773,9 +774,9 @@ struct EditorSettingsView: View {
         let configuration = entry.makeConfiguration().normalized
 
         Task {
-            let result: Result<[String], Error>
+            let result: Result<[AgentModelDiscovery], Error>
             do {
-                let models = try await AgentClient(configuration: configuration).fetchModels()
+                let models = try await AgentClient(configuration: configuration).fetchModelDiscoveries()
                 result = .success(models)
             } catch {
                 result = .failure(error)
@@ -784,10 +785,11 @@ struct EditorSettingsView: View {
             await MainActor.run {
                 isFetchingAgentModels = false
                 switch result {
-                case .success(let models):
-                    fetchedAgentModels = models
-                    appState.recordFetchedAgentModels(models)
-                    if models.isEmpty {
+                case .success(let discoveries):
+                    let modelIDs = discoveries.map(\.id)
+                    fetchedAgentModels = modelIDs
+                    appState.recordFetchedAgentModelDiscoveries(discoveries)
+                    if modelIDs.isEmpty {
                         agentModelFetchMessage = "No models returned."
                     } else {
                         // Auto-activate this entry: fetching is a strong
@@ -801,7 +803,7 @@ struct EditorSettingsView: View {
                             appState.setActiveProviderLibraryEntry(id: entry.id)
                         }
                         let suffix = wasActive ? "" : " ★ Activated."
-                        agentModelFetchMessage = "Fetched \(models.count) models for \(entry.displayName).\(suffix)"
+                        agentModelFetchMessage = "Fetched \(modelIDs.count) models for \(entry.displayName).\(suffix)"
                     }
                 case .failure(let error):
                     fetchedAgentModels = []

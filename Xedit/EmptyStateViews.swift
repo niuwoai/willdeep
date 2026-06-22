@@ -64,7 +64,7 @@ struct EmptyProjectEditorView: View {
                     .accessibilityLabel(L10n.EmptyState.openFileAccessibilityLabel)
                 }
                 .labelStyle(.titleAndIcon)
-                .focusEffectDisabled()
+                .focusEffectDisabledCompat()
             }
             .padding(.horizontal, 40)
             .frame(maxWidth: 520)
@@ -212,7 +212,7 @@ struct EmptyWorkspaceHero: View {
                 .accessibilityLabel(L10n.EmptyState.agentModeAccessibilityLabel)
             }
             .labelStyle(.titleAndIcon)
-            .focusEffectDisabled()
+            .focusEffectDisabledCompat()
 
             if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, !version.isEmpty {
                 Text("v\(version)")

@@ -107,6 +107,20 @@ extension AppState {
         }
     }
 
+    func syncSomeIMImageUnderstanding(apiKey: String) {
+        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedKey.isEmpty else { return }
+
+        var configuration = agentConfiguration.normalized
+        configuration.imageDescription = AgentImageDescriptionConfiguration(
+            providerID: "some-im",
+            baseURL: SomeIMRelayRegion.chinaBaseURL,
+            model: SomeIMIntegrationSettings.defaultVisionModel,
+            apiKey: trimmedKey
+        ).normalized
+        agentConfiguration = configuration.normalized
+    }
+
     /// Remove a library entry. The library auto-repoints `activeID`
     /// to the next entry; if nothing remains the live configuration
     /// is left as-is (the Settings UI is expected to require at
@@ -1163,6 +1177,12 @@ extension AppState {
             .sorted()
         agentKnownModelIDs = merged
         AgentSettingsStore.saveKnownModelIDs(merged)
+    }
+
+    func recordFetchedAgentModelDiscoveries(_ models: [AgentModelDiscovery]) {
+        recordFetchedAgentModels(models.map(\.id))
+        agentDiscoveredModelMetadata = models
+        AgentSettingsStore.saveDiscoveredModelMetadata(models)
     }
 
     func recordRecentlyUsedAgentModel(_ id: String) {

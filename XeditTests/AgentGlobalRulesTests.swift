@@ -31,6 +31,14 @@ struct AgentGlobalRulesTests {
     }
 
     @Test
+    func defaultRulesTemplateContainsCodexStrictRules() {
+        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("# Codex 规则（严格条款）"))
+        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("所有对用户的回复一律使用**简体中文**"))
+        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("前端与后端版本号必须保持一致"))
+        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("<!-- BEGIN ALMA AGENTRULES SYNC -->"))
+    }
+
+    @Test
     func loadRulesRespectsEnabledFlagAndTruncatesOnlyForPromptInjection() throws {
         let tempDir = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: tempDir) }
@@ -47,6 +55,22 @@ struct AgentGlobalRulesTests {
         #expect(injected.count < raw.count)
         #expect(injected.contains("[truncated]"))
         #expect(AgentGlobalRulesStore.loadRules(settings: AgentGlobalRulesSettings(isEnabled: false, filePath: rulesURL.path)) == nil)
+    }
+
+    @Test
+    func defaultRulesSeederOnlyTargetsMissingDefaultPath() {
+        #expect(AgentGlobalRulesStore.shouldSeedDefaultRulesFile(
+            settings: AgentGlobalRulesSettings.default,
+            fileExists: false
+        ))
+        #expect(!AgentGlobalRulesStore.shouldSeedDefaultRulesFile(
+            settings: AgentGlobalRulesSettings.default,
+            fileExists: true
+        ))
+        #expect(!AgentGlobalRulesStore.shouldSeedDefaultRulesFile(
+            settings: AgentGlobalRulesSettings(isEnabled: true, filePath: "/tmp/custom-rules.md"),
+            fileExists: false
+        ))
     }
 
     @Test

@@ -285,4 +285,21 @@ struct AgentProviderLibraryTests {
         #expect(appState.agentConfiguration.flashModel == "deepseek-v4-flash")
         #expect(appState.agentConfiguration.proModel == "deepseek-v4-pro")
     }
+
+    @MainActor
+    @Test
+    func syncingSomeIMImageUnderstandingUsesDomesticVisionModel() {
+        let sandbox = KeychainSandbox()
+        _ = sandbox
+
+        let appState = AppState()
+
+        appState.syncSomeIMImageUnderstanding(apiKey: " sk-some-im ")
+
+        let imageDescription = appState.agentConfiguration.imageDescription
+        #expect(imageDescription.providerID == "some-im")
+        #expect(imageDescription.baseURL == SomeIMRelayRegion.chinaBaseURL)
+        #expect(imageDescription.model == SomeIMIntegrationSettings.defaultVisionModel)
+        #expect(imageDescription.apiKey == "sk-some-im")
+    }
 }

@@ -15,7 +15,7 @@ The client only notifies the user and opens the download URL. It does not silent
   "version": "1.63.0",
   "download_url": "https://meta.niuwoai.com/willdeep/WillDeep-1.63.0.dmg",
   "release_notes_url": "https://meta.niuwoai.com/willdeep/releases/1.63.0.html",
-  "minimum_system_version": "14.6",
+  "minimum_system_version": "13.7",
   "notes": "Bug fixes and update-check improvements."
 }
 ```

@@ -310,14 +310,6 @@ struct MobileGatewayCoordinatorTests {
     }
 
     @Test
-    func autoStartSkipsXCTestEnvironment() {
-        #expect(!MobileGatewayCoordinator.shouldAutoStart(environment: [
-            "XCTestConfigurationFilePath": "/tmp/WillDeepTests.xctestconfiguration",
-        ]))
-        #expect(MobileGatewayCoordinator.shouldAutoStart(environment: [:]))
-    }
-
-    @Test
     func staleGatewayParserOnlySelectsOrphanedMobileGatewayForSameToken() {
         let tokenPath = "/Users/me/Library/Application Support/com.willdeep.app/MobileGateway/desktop-token"
         let processList = """

@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-06-22 | Target version: v1.102.0-rc6
+> Last updated: 2026-06-23 | Target version: v1.103.0-rc1
 
 ## Summary
 
@@ -66,8 +66,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.102.0-rc6`
-- `X-Server-Version: 1.102.0-rc6`
+- `X-App-Version: 1.103.0-rc1`
+- `X-Server-Version: 1.103.0-rc1`
 
 ### `GET /mobile/health`
 
@@ -79,7 +79,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.102.0-rc6",
+    "version": "1.103.0-rc1",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
@@ -313,8 +313,9 @@ Current desktop bridge behavior:
 
 The macOS app includes a Mobile Gateway settings section:
 
-- enable or disable LAN access;
-- start or stop `willdeep-agent serve-mobile`;
+- lazy-start `willdeep-agent serve-mobile` only when the user opens Settings → Mobile Gateway, so normal editor launches do not read the Mobile Gateway Keychain token or show a Keychain prompt;
+- keep the gateway running for the current app session after the settings tab starts it, so paired mobile devices remain connected after Settings is closed;
+- apply settings changes by restarting the gateway;
 - show the selected LAN address, port, and resolved gateway executable;
 - edit the port with a numeric-only text input, defaulting to `8877`;
 - show protocol version;

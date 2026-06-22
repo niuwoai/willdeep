@@ -117,7 +117,7 @@ struct OnboardingView: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
-                    .onChange(of: presetID) { _, newID in
+                    .onCompatibleChange(of: presetID) { _, newID in
                         applyPreset(id: newID)
                     }
                 }
@@ -201,6 +201,16 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Toggle(L10n.Settings.SomeIM.enabledToggle, isOn: $someIMSettings.enabled)
 
+                LabeledContent(L10n.Settings.SomeIM.regionLabel) {
+                    Picker("", selection: someIMRelayRegionBinding) {
+                        ForEach(SomeIMRelayRegion.allCases) { region in
+                            Text(L10n.Settings.SomeIM.regionName(region)).tag(region)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 220)
+                }
+
                 LabeledContent(L10n.Settings.SomeIM.baseURLLabel) {
                     TextField("", text: $someIMSettings.baseURL)
                         .textFieldStyle(.roundedBorder)
@@ -222,7 +232,11 @@ struct OnboardingView: View {
                     TextField("", text: $someIMSettings.preferredVideoModel)
                         .textFieldStyle(.roundedBorder)
                         .disableAutocorrection(true)
+                        .disabled(true)
                 }
+                Text(L10n.Settings.SomeIM.videoHelp)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Text(L10n.Onboarding.SomeIM.note)
@@ -239,6 +253,16 @@ struct OnboardingView: View {
         }
     }
 
+    private var someIMRelayRegionBinding: Binding<SomeIMRelayRegion> {
+        Binding {
+            SomeIMRelayRegion.resolved(for: someIMSettings.baseURL)
+        } set: { region in
+            if let baseURL = region.baseURL {
+                someIMSettings.baseURL = baseURL
+            }
+        }
+    }
+
     private func commitSomeIM() {
         let normalized = someIMSettings.normalized
         someIMSettings = normalized
@@ -246,6 +270,7 @@ struct OnboardingView: View {
         SomeIMIntegrationStore.saveSettings(normalized)
         SomeIMIntegrationStore.saveAPIKey(trimmedKey)
         appState.syncSomeIMProvider(settings: normalized, apiKey: trimmedKey)
+        appState.syncSomeIMImageUnderstanding(apiKey: trimmedKey)
         someIMStatus = L10n.Settings.savedStatus
     }
 

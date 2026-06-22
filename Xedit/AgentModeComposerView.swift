@@ -65,12 +65,12 @@ struct AgentChatComposer: View {
         .onAppear {
             appState.refreshActiveAgentWorktreeChanges()
         }
-        .onChange(of: appState.activeAgentSessionID) { _, _ in
+        .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in
             appState.refreshActiveAgentWorktreeChanges()
             // 切 session 后重置 banner 状态：新 session 的 plan 该弹照弹。
             dismissedPlanFingerprint = nil
         }
-        .onChange(of: appState.agentInput) { oldValue, newValue in
+        .onCompatibleChange(of: appState.agentInput) { oldValue, newValue in
             // 用户在 composer 开始打字（输入框从空变非空，或非空状态下
             // 字数变多） → 视作"我有补充，留在 Plan 模式"，立刻 dismiss
             // banner。**只在 banner 还显示时记 fingerprint**，否则
@@ -80,7 +80,7 @@ struct AgentChatComposer: View {
                 dismissedPlanFingerprint = planFingerprint(plan)
             }
         }
-        .onChange(of: appState.agentCurrentPlan?.status) { _, newStatus in
+        .onCompatibleChange(of: appState.agentCurrentPlan?.status) { _, newStatus in
             // 新 plan 刚解析出来变成 .proposed —— 如果用户之前在本
             // workspace 勾过「记住」，跳过 banner 直接 confirm。
             guard newStatus == .proposed,
@@ -610,10 +610,6 @@ private struct ComposerCard: View {
 
 struct AgentChatStatusBar: View {
     @EnvironmentObject var appState: AppState
-    // 1.85.0-rc9：独立 Agent 窗口里 `NSApp.sendAction(showSettingsWindow:)`
-    // 找不到 target(responder chain 不经过 Settings scene),齿轮/手机按钮
-    // 之前点了无反应。改用 macOS 14+ 的 `\.openSettings` 环境值。
-    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         let palette = appState.editorSettings.interfaceSkin.palette
@@ -660,26 +656,13 @@ struct AgentChatStatusBar: View {
 
             // Quick access: gear opens Settings (keeping the last tab),
             // phone jumps straight to the Mobile Gateway section.
-            Button {
-                openSettings()
-                NSApp.activate(ignoringOtherApps: true)
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 13))
+            if #available(macOS 14.0, *) {
+                AgentChatStatusBarSettingsButtonsModern()
+            } else {
+                AgentChatStatusBarSettingsButtons {
+                    EditorSettingsNavigation.shared.openWindow(appState: appState)
+                }
             }
-            .buttonStyle(.plain)
-            .help(L10n.Settings.agentBarSettings)
-
-            Button {
-                EditorSettingsNavigation.shared.selectedTab = .mobileGateway
-                openSettings()
-                NSApp.activate(ignoringOtherApps: true)
-            } label: {
-                Image(systemName: "iphone.radiowaves.left.and.right")
-                    .font(.system(size: 13))
-            }
-            .buttonStyle(.plain)
-            .help(L10n.Settings.agentBarMobileGateway)
         }
         .font(AgentDesign.captionFont)
         .foregroundStyle(.secondary)
@@ -709,6 +692,43 @@ struct AgentChatStatusBar: View {
             return Color.accentColor
         }
         return WorkspacePresentation.remoteTint(for: AgentRuntimeStore.descriptor(id: runtimeID))
+    }
+}
+
+private struct AgentChatStatusBarSettingsButtons: View {
+    let openSettings: () -> Void
+
+    var body: some View {
+        Button {
+            openSettings()
+        } label: {
+            Image(systemName: "gearshape")
+                .font(.system(size: 13))
+        }
+        .buttonStyle(.plain)
+        .help(L10n.Settings.agentBarSettings)
+
+        Button {
+            EditorSettingsNavigation.shared.selectedTab = .mobileGateway
+            openSettings()
+        } label: {
+            Image(systemName: "iphone.radiowaves.left.and.right")
+                .font(.system(size: 13))
+        }
+        .buttonStyle(.plain)
+        .help(L10n.Settings.agentBarMobileGateway)
+    }
+}
+
+@available(macOS 14.0, *)
+private struct AgentChatStatusBarSettingsButtonsModern: View {
+    @Environment(\.openSettings) private var openSettings
+
+    var body: some View {
+        AgentChatStatusBarSettingsButtons {
+            openSettings()
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 }
 

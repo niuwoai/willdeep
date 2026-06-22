@@ -36,10 +36,15 @@ struct AgentLearningActionPresentationTests {
         )
 
         let lines = AgentLearningActionPresentation.summaryLines(for: event)
+        let conciseLines = AgentLearningActionPresentation.conciseSummaryLines(for: event)
 
         #expect(lines.contains(L10n.Transcript.learningActionReason("The workflow repeated across multiple tool calls.")))
         #expect(lines.contains(L10n.Transcript.learningActionConfidence(L10n.Transcript.learningConfidenceMedium)))
         #expect(lines.contains(L10n.Transcript.learningActionWhy(L10n.Transcript.learningExplanationDraftNeedsReview)))
+        #expect(!conciseLines.contains(L10n.Transcript.learningActionReason("The workflow repeated across multiple tool calls.")))
+        #expect(!conciseLines.contains(L10n.Transcript.learningActionConfidence(L10n.Transcript.learningConfidenceMedium)))
+        #expect(!conciseLines.contains(L10n.Transcript.learningActionWhy(L10n.Transcript.learningExplanationDraftNeedsReview)))
+        #expect(AgentLearningActionPresentation.Confidence.medium.shortLabel == L10n.Transcript.learningConfidenceMediumShort)
         #expect(AgentLearningActionPresentation.copyText(for: event).contains("Source: explicit user request"))
     }
 
@@ -85,5 +90,24 @@ struct AgentLearningActionPresentationTests {
         #expect(text.contains(L10n.Transcript.learningActionReason("The turn contained durable self-learning policy or integration guidance.")))
         #expect(text.contains(L10n.Transcript.learningActionConfidence(L10n.Transcript.learningConfidenceHigh)))
         #expect(text.contains(L10n.Transcript.learningExplanationCompletedFromDirectEvidence))
+    }
+
+    @Test
+    func memorySuggestionDetailShowsOnlyContentUseAndAction() {
+        let detail = AgentLearningActionPresentation.memorySuggestionDetail(for: [
+            AgentMemoryDraft(
+                content: "k3s 自带 traefik，如需 Let’s Encrypt 自动证书，可安装 cert-manager",
+                scopeRaw: AgentMemoryScope.project.rawValue,
+                lifetimeRaw: AgentMemoryLifetime.longTerm.rawValue,
+                rootDirectoryPath: "/tmp/project"
+            )
+        ])
+
+        #expect(detail.contains("`k3s 自带 traefik"))
+        #expect(detail.contains(L10n.Transcript.learningMemorySuggestionUse))
+        #expect(detail.contains(L10n.Transcript.learningMemorySuggestionAction))
+        #expect(!detail.contains(L10n.Transcript.learningActionConfidence(L10n.Transcript.learningConfidenceHigh)))
+        #expect(!detail.contains(L10n.Transcript.learningNextStepApprovePopover))
+        #expect(!detail.contains(L10n.Transcript.learningReasonConversationContext))
     }
 }

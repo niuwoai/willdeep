@@ -154,10 +154,10 @@ struct AgentPanelView: View {
             // mutates `messages[i].content`, and observing the whole
             // array fires `scrollTo` on every token. See the longer
             // comment in AgentChatTranscript.
-            .onChange(of: appState.agentMessages.count) { _, _ in
+            .onCompatibleChange(of: appState.agentMessages.count) { _, _ in
                 proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
             }
-            .onChange(of: appState.agentToolCalls.count) { _, _ in
+            .onCompatibleChange(of: appState.agentToolCalls.count) { _, _ in
                 proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
             }
         }
@@ -233,7 +233,7 @@ struct AgentPanelView: View {
             }
         }
         .padding(10)
-        .onChange(of: appState.agentComposerFocusRevision) { _, _ in
+        .onCompatibleChange(of: appState.agentComposerFocusRevision) { _, _ in
             inputFocused = true
         }
     }

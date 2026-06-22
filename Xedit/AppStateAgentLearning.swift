@@ -130,16 +130,12 @@ extension AppState {
                 rootDirectoryPath: record.scope == .project ? workspaceURL?.path : nil
             )
         }
-        let preview = drafts
-            .prefix(3)
-            .map { "- \(Self.oneLine($0.content, limit: 180))" }
-            .joined(separator: "\n")
         return [
             AgentLearningEvent(
                 kind: .memory,
                 status: .suggested,
-                title: L10n.Transcript.learningEventTitleConversationMemories(String(drafts.count)),
-                detail: preview,
+                title: L10n.Transcript.learningEventTitleSuggestedMemories(String(drafts.count)),
+                detail: AgentLearningActionPresentation.memorySuggestionDetail(for: drafts),
                 action: AgentLearningAction(
                     kind: .saveMemory,
                     commandName: "add_memory",

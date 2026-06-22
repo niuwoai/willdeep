@@ -132,7 +132,7 @@ struct AgentMCPSettingsView: View {
                 creationCoordinator.clearPendingReviewItem()
             }
         }
-        .onChange(of: creationCoordinator.draft?.serverName) { _, newValue in
+        .onCompatibleChange(of: creationCoordinator.draft?.serverName) { _, newValue in
             if newValue != nil {
                 pendingDraft = creationCoordinator.consumeDraft()
                 isCreatingServer = true

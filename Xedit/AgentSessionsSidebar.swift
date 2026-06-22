@@ -79,7 +79,7 @@ struct AgentSessionsSidebar: View {
             }
         }
         .onAppear(perform: prunePersistedWorkspaceStateIfNeeded)
-        .onChange(of: workspaceStatePruneKey) { _, _ in
+        .onCompatibleChange(of: workspaceStatePruneKey) { _, _ in
             prunePersistedWorkspaceStateIfNeeded()
         }
     }

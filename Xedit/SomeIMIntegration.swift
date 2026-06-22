@@ -19,18 +19,57 @@ enum SomeIMGenerationKind: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum SomeIMRelayRegion: String, CaseIterable, Identifiable {
+    case china
+    case international
+    case custom
+
+    static let chinaBaseURL = "https://api.niuwoai.com/v1"
+    static let internationalBaseURL = "https://some.im/v1"
+
+    var id: String { rawValue }
+
+    var baseURL: String? {
+        switch self {
+        case .china:
+            return Self.chinaBaseURL
+        case .international:
+            return Self.internationalBaseURL
+        case .custom:
+            return nil
+        }
+    }
+
+    static func resolved(for baseURL: String) -> SomeIMRelayRegion {
+        switch baseURL.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case chinaBaseURL.lowercased():
+            return .china
+        case internationalBaseURL.lowercased(), "":
+            return .international
+        default:
+            return .custom
+        }
+    }
+}
+
 struct SomeIMModel: Identifiable, Codable, Equatable {
     var id: String { model }
     var model: String
     var kinds: [SomeIMGenerationKind]
+    var isHot: Bool = false
+    var isNew: Bool = false
 
     var supportsImageGeneration: Bool { kinds.contains(.image) || model.localizedCaseInsensitiveContains("image") }
     var supportsVideoGeneration: Bool { kinds.contains(.video) || model.localizedCaseInsensitiveContains("video") }
+    var agentDiscovery: AgentModelDiscovery {
+        AgentModelDiscovery(id: model, isHot: isHot, isNew: isNew)
+    }
 }
 
 struct SomeIMIntegrationSettings: Codable, Equatable {
-    static let defaultBaseURL = "https://some.im/v1"
+    static let defaultBaseURL = SomeIMRelayRegion.internationalBaseURL
     static let defaultImageModel = "gpt-image-2"
+    static let defaultVisionModel = "qwen3-vl-plus"
 
     var enabled: Bool
     var baseURL: String
@@ -243,7 +282,7 @@ enum SomeIMClient {
         }
         let decoded = try JSONDecoder().decode(PricingResponse.self, from: data)
         return decoded.items.map { item in
-            SomeIMModel(model: item.model, kinds: item.detectedKinds)
+            SomeIMModel(model: item.model, kinds: item.detectedKinds, isHot: item.is_hot ?? false, isNew: item.is_new ?? false)
         }
     }
 
@@ -259,9 +298,14 @@ enum SomeIMClient {
             apiKey: apiKey
         )
         return try await AgentClient(configuration: configuration, session: session)
-            .fetchModels()
-            .map { model in
-                SomeIMModel(model: model, kinds: detectKinds(model: model, words: []))
+            .fetchModelDiscoveries()
+            .map { discovery in
+                SomeIMModel(
+                    model: discovery.id,
+                    kinds: detectKinds(model: discovery.id, words: []),
+                    isHot: discovery.isHot,
+                    isNew: discovery.isNew
+                )
             }
     }
 
@@ -327,6 +371,8 @@ enum SomeIMClient {
         let input_modalities: [String]?
         let output_modalities: [String]?
         let catalog_tags: [String]?
+        let is_hot: Bool?
+        let is_new: Bool?
 
         var detectedKinds: [SomeIMGenerationKind] {
             detectKinds(model: model, words: [
@@ -369,6 +415,15 @@ struct SomeIMIntegrationSettingsView: View {
         Form {
             Section(L10n.Settings.SomeIM.connectionSection) {
                 Toggle(L10n.Settings.SomeIM.enabledToggle, isOn: $settings.enabled)
+                LabeledContent(L10n.Settings.SomeIM.regionLabel) {
+                    Picker("", selection: relayRegionBinding) {
+                        ForEach(SomeIMRelayRegion.allCases) { region in
+                            Text(L10n.Settings.SomeIM.regionName(region)).tag(region)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 220)
+                }
                 LabeledContent(L10n.Settings.SomeIM.baseURLLabel) {
                     TextField("", text: $settings.baseURL)
                         .textFieldStyle(.roundedBorder)
@@ -414,14 +469,26 @@ struct SomeIMIntegrationSettingsView: View {
                     candidates: videoModels,
                     fallbackModels: settings.preferredVideoModels
                 )
+                .disabled(true)
                 TextField(L10n.Settings.SomeIM.priorityPlaceholder, text: priorityVideoModelsBinding)
                     .textFieldStyle(.roundedBorder)
+                    .disabled(true)
                 Text(L10n.Settings.SomeIM.videoHelp)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var relayRegionBinding: Binding<SomeIMRelayRegion> {
+        Binding {
+            SomeIMRelayRegion.resolved(for: settings.baseURL)
+        } set: { region in
+            if let baseURL = region.baseURL {
+                settings.baseURL = baseURL
+            }
+        }
     }
 
     private func modelPicker(
@@ -512,6 +579,7 @@ struct SomeIMIntegrationSettingsView: View {
                 switch result {
                 case .success(let models):
                     fetchedModels = models
+                    appState.recordFetchedAgentModelDiscoveries(models.map(\.agentDiscovery))
                     adoptFetchedDefaults(models)
                     status = L10n.Settings.SomeIM.fetchedModels("\(models.count)")
                 case .failure(let error):

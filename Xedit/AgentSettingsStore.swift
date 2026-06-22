@@ -8,6 +8,12 @@
 import Foundation
 import Security
 
+struct AgentModelDiscovery: Codable, Equatable {
+    var id: String
+    var isHot: Bool
+    var isNew: Bool
+}
+
 enum AgentWebSearchProvider: String, CaseIterable, Codable, Identifiable {
     case auto
     case exa
@@ -19,6 +25,7 @@ enum AgentWebSearchProvider: String, CaseIterable, Codable, Identifiable {
 enum AgentSettingsStore {
     private static let defaultsKey = "com.willdeep.agentSettings.v1"
     private static let knownModelsKey = "com.willdeep.agentSettings.knownModels.v1"
+    private static let discoveredModelMetadataKey = "com.willdeep.agentSettings.discoveredModelMetadata.v1"
     private static let recentlyUsedModelsKey = "com.willdeep.agentSettings.recentlyUsedModels.v1"
     private static let alwaysAllowedCommandsKey = "com.willdeep.agentSettings.alwaysAllowedCommands.v1"
     private static let autoApproveKey = "com.willdeep.agentSettings.autoApproveSafeCommands.v1"
@@ -136,6 +143,34 @@ enum AgentSettingsStore {
     static func saveKnownModelIDs(_ ids: [String]) {
         let cleaned = Array(Set(ids.filter { !$0.isEmpty })).sorted()
         defaults.set(cleaned, forKey: knownModelsKey)
+    }
+
+    static func loadDiscoveredModelMetadata() -> [AgentModelDiscovery] {
+        guard let data = defaults.data(forKey: discoveredModelMetadataKey),
+              let decoded = try? JSONDecoder().decode([AgentModelDiscovery].self, from: data) else {
+            return []
+        }
+        return cleanedDiscoveredModelMetadata(decoded)
+    }
+
+    static func saveDiscoveredModelMetadata(_ models: [AgentModelDiscovery]) {
+        let cleaned = cleanedDiscoveredModelMetadata(models)
+        if let data = try? JSONEncoder().encode(cleaned) {
+            defaults.set(data, forKey: discoveredModelMetadataKey)
+        }
+    }
+
+    private static func cleanedDiscoveredModelMetadata(_ models: [AgentModelDiscovery]) -> [AgentModelDiscovery] {
+        var seen = Set<String>()
+        var result: [AgentModelDiscovery] = []
+        for model in models {
+            let id = model.id.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !id.isEmpty else { continue }
+            let key = id.lowercased()
+            guard seen.insert(key).inserted else { continue }
+            result.append(AgentModelDiscovery(id: id, isHot: model.isHot, isNew: model.isNew))
+        }
+        return result.sorted { $0.id.localizedCaseInsensitiveCompare($1.id) == .orderedAscending }
     }
 
     /// Models the user explicitly picked in the composer/model picker,

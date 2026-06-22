@@ -126,16 +126,18 @@ final class EditorAppStateRegistry: ObservableObject {
     }
 
     /// 把当前 current 对应的 editor 窗口激活到前台。Agent 窗口的
-    /// header 「切回 editor」按钮用。如果窗口已经被系统释放（不该
-    /// 发生，因为 unregister 时会清掉 windows entry，但 weak ref 兜底）
-    /// 则什么都不做。
-    func focusCurrentEditorWindow() {
+    /// header 「切回 editor」按钮用。返回 false 表示当前只有 orphan
+    /// AppState 或窗口弱引用已失效,调用方应通过 SwiftUI `openWindow`
+    /// 创建/显示主 editor 窗口。
+    @discardableResult
+    func focusCurrentEditorWindow() -> Bool {
         guard let appState = current,
               let window = windows[ObjectIdentifier(appState)]?.window else {
-            return
+            return false
         }
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+        return true
     }
 
     private final class WeakWindow {

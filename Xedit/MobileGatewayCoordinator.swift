@@ -205,15 +205,10 @@ final class MobileGatewayCoordinator: ObservableObject {
         MobileGatewaySettingsStore.save(settings)
     }
 
-    /// 1.85.0-rc10:网关无条件自启动,不再读 `isEnabled`。配对仍然要求
-    /// 手机扫 QR + token 校验,关闭开关并不增加实际安全收益,只是徒增
-    /// 「为啥状态栏齿轮显示未连接」这类困惑。
-    func autoStart() {
-        guard Self.shouldAutoStart() else { return }
-        Task { await start() }
-    }
-
     func start() async {
+        if case .starting = state {
+            return
+        }
         guard process == nil else {
             await refresh()
             return
@@ -308,8 +303,15 @@ final class MobileGatewayCoordinator: ObservableObject {
         let baseURL = Self.desktopBaseURL(for: settings)
         displayBaseURL = Self.pairingBaseURL(for: settings)
         health = try? await get(path: "/mobile/health", baseURL: baseURL, token: nil, as: MobileGatewayHealth.self)
-        pairingPayload = (try? await get(path: "/mobile/pairing", baseURL: baseURL, token: desktopToken, as: MobileGatewayPairingResponse.self).pairingPayload)?
-            .addingFallbackBaseURLs(Self.pairingFallbackBaseURLs(for: settings))
+        let pairing = await fetchPairingPayload(
+            baseURL: baseURL,
+            desktopToken: desktopToken,
+            rotateIfUnavailable: settings.allowPairing
+        )
+        pairingPayload = pairing.payload
+        if pairing.didRotate {
+            health = try? await get(path: "/mobile/health", baseURL: baseURL, token: nil, as: MobileGatewayHealth.self)
+        }
         devices = (try? await get(path: "/mobile/devices", baseURL: baseURL, token: desktopToken, as: DevicesResponse.self).devices) ?? devices
     }
 
@@ -343,6 +345,37 @@ final class MobileGatewayCoordinator: ObservableObject {
             await refresh()
         } catch {
             fail(error.localizedDescription)
+        }
+    }
+
+    private func fetchPairingPayload(
+        baseURL: URL,
+        desktopToken: String,
+        rotateIfUnavailable: Bool
+    ) async -> (payload: MobileGatewayPairingPayload?, didRotate: Bool) {
+        do {
+            let payload = try await get(
+                path: "/mobile/pairing",
+                baseURL: baseURL,
+                token: desktopToken,
+                as: MobileGatewayPairingResponse.self
+            ).pairingPayload?.addingFallbackBaseURLs(Self.pairingFallbackBaseURLs(for: settings))
+            return (payload, false)
+        } catch {
+            guard rotateIfUnavailable else { return (nil, false) }
+        }
+
+        do {
+            let payload = try await post(
+                path: "/mobile/pairing/rotate",
+                baseURL: baseURL,
+                token: desktopToken,
+                body: EmptyRequest(),
+                as: MobileGatewayPairingResponse.self
+            ).pairingPayload?.addingFallbackBaseURLs(Self.pairingFallbackBaseURLs(for: settings))
+            return (payload, true)
+        } catch {
+            return (nil, false)
         }
     }
 
@@ -449,10 +482,6 @@ final class MobileGatewayCoordinator: ObservableObject {
         if recentOutput.count > 4096 {
             recentOutput = String(recentOutput.suffix(4096))
         }
-    }
-
-    static func shouldAutoStart(environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
-        environment["XCTestConfigurationFilePath"] == nil
     }
 
     nonisolated static func staleGatewayPIDs(

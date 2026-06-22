@@ -263,13 +263,13 @@ struct AgentChatTranscript: View {
             // message is appended. The target is a stable bottom
             // sentinel because historical messages are folded into
             // one NSTextView and no longer expose per-message ids.
-            .onChange(of: appState.agentMessages.count) { _, _ in
+            .onCompatibleChange(of: appState.agentMessages.count) { _, _ in
                 proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
             }
-            .onChange(of: appState.agentToolCalls.count) { _, _ in
+            .onCompatibleChange(of: appState.agentToolCalls.count) { _, _ in
                 proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
             }
-            .onChange(of: appState.agentLearningEvents.count) { _, _ in
+            .onCompatibleChange(of: appState.agentLearningEvents.count) { _, _ in
                 proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
             }
         }

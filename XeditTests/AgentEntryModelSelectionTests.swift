@@ -123,6 +123,24 @@ struct AgentEntryModelSelectionTests {
     }
 
     @Test
+    func fetchedModelDiscoveriesPersistHotAndNewFlags() {
+        let _sandbox = installKeychainSandbox(); _ = _sandbox
+        let (app, _, _) = makeAppStateWithTwoEntries()
+
+        app.recordFetchedAgentModelDiscoveries([
+            AgentModelDiscovery(id: "some/hot-model", isHot: true, isNew: false),
+            AgentModelDiscovery(id: "some/new-model", isHot: false, isNew: true)
+        ])
+
+        #expect(app.agentKnownModelIDs == ["some/hot-model", "some/new-model"])
+        #expect(app.agentDiscoveredModelMetadata == [
+            AgentModelDiscovery(id: "some/hot-model", isHot: true, isNew: false),
+            AgentModelDiscovery(id: "some/new-model", isHot: false, isNew: true)
+        ])
+        #expect(AgentSettingsStore.loadDiscoveredModelMetadata() == app.agentDiscoveredModelMetadata)
+    }
+
+    @Test
     func emptyModelClearsOverride() {
         let _sandbox = installKeychainSandbox(); _ = _sandbox
         let (app, openai, _) = makeAppStateWithTwoEntries()

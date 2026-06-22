@@ -199,9 +199,7 @@ extension AppState {
         }
 
         pendingDefinitionNavigation = location
-        registerRecentFile(location.url)
-        registerRecentFolder(location.url.deletingLastPathComponent())
-        openedFileURL = location.url
+        openEditorFile(location.url)
     }
 
     func toggleFocusMode() {
@@ -212,12 +210,13 @@ extension AppState {
         isAgentPanelVisible.toggle()
     }
 
-    func showEditor() {
+    @discardableResult
+    func showEditor() -> Bool {
         isAgentPanelVisible = false
         isPreviewVisible = false
         isEditorTerminalVisible = false
         isFocusModeEnabled = false
-        EditorAppStateRegistry.shared.focusCurrentEditorWindow()
+        return EditorAppStateRegistry.shared.focusCurrentEditorWindow()
     }
 
     func togglePreview() {

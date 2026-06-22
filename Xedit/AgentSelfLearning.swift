@@ -456,15 +456,11 @@ enum AgentSelfLearning {
                     rootDirectoryPath: scope == .project ? workspaceURL?.path : nil
                 )
             }
-            let preview = drafts
-                .prefix(3)
-                .map { "- \(oneLine($0.content, limit: 180))" }
-                .joined(separator: "\n")
             events.append(AgentLearningEvent(
                 kind: .memory,
                 status: .suggested,
-                title: L10n.Transcript.learningEventTitleSelfLearningMemories(String(drafts.count)),
-                detail: preview,
+                title: L10n.Transcript.learningEventTitleSuggestedMemories(String(drafts.count)),
+                detail: AgentLearningActionPresentation.memorySuggestionDetail(for: drafts),
                 action: AgentLearningAction(
                     kind: .saveMemory,
                     commandName: "add_memory",

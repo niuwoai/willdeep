@@ -175,10 +175,10 @@ struct CollaborationConnectorSettingsView: View {
                             .lineLimit(4)
                     }
                 } else {
-                    ContentUnavailableView(
-                        L10n.Settings.Connectors.feishuQRCodePlaceholderTitle,
+                    ConnectorUnavailablePlaceholder(
+                        title: L10n.Settings.Connectors.feishuQRCodePlaceholderTitle,
                         systemImage: "qrcode",
-                        description: Text(L10n.Settings.Connectors.feishuQRCodePlaceholderDescription)
+                        description: L10n.Settings.Connectors.feishuQRCodePlaceholderDescription
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -772,5 +772,29 @@ struct CollaborationConnectorSettingsView: View {
             return "exit=\(result.exitStatus)"
         }
         return output.count > 180 ? String(output.prefix(180)) + "..." : output
+    }
+}
+
+private struct ConnectorUnavailablePlaceholder: View {
+    let title: String
+    let systemImage: String
+    let description: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 8)
     }
 }

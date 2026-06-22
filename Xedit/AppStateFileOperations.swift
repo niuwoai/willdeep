@@ -104,14 +104,136 @@ extension AppState {
 
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
-            self?.registerRecentFile(url)
-            self?.registerRecentFolder(url.deletingLastPathComponent())
             // Same rationale as openExternalURL: opening a file no longer
             // promotes its parent to rootDirectory. Use Open Folder… (⇧⌘O)
             // to load the FileTree.
-            self?.openedFileURL = url
-            self?.persistSession()
+            self?.openEditorFile(url)
         }
+    }
+
+    /// Opens a concrete file URL in the editor without depending on SwiftUI
+    /// `onChange` delivery. This is the main entry point for menu opens,
+    /// Finder/CLI URL opens, recent files, and Quick Open. The view layer still
+    /// calls into it when a binding-driven file-tree selection changes.
+    @discardableResult
+    func openEditorFile(
+        _ url: URL,
+        fallbackURL: URL? = nil,
+        allowLargeFile: Bool = false,
+        performsSafetyChecks: Bool = true
+    ) -> Bool {
+        let fileURL = url.isFileURL ? url.standardizedFileURL : URL(fileURLWithPath: url.path).standardizedFileURL
+
+        imagePreviewURL = nil
+        selectedSidebarFileURL = fileURL
+
+        if performsSafetyChecks {
+            if Self.isBinaryFile(at: fileURL) {
+                let alert = NSAlert()
+                alert.messageText = L10n.Alert.binaryFileTitle
+                alert.informativeText = L10n.Alert.binaryFileMessage(fileURL.lastPathComponent)
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: L10n.Alert.binaryFileButtonOk)
+                alert.runModal()
+                revertOpenSelection(to: fallbackURL)
+                return false
+            }
+
+            var confirmedLargeFile = allowLargeFile
+            if !allowLargeFile, Self.shouldRequireLargeFileConfirmation(at: fileURL) {
+                let alert = NSAlert()
+                alert.messageText = L10n.Alert.largeFileTitle
+                alert.informativeText = L10n.Alert.largeFileMessage(fileURL.lastPathComponent)
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: L10n.Alert.largeFileButtonOpenAnyway)
+                alert.addButton(withTitle: L10n.Alert.largeFileButtonCancel)
+                let response = alert.runModal()
+                if response == .alertSecondButtonReturn {
+                    revertOpenSelection(to: fallbackURL)
+                    return false
+                }
+                confirmedLargeFile = true
+            }
+
+            return openEditorFileAfterSafetyChecks(
+                fileURL,
+                fallbackURL: fallbackURL,
+                allowLargeFile: confirmedLargeFile
+            )
+        }
+
+        return openEditorFileAfterSafetyChecks(
+            fileURL,
+            fallbackURL: fallbackURL,
+            allowLargeFile: allowLargeFile
+        )
+    }
+
+    @discardableResult
+    private func openEditorFileAfterSafetyChecks(
+        _ fileURL: URL,
+        fallbackURL: URL?,
+        allowLargeFile: Bool
+    ) -> Bool {
+        registerRecentFile(fileURL)
+        registerRecentFolder(fileURL.deletingLastPathComponent())
+
+        let shouldLoadFromDisk = prepareEditorTabForFileOpen(fileURL)
+        if shouldLoadFromDisk {
+            loadFile(from: fileURL, fallbackURL: fallbackURL, allowLargeFile: allowLargeFile)
+        } else {
+            persistSession()
+        }
+        return true
+    }
+
+    private func prepareEditorTabForFileOpen(_ fileURL: URL) -> Bool {
+        if let index = tabIndex(for: fileURL) {
+            let tab = tabs[index]
+            activeTabID = tab.id
+            applySnapshot(from: tab, suppressURLChange: true)
+            return shouldReloadFromDisk(tab: tab, fileURL: fileURL)
+        }
+
+        let tab = EditorTab(url: fileURL)
+        tabs.append(tab)
+        activeTabID = tab.id
+        applySnapshot(from: tab, suppressURLChange: true)
+        return true
+    }
+
+    private func shouldReloadFromDisk(tab: EditorTab, fileURL: URL) -> Bool {
+        if tab.isEdited {
+            return false
+        }
+
+        if knownModificationDates[fileURL] == nil {
+            return true
+        }
+
+        guard tab.content.isEmpty else {
+            return false
+        }
+
+        return (Self.fileSize(at: fileURL) ?? 0) > 0
+    }
+
+    private func revertOpenSelection(to fallbackURL: URL?) {
+        suppressURLChangeProcessing = true
+        selectedSidebarFileURL = fallbackURL
+        openedFileURL = fallbackURL
+
+        guard fallbackURL == nil, activeTabID == nil else {
+            return
+        }
+
+        isApplyingTabSnapshot = true
+        fileContent = ""
+        isEdited = false
+        isApplyingTabSnapshot = false
+        bumpEditorRenderRevision()
+        bumpEditorHighlightRevision()
+        updateWindowTitle(url: nil, isEdited: false)
     }
 
     // MARK: - File Size
@@ -230,13 +352,13 @@ extension AppState {
     }
 
     func applyLoadedContent(_ content: String, for url: URL) {
-        if let index = tabs.firstIndex(where: { $0.url == url }) {
+        if let index = tabIndex(for: url) {
             tabs[index].content = content
             tabs[index].savedContent = content
             tabs[index].isEdited = false
         }
 
-        guard openedFileURL == url else {
+        guard isOpenedFile(url) else {
             return
         }
 
@@ -273,15 +395,16 @@ extension AppState {
     }
 
     func revertFailedLoad(for url: URL, fallbackURL: URL?) {
-        tabs.removeAll { $0.url == url && $0.content.isEmpty && !$0.isEdited }
+        tabs.removeAll { Self.sameFileURL($0.url, url) && $0.content.isEmpty && !$0.isEdited }
 
-        guard openedFileURL == url else {
+        guard isOpenedFile(url) else {
             return
         }
 
         suppressURLChangeProcessing = true
         openedFileURL = fallbackURL
-        if let fallbackURL, let fallbackTab = tabs.first(where: { $0.url == fallbackURL }) {
+        if let fallbackURL, let index = tabIndex(for: fallbackURL) {
+            let fallbackTab = tabs[index]
             activeTabID = fallbackTab.id
             applySnapshot(from: fallbackTab, suppressURLChange: false)
         } else {

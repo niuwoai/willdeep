@@ -225,6 +225,42 @@ struct OpenAIResponsesAdapter {
         return decoded.data.map(\.id).filter { !$0.isEmpty }.sorted()
     }
 
+    func fetchModelDiscoveries() async throws -> [AgentModelDiscovery] {
+        guard !configuration.apiKey.isEmpty else {
+            throw AgentClientError.missingAPIKey
+        }
+
+        let endpoint = try AgentNetworkSupport.endpoint(
+            from: configuration.baseURL,
+            suffix: "models"
+        )
+        var request = URLRequest(url: endpoint)
+        request.timeoutInterval = AgentNetworkSupport.requestTimeout
+        request.httpMethod = "GET"
+        applyAuthenticationHeaders(to: &request)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AgentClientError.invalidResponse
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw AgentClientError.serverStatus(
+                httpError(
+                    statusCode: httpResponse.statusCode,
+                    method: request.httpMethod ?? "GET",
+                    url: endpoint,
+                    requestBody: nil,
+                    responseBody: String(data: data, encoding: .utf8) ?? "<non-UTF8 response body>",
+                    messages: []
+                )
+            )
+        }
+
+        let decoded = try JSONDecoder().decode(ModelsResponse.self, from: data)
+        return decoded.discoveries
+    }
+
     // MARK: - Stream state machine
 
     /// State carried across the SSE stream: function-call accumulators
@@ -737,7 +773,49 @@ private struct NonStreamResponse: Decodable {
 private struct ModelsResponse: Decodable {
     let data: [Model]
 
+    var discoveries: [AgentModelDiscovery] {
+        data
+            .map(\.discovery)
+            .filter { !$0.id.isEmpty }
+            .sorted { $0.id.localizedCaseInsensitiveCompare($1.id) == .orderedAscending }
+    }
+
     struct Model: Decodable {
         let id: String
+        let isHot: Bool
+        let isNew: Bool
+
+        var discovery: AgentModelDiscovery {
+            AgentModelDiscovery(
+                id: id.trimmingCharacters(in: .whitespacesAndNewlines),
+                isHot: isHot,
+                isNew: isNew
+            )
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(String.self, forKey: .id)
+            let metadata = try? container.decode(ModelMetadata.self, forKey: .metadata)
+            isHot = (try? container.decode(Bool.self, forKey: .isHot)) ?? metadata?.isHot ?? false
+            isNew = (try? container.decode(Bool.self, forKey: .isNew)) ?? metadata?.isNew ?? false
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case isHot = "is_hot"
+            case isNew = "is_new"
+            case metadata
+        }
+
+        private struct ModelMetadata: Decodable {
+            let isHot: Bool?
+            let isNew: Bool?
+
+            private enum CodingKeys: String, CodingKey {
+                case isHot = "is_hot"
+                case isNew = "is_new"
+            }
+        }
     }
 }
