@@ -100,6 +100,11 @@ final class AppState: ObservableObject {
     /// Model IDs the user has previously fetched in Settings — surfaced in
     /// the Agent-mode model picker as a quick switcher.
     @Published var agentKnownModelIDs: [String] = []
+    /// Model IDs explicitly chosen in the composer, most-recently-used
+    /// first. This is separate from fetched IDs so a large /models
+    /// result doesn't drown out the handful of models the user actually
+    /// rotates between.
+    @Published var agentRecentlyUsedModelIDs: [String] = []
     @Published var agentWorktreeDiffPreview: AgentWorktreeDiffPreview?
     /// Command families the user has explicitly allowed Agent mode to run
     /// without prompting again, e.g. `git push`.
@@ -349,6 +354,7 @@ final class AppState: ObservableObject {
             }
         self.agentSessions = AgentSessionStore.loadAll()
         self.agentKnownModelIDs = AgentSettingsStore.loadKnownModelIDs()
+        self.agentRecentlyUsedModelIDs = AgentSettingsStore.loadRecentlyUsedModelIDs()
         self.agentAlwaysAllowedCommands = AgentSettingsStore.loadAlwaysAllowedCommands()
         // Sweep persisted "New Chat" rows that never received a user
         // message — every ⌘N press creates one on disk, and over time

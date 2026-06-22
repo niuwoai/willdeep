@@ -19,6 +19,7 @@ enum AgentWebSearchProvider: String, CaseIterable, Codable, Identifiable {
 enum AgentSettingsStore {
     private static let defaultsKey = "com.willdeep.agentSettings.v1"
     private static let knownModelsKey = "com.willdeep.agentSettings.knownModels.v1"
+    private static let recentlyUsedModelsKey = "com.willdeep.agentSettings.recentlyUsedModels.v1"
     private static let alwaysAllowedCommandsKey = "com.willdeep.agentSettings.alwaysAllowedCommands.v1"
     private static let autoApproveKey = "com.willdeep.agentSettings.autoApproveSafeCommands.v1"
     private static let perProviderConcurrencyKey = "com.willdeep.agentSettings.perProviderConcurrencyLimit.v1"
@@ -135,6 +136,31 @@ enum AgentSettingsStore {
     static func saveKnownModelIDs(_ ids: [String]) {
         let cleaned = Array(Set(ids.filter { !$0.isEmpty })).sorted()
         defaults.set(cleaned, forKey: knownModelsKey)
+    }
+
+    /// Models the user explicitly picked in the composer/model picker,
+    /// most-recently-used first. Kept separate from `knownModelsKey`:
+    /// fetched means "seen from /models", used means "chosen for a turn".
+    static func loadRecentlyUsedModelIDs() -> [String] {
+        cleanedRecentlyUsedModelIDs(defaults.stringArray(forKey: recentlyUsedModelsKey) ?? [])
+    }
+
+    static func saveRecentlyUsedModelIDs(_ ids: [String]) {
+        defaults.set(cleanedRecentlyUsedModelIDs(ids), forKey: recentlyUsedModelsKey)
+    }
+
+    private static func cleanedRecentlyUsedModelIDs(_ ids: [String], limit: Int = 24) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for raw in ids {
+            let id = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !id.isEmpty else { continue }
+            let key = id.lowercased()
+            guard seen.insert(key).inserted else { continue }
+            result.append(id)
+            if result.count >= limit { break }
+        }
+        return result
     }
 
     static func loadAlwaysAllowedCommands() -> [AgentAlwaysAllowedCommand] {

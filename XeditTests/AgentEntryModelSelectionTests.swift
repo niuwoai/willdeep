@@ -99,6 +99,30 @@ struct AgentEntryModelSelectionTests {
     }
 
     @Test
+    func pickedModelsAreTrackedMostRecentlyUsedFirst() {
+        let _sandbox = installKeychainSandbox(); _ = _sandbox
+        let (app, openai, _) = makeAppStateWithTwoEntries()
+
+        app.selectAgentEntryAndModel(entryID: openai.id, model: "gpt-4o-mini")
+        app.selectAgentEntryAndModel(entryID: openai.id, model: "gpt-4-turbo")
+        app.selectAgentEntryAndModel(entryID: openai.id, model: "gpt-4o-mini")
+
+        #expect(app.agentRecentlyUsedModelIDs.prefix(2).elementsEqual(["gpt-4o-mini", "gpt-4-turbo"]))
+        #expect(AgentSettingsStore.loadRecentlyUsedModelIDs().prefix(2).elementsEqual(["gpt-4o-mini", "gpt-4-turbo"]))
+    }
+
+    @Test
+    func routeDefaultPickIsAlsoTrackedAsRecentlyUsed() {
+        let _sandbox = installKeychainSandbox(); _ = _sandbox
+        let (app, openai, _) = makeAppStateWithTwoEntries()
+
+        app.selectAgentEntryAndModel(entryID: openai.id, model: "gpt-4.1-mini")
+
+        #expect(app.agentSessionModelOverride == nil)
+        #expect(app.agentRecentlyUsedModelIDs.first == "gpt-4.1-mini")
+    }
+
+    @Test
     func emptyModelClearsOverride() {
         let _sandbox = installKeychainSandbox(); _ = _sandbox
         let (app, openai, _) = makeAppStateWithTwoEntries()

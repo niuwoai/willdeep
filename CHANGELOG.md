@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.102.0-rc6 - 2026-06-22
+
+### Fixed
+- Agent composer 模型菜单新增 **Recently used** 分组,记录用户实际选择过的模型并按最近使用排序；**Recently fetched** 继续保留已拉取但未归入常用/Provider 的 ad-hoc 模型。
+
+### Changed
+- 版本号从 **1.102.0-rc5** 提升为 **1.102.0-rc6**（bugfix）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
 ## 1.102.0-rc5 - 2026-06-22
 
 ### Fixed

@@ -1165,12 +1165,24 @@ extension AppState {
         AgentSettingsStore.saveKnownModelIDs(merged)
     }
 
+    func recordRecentlyUsedAgentModel(_ id: String) {
+        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let withoutExisting = agentRecentlyUsedModelIDs.filter {
+            $0.caseInsensitiveCompare(trimmed) != .orderedSame
+        }
+        let updated = [trimmed] + withoutExisting
+        agentRecentlyUsedModelIDs = Array(updated.prefix(24))
+        AgentSettingsStore.saveRecentlyUsedModelIDs(agentRecentlyUsedModelIDs)
+    }
+
     func setAgentSessionModel(_ model: String?) {
         let trimmed = model?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let trimmed, !trimmed.isEmpty {
             if agentModelIsCompatibleWithActiveProvider(trimmed) {
                 agentSessionModelOverride = trimmed
                 recordFetchedAgentModels([trimmed])
+                recordRecentlyUsedAgentModel(trimmed)
             } else {
                 agentSessionModelOverride = nil
             }
@@ -1223,6 +1235,7 @@ extension AppState {
         // "Use route default" state instead of a redundant lock.
         let routed = agentConfiguration.normalized.model(for: .interactive)
         if trimmed == routed {
+            recordRecentlyUsedAgentModel(trimmed)
             setAgentSessionModel(nil)
         } else {
             setAgentSessionModel(trimmed)

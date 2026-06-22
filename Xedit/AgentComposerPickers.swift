@@ -9,9 +9,9 @@
 //     a "Choose folder…" sentinel.
 //   - `ModelPickerPill`: provider/model selector. Flat Section per
 //     provider with Flash and Pro models as direct rows (nested Menus
-//     on macOS dismiss on the slightest hover drift). Has a
-//     "Recently fetched" tail menu for ad-hoc model IDs not in the
-//     library entries.
+//     on macOS dismiss on the slightest hover drift). Has
+//     "Recently used" and "Recently fetched" tail menus for ad-hoc
+//     model IDs not in the library entries.
 //   - `AgentExecutionPickerPill`: WillDeep / Claude Code / Codex
 //     execution backend selector for the next composer turn.
 //   - `AgentModePickerPill`: Normal / Plan / Goal selector. Plan locks
@@ -513,6 +513,7 @@ struct ModelPickerPill: View {
             let configured = appState.agentConfiguration.normalized.model(for: .interactive)
             if !configured.isEmpty {
                 Button {
+                    appState.recordRecentlyUsedAgentModel(configured)
                     appState.setAgentSessionModel(nil)
                 } label: {
                     HStack {
@@ -541,28 +542,27 @@ struct ModelPickerPill: View {
                 Text("No providers configured. Open Settings → Agent.")
             }
 
-            // Tail: previously fetched ad-hoc models that don't belong
-            // to any library entry's primary/alternates list. Keeps the
-            // old "fetch + pick" workflow working when the user grabs a
-            // brand-new model id mid-conversation.
+            // Tail: ad-hoc models that don't belong to any library
+            // entry's primary/alternates list. Recently used comes
+            // first, then older fetched-only ids, so a new pull does
+            // not bury the models the user actually picked.
             let libraryModels = libraryModelSet
-            let extras = appState.agentKnownModelIDs.filter {
-                !libraryModels.contains($0) && isKnownModelRelevantToActiveProvider($0)
-            }
-            if !extras.isEmpty {
+            let used = adHocModels(from: appState.agentRecentlyUsedModelIDs, excluding: libraryModels)
+            let fetched = adHocModels(from: appState.agentKnownModelIDs, excluding: libraryModels.union(used))
+            if !used.isEmpty || !fetched.isEmpty {
                 Divider()
+            }
+            if !used.isEmpty {
+                Menu("Recently used") {
+                    ForEach(used, id: \.self) { model in
+                        adHocModelButton(model)
+                    }
+                }
+            }
+            if !fetched.isEmpty {
                 Menu("Recently fetched") {
-                    ForEach(extras, id: \.self) { model in
-                        Button {
-                            appState.setAgentSessionModel(model)
-                        } label: {
-                            HStack {
-                                Text(model)
-                                if appState.agentSessionModelOverride == model {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
+                    ForEach(fetched, id: \.self) { model in
+                        adHocModelButton(model)
                     }
                 }
             }
@@ -660,8 +660,22 @@ struct ModelPickerPill: View {
         appState.selectAgentEntryAndModel(entryID: entry.id, model: model)
     }
 
+    @ViewBuilder
+    private func adHocModelButton(_ model: String) -> some View {
+        Button {
+            appState.setAgentSessionModel(model)
+        } label: {
+            HStack {
+                Text(model)
+                if appState.agentSessionModelOverride == model {
+                    Image(systemName: "checkmark")
+                }
+            }
+        }
+    }
+
     /// Set of every model id that lives somewhere in the library —
-    /// used to filter "Recently fetched" so we don't repeat them.
+    /// used to filter ad-hoc model groups so we don't repeat them.
     private var libraryModelSet: Set<String> {
         var s = Set<String>()
         for e in appState.agentProviderLibrary.entries {
@@ -669,6 +683,24 @@ struct ModelPickerPill: View {
             s.formUnion(e.allProModels)
         }
         return s
+    }
+
+    private func adHocModels(from ids: [String], excluding excluded: Set<String>) -> [String] {
+        var seen = Set<String>()
+        let excludedKeys = Set(excluded.map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        })
+        return ids.compactMap { raw -> String? in
+            let model = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = model.lowercased()
+            guard !model.isEmpty,
+                  !excludedKeys.contains(key),
+                  isKnownModelRelevantToActiveProvider(model) else {
+                return nil
+            }
+            guard seen.insert(key).inserted else { return nil }
+            return model
+        }
     }
 
     private func isKnownModelRelevantToActiveProvider(_ model: String) -> Bool {

@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-22 | Current version: v1.102.0-rc5
+> Last updated: 2026-06-22 | Current version: v1.102.0-rc6
 
 ## Positioning
 
@@ -21,6 +21,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **some.im Provider 自动同步（1.102.0-rc3）** —— Onboarding / Settings 保存 some.im API Key 后会自动在 AI Providers 中创建或更新 some.im relay provider,并默认激活 `deepseek-v4-flash` / `deepseek-v4-pro` 作为 Flash / Pro 聊天模型,避免用户重复配置。
 - **历史对话保留用户换行（1.102.0-rc4）** —— 用户粘贴到 composer 的多行文本在沉淀到 Agent 历史气泡后按原文保留换行和空行,命令输出、日志片段不会被 Markdown 段落规则压成一行。
 - **历史粘贴文本可查看（1.102.0-rc5）** —— 历史气泡中的“已粘贴的文本.txt”附件条目可点击打开只读内容窗口,方便回看大段粘贴日志或命令输出。
+- **Composer 模型 Recently Used（1.102.0-rc6）** —— Agent composer 模型菜单新增 Recently used 分组,按用户最近实际选择排序,并与 Recently fetched 去重,避免新拉取的大模型列表淹没常用模型。
 - **CLI 缺失文件新建（1.102.0-rc2）** —— `willdeep <path>` 现在通过 `willdeep://open?path=...` 把路径交给 App 处理,不存在但父目录存在的文件会自动创建空文件并打开,避免 macOS `open` 在 App 启动前直接报 "does not exist"。
 - **some.im 多模态整合（1.102.0-rc1）** —— Settings 与 Onboarding 新增 some.im 配置入口,API Key 存 Keychain,可拉取模型并设置图片/视频生成首选与优先模型；内置 `generate_image` 工具在 some.im 配置后直接调用 relay 图片生成接口,默认 `gpt-image-2`,并且 OpenAI Chat 兼容请求会过滤 `.widget` / `.workflowReport` 本地卡片,避免 UI-only role 泄漏给 some.im。
 - **DMG 图标同步（1.100.0-rc2）** —— release 打包流程会从 `Xedit/Assets.xcassets/AppIcon.appiconset` 自动生成临时 `.icns`,并把它用作 DMG volume icon；DMG 内的 `.app` 图标和安装包自身图标都跟当前 App 启动/Dock 图标保持一致。
