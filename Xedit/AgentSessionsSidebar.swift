@@ -75,9 +75,20 @@ struct AgentSessionsSidebar: View {
                         }
                     }
                     .padding(.vertical, 8)
+                    // 父 AgentModeView 给了 `.frame(width: sidebarWidth)`,
+                    // 但 SwiftUI ScrollView 里的内容若声明了更大的固有宽
+                    // 度(比如长 session title 跑出 truncation 边界),会向
+                    // 右溢出到 chat 区域。把内容显式钉到 maxWidth=.infinity
+                    // 让 ScrollView 知道它就只有那么宽,内部 Text 会按
+                    // truncationMode 收尾。
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
+        // sidebar 整体再 clip 一次:即便 SwiftUI 在 narrow window 下
+        // 没把某个子 view 完美约束,溢出的部分也不会糊到 chat / side
+        // panel 上去。
+        .clipped()
         .onAppear(perform: prunePersistedWorkspaceStateIfNeeded)
         .onCompatibleChange(of: workspaceStatePruneKey) { _, _ in
             prunePersistedWorkspaceStateIfNeeded()
@@ -381,6 +392,11 @@ struct AgentSessionsSidebar: View {
                         .foregroundStyle(isActive ? .primary : .secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
+                        // sidebar 收窄时:title 优先保留(给它 priority 1),
+                        // badge / 时间 chip / trailing actions 走默认 0,
+                        // SwiftUI 会先压缩低优先级元素,而不是把 title 压到
+                        // 一个字符然后留一堆空白给 chrome。
+                        .layoutPriority(1)
                         // Double-click the title to rename — same dialog as the
                         // context-menu "Rename". Takes priority over the row
                         // button's single-click select for two-tap sequences.
@@ -765,11 +781,18 @@ struct SidebarActionRow: View {
                 Text(title)
                     .font(AgentDesign.sidebarRowFont)
                     .foregroundStyle(isDimmed ? .secondary : .primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    // Title 是主信息,sidebar 收窄时优先保留它,把 shortcut
+                    // (e.g. "⌘N") 先挤掉而不是反过来。
+                    .layoutPriority(1)
                 Spacer(minLength: 0)
                 if let shortcut {
                     Text(shortcut)
                         .font(.system(size: 10))
                         .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .fixedSize()
                 }
             }
             .padding(.horizontal, 14)

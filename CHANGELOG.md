@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.105.0-rc12 - 2026-06-24
+
+### Fixed
+- Agent 窗口收窄时,sessions sidebar 里的 New Chat 行、workspace 标题、session 标题会向右溢出到 chat 区域(用户截图反馈:标题被挤出窗口)。把 `SidebarActionRow.title` 和 session row 的 `Text(session.title)` 都加上 `lineLimit(1)` + `truncationMode(.tail)` + `layoutPriority(1)`,shortcut chip 用 `fixedSize()`,这样 SwiftUI 在宽度不足时先压缩低优先级 chrome 再裁标题。sidebar 整体 `frame(maxWidth: .infinity).clipped()`,即使有未声明 `lineLimit` 的子 view 也不会糊到 chat / side panel 上。
+
+### Changed
+- 版本号从 **1.105.0-rc11** 提升为 **1.105.0-rc12**（sidebar 窄窗口截断与溢出修复）。pbxproj×6 / Go agent / Help Info.plist / README badge / product-overview / docs ×2 同步。
+
 ## 1.105.0-rc11 - 2026-06-24
 
 ### Fixed
