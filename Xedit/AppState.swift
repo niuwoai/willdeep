@@ -644,6 +644,37 @@ final class AppState: ObservableObject {
         EditorAppStateRegistry.shared.focusCurrentEditorWindow()
     }
 
+    func openAgentReferencedFile(_ rawPath: String) {
+        let path = Self.agentFilePathWithoutLineSuffix(rawPath)
+        let url: URL?
+        if path.hasPrefix("/") {
+            url = URL(fileURLWithPath: path).standardizedFileURL
+        } else if let changed = agentChangedFileURL(path) {
+            url = changed
+        } else if let base = agentWorktreeChanges.repositoryRoot ?? rootDirectory {
+            url = base.appendingPathComponent(path).standardizedFileURL
+        } else {
+            url = nil
+        }
+        guard let url else { return }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              !isDirectory.boolValue else {
+            return
+        }
+        openEditorFile(url)
+        registerRecentFile(url)
+        EditorAppStateRegistry.shared.focusCurrentEditorWindow()
+    }
+
+    nonisolated static func agentFilePathWithoutLineSuffix(_ rawPath: String) -> String {
+        var parts = rawPath.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+        while parts.count > 1, let last = parts.last, last.allSatisfy(\.isNumber) {
+            parts.removeLast()
+        }
+        return parts.joined(separator: ":")
+    }
+
     func agentChangedFileURL(_ relativePath: String) -> URL? {
         let base = agentWorktreeChanges.repositoryRoot ?? rootDirectory
         guard let base else { return nil }

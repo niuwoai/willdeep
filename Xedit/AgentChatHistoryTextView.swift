@@ -41,6 +41,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
     var latestTurnReportToolCount: Int? = nil
     /// 1.103.0-rc11: footer 报告图标被点时触发(SwiftUI 侧打开 popover)。
     var onShowTurnReport: (() -> Void)? = nil
+    var onOpenFilePath: ((String) -> Void)? = nil
     @Environment(\.colorScheme) private var colorScheme
 
     func makeNSView(context: Context) -> AgentChatHistoryNSTextView {
@@ -48,6 +49,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         view.translatesAutoresizingMaskIntoConstraints = false
         view.onRetryLastTurn = onRetryLastTurn
         view.onShowTurnReport = onShowTurnReport
+        view.onOpenFilePath = onOpenFilePath
         configure(view)
         view.applyMessages(
             messages,
@@ -61,6 +63,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
     func updateNSView(_ nsView: AgentChatHistoryNSTextView, context: Context) {
         nsView.onRetryLastTurn = onRetryLastTurn
         nsView.onShowTurnReport = onShowTurnReport
+        nsView.onOpenFilePath = onOpenFilePath
         nsView.applyMessages(
             messages,
             isDark: colorScheme == .dark,
@@ -127,6 +130,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
     /// 1.103.0-rc11: TextKit footer 里 doc.text 图标被点时回调 SwiftUI 侧
     /// 弹出 AgentTurnReportCard popover —— 见 AgentChatTranscript。
     var onShowTurnReport: (() -> Void)?
+    var onOpenFilePath: ((String) -> Void)?
 
     init() {
         let textStorage = NSTextStorage()
@@ -420,6 +424,11 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             return true
         }
 
+        if let path = textStorage.attribute(.agentChatHistoryFilePath, at: charIndex, effectiveRange: nil) as? String {
+            onOpenFilePath?(path)
+            return true
+        }
+
         return isInternalActionLink(link)
     }
 
@@ -444,6 +453,7 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             AgentChatHistoryFooterChrome.reportLinkValue,
             AgentChatHistoryTableLink.value,
             AgentChatHistoryTextAttachmentLink.value,
+            AgentChatHistoryFilePathLink.value,
             "agent-chat-history-tool-group",
         ].contains(value)
     }
@@ -518,6 +528,10 @@ enum AgentChatHistoryTextAttachmentLink {
     static let value = "agent-chat-history-text-attachment"
 }
 
+enum AgentChatHistoryFilePathLink {
+    static let value = "agent-chat-history-file-path"
+}
+
 extension NSAttributedString.Key {
     static let agentChatHistoryBubbleKind = NSAttributedString.Key("AgentChatHistoryBubbleKind")
     static let agentChatHistoryCodeBlockID = NSAttributedString.Key("AgentChatHistoryCodeBlockID")
@@ -528,6 +542,7 @@ extension NSAttributedString.Key {
     static let agentChatHistoryTableBlockID = NSAttributedString.Key("AgentChatHistoryTableBlockID")
     static let agentChatHistoryTablePayload = NSAttributedString.Key("AgentChatHistoryTablePayload")
     static let agentChatHistoryTextAttachment = NSAttributedString.Key("AgentChatHistoryTextAttachment")
+    static let agentChatHistoryFilePath = NSAttributedString.Key("AgentChatHistoryFilePath")
     static let agentChatHistoryToolGroupID = NSAttributedString.Key("AgentChatHistoryToolGroupID")
     static let agentChatHistoryUserMessageID = NSAttributedString.Key("AgentChatHistoryUserMessageID")
     /// Markup so the formatter's `applyBubbleChrome` step can swap in a

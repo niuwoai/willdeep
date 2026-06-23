@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-23 | Current version: v1.103.0-rc14
+> Last updated: 2026-06-23 | Current version: v1.104.0-rc1
 
 ## Positioning
 
@@ -46,6 +46,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **Pending patch 下一条消息自动处理（1.103.0-rc12）** —— 用户没点 Apply 就继续发送下一条消息时,Goal 模式和「替我审批」workspace-access 模式会先自动应用仍 pending 的 patch proposal,并保留 applied 状态审计;普通/Plan 模式继续 supersede 旧 proposal,避免非授权写盘。
 - **流式输出降载与 @ 选择器修复（1.103.0-rc13）** —— Agent 流式 assistant delta 刷新节奏降到约 10fps，并把流式中的 assistant 气泡改为轻量文本渲染，turn 结束后仍折回完整 Markdown/TextKit 历史渲染；composer `@` 选择器改为输入框上方的独立面板，顶部提供搜索框，列表高度封顶并内部滚动，避免浮层文字和输入区文字重叠。
 - **上下文压缩保留本地历史与截图粘贴修复（1.103.0-rc14）** —— Agent context compression 现在只把旧消息摘要写进 model-facing request history，不再替换本地 `messages` 或清理旧工具调用，因此 transcript / session 持久化仍保留完整历史；composer pasteboard 读取补上 `NSImage`/UTType image fallback，让系统截图等非文件型图片粘贴也能变成图片附件。
+- **Agent 任务监控 Rail（1.104.0-rc1）** —— Agent mode 右侧新增常驻“任务监控”栏，把待办、最终产物、工作文件、技能/MCP 与意识更新集中展示；composer 上方新增语义化阶段状态（搜索中/编辑中/验证中/反思中 + 计时）；历史正文里的路径样式升级为可点击 path chip，能直接按 workspace 打开对应文件。
 - **Composer 模型热门/上新分组（1.102.0-rc7）** —— Agent composer 模型菜单消费 some.im `/v1/models` / 公开模型定价里的 `is_hot`、`is_new` 标记,在 Recently used 后展示 Hot / New 分组,并与 Recently fetched 去重。
 - **CLI 缺失文件新建（1.102.0-rc2）** —— `willdeep <path>` 现在通过 `willdeep://open?path=...` 把路径交给 App 处理,不存在但父目录存在的文件会自动创建空文件并打开,避免 macOS `open` 在 App 启动前直接报 "does not exist"。
 - **some.im 多模态整合（1.102.0-rc1）** —— Settings 与 Onboarding 新增 some.im 配置入口,API Key 存 Keychain,可拉取模型并设置图片/视频生成首选与优先模型；内置 `generate_image` 工具在 some.im 配置后直接调用 relay 图片生成接口,默认 `gpt-image-2`,并且 OpenAI Chat 兼容请求会过滤 `.widget` / `.workflowReport` 本地卡片,避免 UI-only role 泄漏给 some.im。

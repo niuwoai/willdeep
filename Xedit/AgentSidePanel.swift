@@ -24,7 +24,7 @@ enum AgentSidePanelKind: String, CaseIterable, Identifiable {
         case .preview: return L10n.AgentSidePanel.preview
         case .diff: return L10n.AgentSidePanel.diff
         case .files: return L10n.AgentSidePanel.files
-        case .backgroundTasks: return L10n.AgentSidePanel.backgroundTasks
+        case .backgroundTasks: return "任务监控"
         case .plan: return L10n.AgentSidePanel.plan
         }
     }
@@ -85,7 +85,7 @@ struct AgentSidePanelHost: View {
     private var content: some View {
         switch kind {
         case .backgroundTasks:
-            backgroundTasksList
+            AgentTaskMonitorRail()
         case .diff:
             AgentSidePanelDiffView()
         case .files:
@@ -96,28 +96,6 @@ struct AgentSidePanelHost: View {
             AgentSidePanelPreviewView(selectedFile: $selectedFile)
         case .none:
             comingSoonPlaceholder
-        }
-    }
-
-    private var backgroundTasksList: some View {
-        Group {
-            if let runtimeID = appState.activeAgentSessionID {
-                let jobs = appState.agentJobRegistry.jobs(forRuntime: runtimeID)
-                if jobs.isEmpty {
-                    comingSoonPlaceholder
-                } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ForEach(jobs) { job in
-                                AgentJobRow(job: job)
-                            }
-                        }
-                        .padding(10)
-                    }
-                }
-            } else {
-                comingSoonPlaceholder
-            }
         }
     }
 

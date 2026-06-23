@@ -26,13 +26,13 @@ struct AgentPanelView: View {
                 }
                 if isJobsDrawerOpen {
                     Divider()
-                    AgentJobsDrawer(isOpen: $isJobsDrawerOpen)
-                        .frame(width: 260)
+                    AgentTaskMonitorRail()
+                        .frame(width: 300)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
         }
-        .frame(minWidth: isJobsDrawerOpen ? 560 : 300)
+        .frame(minWidth: isJobsDrawerOpen ? 600 : 300)
         .background(appState.editorSettings.interfaceSkin.palette.panelFill)
         .overlay(alignment: .leading) {
             Divider()

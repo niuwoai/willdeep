@@ -43,9 +43,12 @@ struct AgentModeView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(skin.windowBackground)
 
+            Divider()
             if sidePanel != nil {
-                Divider()
                 AgentSidePanelHost(kind: $sidePanel, selectedFile: $sidePanelFile)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            } else {
+                AgentTaskMonitorRail()
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }

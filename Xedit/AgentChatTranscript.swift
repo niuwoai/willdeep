@@ -104,7 +104,10 @@ struct AgentChatTranscript: View {
                                 baseFontSize: appState.agentChatBaseFontSize,
                                 onRetryLastTurn: appState.retryLastAgentTurn,
                                 latestTurnReportToolCount: appState.agentLatestTurnReport?.toolSummary.total,
-                                onShowTurnReport: { showTurnReportPopover = true }
+                                onShowTurnReport: { showTurnReportPopover = true },
+                                onOpenFilePath: { rawPath in
+                                    appState.openAgentReferencedFile(rawPath)
+                                }
                             )
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                                 .popover(isPresented: $showTurnReportPopover, arrowEdge: .top) {
