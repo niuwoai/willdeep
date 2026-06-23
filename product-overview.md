@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-23 | Current version: v1.105.0-rc2
+> Last updated: 2026-06-23 | Current version: v1.105.0-rc4
 
 ## Positioning
 
@@ -49,6 +49,8 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **Agent 任务监控 Rail（1.104.0-rc1）** —— Agent mode 右侧新增常驻“任务监控”栏，把待办、最终产物、工作文件、技能/MCP 与意识更新集中展示；composer 上方新增语义化阶段状态（搜索中/编辑中/验证中/反思中 + 计时）；历史正文里的路径样式升级为可点击 path chip，能直接按 workspace 打开对应文件。
 - **聊天配置 MCP 与用户 Skill 维护（1.105.0-rc1）** —— Agent 新增 `configure_mcp_server`，可把用户贴进聊天的 `mcpServers` JSON 或单 server JSON 保存为用户 MCP 配置，复用 Settings 的 upsert 与凭据存储，敏感 env/header 自动脱敏；同时新增 `update_user_skill` / `delete_user_skill`，只允许维护用户目录下的 skill，内置和插件 skill 不可被聊天误改误删，删除仍需要危险确认。
 - **语音烟测资源护栏（1.105.0-rc2）** —— `VoiceSmokeTests` 默认只转录短音频样本，先按文件大小和音频时长跳过超限的 Downloads 候选；XCTest 启动 app 时也不再自动预加载 SenseVoice ONNX 模型。需要手动长音频 dogfood 时显式设置 `WILLDEEP_VOICE_SMOKE_ALLOW_LONG_AUDIO=1`。
+- **任务监控与弹层反馈修复（1.105.0-rc3）** —— Agent mode 新开应用时不再默认露出右侧任务监控 Rail；当当前会话进入 Agent 活动并且任务、待办、工作文件或学习建议发生变化时，才自动打开带关闭按钮的任务监控侧栏。侧边 Agent panel 的任务抽屉也补齐关闭按钮，避免同一功能有时能关、有时没处关；composer 的 `@` skill / 附件列表支持 Esc 和关闭图标收起，学习内容 popover 的删除、复制、确认 icon 都有即时反馈。
+- **Composer @ 列表扩容（1.105.0-rc4）** —— composer 中用 `@` 呼起的 skill / 附件列表加宽并提高可见列表高度，减少技能说明和文件路径拥挤，保留 Esc 与右上角关闭按钮。
 - **Composer 模型热门/上新分组（1.102.0-rc7）** —— Agent composer 模型菜单消费 some.im `/v1/models` / 公开模型定价里的 `is_hot`、`is_new` 标记,在 Recently used 后展示 Hot / New 分组,并与 Recently fetched 去重。
 - **CLI 缺失文件新建（1.102.0-rc2）** —— `willdeep <path>` 现在通过 `willdeep://open?path=...` 把路径交给 App 处理,不存在但父目录存在的文件会自动创建空文件并打开,避免 macOS `open` 在 App 启动前直接报 "does not exist"。
 - **some.im 多模态整合（1.102.0-rc1）** —— Settings 与 Onboarding 新增 some.im 配置入口,API Key 存 Keychain,可拉取模型并设置图片/视频生成首选与优先模型；内置 `generate_image` 工具在 some.im 配置后直接调用 relay 图片生成接口,默认 `gpt-image-2`,并且 OpenAI Chat 兼容请求会过滤 `.widget` / `.workflowReport` 本地卡片,避免 UI-only role 泄漏给 some.im。

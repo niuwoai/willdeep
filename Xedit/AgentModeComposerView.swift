@@ -416,7 +416,8 @@ private struct ComposerCard: View {
                     onPick: { index in
                         atMenuSelection = index
                         _ = commitSelectedAtEntry()
-                    }
+                    },
+                    onClose: { closeAtMenu() }
                 )
                 .transition(.opacity.combined(with: .move(edge: .top)))
                 .zIndex(20)
@@ -441,6 +442,7 @@ private struct ComposerCard: View {
                     atMenuSelection: $atMenuSelection,
                     atMenuItemCount: { filteredAtEntries.count },
                     onAtCommit: { commitSelectedAtEntry() },
+                    onAtCancel: { closeAtMenu() },
                     onAtQueryChange: { handleAtQueryChange($0) },
                     coordinatorRef: coordinatorRef
                 )
@@ -528,6 +530,12 @@ private struct ComposerCard: View {
         }
     }
 
+    private func closeAtMenu() {
+        atMenuVisible = false
+        atMenuSelection = 0
+        atMenuQuery = ""
+    }
+
     @discardableResult
     private func commitSelectedAtEntry() -> Bool {
         let entries = filteredAtEntries
@@ -549,8 +557,7 @@ private struct ComposerCard: View {
         case .file(let url, _):
             appState.attachAgentFile(url: url)
         }
-        atMenuVisible = false
-        atMenuQuery = ""
+        closeAtMenu()
         return true
     }
 

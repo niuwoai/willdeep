@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.105.0-rc4 - 2026-06-23
+
+### Changed
+- Composer 的 `@` skill / 附件列表加宽到约 540pt，并把可见列表高度提高到约 340pt，让技能说明和文件路径不用挤在小窗体里。
+- 版本号从 **1.105.0-rc3** 提升为 **1.105.0-rc4**（Composer `@` 列表尺寸调整）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.105.0-rc3 - 2026-06-23
+
+### Fixed
+- Agent mode 新开应用时不再默认显示右侧“任务监控”Rail；只有当前会话进入 Agent 活动后，任务监控内容发生运行期变化时才自动打开。
+- “任务监控”统一通过带 header 的侧栏/抽屉呈现，Agent mode 和侧边 Agent panel 都始终提供关闭按钮。
+- Composer 的 `@` skill / 附件列表现在可用 Esc 或右上角关闭图标收起，并清理临时 query/选中状态。
+- Agent 学习内容 popover 的垃圾桶、复制、确认图标补齐 hover / 点击反馈；删除会立即从当前 popover 移除该条，复制和确认会切换为已完成状态。
+
+### Changed
+- 版本号从 **1.105.0-rc2** 提升为 **1.105.0-rc3**（任务监控按需展开、composer `@` 列表关闭和学习 popover 图标反馈修复）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.105.0-rc2 - 2026-06-23
 
 ### Fixed

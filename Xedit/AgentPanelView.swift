@@ -26,9 +26,13 @@ struct AgentPanelView: View {
                 }
                 if isJobsDrawerOpen {
                     Divider()
-                    AgentTaskMonitorRail()
-                        .frame(width: 300)
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                    VStack(spacing: 0) {
+                        taskMonitorDrawerHeader
+                        Divider().opacity(0.5)
+                        AgentTaskMonitorRail(width: 300)
+                    }
+                    .frame(width: 300)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
         }
@@ -78,6 +82,27 @@ struct AgentPanelView: View {
             .help("Close Agent")
         }
         .padding(.horizontal, 10)
+        .frame(height: 38)
+    }
+
+    private var taskMonitorDrawerHeader: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "rectangle.and.text.magnifyingglass")
+                .foregroundStyle(.secondary)
+            Text("任务监控")
+                .font(AgentDesign.titleFont)
+            Spacer(minLength: 0)
+            Button {
+                isJobsDrawerOpen = false
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .foregroundStyle(.secondary)
+            .help(L10n.AgentSidePanel.close)
+        }
+        .padding(.horizontal, 12)
         .frame(height: 38)
     }
 

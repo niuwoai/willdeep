@@ -40,6 +40,7 @@ struct ComposerTextEditor: NSViewRepresentable {
     @Binding var atMenuSelection: Int
     let atMenuItemCount: () -> Int
     let onAtCommit: () -> Bool
+    let onAtCancel: () -> Void
     /// Notifies the composer card that the @ token in the buffer has
     /// changed (e.g. user kept typing letters after `@`), so the popover
     /// can re-filter its entries.
@@ -64,6 +65,7 @@ struct ComposerTextEditor: NSViewRepresentable {
             atMenuSelection: $atMenuSelection,
             atMenuItemCount: atMenuItemCount,
             onAtCommit: onAtCommit,
+            onAtCancel: onAtCancel,
             onAtQueryChange: onAtQueryChange
         )
         coordinatorRef.coordinator = coord
@@ -155,6 +157,7 @@ struct ComposerTextEditor: NSViewRepresentable {
         var atMenuSelection: Binding<Int>
         let atMenuItemCount: () -> Int
         let onAtCommit: () -> Bool
+        let onAtCancel: () -> Void
         let onAtQueryChange: (String?) -> Void
 
         // History cursor state. `historyIndex` counts back from the most
@@ -191,6 +194,7 @@ struct ComposerTextEditor: NSViewRepresentable {
             atMenuSelection: Binding<Int>,
             atMenuItemCount: @escaping () -> Int,
             onAtCommit: @escaping () -> Bool,
+            onAtCancel: @escaping () -> Void,
             onAtQueryChange: @escaping (String?) -> Void
         ) {
             self.text = text
@@ -206,6 +210,7 @@ struct ComposerTextEditor: NSViewRepresentable {
             self.atMenuSelection = atMenuSelection
             self.atMenuItemCount = atMenuItemCount
             self.onAtCommit = onAtCommit
+            self.onAtCancel = onAtCancel
             self.onAtQueryChange = onAtQueryChange
         }
 
@@ -285,7 +290,7 @@ struct ComposerTextEditor: NSViewRepresentable {
                      #selector(NSResponder.insertTab(_:)):
                     if onAtCommit() { return true }
                 case #selector(NSResponder.cancelOperation(_:)):
-                    atMenuVisible.wrappedValue = false
+                    onAtCancel()
                     return true
                 default:
                     break

@@ -18031,6 +18031,22 @@
         }
       }
     },
+    "transcript.learning.approved" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存"
+          }
+        }
+      }
+    },
     "transcript.learning.copy-help" : {
       "localizations" : {
         "en" : {

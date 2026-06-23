@@ -10,6 +10,7 @@ import AppKit
 
 struct AgentTaskMonitorRail: View {
     @EnvironmentObject var appState: AppState
+    var width: CGFloat = 320
 
     var body: some View {
         let palette = appState.editorSettings.interfaceSkin.palette
@@ -24,7 +25,7 @@ struct AgentTaskMonitorRail: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 16)
         }
-        .frame(width: 320)
+        .frame(width: width)
         .background(palette.panelFill)
     }
 
@@ -222,6 +223,88 @@ struct AgentTaskMonitorRail: View {
         let skill = events.filter { $0.kind == .skill }.count
         let mcp = events.filter { $0.kind == .mcpSuggestion }.count
         return (memory, skill, mcp, memory + skill + mcp)
+    }
+}
+
+struct AgentTaskMonitorSnapshot: Equatable {
+    var sessionID: UUID?
+    var isAgentResponding: Bool
+    var isCompressingContext: Bool
+    var runningTaskCount: Int
+    var attentionToolIDs: [String]
+    var todoDigest: [String]
+    var workFileDigest: [String]
+    var learningDigest: [String]
+
+    var isAgentActivityActive: Bool {
+        isAgentResponding
+            || isCompressingContext
+            || runningTaskCount > 0
+            || !attentionToolIDs.isEmpty
+    }
+
+    var hasVisibleMonitorContent: Bool {
+        isAgentActivityActive
+            || !todoDigest.isEmpty
+            || !workFileDigest.isEmpty
+            || !learningDigest.isEmpty
+    }
+
+    static func capture(from appState: AppState) -> AgentTaskMonitorSnapshot {
+        AgentTaskMonitorSnapshot(
+            sessionID: appState.activeAgentSessionID,
+            isAgentResponding: appState.isAgentResponding,
+            isCompressingContext: appState.isCompressingAgentContext,
+            runningTaskCount: appState.agentRunningTaskCount,
+            attentionToolIDs: appState.agentToolCalls
+                .filter { call in
+                    switch call.status {
+                    case .pendingApproval, .awaitingConfirm, .awaitingUserAnswer, .running:
+                        return true
+                    case .succeeded, .failed, .denied:
+                        return false
+                    }
+                }
+                .map { "\($0.id.uuidString):\($0.status.rawValue):\($0.toolName)" },
+            todoDigest: todoDigest(from: appState),
+            workFileDigest: appState.agentWorktreeChanges.files.map { change in
+                [
+                    change.path,
+                    change.kind.rawValue,
+                    String(change.addedLines),
+                    String(change.deletedLines)
+                ].joined(separator: ":")
+            },
+            learningDigest: learningDigest(from: appState)
+        )
+    }
+
+    private static func todoDigest(from appState: AppState) -> [String] {
+        if let plan = appState.agentCurrentPlan, !plan.steps.isEmpty {
+            return ["plan:\(plan.status.rawValue)"] + plan.steps.map { step in
+                "\(step.id.uuidString):\(step.status.rawValue):\(step.text)"
+            }
+        }
+        if let goal = appState.agentCurrentGoal, !goal.checklist.isEmpty {
+            return ["goal:\(goal.statement)"] + goal.checklist.map { item in
+                "\(item.id.uuidString):\(item.done):\(item.text)"
+            }
+        }
+        return []
+    }
+
+    private static func learningDigest(from appState: AppState) -> [String] {
+        let events = appState.agentCurrentTurnLearningEvents.isEmpty
+            ? appState.agentLearningEvents
+            : appState.agentCurrentTurnLearningEvents
+        return events.map { event in
+            [
+                event.id.uuidString,
+                event.kind.rawValue,
+                event.status.rawValue,
+                event.title
+            ].joined(separator: ":")
+        }
     }
 }
 
