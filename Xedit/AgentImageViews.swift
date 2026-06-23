@@ -9,6 +9,7 @@
 
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 struct AgentImageThumbnail: View {
     let image: AgentImageAttachment
@@ -96,8 +97,7 @@ enum AgentImagePasteboardHelper {
     /// The NSImage is then flattened to PNG.
     static func readImages(from pasteboard: NSPasteboard) -> [(data: Data, mimeType: String)] {
         var results: [(Data, String)] = []
-        guard let items = pasteboard.pasteboardItems else { return results }
-        for item in items {
+        for item in pasteboard.pasteboardItems ?? [] {
             if let pngData = item.data(forType: .png) {
                 results.append((pngData, "image/png"))
                 continue
@@ -113,6 +113,10 @@ enum AgentImagePasteboardHelper {
                let data = try? Data(contentsOf: url),
                let mime = mimeType(forPath: url.path) {
                 results.append((data, mime))
+                continue
+            }
+            if let imageData = imageData(from: item) {
+                results.append(imageData)
             }
         }
         if results.isEmpty,
@@ -135,6 +139,7 @@ enum AgentImagePasteboardHelper {
         return items.contains { item in
             if item.data(forType: .png) != nil { return true }
             if item.data(forType: .tiff) != nil { return true }
+            if item.types.contains(where: isImagePasteboardType) { return true }
             if let urlString = item.string(forType: .fileURL),
                let url = URL(string: urlString),
                mimeType(forPath: url.path) != nil {
@@ -142,6 +147,23 @@ enum AgentImagePasteboardHelper {
             }
             return false
         }
+    }
+
+    private static func imageData(from item: NSPasteboardItem) -> (Data, String)? {
+        for type in item.types where isImagePasteboardType(type) {
+            guard let data = item.data(forType: type) else { continue }
+            if type.rawValue.lowercased().contains("heic") {
+                return (data, "image/heic")
+            }
+            if let image = NSImage(data: data), let png = pngData(from: image) {
+                return (png, "image/png")
+            }
+        }
+        return nil
+    }
+
+    private static func isImagePasteboardType(_ type: NSPasteboard.PasteboardType) -> Bool {
+        UTType(type.rawValue)?.conforms(to: .image) == true
     }
 
     private static func pngData(from image: NSImage) -> Data? {

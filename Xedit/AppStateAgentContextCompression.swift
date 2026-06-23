@@ -58,10 +58,15 @@ extension AppState {
         guard !runtime.isCompressingContext, !runtime.isResponding else { return false }
         guard runtime.messages.count > 6 else { return false }
         let window = max(1, agentContextWindow)
-        // Token estimate uses the runtime's own message list, not the
-        // currently-displayed conversation; a background runtime can get
-        // compressed while its session is not on screen.
-        let collapsed = Self.collapseOldToolResults(in: runtime.messages)
+        // Estimate the model-facing window, not the local transcript. Once a
+        // summary exists, the user can still see every old message locally
+        // while the provider request sees only the summary + newer tail.
+        let history = Self.modelFacingHistory(
+            messages: runtime.messages,
+            contextSummary: runtime.contextSummary,
+            contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID
+        )
+        let collapsed = Self.collapseOldToolResults(in: history)
         let used = Self.estimateAgentTokens(messages: collapsed, tools: AgentToolRegistry.all)
         let usedFraction = Double(used) / Double(window)
         return usedFraction > 0.75
@@ -163,15 +168,32 @@ extension AppState {
             return
         }
 
+        runtime.contextSummary = trimmed
+        runtime.contextSummaryThroughMessageID = head.last?.id
+    }
+
+    /// Returns the transcript slice that should be sent to the model. Local
+    /// `messages` remain complete; compression only swaps the already-covered
+    /// prefix for a synthetic system summary in the request payload.
+    nonisolated static func modelFacingHistory(
+        messages: [AgentMessage],
+        contextSummary: String?,
+        contextSummaryThroughMessageID: AgentMessage.ID?,
+        excludingMessageID: AgentMessage.ID? = nil
+    ) -> [AgentMessage] {
+        let visible = messages.filter { $0.id != excludingMessageID }
+        guard let summary = contextSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !summary.isEmpty,
+              let throughID = contextSummaryThroughMessageID,
+              let markerIndex = visible.firstIndex(where: { $0.id == throughID }) else {
+            return visible
+        }
+
         let summaryMessage = AgentMessage(
-            role: .assistant,
-            content: "[Earlier conversation summary]\n\n\(trimmed)"
+            role: .system,
+            content: "Earlier conversation summary for context only; the local transcript is preserved in full.\n\n\(summary)"
         )
-        runtime.messages = [summaryMessage] + tail
-        // Tool calls referencing pre-compression assistant messages no
-        // longer have a valid messageID; drop them so they stop rendering.
-        let liveMessageIDs = Set(runtime.messages.map(\.id))
-        runtime.toolCalls.removeAll { !liveMessageIDs.contains($0.messageID) }
+        return [summaryMessage] + Array(visible.dropFirst(markerIndex + 1))
     }
 
     /// Replace model-facing `tool` message bodies with compact summaries

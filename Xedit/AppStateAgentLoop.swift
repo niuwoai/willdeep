@@ -394,7 +394,12 @@ extension AppState {
                 runtime.messages[index].requestPrefixHash = cacheDiagnostics.hash
                 runtime.messages[index].requestStablePrefixCharacters = cacheDiagnostics.stableCharacters
             }
-            let history = runtime.messages.filter { $0.id != assistantID }
+            let history = Self.modelFacingHistory(
+                messages: runtime.messages,
+                contextSummary: runtime.contextSummary,
+                contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID,
+                excludingMessageID: assistantID
+            )
             let collapsedHistory = Self.collapseOldToolResults(in: history)
             let requestMessages = [AgentMessage(role: .system, content: systemPrompt)] + collapsedHistory
 
