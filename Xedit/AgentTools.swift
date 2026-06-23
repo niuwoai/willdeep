@@ -143,18 +143,28 @@ enum AgentToolRunner {
         let files = changes.map(\.path)
         let fileList = files.map { "- \($0)" }.joined(separator: "\n")
         let fileLabel = files.count == 1 ? "1 file" : "\(files.count) files"
+        let statusLine: String
+        switch proposal.status {
+        case .applied:
+            statusLine = "Patch status: applied. The existing patch applier wrote the changes to disk."
+        case .failed:
+            statusLine = "Patch status: failed\(proposal.statusMessage.map { ": \($0)" } ?? ".")"
+        case .rejected:
+            statusLine = "Patch status: rejected."
+        case .pending:
+            statusLine = "Patch status: pending. No files were modified; the user must click Apply before this patch writes to disk."
+        }
 
         return AgentToolResult(
-            summary: "patch queued: \(fileLabel)",
+            summary: proposal.status == .applied ? "patch applied: \(fileLabel)" : "patch queued: \(fileLabel)",
             payload: """
             Patch proposal queued in the right-side diff panel.
 
             Patch ID: \(proposal.id.uuidString)
             Title: \(proposal.title)
+            \(statusLine)
             Files:
             \(fileList)
-
-            No files were modified. The user must click Apply before this patch writes to disk.
             """
         )
     }

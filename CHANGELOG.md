@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.103.0-rc9 - 2026-06-23
+
+### Changed
+- `apply_patch` 在 Goal 模式和「替我审批」workspace-access approval mode 下会自动调用现有 `applyAgentPatch` 落盘，并把右侧 Patch Review proposal 标记为 applied；普通/智能模式仍保持 pending，等待用户点击 Apply。
+- extended 系统提示词和工具描述同步更新，明确 `apply_patch` 的 pending/auto-apply 边界，避免模型误以为所有模式都必须等待手动点击。
+- 版本号从 **1.103.0-rc8** 提升为 **1.103.0-rc9**（Agent Patch 自动应用）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
 ## 1.103.0-rc8 - 2026-06-23
 
 ### Added

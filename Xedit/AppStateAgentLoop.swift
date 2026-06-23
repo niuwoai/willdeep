@@ -729,6 +729,10 @@ extension AppState {
                     continue
                 }
 
+                let patchAutoApplySource = patchAutoApplySource(
+                    forToolName: call.toolName,
+                    runtime: runtime
+                )
                 let context = AgentToolContext(
                     rootDirectory: workspaceURL,
                     workspaceLocation: workspaceLocation,
@@ -745,9 +749,11 @@ extension AppState {
                             for: runtime,
                             messageID: assistantID,
                             title: title,
-                            diff: diff
+                            diff: diff,
+                            autoApplySource: patchAutoApplySource
                         )
-                    }
+                    },
+                    patchAutoApplySource: patchAutoApplySource
                 )
                 do {
                     let result = try await AgentToolRunner.run(
@@ -758,15 +764,21 @@ extension AppState {
                     if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
                         runtime.toolCalls[index].status = .succeeded
                         runtime.toolCalls[index].result = result
+                        if let patchAutoApplySource {
+                            runtime.toolCalls[index].approvalSource = patchAutoApplySource
+                        }
                     }
+                    let effectiveApprovalSource = runtime.toolCalls.first(where: { $0.id == recordID })?.approvalSource
+                        ?? autoApproval
+                        ?? patchAutoApplySource
                     AgentSandboxAuditLog.append(
                         toolName: call.toolName,
                         arguments: argsDict,
                         decision: sandboxDecision,
-                        approvalSource: runtime.toolCalls.first(where: { $0.id == recordID })?.approvalSource ?? autoApproval,
+                        approvalSource: effectiveApprovalSource,
                         outcome: "succeeded"
                     )
-                    if call.toolName == "run_command" || risk != .read {
+                    if call.toolName == "run_command" || risk != .read || patchAutoApplySource != nil {
                         await refreshGitStatusAfterAgentTool(
                             for: runtime,
                             workspaceURL: workspaceURL,
@@ -783,7 +795,9 @@ extension AppState {
                         toolName: call.toolName,
                         arguments: argsDict,
                         decision: sandboxDecision,
-                        approvalSource: runtime.toolCalls.first(where: { $0.id == recordID })?.approvalSource ?? autoApproval,
+                        approvalSource: runtime.toolCalls.first(where: { $0.id == recordID })?.approvalSource
+                            ?? autoApproval
+                            ?? patchAutoApplySource,
                         outcome: "failed"
                     )
                     appendToolMessage(
@@ -804,6 +818,21 @@ extension AppState {
 
         runtime.errorMessage = "Agent paused after \(Self.maxAgentToolRounds) tool-call rounds to avoid an accidental loop. Send another message to continue."
         runtime.errorDetails = nil
+    }
+
+    private func patchAutoApplySource(
+        forToolName toolName: String,
+        runtime: AgentRuntime
+    ) -> AgentToolApprovalSource? {
+        guard toolName == "apply_patch" else { return nil }
+        if runtime.interactionMode == .goal {
+            return .goalMode
+        }
+        if runtime.interactionMode != .plan,
+           runtime.approvalMode == .workspaceAccess {
+            return .workspaceAccess
+        }
+        return nil
     }
 
     /// Suspend until the user resolves the tool call. Three resume paths:

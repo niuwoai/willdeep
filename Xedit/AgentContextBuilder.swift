@@ -301,7 +301,7 @@ enum AgentContextBuilder {
                 sections.append("""
                 Extended tool capability map:
                 - Workspace exploration: search_files, grep_files, read_file, list_directory, git_status.
-                - Proposed edits: apply_patch validates an existing-file unified diff and queues it in the right-side diff panel. It does not write files; the user must still click Apply.
+                - Proposed edits: apply_patch validates an existing-file unified diff and queues it in the right-side diff panel. In normal modes it waits for the user to click Apply; in Goal mode or workspace-access approval mode the host may auto-apply through the same patch applier and mark the proposal applied.
                 - Shell and verification: run_command for build/test/render commands; use run_in_background with list_jobs/get_job_output/kill_job for long tasks.
                 - Delegation: spawn_agent for read-only parallel exploration; claude_code/codex_cli/cursor_agent/cline_cli for approved end-to-end delegated coding tasks.
                 - External context: web_search/web_fetch for current public information, list_mcp_servers/list_mcp_tools/call_mcp_tool for configured integrations, and lark_cli for configured Feishu/Lark work.
@@ -315,7 +315,7 @@ enum AgentContextBuilder {
             sections.append("""
             Stable tool contract:
             - You can call tools to look around the workspace before answering: search_files, grep_files, read_file, list_directory, git_status, run_command.
-            - For code edits, prefer apply_patch when you have a conservative unified diff for existing files. It queues the diff in WillDeep's right-side review panel and never writes files directly; the user must still click Apply. If apply_patch is unavailable or the edit requires unsupported file creation/deletion/binary changes, explain that limit and provide the diff or next step instead.
+            - For code edits, prefer apply_patch when you have a conservative unified diff for existing files. It queues the diff in WillDeep's right-side review panel; normal modes wait for the user to click Apply, while Goal mode and workspace-access approval mode may auto-apply through the same patch applier. If apply_patch is unavailable or the edit requires unsupported file creation/deletion/binary changes, explain that limit and provide the diff or next step instead.
             - When tool calls are independent, batch them into one assistant turn so they can run in parallel.
             - You can discover Codex skills with list_skills and read a selected skill's SKILL.md with read_skill. Use skills when the user's task matches a specialized workflow.
             - Learning checkpoint is REQUIRED before the final answer of any meaningful task. If the turn revealed a durable preference, rule, recurring fact, or project convention, call add_memory. If the turn produced a reusable multi-step workflow, call create_user_skill. If the task exposed a missing external integration, call list_mcp_servers first, then search_mcp_servers and suggest_mcp_server when no configured MCP covers it. These are auditable tool calls, not hidden changes.

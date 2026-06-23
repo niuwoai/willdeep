@@ -1142,6 +1142,67 @@ extension WillDeepTests {
         #expect(try String(contentsOf: fileURL, encoding: .utf8) == "let value = 1\n")
     }
 
+    @Test("apply_patch auto-applies through existing patch applier in Goal and workspace access modes")
+    @MainActor
+    func testApplyPatchAutoAppliesInGoalAndWorkspaceAccessModes() throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_apply_patch_auto_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let fileURL = workspace.appendingPathComponent("Sample.swift")
+        try "let value = 1\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        let appState = AppState(rootDirectory: workspace)
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        let session = appState.startNewAgentSession()
+        defer {
+            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
+                AgentSessionStore.delete(id: id)
+            }
+        }
+        guard let runtime = appState.agentRuntimes[session.id] else {
+            Issue.record("Expected runtime for new agent session")
+            return
+        }
+
+        let proposal = try appState.enqueueAgentPatchProposal(
+            for: runtime,
+            messageID: UUID(),
+            title: "Auto update sample",
+            diff: """
+            --- a/Sample.swift
+            +++ b/Sample.swift
+            @@ -1 +1 @@
+            -let value = 1
+            +let value = 2
+            """,
+            autoApplySource: .goalMode
+        )
+
+        #expect(proposal.status == .applied)
+        #expect(proposal.statusMessage == "Auto-applied by Goal mode")
+        #expect(runtime.patchProposals.first?.status == .applied)
+        #expect(try String(contentsOf: fileURL, encoding: .utf8) == "let value = 2\n")
+
+        let workspaceAccessProposal = try appState.enqueueAgentPatchProposal(
+            for: runtime,
+            messageID: UUID(),
+            title: "Workspace access update",
+            diff: """
+            --- a/Sample.swift
+            +++ b/Sample.swift
+            @@ -1 +1 @@
+            -let value = 2
+            +let value = 3
+            """,
+            autoApplySource: .workspaceAccess
+        )
+
+        #expect(workspaceAccessProposal.status == .applied)
+        #expect(workspaceAccessProposal.statusMessage == "Auto-applied by workspace access approval")
+        #expect(try String(contentsOf: fileURL, encoding: .utf8) == "let value = 3\n")
+    }
+
     @Test("apply_patch is advertised in extended prompt and tool registry")
     func testApplyPatchPromptAndRegistrySurface() {
         let descriptor = AgentToolRegistry.descriptor(for: "apply_patch")
