@@ -84,19 +84,25 @@ struct AgentSidePanelHost: View {
                     .font(AgentDesign.titleFont)
             }
             Spacer(minLength: 0)
+            // rc10 用户反馈:`Image(systemName: "xmark")` + `.secondary`
+            // 在浅色皮肤上颜色弱到几乎看不见,误以为没有关闭按钮。
+            // 给一个 22pt 圆形 hit area + 13pt 加粗字号 + 主文本色,
+            // 至少肉眼第一秒就能看到。
             Button {
                 kind = nil
             } label: {
                 Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.primary.opacity(0.78))
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .focusable(false)
-            .foregroundStyle(.secondary)
             .help(L10n.AgentSidePanel.close)
         }
-        // 右边 padding 比左边大一点,让关闭 X 不至于贴着面板右沿。
         .padding(.leading, 14)
-        .padding(.trailing, 22)
+        .padding(.trailing, 12)
         .frame(height: AgentDesign.headerHeight)
     }
 
@@ -480,9 +486,7 @@ struct AgentSidePanelPreviewView: View {
             placeholder(systemImage: "exclamationmark.triangle", text: loadError)
         } else if loadedURL == nil {
             placeholderWithPicker
-        } else if language == nil || !PreviewPaneCompatibility.supports(language) {
-            placeholder(systemImage: "doc.questionmark", text: L10n.AgentSidePanel.previewUnsupported)
-        } else {
+        } else if PreviewPaneCompatibility.supports(language) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
                     ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
@@ -493,6 +497,21 @@ struct AgentSidePanelPreviewView: View {
                 .padding(14)
             }
             .background(Color(nsColor: .textBackgroundColor))
+        } else if !content.isEmpty {
+            // Plain-text fallback:之前 md/html 之外的文件直接显示
+            // 「unsupported」placeholder,用户点 chip 等于看了个空。
+            // 现在用 mono ScrollView 渲染原始文本,至少能看到内容,
+            // 高亮/格式化交给 editor 窗口。
+            ScrollView([.vertical, .horizontal]) {
+                Text(content)
+                    .font(.system(size: 12, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+            }
+            .background(Color(nsColor: .textBackgroundColor))
+        } else {
+            placeholder(systemImage: "doc.questionmark", text: L10n.AgentSidePanel.previewUnsupported)
         }
     }
 
@@ -585,7 +604,22 @@ struct AgentSidePanelPreviewView: View {
         loadError = nil
         do {
             let data = try Data(contentsOf: url, options: .mappedIfSafe)
-            content = String(decoding: data, as: UTF8.self)
+            if Self.looksBinary(data) {
+                content = ""
+                loadedURL = url
+                language = nil
+                loadError = L10n.AgentSidePanel.previewUnsupported
+                return
+            }
+            // 200KB 之后截断,避免 SwiftUI Text 在超大文件上卡死;同时
+            // 给用户一个明确的「还有更多」提示。
+            let cap = 200_000
+            if data.count > cap {
+                let trimmed = data.prefix(cap)
+                content = String(decoding: trimmed, as: UTF8.self) + "\n\n[Truncated — open in editor to view full file]"
+            } else {
+                content = String(decoding: data, as: UTF8.self)
+            }
             loadedURL = url
             language = Language.fromURL(url)
         } catch {
@@ -594,6 +628,14 @@ struct AgentSidePanelPreviewView: View {
             language = nil
             loadError = error.localizedDescription
         }
+    }
+
+    /// Cheap binary sniff:扫前 4KB,看到 NUL 就当 binary。够 PDF /
+    /// PNG / 视频 / SQLite 类文件这种「头几 KB 就有 0x00」的格式过滤
+    /// 掉,文本文件(代码、JSON、Markdown、YAML)绝大多数不会触发。
+    private static func looksBinary(_ data: Data) -> Bool {
+        let window = data.prefix(4096)
+        return window.contains(0)
     }
 
     private func resolvedWorkspaceRoot() -> URL? {

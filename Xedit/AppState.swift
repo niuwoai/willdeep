@@ -667,29 +667,12 @@ final class AppState: ObservableObject {
     func revealAgentReferencedFileInSidePanel(_ rawPath: String) {
         guard let url = resolveAgentReferencedFileURL(rawPath) else { return }
         registerRecentFile(url)
-        let kind: AgentSidePanelKind = {
-            let ext = url.pathExtension.lowercased()
-            if ext == "md" || ext == "markdown" || ext == "html" || ext == "htm" {
-                return .preview
-            }
-            // 文件在 worktree 里有改动时,直接亮 Diff 面板比 Files 树更
-            // 贴近用户场景(他们多半就是想看「这个文件改了什么」)。
-            let relative = relativeWorkspacePath(for: url) ?? url.lastPathComponent
-            if agentWorktreeChanges.files.contains(where: { $0.path == relative }) {
-                return .diff
-            }
-            return .files
-        }()
-        agentSidePanelRequest = AgentSidePanelOpenRequest(kind: kind, file: url)
-    }
-
-    private func relativeWorkspacePath(for url: URL) -> String? {
-        let base = agentWorktreeChanges.repositoryRoot ?? rootDirectory
-        guard let base else { return nil }
-        let basePath = base.standardizedFileURL.path
-        let filePath = url.standardizedFileURL.path
-        guard filePath.hasPrefix(basePath + "/") else { return nil }
-        return String(filePath.dropFirst(basePath.count + 1))
+        // 任意「能读成文本」的文件都走 Preview —— Preview 现在支持
+        // plain-text fallback,用户至少能看到文件内容。Diff 面板是全
+        // 局 git diff、Files 只是个文件树,都看不到具体文件本身,所
+        // 以不再按是否有 worktree 改动来分叉。如果用户想看 diff,可
+        // 以从顶部菜单切到 Diff 面板。
+        agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .preview, file: url)
     }
 
     private func resolveAgentReferencedFileURL(_ rawPath: String) -> URL? {
@@ -699,7 +682,7 @@ final class AppState: ObservableObject {
             url = URL(fileURLWithPath: path).standardizedFileURL
         } else if let changed = agentChangedFileURL(path) {
             url = changed
-        } else if let base = agentWorktreeChanges.repositoryRoot ?? rootDirectory {
+        } else if let base = agentReferencedFileBase() {
             url = base.appendingPathComponent(path).standardizedFileURL
         } else {
             url = nil
@@ -711,6 +694,17 @@ final class AppState: ObservableObject {
             return nil
         }
         return url
+    }
+
+    /// 解析 chat 里的相对路径要找 base。优先级:worktree 已知 repo root →
+    /// 当前 runtime 的 workspaceRootPath(Agent mode 下 editor 没打开
+    /// 也得用得上) → editor rootDirectory(传统 editor mode)。
+    private func agentReferencedFileBase() -> URL? {
+        if let root = agentWorktreeChanges.repositoryRoot { return root }
+        if let path = activeRuntime?.workspaceRootPath, !path.isEmpty {
+            return URL(fileURLWithPath: path).standardizedFileURL
+        }
+        return rootDirectory
     }
 
     nonisolated static func agentFilePathWithoutLineSuffix(_ rawPath: String) -> String {

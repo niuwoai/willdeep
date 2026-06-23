@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-24 | Current version: v1.105.0-rc10
+> Last updated: 2026-06-24 | Current version: v1.105.0-rc11
 
 ## Positioning
 
@@ -57,6 +57,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **上下文压缩可见性与 skill prelude 折叠（1.105.0-rc8）** —— Composer 圆环百分比改用 `modelFacingHistory` 估算，已经存在的 context 摘要会被算进去，Compress 按下后百分比真的会降下来；用户手动连续 Compress 时，若已有摘要则把 `keepRecent` 收紧到 2 并把上一轮摘要折进新摘要，再压缩有效；transcript 中由 `composeAttachedPrompt` 拼出来的 skill / 文件 / workspace prelude 在 UI 渲染时折叠成 `[已附加技能: …]` 短 tag + 用户原文，发送到模型的 prompt 不变。
 - **Patch 错误本地化与文件 chip 体验（1.105.0-rc9）** —— `AgentPatchError` 全部走 `L10n.AgentPatchError`，「Open a project folder before applying an agent patch.」等错误现在按系统语言出中英文。Transcript 里的文件 chip 改成「轻底色 + 下划线 + kern」的链接观感，背景跟随 link 色而非固定 controlBackgroundColor 矩形，深浅色和皮肤都更贴；点击 chip 不再只是默默 focus 不存在的 editor 窗口，而是按文件类型把 Agent mode 右侧侧栏拉起 —— md/html 走 Preview，已有 worktree 改动的文件走 Diff，其它走 Files。
 - **用户气泡默认强化（1.105.0-rc10）** —— 用户气泡的圆角矩形以前 hover / 非 hover 走两套 opacity（0.028/0.022 vs 0.038/0.032），非 hover 状态下边线弱到几乎看不见，时间戳和复制 icon 像漂在框外。统一改用 hover 那档（0.038 + 0.032），默认就把 footer 包进圆角矩形里，hover state 一并取消。
+- **侧边栏关闭按钮与 chip 点击补强（1.105.0-rc11）** —— `AgentSidePanelHost.header` 的 `xmark` 加粗到 13pt + 主文本色 78%（之前 SF Symbol 默认尺寸 + secondary 在浅色皮肤上几乎看不见），点击区扩到 22×22。文件 chip 路由不再按是否有 worktree 改动分叉 —— 所有文件统一走 Preview，AgentSidePanelPreviewView 新增 plain-text fallback（前 4KB 扫到 NUL 就当 binary 拒载，否则按 mono ScrollView 渲染，>200KB 截断并提示打开 editor）。`resolveAgentReferencedFileURL` 的 base 解析新增 `activeRuntime.workspaceRootPath` 兜底，Agent mode 下 editor 没打开也能找到工作区文件。
 - **Composer 模型热门/上新分组（1.102.0-rc7）** —— Agent composer 模型菜单消费 some.im `/v1/models` / 公开模型定价里的 `is_hot`、`is_new` 标记,在 Recently used 后展示 Hot / New 分组,并与 Recently fetched 去重。
 - **CLI 缺失文件新建（1.102.0-rc2）** —— `willdeep <path>` 现在通过 `willdeep://open?path=...` 把路径交给 App 处理,不存在但父目录存在的文件会自动创建空文件并打开,避免 macOS `open` 在 App 启动前直接报 "does not exist"。
 - **some.im 多模态整合（1.102.0-rc1）** —— Settings 与 Onboarding 新增 some.im 配置入口,API Key 存 Keychain,可拉取模型并设置图片/视频生成首选与优先模型；内置 `generate_image` 工具在 some.im 配置后直接调用 relay 图片生成接口,默认 `gpt-image-2`,并且 OpenAI Chat 兼容请求会过滤 `.widget` / `.workflowReport` 本地卡片,避免 UI-only role 泄漏给 some.im。

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.105.0-rc11 - 2026-06-24
+
+### Fixed
+- `AgentSidePanelHost.header` 的 `xmark` 关闭按钮以前是 `Image(systemName: "xmark")` + `.foregroundStyle(.secondary)`,SF Symbol 默认尺寸在浅色皮肤上颜色弱到几乎看不见,用户误以为面板没有关闭按钮。加粗到 13pt semibold + `Color.primary.opacity(0.78)`,点击区域扩到 22×22 Rectangle hit area。
+- 点击 Agent 聊天里的文件 chip 之前会按文件是否在 worktree 改动里分叉到 `.diff` / `.files`,但 `AgentSidePanelDiffView` 显示的是全局 git diff、`AgentSidePanelFilesView` 只是个文件树,都看不到「点了的那个文件本身」。现在所有文件统一走 `.preview`,`AgentSidePanelPreviewView` 新增 plain-text fallback:扫前 4KB 没有 NUL 就按 mono ScrollView 渲染原始文本,>200KB 截断并提示打开 editor;`Language.fromURL` 命中 markdown/html 时仍走原 MarkdownPreview 路径不变。
+- `AppState.resolveAgentReferencedFileURL` 之前只在 `agentWorktreeChanges.repositoryRoot ?? rootDirectory` 里找 base。Agent mode 下 editor 窗口没打开 → `rootDirectory == nil`,首轮还没 worktree 摘要 → `repositoryRoot == nil`,chip 点击直接静默失败。新增 `agentReferencedFileBase()` 把 `activeRuntime.workspaceRootPath` 加进 fallback 链。
+
+### Changed
+- 版本号从 **1.105.0-rc10** 提升为 **1.105.0-rc11**（侧栏关闭按钮可见性、chip 路由统一走 Preview、plain-text fallback、workspaceRootPath 兜底）。pbxproj×6 / Go agent / Help Info.plist / README badge / product-overview / docs ×2 同步。
+
 ## 1.105.0-rc10 - 2026-06-24
 
 ### Fixed
