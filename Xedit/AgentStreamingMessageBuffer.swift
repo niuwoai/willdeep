@@ -9,8 +9,8 @@ import Foundation
 
 @MainActor
 final class AgentStreamingMessageBuffer {
-    private static let flushIntervalNanoseconds: UInt64 = 50_000_000
-    private static let immediateFlushCharacterCount = 1_200
+    private static let flushIntervalNanoseconds: UInt64 = 100_000_000
+    private static let immediateFlushCharacterCount = 2_400
 
     private weak var runtime: AgentRuntime?
     private let assistantID: AgentMessage.ID

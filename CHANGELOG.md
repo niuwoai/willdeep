@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.103.0-rc13 - 2026-06-23
+
+### Fixed
+- Agent 流式 assistant 输出减少 UI 主线程压力：`AgentStreamingMessageBuffer` 从 50ms/1200 字符调整为 100ms/2400 字符批量落 UI，流式中的 assistant 气泡改用轻量文本渲染；turn 结束后仍进入完整 Markdown/TextKit 历史渲染，最终阅读效果不降级。
+- Composer `@` 选择器不再覆盖 text editor 文本：改为输入框上方的独立面板，顶部新增搜索框，列表高度封顶并内部滚动，选中行横向撑满面板。
+- 版本号从 **1.103.0-rc12** 提升为 **1.103.0-rc13**（流式 CPU 降载 + @ 选择器修复）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×4 同步。
+
 ## 1.103.0-rc12 - 2026-06-23
 
 ### Fixed

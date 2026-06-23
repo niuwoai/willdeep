@@ -176,6 +176,8 @@ enum L10n {
     }
 
     enum Composer {
+        static let atPickerNoMatches = String(localized: "composer.at-picker.no-matches", defaultValue: "No matching skills, files, or shortcuts")
+        static let atPickerSearchPlaceholder = String(localized: "composer.at-picker.search-placeholder", defaultValue: "Search skills, files, or workspace...")
         static let queueSendHelp = String(localized: "composer.queue-send.help", defaultValue: "Queue this message after the current turn")
         static let sendHelp = String(localized: "composer.send.help", defaultValue: "Send")
         static let stopHelp = String(localized: "composer.stop.help", defaultValue: "Stop the current Agent turn")

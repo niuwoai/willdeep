@@ -312,26 +312,54 @@ enum AtPickerEntry: Identifiable, Equatable {
 
 struct AtPickerMenu: View {
     let entries: [AtPickerEntry]
+    @Binding var query: String
     @Binding var selection: Int
     let onPick: (Int) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                TextField(L10n.Composer.atPickerSearchPlaceholder, text: $query)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Color(nsColor: .textBackgroundColor).opacity(0.78))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(Color.primary.opacity(0.10), lineWidth: 1)
+            )
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
+
             if entries.isEmpty {
-                Text("No matching skills, files, or shortcuts")
+                Text(L10n.Composer.atPickerNoMatches)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
             } else {
-                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                    AtPickerRow(entry: entry, isSelected: index == selection)
-                        .contentShape(Rectangle())
-                        .onTapGesture { onPick(index) }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                            AtPickerRow(entry: entry, isSelected: index == selection)
+                                .contentShape(Rectangle())
+                                .onTapGesture { onPick(index) }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
                 }
+                .frame(maxHeight: 260)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.bottom, 6)
         .frame(maxWidth: 460, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -339,10 +367,9 @@ struct AtPickerMenu: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+                .stroke(Color.primary.opacity(0.16), lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.18), radius: 12, y: 4)
-        .fixedSize()
     }
 }
 

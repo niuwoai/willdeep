@@ -392,6 +392,20 @@ private struct ComposerCard: View {
                 )
             }
 
+            if atMenuVisible {
+                AtPickerMenu(
+                    entries: filteredAtEntries,
+                    query: $atMenuQuery,
+                    selection: $atMenuSelection,
+                    onPick: { index in
+                        atMenuSelection = index
+                        _ = commitSelectedAtEntry()
+                    }
+                )
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                .zIndex(20)
+            }
+
             ZStack(alignment: .topLeading) {
                 ComposerTextEditor(
                     text: $appState.agentInput,
@@ -437,18 +451,6 @@ private struct ComposerCard: View {
                     .transition(.opacity)
                 }
 
-                if atMenuVisible {
-                    AtPickerMenu(
-                        entries: filteredAtEntries,
-                        selection: $atMenuSelection,
-                        onPick: { index in
-                            atMenuSelection = index
-                            _ = commitSelectedAtEntry()
-                        }
-                    )
-                    .offset(y: -8)
-                    .transition(.opacity)
-                }
             }
 
             HStack(spacing: 6) {
@@ -506,6 +508,7 @@ private struct ComposerCard: View {
             atMenuQuery = q
         } else {
             atMenuQuery = ""
+            atMenuVisible = false
         }
     }
 

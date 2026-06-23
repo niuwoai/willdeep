@@ -1,6 +1,6 @@
 # Visual QA Screenshot
 
-> Last updated: 2026-06-23 | Current version: v1.103.0-rc12
+> Last updated: 2026-06-23 | Current version: v1.103.0-rc13
 
 WillDeep Agent provides an on-demand `visual_qa_screenshot` tool for UI screenshots and design QA. It is intentionally not automatic on every turn: screenshots may contain private data, and visual-model review may send image bytes to the configured Image Understanding provider.
 
