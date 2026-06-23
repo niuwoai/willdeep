@@ -22,6 +22,9 @@
     "· Sandbox: no network, no navigation · sendPrompt() available" : {
 
     },
+    "(%lld)" : {
+
+    },
     "@%@" : {
 
     },
@@ -98,6 +101,9 @@
 
     },
     "%lld 个文件已更改" : {
+
+    },
+    "%lld 条" : {
 
     },
     "%lld." : {
@@ -422,6 +428,108 @@
         }
       }
     },
+    "agent-patch-error.empty-diff" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The diff is empty."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "diff 内容为空。"
+          }
+        }
+      }
+    },
+    "agent-patch-error.hunk-did-not-match" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A patch hunk did not match the current file content: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "patch 的某段与当前文件内容不匹配：%@"
+          }
+        }
+      }
+    },
+    "agent-patch-error.missing-file" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The patch target file does not exist: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "patch 要修改的文件不存在：%@"
+          }
+        }
+      }
+    },
+    "agent-patch-error.no-workspace" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open a project folder before applying an agent patch."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先打开一个项目文件夹再 Apply patch。"
+          }
+        }
+      }
+    },
+    "agent-patch-error.path-outside-workspace" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The patch path is outside the workspace: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "patch 路径超出当前工作目录：%@"
+          }
+        }
+      }
+    },
+    "agent-patch-error.unsupported-diff" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The diff format is not supported yet. Use a unified diff for existing files."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂不支持这种 diff 格式，请使用现有文件的 unified diff。"
+          }
+        }
+      }
+    },
     "agent-selection.add-to-conversation" : {
       "comment" : "Editor context menu item that stages selected text as Agent chat context",
       "extractionState" : "manual",
@@ -658,108 +766,6 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "No active plan."
-          }
-        }
-      }
-    },
-    "agent-patch-error.empty-diff" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The diff is empty."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "diff 内容为空。"
-          }
-        }
-      }
-    },
-    "agent-patch-error.hunk-did-not-match" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A patch hunk did not match the current file content: %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "patch 的某段与当前文件内容不匹配：%@"
-          }
-        }
-      }
-    },
-    "agent-patch-error.missing-file" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The patch target file does not exist: %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "patch 要修改的文件不存在：%@"
-          }
-        }
-      }
-    },
-    "agent-patch-error.no-workspace" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open a project folder before applying an agent patch."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请先打开一个项目文件夹再 Apply patch。"
-          }
-        }
-      }
-    },
-    "agent-patch-error.path-outside-workspace" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The patch path is outside the workspace: %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "patch 路径超出当前工作目录：%@"
-          }
-        }
-      }
-    },
-    "agent-patch-error.unsupported-diff" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The diff format is not supported yet. Use a unified diff for existing files."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "暂不支持这种 diff 格式，请使用现有文件的 unified diff。"
           }
         }
       }
@@ -3301,6 +3307,28 @@
         }
       }
     },
+    "composer.at-picker.no-matches" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No matching skills, files, or shortcuts"
+          }
+        }
+      }
+    },
+    "composer.at-picker.search-placeholder" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Search skills, files, or workspace..."
+          }
+        }
+      }
+    },
     "composer.queue-send.help" : {
       "comment" : "tooltip for queueing the current composer message while Agent is responding",
       "extractionState" : "manual",
@@ -3610,23 +3638,6 @@
     },
     "Default model" : {
 
-    },
-    "file-tree.open-in-editor" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open in Editor"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在编辑器中打开"
-          }
-        }
-      }
     },
     "Download (~937 MB)" : {
 
@@ -4291,6 +4302,23 @@
     "Expand widget" : {
 
     },
+    "file-tree.open-in-editor" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open in Editor"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在编辑器中打开"
+          }
+        }
+      }
+    },
     "find-replace-bar.close-button" : {
       "comment" : "Tooltip for close find bar button",
       "extractionState" : "manual",
@@ -4741,6 +4769,9 @@
       }
     },
     "Hide Diff" : {
+
+    },
+    "Hot" : {
 
     },
     "image-description.help" : {
@@ -5897,6 +5928,9 @@
         }
       }
     },
+    "New" : {
+
+    },
     "New File" : {
 
     },
@@ -5904,9 +5938,6 @@
 
     },
     "No matching commands" : {
-
-    },
-    "No matching skills, files, or shortcuts" : {
 
     },
     "No project commands found" : {
@@ -5920,6 +5951,57 @@
     },
     "On-device Voice (SenseVoice)" : {
 
+    },
+    "onboarding.some-im.note" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can skip this and configure it later in Settings -> some.im. The image default is gpt-image-2."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可以先跳过，之后在 Settings → some.im 里配置。图片默认模型是 gpt-image-2。"
+          }
+        }
+      }
+    },
+    "onboarding.some-im.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optional. Add your relay key so image, video, and future multimodal skills can route to the right model automatically."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可选。填入 relay key 后，图片、视频以及后续多模态技能就能自动路由到合适模型。"
+          }
+        }
+      }
+    },
+    "onboarding.some-im.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect some.im"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接 some.im"
+          }
+        }
+      }
     },
     "One KEY=value per line. These values are added to commands launched from the editor terminal." : {
 
@@ -6593,57 +6675,6 @@
         }
       }
     },
-    "onboarding.some-im.note" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You can skip this and configure it later in Settings -> some.im. The image default is gpt-image-2."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "可以先跳过，之后在 Settings → some.im 里配置。图片默认模型是 gpt-image-2。"
-          }
-        }
-      }
-    },
-    "onboarding.some-im.subtitle" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Optional. Add your relay key so image, video, and future multimodal skills can route to the right model automatically."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "可选。填入 relay key 后，图片、视频以及后续多模态技能就能自动路由到合适模型。"
-          }
-        }
-      }
-    },
-    "onboarding.some-im.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Connect some.im"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "连接 some.im"
-          }
-        }
-      }
-    },
     "plugin-picker.help" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7030,6 +7061,9 @@
       }
     },
     "Recently fetched" : {
+
+    },
+    "Recently used" : {
 
     },
     "Refresh status" : {
@@ -9327,6 +9361,261 @@
         }
       }
     },
+    "settings.interface-skin.aurora-night.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aurora Night"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "极光暗夜"
+          }
+        }
+      }
+    },
+    "settings.interface-skin.aurora-night.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dark green-blue with clear aurora accents."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "黑绿暗底配青绿高光，清爽但不刺眼。"
+          }
+        }
+      }
+    },
+    "settings.interface-skin.ember-graphite.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ember Graphite"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "烽火石墨"
+          }
+        }
+      }
+    },
+    "settings.interface-skin.ember-graphite.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Graphite warmth with ember highlights."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "炭黑底色配暖橙强调，深色但有温度。"
+          }
+        }
+      }
+    },
+    "settings.interface-skin.help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a full-window skin. Skin changes apply to window chrome, sidebars, panels, selection color, and the recommended editor theme."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择整窗界面皮肤。皮肤会应用到窗口、侧栏、面板、选中态，并同步推荐的编辑器主题。"
+          }
+        }
+      }
+    },
+    "settings.interface-skin.midnight-slate.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Midnight Slate"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "午夜岩蓝"
+          }
+        }
+      }
+    },
+    "settings.interface-skin.midnight-slate.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Blue-black depth for longer night coding."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深蓝黑底配浅色文字，长时间使用更稳。"
+          }
+        }
+      }
+    },
+    "settings.interface-skin.mist-forest.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mist Forest"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "淡雾森林"
+          }
+        }
+      }
+    },
+    "settings.interface-skin.mist-forest.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Soft green and warm mist for calm long sessions."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浅绿、暖白和柔和雾气感。"
+          }
+        }
+      }
+    },
+    "settings.interface-skin.rice-paper.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rice Paper"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "水墨宣纸"
+          }
+        }
+      }
+    },
+    "settings.interface-skin.rice-paper.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Low-saturation ink and paper tones with a quiet reading feel."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "黑白层次低饱和纸底，安静有质感。"
+          }
+        }
+      }
+    },
+    "settings.interface-skin.sci-fi-raster.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sci-Fi Raster"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "科幻光栅"
+          }
+        }
+      }
+    },
+    "settings.interface-skin.sci-fi-raster.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deep cyan neon with a compact terminal-like atmosphere."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深色界面配冷光和少量霓虹点缀。"
+          }
+        }
+      }
+    },
+    "settings.interface-skin.system.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System Default"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统默认"
+          }
+        }
+      }
+    },
+    "settings.interface-skin.system.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Follows macOS with stable native contrast."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟随 macOS 原生外观，稳定克制。"
+          }
+        }
+      }
+    },
     "settings.label.default-view" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10504,23 +10793,6 @@
         }
       }
     },
-    "settings.mcp.refresh" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Refresh"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "刷新"
-          }
-        }
-      }
-    },
     "settings.mcp.recommended-description" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10551,6 +10823,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "推荐 MCP 服务器"
+          }
+        }
+      }
+    },
+    "settings.mcp.refresh" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新"
           }
         }
       }
@@ -13976,118 +14265,6 @@
         }
       }
     },
-    "settings.interface-skin.aurora-night.name" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Aurora Night" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "极光暗夜" } }
-      }
-    },
-    "settings.interface-skin.aurora-night.summary" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Dark green-blue with clear aurora accents." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "黑绿暗底配青绿高光，清爽但不刺眼。" } }
-      }
-    },
-    "settings.interface-skin.ember-graphite.name" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ember Graphite" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "烽火石墨" } }
-      }
-    },
-    "settings.interface-skin.ember-graphite.summary" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Graphite warmth with ember highlights." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "炭黑底色配暖橙强调，深色但有温度。" } }
-      }
-    },
-    "settings.interface-skin.help" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose a full-window skin. Skin changes apply to window chrome, sidebars, panels, selection color, and the recommended editor theme." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择整窗界面皮肤。皮肤会应用到窗口、侧栏、面板、选中态，并同步推荐的编辑器主题。" } }
-      }
-    },
-    "settings.interface-skin.midnight-slate.name" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Midnight Slate" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "午夜岩蓝" } }
-      }
-    },
-    "settings.interface-skin.midnight-slate.summary" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Blue-black depth for longer night coding." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "深蓝黑底配浅色文字，长时间使用更稳。" } }
-      }
-    },
-    "settings.interface-skin.mist-forest.name" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Mist Forest" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "淡雾森林" } }
-      }
-    },
-    "settings.interface-skin.mist-forest.summary" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Soft green and warm mist for calm long sessions." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "浅绿、暖白和柔和雾气感。" } }
-      }
-    },
-    "settings.interface-skin.rice-paper.name" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Rice Paper" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "水墨宣纸" } }
-      }
-    },
-    "settings.interface-skin.rice-paper.summary" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Low-saturation ink and paper tones with a quiet reading feel." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "黑白层次低饱和纸底，安静有质感。" } }
-      }
-    },
-    "settings.interface-skin.sci-fi-raster.name" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sci-Fi Raster" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "科幻光栅" } }
-      }
-    },
-    "settings.interface-skin.sci-fi-raster.summary" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Deep cyan neon with a compact terminal-like atmosphere." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "深色界面配冷光和少量霓虹点缀。" } }
-      }
-    },
-    "settings.interface-skin.system.name" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "System Default" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "系统默认" } }
-      }
-    },
-    "settings.interface-skin.system.summary" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Follows macOS with stable native contrast." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "跟随 macOS 原生外观，稳定克制。" } }
-      }
-    },
-    "settings.section.interface-skin" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Interface Skin" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "界面皮肤" } }
-      }
-    },
     "settings.section.color-style" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -14220,6 +14397,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "检查器"
+          }
+        }
+      }
+    },
+    "settings.section.interface-skin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Interface Skin"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "界面皮肤"
           }
         }
       }
@@ -15317,6 +15511,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "优先模型，用英文逗号分隔"
+          }
+        }
+      }
+    },
+    "settings.some-im.region" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Region"
+          }
+        }
+      }
+    },
+    "settings.some-im.region.china" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "China (api.niuwoai.com)"
+          }
+        }
+      }
+    },
+    "settings.some-im.region.custom" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Custom"
+          }
+        }
+      }
+    },
+    "settings.some-im.region.international" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "International (some.im)"
           }
         }
       }
@@ -17275,24 +17513,6 @@
         }
       }
     },
-    "stats-dashboard.range.24h" : {
-      "comment" : "date range selector",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "24h"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "24 小时"
-          }
-        }
-      }
-    },
     "stats-dashboard.range.7d" : {
       "comment" : "date range selector",
       "extractionState" : "manual",
@@ -17307,6 +17527,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "7 天"
+          }
+        }
+      }
+    },
+    "stats-dashboard.range.24h" : {
+      "comment" : "date range selector",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "24h"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "24 小时"
           }
         }
       }
@@ -18038,6 +18276,22 @@
         }
       }
     },
+    "transcript.learning.approved" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存"
+          }
+        }
+      }
+    },
     "transcript.learning.confidence.high" : {
       "localizations" : {
         "en" : {
@@ -18150,22 +18404,6 @@
         }
       }
     },
-    "transcript.learning.approved" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Saved"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已保存"
-          }
-        }
-      }
-    },
     "transcript.learning.copy-help" : {
       "localizations" : {
         "en" : {
@@ -18267,22 +18505,6 @@
         }
       }
     },
-    "transcript.learning.event-title.suggested-memories" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Suggest saving %@ memory item(s)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "建议保存 %@ 条记忆"
-          }
-        }
-      }
-    },
     "transcript.learning.event-title.skipped-auto-skill" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -18313,6 +18535,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已跳过已存在的用户技能 %@"
+          }
+        }
+      }
+    },
+    "transcript.learning.event-title.suggested-memories" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suggest saving %@ memory item(s)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "建议保存 %@ 条记忆"
           }
         }
       }
@@ -18509,22 +18747,6 @@
         }
       }
     },
-    "transcript.learning.more" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ more learning events hidden"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "另有 %@ 条学习事件未展开"
-          }
-        }
-      }
-    },
     "transcript.learning.memory-suggestion.action" : {
       "localizations" : {
         "en" : {
@@ -18569,6 +18791,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "用途：后续处理相关问题时参考。"
+          }
+        }
+      }
+    },
+    "transcript.learning.more" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ more learning events hidden"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "另有 %@ 条学习事件未展开"
           }
         }
       }
@@ -19911,6 +20149,9 @@
     "Your answer" : {
 
     },
+    "任务监控" : {
+
+    },
     "关闭" : {
 
     },
@@ -19960,6 +20201,9 @@
 
     },
     "详情" : {
+
+    },
+    "还有 %lld 个文件" : {
 
     },
     "选择这一轮由 WillDeep 自己执行，还是委托给本机 Claude Code / Codex CLI。" : {

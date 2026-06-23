@@ -292,11 +292,19 @@ enum AgentToolRunner {
             process.arguments = launch.arguments
             process.currentDirectoryURL = root
             let baseEnvironment = shellEnvironment()
-            process.environment = AgentSandboxPolicy.sandboxedEnvironment(
+            var environment = AgentSandboxPolicy.sandboxedEnvironment(
                 mode: context.sandboxMode,
                 rootDirectory: context.rootDirectory,
                 base: baseEnvironment
             )
+            // `shellEnvironment()` 复制宿主进程的环境,里面带着宿主的
+            // `$PWD`。`sh`/`bash` 的 `pwd` builtin 信任 `$PWD`,于是即便
+            // 我们已经 chdir 到 `root`,`pwd` 仍会打印宿主那个陈旧的目
+            // 录(CI 上就是 runner 的工作目录,本地恰好可能一致所以测
+            // 不出来)。把 `$PWD` 同步成真实 cwd,`pwd` 才反映实际工作
+            // 目录 —— 也修掉 testRunCommandUsesHomeDirectoryWithoutWorkspace。
+            environment["PWD"] = root.path
+            process.environment = environment
 
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.105.0-rc15 - 2026-06-24
+
+### Fixed
+- 切走 app 再切回来时,聊天 transcript 会重置滚动到顶部 —— 用户本来在看最新消息,切回来却跳到最上面。`AgentChatTranscript` 之前只在 `agentMessages` / `agentToolCalls` / `agentLearningEvents` 的 count 变化时滚到底部哨兵,视图重新出现 / app 重新激活时没有任何重锚逻辑,SwiftUI ScrollView 默认回到顶部。现在在 `.onAppear` 和 `NSApplication.didBecomeActiveNotification` 两个时机都把锚点拉回底部哨兵(各延一帧等布局完成),保证切回来还停在最新处。
+- 修掉 CI flaky 测试 `testRunCommandUsesHomeDirectoryWithoutWorkspace`(rc14 CI 在此挂掉)的根因:`run_command` 通过 `process.currentDirectoryURL` chdir 到工作目录,但 `shellEnvironment()` 复制了宿主进程的 `$PWD`,`sh`/`bash` 的 `pwd` builtin 信任 `$PWD`,于是打印的是宿主陈旧目录而非真实 cwd(本地恰好一致测不出来,CI runner 工作目录不同就暴露)。现在显式 `environment["PWD"] = root.path`,kernel cwd 与 `$PWD` 一致,`pwd` 行为确定。
+
+### Changed
+- 版本号从 **1.105.0-rc14** 提升为 **1.105.0-rc15**（transcript 切回 app 重锚到最新消息 + run_command PWD 同步修 CI flaky）。pbxproj×6 / Go agent / Help Info.plist / README badge / product-overview / docs ×2 同步。
+
 ## 1.105.0-rc14 - 2026-06-24
 
 ### Fixed

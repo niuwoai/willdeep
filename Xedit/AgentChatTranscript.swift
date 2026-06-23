@@ -30,6 +30,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 struct AgentChatTranscript: View {
     @EnvironmentObject var appState: AppState
@@ -300,6 +301,22 @@ struct AgentChatTranscript: View {
             }
             .onCompatibleChange(of: appState.agentLearningEvents.count) { _, _ in
                 proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+            }
+            // 切走 app 再切回来时,SwiftUI 会重新布局 ScrollView,默认
+            // 把滚动位置重置到顶部 —— 用户反馈:本来在看最新消息,
+            // 切回来却跳到了最顶上。这里在视图首次出现 + app 重新激活
+            // 时把锚点拉回底部哨兵,保证「切回来还在最新处」。
+            .onAppear {
+                // 等一帧让内容先完成布局,直接 scrollTo 在 onAppear 里
+                // 偶尔会落空(目标还没拿到最终高度)。
+                DispatchQueue.main.async {
+                    proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                DispatchQueue.main.async {
+                    proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                }
             }
         }
     }

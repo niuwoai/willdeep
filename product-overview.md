@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-24 | Current version: v1.105.0-rc14
+> Last updated: 2026-06-24 | Current version: v1.105.0-rc15
 
 ## Positioning
 
@@ -61,6 +61,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **Sessions sidebar 窄窗口不溢出（1.105.0-rc12）** —— Agent 窗口收窄时，sidebar 内的 New Chat 行、workspace 标题、session 标题以前会向右溢出到 chat 区域（用户截图反馈：标题被挤出窗口）。`SidebarActionRow.title` 与 session row 的 `Text(session.title)` 加上 `lineLimit(1)` + `truncationMode(.tail)` + `layoutPriority(1)`，shortcut 走 `fixedSize()`，先压缩 chrome 再裁标题；sidebar 整体 `frame(maxWidth: .infinity).clipped()`，即使有未约束的子 view 也不会糊到 chat / side panel 上。
 - **Sidebar / side panel 宽度锁死（1.105.0-rc13）** —— 即便加了 truncation/clipped，rc12 用户反馈最左栏在窗口收窄时仍然在变窄。SwiftUI 的 `.frame(width:)` 是「建议宽度」、父 HStack 仍可压缩；给 `AgentSessionsSidebar` 与 `AgentSidePanelHost` 都补上 `.fixedSize(horizontal: true, vertical: false)`，宽度被钉死为 230 / 320，窗口收窄只从 chat 区域吃宽度，左右两栏纹丝不动。
 - **文件 chip 点击不再静默失败（1.105.0-rc14）** —— rc9–rc13 反复出现「点了 AI 输出里的文件名屁事没发生」。根因:`revealAgentReferencedFileInSidePanel` 在 `resolveAgentReferencedFileURL` 返回 nil 时直接 `return`,而文件名经常解析不到(相对路径不在 base 直下、大小写对不上、文件还没生成)。现在:① 解析逻辑新增「后缀/basename 模糊匹配」,在 `quickOpenFiles` 全工程索引和 worktree 改动里找深层路径(agent 写 `version.go`、真实在 `willdeep-agent/internal/agent/version.go` 也能命中);② 无论如何都不再静默 —— 解析到就 Preview 那个文件,解析不到就兜底打开 Files 面板,保证点击一定有可见反馈。
+- **切回 app 保持在最新消息 + run_command PWD 修复（1.105.0-rc15）** —— 切走 app 再切回来时 transcript 会重置到顶部;`AgentChatTranscript` 新增 `.onAppear` + `NSApplication.didBecomeActiveNotification` 两个重锚时机把滚动拉回底部哨兵,切回来仍停在最新消息。另外修掉一个 CI flaky 测试的根因:`run_command` 用 `currentDirectoryURL` chdir 到工作目录,但 shell 继承了宿主陈旧的 `$PWD`,`pwd` builtin 信任 `$PWD` 于是打印错目录;现在显式把 `$PWD` 同步成真实 cwd,`pwd` 行为确定。
 - **Composer 模型热门/上新分组（1.102.0-rc7）** —— Agent composer 模型菜单消费 some.im `/v1/models` / 公开模型定价里的 `is_hot`、`is_new` 标记,在 Recently used 后展示 Hot / New 分组,并与 Recently fetched 去重。
 - **CLI 缺失文件新建（1.102.0-rc2）** —— `willdeep <path>` 现在通过 `willdeep://open?path=...` 把路径交给 App 处理,不存在但父目录存在的文件会自动创建空文件并打开,避免 macOS `open` 在 App 启动前直接报 "does not exist"。
 - **some.im 多模态整合（1.102.0-rc1）** —— Settings 与 Onboarding 新增 some.im 配置入口,API Key 存 Keychain,可拉取模型并设置图片/视频生成首选与优先模型；内置 `generate_image` 工具在 some.im 配置后直接调用 relay 图片生成接口,默认 `gpt-image-2`,并且 OpenAI Chat 兼容请求会过滤 `.widget` / `.workflowReport` 本地卡片,避免 UI-only role 泄漏给 some.im。
