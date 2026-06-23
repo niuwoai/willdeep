@@ -47,6 +47,10 @@ final class FnPushToTalkMonitor {
 
     func install() {
         guard monitor == nil else { return }
+        guard !Self.isRunningUnderXCTest else {
+            log.info("install(): XCTest detected — skip Fn push-to-talk monitor")
+            return
+        }
         log.info("install()")
 
         monitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
@@ -185,5 +189,9 @@ final class FnPushToTalkMonitor {
             log.info("append: lazily created agent session \(newID.uuidString, privacy: .private)")
         }
         log.info("append: wrote transcript; total now \(appState.agentInput.count)")
+    }
+
+    private static var isRunningUnderXCTest: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 }

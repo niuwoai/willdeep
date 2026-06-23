@@ -6,9 +6,11 @@
 - Agent mode 进入纯「思考中」状态（没有任何 tool / 后台任务 / 上下文压缩）不再触发右侧任务监控侧栏自动展开；`AgentTaskMonitorSnapshot.isAgentActivityActive` 不再把 `isAgentResponding` 视作活动。
 - 任务监控侧栏右上角 `xmark` 关闭按钮在 `AgentSidePanelHost` 和侧边 `AgentPanelView` 抽屉 header 都补足 trailing padding，按钮不再贴着面板右沿。
 - 任务监控「记忆 / 技能 / MCP」学习卡只统计当前 user 消息（含）之后产生的 `AgentLearningEvent`；不再回退到 24 条跨轮历史，历史轮次的学习也不会再因 `learningDigest` 改写而误把任务监控侧栏自动打开。
+- `EditorWorkflowTests` 不再依赖 `loadFile` 的后台队列回主线程调度来判断文件打开行为，避免 GitHub macOS runner 主队列拥塞时误报 `.loadTimedOut`。
+- XCTest 启动宿主 App 时跳过 Fn push-to-talk 事件监听安装，减少语音相关启动期副作用。
 
 ### Changed
-- 版本号从 **1.105.0-rc6** 提升为 **1.105.0-rc7**（任务监控触发条件、关闭按钮 padding、学习统计范围）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+- 版本号从 **1.105.0-rc6** 提升为 **1.105.0-rc7**（任务监控触发条件、关闭按钮 padding、学习统计范围、CI 文件加载测试稳定性）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
 
 ## 1.105.0-rc6 - 2026-06-23
 
