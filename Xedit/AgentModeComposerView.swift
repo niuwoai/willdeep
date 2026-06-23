@@ -37,6 +37,11 @@ struct AgentChatComposer: View {
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
 
+                if shouldShowActivityStatus {
+                    AgentSemanticActivityStatusLine(style: .composer)
+                        .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                }
+
                 if let plan = bannerPlan() {
                     AgentPlanAutoExecutionBanner(
                         plan: plan,
@@ -115,6 +120,17 @@ struct AgentChatComposer: View {
             return nil
         }
         return plan
+    }
+
+    private var shouldShowActivityStatus: Bool {
+        appState.isAgentResponding
+            || appState.isCompressingAgentContext
+            || appState.agentRunningTaskCount > 0
+            || appState.agentToolCalls.contains { call in
+                call.status == .pendingApproval
+                    || call.status == .awaitingConfirm
+                    || call.status == .awaitingUserAnswer
+            }
     }
 
     private func planFingerprint(_ plan: AgentPlan) -> String {

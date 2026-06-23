@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.104.0-rc1 - 2026-06-23
+
+### Added
+- Agent mode 新增常驻右侧“任务监控”Rail：集中展示待办、最终产物、工作文件目录聚合、技能/MCP 建议和意识/记忆更新，让长任务的当前状态、交付物和触碰文件不再滚出 transcript。
+- Composer 上方新增语义化活动状态条，将工具调用映射为搜索中、编辑中、验证中、委派中、反思中等阶段，并显示本轮耗时。
+- Agent 历史正文中的路径片段升级为可点击 path chip，识别 `src/foo.swift`、`orders/index.vue:12` 等常见路径并按当前 workspace 打开对应文件。
+
+### Changed
+- 侧边 Agent panel 的后台任务抽屉复用新的任务监控 Rail，保留运行任务可见性，同时增加产物/工作文件/学习状态。
+- 版本号从 **1.103.0-rc14** 提升为 **1.104.0-rc1**（Agent 任务监控 Rail + path chip + 语义化状态）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×4 同步。
+
 ## 1.103.0-rc14 - 2026-06-23
 
 ### Fixed

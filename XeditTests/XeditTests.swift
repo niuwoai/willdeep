@@ -249,6 +249,13 @@ struct WillDeepTests {
         #expect(modelHistory.contains(where: { $0.content == "old user turn" }) == false)
     }
 
+    @Test("agent file path links strip line suffixes")
+    func testAgentFilePathWithoutLineSuffix() {
+        #expect(AppState.agentFilePathWithoutLineSuffix("src/App.swift:42") == "src/App.swift")
+        #expect(AppState.agentFilePathWithoutLineSuffix("web/src/index.tsx:12:4") == "web/src/index.tsx")
+        #expect(AppState.agentFilePathWithoutLineSuffix("/Users/test/demo/file.vue") == "/Users/test/demo/file.vue")
+    }
+
     @Test("ask_user tool is registered with userInput risk and a question parameter")
     func testAskUserToolRegistration() {
         let descriptor = AgentToolRegistry.descriptor(for: "ask_user")

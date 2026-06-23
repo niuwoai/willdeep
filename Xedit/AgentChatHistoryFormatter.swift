@@ -872,7 +872,35 @@ enum AgentChatHistoryRenderer {
         let parsed = MarkdownInline.attributedString(from: raw)
         let converted = NSMutableAttributedString(attributedString: NSAttributedString(parsed))
         applyMissingBaseAttributes(to: converted, baseFont: baseFont, color: color)
+        applyPathChipAttributes(to: converted, baseFont: baseFont, color: color)
         return converted
+    }
+
+    private static func applyPathChipAttributes(
+        to attributed: NSMutableAttributedString,
+        baseFont: NSFont,
+        color: NSColor
+    ) {
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        guard fullRange.length > 0,
+              let regex = try? NSRegularExpression(
+                pattern: #"(?<![\w@])(?:(?:[A-Za-z0-9_.$@+~()-]+/)+[A-Za-z0-9_.$@+~()-]+|[A-Za-z0-9_.$@+~()-]+\.(?:swift|go|ts|tsx|js|jsx|vue|md|markdown|json|yaml|yml|toml|rb|py|java|kt|rs|html|css|scss|sql|sh|zsh|txt))(?:\:\d+(?:\:\d+)?)?"#
+              ) else {
+            return
+        }
+        let string = attributed.string as NSString
+        regex.enumerateMatches(in: attributed.string, range: fullRange) { match, _, _ in
+            guard let range = match?.range, range.length > 0 else { return }
+            if attributed.attribute(.link, at: range.location, effectiveRange: nil) != nil { return }
+            let rawPath = string.substring(with: range)
+            attributed.addAttributes([
+                .font: NSFont.monospacedSystemFont(ofSize: baseFont.pointSize, weight: .regular),
+                .foregroundColor: Self.webLinkColor(base: color),
+                .backgroundColor: NSColor.controlBackgroundColor.withAlphaComponent(0.78),
+                .link: AgentChatHistoryFilePathLink.value,
+                .agentChatHistoryFilePath: rawPath,
+            ], range: range)
+        }
     }
 
     private static func applyMissingBaseAttributes(
