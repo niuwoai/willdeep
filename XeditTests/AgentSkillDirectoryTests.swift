@@ -78,6 +78,43 @@ struct AgentSkillDirectoryTests {
     }
 
     @Test
+    func userSkillUpdatePreservesSafeFrontMatterAndBody() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WillDeepSkillUpdateTests-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        let skillURL = try AgentSkillFileManager.createUserSkill(
+            name: "Update Me",
+            description: "Old description",
+            body: "# Update Me\n\nOld body.",
+            root: root
+        )
+        let entry = AgentSkillEntry(
+            identifier: "update-me",
+            name: "Update Me",
+            description: "Old description",
+            url: skillURL,
+            source: .user,
+            isEnabled: true
+        )
+
+        try AgentSkillFileManager.updateUserSkill(
+            entry,
+            description: "New description",
+            body: "# Update Me\n\nNew instructions.",
+            allowedRoots: [root]
+        )
+        let text = try String(contentsOf: skillURL, encoding: .utf8)
+
+        #expect(text.contains("name: Update Me"))
+        #expect(text.contains("description: New description"))
+        #expect(text.contains("New instructions."))
+        #expect(!text.contains("Old body."))
+    }
+
+    @Test
     func deleteRejectsNonUserSkills() throws {
         let entry = AgentSkillEntry(
             identifier: "browser",

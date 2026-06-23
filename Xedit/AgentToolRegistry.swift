@@ -137,12 +137,30 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "create_user_skill",
-            description: "Create a local user Codex skill under ~/.codex/skills when a reusable workflow has emerged and should be available via @skill/list_skills in future turns. Include when to use it, steps, verification, and safety notes. Requires approval outside autonomous modes.",
+            description: "Create a local user Codex skill under ~/.willdeep/skills when a reusable workflow has emerged and should be available via @skill/list_skills in future turns. Include when to use it, steps, verification, and safety notes. Requires approval outside autonomous modes.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "name", type: .string, description: "Short skill name, e.g. `release-guardian` or `ppt-qc-workflow`.", required: true),
                 AgentToolParameter(name: "description", type: .string, description: "One sentence describing when the Agent should use this skill.", required: true),
                 AgentToolParameter(name: "body", type: .string, description: "Markdown skill instructions. Must avoid secrets and stale outputs.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "update_user_skill",
+            description: "Update an existing user-created Codex skill by exact name or identifier. Only user skills under ~/.willdeep/skills or legacy ~/.codex/skills can be changed; bundled and plugin skills are refused. Pass a full replacement body when changing instructions. Requires approval.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "name", type: .string, description: "User skill name or identifier returned by list_skills.", required: true),
+                AgentToolParameter(name: "description", type: .string, description: "Optional replacement one-sentence description. Omit to preserve the current description.", required: false),
+                AgentToolParameter(name: "body", type: .string, description: "Optional replacement Markdown instructions. Omit to preserve the current body.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "delete_user_skill",
+            description: "Delete a user-created Codex skill by exact name or identifier. Only user skills under ~/.willdeep/skills or legacy ~/.codex/skills can be deleted; bundled and plugin skills are refused. Destructive and requires typed confirmation.",
+            risk: .danger,
+            parameters: [
+                AgentToolParameter(name: "name", type: .string, description: "User skill name or identifier returned by list_skills.", required: true)
             ]
         ),
         AgentToolDescriptor(
@@ -166,6 +184,17 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "install_hint", type: .string, description: "Concise setup hint or URL/package reference. Do not include secrets.", required: false),
                 AgentToolParameter(name: "reason", type: .string, description: "Why this MCP would help this or future tasks.", required: false),
                 AgentToolParameter(name: "search_query", type: .string, description: "The query used or recommended to verify the MCP option.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "configure_mcp_server",
+            description: "Add or update user MCP server configuration from pasted JSON. Accepts Cursor/Claude-style `{ \"mcpServers\": { ... } }` or a single server object with `name`/`server_name`; supports stdio `command`/`args`/`env` and streamable-http `url`/`headers`. Sensitive env/header values are stored through WillDeep's credential store. Requires approval.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "json", type: .string, description: "MCP server JSON pasted by the user. Do not invent credentials.", required: true),
+                AgentToolParameter(name: "server_name", type: .string, description: "Optional server name to select when json contains several mcpServers, or to name a single-server object.", required: false),
+                AgentToolParameter(name: "enabled", type: .boolean, description: "Optional override for whether the server is enabled after saving. Defaults to the JSON value or true.", required: false),
+                AgentToolParameter(name: "trust_level", type: .string, description: "Optional trust level: standard, fullyTrusted, or untrusted. Defaults to standard unless JSON provides trust_level.", required: false)
             ]
         ),
         AgentToolDescriptor(
