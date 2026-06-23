@@ -35,27 +35,37 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
     /// chrome stay on fixed sizes inside the renderer.
     let baseFontSize: CGFloat
     let onRetryLastTurn: () -> Void
+    /// 1.103.0-rc11: 本轮 turn-report 的工具调用次数(>0 才会在最近一条
+    /// assistant 的 footer 里渲染 doc.text + 数字图标);nil/0 表示没有
+    /// report 可看(0 次 tool call 的轮次原 PostStrip 也是不显示)。
+    var latestTurnReportToolCount: Int? = nil
+    /// 1.103.0-rc11: footer 报告图标被点时触发(SwiftUI 侧打开 popover)。
+    var onShowTurnReport: (() -> Void)? = nil
     @Environment(\.colorScheme) private var colorScheme
 
     func makeNSView(context: Context) -> AgentChatHistoryNSTextView {
         let view = AgentChatHistoryNSTextView()
         view.translatesAutoresizingMaskIntoConstraints = false
         view.onRetryLastTurn = onRetryLastTurn
+        view.onShowTurnReport = onShowTurnReport
         configure(view)
         view.applyMessages(
             messages,
             isDark: colorScheme == .dark,
-            baseFontSize: baseFontSize
+            baseFontSize: baseFontSize,
+            latestTurnReportToolCount: latestTurnReportToolCount
         )
         return view
     }
 
     func updateNSView(_ nsView: AgentChatHistoryNSTextView, context: Context) {
         nsView.onRetryLastTurn = onRetryLastTurn
+        nsView.onShowTurnReport = onShowTurnReport
         nsView.applyMessages(
             messages,
             isDark: colorScheme == .dark,
-            baseFontSize: baseFontSize
+            baseFontSize: baseFontSize,
+            latestTurnReportToolCount: latestTurnReportToolCount
         )
     }
 
@@ -102,6 +112,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
     private var currentMessages: [AgentMessage] = []
     private var currentIsDark = false
     private var currentBaseFontSize: CGFloat = NSFont.systemFontSize
+    private var currentLatestTurnReportToolCount: Int? = nil
     private var expandedToolGroupIDs = Set<String>()
     private var hoveredUserMessageID: UUID?
     private var hoverTrackingArea: NSTrackingArea?
@@ -113,6 +124,9 @@ final class AgentChatHistoryNSTextView: NSTextView {
     private var pendingCodeCopyRestore: DispatchWorkItem?
     private var pendingFooterCopyRestore: DispatchWorkItem?
     var onRetryLastTurn: (() -> Void)?
+    /// 1.103.0-rc11: TextKit footer 里 doc.text 图标被点时回调 SwiftUI 侧
+    /// 弹出 AgentTurnReportCard popover —— 见 AgentChatTranscript。
+    var onShowTurnReport: (() -> Void)?
 
     init() {
         let textStorage = NSTextStorage()
@@ -181,12 +195,14 @@ final class AgentChatHistoryNSTextView: NSTextView {
     func applyMessages(
         _ messages: [AgentMessage],
         isDark: Bool,
-        baseFontSize: CGFloat = NSFont.systemFontSize
+        baseFontSize: CGFloat = NSFont.systemFontSize,
+        latestTurnReportToolCount: Int? = nil
     ) {
         let fp = Self.inputFingerprint(
             messages: messages,
             isDark: isDark,
-            baseFontSize: baseFontSize
+            baseFontSize: baseFontSize,
+            latestTurnReportToolCount: latestTurnReportToolCount
         )
         if fp == lastInputFingerprint {
             return
@@ -195,6 +211,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
         currentMessages = messages
         currentIsDark = isDark
         currentBaseFontSize = baseFontSize
+        currentLatestTurnReportToolCount = latestTurnReportToolCount
         renderCurrentMessages()
     }
 
@@ -208,12 +225,14 @@ final class AgentChatHistoryNSTextView: NSTextView {
     private static func inputFingerprint(
         messages: [AgentMessage],
         isDark: Bool,
-        baseFontSize: CGFloat
+        baseFontSize: CGFloat,
+        latestTurnReportToolCount: Int?
     ) -> Int {
         var hasher = Hasher()
         hasher.combine(isDark)
         hasher.combine(baseFontSize)
         hasher.combine(messages.count)
+        hasher.combine(latestTurnReportToolCount ?? -1)
         for m in messages {
             hasher.combine(m.id)
             hasher.combine(m.role.rawValue)
@@ -243,7 +262,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
             isDark: currentIsDark,
             expandedToolGroupIDs: expandedToolGroupIDs,
             hoveredUserMessageID: hoveredUserMessageID,
-            baseFontSize: currentBaseFontSize
+            baseFontSize: currentBaseFontSize,
+            latestTurnReportToolCount: currentLatestTurnReportToolCount
         )
         var hasher = Hasher()
         hasher.combine(attr.string)
@@ -374,6 +394,11 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             return true
         }
 
+        if (textStorage.attribute(.agentChatHistoryShowTurnReport, at: charIndex, effectiveRange: nil) as? NSNumber)?.boolValue == true {
+            onShowTurnReport?()
+            return true
+        }
+
         if let payload = textStorage.attribute(.agentChatHistoryTablePayload, at: charIndex, effectiveRange: nil) as? AgentMarkdownTablePayload {
             AgentMarkdownTableDetailWindowRegistry.open(payload: payload)
             return true
@@ -416,6 +441,7 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             AgentChatHistoryCodeCopyChrome.linkValue,
             AgentChatHistoryFooterChrome.copyLinkValue,
             AgentChatHistoryFooterChrome.retryLinkValue,
+            AgentChatHistoryFooterChrome.reportLinkValue,
             AgentChatHistoryTableLink.value,
             AgentChatHistoryTextAttachmentLink.value,
             "agent-chat-history-tool-group",
@@ -498,6 +524,7 @@ extension NSAttributedString.Key {
     static let agentChatHistoryCodeCopyText = NSAttributedString.Key("AgentChatHistoryCodeCopyText")
     static let agentChatHistoryMessageCopyText = NSAttributedString.Key("AgentChatHistoryMessageCopyText")
     static let agentChatHistoryRetryLastTurn = NSAttributedString.Key("AgentChatHistoryRetryLastTurn")
+    static let agentChatHistoryShowTurnReport = NSAttributedString.Key("AgentChatHistoryShowTurnReport")
     static let agentChatHistoryTableBlockID = NSAttributedString.Key("AgentChatHistoryTableBlockID")
     static let agentChatHistoryTablePayload = NSAttributedString.Key("AgentChatHistoryTablePayload")
     static let agentChatHistoryTextAttachment = NSAttributedString.Key("AgentChatHistoryTextAttachment")

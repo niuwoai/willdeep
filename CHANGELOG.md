@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.103.0-rc11 - 2026-06-23
+
+### Changed
+- Agent 聊天 turn-report 触发图标（原 `AgentTurnPostStrip` 左侧 `list.bullet.clipboard + 计数`）搬进 TextKit footer，跟 copy / ◷ / tokens / ↻ 同一行：在最近一条 assistant 消息底部追加 `doc.text + 计数`，点击复用同一张 `AgentTurnReportCard` popover（ScrollView + 520pt 宽 + 560pt 高）。`AgentTurnPostStrip` 现在只承载 Learning 图标，0 learning 时整行不再渲染、不再占用 transcript 底部一行空间。
+- 实现细节：`AgentChatHistoryFooterChrome.reportButton(count:)` 渲染图标+计数 + `reportLinkValue`；`appendMessageFooter` 新增 `turnReportToolCount` 入参；`AgentChatHistoryTextView` 暴露 `onShowTurnReport` 闭包，`clickedOnLink` 监听 `.agentChatHistoryShowTurnReport` 属性触发；渲染缓存 fingerprint 与 cache key 都 hash 进 `latestTurnReportToolCount` 以保证计数变化时立刻刷新。
+- 版本号从 **1.103.0-rc10** 提升为 **1.103.0-rc11**（turn-report 图标搬家 + Strip 瘦身）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×4 同步。
+
+## 1.103.0-rc10 - 2026-06-23
+
+### Changed
+- Agent 聊天用户消息气泡默认背景从 `0.018` 提到 `0.028`，边框从 `0.014` 提到 `0.022`，hover 同步上调到 `0.038 / 0.032`。原默认值过淡，单行消息看起来像"飘"在背景里没有边界，hover 才隐约可见；现在默认就有清晰气泡感，hover 仍有轻微反馈。padding/高度保持不变。
+- 版本号从 **1.103.0-rc9** 提升为 **1.103.0-rc10**（用户气泡可见性 fix）。pbxproj×6 / Go agent 同步。
+
 ## 1.103.0-rc9 - 2026-06-23
 
 ### Changed

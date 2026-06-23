@@ -35,6 +35,11 @@ struct AgentChatTranscript: View {
     @EnvironmentObject var appState: AppState
     private static let bottomScrollID = "agent-chat-transcript-bottom"
 
+    /// 1.103.0-rc11: TextKit footer 里 doc.text 图标点开后呈现
+    /// AgentTurnReportCard 的 SwiftUI popover 开关。Anchor 挂在
+    /// AgentChatHistoryTextView wrapper 上即可。
+    @State private var showTurnReportPopover = false
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -97,9 +102,25 @@ struct AgentChatTranscript: View {
                             AgentChatHistoryTextView(
                                 messages: history,
                                 baseFontSize: appState.agentChatBaseFontSize,
-                                onRetryLastTurn: appState.retryLastAgentTurn
+                                onRetryLastTurn: appState.retryLastAgentTurn,
+                                latestTurnReportToolCount: appState.agentLatestTurnReport?.toolSummary.total,
+                                onShowTurnReport: { showTurnReportPopover = true }
                             )
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+                                .popover(isPresented: $showTurnReportPopover, arrowEdge: .top) {
+                                    // 1.103.0-rc11:复用 AgentTurnPostStrip 里
+                                    // 同款 ScrollView + 固定 width/maxHeight
+                                    // 包裹,长报告也不会撑出屏幕。
+                                    if let report = appState.agentLatestTurnReport {
+                                        ScrollView {
+                                            AgentTurnReportCard(report: report, initiallyExpanded: true)
+                                                .padding(12)
+                                                .frame(width: 520, alignment: .leading)
+                                        }
+                                        .frame(width: 520)
+                                        .frame(maxHeight: 560)
+                                    }
+                                }
                         }
 
                         // Render the active streaming message — and

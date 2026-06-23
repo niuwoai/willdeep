@@ -144,13 +144,15 @@ enum AgentChatHistoryRenderer {
         isDark: Bool,
         expandedToolGroupIDs: Set<String> = [],
         hoveredUserMessageID: UUID? = nil,
-        baseFontSize: CGFloat = NSFont.systemFontSize
+        baseFontSize: CGFloat = NSFont.systemFontSize,
+        latestTurnReportToolCount: Int? = nil
     ) -> NSAttributedString {
         let clampedSize = AgentSettingsStore.clampChatBaseFontSize(baseFontSize)
         var hasher = Hasher()
         hasher.combine(messages.count)
         hasher.combine(expandedToolGroupIDs.sorted())
         hasher.combine(hoveredUserMessageID)
+        hasher.combine(latestTurnReportToolCount ?? -1)
         for m in messages {
             hasher.combine(messageHash(m))
         }
@@ -176,7 +178,8 @@ enum AgentChatHistoryRenderer {
             isDark: isDark,
             expandedToolGroupIDs: expandedToolGroupIDs,
             hoveredUserMessageID: hoveredUserMessageID,
-            baseFontSize: clampedSize
+            baseFontSize: clampedSize,
+            latestTurnReportToolCount: latestTurnReportToolCount
         )
 
         // Critical section #2: insertion + LRU eviction. If a parallel
@@ -201,7 +204,8 @@ enum AgentChatHistoryRenderer {
         isDark: Bool,
         expandedToolGroupIDs: Set<String>,
         hoveredUserMessageID: UUID?,
-        baseFontSize: CGFloat
+        baseFontSize: CGFloat,
+        latestTurnReportToolCount: Int?
     ) -> NSAttributedString {
         let result = NSMutableAttributedString()
         // `bodyFont` / `monoFont` follow the user's chat-base size
@@ -389,6 +393,7 @@ enum AgentChatHistoryRenderer {
                     for: message,
                     isLatestAssistant: message.id == latestAssistantMessageID,
                     isVisible: message.role != .user || isHoveredUserMessage,
+                    turnReportToolCount: latestTurnReportToolCount,
                     to: result
                 )
                 if hasMessageBubbleContent && message.toolCalls.isEmpty {

@@ -22,6 +22,8 @@ import SwiftUI
 import AppKit
 
 struct AgentTurnPostStrip: View {
+    // 1.103.0-rc11: report 入参保留只为外部 call site 兼容,内部不再渲染;
+    // doc.text + 计数已搬进 TextKit footer chrome,跟 copy/clock/tokens 同一行。
     let report: AgentTurnReport?
     let learningEvents: [AgentLearningEvent]
     /// 1.85.0-rc16:Approve 回调,popover 里点 ✓ 触发,把 LearningEvent 上
@@ -29,59 +31,18 @@ struct AgentTurnPostStrip: View {
     /// `applyAgentMemoryDrafts(for:)` 实现。
     var onApproveMemory: ((AgentLearningEvent) -> Void)? = nil
 
-    @State private var showReport = false
     @State private var showLearning = false
 
-    // 1.85.0-rc17:0 次工具调用就不显示 📋 turn report 图标了 ——
-    // 那种轮里指标全是 0,展开也只有 tokens / elapsed,基本没人会去看;
-    // 反而是个干扰项。`hasUsefulContent` 太宽,assistantMessageCount > 0
-    // 就放行,所以这里收成「至少打过一次工具」。learning 走自己的图标,
-    // 不会因此被藏掉。
-    private var hasReport: Bool { (report?.toolSummary.total ?? 0) > 0 }
     private var hasLearning: Bool { !learningEvents.isEmpty }
 
     var body: some View {
-        // 两边数据都没有时不渲染 —— 避免在 transcript 底部留一条空 footprint。
-        if hasReport || hasLearning {
+        if hasLearning {
             HStack(spacing: 14) {
-                if hasReport, let report {
-                    reportButton(report: report)
-                }
-                if hasLearning {
-                    learningButton
-                }
+                learningButton
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 4)
             .padding(.vertical, 6)
-        }
-    }
-
-    @ViewBuilder
-    private func reportButton(report: AgentTurnReport) -> some View {
-        Button {
-            showReport.toggle()
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "list.bullet.clipboard")
-                    .font(.system(size: 12, weight: .medium))
-                Text("\(report.toolSummary.total)")
-                    .font(AgentDesign.captionFont)
-            }
-            .foregroundStyle(.secondary)
-        }
-        .buttonStyle(.plain)
-        .help(L10n.Transcript.postTurnReportTooltip)
-        .popover(isPresented: $showReport, arrowEdge: .top) {
-            // 1.102.0-rc1:工具数多/有 recall 摘要时 report 卡片也会撑出屏幕,
-            // 顺手套上 ScrollView + maxHeight,行为与下方 learning popover 一致。
-            ScrollView {
-                AgentTurnReportCard(report: report, initiallyExpanded: true)
-                    .padding(12)
-                    .frame(width: 520, alignment: .leading)
-            }
-            .frame(width: 520)
-            .frame(maxHeight: 560)
         }
     }
 

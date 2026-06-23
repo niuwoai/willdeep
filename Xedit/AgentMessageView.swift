@@ -163,11 +163,11 @@ struct AgentModeMessageView: View {
             .padding(.bottom, 14)
             .background(
                 RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                    .fill(Color.primary.opacity(isHoveringUser ? 0.03 : 0.018))
+                    .fill(Color.primary.opacity(isHoveringUser ? 0.038 : 0.028))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                    .stroke(Color.primary.opacity(isHoveringUser ? 0.026 : 0.014), lineWidth: 1)
+                    .stroke(Color.primary.opacity(isHoveringUser ? 0.032 : 0.022), lineWidth: 1)
             )
             .frame(maxWidth: AgentDesign.chatMaxContentWidth * AgentDesign.userMessageMaxWidthRatio, alignment: .leading)
             .onHover { isHoveringUser = $0 }

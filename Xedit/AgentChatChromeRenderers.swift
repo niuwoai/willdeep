@@ -59,6 +59,29 @@ enum AgentChatHistoryFooterChrome {
     static let retryLabel = "↻"
     static let copyLinkValue = "agent-chat-history-copy-message"
     static let retryLinkValue = "agent-chat-history-retry-last-turn"
+    /// 1.103.0-rc11: 用 `AgentTurnPostStrip` 那行原本承载的 turn-report
+    /// 图标搬进 TextKit footer,跟 copy / ◷ / tokens / ↻ 同一行。link
+    /// 值供 NSTextView 的 `clickedOnLink` 路由到 popover。
+    static let reportLinkValue = "agent-chat-history-show-turn-report"
+
+    /// Per-message report trigger. 仅在 `appendMessageFooter` 判定
+    /// `isLatestAssistant && toolCount > 0` 时插入,否则不显示。
+    static func reportButton(count: Int) -> NSAttributedString {
+        let result = NSMutableAttributedString(attributedString: reportSymbolString(
+            pointSize: 13,
+            color: NSColor.secondaryLabelColor
+        ))
+        result.append(NSAttributedString(string: " \(count)", attributes: [
+            .font: footerFont,
+            .foregroundColor: NSColor.secondaryLabelColor,
+            .underlineStyle: 0,
+        ]))
+        result.addAttributes([
+            .link: reportLinkValue,
+            .agentChatHistoryShowTurnReport: NSNumber(value: true),
+        ], range: NSRange(location: 0, length: result.length))
+        return result
+    }
 
     static func copyButton(copied: Bool, message: String) -> NSAttributedString {
         var attributes = copyLinkAttributes(color: copied ? NSColor.systemGreen : NSColor.secondaryLabelColor)
@@ -150,6 +173,13 @@ enum AgentChatHistoryFooterChrome {
 
 private func copySymbolString(pointSize: CGFloat, color: NSColor) -> NSAttributedString {
     symbolAttachmentString(named: "square.on.square", fallback: "⧉", pointSize: pointSize, color: color)
+}
+
+/// Same `doc.text` 图标语义,跟 `AgentTurnPostStrip` 原来的
+/// `list.bullet.clipboard` 含义对齐:点开 = 看本轮工具/Approvals/
+/// Learning/Tokens/Mode 报告。
+private func reportSymbolString(pointSize: CGFloat, color: NSColor) -> NSAttributedString {
+    symbolAttachmentString(named: "doc.text", fallback: "▤", pointSize: pointSize, color: color)
 }
 
 /// Footer chrome for rendered Markdown tables in the history NSTextView.
