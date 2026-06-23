@@ -385,6 +385,13 @@ enum L10n {
         static let noWorkspace = String(localized: "workspace.no-workspace", defaultValue: "No workspace")
     }
 
+    enum AgentPatch {
+        static let apply = String(localized: "agent-patch.apply", defaultValue: "Apply")
+        static let reject = String(localized: "agent-patch.reject", defaultValue: "Reject")
+        static let showDiff = String(localized: "agent-patch.show-diff", defaultValue: "Show Diff")
+        static let hideDiff = String(localized: "agent-patch.hide-diff", defaultValue: "Hide Diff")
+    }
+
     enum AgentPatchError {
         static let emptyDiff = String(localized: "agent-patch-error.empty-diff", defaultValue: "The diff is empty.")
         static let unsupportedDiff = String(localized: "agent-patch-error.unsupported-diff", defaultValue: "The diff format is not supported yet. Use a unified diff for existing files.")

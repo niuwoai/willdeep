@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.105.0-rc17 - 2026-06-24
+
+### Fixed
+- 在 Agent 会话里点 Apply patch 报「请先打开一个项目文件夹再 Apply patch」,但用户明明已经在某个 workspace(状态栏显示 `mylinux`)里。根因:`applyAgentPatch` 用 `guard let rootDirectory`,而 `rootDirectory` 是 editor 窗口的根目录,Agent mode 下没在 editor 打开文件夹时为 nil。改用新的 `agentPatchWorkspaceRoot()`:`agentWorktreeChanges.repositoryRoot` → `activeRuntime.workspaceRootPath` → `rootDirectory`,和 worktree diff 解析同一套优先级,patch 现在能落到 agent 会话锚定的 workspace。
+- Patch 提案卡片的 **Apply / Reject / Show Diff / Hide Diff** 之前是硬编码英文,现在走 `L10n.AgentPatch`,Localizable.xcstrings 补齐 zh-Hans(应用 / 拒绝 / 查看 Diff / 收起 Diff)。
+
+### Changed
+- 版本号从 **1.105.0-rc16** 提升为 **1.105.0-rc17**（Apply patch 认 agent workspace、patch 按钮本地化）。pbxproj×6 / Go agent / Help Info.plist / README badge / product-overview / docs ×2 同步。
+
 ## 1.105.0-rc16 - 2026-06-24
 
 ### Changed

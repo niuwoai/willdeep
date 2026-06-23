@@ -158,12 +158,18 @@ extension AppState {
     }
 
     func applyAgentPatch(_ diff: String) throws {
-        guard let rootDirectory else {
+        // Agent mode 下 editor 窗口的 `rootDirectory` 经常是 nil(没在
+        // editor 里打开文件夹),但 agent 会话本身锚在一个 workspace 上。
+        // 之前只看 `rootDirectory` → 一律报「请先打开项目文件夹」,哪怕
+        // 用户明明在 mylinux 这个 workspace 里。改成和 worktree diff 同
+        // 一套优先级:已知 git repo root → 会话 workspaceRootPath → editor
+        // rootDirectory。
+        guard let resolvedRoot = agentPatchWorkspaceRoot() else {
             throw AgentPatchError.noWorkspace
         }
 
         let changes = try AgentPatchApplier.parse(diff)
-        let root = rootDirectory.standardizedFileURL
+        let root = resolvedRoot.standardizedFileURL
         let rootPath = root.path
         var pendingWrites: [(url: URL, content: String, relativePath: String)] = []
 
@@ -202,6 +208,19 @@ extension AppState {
 
         refreshGitStatus()
         persistSession()
+    }
+
+    /// Workspace root used for resolving / confining agent patches.
+    /// Mirrors the worktree-diff resolver so patch apply works in Agent
+    /// mode even when the editor window has no folder open.
+    func agentPatchWorkspaceRoot() -> URL? {
+        if let repoRoot = agentWorktreeChanges.repositoryRoot {
+            return repoRoot.standardizedFileURL
+        }
+        if let path = activeRuntime?.workspaceRootPath, !path.isEmpty {
+            return URL(fileURLWithPath: path).standardizedFileURL
+        }
+        return rootDirectory?.standardizedFileURL
     }
 
     nonisolated static func relativeWorkspacePath(for url: URL, root: URL, rootPath: String) -> String {

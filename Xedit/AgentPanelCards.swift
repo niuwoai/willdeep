@@ -34,7 +34,7 @@ struct AgentPatchProposalCard: View {
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                 }
                 .buttonStyle(.borderless)
-                .help(isExpanded ? "Hide Diff" : "Show Diff")
+                .help(isExpanded ? L10n.AgentPatch.hideDiff : L10n.AgentPatch.showDiff)
             }
 
             if isExpanded {
@@ -56,14 +56,14 @@ struct AgentPatchProposalCard: View {
                 Button {
                     appState.rejectAgentPatchProposal(id: proposal.id)
                 } label: {
-                    Label("Reject", systemImage: "xmark.circle")
+                    Label(L10n.AgentPatch.reject, systemImage: "xmark.circle")
                 }
                 .disabled(proposal.status != .pending)
 
                 Button {
                     appState.applyAgentPatchProposal(id: proposal.id)
                 } label: {
-                    Label("Apply", systemImage: "checkmark.circle")
+                    Label(L10n.AgentPatch.apply, systemImage: "checkmark.circle")
                 }
                 .disabled(proposal.status != .pending)
 
