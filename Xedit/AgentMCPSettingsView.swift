@@ -99,6 +99,8 @@ struct AgentMCPSettingsView: View {
                 }
             }
 
+            recommendedPresetSection
+
             serverSection(title: L10n.Settings.MCP.userServers, source: .user)
             serverSection(title: L10n.Settings.MCP.cursorServers, source: .cursor)
             serverSection(title: L10n.Settings.MCP.codexServers, source: .codex)
@@ -137,6 +139,45 @@ struct AgentMCPSettingsView: View {
                 pendingDraft = creationCoordinator.consumeDraft()
                 isCreatingServer = true
             }
+        }
+    }
+
+    private var recommendedPresetSection: some View {
+        Section {
+            Text(L10n.Settings.MCP.recommendedDescription)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            ForEach(AgentMCPServerPreset.recommended) { preset in
+                HStack(spacing: 12) {
+                    Image(systemName: "globe.badge.chevron.backward")
+                        .foregroundStyle(.blue)
+                        .frame(width: 24)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(title(for: preset))
+                            .font(.headline)
+                        Text(preset.detail)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        installPreset(preset)
+                    } label: {
+                        Label(L10n.Settings.MCP.addPreset, systemImage: "plus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(hasUserServer(named: preset.server.name)
+                              && preset.server.env == serverEnv(named: preset.server.name))
+                }
+                .padding(.vertical, 4)
+            }
+        } header: {
+            Text(L10n.Settings.MCP.recommendedServers)
         }
     }
 
@@ -319,6 +360,34 @@ struct AgentMCPSettingsView: View {
             .labelsHidden()
         }
         .padding(.vertical, 8)
+    }
+
+    private func installPreset(_ preset: AgentMCPServerPreset) {
+        AgentMCPSettingsStore.upsertUserServer(preset.server)
+        refreshServers()
+        statusMessage = L10n.Settings.MCP.createdServer(preset.server.name)
+        if let server = servers.first(where: { $0.id == "user:\(preset.server.name)" }) {
+            refreshTools(for: server)
+        }
+    }
+
+    private func hasUserServer(named name: String) -> Bool {
+        servers.contains { $0.source == .user && $0.name.lowercased() == name.lowercased() }
+    }
+
+    private func serverEnv(named name: String) -> [String: String] {
+        servers.first { $0.source == .user && $0.name.lowercased() == name.lowercased() }?.env ?? [:]
+    }
+
+    private func title(for preset: AgentMCPServerPreset) -> String {
+        switch preset.id {
+        case AgentMCPServerPreset.playwright.id:
+            return L10n.Settings.MCP.playwrightPresetTitle
+        case AgentMCPServerPreset.playwrightChinaMirror.id:
+            return L10n.Settings.MCP.playwrightChinaPresetTitle
+        default:
+            return preset.title
+        }
     }
 
     private func refreshTools(for server: AgentMCPServerConfig) {

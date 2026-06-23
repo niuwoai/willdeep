@@ -188,6 +188,17 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "visual_qa_screenshot",
+            description: "Inspect a screenshot or UI image for on-demand visual QA. Use only when the user explicitly asks for screenshot/UI/color/theme/accessibility/layout review, or after a browser screenshot was captured with approval for visual verification. Returns local palette/OCR/theme signals and, by default, may send the image to the configured Image Understanding provider for visual review; pass `allow_vl: false` for local-only inspection. Requires approval because screenshots can contain private information and VL analysis may send image bytes to a provider.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "path", type: .string, description: "Screenshot/image path. Prefer workspace-relative paths; absolute local paths are allowed for approved screenshots or user-provided images.", required: true),
+                AgentToolParameter(name: "context", type: .string, description: "Optional short context such as page, route, expected state, or recent UI change being verified.", required: false),
+                AgentToolParameter(name: "focus", type: .string, description: "Optional focus area such as `colors`, `dark-mode`, `layout`, `accessibility`, `regression`, or `general`.", required: false),
+                AgentToolParameter(name: "allow_vl", type: .boolean, description: "When true (default), call the configured Image Understanding provider if available. Set false to restrict analysis to local palette/OCR/theme signals.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "chrome_status",
             description: "Check whether the WillDeep Browser Chrome extension native bridge is reachable on localhost and return protocol/version/capability details. Read-only.",
             risk: .read,

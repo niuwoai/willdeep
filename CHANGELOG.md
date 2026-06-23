@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.103.0-rc5 - 2026-06-23
+
+### Added
+
+- 新增内建 `visual_qa_screenshot` 工具：面向截图/UI 图做按需视觉 QA，先本地输出主题估计、dominant palette 与 OCR 预览，再在 `allow_vl=true` 时调用已配置的 Image Understanding provider 生成颜色、布局、可读性和代码检查建议。
+- Agent 稳定工具契约新增视觉 QA 调用边界：仅在用户明确要求截图/颜色/主题/布局/可访问性/视觉回归检查，或已批准浏览器截图后需要视觉验证时调用；可用 `allow_vl=false` 限制为本地 palette/OCR 检查。
+- 新增 `docs/VISUAL_QA.md`，记录工具参数、审批边界、浏览器自动化联动和测试覆盖。
+
+### Changed
+
+- Bundled `browser` skill 同步补充截图后视觉 QA 路线：Playwright MCP / Chrome Relay / PinchTab 截图后，可在用户授权边界内调用 `visual_qa_screenshot` 做颜色和布局检查。
+- 版本号从 **1.103.0-rc4** 提升为 **1.103.0-rc5**（按需截图视觉 QA 工具）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
+## 1.103.0-rc4 - 2026-06-23
+
+### Changed
+
+- Bundled `browser` skill 同步补充 Playwright MCP 路线：明确 Playwright MCP 适合结构化浏览器 QA、本地 Web 应用测试、截图、console/network 诊断和 accessibility snapshot；同时写明推荐预设使用 `npx -y @playwright/mcp@latest`，国内镜像仅通过 `npm_config_registry=https://registry.npmmirror.com` 配置。
+- 版本号从 **1.103.0-rc3** 提升为 **1.103.0-rc4**（Playwright MCP skill 指引同步）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
+## 1.103.0-rc3 - 2026-06-23
+
+### Added
+
+- Settings → MCP 新增推荐服务器区，可一键添加 Playwright MCP 标准预设或国内镜像预设；预设使用 `/usr/bin/env npx -y @playwright/mcp@latest`，避免首次运行卡在 npm 交互确认。
+- 新增 `docs/PLAYWRIGHT_MCP.md`，记录 WillDeep 对 Playwright MCP 的安装策略、`npx -y` 选择依据和 `npm_config_registry` 国内镜像配置。
+
+### Changed
+
+- MCP stdio 启动环境复用 Agent shell PATH 补全逻辑，提高 GUI App 内找到 Homebrew / local Node 工具链的稳定性。
+- 版本号从 **1.103.0-rc2** 提升为 **1.103.0-rc3**（Playwright MCP 推荐预设）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
 ## 1.103.0-rc2 - 2026-06-23
 
 ### Added

@@ -1,6 +1,6 @@
 ---
 name: browser
-description: Browser automation for AI agents. Use when the user needs to interact with websites — navigating, filling forms, clicking buttons, extracting data, taking screenshots, or automating any browser task. PinchTab (primary) for fresh automation, Chrome Relay (fallback) for the user's existing browser tabs.
+description: Browser automation for AI agents. Use when the user needs to interact with websites — navigating, filling forms, clicking buttons, extracting data, taking screenshots, or automating any browser task. PinchTab is primary for fresh automation, Playwright MCP is preferred for structured browser QA and local web app testing when configured, and Chrome Relay is fallback for the user's existing browser tabs.
 allowed-tools:
   - Bash
   - Read
@@ -8,12 +8,54 @@ allowed-tools:
 
 # Browser Skill
 
-Two engines, pick the right one:
+Three engines, pick the right one:
 
 | Engine | When to Use | How |
 |--------|-------------|-----|
 | **PinchTab** | Fresh automation, scraping, form filling, stealth browsing, any task that doesn't need the user's existing login | `pinchtab` CLI |
+| **Playwright MCP** | Structured browser QA, local web app testing, screenshots, console/network inspection, accessibility snapshots; best when the user configured the Playwright MCP preset | MCP server `playwright` |
 | **Chrome Relay** | Reading/interacting with tabs the user already has open, using their existing cookies/logins | `alma browser` CLI |
+
+## Playwright MCP (Structured Browser QA)
+
+Use Playwright MCP when the task is browser QA rather than authenticated user-session work: local web apps, visual checks, form flows, screenshots, console/network debugging, and repeatable automation. Prefer it over ad-hoc shell scripts when a configured MCP server named `playwright` is available.
+
+### Recommended Setup
+
+WillDeep Settings -> MCP has two one-click Playwright presets:
+
+```json
+{
+  "command": "/usr/bin/env",
+  "args": ["npx", "-y", "@playwright/mcp@latest"]
+}
+```
+
+For users in China, use the mirror preset:
+
+```json
+{
+  "command": "/usr/bin/env",
+  "args": ["npx", "-y", "@playwright/mcp@latest"],
+  "env": {
+    "npm_config_registry": "https://registry.npmmirror.com"
+  }
+}
+```
+
+Important:
+- Keep `-y`; it prevents npm's first-run `Ok to proceed?` prompt from hanging the GUI.
+- Do not add `@playwright/mcp` to the user's project dependencies unless the user explicitly asks for a project-level test runner.
+- Do not switch to `pnpm dlx` or `yarn dlx` by default; they are fine for advanced custom configs but are less likely to exist on every machine.
+
+### MCP Workflow
+
+1. Confirm the server is configured: call `list_mcp_servers` and look for `playwright`.
+2. Inspect tools: call `list_mcp_tools` with `server: "playwright"`.
+3. Use the Playwright MCP tools for navigation, accessibility snapshots, screenshots, clicks, typing, console/network diagnostics, and page evaluation.
+4. Re-snapshot after interactions that navigate or change dynamic content.
+5. For color/theme/layout/accessibility QA, pass the saved screenshot path to `visual_qa_screenshot` after the user has approved the screenshot capture. Use `allow_vl=false` when local palette/OCR is enough; leave it true when the configured Image Understanding provider may review the image.
+6. If the user needs their existing Chrome login/session, switch to Chrome Relay instead.
 
 ## PinchTab (Primary Engine)
 
@@ -171,6 +213,10 @@ alma browser forward <tabId>
 
 - Need to scrape/automate a site from scratch? → PinchTab
 - Need stealth to avoid bot detection? → PinchTab
+- Need local app QA, screenshots, console/network inspection, or accessibility snapshots and Playwright MCP is configured? → Playwright MCP
+- Need color/theme/layout/accessibility review from an approved screenshot? → Capture with Playwright MCP / PinchTab / Chrome Relay, then call `visual_qa_screenshot`
+- Need to avoid npm's install confirmation prompt for Playwright MCP? → Use the WillDeep preset with `npx -y @playwright/mcp@latest`
+- User is in China and npm is slow/unreachable? → Use the Playwright MCP China mirror preset with `npm_config_registry=https://registry.npmmirror.com`
 - Need to read what the user is currently looking at? → Chrome Relay
 - Need the user's existing login session? → Chrome Relay (or PinchTab with saved profile if you've logged in before)
 - Need parallel sessions? → PinchTab (multi-instance)

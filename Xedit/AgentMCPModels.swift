@@ -206,3 +206,45 @@ struct AgentMCPSettings: Codable, Equatable {
         return copy
     }
 }
+
+struct AgentMCPServerPreset: Identifiable, Equatable, Sendable {
+    var id: String
+    var title: String
+    var detail: String
+    var server: AgentMCPServerConfig
+
+    static let playwright = AgentMCPServerPreset(
+        id: "playwright",
+        title: "Playwright MCP",
+        detail: "npx -y @playwright/mcp@latest",
+        server: AgentMCPServerConfig.playwrightMCP()
+    )
+
+    static let playwrightChinaMirror = AgentMCPServerPreset(
+        id: "playwright-china-mirror",
+        title: "Playwright MCP (China mirror)",
+        detail: "npx -y @playwright/mcp@latest + npmmirror",
+        server: AgentMCPServerConfig.playwrightMCP(
+            env: ["npm_config_registry": "https://registry.npmmirror.com"]
+        )
+    )
+
+    static let recommended: [AgentMCPServerPreset] = [
+        .playwright,
+        .playwrightChinaMirror
+    ]
+}
+
+extension AgentMCPServerConfig {
+    static func playwrightMCP(env: [String: String] = [:]) -> AgentMCPServerConfig {
+        AgentMCPServerConfig(
+            name: "playwright",
+            source: .user,
+            transport: .stdio,
+            command: "/usr/bin/env",
+            args: ["npx", "-y", "@playwright/mcp@latest"],
+            env: env,
+            startupTimeout: 90
+        )
+    }
+}

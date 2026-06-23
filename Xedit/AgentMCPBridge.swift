@@ -110,7 +110,7 @@ enum AgentMCPBridge {
         process.executableURL = URL(fileURLWithPath: server.command)
         process.arguments = server.args
 
-        var environment = ProcessInfo.processInfo.environment
+        var environment = AgentToolRunner.shellEnvironment()
         for (key, value) in server.env {
             environment[key] = AgentCredentialStore.resolve(value)
         }

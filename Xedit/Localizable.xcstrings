@@ -9813,6 +9813,23 @@
         }
       }
     },
+    "settings.mcp.add-preset" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加"
+          }
+        }
+      }
+    },
     "settings.mcp.args-placeholder" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10334,6 +10351,40 @@
         }
       }
     },
+    "settings.mcp.playwright-china-preset-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Playwright MCP (China mirror)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Playwright MCP（国内镜像）"
+          }
+        }
+      }
+    },
+    "settings.mcp.playwright-preset-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Playwright MCP"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Playwright MCP"
+          }
+        }
+      }
+    },
     "settings.mcp.refresh" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10347,6 +10398,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "刷新"
+          }
+        }
+      }
+    },
+    "settings.mcp.recommended-description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add common MCP servers with safe defaults. Playwright uses npx -y so first launch does not stop at an interactive install prompt."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用稳妥默认值添加常用 MCP 服务器。Playwright 使用 npx -y，首次启动不会卡在交互式安装确认。"
+          }
+        }
+      }
+    },
+    "settings.mcp.recommended-servers" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recommended MCP Servers"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "推荐 MCP 服务器"
           }
         }
       }

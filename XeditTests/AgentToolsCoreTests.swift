@@ -10,6 +10,8 @@
 //
 
 import Testing
+import AppKit
+import CoreGraphics
 import Foundation
 @testable import WillDeep
 
@@ -76,6 +78,45 @@ struct AgentToolsCoreTests {
         #expect(AppState.delegatedComposerApprovalSource(risk: .read) == nil)
         #expect(AppState.delegatedComposerApprovalSource(risk: .write) == .user)
         #expect(AppState.delegatedComposerApprovalSource(risk: .danger) == .user)
+    }
+
+    @Test
+    func visualQAScreenshotToolRequiresApprovalAndDocumentsBoundary() throws {
+        let descriptor = try #require(AgentToolRegistry.descriptor(for: "visual_qa_screenshot"))
+        #expect(descriptor.risk == .write)
+        #expect(descriptor.description.contains("Image Understanding"))
+        #expect(descriptor.description.contains("allow_vl"))
+        #expect(descriptor.parameters.contains { $0.name == "path" && $0.required })
+        #expect(descriptor.parameters.contains { $0.name == "allow_vl" && !$0.required })
+    }
+
+    @Test
+    func visualQAScreenshotCanRunLocalOnly() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-visual-qa-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let imageURL = directory.appendingPathComponent("light-screen.png")
+        let image = ImageWorkflowSupport.render(width: 16, height: 12, background: .white) { context in
+            context.setFillColor(ImageWorkflowSupport.RGBAColor.black.nsColor.cgColor)
+            context.fill(CGRect(x: 2, y: 2, width: 4, height: 4))
+        }
+        try ImageWorkflowSupport.save(image, to: imageURL, format: "png")
+
+        let result = try await AgentToolRunner.run(
+            name: "visual_qa_screenshot",
+            arguments: [
+                "path": .string(imageURL.path),
+                "allow_vl": .bool(false),
+                "focus": .string("colors")
+            ],
+            context: AgentToolContext(rootDirectory: nil, sandboxMode: .readOnly)
+        )
+
+        #expect(result.summary.contains("light-screen.png"))
+        #expect(result.payload.contains("# Visual QA Screenshot"))
+        #expect(result.payload.contains("Theme estimate:"))
+        #expect(result.payload.contains("Dominant palette:"))
+        #expect(result.payload.contains("VL analysis: skipped because `allow_vl=false`"))
     }
 
     @Test

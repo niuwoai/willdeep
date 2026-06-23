@@ -166,6 +166,32 @@ struct AgentMCPBridgeCoreTests {
         #expect(AgentMCPServerSource.codex.rawValue == "codex")
     }
 
+    /// Playwright MCP is intentionally launched through npx with `-y`
+    /// so first use downloads @playwright/mcp without stopping at the
+    /// interactive "Ok to proceed?" prompt.
+    @Test
+    func playwrightPresetUsesNonInteractiveNpx() {
+        let server = AgentMCPServerPreset.playwright.server
+
+        #expect(server.name == "playwright")
+        #expect(server.transport == .stdio)
+        #expect(server.command == "/usr/bin/env")
+        #expect(server.args == ["npx", "-y", "@playwright/mcp@latest"])
+        #expect(server.env.isEmpty)
+        #expect(server.startupTimeout == 90)
+    }
+
+    /// China mirror mode should not switch package managers. It stays on
+    /// npx and only injects npm_config_registry, which npm/npx honor.
+    @Test
+    func playwrightChinaMirrorPresetUsesNpmRegistryEnvOnly() {
+        let server = AgentMCPServerPreset.playwrightChinaMirror.server
+
+        #expect(server.command == "/usr/bin/env")
+        #expect(server.args == ["npx", "-y", "@playwright/mcp@latest"])
+        #expect(server.env == ["npm_config_registry": "https://registry.npmmirror.com"])
+    }
+
     // MARK: - parseToolCount
 
     /// `parseToolCount` returns the length of the `tools` array. The

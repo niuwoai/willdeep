@@ -66,6 +66,8 @@ enum AgentToolRunner {
             return try await AgentWebTools.webFetch(arguments: arguments)
         case "generate_image":
             return try await generateImage(arguments: arguments)
+        case "visual_qa_screenshot":
+            return try await AgentVisualQATools.analyzeScreenshot(arguments: arguments, context: context)
         case "chrome_status":
             return try await AgentChromeTools.status(arguments: arguments)
         case "chrome_read_page":

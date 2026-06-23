@@ -23,6 +23,18 @@ struct AgentSkillDirectoryTests {
     }
 
     @Test
+    func bundledBrowserSkillDocumentsPlaywrightMCPPreset() throws {
+        let skills = AgentSkillDirectory.list(includeDisabled: true)
+        let browser = try #require(skills.first { $0.identifier == "browser" })
+        let body = try String(contentsOf: browser.url, encoding: .utf8)
+
+        #expect(body.contains("Playwright MCP"))
+        #expect(body.contains("\"args\": [\"npx\", \"-y\", \"@playwright/mcp@latest\"]"))
+        #expect(body.contains("npm_config_registry"))
+        #expect(body.contains("https://registry.npmmirror.com"))
+    }
+
+    @Test
     func disabledSkillIsHiddenFromAgentListButVisibleInSettingsList() {
         AgentSkillSettingsStore.setSkillEnabled(identifier: "browser", enabled: false)
         defer {
