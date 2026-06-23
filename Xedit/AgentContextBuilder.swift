@@ -7,11 +7,54 @@
 
 import Foundation
 
+enum AgentSystemPromptProfile: String, CaseIterable, Identifiable {
+    case compact
+    case standard
+    case extended
+
+    var id: String { rawValue }
+
+    static func automatic(for configuration: AgentConfiguration) -> AgentSystemPromptProfile {
+        automatic(modelID: configuration.model, providerID: configuration.providerID)
+    }
+
+    static func automatic(modelID: String, providerID: String) -> AgentSystemPromptProfile {
+        let model = modelID.lowercased()
+        let provider = providerID.lowercased()
+
+        if containsAny(model, [
+            "mini", "nano", "flash-lite", "lite", "haiku", "qwen-turbo",
+            "deepseek-v4-flash", "deepseek-chat", "4o-mini", "4.1-mini",
+            "4.1-nano", "glm-4-flash"
+        ]) {
+            return .compact
+        }
+
+        if containsAny(model, [
+            "claude-opus-4.8", "claude-opus-4.7", "claude-opus-4.6",
+            "claude-fable-5", "claude-mythos-5", "gpt-5.5",
+            "gpt-5-codex", "gemini-3", "kimi-k2.7-code"
+        ]) {
+            return .extended
+        }
+
+        if provider.contains("claude"), model.contains("opus") {
+            return .extended
+        }
+
+        return .standard
+    }
+
+    private static func containsAny(_ value: String, _ needles: [String]) -> Bool {
+        needles.contains { value.contains($0) }
+    }
+}
+
 enum AgentContextBuilder {
     private static let maxCurrentFileCharacters = 12_000
     private static let maxSelectionCharacters = 6_000
     private static let maxRulesCharacters = 6_000
-    static let stablePrefixVersion = "willdeep-agent-system-v3"
+    static let stablePrefixVersion = "willdeep-agent-system-v4"
 
     static func systemPrompt(
         rootDirectory: URL?,
@@ -24,10 +67,30 @@ enum AgentContextBuilder {
         approvalMode: AgentApprovalMode = .smart,
         currentPlan: AgentPlan? = nil,
         currentGoal: AgentGoal? = nil,
-        globalRules: String? = AgentGlobalRulesStore.loadRules()
+        globalRules: String? = AgentGlobalRulesStore.loadRules(),
+        promptProfile: AgentSystemPromptProfile = .standard
     ) -> String {
         var sections: [String] = []
-        sections.append(stableSystemPromptPrefix(toolsEnabled: toolsEnabled))
+        sections.append(stableSystemPromptPrefix(toolsEnabled: toolsEnabled, promptProfile: promptProfile))
+
+        if let rules = globalRules?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !rules.isEmpty {
+            sections.append("""
+            Global user instructions:
+            These instructions apply to every workspace. Project instructions below are more specific and may add stricter requirements.
+            \(rules)
+            """)
+        }
+
+        if let rootDirectory,
+           let rules = projectRules(in: rootDirectory, openedFileURL: openedFileURL) {
+            sections.append("""
+            Project instructions:
+            Deeper AGENTS.md/CLAUDE.md files appear later and override earlier instructions within their directory scope.
+            \(rules)
+            """)
+        }
+
         sections.append("=== Dynamic Turn Context ===")
 
         // Plan mode: lock writes behind a numbered, user-approved plan.
@@ -121,7 +184,7 @@ enum AgentContextBuilder {
 
         if toolsEnabled {
             sections.append("""
-            - Current approval mode: \(approvalMode.displayName). \(approvalMode.systemPromptDescription)
+            - Current approval mode: \(approvalMode.displayName). \(approvalMode.conciseSystemPromptDescription)
             """)
         }
 
@@ -131,22 +194,6 @@ enum AgentContextBuilder {
             - Root: \(rootDirectory.path)
             - Name: \(rootDirectory.lastPathComponent)
             """)
-
-            if let rules = globalRules?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !rules.isEmpty {
-                sections.append("""
-                Global user instructions:
-                These instructions apply to every workspace. Project instructions below are more specific and may add stricter requirements.
-                \(rules)
-                """)
-            }
-
-            if let rules = projectRules(in: rootDirectory) {
-                sections.append("""
-                Project instructions:
-                \(rules)
-                """)
-            }
         } else {
             sections.append("Workspace: no folder is currently open.")
         }
@@ -184,10 +231,13 @@ enum AgentContextBuilder {
         return sections.joined(separator: "\n\n")
     }
 
-    static func stableSystemPromptPrefix(toolsEnabled: Bool) -> String {
+    static func stableSystemPromptPrefix(
+        toolsEnabled: Bool,
+        promptProfile: AgentSystemPromptProfile = .standard
+    ) -> String {
         var sections: [String] = [
             """
-            === Stable WillDeep Agent Contract (\(stablePrefixVersion)) ===
+            === Stable WillDeep Agent Contract (\(stablePrefixVersion), \(promptProfile.rawValue)) ===
             You are WillDeep Agent, a concise coding assistant embedded in a native macOS editor.
             Work with the currently opened project directory as the workspace.
             You cannot directly change files. When the user asks for code edits, provide a unified diff in a ```diff fenced block.
@@ -222,6 +272,32 @@ enum AgentContextBuilder {
             AppLocale.systemPromptDirective
         ]
 
+        switch promptProfile {
+        case .compact:
+            sections.append("""
+            Compact profile:
+            - Prefer the shortest correct path. Use tools to verify facts, then answer tersely.
+            - Keep plans implicit unless the user asks or Plan/Goal mode requires a visible plan.
+            - Avoid broad refactors and optional explanations.
+            """)
+        case .standard:
+            sections.append("""
+            Standard profile:
+            - Balance autonomy with concise progress updates.
+            - For multi-file work, inspect conventions first, edit narrowly, and verify with the smallest meaningful command.
+            """)
+        case .extended:
+            sections.append("""
+            Extended profile for high-capability models:
+            - Build a private task model before editing: goal, constraints, affected surfaces, verification evidence, and rollback risks.
+            - Explore in parallel when independent reads are useful, then converge on a small implementation plan.
+            - Treat repository instructions as scoped law: global rules < root project rules < deeper AGENTS.md/CLAUDE.md < latest user message.
+            - For long tasks, keep the user oriented with concise status updates, but do not narrate routine mechanics.
+            - Before the final answer, audit explicit requirements against evidence: edited files, command output, version consistency, and any known blocked checks.
+            - Do not invent API fields, dependency names, environment values, or external state. Inspect sources or ask one concrete question.
+            """)
+        }
+
         if toolsEnabled {
             sections.append("""
             Stable tool contract:
@@ -249,30 +325,71 @@ enum AgentContextBuilder {
         return sections.joined(separator: "\n\n")
     }
 
-    static func cacheDiagnostics(for systemPrompt: String, toolsEnabled: Bool) -> (hash: String, stableCharacters: Int) {
-        let stable = stableSystemPromptPrefix(toolsEnabled: toolsEnabled)
-        let observedStablePrefix = String(systemPrompt.prefix(stable.count))
-        return (stableHash(observedStablePrefix), stable.count)
+    static func cacheDiagnostics(
+        for systemPrompt: String,
+        toolsEnabled: Bool,
+        promptProfile: AgentSystemPromptProfile = .standard
+    ) -> (hash: String, stableCharacters: Int) {
+        let stable = stableSystemPromptPrefix(toolsEnabled: toolsEnabled, promptProfile: promptProfile)
+        let dynamicMarker = "\n\n=== Dynamic Turn Context ==="
+        let stableCharacterCount = systemPrompt.range(of: dynamicMarker).map {
+            systemPrompt.distance(from: systemPrompt.startIndex, to: $0.lowerBound)
+        } ?? stable.count
+        let observedStablePrefix = String(systemPrompt.prefix(stableCharacterCount))
+        return (stableHash(observedStablePrefix), stableCharacterCount)
     }
 
-    private static func projectRules(in rootDirectory: URL) -> String? {
-        let candidates = ["AGENTS.md", "CLAUDE.md", "README.md", "product-overview.md"]
+    private static func projectRules(in rootDirectory: URL, openedFileURL: URL?) -> String? {
         var collected: [String] = []
 
-        for name in candidates {
+        for name in ["README.md", "product-overview.md"] {
             let url = rootDirectory.appendingPathComponent(name)
-            guard let data = try? Data(contentsOf: url),
-                  let text = String(data: data, encoding: .utf8) else {
-                continue
-            }
+            appendRuleFile(url, label: name, to: &collected)
+        }
 
-            let excerpt = limit(text.trimmingCharacters(in: .whitespacesAndNewlines), to: maxRulesCharacters)
-            guard !excerpt.isEmpty else { continue }
-            collected.append("# \(name)\n\(excerpt)")
+        for directory in scopedInstructionDirectories(rootDirectory: rootDirectory, openedFileURL: openedFileURL) {
+            for name in ["AGENTS.md", "CLAUDE.md"] {
+                let url = directory.appendingPathComponent(name)
+                let relative = relativePath(for: url, rootDirectory: rootDirectory)
+                appendRuleFile(url, label: relative, to: &collected)
+            }
         }
 
         guard !collected.isEmpty else { return nil }
         return collected.joined(separator: "\n\n")
+    }
+
+    private static func appendRuleFile(_ url: URL, label: String, to collected: inout [String]) {
+        guard let data = try? Data(contentsOf: url),
+              let text = String(data: data, encoding: .utf8) else {
+            return
+        }
+
+        let excerpt = limit(text.trimmingCharacters(in: .whitespacesAndNewlines), to: maxRulesCharacters)
+        guard !excerpt.isEmpty else { return }
+        collected.append("# \(label)\n\(excerpt)")
+    }
+
+    private static func scopedInstructionDirectories(rootDirectory: URL, openedFileURL: URL?) -> [URL] {
+        let root = rootDirectory.standardizedFileURL
+        guard let openedFileURL else { return [root] }
+
+        let active = openedFileURL.standardizedFileURL
+        let activePath = active.path
+        let rootPath = root.path
+        guard activePath == rootPath || activePath.hasPrefix(rootPath + "/") else {
+            return [root]
+        }
+
+        var directories: [URL] = [root]
+        var directory = active.deletingLastPathComponent()
+        var stack: [URL] = []
+        while directory.path != rootPath, directory.path.hasPrefix(rootPath + "/") {
+            stack.append(directory)
+            directory.deleteLastPathComponent()
+        }
+        directories.append(contentsOf: stack.reversed())
+        return directories
     }
 
     private static func relativePath(for url: URL, rootDirectory: URL?) -> String {

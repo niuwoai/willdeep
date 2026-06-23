@@ -664,7 +664,8 @@ extension WillDeepTests {
             selectedText: "",
             language: nil,
             toolsEnabled: true,
-            approvalMode: .smart
+            approvalMode: .smart,
+            globalRules: nil
         )
         let second = AgentContextBuilder.systemPrompt(
             rootDirectory: URL(fileURLWithPath: "/tmp/project-b"),
@@ -673,7 +674,8 @@ extension WillDeepTests {
             selectedText: "b",
             language: nil,
             toolsEnabled: true,
-            approvalMode: .requestEveryTime
+            approvalMode: .requestEveryTime,
+            globalRules: nil
         )
         let stable = AgentContextBuilder.stableSystemPromptPrefix(toolsEnabled: true)
         let firstDiagnostics = AgentContextBuilder.cacheDiagnostics(for: first, toolsEnabled: true)
@@ -688,6 +690,59 @@ extension WillDeepTests {
         #expect(stable.contains("Reference code as `path/to/file.swift:42`"))
         #expect(stable.contains("batch them into one assistant turn"))
         #expect(stable.contains("Never log, echo, persist, or expose secrets"))
+    }
+
+    @Test("AgentSystemPromptProfile picks prompt size from model capability")
+    func testAgentSystemPromptProfileAutoSelection() {
+        #expect(AgentSystemPromptProfile.automatic(modelID: "claude-opus-4.8", providerID: "claude") == .extended)
+        #expect(AgentSystemPromptProfile.automatic(modelID: "gpt-5-codex", providerID: "openai") == .extended)
+        #expect(AgentSystemPromptProfile.automatic(modelID: "deepseek-v4-flash", providerID: "deepseek") == .compact)
+        #expect(AgentSystemPromptProfile.automatic(modelID: "claude-sonnet-4.5", providerID: "claude") == .standard)
+    }
+
+    @Test("AgentContextBuilder collects nested project instruction files in scope order")
+    func testAgentContextBuilderNestedProjectRules() throws {
+        let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("willdeep_test_rules_\(UUID().uuidString)")
+        let nested = workspace.appendingPathComponent("Sources/Feature", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        try "Root overview".write(
+            to: workspace.appendingPathComponent("README.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "Root agent rule".write(
+            to: workspace.appendingPathComponent("AGENTS.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "Feature agent rule".write(
+            to: nested.appendingPathComponent("AGENTS.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let prompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: workspace,
+            openedFileURL: nested.appendingPathComponent("View.swift"),
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            toolsEnabled: true,
+            globalRules: nil
+        )
+
+        let readmeIndex = try #require(prompt.range(of: "Root overview")?.lowerBound)
+        let rootRuleIndex = try #require(prompt.range(of: "Root agent rule")?.lowerBound)
+        let featureRuleIndex = try #require(prompt.range(of: "Feature agent rule")?.lowerBound)
+        let dynamicIndex = try #require(prompt.range(of: "=== Dynamic Turn Context ===")?.lowerBound)
+
+        #expect(readmeIndex < rootRuleIndex)
+        #expect(rootRuleIndex < featureRuleIndex)
+        #expect(featureRuleIndex < dynamicIndex)
+        #expect(prompt.contains("# Sources/Feature/AGENTS.md"))
     }
 
     @Test("long tool results are summarized before entering model context")

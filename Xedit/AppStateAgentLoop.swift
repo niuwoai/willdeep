@@ -360,6 +360,7 @@ extension AppState {
             // window-level context the user can flip while another
             // session is running, and the model just sees it as
             // "what's on screen right now".
+            let promptProfile = AgentSystemPromptProfile.automatic(for: configuration)
             var systemPrompt = AgentContextBuilder.systemPrompt(
                 rootDirectory: workspaceURL,
                 openedFileURL: openedFileURL,
@@ -370,7 +371,8 @@ extension AppState {
                 interactionMode: runtime.interactionMode,
                 approvalMode: runtime.approvalMode,
                 currentPlan: runtime.currentPlan,
-                currentGoal: runtime.currentGoal
+                currentGoal: runtime.currentGoal,
+                promptProfile: promptProfile
             )
             if let remoteRuntimeDescriptor,
                case .remote(_, let remotePath) = workspaceLocation {
@@ -388,7 +390,8 @@ extension AppState {
             }
             let cacheDiagnostics = AgentContextBuilder.cacheDiagnostics(
                 for: systemPrompt,
-                toolsEnabled: true
+                toolsEnabled: true,
+                promptProfile: promptProfile
             )
             if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }) {
                 runtime.messages[index].requestPrefixHash = cacheDiagnostics.hash

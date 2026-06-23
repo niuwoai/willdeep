@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.103.0-rc7 - 2026-06-23
+
+### Added
+
+- Agent 系统提示词新增 compact / standard / extended 三档 profile，并根据当前模型能力自动选择；`claude-opus-4.8`、`gpt-5-codex` 等高能力模型走 extended，轻量/低价模型走 compact。
+- Project instructions 支持从 workspace root 到当前文件目录逐级收集 `AGENTS.md` / `CLAUDE.md`，更深层规则排在后面覆盖父级规则。
+
+### Changed
+
+- Approval mode 注入改成更短的一行描述，减少动态上下文对稳定 prompt 前缀的扰动。
+- 稳定前缀诊断改为统计 `=== Dynamic Turn Context ===` 之前的完整稳定段，并补充 profile 自动选择与嵌套规则顺序测试。
+- 版本号从 **1.103.0-rc6** 提升为 **1.103.0-rc7**（Agent Prompt Profile 自动分档）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
 ## 1.103.0-rc6 - 2026-06-23
 
 ### Changed

@@ -69,6 +69,10 @@ extension AppState {
     }
 
     var estimatedAgentRequestMessages: [AgentMessage] {
+        let promptProfile = AgentSystemPromptProfile.automatic(
+            modelID: activeAgentModelID,
+            providerID: agentConfiguration.normalized.providerID
+        )
         var systemPrompt = AgentContextBuilder.systemPrompt(
             rootDirectory: rootDirectory,
             openedFileURL: openedFileURL,
@@ -79,7 +83,8 @@ extension AppState {
             interactionMode: agentInteractionMode,
             approvalMode: agentApprovalMode,
             currentPlan: agentCurrentPlan,
-            currentGoal: agentCurrentGoal
+            currentGoal: agentCurrentGoal,
+            promptProfile: promptProfile
         )
         let settings = AgentMemorySettingsStore.loadSettings()
         let memoryResults = AgentMemoryEngine.retrieve(
