@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.105.0-rc1 - 2026-06-23
+
+### Added
+- Agent 新增 `configure_mcp_server` 工具：用户把 MCP JSON 贴到聊天后，可由 Agent 解析 `mcpServers` 或单 server JSON，并复用现有 MCP Settings upsert 与凭据存储写入用户配置。
+- Agent 新增 `update_user_skill` / `delete_user_skill`：聊天中可更新或删除用户创建的 skill；内置/插件 skill 会被拒绝，删除 skill 标为 danger 并要求 typed confirmation。
+- 补充回归测试覆盖聊天配置 MCP 的创建/更新路径，以及用户 skill 更新/删除的安全边界。
+
+### Changed
+- Extended/Stable 系统提示词补充 MCP 配置与用户 skill 维护能力地图；Goal 模式与「替我审批」workspace-access 模式可自动执行非 danger 的 MCP/skill 配置工具，删除 skill 仍不可自动通过。
+- 版本号从 **1.104.0-rc1** 提升为 **1.105.0-rc1**（聊天配置 MCP + 用户 skill 维护）。pbxproj×6 / Go agent / Help Info.plist / product-overview / docs ×4 同步。
+
 ## 1.104.0-rc1 - 2026-06-23
 
 ### Added

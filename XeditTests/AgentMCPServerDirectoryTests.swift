@@ -81,6 +81,71 @@ struct AgentMCPServerDirectoryTests {
         #expect(!agentList.contains { $0.id == "user:local-test-mcp" })
     }
 
+    @Test
+    func configureMCPServerToolAddsAndUpdatesPastedJSON() throws {
+        let suiteName = "willdeep-mcp-config-tool-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        AgentMCPSettingsStore._setTestDefaultsOverride(defaults)
+        defer {
+            AgentMCPSettingsStore._setTestDefaultsOverride(nil)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let createJSON = """
+        {
+          "mcpServers": {
+            "local-docs": {
+              "command": "/usr/bin/env",
+              "args": ["node", "server.js"],
+              "env": {
+                "NODE_ENV": "test"
+              },
+              "startup_timeout_sec": 45
+            }
+          }
+        }
+        """
+        let createResult = try AgentConfigurationTools.configureMCPServer(arguments: [
+            "json": .string(createJSON),
+            "trust_level": .string("untrusted")
+        ])
+        let created = try #require(AgentMCPSettingsStore.load().userServers.first)
+
+        #expect(createResult.summary.contains("Configured 1 MCP"))
+        #expect(created.name == "local-docs")
+        #expect(created.transport == .stdio)
+        #expect(created.command == "/usr/bin/env")
+        #expect(created.args == ["node", "server.js"])
+        #expect(created.env["NODE_ENV"] == "test")
+        #expect(created.startupTimeout == 45)
+        #expect(AgentMCPSettingsStore.trustLevel(id: created.id) == .untrusted)
+
+        let updateJSON = """
+        {
+          "name": "local-docs",
+          "type": "streamable-http",
+          "url": "https://example.com/mcp",
+          "headers": {
+            "X-Workspace": "local"
+          }
+        }
+        """
+        _ = try AgentConfigurationTools.configureMCPServer(arguments: [
+            "json": .string(updateJSON),
+            "enabled": .bool(false),
+            "trust_level": .string("standard")
+        ])
+        let settings = AgentMCPSettingsStore.load()
+        let updated = try #require(settings.userServers.first)
+
+        #expect(settings.userServers.count == 1)
+        #expect(updated.transport == .streamableHTTP)
+        #expect(updated.url == "https://example.com/mcp")
+        #expect(updated.headers["X-Workspace"] == "local")
+        #expect(settings.disabledServerIDs.contains(updated.id))
+        #expect(AgentMCPSettingsStore.trustLevel(id: updated.id) == .standard)
+    }
+
     // CI-skipped: writes a secret to the login keychain and reads it back.
     // GitHub's shared macOS runners often have no unlocked keychain in the
     // headless session, so `AgentCredentialStore.resolve` intermittently

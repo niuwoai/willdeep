@@ -166,6 +166,52 @@ enum AgentSkillFileManager {
         try FileManager.default.removeItem(at: skillDirectory)
     }
 
+    static func updateUserSkill(
+        _ skill: AgentSkillEntry,
+        description: String?,
+        body: String?,
+        allowedRoots: [URL] = [userSkillsRoot, legacyCodexSkillsRoot]
+    ) throws {
+        guard skill.source == .user else {
+            throw AgentSkillFileError.notUserSkill
+        }
+
+        let skillURL = skill.url.standardizedFileURL
+        guard skillURL.lastPathComponent == "SKILL.md" else {
+            throw AgentSkillFileError.unsafeDeletePath
+        }
+
+        let skillDirectory = skillURL.deletingLastPathComponent().standardizedFileURL
+        guard isSkillDirectory(skillDirectory, inside: allowedRoots) else {
+            throw AgentSkillFileError.unsafeDeletePath
+        }
+
+        guard let data = try? Data(contentsOf: skillURL),
+              let existingText = String(data: data, encoding: .utf8) else {
+            throw AgentToolError.notFound(skillURL.path)
+        }
+
+        let metadata = parseFrontMatter(from: existingText)
+        let nextDescription = description?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? metadata.description
+            ?? skill.description
+        let nextBody = body?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? metadata.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !nextBody.isEmpty else {
+            throw AgentSkillFileError.emptyBody
+        }
+
+        let markdown = """
+        ---
+        name: \(metadata.name ?? skill.name)
+        description: \(nextDescription)
+        ---
+
+        \(nextBody)
+        """
+        try markdown.write(to: skillURL, atomically: true, encoding: .utf8)
+    }
+
     private static func skillSlug(from name: String) -> String {
         let lowercased = name.lowercased()
         var slug = ""
@@ -189,6 +235,45 @@ enum AgentSkillFileManager {
             return directoryPath.hasPrefix(rootPath + "/")
         }
     }
+
+    private static func parseFrontMatter(from text: String) -> (name: String?, description: String?, body: String) {
+        let lines = text.components(separatedBy: .newlines)
+        guard lines.first == "---" else {
+            return (nil, nil, text)
+        }
+
+        var name: String?
+        var description: String?
+        var bodyStartIndex: Int?
+        for index in lines.indices.dropFirst() {
+            let line = lines[index]
+            if line == "---" {
+                bodyStartIndex = lines.index(after: index)
+                break
+            }
+            if let value = yamlValue(line, key: "name") {
+                name = value
+            } else if let value = yamlValue(line, key: "description") {
+                description = value
+            }
+        }
+
+        guard let bodyStartIndex else {
+            return (name, description, text)
+        }
+        return (name, description, lines[bodyStartIndex...].joined(separator: "\n"))
+    }
+
+    private static func yamlValue(_ line: String, key: String) -> String? {
+        let prefix = "\(key):"
+        guard line.hasPrefix(prefix) else { return nil }
+        var value = String(line.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.hasPrefix("\""), value.hasSuffix("\""), value.count >= 2 {
+            value.removeFirst()
+            value.removeLast()
+        }
+        return value
+    }
 }
 
 enum AgentSkillFileError: LocalizedError {
@@ -196,6 +281,7 @@ enum AgentSkillFileError: LocalizedError {
     case alreadyExists(String)
     case notUserSkill
     case unsafeDeletePath
+    case emptyBody
 
     var errorDescription: String? {
         switch self {
@@ -204,9 +290,11 @@ enum AgentSkillFileError: LocalizedError {
         case .alreadyExists(let slug):
             return "A user skill named \(slug) already exists."
         case .notUserSkill:
-            return "Only user skills can be deleted."
+            return "Only user skills can be changed."
         case .unsafeDeletePath:
             return "The skill path is outside the user skills folder."
+        case .emptyBody:
+            return "Skill body cannot be empty."
         }
     }
 }

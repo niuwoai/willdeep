@@ -114,7 +114,7 @@ struct AgentMCPServerConfig: Identifiable, Codable, Equatable, Sendable {
         })
     }
 
-    static func redactedValue(for key: String, value: String) -> String {
+    nonisolated static func redactedValue(for key: String, value: String) -> String {
         if AgentCredentialStore.isReference(value) {
             return "[redacted]"
         }
@@ -124,7 +124,7 @@ struct AgentMCPServerConfig: Identifiable, Codable, Equatable, Sendable {
         return value
     }
 
-    static func isSensitiveCredentialKey(_ key: String) -> Bool {
+    nonisolated static func isSensitiveCredentialKey(_ key: String) -> Bool {
         let lowercased = key.lowercased()
         return lowercased.contains("token")
             || lowercased.contains("secret")
