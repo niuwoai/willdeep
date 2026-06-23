@@ -70,7 +70,10 @@ struct AgentModeMessageView: View {
     /// streaming assistant message. Defaults to system body so existing
     /// callers that don't pass it keep working.
     var baseFontSize: CGFloat = NSFont.systemFontSize
-    @State private var isHoveringUser = false
+    // rc10: 之前 hover / 非 hover 用两套 opacity (0.028/0.022 vs
+    // 0.038/0.032),非 hover 状态下气泡边线弱到看不见,用户感觉
+    // 时间戳和复制 icon 像「漂在外面」(rc9 截图反馈)。统一改用
+    // hover 那档,默认就把 footer 显式包进圆角矩形里。
 
     var body: some View {
         switch message.role {
@@ -169,14 +172,13 @@ struct AgentModeMessageView: View {
             .padding(.bottom, 14)
             .background(
                 RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                    .fill(Color.primary.opacity(isHoveringUser ? 0.038 : 0.028))
+                    .fill(Color.primary.opacity(0.038))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                    .stroke(Color.primary.opacity(isHoveringUser ? 0.032 : 0.022), lineWidth: 1)
+                    .stroke(Color.primary.opacity(0.032), lineWidth: 1)
             )
             .frame(maxWidth: AgentDesign.chatMaxContentWidth * AgentDesign.userMessageMaxWidthRatio, alignment: .leading)
-            .onHover { isHoveringUser = $0 }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
     }

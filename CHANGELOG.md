@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.105.0-rc10 - 2026-06-24
+
+### Fixed
+- 用户气泡 (`AgentModeMessageView.userBubble`) 之前 hover 与非 hover 走两档 opacity (0.028/0.022 → 0.038/0.032),非 hover 时 stroke 弱到接近隐形,时间戳和复制图标看起来像漂在框外面。统一改成 hover 那一档 (0.038 + 0.032),`isHoveringUser` state 和 `.onHover` modifier 一并删除,默认就把 footer 显式包进圆角矩形里。
+
+### Changed
+- 版本号从 **1.105.0-rc9** 提升为 **1.105.0-rc10**（用户气泡默认强化与 hover state 移除）。pbxproj×6 / Go agent / Help Info.plist / README badge / product-overview / docs ×2 同步。
+
 ## 1.105.0-rc9 - 2026-06-24
 
 ### Fixed
