@@ -259,6 +259,14 @@ struct AgentAssistantMarkdownBody: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
+        if isStreaming {
+            AgentAssistantStreamingBody(content: content, baseFontSize: baseFontSize)
+        } else {
+            renderedMarkdownBody
+        }
+    }
+
+    private var renderedMarkdownBody: some View {
         // The Text on the bottom is the single-view substitute for
         // the old `VStack + ForEach(blocks)`. The streaming cursor
         // is a tiny separate view (one AgentStreamingCursor) — that
@@ -272,9 +280,23 @@ struct AgentAssistantMarkdownBody: View {
                 .textSelection(.enabled)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
-            if isStreaming {
-                AgentStreamingCursor()
-            }
+        }
+    }
+}
+
+private struct AgentAssistantStreamingBody: View {
+    let content: String
+    let baseFontSize: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(AgentLongTokenBreaker.inject(into: AgentMarkdownNormalizer.normalizedForChatRendering(content)))
+                .font(.system(size: baseFontSize))
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+            AgentStreamingCursor()
         }
     }
 }
