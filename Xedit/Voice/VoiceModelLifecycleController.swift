@@ -50,6 +50,10 @@ final class VoiceModelLifecycleController {
     func install() {
         guard !installed else { return }
         installed = true
+        guard !Self.isRunningUnderXCTest else {
+            log.info("install(): XCTest detected — skip voice model lifecycle preload")
+            return
+        }
         log.info("install()")
 
         resignObserver = NotificationCenter.default.addObserver(
@@ -78,6 +82,10 @@ final class VoiceModelLifecycleController {
     /// 用户在 Settings 里改了 preload 开关 / 第一次成功用了语音时,
     /// 可以再调一次来按当前 prefs 触发 preload。幂等。
     func preloadIfWarranted() {
+        guard !Self.isRunningUnderXCTest else {
+            log.info("preloadIfWarranted: XCTest detected — skip")
+            return
+        }
         guard VoiceLifecyclePrefs.userHasUsedVoice else {
             log.info("preloadIfWarranted: user hasn't used voice yet — skip")
             return
@@ -140,5 +148,9 @@ final class VoiceModelLifecycleController {
     /// Settings 「Is the model in memory?」展示用。actor 隔离需要 await。
     func isLoaded() async -> Bool {
         await SpeechTranscriptionModel.shared.isModelLoaded()
+    }
+
+    private static var isRunningUnderXCTest: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 }

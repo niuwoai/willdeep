@@ -11,10 +11,15 @@
 
 import Testing
 import Foundation
+import AVFoundation
 @testable import WillDeep
 
 @MainActor
 struct VoiceSmokeTests {
+    private static let maxDefaultSmokeDuration: TimeInterval = 45
+    private static let maxDefaultSmokeFileSizeBytes = 80 * 1024 * 1024
+    private static let allowLongAudioEnvironmentKey = "WILLDEEP_VOICE_SMOKE_ALLOW_LONG_AUDIO"
+
     @Test func transcribeM4AIfPresent() async throws {
         // Pick a test file. Order of preference: explicit
         // willdeep-voice-test.{m4a,wav,mp3}, then anything matching
@@ -43,6 +48,10 @@ struct VoiceSmokeTests {
             return
         }
 
+        guard try await shouldRunSmokeTranscription(for: url) else {
+            return
+        }
+
         // Preflight first — surfaces the friendly model-missing message
         // instead of a deep ONNX error.
         do {
@@ -65,5 +74,31 @@ struct VoiceSmokeTests {
         print("[voice-smoke] First 300 chars:\n\(String(transcript.prefix(300)))")
 
         #expect(!transcript.isEmpty, "Transcript was empty — model produced no tokens.")
+    }
+
+    private func shouldRunSmokeTranscription(for url: URL) async throws -> Bool {
+        let env = ProcessInfo.processInfo.environment
+        if env[Self.allowLongAudioEnvironmentKey] == "1" {
+            print("[voice-smoke] Long-audio override enabled via \(Self.allowLongAudioEnvironmentKey)=1.")
+            return true
+        }
+
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        let fileSize = (attributes[.size] as? NSNumber)?.int64Value ?? 0
+        if fileSize > Self.maxDefaultSmokeFileSizeBytes {
+            let fileMB = Double(fileSize) / 1024.0 / 1024.0
+            let limitMB = Double(Self.maxDefaultSmokeFileSizeBytes) / 1024.0 / 1024.0
+            print("[voice-smoke] Skipping \(url.lastPathComponent): file is \(String(format: "%.1f", fileMB)) MB; default smoke limit is \(String(format: "%.0f", limitMB)) MB. Set \(Self.allowLongAudioEnvironmentKey)=1 for manual long-audio dogfood.")
+            return false
+        }
+
+        let asset = AVURLAsset(url: url)
+        let duration = try await asset.load(.duration).seconds
+        if duration.isFinite, duration > Self.maxDefaultSmokeDuration {
+            print("[voice-smoke] Skipping \(url.lastPathComponent): duration is \(String(format: "%.1f", duration))s; default smoke limit is \(String(format: "%.0f", Self.maxDefaultSmokeDuration))s. Set \(Self.allowLongAudioEnvironmentKey)=1 for manual long-audio dogfood.")
+            return false
+        }
+
+        return true
     }
 }

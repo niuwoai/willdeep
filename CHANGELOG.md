@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.105.0-rc2 - 2026-06-23
+
+### Fixed
+- `VoiceSmokeTests` 默认跳过超长或超大 Downloads 音频候选，避免语音烟测误把真实长录音跑成 ASR 压力测试并导致内存暴涨。
+- XCTest 环境下不再安装语音模型生命周期预热器，避免所有测试启动 app 时都预加载约 937MB 的 SenseVoice ONNX 模型。
+
+### Changed
+- 保留手动长音频 dogfood 入口：设置 `WILLDEEP_VOICE_SMOKE_ALLOW_LONG_AUDIO=1` 时可绕过烟测默认资源限制。
+- 版本号从 **1.105.0-rc1** 提升为 **1.105.0-rc2**（语音测试资源护栏）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.105.0-rc1 - 2026-06-23
 
 ### Added
