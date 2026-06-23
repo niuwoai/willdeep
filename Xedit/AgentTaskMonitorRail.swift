@@ -216,9 +216,9 @@ struct AgentTaskMonitorRail: View {
     }
 
     private var learningSummary: (memory: Int, skill: Int, mcp: Int, total: Int) {
-        let events = appState.agentCurrentTurnLearningEvents.isEmpty
-            ? appState.agentLearningEvents
-            : appState.agentCurrentTurnLearningEvents
+        // 只统计「本轮」(>= 最近一条 user message) 的学习事件:历史轮次
+        // 的事件不该让 rail 误以为有新进展、也不该触发任务监控自动展开。
+        let events = appState.agentCurrentTurnLearningEvents
         let memory = events.filter { $0.kind == .memory }.count
         let skill = events.filter { $0.kind == .skill }.count
         let mcp = events.filter { $0.kind == .mcpSuggestion }.count
@@ -237,8 +237,11 @@ struct AgentTaskMonitorSnapshot: Equatable {
     var learningDigest: [String]
 
     var isAgentActivityActive: Bool {
-        isAgentResponding
-            || isCompressingContext
+        // 「思考中」(`isAgentResponding` 但没有任何 tool / 后台任务) 是日
+        // 常状态,不应触发任务监控自动展开。只把有实质动作的状态算
+        // 作 active:正在压缩上下文、有后台任务在跑、或有 tool 在等审
+        // 批 / 等确认 / 等回答 / 正在执行。
+        isCompressingContext
             || runningTaskCount > 0
             || !attentionToolIDs.isEmpty
     }
@@ -294,9 +297,9 @@ struct AgentTaskMonitorSnapshot: Equatable {
     }
 
     private static func learningDigest(from appState: AppState) -> [String] {
-        let events = appState.agentCurrentTurnLearningEvents.isEmpty
-            ? appState.agentLearningEvents
-            : appState.agentCurrentTurnLearningEvents
+        // 同 learningSummary:digest 只反映本轮事件,避免历史轮次写
+        // 进 snapshot 后触发 hasVisibleMonitorContent 自动展开。
+        let events = appState.agentCurrentTurnLearningEvents
         return events.map { event in
             [
                 event.id.uuidString,

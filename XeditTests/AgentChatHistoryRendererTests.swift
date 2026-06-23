@@ -542,8 +542,11 @@ struct AgentChatHistoryRendererTests {
         var found = NSRange(location: NSNotFound, length: 0)
         let fullRange = NSRange(location: 0, length: attributed.length)
         attributed.enumerateAttribute(key, in: fullRange) { value, range, stop in
-            guard let stringValue = value as? String,
-                  stringValue.contains(expectedSubstring) else { return }
+            guard value != nil else { return }
+            let rangeText = (attributed.string as NSString).substring(with: range)
+            let stringValue = value as? String
+            guard stringValue?.contains(expectedSubstring) == true
+                    || rangeText.contains(expectedSubstring) else { return }
             found = range
             stop.pointee = true
         }

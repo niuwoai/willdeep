@@ -77,7 +77,9 @@ struct AgentSidePanelHost: View {
             .foregroundStyle(.secondary)
             .help(L10n.AgentSidePanel.close)
         }
-        .padding(.horizontal, 14)
+        // 右边 padding 比左边大一点,让关闭 X 不至于贴着面板右沿。
+        .padding(.leading, 14)
+        .padding(.trailing, 22)
         .frame(height: AgentDesign.headerHeight)
     }
 

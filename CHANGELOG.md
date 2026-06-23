@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.105.0-rc7 - 2026-06-24
+
+### Fixed
+- Agent mode 进入纯「思考中」状态（没有任何 tool / 后台任务 / 上下文压缩）不再触发右侧任务监控侧栏自动展开；`AgentTaskMonitorSnapshot.isAgentActivityActive` 不再把 `isAgentResponding` 视作活动。
+- 任务监控侧栏右上角 `xmark` 关闭按钮在 `AgentSidePanelHost` 和侧边 `AgentPanelView` 抽屉 header 都补足 trailing padding，按钮不再贴着面板右沿。
+- 任务监控「记忆 / 技能 / MCP」学习卡只统计当前 user 消息（含）之后产生的 `AgentLearningEvent`；不再回退到 24 条跨轮历史，历史轮次的学习也不会再因 `learningDigest` 改写而误把任务监控侧栏自动打开。
+
+### Changed
+- 版本号从 **1.105.0-rc6** 提升为 **1.105.0-rc7**（任务监控触发条件、关闭按钮 padding、学习统计范围）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.105.0-rc6 - 2026-06-23
+
+### Fixed
+- 修复 `AgentChatHistoryRendererTests.rendersPastedTextAttachmentsAsClickableLinks` 的断言辅助函数：文本附件属性值是 `AgentTextAttachment`，测试现在会按带属性的可见文本 range 识别附件文件名，不再误判为不可点击。
+
+### Changed
+- 版本号从 **1.105.0-rc5** 提升为 **1.105.0-rc6**（CI 失败测试辅助函数修复）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.105.0-rc5 - 2026-06-23
 
 ### Fixed

@@ -102,7 +102,8 @@ struct AgentPanelView: View {
             .foregroundStyle(.secondary)
             .help(L10n.AgentSidePanel.close)
         }
-        .padding(.horizontal, 12)
+        .padding(.leading, 12)
+        .padding(.trailing, 20)
         .frame(height: 38)
     }
 
