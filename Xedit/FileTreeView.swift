@@ -21,6 +21,7 @@ struct FileTreeView: View {
     /// A binding to the currently selected file URL (writes into AppState).
     @Binding var selectedURL: URL?
     @Binding var selectedFolderURL: URL?
+    var onOpenFile: ((URL) -> Void)? = nil
 
     private let treeContentLeadingPadding: CGFloat = 10
 
@@ -31,6 +32,7 @@ struct FileTreeView: View {
                     node: root,
                     selectedURL: $selectedURL,
                     selectedFolderURL: $selectedFolderURL,
+                    onOpenFile: onOpenFile,
                     level: 0
                 )
             }
@@ -55,6 +57,7 @@ private struct FileNodeRow: View {
     @ObservedObject var node: FileSystemNode
     @Binding var selectedURL: URL?
     @Binding var selectedFolderURL: URL?
+    let onOpenFile: ((URL) -> Void)?
     let level: Int
 
     var body: some View {
@@ -102,6 +105,7 @@ private struct FileNodeRow: View {
                                 node: child,
                                 selectedURL: $selectedURL,
                                 selectedFolderURL: $selectedFolderURL,
+                                onOpenFile: onOpenFile,
                                 level: level + 1
                             )
                         }
@@ -181,6 +185,7 @@ private struct FileNodeRow: View {
 
         appState.closeImagePreview()
         selectedURL = node.url
+        onOpenFile?(node.url)
     }
 
     private func openFileFromDoubleClick() {
@@ -190,7 +195,15 @@ private struct FileNodeRow: View {
         } else {
             appState.closeImagePreview()
             selectedURL = node.url
+            onOpenFile?(node.url)
         }
+    }
+
+    private func openFileFromContextMenu() {
+        appState.selectedSidebarFileURL = node.url
+        appState.closeImagePreview()
+        selectedURL = node.url
+        onOpenFile?(node.url)
     }
 
     @ViewBuilder
@@ -223,6 +236,10 @@ private struct FileNodeRow: View {
 
     @ViewBuilder
     private var fileContextMenu: some View {
+        Button(L10n.FileTree.openInEditor) {
+            openFileFromContextMenu()
+        }
+        Divider()
         Button("Open in Terminal") {
             appState.openTerminalHere(node.url)
         }

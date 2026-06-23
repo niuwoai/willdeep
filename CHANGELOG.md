@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.105.0-rc5 - 2026-06-23
+
+### Fixed
+- Agent mode 右侧 Files 面板里的文件点击现在会调用 WillDeep 自有编辑器打开逻辑，并把对应 editor window 抬到前台；不再只有 markdown / HTML 走 Preview 才有可见反馈。
+- Files 面板文件右键菜单新增 “Open in Editor”，用于显式把 JSON、TS、Go、配置文件等非预览文件打开到编辑器 tab。
+
+### Changed
+- 版本号从 **1.105.0-rc4** 提升为 **1.105.0-rc5**（Agent Files 编辑器打开修复）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.105.0-rc4 - 2026-06-23
 
 ### Changed

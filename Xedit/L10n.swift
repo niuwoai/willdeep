@@ -602,6 +602,10 @@ enum L10n {
         static let placeholder = String(localized: "quick-open.placeholder", defaultValue: "Quick Open")
     }
 
+    enum FileTree {
+        static let openInEditor = String(localized: "file-tree.open-in-editor", defaultValue: "Open in Editor")
+    }
+
     enum Sidebar {
         static func archivedSessionsHeader(_ a1: String) -> String {
             let template = String(localized: "sidebar.archived-sessions.header", defaultValue: "Archived count")
