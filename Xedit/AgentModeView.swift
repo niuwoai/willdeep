@@ -28,6 +28,12 @@ struct AgentModeView: View {
         HStack(spacing: 0) {
             AgentSessionsSidebar()
                 .frame(width: sidebarWidth)
+                // `.frame(width:)` 是 SwiftUI 的「建议」宽度,父 HStack
+                // 在窗口宽度不够时仍会把它继续压缩。`.fixedSize(...)`
+                // 把宽度锁死为 sidebarWidth(230),收窄窗口只会从 chat
+                // 区域吃掉空间,不会再动 sidebar —— rc12 用户反馈:
+                // 「最左栏还是会被缩小,要不就固定个宽度」。
+                .fixedSize(horizontal: true, vertical: false)
                 .background(
                     skin.sidebarBackground
                         .overlay(skin.palette.hoverFill.opacity(0.35))
@@ -48,6 +54,9 @@ struct AgentModeView: View {
             if sidePanel != nil {
                 Divider()
                 AgentSidePanelHost(kind: $sidePanel, selectedFile: $sidePanelFile)
+                    // 同 sidebar:固定宽度,父 HStack 不要靠压缩侧面板
+                    // 来腾位置。侧面板自己有 `.frame(width: 320)`。
+                    .fixedSize(horizontal: true, vertical: false)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }

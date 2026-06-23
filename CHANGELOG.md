@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.105.0-rc13 - 2026-06-24
+
+### Fixed
+- Agent 窗口收窄时,sessions sidebar 仍然会被压缩 —— rc12 加的 truncation / clipped 只是让溢出不糊到隔壁,没把宽度锁死。SwiftUI 的 `.frame(width:)` 是「建议」,父 HStack 在宽度不够时仍可压子 view。`AgentSessionsSidebar` 加 `.fixedSize(horizontal: true, vertical: false)`,宽度钉死为 `sidebarWidth` (230);`AgentSidePanelHost` 同样加 `.fixedSize(...)`,宽度钉死为 320。窗口收窄只从中间 chat 区域吃空间,左右两栏不再变宽变窄。
+
+### Changed
+- 版本号从 **1.105.0-rc12** 提升为 **1.105.0-rc13**（sidebar / side panel 宽度 fixedSize 锁死）。pbxproj×6 / Go agent / Help Info.plist / README badge / product-overview / docs ×2 同步。
+
 ## 1.105.0-rc12 - 2026-06-24
 
 ### Fixed
