@@ -277,13 +277,21 @@ enum AgentChatHistoryRenderer {
             let messageBubbleStart = result.length
             var hasMessageBubbleContent = false
             let useMono = (message.role == .tool)
+            // User 消息如果是 composeAttachedPrompt 拼出来的 prelude(skill /
+            // 文件 / workspace 注入),只在 UI 渲染时折叠成短 tag。原始
+            // content 仍然完整保存在 message.content 里发给模型。
+            let displaySourceContent: String = {
+                guard message.role == .user else { return message.content }
+                let display = AgentAttachedPromptDisplay.transform(message.content)
+                return display.isSplicedPrelude ? display.visibleContent : message.content
+            }()
             let body: String
             if useMono, message.content.count > toolBodyLimit {
                 let head = String(message.content.prefix(toolBodyLimit))
                 let omitted = message.content.count - toolBodyLimit
                 body = head + "\n\n…[truncated \(omitted) characters from this tool output — open the message reader for the full body]"
             } else {
-                body = message.content
+                body = displaySourceContent
             }
 
             if message.role == .user, !message.textAttachments.isEmpty {

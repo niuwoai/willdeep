@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.105.0-rc8 - 2026-06-24
+
+### Fixed
+- Composer 顶部的上下文百分比圆环之前一直走原始 `agentMessages`,没用 `modelFacingHistory`,导致按下 Compress 之后摘要确实生效但 UI 还是 100%、看上去「压不下去」。`estimatedAgentRequestMessages` 现在也会先用 `modelFacingHistory` 把已有 `contextSummary` 折叠掉,再做 token 估算。
+- 手动连续按 Compress 时,如果当前会话已经有一份 `contextSummary`,新一次压缩自动把 `keepRecent` 收紧到 `2`,并把上一轮摘要随 head 一起塞给压缩 LLM(标记 `EARLIER SUMMARY` 让新摘要把它折进去),避免反复 round-trip 但摘要内容不更进。
+- Transcript 里由 `composeAttachedPrompt` 拼出来的 skill / 文件 / workspace prelude(`The user attached the following context for this turn — treat it as task setup...`)在 UI 渲染时折叠成 `[已附加技能: …]` 这样的短 tag + 用户原文。压缩后看到的第一条用户消息不再是一大段 SKILL.md。新增 `AgentAttachedPromptDisplay`,在 TextKit 渲染、Agent mode SwiftUI 气泡和侧边 panel 卡片三处统一使用;发送到模型的 prompt 内容完全不变。
+
+### Changed
+- 版本号从 **1.105.0-rc7** 提升为 **1.105.0-rc8**（上下文压缩百分比与可视化、skill prelude UI 折叠）。pbxproj×6 / Go agent / Help Info.plist / README badge / product-overview / docs ×2 同步。
+
 ## 1.105.0-rc7 - 2026-06-24
 
 ### Fixed
