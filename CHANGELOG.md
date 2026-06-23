@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.105.0-rc9 - 2026-06-24
+
+### Fixed
+- `AgentPatchError` 的六条错误描述本地化:`emptyDiff` / `unsupportedDiff` / `noWorkspace` / `pathOutsideWorkspace` / `missingFile` / `hunkDidNotMatch` 全部走 `L10n.AgentPatchError`,Localizable.xcstrings 补齐 zh-Hans。截图里 patch proposal 卡片上「Open a project folder before applying an agent patch.」之类的英文硬编码不会再漏出来。
+- Agent transcript 里的文件 chip 在不同皮肤下既不够 padding 又方块感太强(rc8 用户反馈)。改成「link 色轻底色 (8%) + 链接下划线 (42%) + 0.3pt kern」的链接观感,背景跟随 `webLinkColor(base:)` 已经在做的 link-blend 计算,深浅色和当前皮肤都更贴,不再是固定的 `controlBackgroundColor` 矩形。
+- 点击文件 chip 之前只调 `openEditorFile` + 切焦点到 editor 窗口,Agent mode 下 editor 没开就毫无反应。新增 `AgentSidePanelOpenRequest` + `AppState.revealAgentReferencedFileInSidePanel(_:)`,AgentModeView 监听 request 并把右侧侧栏拉起来:md/markdown/html → Preview,在 worktree 里有改动的文件 → Diff,其它 → Files;原 `openAgentReferencedFile` 走 editor 的路径保留,给非 Agent mode 入口用。
+
+### Changed
+- 版本号从 **1.105.0-rc8** 提升为 **1.105.0-rc9**（patch 错误本地化、文件 chip 样式与点击行为）。pbxproj×6 / Go agent / Help Info.plist / README badge / product-overview / docs ×2 同步。
+
 ## 1.105.0-rc8 - 2026-06-24
 
 ### Fixed

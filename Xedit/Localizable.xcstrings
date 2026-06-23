@@ -662,6 +662,108 @@
         }
       }
     },
+    "agent-patch-error.empty-diff" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The diff is empty."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "diff 内容为空。"
+          }
+        }
+      }
+    },
+    "agent-patch-error.hunk-did-not-match" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A patch hunk did not match the current file content: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "patch 的某段与当前文件内容不匹配：%@"
+          }
+        }
+      }
+    },
+    "agent-patch-error.missing-file" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The patch target file does not exist: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "patch 要修改的文件不存在：%@"
+          }
+        }
+      }
+    },
+    "agent-patch-error.no-workspace" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open a project folder before applying an agent patch."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先打开一个项目文件夹再 Apply patch。"
+          }
+        }
+      }
+    },
+    "agent-patch-error.path-outside-workspace" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The patch path is outside the workspace: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "patch 路径超出当前工作目录：%@"
+          }
+        }
+      }
+    },
+    "agent-patch-error.unsupported-diff" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The diff format is not supported yet. Use a unified diff for existing files."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂不支持这种 diff 格式，请使用现有文件的 unified diff。"
+          }
+        }
+      }
+    },
     "agent-side-panel.preview" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
