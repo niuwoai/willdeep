@@ -43,6 +43,8 @@ final class AgentRuntime: ObservableObject, Identifiable {
     // MARK: - Conversation state
 
     @Published var messages: [AgentMessage] = []
+    @Published var contextSummary: String?
+    @Published var contextSummaryThroughMessageID: AgentMessage.ID?
     @Published var patchProposals: [AgentPatchProposal] = []
     @Published var toolCalls: [AgentToolCall] = []
 
@@ -132,6 +134,8 @@ final class AgentRuntime: ObservableObject, Identifiable {
 
         // Seed live state from persisted session.
         self.messages = session.messages
+        self.contextSummary = session.contextSummary
+        self.contextSummaryThroughMessageID = session.contextSummaryThroughMessageID
         self.didEditFiles = session.didEditFiles
         self.agentEditedPaths = Set(session.agentEditedPaths)
         self.interactionMode = session.interactionMode
@@ -169,6 +173,8 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// fields `AgentSession` cares about.
     func persist() {
         session.messages = messages
+        session.contextSummary = contextSummary
+        session.contextSummaryThroughMessageID = contextSummaryThroughMessageID
         session.workspaceRootPath = workspaceRootPath
         session.workspaceLocation = workspaceLocation
         session.didEditFiles = didEditFiles

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.103.0-rc14 - 2026-06-23
+
+### Fixed
+- Agent context compression 不再替换本地 transcript：压缩摘要持久化到 `AgentSession.contextSummary`，下一次请求只对 model-facing history 使用“摘要 + 新消息尾部”，UI 和 session `messages` 仍保留完整历史。
+- Composer 图片粘贴补上 `NSImage`/UTType image pasteboard fallback：系统截图等没有文件 URL 的图片也会被读取为 PNG 附件，并保持 `pasteboardHasImage` 与实际读取能力一致。
+- 版本号从 **1.103.0-rc13** 提升为 **1.103.0-rc14**（上下文压缩保留本地历史 + 截图粘贴修复）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×4 同步。
+
 ## 1.103.0-rc13 - 2026-06-23
 
 ### Fixed

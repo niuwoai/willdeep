@@ -33,6 +33,8 @@ struct AgentSessionPersistenceTests {
         #expect(session.currentPlan == nil)
         #expect(session.currentGoal == nil)
         #expect(session.latestTurnRecall == nil)
+        #expect(session.contextSummary == nil)
+        #expect(session.contextSummaryThroughMessageID == nil)
         #expect(session.didEditFiles == false)
         #expect(session.workspaceRootPath == nil)
     }
@@ -61,7 +63,9 @@ struct AgentSessionPersistenceTests {
             title: "Persistence work",
             workspaceRootPath: "/Users/test/proj",
             modelID: "gpt-4.6",
-            messages: [],
+            messages: [AgentMessage(role: .user, content: "keep the visible transcript")],
+            contextSummary: "summary used only for model context",
+            contextSummaryThroughMessageID: UUID(uuidString: "44444444-4444-4444-4444-444444444444"),
             didEditFiles: true,
             interactionMode: .plan,
             currentPlan: plan,
@@ -93,6 +97,9 @@ struct AgentSessionPersistenceTests {
         #expect(decoded.currentGoal?.checklist.count == 2)
         #expect(decoded.currentGoal?.checklist.first?.done == true)
         #expect(decoded.currentGoal?.checklist.last?.done == false)
+        #expect(decoded.messages.first?.content == "keep the visible transcript")
+        #expect(decoded.contextSummary == "summary used only for model context")
+        #expect(decoded.contextSummaryThroughMessageID == UUID(uuidString: "44444444-4444-4444-4444-444444444444"))
         #expect(decoded.latestTurnRecall?.items.count == 1)
         #expect(decoded.latestTurnRecall?.items.first?.kind == .memory)
         #expect(decoded.didEditFiles == true)

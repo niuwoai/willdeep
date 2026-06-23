@@ -28,6 +28,14 @@ struct AgentSession: Identifiable, Codable, Equatable {
     let createdAt: Date
     var updatedAt: Date
     var messages: [AgentMessage]
+    /// Model-facing summary of older messages. This is intentionally
+    /// separate from `messages`: context compression must shrink only the
+    /// next provider request, never the user's local transcript.
+    var contextSummary: String?
+    /// The latest local message included in `contextSummary`. Requests send
+    /// the summary plus messages after this id; the UI still renders every
+    /// original message from `messages`.
+    var contextSummaryThroughMessageID: AgentMessage.ID?
     /// True once the Agent has successfully applied at least one patch in
     /// this session. Drives whether the "正在编辑 / N 个文件已更改" worktree
     /// card appears — empty/new sessions never show it, even when the
@@ -94,6 +102,8 @@ struct AgentSession: Identifiable, Codable, Equatable {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         messages: [AgentMessage] = [],
+        contextSummary: String? = nil,
+        contextSummaryThroughMessageID: AgentMessage.ID? = nil,
         didEditFiles: Bool = false,
         agentEditedPaths: [String] = [],
         interactionMode: AgentInteractionMode = .normal,
@@ -117,6 +127,8 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.messages = messages
+        self.contextSummary = contextSummary
+        self.contextSummaryThroughMessageID = contextSummaryThroughMessageID
         self.didEditFiles = didEditFiles
         self.agentEditedPaths = agentEditedPaths
         self.interactionMode = interactionMode
@@ -185,7 +197,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case id, title, workspaceRootPath, workspaceLocation, modelID
         case providerID, providerDisplayName
-        case createdAt, updatedAt, messages
+        case createdAt, updatedAt, messages, contextSummary, contextSummaryThroughMessageID
         case didEditFiles, agentEditedPaths, interactionMode, approvalMode, executionAgent, currentPlan, currentGoal, learningEvents, latestTurnRecall
         case pinnedAt, archivedAt, titleIsUserSet
     }
@@ -203,6 +215,8 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.createdAt = try c.decode(Date.self, forKey: .createdAt)
         self.updatedAt = try c.decode(Date.self, forKey: .updatedAt)
         self.messages = try c.decode([AgentMessage].self, forKey: .messages)
+        self.contextSummary = try c.decodeIfPresent(String.self, forKey: .contextSummary)
+        self.contextSummaryThroughMessageID = try c.decodeIfPresent(AgentMessage.ID.self, forKey: .contextSummaryThroughMessageID)
         self.didEditFiles = try c.decodeIfPresent(Bool.self, forKey: .didEditFiles) ?? false
         self.agentEditedPaths = try c.decodeIfPresent([String].self, forKey: .agentEditedPaths) ?? []
         self.interactionMode = try c.decodeIfPresent(AgentInteractionMode.self, forKey: .interactionMode) ?? .normal

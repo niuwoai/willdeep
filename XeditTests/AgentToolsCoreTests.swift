@@ -120,6 +120,25 @@ struct AgentToolsCoreTests {
     }
 
     @Test
+    func agentImagePasteboardHelperReadsNSImageScreenshots() throws {
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("willdeep-image-paste-\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        let image = NSImage(size: NSSize(width: 12, height: 8))
+        image.lockFocus()
+        NSColor.systemBlue.setFill()
+        NSRect(x: 0, y: 0, width: 12, height: 8).fill()
+        image.unlockFocus()
+
+        #expect(pasteboard.writeObjects([image]) == true)
+        #expect(AgentImagePasteboardHelper.pasteboardHasImage(pasteboard) == true)
+
+        let images = AgentImagePasteboardHelper.readImages(from: pasteboard)
+        let first = try #require(images.first)
+        #expect(first.mimeType == "image/png")
+        #expect(NSImage(data: first.data) != nil)
+    }
+
+    @Test
     func runCommandClosesStandardInputForHeadlessCLIs() async throws {
         let result = try await AgentToolRunner.run(
             name: "run_command",

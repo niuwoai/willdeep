@@ -222,6 +222,33 @@ struct WillDeepTests {
         appState.isAgentResponding = false
     }
 
+    @Test("context compression summary only affects model-facing history")
+    func testContextSummaryPreservesLocalTranscript() {
+        let oldUser = AgentMessage(role: .user, content: "old user turn")
+        let oldAssistant = AgentMessage(role: .assistant, content: "old assistant answer")
+        let recentUser = AgentMessage(role: .user, content: "recent user turn")
+        let recentAssistant = AgentMessage(role: .assistant, content: "recent assistant answer")
+        let localMessages = [oldUser, oldAssistant, recentUser, recentAssistant]
+
+        let modelHistory = AppState.modelFacingHistory(
+            messages: localMessages,
+            contextSummary: "summary of older turns",
+            contextSummaryThroughMessageID: oldAssistant.id
+        )
+
+        #expect(localMessages.map(\.content) == [
+            "old user turn",
+            "old assistant answer",
+            "recent user turn",
+            "recent assistant answer",
+        ])
+        #expect(modelHistory.count == 3)
+        #expect(modelHistory.first?.role == .system)
+        #expect(modelHistory.first?.content.contains("summary of older turns") == true)
+        #expect(modelHistory.dropFirst().map(\.id) == [recentUser.id, recentAssistant.id])
+        #expect(modelHistory.contains(where: { $0.content == "old user turn" }) == false)
+    }
+
     @Test("ask_user tool is registered with userInput risk and a question parameter")
     func testAskUserToolRegistration() {
         let descriptor = AgentToolRegistry.descriptor(for: "ask_user")
