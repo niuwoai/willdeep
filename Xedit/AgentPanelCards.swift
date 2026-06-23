@@ -239,6 +239,10 @@ struct AgentMessageBubble: View {
             }
             return "…"
         }
+        if message.role == .user {
+            let display = AgentAttachedPromptDisplay.transform(message.content)
+            if display.isSplicedPrelude { return display.visibleContent }
+        }
         return message.content
     }
 

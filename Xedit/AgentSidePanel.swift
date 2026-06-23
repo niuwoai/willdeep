@@ -10,6 +10,23 @@
 
 import SwiftUI
 
+/// One-shot intent from elsewhere in the UI (e.g. an inline file chip
+/// click) to open a specific side panel and optionally point it at a
+/// file. Carries a fresh `id` per request so observers can tell two
+/// "show files for /foo.swift" calls apart even when the destination
+/// happens to match.
+struct AgentSidePanelOpenRequest: Equatable, Identifiable {
+    let id: UUID
+    let kind: AgentSidePanelKind
+    let file: URL?
+
+    init(kind: AgentSidePanelKind, file: URL? = nil, id: UUID = UUID()) {
+        self.kind = kind
+        self.file = file
+        self.id = id
+    }
+}
+
 enum AgentSidePanelKind: String, CaseIterable, Identifiable {
     case preview
     case diff

@@ -103,7 +103,13 @@ struct AgentModeMessageView: View {
         // bullets — see screenshot. Split it back out at render time: the
         // user's own prose stays inline, the description collapses into a
         // disclosure chip.
-        let split = AgentUserContentSplitter.split(message.content)
+        // 把 composeAttachedPrompt 的 skill / 文件 / workspace 块在 UI
+        // 上折叠成短 tag,只让 image-description splitter 看到用户原文。
+        let preludeDisplay = AgentAttachedPromptDisplay.transform(message.content)
+        let displaySource = preludeDisplay.isSplicedPrelude
+            ? preludeDisplay.visibleContent
+            : message.content
+        let split = AgentUserContentSplitter.split(displaySource)
         // rc13: collapsed the previous HStack { Spacer; VStack { VStack
         // {...}.frame(maxWidth:); footer } }.frame(maxWidth:) chain.
         // Two nested .frame(maxWidth:) plus an HStack Spacer is a

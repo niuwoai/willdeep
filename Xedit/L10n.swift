@@ -385,6 +385,24 @@ enum L10n {
         static let noWorkspace = String(localized: "workspace.no-workspace", defaultValue: "No workspace")
     }
 
+    enum AgentPatchError {
+        static let emptyDiff = String(localized: "agent-patch-error.empty-diff", defaultValue: "The diff is empty.")
+        static let unsupportedDiff = String(localized: "agent-patch-error.unsupported-diff", defaultValue: "The diff format is not supported yet. Use a unified diff for existing files.")
+        static let noWorkspace = String(localized: "agent-patch-error.no-workspace", defaultValue: "Open a project folder before applying an agent patch.")
+        static func pathOutsideWorkspace(_ a1: String) -> String {
+            let template = String(localized: "agent-patch-error.path-outside-workspace", defaultValue: "The patch path is outside the workspace: %@")
+            return String(format: template, a1)
+        }
+        static func missingFile(_ a1: String) -> String {
+            let template = String(localized: "agent-patch-error.missing-file", defaultValue: "The patch target file does not exist: %@")
+            return String(format: template, a1)
+        }
+        static func hunkDidNotMatch(_ a1: String) -> String {
+            let template = String(localized: "agent-patch-error.hunk-did-not-match", defaultValue: "A patch hunk did not match the current file content: %@")
+            return String(format: template, a1)
+        }
+    }
+
     enum AgentSidePanel {
         static let preview = String(localized: "agent-side-panel.preview", defaultValue: "Preview")
         static let diff = String(localized: "agent-side-panel.diff", defaultValue: "Diff")

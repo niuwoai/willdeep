@@ -1116,17 +1116,17 @@ enum AgentPatchError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .emptyDiff:
-            return "The diff is empty."
+            return L10n.AgentPatchError.emptyDiff
         case .unsupportedDiff:
-            return "The diff format is not supported yet. Use a unified diff for existing files."
+            return L10n.AgentPatchError.unsupportedDiff
         case .noWorkspace:
-            return "Open a project folder before applying an agent patch."
+            return L10n.AgentPatchError.noWorkspace
         case .pathOutsideWorkspace(let path):
-            return "The patch path is outside the workspace: \(path)"
+            return L10n.AgentPatchError.pathOutsideWorkspace(path)
         case .missingFile(let path):
-            return "The patch target file does not exist: \(path)"
+            return L10n.AgentPatchError.missingFile(path)
         case .hunkDidNotMatch(let path):
-            return "A patch hunk did not match the current file content: \(path)"
+            return L10n.AgentPatchError.hunkDidNotMatch(path)
         }
     }
 }

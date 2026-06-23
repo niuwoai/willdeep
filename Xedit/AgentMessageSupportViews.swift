@@ -99,6 +99,94 @@ struct AgentStreamingCursor: View {
     }
 }
 
+// MARK: - Attached prompt prelude
+
+/// `composeAttachedPrompt` glues skill / file / workspace bodies in front
+/// of the user's actual text so the model treats them as task setup. The
+/// bubble UI should NOT show that full prelude as if the user typed it —
+/// after context compression dropped the original turn, the bubble would
+/// otherwise read like a giant SKILL.md dump (the rc7 bug report).
+///
+/// This helper turns the spliced prompt back into something human-shaped:
+/// a one-line "📎 attached: ..." tag plus the user's prose.
+enum AgentAttachedPromptDisplay {
+    /// Header emitted by `AppState.composeAttachedPrompt`. Keep in sync.
+    static let preludeHeader = "The user attached the following context for this turn — treat it as task setup, not verbatim user text:"
+
+    struct Display {
+        /// `true` when the content was actually a spliced prelude and we
+        /// rewrote it into a compact form. False when this is plain text.
+        let isSplicedPrelude: Bool
+        /// What the bubble / TextKit body should render. Always non-empty
+        /// when `isSplicedPrelude` is true (falls back to a tag-only line
+        /// when the user typed nothing alongside the attachments).
+        let visibleContent: String
+        /// Skill identifiers extracted from the prelude, useful as chips
+        /// or tooltips when callers want more than a one-liner.
+        let skills: [String]
+        /// File paths extracted from the prelude.
+        let files: [String]
+        /// True when the prelude carried the workspace overview block.
+        let hasWorkspace: Bool
+    }
+
+    static func transform(_ content: String) -> Display {
+        guard content.hasPrefix(preludeHeader) else {
+            return Display(isSplicedPrelude: false, visibleContent: content, skills: [], files: [], hasWorkspace: false)
+        }
+
+        var skills: [String] = []
+        var files: [String] = []
+        var hasWorkspace = false
+        let lines = content.components(separatedBy: "\n")
+        for line in lines {
+            if line.hasPrefix("### Skill: ") {
+                skills.append(String(line.dropFirst("### Skill: ".count)).trimmingCharacters(in: .whitespaces))
+            } else if line.hasPrefix("### File: ") {
+                files.append(String(line.dropFirst("### File: ".count)).trimmingCharacters(in: .whitespaces))
+            } else if line.hasPrefix("### Workspace") {
+                hasWorkspace = true
+            }
+        }
+
+        // 真正的用户文字位于最后一段 "---" 之后(composeAttachedPrompt
+        // 在加 userText 时总会先 append 一行 "---")。没有这行就说明
+        // 用户只挂了 skill/file 但没自己打字,这时只显示 tag。
+        var userText = ""
+        if let separatorIndex = lines.lastIndex(of: "---") {
+            userText = lines[(separatorIndex + 1)...]
+                .joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        let tag = attachmentTag(skills: skills, files: files, hasWorkspace: hasWorkspace)
+        let visible: String
+        if userText.isEmpty {
+            visible = tag.isEmpty ? content : tag
+        } else if tag.isEmpty {
+            visible = userText
+        } else {
+            visible = "\(tag)\n\(userText)"
+        }
+        return Display(
+            isSplicedPrelude: true,
+            visibleContent: visible,
+            skills: skills,
+            files: files,
+            hasWorkspace: hasWorkspace
+        )
+    }
+
+    private static func attachmentTag(skills: [String], files: [String], hasWorkspace: Bool) -> String {
+        var parts: [String] = []
+        if !skills.isEmpty { parts.append("已附加技能: \(skills.joined(separator: ", "))") }
+        if !files.isEmpty { parts.append("已附加文件: \(files.joined(separator: ", "))") }
+        if hasWorkspace { parts.append("已附加 workspace 概览") }
+        guard !parts.isEmpty else { return "" }
+        return "[\(parts.joined(separator: " · "))]"
+    }
+}
+
 // MARK: - User content splitter
 
 /// Pulls the spliced-in image description block out of a user message so

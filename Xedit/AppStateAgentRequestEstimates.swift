@@ -102,7 +102,16 @@ extension AppState {
         if let memoryContext = AgentMemoryEngine.contextBlock(for: memoryResults) {
             systemPrompt += "\n\n\(memoryContext)"
         }
-        let collapsedHistory = Self.collapseOldToolResults(in: agentMessages)
+        // 估算口径必须与发往模型的 history 对齐:已经存在的 context
+        // summary 在请求阶段会把旧消息折叠成一段 system 摘要,本地
+        // estimator 也得用同一个 modelFacingHistory,不然「Compress」
+        // 跑完后 ring 还是 100%,用户会以为压缩没生效。
+        let modelFacing = Self.modelFacingHistory(
+            messages: agentMessages,
+            contextSummary: activeRuntime?.contextSummary,
+            contextSummaryThroughMessageID: activeRuntime?.contextSummaryThroughMessageID
+        )
+        let collapsedHistory = Self.collapseOldToolResults(in: modelFacing)
         return AgentClient.providerReadyMessages([
             AgentMessage(role: .system, content: systemPrompt)
         ] + collapsedHistory, supportsImages: agentConfiguration.normalized.supportsImageInput)

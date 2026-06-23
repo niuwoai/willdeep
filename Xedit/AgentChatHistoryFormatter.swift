@@ -277,13 +277,21 @@ enum AgentChatHistoryRenderer {
             let messageBubbleStart = result.length
             var hasMessageBubbleContent = false
             let useMono = (message.role == .tool)
+            // User 消息如果是 composeAttachedPrompt 拼出来的 prelude(skill /
+            // 文件 / workspace 注入),只在 UI 渲染时折叠成短 tag。原始
+            // content 仍然完整保存在 message.content 里发给模型。
+            let displaySourceContent: String = {
+                guard message.role == .user else { return message.content }
+                let display = AgentAttachedPromptDisplay.transform(message.content)
+                return display.isSplicedPrelude ? display.visibleContent : message.content
+            }()
             let body: String
             if useMono, message.content.count > toolBodyLimit {
                 let head = String(message.content.prefix(toolBodyLimit))
                 let omitted = message.content.count - toolBodyLimit
                 body = head + "\n\n…[truncated \(omitted) characters from this tool output — open the message reader for the full body]"
             } else {
-                body = message.content
+                body = displaySourceContent
             }
 
             if message.role == .user, !message.textAttachments.isEmpty {
@@ -889,14 +897,25 @@ enum AgentChatHistoryRenderer {
             return
         }
         let string = attributed.string as NSString
+        let linkColor = Self.webLinkColor(base: color)
         regex.enumerateMatches(in: attributed.string, range: fullRange) { match, _, _ in
             guard let range = match?.range, range.length > 0 else { return }
             if attributed.attribute(.link, at: range.location, effectiveRange: nil) != nil { return }
             let rawPath = string.substring(with: range)
+            // 之前用 `.backgroundColor` 画了一个 controlBackgroundColor 矩
+            // 形,在不同皮肤下都不贴(rc8 用户反馈:padding / 圆角 /
+            // 配色全不对)。TextKit 的 `.backgroundColor` 是平直矩形,
+            // 没法加 padding 或圆角,加大色块只会更别扭。改用「轻底
+            // 色 + 下划线 + 适度 kern」的链接观感:背景用 link 色 ×8%
+            // 跟随当前皮肤+深浅色,下划线是真正的「这是可点的文件」
+            // 信号,kern 把 mono 字符稍微撑开避免挤成一坨。
             attributed.addAttributes([
                 .font: NSFont.monospacedSystemFont(ofSize: baseFont.pointSize, weight: .regular),
-                .foregroundColor: Self.webLinkColor(base: color),
-                .backgroundColor: NSColor.controlBackgroundColor.withAlphaComponent(0.78),
+                .foregroundColor: linkColor,
+                .backgroundColor: linkColor.withAlphaComponent(0.08),
+                .underlineColor: linkColor.withAlphaComponent(0.42),
+                .underlineStyle: NSUnderlineStyle.single.rawValue,
+                .kern: NSNumber(value: 0.3),
                 .link: AgentChatHistoryFilePathLink.value,
                 .agentChatHistoryFilePath: rawPath,
             ], range: range)

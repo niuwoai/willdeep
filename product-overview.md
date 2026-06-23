@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-24 | Current version: v1.105.0-rc7
+> Last updated: 2026-06-24 | Current version: v1.105.0-rc9
 
 ## Positioning
 
@@ -54,6 +54,8 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **Agent Files 编辑器打开（1.105.0-rc5）** —— Agent mode 右侧 Files 面板里的非 markdown/html 文件现在也能通过点击或右键菜单打开到 WillDeep 自有编辑器窗口；markdown/html 仍会同步给 Preview 面板。
 - **Agent 文本附件测试稳定性（1.105.0-rc6）** —— 修正文本附件可点击断言的测试辅助逻辑，避免把 `AgentTextAttachment` payload 误当成 String 属性值导致 CI 误报。
 - **任务监控触发与关闭按钮修复（1.105.0-rc7）** —— Agent mode 进入纯思考状态（无工具、无后台任务、无上下文压缩）不再触发任务监控侧栏自动展开；任务监控侧栏的 `xmark` 关闭按钮在 Agent mode 与侧边 Agent panel 两处都补足 trailing padding，不再贴着右沿；学习卡（记忆 / 技能 / MCP）只统计「本轮 user 消息之后」的事件，历史轮次的学习不再误把侧栏打开；CI 文件加载测试改为验证同步读写与 apply 结果，减少 macOS runner 调度抖动误报。
+- **上下文压缩可见性与 skill prelude 折叠（1.105.0-rc8）** —— Composer 圆环百分比改用 `modelFacingHistory` 估算，已经存在的 context 摘要会被算进去，Compress 按下后百分比真的会降下来；用户手动连续 Compress 时，若已有摘要则把 `keepRecent` 收紧到 2 并把上一轮摘要折进新摘要，再压缩有效；transcript 中由 `composeAttachedPrompt` 拼出来的 skill / 文件 / workspace prelude 在 UI 渲染时折叠成 `[已附加技能: …]` 短 tag + 用户原文，发送到模型的 prompt 不变。
+- **Patch 错误本地化与文件 chip 体验（1.105.0-rc9）** —— `AgentPatchError` 全部走 `L10n.AgentPatchError`，「Open a project folder before applying an agent patch.」等错误现在按系统语言出中英文。Transcript 里的文件 chip 改成「轻底色 + 下划线 + kern」的链接观感，背景跟随 link 色而非固定 controlBackgroundColor 矩形，深浅色和皮肤都更贴；点击 chip 不再只是默默 focus 不存在的 editor 窗口，而是按文件类型把 Agent mode 右侧侧栏拉起 —— md/html 走 Preview，已有 worktree 改动的文件走 Diff，其它走 Files。
 - **Composer 模型热门/上新分组（1.102.0-rc7）** —— Agent composer 模型菜单消费 some.im `/v1/models` / 公开模型定价里的 `is_hot`、`is_new` 标记,在 Recently used 后展示 Hot / New 分组,并与 Recently fetched 去重。
 - **CLI 缺失文件新建（1.102.0-rc2）** —— `willdeep <path>` 现在通过 `willdeep://open?path=...` 把路径交给 App 处理,不存在但父目录存在的文件会自动创建空文件并打开,避免 macOS `open` 在 App 启动前直接报 "does not exist"。
 - **some.im 多模态整合（1.102.0-rc1）** —— Settings 与 Onboarding 新增 some.im 配置入口,API Key 存 Keychain,可拉取模型并设置图片/视频生成首选与优先模型；内置 `generate_image` 工具在 some.im 配置后直接调用 relay 图片生成接口,默认 `gpt-image-2`,并且 OpenAI Chat 兼容请求会过滤 `.widget` / `.workflowReport` 本地卡片,避免 UI-only role 泄漏给 some.im。

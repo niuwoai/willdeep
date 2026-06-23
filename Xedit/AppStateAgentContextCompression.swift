@@ -28,12 +28,22 @@ extension AppState {
 
     func compressAgentContext(for runtime: AgentRuntime, keepRecent: Int = 4) {
         guard !runtime.isCompressingContext, !runtime.isResponding else { return }
-        guard runtime.messages.count > keepRecent else { return }
+        guard runtime.messages.count > 1 else { return }
+
+        // 第二次手动按 Compress 时,往往是因为上次 keepRecent=4 留下
+        // 的尾部里有 skill prelude / 长 tool result 等大块内容,光靠
+        // 头部摘要看不出来效果。再压时把尾部缩到 2,并把已有摘要
+        // 一起折进新 head,这样可压面就最大化。
+        let hasPriorSummary = (runtime.contextSummary?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+            && runtime.contextSummaryThroughMessageID != nil
+        let effectiveKeepRecent = hasPriorSummary ? min(2, keepRecent) : keepRecent
+        guard runtime.messages.count > effectiveKeepRecent else { return }
 
         runtime.isCompressingContext = true
         let configuration = configurationForContextCompression()
-        let head = Array(runtime.messages.prefix(runtime.messages.count - keepRecent))
-        let tail = Array(runtime.messages.suffix(keepRecent))
+        let head = Array(runtime.messages.prefix(runtime.messages.count - effectiveKeepRecent))
+        let tail = Array(runtime.messages.suffix(effectiveKeepRecent))
+        let priorSummary = hasPriorSummary ? runtime.contextSummary : nil
 
         Task { [weak self, weak runtime] in
             guard let self, let runtime else { return }
@@ -41,6 +51,7 @@ extension AppState {
                 for: runtime,
                 head: head,
                 tail: tail,
+                priorSummary: priorSummary,
                 configuration: configuration
             )
         }
@@ -90,6 +101,7 @@ extension AppState {
         for runtime: AgentRuntime,
         head: [AgentMessage],
         tail: [AgentMessage],
+        priorSummary: String? = nil,
         configuration: AgentConfiguration
     ) async {
         defer {
@@ -101,7 +113,7 @@ extension AppState {
             consumeNextQueuedMessageIfNeeded(for: runtime)
         }
 
-        let transcript = head
+        let transcriptBody = head
             .filter { $0.role != .system }
             .map { message -> String in
                 let label: String
@@ -116,6 +128,20 @@ extension AppState {
                 return "\(label):\n\(message.content)"
             }
             .joined(separator: "\n\n---\n\n")
+        let transcript: String = {
+            guard let prior = priorSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !prior.isEmpty else {
+                return transcriptBody
+            }
+            return """
+            EARLIER SUMMARY (from prior compression — fold into the new summary, don't drop):
+            \(prior)
+
+            ---
+
+            \(transcriptBody)
+            """
+        }()
 
         let system = AgentMessage(
             role: .system,

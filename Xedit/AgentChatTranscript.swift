@@ -106,7 +106,12 @@ struct AgentChatTranscript: View {
                                 latestTurnReportToolCount: appState.agentLatestTurnReport?.toolSummary.total,
                                 onShowTurnReport: { showTurnReportPopover = true },
                                 onOpenFilePath: { rawPath in
-                                    appState.openAgentReferencedFile(rawPath)
+                                    // Agent mode 里点击 transcript 中
+                                    // 的文件 chip,优先把右侧侧栏拉起
+                                    // 来给反馈(Preview / Diff / Files
+                                    // 三选一);editor 窗口未开时 chip
+                                    // 不再「点了没反应」。
+                                    appState.revealAgentReferencedFileInSidePanel(rawPath)
                                 }
                             )
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)

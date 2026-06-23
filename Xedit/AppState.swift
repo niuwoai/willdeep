@@ -109,6 +109,12 @@ final class AppState: ObservableObject {
     /// rotates between.
     @Published var agentRecentlyUsedModelIDs: [String] = []
     @Published var agentWorktreeDiffPreview: AgentWorktreeDiffPreview?
+    /// One-shot request from chat-pane affordances (file chips, citations,
+    /// future commands) to open a specific kind of side panel in Agent
+    /// mode and optionally focus a file. AgentModeView listens, applies
+    /// the request, then clears it. Side-panel state itself lives in
+    /// AgentModeView's @State.
+    @Published var agentSidePanelRequest: AgentSidePanelOpenRequest?
     /// Command families the user has explicitly allowed Agent mode to run
     /// without prompting again, e.g. `git push`.
     @Published var agentAlwaysAllowedCommands: [AgentAlwaysAllowedCommand] = []
@@ -645,6 +651,48 @@ final class AppState: ObservableObject {
     }
 
     func openAgentReferencedFile(_ rawPath: String) {
+        guard let url = resolveAgentReferencedFileURL(rawPath) else { return }
+        openEditorFile(url)
+        registerRecentFile(url)
+        EditorAppStateRegistry.shared.focusCurrentEditorWindow()
+    }
+
+    /// Click target for inline file chips in the Agent transcript. We're
+    /// always in Agent mode here (chip lives in `AgentChatTranscript`),
+    /// so a silent `openEditorFile` (which only focuses an already-open
+    /// editor window) leaves the user staring at an unchanged chat pane.
+    /// Route to the Agent side panel instead — Preview for markdown /
+    /// HTML, Diff when the file has worktree changes, otherwise Files.
+    /// AgentModeView consumes `agentSidePanelRequest` and applies it.
+    func revealAgentReferencedFileInSidePanel(_ rawPath: String) {
+        guard let url = resolveAgentReferencedFileURL(rawPath) else { return }
+        registerRecentFile(url)
+        let kind: AgentSidePanelKind = {
+            let ext = url.pathExtension.lowercased()
+            if ext == "md" || ext == "markdown" || ext == "html" || ext == "htm" {
+                return .preview
+            }
+            // 文件在 worktree 里有改动时,直接亮 Diff 面板比 Files 树更
+            // 贴近用户场景(他们多半就是想看「这个文件改了什么」)。
+            let relative = relativeWorkspacePath(for: url) ?? url.lastPathComponent
+            if agentWorktreeChanges.files.contains(where: { $0.path == relative }) {
+                return .diff
+            }
+            return .files
+        }()
+        agentSidePanelRequest = AgentSidePanelOpenRequest(kind: kind, file: url)
+    }
+
+    private func relativeWorkspacePath(for url: URL) -> String? {
+        let base = agentWorktreeChanges.repositoryRoot ?? rootDirectory
+        guard let base else { return nil }
+        let basePath = base.standardizedFileURL.path
+        let filePath = url.standardizedFileURL.path
+        guard filePath.hasPrefix(basePath + "/") else { return nil }
+        return String(filePath.dropFirst(basePath.count + 1))
+    }
+
+    private func resolveAgentReferencedFileURL(_ rawPath: String) -> URL? {
         let path = Self.agentFilePathWithoutLineSuffix(rawPath)
         let url: URL?
         if path.hasPrefix("/") {
@@ -656,15 +704,13 @@ final class AppState: ObservableObject {
         } else {
             url = nil
         }
-        guard let url else { return }
+        guard let url else { return nil }
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
               !isDirectory.boolValue else {
-            return
+            return nil
         }
-        openEditorFile(url)
-        registerRecentFile(url)
-        EditorAppStateRegistry.shared.focusCurrentEditorWindow()
+        return url
     }
 
     nonisolated static func agentFilePathWithoutLineSuffix(_ rawPath: String) -> String {
