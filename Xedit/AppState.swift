@@ -661,39 +661,83 @@ final class AppState: ObservableObject {
     /// always in Agent mode here (chip lives in `AgentChatTranscript`),
     /// so a silent `openEditorFile` (which only focuses an already-open
     /// editor window) leaves the user staring at an unchanged chat pane.
-    /// Route to the Agent side panel instead — Preview for markdown /
-    /// HTML, Diff when the file has worktree changes, otherwise Files.
-    /// AgentModeView consumes `agentSidePanelRequest` and applies it.
+    /// Route to the Agent side panel instead.
+    ///
+    /// MUST NOT silently no-op. rc9–rc13 的反复 bug 就是:解析不到文件
+    /// (相对路径不在 base 直下、文件名大小写对不上、文件还没生成)时
+    /// 直接 return,用户点了「屁事没发生」。现在:解析到 → Preview 那个
+    /// 文件;解析不到 → 仍然打开 Files 面板,让用户看到文件树、知道点击
+    /// 被响应了。任何情况下侧栏都会动。
     func revealAgentReferencedFileInSidePanel(_ rawPath: String) {
-        guard let url = resolveAgentReferencedFileURL(rawPath) else { return }
-        registerRecentFile(url)
-        // 任意「能读成文本」的文件都走 Preview —— Preview 现在支持
-        // plain-text fallback,用户至少能看到文件内容。Diff 面板是全
-        // 局 git diff、Files 只是个文件树,都看不到具体文件本身,所
-        // 以不再按是否有 worktree 改动来分叉。如果用户想看 diff,可
-        // 以从顶部菜单切到 Diff 面板。
-        agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .preview, file: url)
+        if let url = resolveAgentReferencedFileURL(rawPath) {
+            registerRecentFile(url)
+            agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .preview, file: url)
+        } else {
+            // 兜底:打开 Files 面板(没有具体文件),至少有可见反馈。
+            agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .files, file: nil)
+        }
     }
 
     private func resolveAgentReferencedFileURL(_ rawPath: String) -> URL? {
         let path = Self.agentFilePathWithoutLineSuffix(rawPath)
-        let url: URL?
+
+        // 1) 绝对路径直接用。
         if path.hasPrefix("/") {
-            url = URL(fileURLWithPath: path).standardizedFileURL
-        } else if let changed = agentChangedFileURL(path) {
-            url = changed
-        } else if let base = agentReferencedFileBase() {
-            url = base.appendingPathComponent(path).standardizedFileURL
-        } else {
-            url = nil
+            let url = URL(fileURLWithPath: path).standardizedFileURL
+            return Self.existingFile(at: url) ? url : nil
         }
-        guard let url else { return nil }
+
+        // 2) worktree 改动列表里的相对路径(最精确,带正确的子目录)。
+        if let changed = agentChangedFileURL(path) {
+            return changed
+        }
+
+        // 3) base + 相对路径直接拼。
+        if let base = agentReferencedFileBase() {
+            let url = base.appendingPathComponent(path).standardizedFileURL
+            if Self.existingFile(at: url) { return url }
+        }
+
+        // 4) 兜底:在 quickOpen 索引和 worktree 改动里按「后缀匹配」找。
+        //    agent 经常只写文件名(`version.go`)或部分路径,真实文件却在
+        //    深层目录(`willdeep-agent/internal/agent/version.go`)。用后缀
+        //    匹配把这种情况也接住;有多个候选时取路径最短的(最接近根)。
+        if let fuzzy = fuzzyMatchReferencedFile(relativePath: path) {
+            return fuzzy
+        }
+
+        return nil
+    }
+
+    /// 后缀匹配:`candidate` 的路径以 `/relativePath` 结尾,或 basename
+    /// 完全相等。优先 quickOpen 索引(全工程文件),再退到 worktree 改动。
+    private func fuzzyMatchReferencedFile(relativePath: String) -> URL? {
+        let needle = "/" + relativePath
+        let targetName = (relativePath as NSString).lastPathComponent
+
+        func score(_ url: URL) -> Int { url.path.count }
+
+        var candidates: [URL] = quickOpenFiles.filter { url in
+            let p = url.path
+            return p.hasSuffix(needle) || url.lastPathComponent == targetName
+        }
+
+        if candidates.isEmpty, let base = agentReferencedFileBase() {
+            candidates = agentWorktreeChanges.files.compactMap { change in
+                let url = base.appendingPathComponent(change.path).standardizedFileURL
+                let p = url.path
+                guard p.hasSuffix(needle) || url.lastPathComponent == targetName else { return nil }
+                return Self.existingFile(at: url) ? url : nil
+            }
+        }
+
+        return candidates.sorted { score($0) < score($1) }.first
+    }
+
+    private static func existingFile(at url: URL) -> Bool {
         var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
-              !isDirectory.boolValue else {
-            return nil
-        }
-        return url
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            && !isDirectory.boolValue
     }
 
     /// 解析 chat 里的相对路径要找 base。优先级:worktree 已知 repo root →

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.105.0-rc14 - 2026-06-24
+
+### Fixed
+- 点击 AI 输出 markdown 里的文件名「屁事没发生」(rc9–rc13 反复未解决)。点击事件其实一直有到达 `clickedOnLink`(和 copy-code / retry / table 走同一条 String-link 通路,那些都正常),真正卡住的是 `AppState.revealAgentReferencedFileInSidePanel`:`resolveAgentReferencedFileURL` 返回 nil 时它直接 `return`,侧栏一动不动。修两处:
+  - 解析新增「后缀 / basename 模糊匹配」兜底:agent 经常只写文件名(`version.go`)或部分路径,真实文件却在深层目录(`willdeep-agent/internal/agent/version.go`)。先在 `quickOpenFiles` 全工程索引里按 `/relativePath` 后缀或 basename 命中,再退到 worktree 改动列表,多候选取路径最短的。
+  - 永不静默:解析到文件 → 打开 Preview 显示该文件;解析不到 → 兜底打开 Files 面板。任何情况下点击都有可见反馈,不再「点了像没点」。
+
+### Changed
+- 版本号从 **1.105.0-rc13** 提升为 **1.105.0-rc14**（文件 chip 点击解析模糊匹配 + 永不静默兜底）。pbxproj×6 / Go agent / Help Info.plist / README badge / product-overview / docs ×2 同步。
+
 ## 1.105.0-rc13 - 2026-06-24
 
 ### Fixed
