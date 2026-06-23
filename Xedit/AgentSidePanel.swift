@@ -77,7 +77,9 @@ struct AgentSidePanelHost: View {
             .foregroundStyle(.secondary)
             .help(L10n.AgentSidePanel.close)
         }
-        .padding(.horizontal, 14)
+        // 右边 padding 比左边大一点,让关闭 X 不至于贴着面板右沿。
+        .padding(.leading, 14)
+        .padding(.trailing, 22)
         .frame(height: AgentDesign.headerHeight)
     }
 
@@ -285,6 +287,7 @@ struct AgentSidePanelDiffView: View {
 
 struct AgentSidePanelFilesView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.openWindow) private var openWindow
     @Binding var selectedFile: URL?
     @Binding var kind: AgentSidePanelKind?
     @State private var root: FileSystemNode?
@@ -297,7 +300,8 @@ struct AgentSidePanelFilesView: View {
                 FileTreeView(
                     root: root,
                     selectedURL: $selectedFile,
-                    selectedFolderURL: $selectedFolderURL
+                    selectedFolderURL: $selectedFolderURL,
+                    onOpenFile: openFileInEditor
                 )
             } else {
                 placeholderNoWorkspace
@@ -342,6 +346,14 @@ struct AgentSidePanelFilesView: View {
         if newPath == rootPath { return }
         rootPath = newPath
         root = resolved.map { FileSystemNode(url: $0) }
+    }
+
+    private func openFileInEditor(_ url: URL) {
+        let fallbackURL = appState.openedFileURL
+        guard appState.openEditorFile(url, fallbackURL: fallbackURL) else { return }
+        if !appState.showEditor() {
+            openWindow(id: EditorWindowID.value)
+        }
     }
 }
 

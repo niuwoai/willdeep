@@ -21,9 +21,15 @@ struct AgentLearningEventsCard: View {
     /// rc13:popover 里隐藏 5 条 cap + 「N more」,直接全展示。
     var capItems: Bool = true
     @State private var copiedEventID: AgentLearningEvent.ID?
+    @State private var rejectedEventIDs = Set<AgentLearningEvent.ID>()
+    @State private var approvedEventIDs = Set<AgentLearningEvent.ID>()
+
+    private var activeEvents: [AgentLearningEvent] {
+        events.filter { !rejectedEventIDs.contains($0.id) }
+    }
 
     private var visibleEvents: [AgentLearningEvent] {
-        capItems ? Array(events.prefix(5)) : events
+        capItems ? Array(activeEvents.prefix(5)) : activeEvents
     }
 
     var body: some View {
@@ -35,7 +41,7 @@ struct AgentLearningEventsCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(L10n.Transcript.learningCardTitle)
                         .font(AgentDesign.titleFont)
-                    Text(L10n.Transcript.learningCardSubtitle(String(events.count)))
+                    Text(L10n.Transcript.learningCardSubtitle(String(activeEvents.count)))
                         .font(AgentDesign.secondaryFont)
                         .foregroundStyle(.secondary)
                 }
@@ -48,10 +54,21 @@ struct AgentLearningEventsCard: View {
                         event: event,
                         didCopy: copiedEventID == event.id,
                         onCopy: { copy(event) },
-                        onReject: onReject.map { reject in { reject(event) } },
+                        onReject: onReject.map { reject in
+                            {
+                                withAnimation(.easeInOut(duration: 0.16)) {
+                                    _ = rejectedEventIDs.insert(event.id)
+                                }
+                                reject(event)
+                            }
+                        },
                         // 只有带 pending drafts 的事件才暴露 Approve 按钮。
+                        didApprove: approvedEventIDs.contains(event.id),
                         onApprove: (onApprove != nil && !event.pendingMemoryDrafts.isEmpty)
-                            ? { onApprove?(event) }
+                            ? {
+                                approvedEventIDs.insert(event.id)
+                                onApprove?(event)
+                            }
                             : nil
                     )
                     if index < visibleEvents.count - 1 {
@@ -61,8 +78,8 @@ struct AgentLearningEventsCard: View {
                 }
             }
 
-            if capItems && events.count > visibleEvents.count {
-                Text(L10n.Transcript.learningMore(String(events.count - visibleEvents.count)))
+            if capItems && activeEvents.count > visibleEvents.count {
+                Text(L10n.Transcript.learningMore(String(activeEvents.count - visibleEvents.count)))
                     .font(AgentDesign.secondaryFont)
                     .foregroundStyle(.secondary)
             }
@@ -99,6 +116,7 @@ private struct AgentLearningEventRow: View {
     let onCopy: () -> Void
     /// rc13:popover 形态下用来 dismiss review item;nil 时不渲染 reject 按钮。
     var onReject: (() -> Void)? = nil
+    let didApprove: Bool
     /// rc16:popover 形态下用来 Approve pending memory drafts;nil 时不渲染。
     var onApprove: (() -> Void)? = nil
 
@@ -157,36 +175,31 @@ private struct AgentLearningEventRow: View {
             // 1.96.0-rc2:全部 .focusable(false) —— 否则 SwiftUI popover 打开时
             // 会自动把焦点环聚到第一个 button(用户反馈"图标自动聚焦")。
             if let onReject {
-                Button(action: onReject) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color.secondary)
-                }
-                .buttonStyle(.plain)
-                .focusable(false)
-                .help(L10n.Transcript.learningRejectHelp)
+                LearningIconButton(
+                    systemName: "trash",
+                    tint: .secondary,
+                    help: L10n.Transcript.learningRejectHelp,
+                    action: onReject
+                )
             }
 
             if !event.detail.isEmpty {
-                Button(action: onCopy) {
-                    Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(didCopy ? Color.green : Color.secondary)
-                }
-                .buttonStyle(.plain)
-                .focusable(false)
-                .help(didCopy ? L10n.Transcript.learningCopied : L10n.Transcript.learningCopyHelp)
+                LearningIconButton(
+                    systemName: didCopy ? "checkmark" : "doc.on.doc",
+                    tint: didCopy ? .green : .secondary,
+                    help: didCopy ? L10n.Transcript.learningCopied : L10n.Transcript.learningCopyHelp,
+                    action: onCopy
+                )
             }
 
             if let onApprove {
-                Button(action: onApprove) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Color.green)
-                }
-                .buttonStyle(.plain)
-                .focusable(false)
-                .help(L10n.Transcript.learningApproveHelp)
+                LearningIconButton(
+                    systemName: didApprove ? "checkmark.seal.fill" : "checkmark.circle.fill",
+                    tint: .green,
+                    help: didApprove ? L10n.Transcript.learningApproved : L10n.Transcript.learningApproveHelp,
+                    isDisabled: didApprove,
+                    action: onApprove
+                )
             }
         }
         .padding(.vertical, 8)
@@ -261,6 +274,35 @@ private struct AgentLearningEventRow: View {
             .background(confidenceTint.opacity(0.10))
             .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
             .help(AgentLearningActionPresentation.confidence(for: event).label)
+    }
+}
+
+private struct LearningIconButton: View {
+    let systemName: String
+    let tint: Color
+    let help: String
+    var isDisabled = false
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(tint)
+                .frame(width: 22, height: 22)
+                .background {
+                    Circle()
+                        .fill(isHovering ? tint.opacity(0.14) : Color.clear)
+                }
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.68 : 1)
+        .help(help)
+        .onHover { isHovering = $0 }
     }
 }
 

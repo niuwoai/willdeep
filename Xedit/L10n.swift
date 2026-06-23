@@ -602,6 +602,10 @@ enum L10n {
         static let placeholder = String(localized: "quick-open.placeholder", defaultValue: "Quick Open")
     }
 
+    enum FileTree {
+        static let openInEditor = String(localized: "file-tree.open-in-editor", defaultValue: "Open in Editor")
+    }
+
     enum Sidebar {
         static func archivedSessionsHeader(_ a1: String) -> String {
             let template = String(localized: "sidebar.archived-sessions.header", defaultValue: "Archived count")
@@ -1876,6 +1880,7 @@ enum L10n {
         static let learningRecallStrengthWeak = String(localized: "transcript.learning.recall-strength.weak", defaultValue: "weak")
         static let learningCopyHelp = String(localized: "transcript.learning.copy-help", defaultValue: "Copy learning event details")
         static let learningCopied = String(localized: "transcript.learning.copied", defaultValue: "Copied")
+        static let learningApproved = String(localized: "transcript.learning.approved", defaultValue: "Saved")
         // 1.96.0-rc2:event title / 字段内容也走 i18n,简体中文用户
         // 看不懂英文模板;这些 key 在 Localizable.xcstrings 同步加了 zh-Hans。
         static func learningEventTitleConversationMemories(_ a1: String) -> String {

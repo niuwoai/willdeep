@@ -311,10 +311,16 @@ enum AtPickerEntry: Identifiable, Equatable {
 }
 
 struct AtPickerMenu: View {
+    private enum Metrics {
+        static let width: CGFloat = 540
+        static let maxListHeight: CGFloat = 340
+    }
+
     let entries: [AtPickerEntry]
     @Binding var query: String
     @Binding var selection: Int
     let onPick: (Int) -> Void
+    let onClose: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -325,6 +331,16 @@ struct AtPickerMenu: View {
                 TextField(L10n.Composer.atPickerSearchPlaceholder, text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 18, height: 18)
+                        .background(Color.primary.opacity(0.06), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .help(L10n.AgentSidePanel.close)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
@@ -356,11 +372,11 @@ struct AtPickerMenu: View {
                         }
                     }
                 }
-                .frame(maxHeight: 260)
+                .frame(maxHeight: Metrics.maxListHeight)
             }
         }
         .padding(.bottom, 6)
-        .frame(maxWidth: 460, alignment: .leading)
+        .frame(width: Metrics.width, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color(nsColor: .controlBackgroundColor))

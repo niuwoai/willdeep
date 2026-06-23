@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-23 | Current version: v1.104.0-rc1
+> Last updated: 2026-06-24 | Current version: v1.105.0-rc7
 
 ## Positioning
 
@@ -47,6 +47,13 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **流式输出降载与 @ 选择器修复（1.103.0-rc13）** —— Agent 流式 assistant delta 刷新节奏降到约 10fps，并把流式中的 assistant 气泡改为轻量文本渲染，turn 结束后仍折回完整 Markdown/TextKit 历史渲染；composer `@` 选择器改为输入框上方的独立面板，顶部提供搜索框，列表高度封顶并内部滚动，避免浮层文字和输入区文字重叠。
 - **上下文压缩保留本地历史与截图粘贴修复（1.103.0-rc14）** —— Agent context compression 现在只把旧消息摘要写进 model-facing request history，不再替换本地 `messages` 或清理旧工具调用，因此 transcript / session 持久化仍保留完整历史；composer pasteboard 读取补上 `NSImage`/UTType image fallback，让系统截图等非文件型图片粘贴也能变成图片附件。
 - **Agent 任务监控 Rail（1.104.0-rc1）** —— Agent mode 右侧新增常驻“任务监控”栏，把待办、最终产物、工作文件、技能/MCP 与意识更新集中展示；composer 上方新增语义化阶段状态（搜索中/编辑中/验证中/反思中 + 计时）；历史正文里的路径样式升级为可点击 path chip，能直接按 workspace 打开对应文件。
+- **聊天配置 MCP 与用户 Skill 维护（1.105.0-rc1）** —— Agent 新增 `configure_mcp_server`，可把用户贴进聊天的 `mcpServers` JSON 或单 server JSON 保存为用户 MCP 配置，复用 Settings 的 upsert 与凭据存储，敏感 env/header 自动脱敏；同时新增 `update_user_skill` / `delete_user_skill`，只允许维护用户目录下的 skill，内置和插件 skill 不可被聊天误改误删，删除仍需要危险确认。
+- **语音烟测资源护栏（1.105.0-rc2）** —— `VoiceSmokeTests` 默认只转录短音频样本，先按文件大小和音频时长跳过超限的 Downloads 候选；XCTest 启动 app 时也不再自动预加载 SenseVoice ONNX 模型。需要手动长音频 dogfood 时显式设置 `WILLDEEP_VOICE_SMOKE_ALLOW_LONG_AUDIO=1`。
+- **任务监控与弹层反馈修复（1.105.0-rc3）** —— Agent mode 新开应用时不再默认露出右侧任务监控 Rail；当当前会话进入 Agent 活动并且任务、待办、工作文件或学习建议发生变化时，才自动打开带关闭按钮的任务监控侧栏。侧边 Agent panel 的任务抽屉也补齐关闭按钮，避免同一功能有时能关、有时没处关；composer 的 `@` skill / 附件列表支持 Esc 和关闭图标收起，学习内容 popover 的删除、复制、确认 icon 都有即时反馈。
+- **Composer @ 列表扩容（1.105.0-rc4）** —— composer 中用 `@` 呼起的 skill / 附件列表加宽并提高可见列表高度，减少技能说明和文件路径拥挤，保留 Esc 与右上角关闭按钮。
+- **Agent Files 编辑器打开（1.105.0-rc5）** —— Agent mode 右侧 Files 面板里的非 markdown/html 文件现在也能通过点击或右键菜单打开到 WillDeep 自有编辑器窗口；markdown/html 仍会同步给 Preview 面板。
+- **Agent 文本附件测试稳定性（1.105.0-rc6）** —— 修正文本附件可点击断言的测试辅助逻辑，避免把 `AgentTextAttachment` payload 误当成 String 属性值导致 CI 误报。
+- **任务监控触发与关闭按钮修复（1.105.0-rc7）** —— Agent mode 进入纯思考状态（无工具、无后台任务、无上下文压缩）不再触发任务监控侧栏自动展开；任务监控侧栏的 `xmark` 关闭按钮在 Agent mode 与侧边 Agent panel 两处都补足 trailing padding，不再贴着右沿；学习卡（记忆 / 技能 / MCP）只统计「本轮 user 消息之后」的事件，历史轮次的学习不再误把侧栏打开；CI 文件加载测试改为验证同步读写与 apply 结果，减少 macOS runner 调度抖动误报。
 - **Composer 模型热门/上新分组（1.102.0-rc7）** —— Agent composer 模型菜单消费 some.im `/v1/models` / 公开模型定价里的 `is_hot`、`is_new` 标记,在 Recently used 后展示 Hot / New 分组,并与 Recently fetched 去重。
 - **CLI 缺失文件新建（1.102.0-rc2）** —— `willdeep <path>` 现在通过 `willdeep://open?path=...` 把路径交给 App 处理,不存在但父目录存在的文件会自动创建空文件并打开,避免 macOS `open` 在 App 启动前直接报 "does not exist"。
 - **some.im 多模态整合（1.102.0-rc1）** —— Settings 与 Onboarding 新增 some.im 配置入口,API Key 存 Keychain,可拉取模型并设置图片/视频生成首选与优先模型；内置 `generate_image` 工具在 some.im 配置后直接调用 relay 图片生成接口,默认 `gpt-image-2`,并且 OpenAI Chat 兼容请求会过滤 `.widget` / `.workflowReport` 本地卡片,避免 UI-only role 泄漏给 some.im。

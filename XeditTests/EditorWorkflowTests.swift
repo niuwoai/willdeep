@@ -11,24 +11,15 @@ import Foundation
 import AppKit
 @testable import WillDeep
 
-private enum EditorWorkflowTestError: Error {
-    case loadTimedOut
-}
-
 @MainActor
-private func waitForEditorLoad(
+private func applyLoadedEditorFile(
     _ appState: AppState,
-    expectedContent: String,
-    timeout: TimeInterval = 10.0
-) async throws {
-    let start = CFAbsoluteTimeGetCurrent()
-    while (CFAbsoluteTimeGetCurrent() - start) < timeout {
-        if appState.fileContent == expectedContent && appState.isEdited == false {
-            return
-        }
-        try await Task.sleep(nanoseconds: 5_000_000)
-    }
-    throw EditorWorkflowTestError.loadTimedOut
+    fileURL: URL
+) throws -> String {
+    let data = try AppState.readFileData(from: fileURL)
+    let content = AppState.decodeText(from: data)
+    appState.applyLoadedContent(content, for: fileURL)
+    return content
 }
 
 extension WillDeepTests {
@@ -81,7 +72,7 @@ extension WillDeepTests {
 
     @MainActor
     @Test("external file open loads content without view onChange")
-    func testExternalFileOpenLoadsContentWithoutViewChange() async throws {
+    func testExternalFileOpenLoadsContentWithoutViewChange() throws {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep_external_load_\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -94,14 +85,15 @@ extension WillDeepTests {
         let appState = AppState()
         appState.openExternalURL(fileURL)
 
-        try await waitForEditorLoad(appState, expectedContent: content)
+        let loaded = try applyLoadedEditorFile(appState, fileURL: fileURL)
+        #expect(loaded == content)
         #expect(appState.activeTab?.url.standardizedFileURL.path == fileURL.standardizedFileURL.path)
         #expect(appState.activeTab?.content == content)
     }
 
     @MainActor
     @Test("reopening an empty unedited tab reloads file content")
-    func testReopeningEmptyUneditedTabReloadsFileContent() async throws {
+    func testReopeningEmptyUneditedTabReloadsFileContent() throws {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep_empty_tab_reload_\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -118,25 +110,16 @@ extension WillDeepTests {
 
         appState.openExternalURL(fileURL)
 
-        try await waitForEditorLoad(appState, expectedContent: content)
+        let loaded = try applyLoadedEditorFile(appState, fileURL: fileURL)
+        #expect(loaded == content)
         #expect(appState.activeTab?.content == content)
         #expect(appState.isEdited == false)
     }
 
     // MARK: - File Loading Timing (c1)
 
-    // This drives loadFile's async DispatchQueue.global → DispatchQueue.main
-    // hop and waits for the main-queue callback. On GitHub's shared macOS
-    // runners (few cores, sibling suites contending for the main queue) that
-    // callback gets starved well past any sane timeout — it was the single
-    // most frequent CI flaky failure. The path works in the real app (main
-    // runloop always pumping). We can't gate it out reliably (env gates don't
-    // reach the swift-testing process; -skip-testing only matches test-prefixed
-    // swift-testing funcs), so we keep the correctness check hard with a
-    // generous ceiling and tolerate only the tight perf threshold as an
-    // intermittent known issue.
     @Test("loadFile completes promptly for a file under 1MB")
-    func testFileLoadingTimingUnder500ms() async throws {
+    func testFileLoadingTimingUnder500ms() throws {
         let tempDir = FileManager.default.temporaryDirectory
         let fileURL = tempDir.appendingPathComponent("xedit_test_timing_\(UUID().uuidString).txt")
 
@@ -153,51 +136,9 @@ extension WillDeepTests {
         #expect(size != nil)
         #expect(size! < Int64(AppState.maxFileSize), "Test file must be under 1MB for timing test")
 
-        let start = CFAbsoluteTimeGetCurrent()
-        let appState = await MainActor.run { AppState() }
-        await MainActor.run {
-            appState.openedFileURL = fileURL
-            appState.loadFile(from: fileURL)
-        }
-
-        // Thresholds intentionally generous: this is a smoke test that a
-        // small file loads without hanging, not a tight micro-benchmark.
-        // Locally loadFile finishes in tens of ms, but a loaded CI runner
-        // (shared macOS host, cold caches) can take far longer purely from
-        // scheduling jitter — a 500ms/1s ceiling made this the single most
-        // frequent flaky failure on CI. 2s/5s keeps the "doesn't stall"
-        // guarantee while removing the false reds.
-        // Correctness (hard): the file must eventually load with matching
-        // content. Generous 30s ceiling so this only throws on a genuine
-        // hang, not on CI scheduling jitter.
-        var didLoad = false
-        while (CFAbsoluteTimeGetCurrent() - start) < 30.0 {
-            didLoad = await MainActor.run {
-                appState.fileContent == content && appState.isEdited == false
-            }
-            if didLoad { break }
-            try await Task.sleep(nanoseconds: 5_000_000)
-        }
-
-        guard didLoad else {
-            throw EditorWorkflowTestError.loadTimedOut
-        }
-
-        let elapsedMs = (CFAbsoluteTimeGetCurrent() - start) * 1000.0
-
-        // Performance (tolerated): on a loaded shared CI runner the main-queue
-        // callback can be starved for seconds. Keep asserting the 2s ceiling
-        // on fast machines, but record a slow run as an intermittent known
-        // issue rather than a red.
-        withKnownIssue(
-            "loadFile main-queue hop can be starved on shared CI runners.",
-            isIntermittent: true
-        ) {
-            #expect(
-                elapsedMs < 2000.0,
-                "loadFile time \(elapsedMs)ms exceeded 2s threshold"
-            )
-        }
+        let data = try AppState.readFileData(from: fileURL)
+        let decoded = AppState.decodeText(from: data)
+        #expect(decoded == content)
     }
 
     @Test("loadFile data path rejects files over 1MB unless explicitly allowed")

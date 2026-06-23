@@ -1,6 +1,6 @@
 # Playwright MCP
 
-> Last updated: 2026-06-23 | Current version: v1.104.0-rc1
+> Last updated: 2026-06-23 | Current version: v1.105.0-rc1
 
 WillDeep integrates Playwright through MCP, not as a bundled global Node dependency.
 The recommended server runs on demand with npm's `npx`:

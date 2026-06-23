@@ -58,10 +58,16 @@ enum AgentToolRunner {
             return try AgentSelfLearning.addMemory(arguments: arguments, rootDirectory: context.rootDirectory)
         case "create_user_skill":
             return try AgentSelfLearning.createUserSkill(arguments: arguments)
+        case "update_user_skill":
+            return try AgentConfigurationTools.updateUserSkill(arguments: arguments)
+        case "delete_user_skill":
+            return try AgentConfigurationTools.deleteUserSkill(arguments: arguments)
         case "search_mcp_servers":
             return try await AgentSelfLearning.searchMCPServers(arguments: arguments)
         case "suggest_mcp_server":
             return try AgentSelfLearning.suggestMCPServer(arguments: arguments, rootDirectory: context.rootDirectory)
+        case "configure_mcp_server":
+            return try AgentConfigurationTools.configureMCPServer(arguments: arguments)
         case "web_search":
             return try await AgentWebTools.webSearch(arguments: arguments)
         case "web_fetch":

@@ -1,5 +1,72 @@
 # Changelog
 
+## 1.105.0-rc7 - 2026-06-24
+
+### Fixed
+- Agent mode 进入纯「思考中」状态（没有任何 tool / 后台任务 / 上下文压缩）不再触发右侧任务监控侧栏自动展开；`AgentTaskMonitorSnapshot.isAgentActivityActive` 不再把 `isAgentResponding` 视作活动。
+- 任务监控侧栏右上角 `xmark` 关闭按钮在 `AgentSidePanelHost` 和侧边 `AgentPanelView` 抽屉 header 都补足 trailing padding，按钮不再贴着面板右沿。
+- 任务监控「记忆 / 技能 / MCP」学习卡只统计当前 user 消息（含）之后产生的 `AgentLearningEvent`；不再回退到 24 条跨轮历史，历史轮次的学习也不会再因 `learningDigest` 改写而误把任务监控侧栏自动打开。
+- `EditorWorkflowTests` 不再依赖 `loadFile` 的后台队列回主线程调度来判断文件打开行为，避免 GitHub macOS runner 主队列拥塞时误报 `.loadTimedOut`。
+- XCTest 启动宿主 App 时跳过 Fn push-to-talk 事件监听安装，减少语音相关启动期副作用。
+
+### Changed
+- 版本号从 **1.105.0-rc6** 提升为 **1.105.0-rc7**（任务监控触发条件、关闭按钮 padding、学习统计范围、CI 文件加载测试稳定性）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.105.0-rc6 - 2026-06-23
+
+### Fixed
+- 修复 `AgentChatHistoryRendererTests.rendersPastedTextAttachmentsAsClickableLinks` 的断言辅助函数：文本附件属性值是 `AgentTextAttachment`，测试现在会按带属性的可见文本 range 识别附件文件名，不再误判为不可点击。
+
+### Changed
+- 版本号从 **1.105.0-rc5** 提升为 **1.105.0-rc6**（CI 失败测试辅助函数修复）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.105.0-rc5 - 2026-06-23
+
+### Fixed
+- Agent mode 右侧 Files 面板里的文件点击现在会调用 WillDeep 自有编辑器打开逻辑，并把对应 editor window 抬到前台；不再只有 markdown / HTML 走 Preview 才有可见反馈。
+- Files 面板文件右键菜单新增 “Open in Editor”，用于显式把 JSON、TS、Go、配置文件等非预览文件打开到编辑器 tab。
+
+### Changed
+- 版本号从 **1.105.0-rc4** 提升为 **1.105.0-rc5**（Agent Files 编辑器打开修复）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.105.0-rc4 - 2026-06-23
+
+### Changed
+- Composer 的 `@` skill / 附件列表加宽到约 540pt，并把可见列表高度提高到约 340pt，让技能说明和文件路径不用挤在小窗体里。
+- 版本号从 **1.105.0-rc3** 提升为 **1.105.0-rc4**（Composer `@` 列表尺寸调整）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.105.0-rc3 - 2026-06-23
+
+### Fixed
+- Agent mode 新开应用时不再默认显示右侧“任务监控”Rail；只有当前会话进入 Agent 活动后，任务监控内容发生运行期变化时才自动打开。
+- “任务监控”统一通过带 header 的侧栏/抽屉呈现，Agent mode 和侧边 Agent panel 都始终提供关闭按钮。
+- Composer 的 `@` skill / 附件列表现在可用 Esc 或右上角关闭图标收起，并清理临时 query/选中状态。
+- Agent 学习内容 popover 的垃圾桶、复制、确认图标补齐 hover / 点击反馈；删除会立即从当前 popover 移除该条，复制和确认会切换为已完成状态。
+
+### Changed
+- 版本号从 **1.105.0-rc2** 提升为 **1.105.0-rc3**（任务监控按需展开、composer `@` 列表关闭和学习 popover 图标反馈修复）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.105.0-rc2 - 2026-06-23
+
+### Fixed
+- `VoiceSmokeTests` 默认跳过超长或超大 Downloads 音频候选，避免语音烟测误把真实长录音跑成 ASR 压力测试并导致内存暴涨。
+- XCTest 环境下不再安装语音模型生命周期预热器，避免所有测试启动 app 时都预加载约 937MB 的 SenseVoice ONNX 模型。
+
+### Changed
+- 保留手动长音频 dogfood 入口：设置 `WILLDEEP_VOICE_SMOKE_ALLOW_LONG_AUDIO=1` 时可绕过烟测默认资源限制。
+- 版本号从 **1.105.0-rc1** 提升为 **1.105.0-rc2**（语音测试资源护栏）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.105.0-rc1 - 2026-06-23
+
+### Added
+- Agent 新增 `configure_mcp_server` 工具：用户把 MCP JSON 贴到聊天后，可由 Agent 解析 `mcpServers` 或单 server JSON，并复用现有 MCP Settings upsert 与凭据存储写入用户配置。
+- Agent 新增 `update_user_skill` / `delete_user_skill`：聊天中可更新或删除用户创建的 skill；内置/插件 skill 会被拒绝，删除 skill 标为 danger 并要求 typed confirmation。
+- 补充回归测试覆盖聊天配置 MCP 的创建/更新路径，以及用户 skill 更新/删除的安全边界。
+
+### Changed
+- Extended/Stable 系统提示词补充 MCP 配置与用户 skill 维护能力地图；Goal 模式与「替我审批」workspace-access 模式可自动执行非 danger 的 MCP/skill 配置工具，删除 skill 仍不可自动通过。
+- 版本号从 **1.104.0-rc1** 提升为 **1.105.0-rc1**（聊天配置 MCP + 用户 skill 维护）。pbxproj×6 / Go agent / Help Info.plist / product-overview / docs ×4 同步。
+
 ## 1.104.0-rc1 - 2026-06-23
 
 ### Added

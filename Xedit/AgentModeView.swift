@@ -20,6 +20,8 @@ struct AgentModeView: View {
     /// 同一时间只有一个面板挂着,Files 切到 Preview 时子 view 会被
     /// 拆掉,@State 留在父 view 才能跨面板保活。
     @State private var sidePanelFile: URL?
+    @State private var lastTaskMonitorSnapshot: AgentTaskMonitorSnapshot?
+    @State private var didObserveAgentTaskMonitorActivity = false
 
     var body: some View {
         let skin = appState.editorSettings.interfaceSkin
@@ -43,17 +45,55 @@ struct AgentModeView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(skin.windowBackground)
 
-            Divider()
             if sidePanel != nil {
+                Divider()
                 AgentSidePanelHost(kind: $sidePanel, selectedFile: $sidePanelFile)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
-            } else {
-                AgentTaskMonitorRail()
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
         .background(skin.windowBackground)
         .animation(.easeInOut(duration: 0.18), value: sidePanel)
+        .onAppear {
+            let snapshot = currentTaskMonitorSnapshot
+            lastTaskMonitorSnapshot = snapshot
+            didObserveAgentTaskMonitorActivity = snapshot.isAgentActivityActive
+        }
+        .onCompatibleChange(of: currentTaskMonitorSnapshot) { oldSnapshot, newSnapshot in
+            handleTaskMonitorSnapshotChange(from: oldSnapshot, to: newSnapshot)
+        }
+        .onCompatibleChange(of: sidePanel) { oldPanel, newPanel in
+            guard oldPanel == .backgroundTasks, newPanel == nil else { return }
+            lastTaskMonitorSnapshot = currentTaskMonitorSnapshot
+        }
+    }
+
+    private var currentTaskMonitorSnapshot: AgentTaskMonitorSnapshot {
+        AgentTaskMonitorSnapshot.capture(from: appState)
+    }
+
+    private func handleTaskMonitorSnapshotChange(
+        from oldSnapshot: AgentTaskMonitorSnapshot,
+        to newSnapshot: AgentTaskMonitorSnapshot
+    ) {
+        if oldSnapshot.sessionID != newSnapshot.sessionID {
+            lastTaskMonitorSnapshot = newSnapshot
+            didObserveAgentTaskMonitorActivity = newSnapshot.isAgentActivityActive
+            return
+        }
+
+        if newSnapshot.isAgentActivityActive {
+            didObserveAgentTaskMonitorActivity = true
+        }
+
+        let baseline = lastTaskMonitorSnapshot ?? oldSnapshot
+        defer { lastTaskMonitorSnapshot = newSnapshot }
+        guard didObserveAgentTaskMonitorActivity,
+              newSnapshot.hasVisibleMonitorContent,
+              newSnapshot != baseline,
+              sidePanel == nil else {
+            return
+        }
+        sidePanel = .backgroundTasks
     }
 }
 
