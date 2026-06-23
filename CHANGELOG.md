@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.103.0-rc6 - 2026-06-23
+
+### Changed
+
+- Agent 稳定系统提示词升级到 `willdeep-agent-system-v3`，补入简洁输出、`path:line` 引用、少写注释、先看项目约定、不泄露敏感信息、React i18n、yarn 优先、版本同步和独立工具并行调用等硬规则。
+- 稳定前缀测试新增关键提示词断言，防止后续重构时丢失核心约束。
+- 版本号从 **1.103.0-rc5** 提升为 **1.103.0-rc6**（Agent 系统提示词硬规则）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
 ## 1.103.0-rc5 - 2026-06-23
 
 ### Added

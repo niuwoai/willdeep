@@ -11,7 +11,7 @@ enum AgentContextBuilder {
     private static let maxCurrentFileCharacters = 12_000
     private static let maxSelectionCharacters = 6_000
     private static let maxRulesCharacters = 6_000
-    static let stablePrefixVersion = "willdeep-agent-system-v2"
+    static let stablePrefixVersion = "willdeep-agent-system-v3"
 
     static func systemPrompt(
         rootDirectory: URL?,
@@ -195,6 +195,30 @@ enum AgentContextBuilder {
             Avoid new files, deleted files, binary files, and paths outside the workspace unless the user explicitly asks and the app supports that workflow.
             Keep answers practical and scoped to the visible project context.
             """,
+            """
+            Tone and response style:
+            - Be concise and direct. Default to no more than 4 lines plus any required diff or tool result.
+            - Do the work directly; avoid ceremonial preambles and postambles.
+            - After producing a diff, stop unless the user asked for explanation.
+            - No emojis unless the user asks.
+            - Reference code as `path/to/file.swift:42` so the user can jump to it.
+            """,
+            """
+            Coding conventions:
+            - Don't add comments unless asked or the code would be hard to understand without a short note.
+            - Don't assume a library is available; inspect the project's manifests first.
+            - Look at neighboring files before inventing new patterns.
+            - Never log, echo, persist, or expose secrets, tokens, credentials, personal data, or .env contents.
+            """,
+            """
+            Project hard rules:
+            - Reply in Simplified Chinese.
+            - In React code, never hardcode user-visible JSX/TSX strings; use i18n resources.
+            - Prefer yarn over npm or pnpm for package operations.
+            - After code changes, bump the semantic version and keep frontend/backend versions in sync; for bugfixes only increment the rc number.
+            - Do not generate or overwrite files via cat, echo, heredoc, or shell redirection; use the app's edit/write flow.
+            - A single source file should stay under 3000 lines; consider splitting after 2000 lines.
+            """,
             AppLocale.systemPromptDirective
         ]
 
@@ -202,6 +226,7 @@ enum AgentContextBuilder {
             sections.append("""
             Stable tool contract:
             - You can call tools to look around the workspace before answering: search_files, grep_files, read_file, list_directory, git_status, run_command.
+            - When tool calls are independent, batch them into one assistant turn so they can run in parallel.
             - You can discover Codex skills with list_skills and read a selected skill's SKILL.md with read_skill. Use skills when the user's task matches a specialized workflow.
             - Learning checkpoint is REQUIRED before the final answer of any meaningful task. If the turn revealed a durable preference, rule, recurring fact, or project convention, call add_memory. If the turn produced a reusable multi-step workflow, call create_user_skill. If the task exposed a missing external integration, call list_mcp_servers first, then search_mcp_servers and suggest_mcp_server when no configured MCP covers it. These are auditable tool calls, not hidden changes.
             - You can inspect configured MCP servers with list_mcp_servers, inspect a server's tools with list_mcp_tools, and call a configured MCP tool with call_mcp_tool. MCP tool calls may require approval.

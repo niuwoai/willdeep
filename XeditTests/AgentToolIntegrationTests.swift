@@ -683,6 +683,11 @@ extension WillDeepTests {
         #expect(second.hasPrefix(stable))
         #expect(firstDiagnostics.hash == secondDiagnostics.hash)
         #expect(firstDiagnostics.stableCharacters == stable.count)
+        #expect(stable.contains("Reply in Simplified Chinese."))
+        #expect(stable.contains("never hardcode user-visible JSX/TSX strings"))
+        #expect(stable.contains("Reference code as `path/to/file.swift:42`"))
+        #expect(stable.contains("batch them into one assistant turn"))
+        #expect(stable.contains("Never log, echo, persist, or expose secrets"))
     }
 
     @Test("long tool results are summarized before entering model context")
