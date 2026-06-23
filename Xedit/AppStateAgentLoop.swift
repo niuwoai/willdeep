@@ -37,10 +37,7 @@ extension AppState {
         textAttachments: [AgentTextAttachment] = [],
         attachedSkills: [AgentSkillEntry] = []
     ) {
-        rejectPendingAgentPatchProposals(
-            for: runtime,
-            statusMessage: "Superseded by a newer message."
-        )
+        resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime)
 
         let configuration = configurationForCurrentTurn(for: runtime)
         let providerID = configuration.providerID

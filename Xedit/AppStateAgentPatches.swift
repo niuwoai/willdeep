@@ -32,6 +32,42 @@ extension AppState {
         return rejectedCount
     }
 
+    @discardableResult
+    func resolvePendingAgentPatchProposalsBeforeNewMessage(for runtime: AgentRuntime) -> Int {
+        if let autoApplySource = pendingPatchAutoApplySource(for: runtime) {
+            return autoApplyPendingAgentPatchProposals(for: runtime, source: autoApplySource)
+        }
+
+        return rejectPendingAgentPatchProposals(
+            for: runtime,
+            statusMessage: "Superseded by a newer message."
+        )
+    }
+
+    @discardableResult
+    func autoApplyPendingAgentPatchProposals(
+        for runtime: AgentRuntime,
+        source: AgentToolApprovalSource
+    ) -> Int {
+        var resolvedCount = 0
+        for index in runtime.patchProposals.indices where runtime.patchProposals[index].status == .pending {
+            do {
+                try applyAgentPatch(runtime.patchProposals[index].diff)
+                runtime.patchProposals[index].status = .applied
+                runtime.patchProposals[index].statusMessage = autoApplyStatusMessage(for: source)
+            } catch {
+                runtime.patchProposals[index].status = .failed
+                runtime.patchProposals[index].statusMessage = error.localizedDescription
+            }
+            resolvedCount += 1
+        }
+
+        if resolvedCount > 0 {
+            persistAgentSession(runtime: runtime)
+        }
+        return resolvedCount
+    }
+
     func applyAgentPatchProposal(id: AgentPatchProposal.ID) {
         guard let index = agentPatchProposals.firstIndex(where: { $0.id == id }) else { return }
 
@@ -108,6 +144,17 @@ extension AppState {
         default:
             return "Auto-applied"
         }
+    }
+
+    private func pendingPatchAutoApplySource(for runtime: AgentRuntime) -> AgentToolApprovalSource? {
+        if runtime.interactionMode == .goal {
+            return .goalMode
+        }
+        if runtime.interactionMode != .plan,
+           runtime.approvalMode == .workspaceAccess {
+            return .workspaceAccess
+        }
+        return nil
     }
 
     func applyAgentPatch(_ diff: String) throws {

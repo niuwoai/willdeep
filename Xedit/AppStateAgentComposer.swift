@@ -114,10 +114,7 @@ extension AppState {
             return
         }
 
-        rejectPendingAgentPatchProposals(
-            for: runtime,
-            statusMessage: "Superseded by a newer message."
-        )
+        resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime)
 
         runtime.errorMessage = nil
         runtime.errorDetails = nil
