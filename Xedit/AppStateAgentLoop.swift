@@ -739,7 +739,15 @@ extension AppState {
                         risk: risk,
                         approvalSource: autoApproval,
                         sandboxDecision: sandboxDecision
-                    )
+                    ),
+                    patchProposalSink: { title, diff in
+                        try self.enqueueAgentPatchProposal(
+                            for: runtime,
+                            messageID: assistantID,
+                            title: title,
+                            diff: diff
+                        )
+                    }
                 )
                 do {
                     let result = try await AgentToolRunner.run(

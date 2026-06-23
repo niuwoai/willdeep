@@ -1094,6 +1094,69 @@ extension WillDeepTests {
         #expect(result.payload.contains("/usr/local/bin"))
     }
 
+    @Test("apply_patch queues a right-side patch proposal without writing files")
+    @MainActor
+    func testApplyPatchQueuesProposalWithoutWritingFiles() async throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_apply_patch_tool_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let fileURL = workspace.appendingPathComponent("Sample.swift")
+        try "let value = 1\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        let diff = """
+        --- a/Sample.swift
+        +++ b/Sample.swift
+        @@ -1 +1 @@
+        -let value = 1
+        +let value = 2
+        """
+
+        var queuedProposal: AgentPatchProposal?
+        let context = AgentToolContext(
+            rootDirectory: workspace,
+            patchProposalSink: { title, diff in
+                let proposal = AgentPatchProposal(
+                    messageID: UUID(),
+                    title: title ?? "Agent Patch",
+                    diff: diff
+                )
+                queuedProposal = proposal
+                return proposal
+            }
+        )
+
+        let result = try await AgentToolRunner.run(
+            name: "apply_patch",
+            arguments: [
+                "title": .string("Update sample"),
+                "diff": .string(diff)
+            ],
+            context: context
+        )
+
+        #expect(queuedProposal?.title == "Update sample")
+        #expect(queuedProposal?.diff == diff)
+        #expect(result.summary == "patch queued: 1 file")
+        #expect(result.payload.contains("No files were modified"))
+        #expect(try String(contentsOf: fileURL, encoding: .utf8) == "let value = 1\n")
+    }
+
+    @Test("apply_patch is advertised in extended prompt and tool registry")
+    func testApplyPatchPromptAndRegistrySurface() {
+        let descriptor = AgentToolRegistry.descriptor(for: "apply_patch")
+        #expect(descriptor?.risk == .read)
+        #expect(descriptor?.description.contains("right-side patch review panel") == true)
+
+        let prompt = AgentContextBuilder.stableSystemPromptPrefix(
+            toolsEnabled: true,
+            promptProfile: .extended
+        )
+        #expect(prompt.contains("Extended tool capability map"))
+        #expect(prompt.contains("apply_patch validates an existing-file unified diff"))
+        #expect(prompt.contains("right-side review panel"))
+    }
+
     @Test("quick open skips dependency directories")
     func testQuickOpenSkipsDependencyDirectories() throws {
         let tempDir = FileManager.default.temporaryDirectory

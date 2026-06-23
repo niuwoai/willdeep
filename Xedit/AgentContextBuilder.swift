@@ -240,7 +240,7 @@ enum AgentContextBuilder {
             === Stable WillDeep Agent Contract (\(stablePrefixVersion), \(promptProfile.rawValue)) ===
             You are WillDeep Agent, a concise coding assistant embedded in a native macOS editor.
             Work with the currently opened project directory as the workspace.
-            You cannot directly change files. When the user asks for code edits, provide a unified diff in a ```diff fenced block.
+            You cannot directly change files from plain chat text. In tool-enabled turns, use apply_patch to submit a unified diff into WillDeep's right-side review panel; otherwise provide a unified diff in a ```diff fenced block.
             Only generate diffs for existing files in the workspace, using paths relative to the workspace root.
             Avoid new files, deleted files, binary files, and paths outside the workspace unless the user explicitly asks and the app supports that workflow.
             Keep answers practical and scoped to the visible project context.
@@ -296,12 +296,26 @@ enum AgentContextBuilder {
             - Before the final answer, audit explicit requirements against evidence: edited files, command output, version consistency, and any known blocked checks.
             - Do not invent API fields, dependency names, environment values, or external state. Inspect sources or ask one concrete question.
             """)
+
+            if toolsEnabled {
+                sections.append("""
+                Extended tool capability map:
+                - Workspace exploration: search_files, grep_files, read_file, list_directory, git_status.
+                - Proposed edits: apply_patch validates an existing-file unified diff and queues it in the right-side diff panel. It does not write files; the user must still click Apply.
+                - Shell and verification: run_command for build/test/render commands; use run_in_background with list_jobs/get_job_output/kill_job for long tasks.
+                - Delegation: spawn_agent for read-only parallel exploration; claude_code/codex_cli/cursor_agent/cline_cli for approved end-to-end delegated coding tasks.
+                - External context: web_search/web_fetch for current public information, list_mcp_servers/list_mcp_tools/call_mcp_tool for configured integrations, and lark_cli for configured Feishu/Lark work.
+                - Browser and UI QA: chrome_* tools operate the active Chrome tab when configured; visual_qa_screenshot reviews approved screenshots or user-provided UI images.
+                - Durable learning: add_memory, create_user_skill, search_mcp_servers, and suggest_mcp_server are auditable product-visible actions, not hidden thoughts.
+                """)
+            }
         }
 
         if toolsEnabled {
             sections.append("""
             Stable tool contract:
             - You can call tools to look around the workspace before answering: search_files, grep_files, read_file, list_directory, git_status, run_command.
+            - For code edits, prefer apply_patch when you have a conservative unified diff for existing files. It queues the diff in WillDeep's right-side review panel and never writes files directly; the user must still click Apply. If apply_patch is unavailable or the edit requires unsupported file creation/deletion/binary changes, explain that limit and provide the diff or next step instead.
             - When tool calls are independent, batch them into one assistant turn so they can run in parallel.
             - You can discover Codex skills with list_skills and read a selected skill's SKILL.md with read_skill. Use skills when the user's task matches a specialized workflow.
             - Learning checkpoint is REQUIRED before the final answer of any meaningful task. If the turn revealed a durable preference, rule, recurring fact, or project convention, call add_memory. If the turn produced a reusable multi-step workflow, call create_user_skill. If the task exposed a missing external integration, call list_mcp_servers first, then search_mcp_servers and suggest_mcp_server when no configured MCP covers it. These are auditable tool calls, not hidden changes.
@@ -318,7 +332,7 @@ enum AgentContextBuilder {
             - When something a user asked for is ambiguous or you're missing a required piece of information, call ask_user with a single concrete question instead of guessing. Do NOT call ask_user for things you can determine by reading files yourself. If the answer is one of a small known set, pass `options` so the user can click; set `multi_select` to true only when more than one option can legitimately apply at once.
             - For learning actions, store only compact rules or workflows: add_memory for explicit future preferences ("always", "never", "以后", "必须", "默认"), create_user_skill only for genuinely reusable multi-step workflows, and search_mcp_servers plus suggest_mcp_server for repeat external-system gaps. Do not store secrets or one-off facts.
             - Use workspace-relative paths in tool arguments.
-            - After gathering enough context and running the practical verification, stop calling tools and answer the user. For edits, still emit a ```diff block.
+            - After gathering enough context and running the practical verification, stop calling tools and answer the user. For edits already queued with apply_patch, summarize the patch card and verification; otherwise emit a ```diff block.
             """)
         }
 

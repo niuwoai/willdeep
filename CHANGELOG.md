@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.103.0-rc8 - 2026-06-23
+
+### Added
+- 新增 `apply_patch` Agent 工具：模型可把 existing-file unified diff 提交到右侧 Patch Review 面板，工具只创建待审批 proposal，不直接写文件；用户点击 Apply 后继续复用现有 `applyAgentPatch` 安全落盘流程。
+- extended 系统提示词新增真实工具能力地图，覆盖 workspace 探索、patch proposal、shell/长任务、委托 agent、Web/MCP/Lark、Chrome/UI QA 和学习动作边界。
+
+### Changed
+- 工具契约明确 `apply_patch` 优先用于代码编辑，无法支持新增/删除/binary 变更时才回退为普通 diff 或说明限制；patch 工具调用在聊天摘要中单独展示，避免被普通工具组吞掉。
+- 版本号从 **1.103.0-rc7** 提升为 **1.103.0-rc8**（Agent Patch 工具融合）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
 ## 1.103.0-rc7 - 2026-06-23
 
 ### Added

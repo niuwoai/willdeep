@@ -59,6 +59,30 @@ extension AppState {
         }
     }
 
+    @discardableResult
+    func enqueueAgentPatchProposal(
+        for runtime: AgentRuntime,
+        messageID: UUID,
+        title: String?,
+        diff: String
+    ) throws -> AgentPatchProposal {
+        _ = try AgentPatchApplier.parse(diff)
+
+        if let existing = runtime.patchProposals.first(where: { $0.diff == diff }) {
+            return existing
+        }
+
+        let trimmedTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let proposal = AgentPatchProposal(
+            messageID: messageID,
+            title: trimmedTitle?.isEmpty == false ? trimmedTitle! : "Agent Patch",
+            diff: diff
+        )
+        runtime.patchProposals.append(proposal)
+        persistAgentSession(runtime: runtime)
+        return proposal
+    }
+
     func applyAgentPatch(_ diff: String) throws {
         guard let rootDirectory else {
             throw AgentPatchError.noWorkspace
