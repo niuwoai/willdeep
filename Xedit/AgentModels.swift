@@ -285,6 +285,17 @@ enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    var conciseSystemPromptDescription: String {
+        switch self {
+        case .requestEveryTime:
+            return "Reads auto-run; every write asks; danger-tier commands require typed confirmation."
+        case .smart:
+            return "Reads auto-run; trusted workspace writes may auto-run; uncertain writes ask; danger-tier commands require typed confirmation."
+        case .workspaceAccess:
+            return "Reads and workspace-scoped writes auto-run; untrusted external actions ask; danger-tier commands require typed confirmation."
+        }
+    }
+
     var symbol: String {
         switch self {
         case .requestEveryTime: return "hand.raised"

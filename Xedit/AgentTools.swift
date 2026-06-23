@@ -32,6 +32,8 @@ enum AgentToolRunner {
             return try await AgentFileTools.gitStatus(context: context)
         case "run_command":
             return try await runCommand(arguments: arguments, context: context)
+        case "apply_patch":
+            return try await applyPatch(arguments: arguments, context: context)
         case "claude_code":
             return try await claudeCode(arguments: arguments, context: context)
         case "codex_cli":
@@ -95,6 +97,76 @@ enum AgentToolRunner {
         default:
             throw AgentToolError.unknownTool(name)
         }
+    }
+
+    // MARK: apply_patch
+
+    private static func applyPatch(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        guard let rootDirectory = context.rootDirectory else {
+            throw AgentToolError.noWorkspace
+        }
+        guard let rawDiff = arguments["diff"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawDiff.isEmpty else {
+            throw AgentToolError.missingArgument("diff")
+        }
+        guard let sink = context.patchProposalSink else {
+            throw AgentToolError.invalidArgument("apply_patch is only available inside an interactive WillDeep agent session.")
+        }
+
+        let extractedBlocks = AgentPatchApplier.extractDiffBlocks(from: rawDiff)
+        let diff = extractedBlocks.count == 1 ? extractedBlocks[0] : rawDiff
+        let changes: [AgentPatchFileChange]
+        do {
+            changes = try AgentPatchApplier.parse(diff)
+        } catch {
+            throw AgentToolError.invalidArgument(error.localizedDescription)
+        }
+
+        let root = rootDirectory.standardizedFileURL
+        let rootPath = root.path
+        for change in changes {
+            let url = root.appendingPathComponent(change.path).standardizedFileURL
+            guard url.path == rootPath || url.path.hasPrefix(rootPath + "/") else {
+                throw AgentToolError.pathOutsideWorkspace(change.path)
+            }
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                throw AgentToolError.notFound(change.path)
+            }
+        }
+
+        let rawTitle = arguments["title"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = rawTitle?.isEmpty == false ? rawTitle : nil
+        let proposal = try await sink(title, diff)
+        let files = changes.map(\.path)
+        let fileList = files.map { "- \($0)" }.joined(separator: "\n")
+        let fileLabel = files.count == 1 ? "1 file" : "\(files.count) files"
+        let statusLine: String
+        switch proposal.status {
+        case .applied:
+            statusLine = "Patch status: applied. The existing patch applier wrote the changes to disk."
+        case .failed:
+            statusLine = "Patch status: failed\(proposal.statusMessage.map { ": \($0)" } ?? ".")"
+        case .rejected:
+            statusLine = "Patch status: rejected."
+        case .pending:
+            statusLine = "Patch status: pending. No files were modified; the user must click Apply before this patch writes to disk."
+        }
+
+        return AgentToolResult(
+            summary: proposal.status == .applied ? "patch applied: \(fileLabel)" : "patch queued: \(fileLabel)",
+            payload: """
+            Patch proposal queued in the right-side diff panel.
+
+            Patch ID: \(proposal.id.uuidString)
+            Title: \(proposal.title)
+            \(statusLine)
+            Files:
+            \(fileList)
+            """
+        )
     }
 
     private static func generateImage(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {

@@ -76,6 +76,15 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "apply_patch",
+            description: "Submit a conservative unified diff for existing workspace files to WillDeep's right-side patch review panel. This tool validates the diff shape and queues a patch proposal. In normal modes it does not write files until the user clicks Apply; in Goal mode or workspace-access approval mode the host may immediately apply the queued proposal through the same patch applier and mark it applied.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "diff", type: .string, description: "Unified diff for existing files only. Use workspace-relative paths (`--- a/path`, `+++ b/path`) and standard @@ hunks.", required: true),
+                AgentToolParameter(name: "title", type: .string, description: "Optional short title for the patch card. Defaults to Agent Patch.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "list_jobs",
             description: "List background shell jobs spawned via `run_command` with `run_in_background: true` in this session, including their status and short handles. Read-only.",
             risk: .read,

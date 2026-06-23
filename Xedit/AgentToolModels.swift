@@ -78,6 +78,13 @@ struct AgentToolContext {
     /// environment; user-approved write/network/credential commands run
     /// in the escalated/full-user environment.
     let sandboxMode: AgentSandboxMode
+    /// Optional bridge for proposal-only patch tools. The tool submits a
+    /// unified diff into the session's review UI; applying it to disk is
+    /// still handled by the existing user-approved patch flow.
+    let patchProposalSink: (@MainActor (String?, String) async throws -> AgentPatchProposal)?
+    /// When set, apply_patch should ask the host to immediately apply the
+    /// queued proposal using the existing patch applier and audit status.
+    let patchAutoApplySource: AgentToolApprovalSource?
 
     init(
         rootDirectory: URL?,
@@ -85,7 +92,9 @@ struct AgentToolContext {
         runtimeDescriptor: RuntimeDescriptor? = nil,
         runtimeID: UUID? = nil,
         jobRegistry: AgentJobRegistry? = nil,
-        sandboxMode: AgentSandboxMode = .readOnly
+        sandboxMode: AgentSandboxMode = .readOnly,
+        patchProposalSink: (@MainActor (String?, String) async throws -> AgentPatchProposal)? = nil,
+        patchAutoApplySource: AgentToolApprovalSource? = nil
     ) {
         self.rootDirectory = rootDirectory
         self.workspaceLocation = workspaceLocation ?? rootDirectory.map { .local(path: $0.standardizedFileURL.path) }
@@ -93,6 +102,8 @@ struct AgentToolContext {
         self.runtimeID = runtimeID
         self.jobRegistry = jobRegistry
         self.sandboxMode = sandboxMode
+        self.patchProposalSink = patchProposalSink
+        self.patchAutoApplySource = patchAutoApplySource
     }
 
     var sshBackend: SSHRuntimeBackend? {

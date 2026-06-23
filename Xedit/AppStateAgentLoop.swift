@@ -360,6 +360,7 @@ extension AppState {
             // window-level context the user can flip while another
             // session is running, and the model just sees it as
             // "what's on screen right now".
+            let promptProfile = AgentSystemPromptProfile.automatic(for: configuration)
             var systemPrompt = AgentContextBuilder.systemPrompt(
                 rootDirectory: workspaceURL,
                 openedFileURL: openedFileURL,
@@ -370,7 +371,8 @@ extension AppState {
                 interactionMode: runtime.interactionMode,
                 approvalMode: runtime.approvalMode,
                 currentPlan: runtime.currentPlan,
-                currentGoal: runtime.currentGoal
+                currentGoal: runtime.currentGoal,
+                promptProfile: promptProfile
             )
             if let remoteRuntimeDescriptor,
                case .remote(_, let remotePath) = workspaceLocation {
@@ -388,7 +390,8 @@ extension AppState {
             }
             let cacheDiagnostics = AgentContextBuilder.cacheDiagnostics(
                 for: systemPrompt,
-                toolsEnabled: true
+                toolsEnabled: true,
+                promptProfile: promptProfile
             )
             if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }) {
                 runtime.messages[index].requestPrefixHash = cacheDiagnostics.hash
@@ -726,6 +729,10 @@ extension AppState {
                     continue
                 }
 
+                let patchAutoApplySource = patchAutoApplySource(
+                    forToolName: call.toolName,
+                    runtime: runtime
+                )
                 let context = AgentToolContext(
                     rootDirectory: workspaceURL,
                     workspaceLocation: workspaceLocation,
@@ -736,7 +743,17 @@ extension AppState {
                         risk: risk,
                         approvalSource: autoApproval,
                         sandboxDecision: sandboxDecision
-                    )
+                    ),
+                    patchProposalSink: { title, diff in
+                        try self.enqueueAgentPatchProposal(
+                            for: runtime,
+                            messageID: assistantID,
+                            title: title,
+                            diff: diff,
+                            autoApplySource: patchAutoApplySource
+                        )
+                    },
+                    patchAutoApplySource: patchAutoApplySource
                 )
                 do {
                     let result = try await AgentToolRunner.run(
@@ -747,15 +764,21 @@ extension AppState {
                     if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
                         runtime.toolCalls[index].status = .succeeded
                         runtime.toolCalls[index].result = result
+                        if let patchAutoApplySource {
+                            runtime.toolCalls[index].approvalSource = patchAutoApplySource
+                        }
                     }
+                    let effectiveApprovalSource = runtime.toolCalls.first(where: { $0.id == recordID })?.approvalSource
+                        ?? autoApproval
+                        ?? patchAutoApplySource
                     AgentSandboxAuditLog.append(
                         toolName: call.toolName,
                         arguments: argsDict,
                         decision: sandboxDecision,
-                        approvalSource: runtime.toolCalls.first(where: { $0.id == recordID })?.approvalSource ?? autoApproval,
+                        approvalSource: effectiveApprovalSource,
                         outcome: "succeeded"
                     )
-                    if call.toolName == "run_command" || risk != .read {
+                    if call.toolName == "run_command" || risk != .read || patchAutoApplySource != nil {
                         await refreshGitStatusAfterAgentTool(
                             for: runtime,
                             workspaceURL: workspaceURL,
@@ -772,7 +795,9 @@ extension AppState {
                         toolName: call.toolName,
                         arguments: argsDict,
                         decision: sandboxDecision,
-                        approvalSource: runtime.toolCalls.first(where: { $0.id == recordID })?.approvalSource ?? autoApproval,
+                        approvalSource: runtime.toolCalls.first(where: { $0.id == recordID })?.approvalSource
+                            ?? autoApproval
+                            ?? patchAutoApplySource,
                         outcome: "failed"
                     )
                     appendToolMessage(
@@ -793,6 +818,21 @@ extension AppState {
 
         runtime.errorMessage = "Agent paused after \(Self.maxAgentToolRounds) tool-call rounds to avoid an accidental loop. Send another message to continue."
         runtime.errorDetails = nil
+    }
+
+    private func patchAutoApplySource(
+        forToolName toolName: String,
+        runtime: AgentRuntime
+    ) -> AgentToolApprovalSource? {
+        guard toolName == "apply_patch" else { return nil }
+        if runtime.interactionMode == .goal {
+            return .goalMode
+        }
+        if runtime.interactionMode != .plan,
+           runtime.approvalMode == .workspaceAccess {
+            return .workspaceAccess
+        }
+        return nil
     }
 
     /// Suspend until the user resolves the tool call. Three resume paths:

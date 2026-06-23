@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.103.0-rc9 - 2026-06-23
+
+### Changed
+- `apply_patch` 在 Goal 模式和「替我审批」workspace-access approval mode 下会自动调用现有 `applyAgentPatch` 落盘，并把右侧 Patch Review proposal 标记为 applied；普通/智能模式仍保持 pending，等待用户点击 Apply。
+- extended 系统提示词和工具描述同步更新，明确 `apply_patch` 的 pending/auto-apply 边界，避免模型误以为所有模式都必须等待手动点击。
+- 版本号从 **1.103.0-rc8** 提升为 **1.103.0-rc9**（Agent Patch 自动应用）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
+## 1.103.0-rc8 - 2026-06-23
+
+### Added
+- 新增 `apply_patch` Agent 工具：模型可把 existing-file unified diff 提交到右侧 Patch Review 面板，工具只创建待审批 proposal，不直接写文件；用户点击 Apply 后继续复用现有 `applyAgentPatch` 安全落盘流程。
+- extended 系统提示词新增真实工具能力地图，覆盖 workspace 探索、patch proposal、shell/长任务、委托 agent、Web/MCP/Lark、Chrome/UI QA 和学习动作边界。
+
+### Changed
+- 工具契约明确 `apply_patch` 优先用于代码编辑，无法支持新增/删除/binary 变更时才回退为普通 diff 或说明限制；patch 工具调用在聊天摘要中单独展示，避免被普通工具组吞掉。
+- 版本号从 **1.103.0-rc7** 提升为 **1.103.0-rc8**（Agent Patch 工具融合）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
+## 1.103.0-rc7 - 2026-06-23
+
+### Added
+
+- Agent 系统提示词新增 compact / standard / extended 三档 profile，并根据当前模型能力自动选择；`claude-opus-4.8`、`gpt-5-codex` 等高能力模型走 extended，轻量/低价模型走 compact。
+- Project instructions 支持从 workspace root 到当前文件目录逐级收集 `AGENTS.md` / `CLAUDE.md`，更深层规则排在后面覆盖父级规则。
+
+### Changed
+
+- Approval mode 注入改成更短的一行描述，减少动态上下文对稳定 prompt 前缀的扰动。
+- 稳定前缀诊断改为统计 `=== Dynamic Turn Context ===` 之前的完整稳定段，并补充 profile 自动选择与嵌套规则顺序测试。
+- 版本号从 **1.103.0-rc6** 提升为 **1.103.0-rc7**（Agent Prompt Profile 自动分档）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
+## 1.103.0-rc6 - 2026-06-23
+
+### Changed
+
+- Agent 稳定系统提示词升级到 `willdeep-agent-system-v3`，补入简洁输出、`path:line` 引用、少写注释、先看项目约定、不泄露敏感信息、React i18n、yarn 优先、版本同步和独立工具并行调用等硬规则。
+- 稳定前缀测试新增关键提示词断言，防止后续重构时丢失核心约束。
+- 版本号从 **1.103.0-rc5** 提升为 **1.103.0-rc6**（Agent 系统提示词硬规则）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs 同步。
+
 ## 1.103.0-rc5 - 2026-06-23
 
 ### Added

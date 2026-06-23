@@ -59,6 +59,57 @@ extension AppState {
         }
     }
 
+    @discardableResult
+    func enqueueAgentPatchProposal(
+        for runtime: AgentRuntime,
+        messageID: UUID,
+        title: String?,
+        diff: String,
+        autoApplySource: AgentToolApprovalSource? = nil
+    ) throws -> AgentPatchProposal {
+        _ = try AgentPatchApplier.parse(diff)
+
+        let proposalIndex: Int
+        if let existingIndex = runtime.patchProposals.firstIndex(where: { $0.diff == diff }) {
+            proposalIndex = existingIndex
+        } else {
+            let trimmedTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let proposal = AgentPatchProposal(
+                messageID: messageID,
+                title: trimmedTitle?.isEmpty == false ? trimmedTitle! : "Agent Patch",
+                diff: diff
+            )
+            runtime.patchProposals.append(proposal)
+            proposalIndex = runtime.patchProposals.count - 1
+        }
+
+        if let autoApplySource,
+           runtime.patchProposals[proposalIndex].status == .pending {
+            do {
+                try applyAgentPatch(diff)
+                runtime.patchProposals[proposalIndex].status = .applied
+                runtime.patchProposals[proposalIndex].statusMessage = autoApplyStatusMessage(for: autoApplySource)
+            } catch {
+                runtime.patchProposals[proposalIndex].status = .failed
+                runtime.patchProposals[proposalIndex].statusMessage = error.localizedDescription
+            }
+        }
+
+        persistAgentSession(runtime: runtime)
+        return runtime.patchProposals[proposalIndex]
+    }
+
+    private func autoApplyStatusMessage(for source: AgentToolApprovalSource) -> String {
+        switch source {
+        case .goalMode:
+            return "Auto-applied by Goal mode"
+        case .workspaceAccess:
+            return "Auto-applied by workspace access approval"
+        default:
+            return "Auto-applied"
+        }
+    }
+
     func applyAgentPatch(_ diff: String) throws {
         guard let rootDirectory else {
             throw AgentPatchError.noWorkspace

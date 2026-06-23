@@ -20,6 +20,7 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
     case claudeCode
     case codexCLI
     case cursorAgent
+    case applyPatch
     case askUser
     case other(String)
 
@@ -39,6 +40,8 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
             return .codexCLI
         case "cursor_agent":
             return .cursorAgent
+        case "apply_patch":
+            return .applyPatch
         case "ask_user":
             return .askUser
         default:
@@ -51,7 +54,7 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
     /// peer of the same kind.
     var isGroupable: Bool {
         switch self {
-        case .askUser: return false
+        case .askUser, .applyPatch: return false
         default: return true
         }
     }
@@ -70,6 +73,8 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
             return "已委派 \(count) 个 Codex CLI 任务"
         case .cursorAgent:
             return "已委派 \(count) 个 Cursor Agent 任务"
+        case .applyPatch:
+            return "已提交 Patch"
         case .other(let name):
             return "已调用 \(count) 次 \(name)"
         case .askUser:
@@ -96,6 +101,7 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
         case .claudeCode: return "sparkles.rectangle.stack"
         case .codexCLI: return "terminal.fill"
         case .cursorAgent: return "cursorarrow.rays"
+        case .applyPatch: return "square.and.pencil"
         case .askUser: return "bubble.left.and.text.bubble.right"
         case .other: return "wrench.and.screwdriver"
         }

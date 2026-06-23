@@ -664,7 +664,8 @@ extension WillDeepTests {
             selectedText: "",
             language: nil,
             toolsEnabled: true,
-            approvalMode: .smart
+            approvalMode: .smart,
+            globalRules: nil
         )
         let second = AgentContextBuilder.systemPrompt(
             rootDirectory: URL(fileURLWithPath: "/tmp/project-b"),
@@ -673,7 +674,8 @@ extension WillDeepTests {
             selectedText: "b",
             language: nil,
             toolsEnabled: true,
-            approvalMode: .requestEveryTime
+            approvalMode: .requestEveryTime,
+            globalRules: nil
         )
         let stable = AgentContextBuilder.stableSystemPromptPrefix(toolsEnabled: true)
         let firstDiagnostics = AgentContextBuilder.cacheDiagnostics(for: first, toolsEnabled: true)
@@ -683,6 +685,64 @@ extension WillDeepTests {
         #expect(second.hasPrefix(stable))
         #expect(firstDiagnostics.hash == secondDiagnostics.hash)
         #expect(firstDiagnostics.stableCharacters == stable.count)
+        #expect(stable.contains("Reply in Simplified Chinese."))
+        #expect(stable.contains("never hardcode user-visible JSX/TSX strings"))
+        #expect(stable.contains("Reference code as `path/to/file.swift:42`"))
+        #expect(stable.contains("batch them into one assistant turn"))
+        #expect(stable.contains("Never log, echo, persist, or expose secrets"))
+    }
+
+    @Test("AgentSystemPromptProfile picks prompt size from model capability")
+    func testAgentSystemPromptProfileAutoSelection() {
+        #expect(AgentSystemPromptProfile.automatic(modelID: "claude-opus-4.8", providerID: "claude") == .extended)
+        #expect(AgentSystemPromptProfile.automatic(modelID: "gpt-5-codex", providerID: "openai") == .extended)
+        #expect(AgentSystemPromptProfile.automatic(modelID: "deepseek-v4-flash", providerID: "deepseek") == .compact)
+        #expect(AgentSystemPromptProfile.automatic(modelID: "claude-sonnet-4.5", providerID: "claude") == .standard)
+    }
+
+    @Test("AgentContextBuilder collects nested project instruction files in scope order")
+    func testAgentContextBuilderNestedProjectRules() throws {
+        let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("willdeep_test_rules_\(UUID().uuidString)")
+        let nested = workspace.appendingPathComponent("Sources/Feature", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        try "Root overview".write(
+            to: workspace.appendingPathComponent("README.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "Root agent rule".write(
+            to: workspace.appendingPathComponent("AGENTS.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "Feature agent rule".write(
+            to: nested.appendingPathComponent("AGENTS.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let prompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: workspace,
+            openedFileURL: nested.appendingPathComponent("View.swift"),
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            toolsEnabled: true,
+            globalRules: nil
+        )
+
+        let readmeIndex = try #require(prompt.range(of: "Root overview")?.lowerBound)
+        let rootRuleIndex = try #require(prompt.range(of: "Root agent rule")?.lowerBound)
+        let featureRuleIndex = try #require(prompt.range(of: "Feature agent rule")?.lowerBound)
+        let dynamicIndex = try #require(prompt.range(of: "=== Dynamic Turn Context ===")?.lowerBound)
+
+        #expect(readmeIndex < rootRuleIndex)
+        #expect(rootRuleIndex < featureRuleIndex)
+        #expect(featureRuleIndex < dynamicIndex)
+        #expect(prompt.contains("# Sources/Feature/AGENTS.md"))
     }
 
     @Test("long tool results are summarized before entering model context")
@@ -1032,6 +1092,130 @@ extension WillDeepTests {
 
         #expect(result.payload.contains("/opt/homebrew/bin"))
         #expect(result.payload.contains("/usr/local/bin"))
+    }
+
+    @Test("apply_patch queues a right-side patch proposal without writing files")
+    @MainActor
+    func testApplyPatchQueuesProposalWithoutWritingFiles() async throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_apply_patch_tool_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let fileURL = workspace.appendingPathComponent("Sample.swift")
+        try "let value = 1\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        let diff = """
+        --- a/Sample.swift
+        +++ b/Sample.swift
+        @@ -1 +1 @@
+        -let value = 1
+        +let value = 2
+        """
+
+        var queuedProposal: AgentPatchProposal?
+        let context = AgentToolContext(
+            rootDirectory: workspace,
+            patchProposalSink: { title, diff in
+                let proposal = AgentPatchProposal(
+                    messageID: UUID(),
+                    title: title ?? "Agent Patch",
+                    diff: diff
+                )
+                queuedProposal = proposal
+                return proposal
+            }
+        )
+
+        let result = try await AgentToolRunner.run(
+            name: "apply_patch",
+            arguments: [
+                "title": .string("Update sample"),
+                "diff": .string(diff)
+            ],
+            context: context
+        )
+
+        #expect(queuedProposal?.title == "Update sample")
+        #expect(queuedProposal?.diff == diff)
+        #expect(result.summary == "patch queued: 1 file")
+        #expect(result.payload.contains("No files were modified"))
+        #expect(try String(contentsOf: fileURL, encoding: .utf8) == "let value = 1\n")
+    }
+
+    @Test("apply_patch auto-applies through existing patch applier in Goal and workspace access modes")
+    @MainActor
+    func testApplyPatchAutoAppliesInGoalAndWorkspaceAccessModes() throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_apply_patch_auto_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let fileURL = workspace.appendingPathComponent("Sample.swift")
+        try "let value = 1\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        let appState = AppState(rootDirectory: workspace)
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        let session = appState.startNewAgentSession()
+        defer {
+            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
+                AgentSessionStore.delete(id: id)
+            }
+        }
+        guard let runtime = appState.agentRuntimes[session.id] else {
+            Issue.record("Expected runtime for new agent session")
+            return
+        }
+
+        let proposal = try appState.enqueueAgentPatchProposal(
+            for: runtime,
+            messageID: UUID(),
+            title: "Auto update sample",
+            diff: """
+            --- a/Sample.swift
+            +++ b/Sample.swift
+            @@ -1 +1 @@
+            -let value = 1
+            +let value = 2
+            """,
+            autoApplySource: .goalMode
+        )
+
+        #expect(proposal.status == .applied)
+        #expect(proposal.statusMessage == "Auto-applied by Goal mode")
+        #expect(runtime.patchProposals.first?.status == .applied)
+        #expect(try String(contentsOf: fileURL, encoding: .utf8) == "let value = 2\n")
+
+        let workspaceAccessProposal = try appState.enqueueAgentPatchProposal(
+            for: runtime,
+            messageID: UUID(),
+            title: "Workspace access update",
+            diff: """
+            --- a/Sample.swift
+            +++ b/Sample.swift
+            @@ -1 +1 @@
+            -let value = 2
+            +let value = 3
+            """,
+            autoApplySource: .workspaceAccess
+        )
+
+        #expect(workspaceAccessProposal.status == .applied)
+        #expect(workspaceAccessProposal.statusMessage == "Auto-applied by workspace access approval")
+        #expect(try String(contentsOf: fileURL, encoding: .utf8) == "let value = 3\n")
+    }
+
+    @Test("apply_patch is advertised in extended prompt and tool registry")
+    func testApplyPatchPromptAndRegistrySurface() {
+        let descriptor = AgentToolRegistry.descriptor(for: "apply_patch")
+        #expect(descriptor?.risk == .read)
+        #expect(descriptor?.description.contains("right-side patch review panel") == true)
+
+        let prompt = AgentContextBuilder.stableSystemPromptPrefix(
+            toolsEnabled: true,
+            promptProfile: .extended
+        )
+        #expect(prompt.contains("Extended tool capability map"))
+        #expect(prompt.contains("apply_patch validates an existing-file unified diff"))
+        #expect(prompt.contains("right-side review panel"))
     }
 
     @Test("quick open skips dependency directories")
