@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-23 | Current version: v1.103.0-rc11
+> Last updated: 2026-06-23 | Current version: v1.103.0-rc12
 
 ## Positioning
 
@@ -43,6 +43,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **Agent Patch 自动应用（1.103.0-rc9）** —— `apply_patch` 在普通/智能模式下仍生成右侧待审批 proposal；在 Goal 模式或「替我审批」workspace-access approval mode 下，会先生成同一张 patch proposal，再通过现有 `applyAgentPatch` 自动落盘并把 proposal 标记为 applied，保留审计轨迹且不绕过 diff 栏。
 - **用户消息气泡可见性调整（1.103.0-rc10）** —— Agent 聊天用户气泡默认背景从 `Color.primary @ 0.018` 上调到 `0.028`、边框从 `0.014` 上调到 `0.022`，hover 同步上调到 `0.038 / 0.032`。原先默认透明度过低、单行消息几乎看不出气泡边界，只有 hover 后才隐约可见；调整后默认即有清晰气泡感，hover 仍保留轻微反馈，padding/高度保持不变。
 - **Turn-report 图标折进 footer（1.103.0-rc11）** —— 原 `AgentTurnPostStrip` 左侧的 `list.bullet.clipboard + 计数` 触发器搬进 TextKit footer chrome，跟 copy / ◷ / tokens / ↻ 在同一行渲染（最近一条 assistant 消息 footer 上 `doc.text + 数字`）。点击复用同一张 `AgentTurnReportCard` SwiftUI popover（ScrollView + 520pt × 560pt）。`AgentTurnPostStrip` 现在只承载 Learning，0 learning 时整行不再渲染，少占一行底部空间。实现走 `AgentChatHistoryFooterChrome.reportButton(count:)` + 新增 `.agentChatHistoryShowTurnReport` 属性 + `clickedOnLink` 路由 + 渲染缓存 fingerprint 跟 `latestTurnReportToolCount` 同步。
+- **Pending patch 下一条消息自动处理（1.103.0-rc12）** —— 用户没点 Apply 就继续发送下一条消息时,Goal 模式和「替我审批」workspace-access 模式会先自动应用仍 pending 的 patch proposal,并保留 applied 状态审计;普通/Plan 模式继续 supersede 旧 proposal,避免非授权写盘。
 - **Composer 模型热门/上新分组（1.102.0-rc7）** —— Agent composer 模型菜单消费 some.im `/v1/models` / 公开模型定价里的 `is_hot`、`is_new` 标记,在 Recently used 后展示 Hot / New 分组,并与 Recently fetched 去重。
 - **CLI 缺失文件新建（1.102.0-rc2）** —— `willdeep <path>` 现在通过 `willdeep://open?path=...` 把路径交给 App 处理,不存在但父目录存在的文件会自动创建空文件并打开,避免 macOS `open` 在 App 启动前直接报 "does not exist"。
 - **some.im 多模态整合（1.102.0-rc1）** —— Settings 与 Onboarding 新增 some.im 配置入口,API Key 存 Keychain,可拉取模型并设置图片/视频生成首选与优先模型；内置 `generate_image` 工具在 some.im 配置后直接调用 relay 图片生成接口,默认 `gpt-image-2`,并且 OpenAI Chat 兼容请求会过滤 `.widget` / `.workflowReport` 本地卡片,避免 UI-only role 泄漏给 some.im。

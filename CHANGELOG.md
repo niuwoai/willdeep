@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.103.0-rc12 - 2026-06-23
+
+### Fixed
+- Agent pending patch proposal 在用户继续发送下一条消息前会按当前自动化模式处理：Goal 模式和「替我审批」workspace-access 模式自动复用现有 `applyAgentPatch` 落盘并把 proposal 标记为 applied；普通/Plan 模式仍标记为 superseded，继续要求用户显式 Apply，避免非授权场景误写文件。
+- 新增回归测试覆盖三种路径：Goal 自动应用、workspace-access 自动应用、普通 smart 模式保持 superseded 且不改文件。
+- 版本号从 **1.103.0-rc11** 提升为 **1.103.0-rc12**（pending patch 下一条消息前自动处理）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×4 同步。
+
 ## 1.103.0-rc11 - 2026-06-23
 
 ### Changed

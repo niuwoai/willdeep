@@ -1203,6 +1203,96 @@ extension WillDeepTests {
         #expect(try String(contentsOf: fileURL, encoding: .utf8) == "let value = 3\n")
     }
 
+    @Test("pending patch proposals auto-resolve before the next message in autonomous modes")
+    @MainActor
+    func testPendingPatchProposalsAutoResolveBeforeNextMessageInAutonomousModes() throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_pending_patch_auto_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let goalFileURL = workspace.appendingPathComponent("Goal.swift")
+        let workspaceFileURL = workspace.appendingPathComponent("Workspace.swift")
+        let manualFileURL = workspace.appendingPathComponent("Manual.swift")
+        try "let value = 1\n".write(to: goalFileURL, atomically: true, encoding: .utf8)
+        try "let value = 1\n".write(to: workspaceFileURL, atomically: true, encoding: .utf8)
+        try "let value = 1\n".write(to: manualFileURL, atomically: true, encoding: .utf8)
+
+        let appState = AppState(rootDirectory: workspace)
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        let session = appState.startNewAgentSession()
+        defer {
+            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
+                AgentSessionStore.delete(id: id)
+            }
+        }
+        guard let runtime = appState.agentRuntimes[session.id] else {
+            Issue.record("Expected runtime for new agent session")
+            return
+        }
+
+        runtime.interactionMode = .goal
+        runtime.patchProposals.append(
+            AgentPatchProposal(
+                messageID: UUID(),
+                title: "Goal pending",
+                diff: """
+                --- a/Goal.swift
+                +++ b/Goal.swift
+                @@ -1 +1 @@
+                -let value = 1
+                +let value = 2
+                """
+            )
+        )
+
+        #expect(appState.resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime) == 1)
+        #expect(runtime.patchProposals.last?.status == .applied)
+        #expect(runtime.patchProposals.last?.statusMessage == "Auto-applied by Goal mode")
+        #expect(try String(contentsOf: goalFileURL, encoding: .utf8) == "let value = 2\n")
+
+        runtime.interactionMode = .normal
+        runtime.approvalMode = .workspaceAccess
+        runtime.patchProposals.append(
+            AgentPatchProposal(
+                messageID: UUID(),
+                title: "Workspace access pending",
+                diff: """
+                --- a/Workspace.swift
+                +++ b/Workspace.swift
+                @@ -1 +1 @@
+                -let value = 1
+                +let value = 2
+                """
+            )
+        )
+
+        #expect(appState.resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime) == 1)
+        #expect(runtime.patchProposals.last?.status == .applied)
+        #expect(runtime.patchProposals.last?.statusMessage == "Auto-applied by workspace access approval")
+        #expect(try String(contentsOf: workspaceFileURL, encoding: .utf8) == "let value = 2\n")
+
+        runtime.approvalMode = .smart
+        runtime.patchProposals.append(
+            AgentPatchProposal(
+                messageID: UUID(),
+                title: "Manual pending",
+                diff: """
+                --- a/Manual.swift
+                +++ b/Manual.swift
+                @@ -1 +1 @@
+                -let value = 1
+                +let value = 2
+                """
+            )
+        )
+
+        #expect(appState.resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime) == 1)
+        #expect(runtime.patchProposals.last?.status == .rejected)
+        #expect(runtime.patchProposals.last?.statusMessage == "Superseded by a newer message.")
+        #expect(try String(contentsOf: manualFileURL, encoding: .utf8) == "let value = 1\n")
+    }
+
     @Test("apply_patch is advertised in extended prompt and tool registry")
     func testApplyPatchPromptAndRegistrySurface() {
         let descriptor = AgentToolRegistry.descriptor(for: "apply_patch")
