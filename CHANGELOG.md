@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.105.0-rc16 - 2026-06-24
+
+### Changed
+- 排队消息列表 (`QueuedMessagesList`) 从 transcript 中段(思考指示器之后、压缩/错误/patch/worktree/turn-report 卡片之前)移到 transcript 最底部、bottom 哨兵之前,让「已排队」卡片紧贴 composer 顶部的「思考中」状态条,二者视觉上挨在一起,不再被中间一堆卡片隔开。新增 `agentQueuedMessages.count` 的滚动观察,排队消息进来时自动滚到底部。
+- 版本号从 **1.105.0-rc15** 提升为 **1.105.0-rc16**（排队消息钉到 transcript 底部紧贴 composer）。pbxproj×6 / Go agent / Help Info.plist / README badge / product-overview / docs ×2 同步。
+
 ## 1.105.0-rc15 - 2026-06-24
 
 ### Fixed

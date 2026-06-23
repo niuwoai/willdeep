@@ -217,22 +217,6 @@ struct AgentChatTranscript: View {
                         }
                     }
 
-                    if !appState.agentQueuedMessages.isEmpty {
-                        QueuedMessagesList(
-                            messages: appState.agentQueuedMessages,
-                            baseFontSize: appState.agentChatBaseFontSize,
-                            onEdit: { queued in
-                                appState.editQueuedAgentMessage(id: queued.id)
-                            },
-                            onSendNow: { queued in
-                                appState.sendQueuedAgentMessageNow(id: queued.id)
-                            },
-                            onRemove: { queued in
-                                appState.removeQueuedAgentMessage(id: queued.id)
-                            }
-                        )
-                    }
-
                     if appState.isCompressingAgentContext {
                         AgentContextCompressionDivider()
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth)
@@ -270,6 +254,26 @@ struct AgentChatTranscript: View {
                     )
                     .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
 
+                    // 排队消息钉在 transcript 最底部 —— 紧贴 composer
+                    // 上方的「思考中」状态条,让"已排队"和"正在处理"在
+                    // 视觉上挨在一起,而不是飘在中间被其它卡片隔开。
+                    if !appState.agentQueuedMessages.isEmpty {
+                        QueuedMessagesList(
+                            messages: appState.agentQueuedMessages,
+                            baseFontSize: appState.agentChatBaseFontSize,
+                            onEdit: { queued in
+                                appState.editQueuedAgentMessage(id: queued.id)
+                            },
+                            onSendNow: { queued in
+                                appState.sendQueuedAgentMessageNow(id: queued.id)
+                            },
+                            onRemove: { queued in
+                                appState.removeQueuedAgentMessage(id: queued.id)
+                            }
+                        )
+                        .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+                    }
+
                     Color.clear
                         .frame(height: 1)
                         .id(Self.bottomScrollID)
@@ -300,6 +304,9 @@ struct AgentChatTranscript: View {
                 proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
             }
             .onCompatibleChange(of: appState.agentLearningEvents.count) { _, _ in
+                proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+            }
+            .onCompatibleChange(of: appState.agentQueuedMessages.count) { _, _ in
                 proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
             }
             // 切走 app 再切回来时,SwiftUI 会重新布局 ScrollView,默认
