@@ -16,6 +16,9 @@ struct EditorTerminalSettings: Codable, Equatable {
     var fontSize: Double
     var colorSchemeID: String
     var environmentText: String
+    /// block / bar / underline. Decoded leniently (older sessions lack it).
+    var cursorStyleID: String = EditorTerminalCursorStyle.block.id
+    var cursorBlinks: Bool = true
 
     static var `default`: EditorTerminalSettings {
         EditorTerminalSettings(
@@ -23,8 +26,39 @@ struct EditorTerminalSettings: Codable, Equatable {
             fontName: EditorTerminalFont.preferredDefaultID,
             fontSize: 12,
             colorSchemeID: EditorTerminalColorScheme.midnight.id,
-            environmentText: ""
+            environmentText: "",
+            cursorStyleID: EditorTerminalCursorStyle.block.id,
+            cursorBlinks: true
         )
+    }
+
+    /// Sentinel colorSchemeID meaning "derive terminal colors from the
+    /// current interface skin". Handled at apply time by the views that
+    /// know the active skin; falls back to a fixed scheme in the model.
+    static let followSkinColorSchemeID = "skin"
+
+    var followsInterfaceSkin: Bool { colorSchemeID == Self.followSkinColorSchemeID }
+}
+
+/// Cursor shapes the user can pick. Maps to SwiftTerm's CursorStyle
+/// (combined with the blink flag) at apply time.
+enum EditorTerminalCursorStyle: String, CaseIterable, Identifiable {
+    case block
+    case bar
+    case underline
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .block: return "Block"
+        case .bar: return "Bar"
+        case .underline: return "Underline"
+        }
+    }
+
+    static func byID(_ id: String) -> EditorTerminalCursorStyle {
+        EditorTerminalCursorStyle(rawValue: id) ?? .block
     }
 }
 
@@ -51,14 +85,22 @@ extension EditorTerminalSettings {
         if EditorTerminalFont.byID(result.fontName) == nil {
             result.fontName = EditorTerminalSettings.default.fontName
         }
-        if EditorTerminalColorScheme.byID(result.colorSchemeID) == nil {
+        if result.colorSchemeID != EditorTerminalSettings.followSkinColorSchemeID,
+           EditorTerminalColorScheme.byID(result.colorSchemeID) == nil {
             result.colorSchemeID = EditorTerminalSettings.default.colorSchemeID
+        }
+        if EditorTerminalCursorStyle(rawValue: result.cursorStyleID) == nil {
+            result.cursorStyleID = EditorTerminalCursorStyle.block.id
         }
         if result.shellPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             result.shellPath = EditorTerminalSettings.default.shellPath
         }
         result.fontSize = min(max(result.fontSize, 10), 20)
         return result
+    }
+
+    var cursorStyle: EditorTerminalCursorStyle {
+        EditorTerminalCursorStyle.byID(cursorStyleID)
     }
 
     var font: NSFont {
@@ -376,242 +418,5 @@ enum EditorProjectCommandResolver {
             return "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
         }
         return value
-    }
-}
-
-final class EditorTerminalSession: ObservableObject {
-    @Published var output: String = ""
-    @Published var workingDirectoryPath: String = FileManager.default.homeDirectoryForCurrentUser.path
-    @Published private(set) var isRunning = false
-    @Published private(set) var runningCommand: String?
-
-    private var childPID: pid_t?
-    private var masterFileHandle: FileHandle?
-    private var processSource: DispatchSourceProcess?
-
-    func setWorkingDirectory(_ url: URL) {
-        workingDirectoryPath = url.standardizedFileURL.path
-    }
-
-    func startShellIfNeeded(settings: EditorTerminalSettings) {
-        guard !isRunning else { return }
-        startPTY(settings: settings)
-    }
-
-    func run(_ command: String, settings: EditorTerminalSettings) {
-        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        startShellIfNeeded(settings: settings)
-        send(trimmed + "\n")
-        runningCommand = trimmed
-    }
-
-    func stop(settings: EditorTerminalSettings) {
-        guard let childPID, isRunning else { return }
-        kill(childPID, SIGTERM)
-        append("\n[terminated]\n")
-    }
-
-    func clear() {
-        output = ""
-    }
-
-    func send(_ string: String) {
-        guard let data = string.data(using: .utf8) else { return }
-        send(data)
-    }
-
-    func send(_ data: Data) {
-        guard let masterFileHandle, isRunning else { return }
-        do {
-            try masterFileHandle.write(contentsOf: data)
-        } catch {
-            append("\n[terminal write failed: \(error.localizedDescription)]\n")
-        }
-    }
-
-    deinit {
-        if let childPID {
-            kill(childPID, SIGTERM)
-        }
-        processSource?.cancel()
-        masterFileHandle?.readabilityHandler = nil
-        try? masterFileHandle?.close()
-    }
-
-    private func startPTY(settings rawSettings: EditorTerminalSettings) {
-        let settings = rawSettings.normalized()
-        var masterFD: Int32 = -1
-        var slaveFD: Int32 = -1
-
-        guard openpty(&masterFD, &slaveFD, nil, nil, nil) == 0 else {
-            append("[failed to allocate pseudo terminal: \(String(cString: strerror(errno)))]\n")
-            return
-        }
-        guard let slavePathPointer = ttyname(slaveFD) else {
-            append("[failed to resolve pseudo terminal slave path: \(String(cString: strerror(errno)))]\n")
-            close(masterFD)
-            close(slaveFD)
-            return
-        }
-        let slavePath = String(cString: slavePathPointer)
-
-        guard let pid = Self.spawnPTYShell(
-            masterFD: masterFD,
-            slaveFD: slaveFD,
-            slavePath: slavePath,
-            settings: settings,
-            workingDirectoryPath: workingDirectoryPath
-        ) else {
-            append("[failed to spawn terminal shell: \(String(cString: strerror(errno)))]\n")
-            close(masterFD)
-            close(slaveFD)
-            return
-        }
-
-        close(slaveFD)
-        let handle = FileHandle(fileDescriptor: masterFD, closeOnDealloc: true)
-        masterFileHandle = handle
-        childPID = pid
-        isRunning = true
-        runningCommand = nil
-
-        handle.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            let text = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
-            Task { @MainActor in
-                self?.append(text)
-            }
-        }
-
-        let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .main)
-        source.setEventHandler { [weak self] in
-            guard let self else { return }
-            var status: Int32 = 0
-            waitpid(pid, &status, WNOHANG)
-            let code = Self.exitCode(fromWaitStatus: status)
-            self.append("\n[pty exited \(code)]\n")
-            self.cleanup()
-        }
-        source.setCancelHandler { }
-        processSource = source
-        source.resume()
-    }
-
-    private static func spawnPTYShell(
-        masterFD: Int32,
-        slaveFD: Int32,
-        slavePath: String,
-        settings: EditorTerminalSettings,
-        workingDirectoryPath: String
-    ) -> pid_t? {
-        var fileActions: posix_spawn_file_actions_t?
-        guard posix_spawn_file_actions_init(&fileActions) == 0 else {
-            return nil
-        }
-        defer {
-            posix_spawn_file_actions_destroy(&fileActions)
-        }
-
-        guard posix_spawn_file_actions_addopen(&fileActions, STDIN_FILENO, slavePath, O_RDWR, 0) == 0,
-              posix_spawn_file_actions_adddup2(&fileActions, STDIN_FILENO, STDOUT_FILENO) == 0,
-              posix_spawn_file_actions_adddup2(&fileActions, STDIN_FILENO, STDERR_FILENO) == 0,
-              posix_spawn_file_actions_addclose(&fileActions, masterFD) == 0,
-              posix_spawn_file_actions_addclose(&fileActions, slaveFD) == 0,
-              posix_spawn_file_actions_addchdir_np(&fileActions, workingDirectoryPath) == 0 else {
-            return nil
-        }
-
-        var attributes: posix_spawnattr_t?
-        guard posix_spawnattr_init(&attributes) == 0 else {
-            return nil
-        }
-        defer {
-            posix_spawnattr_destroy(&attributes)
-        }
-        let flags = Int16(POSIX_SPAWN_SETSID)
-        posix_spawnattr_setflags(&attributes, flags)
-
-        var environment = ProcessInfo.processInfo.environment
-        environment["TERM"] = environment["TERM"] ?? "xterm-256color"
-        environment["WILLDEEP_TERMINAL"] = "1"
-        environment["SHELL"] = settings.shellPath
-        for (key, value) in settings.environment {
-            environment[key] = value
-        }
-        let shellPath = settings.shellPath
-        let shellName = "-" + URL(fileURLWithPath: shellPath).lastPathComponent
-        let argv = [shellName]
-        let envp = environment
-            .sorted { $0.key < $1.key }
-            .map { "\($0.key)=\($0.value)" }
-        var pid: pid_t = 0
-        let result = withCStringArray(argv) { argvPointer in
-            withCStringArray(envp) { envPointer in
-                shellPath.withCString { shellCString in
-                    posix_spawn(
-                        &pid,
-                        shellCString,
-                        &fileActions,
-                        &attributes,
-                        argvPointer,
-                        envPointer
-                    )
-                }
-            }
-        }
-        guard result == 0 else {
-            errno = result
-            return nil
-        }
-        return pid
-    }
-
-    private static func exitCode(fromWaitStatus status: Int32) -> Int32 {
-        if status & 0x7f == 0 {
-            return (status >> 8) & 0xff
-        }
-        return status
-    }
-
-    private static func withCStringArray<Result>(
-        _ strings: [String],
-        _ body: (UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Result
-    ) -> Result {
-        let cStrings = strings.map { strdup($0) }
-        defer {
-            for pointer in cStrings {
-                free(pointer)
-            }
-        }
-        var pointers: [UnsafeMutablePointer<CChar>?] = cStrings.map { $0 }
-        pointers.append(nil)
-        return pointers.withUnsafeMutableBufferPointer { buffer in
-            body(buffer.baseAddress!)
-        }
-    }
-
-    private func append(_ text: String) {
-        output += normalizedTerminalOutput(text)
-        if output.count > 120_000 {
-            output.removeFirst(output.count - 120_000)
-        }
-    }
-
-    private func normalizedTerminalOutput(_ text: String) -> String {
-        text.replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
-    }
-
-    private func cleanup() {
-        masterFileHandle?.readabilityHandler = nil
-        try? masterFileHandle?.close()
-        masterFileHandle = nil
-        processSource?.cancel()
-        processSource = nil
-        childPID = nil
-        isRunning = false
-        runningCommand = nil
     }
 }

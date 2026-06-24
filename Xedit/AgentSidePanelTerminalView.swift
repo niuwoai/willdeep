@@ -21,6 +21,12 @@ struct AgentSidePanelTerminalView: View {
         appState.editorTerminalSettings.normalized()
     }
 
+    private var skinColors: TerminalSkinColors? {
+        settings.followsInterfaceSkin
+            ? .from(palette: appState.editorSettings.interfaceSkin.palette)
+            : nil
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             tabBar
@@ -32,14 +38,15 @@ struct AgentSidePanelTerminalView: View {
             controller.ensureAtLeastOneTab(
                 originAgentSessionID: appState.activeAgentSessionID,
                 workingDirectory: workingDirectory,
-                settings: settings
+                settings: settings,
+                skin: skinColors
             )
-            controller.applyAppearanceToAll(settings)
+            controller.applyAppearanceToAll(settings, skin: skinColors)
         }
         .onCompatibleChange(of: appState.editorTerminalSettings) { _, _ in
-            // Live-apply font / color changes (e.g. switching to a Nerd
-            // Font to fix powerline glyphs) to already-open tabs.
-            controller.applyAppearanceToAll(settings)
+            // Live-apply font / color / cursor changes (e.g. switching to a
+            // Nerd Font or the skin palette) to already-open tabs.
+            controller.applyAppearanceToAll(settings, skin: skinColors)
         }
     }
 
@@ -110,7 +117,8 @@ struct AgentSidePanelTerminalView: View {
                 controller.openLocalTab(
                     originAgentSessionID: appState.activeAgentSessionID,
                     workingDirectory: workingDirectory,
-                    settings: settings
+                    settings: settings,
+                    skin: skinColors
                 )
             } label: {
                 Label(L10n.AgentTerminal.newLocalTab, systemImage: "terminal")
@@ -122,7 +130,8 @@ struct AgentSidePanelTerminalView: View {
                         controller.openSSHTab(
                             runtime: runtime,
                             originAgentSessionID: appState.activeAgentSessionID,
-                            settings: settings
+                            settings: settings,
+                            skin: skinColors
                         )
                     } label: {
                         Label(L10n.AgentTerminal.newSSHTab(runtime.displayName), systemImage: "network")

@@ -15,6 +15,12 @@ struct EditorTerminalPane: View {
         appState.editorTerminalSettings.normalized()
     }
 
+    private var skinColors: TerminalSkinColors? {
+        settings.followsInterfaceSkin
+            ? .from(palette: appState.editorSettings.interfaceSkin.palette)
+            : nil
+    }
+
     private var commands: [EditorProjectCommand] {
         EditorProjectCommandResolver.commands(
             rootDirectory: appState.rootDirectory,
@@ -29,13 +35,15 @@ struct EditorTerminalPane: View {
             terminalSurface
         }
         .frame(minHeight: 160, idealHeight: 230, maxHeight: 320)
-        .background(Color(nsColor: settings.colorScheme.background))
-        .foregroundStyle(Color(nsColor: settings.colorScheme.foreground))
         .onAppear {
             if let root = appState.rootDirectory {
                 appState.editorTerminalSession.setWorkingDirectory(root)
             }
-            appState.editorTerminalSession.startShellIfNeeded(settings: settings)
+            appState.editorTerminalSession.startShellIfNeeded(settings: settings, skin: skinColors)
+        }
+        .onCompatibleChange(of: appState.editorTerminalSettings) { _, _ in
+            // Live-apply font / color / cursor changes to the running terminal.
+            appState.editorTerminalSession.applyAppearance(settings: settings, skin: skinColors)
         }
     }
 
@@ -70,7 +78,7 @@ struct EditorTerminalPane: View {
             .menuStyle(.button)
 
             Button {
-                appState.editorTerminalSession.startShellIfNeeded(settings: settings)
+                appState.editorTerminalSession.startShellIfNeeded(settings: settings, skin: skinColors)
             } label: {
                 Image(systemName: "power")
             }
@@ -107,21 +115,12 @@ struct EditorTerminalPane: View {
     }
 
     private var terminalSurface: some View {
-        EditorTerminalTextSurface(
-            text: appState.editorTerminalSession.output.isEmpty ? "Starting shell...\n" : appState.editorTerminalSession.output,
-            settings: settings,
-            onInput: { data in
-                appState.editorTerminalSession.send(data)
-            },
-            onPasteText: { text in
-                appState.editorTerminalSession.send(text)
-            }
-        )
+        EditorTerminalSurfaceView(terminalView: appState.editorTerminalSession.terminalView)
     }
 
     private func run(_ projectCommand: EditorProjectCommand) {
         appState.editorTerminalSession.setWorkingDirectory(projectCommand.workingDirectory)
-        appState.editorTerminalSession.run(projectCommand.command, settings: settings)
+        appState.editorTerminalSession.run(projectCommand.command, settings: settings, skin: skinColors)
     }
 }
 
@@ -149,7 +148,16 @@ extension EditorSettingsView {
                     }
                 }
 
+                Picker("Cursor", selection: terminalSetting(\.cursorStyleID)) {
+                    ForEach(EditorTerminalCursorStyle.allCases) { style in
+                        Text(style.displayName).tag(style.id)
+                    }
+                }
+
+                Toggle("Blink cursor", isOn: terminalSetting(\.cursorBlinks))
+
                 Picker("Color scheme", selection: terminalSetting(\.colorSchemeID)) {
+                    Text("Follow App Skin").tag(EditorTerminalSettings.followSkinColorSchemeID)
                     ForEach(EditorTerminalColorScheme.all) { scheme in
                         Text(scheme.displayName).tag(scheme.id)
                     }
@@ -166,6 +174,9 @@ extension EditorSettingsView {
                         .accessibilityLabel(scheme.displayName)
                     }
                 }
+                Text("“Follow App Skin” derives the terminal background, foreground, and cursor from your interface skin; ANSI program colors stay standard so output stays readable. Line spacing isn't adjustable with the current terminal engine.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Environment") {
@@ -192,122 +203,6 @@ extension EditorSettingsView {
         var settings = appState.editorTerminalSettings
         settings[keyPath: keyPath] = value
         appState.editorTerminalSettings = settings.normalized()
-    }
-}
-
-struct EditorTerminalTextSurface: NSViewRepresentable {
-    let text: String
-    let settings: EditorTerminalSettings
-    let onInput: (Data) -> Void
-    let onPasteText: (String) -> Void
-
-    func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
-        scrollView.drawsBackground = true
-        scrollView.backgroundColor = settings.colorScheme.background
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = true
-
-        let textView = TerminalTextView()
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.drawsBackground = true
-        textView.backgroundColor = settings.colorScheme.background
-        textView.textColor = settings.colorScheme.foreground
-        textView.font = settings.font
-        textView.textContainerInset = NSSize(width: 10, height: 8)
-        textView.isHorizontallyResizable = true
-        textView.isVerticallyResizable = true
-        textView.autoresizingMask = [.width]
-        textView.onInput = onInput
-        textView.onPasteText = onPasteText
-
-        scrollView.documentView = textView
-        context.coordinator.textView = textView
-        DispatchQueue.main.async {
-            textView.window?.makeFirstResponder(textView)
-        }
-        return scrollView
-    }
-
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        scrollView.backgroundColor = settings.colorScheme.background
-        guard let textView = context.coordinator.textView else { return }
-        textView.onInput = onInput
-        textView.onPasteText = onPasteText
-        textView.backgroundColor = settings.colorScheme.background
-        textView.textColor = settings.colorScheme.foreground
-        textView.font = settings.font
-        if textView.string != text {
-            textView.string = text
-            textView.scrollToEndOfDocument(nil)
-        }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    final class Coordinator {
-        weak var textView: TerminalTextView?
-    }
-}
-
-final class TerminalTextView: NSTextView {
-    var onInput: ((Data) -> Void)?
-    var onPasteText: ((String) -> Void)?
-
-    override var acceptsFirstResponder: Bool { true }
-
-    override func keyDown(with event: NSEvent) {
-        if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command) {
-            super.keyDown(with: event)
-            return
-        }
-
-        if let data = terminalInputData(for: event) {
-            onInput?(data)
-            return
-        }
-        super.keyDown(with: event)
-    }
-
-    override func paste(_ sender: Any?) {
-        if let text = NSPasteboard.general.string(forType: .string) {
-            onPasteText?(text)
-        }
-    }
-
-    private func terminalInputData(for event: NSEvent) -> Data? {
-        switch event.keyCode {
-        case 36:
-            return Data([13])
-        case 51:
-            return Data([127])
-        case 53:
-            return Data([27])
-        case 123:
-            return Data("\u{1B}[D".utf8)
-        case 124:
-            return Data("\u{1B}[C".utf8)
-        case 125:
-            return Data("\u{1B}[B".utf8)
-        case 126:
-            return Data("\u{1B}[A".utf8)
-        default:
-            guard let characters = event.characters, !characters.isEmpty else { return nil }
-            if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.control),
-               let scalar = characters.unicodeScalars.first {
-                let value = scalar.value
-                if value >= 64 && value <= 95 {
-                    return Data([UInt8(value - 64)])
-                }
-                if value >= 97 && value <= 122 {
-                    return Data([UInt8(value - 96)])
-                }
-            }
-            return Data(characters.utf8)
-        }
     }
 }
 

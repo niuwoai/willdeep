@@ -160,18 +160,15 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
         self.originAgentSessionID = originAgentSessionID
         self.title = title
         self.terminalView = AgentLocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 640, height: 360))
-        applyAppearance(settings)
+        applyAppearance(settings, skin: nil)
         terminalView.processDelegate = self
         terminalView.onUserActivity = { [weak self] in
             self?.lastActivity = Date()
         }
     }
 
-    func applyAppearance(_ settings: EditorTerminalSettings) {
-        let scheme = settings.colorScheme
-        terminalView.font = settings.font
-        terminalView.nativeForegroundColor = scheme.foreground
-        terminalView.nativeBackgroundColor = scheme.background
+    func applyAppearance(_ settings: EditorTerminalSettings, skin: TerminalSkinColors?) {
+        TerminalAppearance.apply(to: terminalView, settings: settings.normalized(), skin: skin)
     }
 
     // MARK: Launch
@@ -179,8 +176,10 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
     func start(
         settings: EditorTerminalSettings,
         workingDirectory: String?,
-        profile: RuntimeTerminalProfile?
+        profile: RuntimeTerminalProfile?,
+        skin: TerminalSkinColors?
     ) {
+        applyAppearance(settings, skin: skin)
         let env = Self.environmentArray(settings: settings)
         switch kind {
         case .localShell:
@@ -391,7 +390,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
     /// one yet. Wired by AppState so the controller can reach live
     /// terminal settings and the active session's workspace. Returns nil
     /// only if there's no AppState to ask.
-    var defaultLocalTabProvider: (() -> (settings: EditorTerminalSettings, workingDirectory: String?, originAgentSessionID: UUID?)?)?
+    var defaultLocalTabProvider: (() -> (settings: EditorTerminalSettings, workingDirectory: String?, originAgentSessionID: UUID?, skin: TerminalSkinColors?)?)?
 
     /// Tabs idle longer than this are auto-terminated and removed. The
     /// currently-visible tab is exempt so we never close what the user is
@@ -429,7 +428,8 @@ final class AgentInteractiveTerminalController: ObservableObject {
     func openLocalTab(
         originAgentSessionID: UUID?,
         workingDirectory: String?,
-        settings: EditorTerminalSettings
+        settings: EditorTerminalSettings,
+        skin: TerminalSkinColors?
     ) -> AgentTerminalTab {
         localShellCounter += 1
         let tab = AgentTerminalTab(
@@ -438,7 +438,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
             title: "Shell \(localShellCounter)",
             settings: settings
         )
-        tab.start(settings: settings, workingDirectory: workingDirectory, profile: nil)
+        tab.start(settings: settings, workingDirectory: workingDirectory, profile: nil, skin: skin)
         register(tab)
         return tab
     }
@@ -447,7 +447,8 @@ final class AgentInteractiveTerminalController: ObservableObject {
     func openSSHTab(
         runtime: RuntimeDescriptor,
         originAgentSessionID: UUID?,
-        settings: EditorTerminalSettings
+        settings: EditorTerminalSettings,
+        skin: TerminalSkinColors?
     ) -> AgentTerminalTab {
         let normalized = runtime.normalized
         let tab = AgentTerminalTab(
@@ -459,7 +460,8 @@ final class AgentInteractiveTerminalController: ObservableObject {
         tab.start(
             settings: settings,
             workingDirectory: nil,
-            profile: normalized.terminalProfile
+            profile: normalized.terminalProfile,
+            skin: skin
         )
         register(tab)
         return tab
@@ -491,20 +493,22 @@ final class AgentInteractiveTerminalController: ObservableObject {
     func ensureAtLeastOneTab(
         originAgentSessionID: UUID?,
         workingDirectory: String?,
-        settings: EditorTerminalSettings
+        settings: EditorTerminalSettings,
+        skin: TerminalSkinColors?
     ) {
         if tabs.isEmpty {
             openLocalTab(
                 originAgentSessionID: originAgentSessionID,
                 workingDirectory: workingDirectory,
-                settings: settings
+                settings: settings,
+                skin: skin
             )
         }
     }
 
-    func applyAppearanceToAll(_ settings: EditorTerminalSettings) {
+    func applyAppearanceToAll(_ settings: EditorTerminalSettings, skin: TerminalSkinColors?) {
         for tab in tabs {
-            tab.applyAppearance(settings)
+            tab.applyAppearance(settings, skin: skin)
         }
     }
 
@@ -585,7 +589,8 @@ final class AgentInteractiveTerminalController: ObservableObject {
         return openLocalTab(
             originAgentSessionID: config.originAgentSessionID,
             workingDirectory: config.workingDirectory,
-            settings: config.settings
+            settings: config.settings,
+            skin: config.skin
         )
     }
 }

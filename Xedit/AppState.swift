@@ -397,9 +397,13 @@ final class AppState: ObservableObject {
         // the terminal but the user hasn't opened a tab yet.
         agentTerminalController.defaultLocalTabProvider = { [weak self] in
             guard let self else { return nil }
+            let settings = self.editorTerminalSettings.normalized()
             let workingDirectory = self.activeRuntime?.workspaceRootPath
                 ?? self.rootDirectory?.standardizedFileURL.path
-            return (self.editorTerminalSettings.normalized(), workingDirectory, self.activeAgentSessionID)
+            let skin = settings.followsInterfaceSkin
+                ? TerminalSkinColors.from(palette: self.editorSettings.interfaceSkin.palette)
+                : nil
+            return (settings, workingDirectory, self.activeAgentSessionID, skin)
         }
         agentJobRegistry.onJobFinished = { [weak self] job in
             self?.surfaceDelegatedBackgroundJobCompletionIfNeeded(job)

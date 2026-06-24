@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.108.0-rc1 - 2026-06-24
+
+### Added
+- **Editor 底部终端也升级为完整终端。** 原来的 NSTextView「原始输出」终端重写为 SwiftTerm（与 Agent 侧栏终端同一引擎）：真·VT100/ANSI，颜色 / 光标寻址 / vim·htop·less 等全屏 TUI 正常渲染，输入体验对齐 Terminal / Ghostty。Run 项目命令、工作目录、清屏、启动/关闭等原有能力保留。
+- **偏好设置新增终端外观项**：字体种类（含已安装的 Nerd Font）、字号、**光标类型（方块 / 竖线 / 下划线）**、光标是否闪烁。
+- **终端配色可「跟随 App 皮肤」**：颜色方案新增 “Follow App Skin”，从当前界面皮肤取**背景 / 前景 / 光标**色；考虑到终端有整套 ANSI 颜色，程序输出的 16 色 ANSI 调色板保持标准不动，保证 `ls`/git/grep 等输出可读 —— 皮肤只统一底色、字色和光标色。编辑器终端与侧栏终端共用这套外观设置，改动实时生效。
+
+### Note
+- 行高 / 行间距暂不可调：当前终端引擎（SwiftTerm）的单元格高度由字体度量推导，未暴露行距设置；如需更松散可调大字号。
+
+### Changed
+- 版本号从 **1.107.0-rc6** 提升为 **1.108.0-rc1**（editor 终端 SwiftTerm 化 + 终端外观/光标/皮肤配色设置，新功能）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.107.0-rc6 - 2026-06-24
 
 ### Fixed

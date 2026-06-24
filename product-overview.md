@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-24 | Current version: v1.107.0-rc6
+> Last updated: 2026-06-24 | Current version: v1.108.0-rc1
 
 ## Positioning
 
@@ -70,6 +70,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **Agent Mode 交互式远程终端（1.106.0-rc1）** —— Agent mode 右侧辅助栏新增 Terminal 面板,复用 Settings → Runtimes 的 SSH 配置启动真实 `/usr/bin/ssh -tt` 交互式 PTY。每台 runtime 可配置启动目录、自动命令、二跳命令、命令间隔、空闲超时和常用服务名;连接顺序固定为主机连接 → 自动命令 → 二跳命令。AI 通过 `terminal_snapshot` 只读当前终端输出,通过 `terminal_send_command` / `terminal_send_control` 写入时仍走现有审批卡;面板内提供 systemctl、journalctl、docker 等常用服务命令模板。
 - **代码块复制状态与横向滚动修复（1.106.0-rc2）** —— TextKit 聊天历史里的 fenced code 复制控件现在会把图标和文字作为同一个可替换范围处理,点击复制后只显示一个 `Done`,3 秒后按按钮实例独立恢复为可复制状态;代码块正文不再自动折行,在代码块区域横向滚动可查看长命令、长路径和长单行输出的完整内容。
 - **CI xcodebuild 收尾 watchdog（1.106.0-rc3）** —— GitHub macOS runner 上如果 Swift 测试已经整轮通过但 `xcodebuild` 收尾不退出,`scripts/xcodebuild_ci.rb` 会在宽限期后清理 stale 进程,保留 `xcodebuild.log` 与 `xcresult` 报告,避免 CI job 被 30 分钟总超时误伤。
+- **Editor 终端 SwiftTerm 化 + 终端外观设置（1.108.0-rc1）** —— editor 底部终端从 NSTextView 原始输出重写为 SwiftTerm 完整终端(与侧栏终端同引擎):颜色 / 光标 / 全屏 TUI 正常,输入对齐 Terminal/Ghostty,保留 Run 命令 / 工作目录 / 清屏。偏好设置新增:字体(含 Nerd Font)/ 字号 / 光标类型(方块·竖线·下划线)/ 光标闪烁;颜色方案新增「Follow App Skin」从皮肤取背景·前景·光标色,ANSI 16 色保持标准以保证程序输出可读(`TerminalAppearance` 统一应用到两个终端)。行高暂不可调(SwiftTerm 单元格高度由字体度量推导)。
 - **`spawn_agent` 子 agent 继承远程 backend（1.107.0-rc6）** —— 修复子 agent 在远程(ssh/daemon)workspace 下仍读本地 Mac 文件的 bug。根因:`AgentSubagentRunner.executeToolCall` 用 `AgentToolContext(rootDirectory:)` 单参构造,丢掉了父会话的 `runtimeDescriptor` 与 `workspaceLocation`,导致 `context.remoteBackend` 为 nil,read-only 工具(search_files / grep_files / read_file / list_directory / git_status / run_command)全跑在本机。修法:把父 context 的 `runtimeDescriptor` + `workspaceLocation` 沿 `executeSpawnAgentToolCall → startBackground / AgentSubagentRunner.run → executeToolCall → AgentToolContext` 一路透传,子 agent 与父会话指向同一远端 backend。只读文件工具静态分级 `.read` 不受影响照常执行;远端 `run_command` 仍按既有策略分级(可能为 `.write` 被子 agent 拒,可接受 —— 子 agent 本就只读)。
 - **窄侧栏图标可见性（1.107.0-rc5）** —— 侧栏变窄时终端标签栏的「+」新建按钮和 header 关闭「X」不再被长标签 / 标题挤出:终端标签标题封顶 130pt 截断、tab 滚动区只占剩余宽度、`+` 与关闭按钮用 `layoutPriority` 永远先拿空间。
 - **远程 runtime 工具可用性提示词梳理（1.107.0-rc4）** —— 全量梳理每个工具在 local / ssh / daemon 三种 runtime 下的真实执行位置,并据此重写远程 workspace 的系统提示词:明确 `search/grep/read/list/git_status/run_command` 与委派 CLI 跑在远端,而 `apply_patch`(改本地文件)、`terminal_*`(本地 shell,daemon 到不了远端)、skills/memory/MCP/chrome/web 等只在本机;按 SSH / daemon 区分措辞,引导模型远端改文件走 `run_command`。(后续项已于 1.107.0-rc6 修复:`spawn_agent` 子 agent 现继承父会话远程 backend。)
