@@ -55,8 +55,11 @@ struct AgentSidePanelTerminalView: View {
                 }
                 .padding(.horizontal, 6)
             }
-            Spacer(minLength: 0)
+            // 让 tab 滚动区只吃「剩余」宽度,窄侧栏时长标签横向滚动,
+            // 不会把右侧「+」挤出可视区。`+` 用 layoutPriority 先拿空间。
+            .frame(maxWidth: .infinity, alignment: .leading)
             addTabMenu
+                .layoutPriority(1)
         }
         .frame(height: 30)
         .padding(.trailing, 6)
@@ -72,6 +75,9 @@ struct AgentSidePanelTerminalView: View {
                 .font(.system(size: 11))
                 .lineLimit(1)
                 .truncationMode(.middle)
+                // 标题封顶,避免 `rocky@host:/` 这种长 OSC 标题把
+                // 整个 chip 撑得占满侧栏、把 `+` 顶出去。
+                .frame(maxWidth: 130)
             Button {
                 controller.closeTab(id: tab.id)
             } label: {

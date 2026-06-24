@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.107.0-rc5 - 2026-06-24
+
+### Fixed
+- 侧栏变窄时,终端标签栏右侧的「+」新建标签按钮和侧栏 header 的关闭「X」会被挤出可视区。原因:终端标签的 OSC 标题(如 `rocky@host:/`)很长,把 chip 撑满整条标签栏顶掉了「+」;header 标题也可能顶掉关闭按钮。修复:终端标签标题宽度封顶 130pt 并截断,tab 滚动区只占剩余宽度、`+` 用 `layoutPriority` 永远先拿到空间;侧栏 header 标题加 `lineLimit(1)` 截断、关闭按钮 `layoutPriority(1)`,窄侧栏时两个图标都保证可见。
+
+### Changed
+- 版本号从 **1.107.0-rc4** 提升为 **1.107.0-rc5**（窄侧栏下终端「+」与关闭「X」可见性修复）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.107.0-rc4 - 2026-06-24
 
 ### Fixed

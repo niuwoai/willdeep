@@ -87,12 +87,16 @@ struct AgentSidePanelHost: View {
                     .foregroundStyle(.secondary)
                 Text(kind.title)
                     .font(AgentDesign.titleFont)
+                    // 窄侧栏时标题先截断,不要把关闭按钮挤出可视区。
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
             Spacer(minLength: 0)
             // rc10 用户反馈:`Image(systemName: "xmark")` + `.secondary`
             // 在浅色皮肤上颜色弱到几乎看不见,误以为没有关闭按钮。
             // 给一个 22pt 圆形 hit area + 13pt 加粗字号 + 主文本色,
-            // 至少肉眼第一秒就能看到。
+            // 至少肉眼第一秒就能看到。窄侧栏时 layoutPriority 保证它
+            // 永远先拿到空间、不被标题挤掉。
             Button {
                 kind = nil
             } label: {
@@ -104,6 +108,7 @@ struct AgentSidePanelHost: View {
             }
             .buttonStyle(.plain)
             .focusable(false)
+            .layoutPriority(1)
             .help(L10n.AgentSidePanel.close)
         }
         .padding(.leading, 14)

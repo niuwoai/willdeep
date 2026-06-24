@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-24 | Current version: v1.107.0-rc4
+> Last updated: 2026-06-24 | Current version: v1.107.0-rc5
 
 ## Positioning
 
@@ -70,6 +70,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **Agent Mode 交互式远程终端（1.106.0-rc1）** —— Agent mode 右侧辅助栏新增 Terminal 面板,复用 Settings → Runtimes 的 SSH 配置启动真实 `/usr/bin/ssh -tt` 交互式 PTY。每台 runtime 可配置启动目录、自动命令、二跳命令、命令间隔、空闲超时和常用服务名;连接顺序固定为主机连接 → 自动命令 → 二跳命令。AI 通过 `terminal_snapshot` 只读当前终端输出,通过 `terminal_send_command` / `terminal_send_control` 写入时仍走现有审批卡;面板内提供 systemctl、journalctl、docker 等常用服务命令模板。
 - **代码块复制状态与横向滚动修复（1.106.0-rc2）** —— TextKit 聊天历史里的 fenced code 复制控件现在会把图标和文字作为同一个可替换范围处理,点击复制后只显示一个 `Done`,3 秒后按按钮实例独立恢复为可复制状态;代码块正文不再自动折行,在代码块区域横向滚动可查看长命令、长路径和长单行输出的完整内容。
 - **CI xcodebuild 收尾 watchdog（1.106.0-rc3）** —— GitHub macOS runner 上如果 Swift 测试已经整轮通过但 `xcodebuild` 收尾不退出,`scripts/xcodebuild_ci.rb` 会在宽限期后清理 stale 进程,保留 `xcodebuild.log` 与 `xcresult` 报告,避免 CI job 被 30 分钟总超时误伤。
+- **窄侧栏图标可见性（1.107.0-rc5）** —— 侧栏变窄时终端标签栏的「+」新建按钮和 header 关闭「X」不再被长标签 / 标题挤出:终端标签标题封顶 130pt 截断、tab 滚动区只占剩余宽度、`+` 与关闭按钮用 `layoutPriority` 永远先拿空间。
 - **远程 runtime 工具可用性提示词梳理（1.107.0-rc4）** —— 全量梳理每个工具在 local / ssh / daemon 三种 runtime 下的真实执行位置,并据此重写远程 workspace 的系统提示词:明确 `search/grep/read/list/git_status/run_command` 与委派 CLI 跑在远端,而 `apply_patch`(改本地文件)、`terminal_*`(本地 shell,daemon 到不了远端)、skills/memory/MCP/chrome/web 等只在本机;按 SSH / daemon 区分措辞,引导模型远端改文件走 `run_command`。(已知后续项:`spawn_agent` 子 agent 当前未继承远程 backend,仍读本地文件,待修。)
 - **AI 驱动侧边栏终端 + Nerd Font 乱码修复（1.107.0-rc3）** —— 重写 `terminal_send_command` / `terminal_snapshot` 工具描述,让在线 Agent 在「操作侧边栏终端」类请求时优先把命令打进可见终端而不是另起 `run_command` 沙箱;无打开标签时工具自动开一个本地 shell 标签。终端字体列表自动探测已安装的 Nerd Font(MesloLGS / JetBrainsMono / FiraCode / Hack / SauceCodePro),选中即可修复 powerlevel10k 等主题的 powerline 图标乱码,切换实时生效。 重写 `terminal_send_command` / `terminal_snapshot` 工具描述,让在线 Agent 在「操作侧边栏终端」类请求时优先把命令打进可见终端而不是另起 `run_command` 沙箱;无打开标签时工具自动开一个本地 shell 标签。终端字体列表自动探测已安装的 Nerd Font(MesloLGS / JetBrainsMono / FiraCode / Hack / SauceCodePro),选中即可修复 powerlevel10k 等主题的 powerline 图标乱码,切换实时生效。
 - **窗口默认 80% + 侧栏可拖宽（1.107.0-rc2）** —— 三类窗口首次启动默认尺寸 ≈ 主屏可见区 80% 宽 × 85% 高(居中,最小 900×600,经 `.defaultSize` 取自 `NSScreen.main.visibleFrame`,已有保存 frame 时不覆盖)。Agent mode 聊天主区 ↔ 右侧侧栏的分隔条改为可拖动手柄(240–760pt,`@AppStorage` 持久化);最左会话侧栏宽度仍固定。
