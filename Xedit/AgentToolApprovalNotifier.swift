@@ -79,6 +79,9 @@ enum AgentToolApprovalNotifier {
         // it noisy and it leaked long paths into the banner.
         content.body = "\(job.displayHandle) · \(statusWord) · \(commandSummary(job.command))"
         content.sound = .default
+        // Deep-link: tapping the banner jumps to the session that owns this
+        // job (see AgentNotificationResponder).
+        content.userInfo = [AgentNotificationUserInfoKey.runtimeID: job.runtimeID.uuidString]
         if let attachment = AgentNotificationIcon.attachment() {
             content.attachments = [attachment]
         }

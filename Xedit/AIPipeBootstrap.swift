@@ -9,11 +9,15 @@
 
 import AppKit
 import Foundation
+import UserNotifications
 
 final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         AIPipeBootstrap.initialize()
         AppUpdateChecker.checkForUpdatesOnLaunch()
+        // Route taps on agent approval / job notifications back to the
+        // session that posted them (see AgentNotificationResponder).
+        UNUserNotificationCenter.current().delegate = AgentNotificationResponder.shared
         MainActor.assumeIsolated {
             FnPushToTalkMonitor.shared.install()
             VoiceModelLifecycleController.shared.install()

@@ -21,6 +21,7 @@ import AppKit
 
 struct AgentWindowRootView: View {
     @ObservedObject private var registry = EditorAppStateRegistry.shared
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
@@ -52,6 +53,11 @@ struct AgentWindowRootView: View {
             // headless AppState 顶上,保证「editor 没开 / 没选 workspace
             // 时 agent 窗口里就空了」这件事不再发生。
             registry.ensureHeadlessFallback()
+        }
+        // Tapped agent notification → focus this window (covers the case
+        // where the Agent window is open but no editor window is).
+        .onReceive(NotificationCenter.default.publisher(for: .willDeepRevealAgentSession)) { _ in
+            openWindow(id: AgentWindowID.value)
         }
     }
 }

@@ -125,6 +125,39 @@ final class EditorAppStateRegistry: ObservableObject {
         return nil
     }
 
+    /// Find the (AppState, sessionID) of a runtime that currently has a
+    /// tool call waiting on the user (approval / confirm / answer). Used
+    /// by the notification responder to deep-link the user straight to
+    /// the session that needs them, instead of making them hunt for it.
+    /// When several are pending, returns the one whose runtime turn
+    /// started most recently.
+    func appStateWithPendingAttention() -> (appState: AppState, sessionID: AgentSession.ID)? {
+        var best: (appState: AppState, sessionID: AgentSession.ID, since: Date)?
+        var candidates = Array(activeEditors.values)
+        if let current, !candidates.contains(where: { $0 === current }) {
+            candidates.append(current)
+        }
+        for appState in candidates {
+            for runtime in appState.agentRuntimes.values {
+                let isWaiting = runtime.toolCalls.contains { call in
+                    switch call.status {
+                    case .pendingApproval, .awaitingConfirm, .awaitingUserAnswer:
+                        return true
+                    case .running, .succeeded, .failed, .denied:
+                        return false
+                    }
+                }
+                guard isWaiting else { continue }
+                let since = runtime.turnStartedAt ?? .distantPast
+                if best == nil || since > best!.since {
+                    best = (appState, runtime.id, since)
+                }
+            }
+        }
+        guard let best else { return nil }
+        return (best.appState, best.sessionID)
+    }
+
     /// 把当前 current 对应的 editor 窗口激活到前台。Agent 窗口的
     /// header 「切回 editor」按钮用。返回 false 表示当前只有 orphan
     /// AppState 或窗口弱引用已失效,调用方应通过 SwiftUI `openWindow`

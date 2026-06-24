@@ -311,6 +311,7 @@ private struct WindowRootView: View {
     /// 都 .sheet 绑这个,但 OnboardingFlowController.presentIfNeeded()
     /// 只让第一窗口翻 isPresented = true。
     @ObservedObject private var onboarding = OnboardingFlowController.shared
+    @Environment(\.openWindow) private var openWindow
     let initialExternalURL: URL?
     @State private var didHandleInitialExternalURL = false
 
@@ -322,6 +323,12 @@ private struct WindowRootView: View {
         ContentView()
             .environmentObject(appState)
             .focusedSceneObject(appState)
+            // A tapped agent notification asks (via the responder) to open
+            // / focus the Agent window; only a live SwiftUI view can call
+            // openWindow, so we bridge it here.
+            .onReceive(NotificationCenter.default.publisher(for: .willDeepRevealAgentSession)) { _ in
+                openWindow(id: AgentWindowID.value)
+            }
             .background(
                 WindowAccessor { window in
                     windowFocus.attach(to: window, appState: appState)
