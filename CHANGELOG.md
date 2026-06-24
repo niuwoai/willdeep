@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.108.0-rc3 - 2026-06-24
+
+### Fixed
+- 偶发：在新聊天（常是没绑定 workspace 的会话）里发消息给 AI，输入框清空了但对话里什么都不显示、也没有响应，"像什么也没发生一样"。根因：`dispatchAgentMessage`（[AppStateAgentLoop.swift](Xedit/AppStateAgentLoop.swift)）把用户消息 append 到对话、置 `isResponding` 都放在 `acquireProviderSlotIfPossible`（[AppStateAgentDispatchQueue.swift](Xedit/AppStateAgentDispatchQueue.swift)，每 provider 默认上限 3）**之后**。当 3 个并发槽都被占着（常见诱因：系统代理让某个 turn 的网络请求挂起、迟迟不 `releaseProviderSlot`），新消息会被塞进一个**完全没有 UI 的后台队列 `pendingDispatchQueue`**：不 append、不显示、不置「处理中」，而 composer 已清空 —— 用户遂以为消息凭空消失。与「没选 workspace」没有因果关系，只是新会话恰好没绑 workspace。修复：把用户消息的 append + 持久化提到抢槽**之前**，保证一发即可见；`PendingDispatch` 带上消息 id，排队 drain 时复用同一条消息、不重复 append；新增 `AgentRuntime.isAwaitingProviderSlot`，在 transcript 里显示「正在排队，等待空闲的并发槽位…」轻提示，排队不再静默。
+
+### Changed
+- 版本号从 **1.108.0-rc2** 提升为 **1.108.0-rc3**（修复抢不到并发槽时用户消息静默丢失）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.108.0-rc2 - 2026-06-24
 
 ### Fixed

@@ -61,6 +61,13 @@ final class AgentRuntime: ObservableObject, Identifiable {
     // MARK: - Turn lifecycle
 
     @Published var isResponding: Bool = false
+    /// True while a sent message is parked in `pendingDispatchQueue`
+    /// waiting for a free per-provider concurrency slot. The user's
+    /// message is already visible in the transcript; this drives a
+    /// lightweight "queued, waiting for a free slot" indicator so the
+    /// send never looks like it silently vanished. Cleared the moment
+    /// the dispatch acquires a slot and the real turn begins.
+    @Published var isAwaitingProviderSlot: Bool = false
     @Published var turnStartedAt: Date?
     @Published var isCompressingContext: Bool = false
     @Published var errorMessage: String?

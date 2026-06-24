@@ -132,6 +132,13 @@ struct AgentPanelView: View {
                         }
                     }
 
+                    // 消息已发出但还没抢到 provider 并发槽时,给一行
+                    // 「排队中」提示 —— 否则用户只看到自己的消息、没有
+                    // 任何「在处理」反馈,容易以为又没发出去。
+                    if appState.activeRuntime?.isAwaitingProviderSlot == true {
+                        AgentInlineStatusDivider(text: "正在排队，等待空闲的并发槽位…")
+                    }
+
                     if appState.shouldShowAgentThinkingIndicator {
                         AgentThinkingDivider()
                     }

@@ -304,6 +304,12 @@ final class AppState: ObservableObject {
 
     struct PendingDispatch {
         let runtimeID: AgentSession.ID
+        /// The user's message is appended to the runtime BEFORE the
+        /// dispatch is queued, so it's visible immediately even while
+        /// waiting for a provider slot. Carrying its id lets the drain
+        /// re-dispatch reuse that message instead of appending a
+        /// duplicate.
+        let userMessageID: AgentMessage.ID
         let text: String
         let images: [AgentImageAttachment]
         let textAttachments: [AgentTextAttachment]

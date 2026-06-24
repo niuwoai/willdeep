@@ -56,12 +56,16 @@ extension AppState {
                 continue
             }
             promotedByProvider.insert(entry.providerID)
+            // The user message was already appended when the dispatch was
+            // first queued — pass its id so the re-dispatch reuses it
+            // instead of appending a duplicate into the transcript.
             dispatchAgentMessage(
                 for: runtime,
                 text: entry.text,
                 images: entry.images,
                 textAttachments: entry.textAttachments,
-                attachedSkills: entry.attachedSkills
+                attachedSkills: entry.attachedSkills,
+                existingUserMessageID: entry.userMessageID
             )
         }
         pendingDispatchQueue = remaining

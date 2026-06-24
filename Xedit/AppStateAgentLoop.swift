@@ -35,21 +35,50 @@ extension AppState {
         text: String,
         images: [AgentImageAttachment],
         textAttachments: [AgentTextAttachment] = [],
-        attachedSkills: [AgentSkillEntry] = []
+        attachedSkills: [AgentSkillEntry] = [],
+        existingUserMessageID: AgentMessage.ID? = nil
     ) {
         resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime)
 
         let configuration = configurationForCurrentTurn(for: runtime)
         let providerID = configuration.providerID
 
+        // Show the user's message immediately — BEFORE the provider
+        // concurrency gate. Pre-rc this append lived after the slot
+        // check, so a message that couldn't grab a slot went into the
+        // invisible `pendingDispatchQueue` while the composer cleared:
+        // the user saw their text vanish with nothing in the transcript
+        // ("like nothing happened"). Appending first guarantees the
+        // message is always on screen; the queue only delays the network
+        // call, never the display. On a drain re-dispatch the message is
+        // already present, so reuse it via `existingUserMessageID`.
+        let userMessage: AgentMessage
+        if let existingUserMessageID,
+           let existing = runtime.messages.first(where: { $0.id == existingUserMessageID }) {
+            userMessage = existing
+        } else {
+            userMessage = AgentMessage(
+                role: .user,
+                content: text,
+                images: images,
+                textAttachments: textAttachments
+            )
+            runtime.messages.append(userMessage)
+            runtime.latestTurnRecall = nil
+            persistAgentSession(runtime: runtime)
+        }
+
         // Concurrency gate: cap simultaneous turns per provider so a
         // routine fleet can't blow past the provider's rate limit. If
         // the slot isn't open, queue this dispatch — `releaseProviderSlot`
-        // drains pending entries FIFO as turns finish.
+        // drains pending entries FIFO as turns finish. The message is
+        // already visible above; we only defer the request here.
         guard acquireProviderSlotIfPossible(providerID: providerID) else {
+            runtime.isAwaitingProviderSlot = true
             pendingDispatchQueue.append(
                 PendingDispatch(
                     runtimeID: runtime.id,
+                    userMessageID: userMessage.id,
                     text: text,
                     images: images,
                     textAttachments: textAttachments,
@@ -61,30 +90,18 @@ extension AppState {
             return
         }
 
+        runtime.isAwaitingProviderSlot = false
         runtime.errorMessage = nil
         runtime.errorDetails = nil
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
         runtime.currentTurnAttachedSkills = attachedSkills
 
-        let userMessage = AgentMessage(
-            role: .user,
-            content: text,
-            images: images,
-            textAttachments: textAttachments
-        )
-        runtime.messages.append(userMessage)
-        runtime.latestTurnRecall = nil
-        // Persist the user's message to disk the instant it's sent —
-        // BEFORE the turn runs. The turn's `defer` persist only fires
-        // when the loop finishes; if the turn hangs (slow/flaky proxy)
-        // and the app is quit mid-flight, that defer never runs and the
-        // only on-disk copy is the empty "New Chat" placeholder — which
-        // `pruneEmptyAgentSessions` later deletes as a stray empty row,
-        // taking the whole conversation with it. Writing here guarantees
-        // the session always has the user's message on disk and can never
-        // be pruned as "empty" after a send.
-        persistAgentSession(runtime: runtime)
+        // The user's message was already appended and persisted to disk
+        // above, before the slot gate — so even if the turn hangs
+        // (slow/flaky proxy) and the app is quit mid-flight, the on-disk
+        // session already holds it and `pruneEmptyAgentSessions` can't
+        // delete the row as "empty". No second persist needed here.
         let imageDescriptionConfiguration = agentConfiguration.normalized.imageDescription.agentConfiguration
 
         runtime.requestTask?.cancel()
