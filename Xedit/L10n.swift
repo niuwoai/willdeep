@@ -390,6 +390,31 @@ enum L10n {
         static let reject = String(localized: "agent-patch.reject", defaultValue: "Reject")
         static let showDiff = String(localized: "agent-patch.show-diff", defaultValue: "Show Diff")
         static let hideDiff = String(localized: "agent-patch.hide-diff", defaultValue: "Hide Diff")
+        static let applyAll = String(localized: "agent-patch.apply-all", defaultValue: "Apply All")
+        static let rejectAll = String(localized: "agent-patch.reject-all", defaultValue: "Reject All")
+        static let showAll = String(localized: "agent-patch.show-all", defaultValue: "Show All")
+        static let hideAll = String(localized: "agent-patch.hide-all", defaultValue: "Collapse")
+
+        /// Title of a collapsed group bundling several patch proposals from
+        /// the same turn — e.g. "3 patch proposals this turn".
+        static func groupTitle(_ count: Int) -> String {
+            let template = String(localized: "agent-patch.group-title",
+                                  defaultValue: "%d patch proposals this turn")
+            return String(format: template, count)
+        }
+
+        static func countApplied(_ n: Int) -> String {
+            String(format: String(localized: "agent-patch.count-applied", defaultValue: "%d applied"), n)
+        }
+        static func countPending(_ n: Int) -> String {
+            String(format: String(localized: "agent-patch.count-pending", defaultValue: "%d pending"), n)
+        }
+        static func countRejected(_ n: Int) -> String {
+            String(format: String(localized: "agent-patch.count-rejected", defaultValue: "%d rejected"), n)
+        }
+        static func countFailed(_ n: Int) -> String {
+            String(format: String(localized: "agent-patch.count-failed", defaultValue: "%d failed"), n)
+        }
     }
 
     enum AgentPatchError {

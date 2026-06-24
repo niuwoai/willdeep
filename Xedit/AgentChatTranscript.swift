@@ -227,10 +227,10 @@ struct AgentChatTranscript: View {
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                     }
 
-                    ForEach(appState.agentPatchProposals) { proposal in
-                        AgentPatchProposalCard(proposal: proposal)
-                            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
-                    }
+                    AgentPatchProposalList(
+                        proposals: appState.agentPatchProposals,
+                        maxContentWidth: AgentDesign.chatMaxContentWidth
+                    )
 
                     // Only show the worktree-change card once the Agent has
                     // actually applied a patch in this session — otherwise a

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.108.0-rc9 - 2026-06-24
+
+### Changed
+- Agent 模式下「同一轮产生的多个补丁应用建议」现在自动折叠成**一张可展开的组卡**,不再每条占一张卡把 transcript / 右侧面板撑长。当一条 assistant message(同 `messageID`)产出 ≥2 个 patch proposal(例如「第1集剧本」「第2集剧本」「第3集剧本」)时,渲染为单张 `AgentPatchProposalGroup`:组头显示「本轮 N 个补丁建议」+ 按状态汇总(如「3 applied」「2 pending · 1 applied」),仍有 pending 时附「全部应用 / 全部拒绝」一键操作;点开后逐条列出原 `AgentPatchProposalCard`,每条仍可单独应用/拒绝/看 diff。单条建议的轮次保持原单卡不变。新增 `AppState.applyAgentPatchProposals(forMessageID:)` / `rejectAgentPatchProposals(forMessageID:)`(复用单条 apply/reject 路径)与 `AgentPatchProposalList`(按 `messageID` 首次出现顺序分组);transcript 与右侧 Agent 面板两处共用同一组件。
+- 版本号从 **1.108.0-rc8** 提升为 **1.108.0-rc9**（补丁建议同轮折叠组卡的 UI 增强）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.108.0-rc8 - 2026-06-24
 
 ### Fixed

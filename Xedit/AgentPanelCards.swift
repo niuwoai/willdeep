@@ -108,6 +108,141 @@ struct AgentPatchProposalCard: View {
     }
 }
 
+/// Collapsed card that bundles several patch proposals produced in the same
+/// turn (same `messageID`). One header + one set of Apply All / Reject All
+/// buttons replaces N stacked cards, so a turn that emits many patches
+/// ("第1集剧本", "第2集剧本", …) no longer floods the transcript. Expanding
+/// reveals the individual `AgentPatchProposalCard`s, each still operable on
+/// its own.
+struct AgentPatchProposalGroup: View {
+    @EnvironmentObject var appState: AppState
+    let proposals: [AgentPatchProposal]
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "doc.on.doc")
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L10n.AgentPatch.groupTitle(proposals.count))
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(statusSummary)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Button {
+                    isExpanded.toggle()
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                }
+                .buttonStyle(.borderless)
+                .help(isExpanded ? L10n.AgentPatch.hideAll : L10n.AgentPatch.showAll)
+            }
+
+            if isExpanded {
+                VStack(spacing: 8) {
+                    ForEach(proposals) { proposal in
+                        AgentPatchProposalCard(proposal: proposal)
+                    }
+                }
+            }
+
+            if pendingCount > 0 {
+                HStack {
+                    Button {
+                        appState.rejectAgentPatchProposals(forMessageID: messageID)
+                    } label: {
+                        Label(L10n.AgentPatch.rejectAll, systemImage: "xmark.circle")
+                    }
+                    Button {
+                        appState.applyAgentPatchProposals(forMessageID: messageID)
+                    } label: {
+                        Label(L10n.AgentPatch.applyAll, systemImage: "checkmark.circle")
+                    }
+                    Spacer(minLength: 0)
+                }
+                .labelStyle(.titleAndIcon)
+                .font(.caption)
+            }
+        }
+        .padding(9)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.75))
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    private var messageID: AgentMessage.ID {
+        proposals.first?.messageID ?? UUID()
+    }
+
+    private var pendingCount: Int { count(of: .pending) }
+
+    private func count(of status: AgentPatchStatus) -> Int {
+        proposals.filter { $0.status == status }.count
+    }
+
+    /// Per-status tally joined with "·", skipping zero buckets — e.g.
+    /// "2 pending · 1 applied". Keeps the collapsed header informative
+    /// without opening it.
+    private var statusSummary: String {
+        var parts: [String] = []
+        let pending = count(of: .pending)
+        let applied = count(of: .applied)
+        let rejected = count(of: .rejected)
+        let failed = count(of: .failed)
+        if pending > 0 { parts.append(L10n.AgentPatch.countPending(pending)) }
+        if applied > 0 { parts.append(L10n.AgentPatch.countApplied(applied)) }
+        if rejected > 0 { parts.append(L10n.AgentPatch.countRejected(rejected)) }
+        if failed > 0 { parts.append(L10n.AgentPatch.countFailed(failed)) }
+        return parts.joined(separator: " · ")
+    }
+}
+
+/// Renders the runtime's patch proposals, auto-collapsing any turn that
+/// produced two or more into a single `AgentPatchProposalGroup`. A turn with
+/// just one proposal stays a plain `AgentPatchProposalCard`. Grouping key is
+/// `messageID`; original ordering is preserved by first appearance.
+struct AgentPatchProposalList: View {
+    let proposals: [AgentPatchProposal]
+    /// Transcript constrains card width; the compact side panel does not.
+    var maxContentWidth: CGFloat? = nil
+
+    var body: some View {
+        ForEach(groupedProposals, id: \.messageID) { group in
+            constrained(
+                Group {
+                    if group.items.count >= 2 {
+                        AgentPatchProposalGroup(proposals: group.items)
+                    } else if let only = group.items.first {
+                        AgentPatchProposalCard(proposal: only)
+                    }
+                }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func constrained(_ view: some View) -> some View {
+        if let maxContentWidth {
+            view.frame(maxWidth: maxContentWidth, alignment: .leading)
+        } else {
+            view
+        }
+    }
+
+    private var groupedProposals: [(messageID: AgentMessage.ID, items: [AgentPatchProposal])] {
+        var order: [AgentMessage.ID] = []
+        var buckets: [AgentMessage.ID: [AgentPatchProposal]] = [:]
+        for proposal in proposals {
+            if buckets[proposal.messageID] == nil { order.append(proposal.messageID) }
+            buckets[proposal.messageID, default: []].append(proposal)
+        }
+        return order.map { ($0, buckets[$0] ?? []) }
+    }
+}
+
 struct AgentPanelEmptyState: View {
     var body: some View {
         VStack(spacing: 10) {

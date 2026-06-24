@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-24 | Current version: v1.108.0-rc8
+> Last updated: 2026-06-24 | Current version: v1.108.0-rc9
 
 ## Positioning
 
@@ -70,6 +70,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **Agent Mode 交互式远程终端（1.106.0-rc1）** —— Agent mode 右侧辅助栏新增 Terminal 面板,复用 Settings → Runtimes 的 SSH 配置启动真实 `/usr/bin/ssh -tt` 交互式 PTY。每台 runtime 可配置启动目录、自动命令、二跳命令、命令间隔、空闲超时和常用服务名;连接顺序固定为主机连接 → 自动命令 → 二跳命令。AI 通过 `terminal_snapshot` 只读当前终端输出,通过 `terminal_send_command` / `terminal_send_control` 写入时仍走现有审批卡;面板内提供 systemctl、journalctl、docker 等常用服务命令模板。
 - **代码块复制状态与横向滚动修复（1.106.0-rc2）** —— TextKit 聊天历史里的 fenced code 复制控件现在会把图标和文字作为同一个可替换范围处理,点击复制后只显示一个 `Done`,3 秒后按按钮实例独立恢复为可复制状态;代码块正文不再自动折行,在代码块区域横向滚动可查看长命令、长路径和长单行输出的完整内容。
 - **CI xcodebuild 收尾 watchdog（1.106.0-rc3）** —— GitHub macOS runner 上如果 Swift 测试已经整轮通过但 `xcodebuild` 收尾不退出,`scripts/xcodebuild_ci.rb` 会在宽限期后清理 stale 进程,保留 `xcodebuild.log` 与 `xcresult` 报告,避免 CI job 被 30 分钟总超时误伤。
+- **补丁建议同轮自动折叠组卡（1.108.0-rc9）** —— Agent 模式下同一轮(同一条 assistant message,`messageID` 相同)产出的多个补丁应用建议,以前每条占一张卡片,一轮三集剧本就是三张卡把 transcript / 右侧面板撑得老长。现在 ≥2 条时自动折叠成一张 `AgentPatchProposalGroup` 组卡:组头「本轮 N 个补丁建议」+ 状态汇总(如「3 applied」「2 pending · 1 applied」),仍有 pending 时附「全部应用 / 全部拒绝」;点开 chevron 逐条展开原单卡,每条仍可单独应用/拒绝/看 diff。单条建议保持原单卡。实现:新增 `AgentPatchProposalList`(按 `messageID` 首现顺序分组)与 `AppState.applyAgentPatchProposals(forMessageID:)`/`rejectAgentPatchProposals(forMessageID:)`,transcript 与右侧面板共用。
 - **任务监控「最近任务」限 3 条 + 内层限高滚动 / 后台任务失败输出内联回写（1.108.0-rc8）** —— ① 右栏「任务监控」的最近任务列表在任务多时无限往下堆,把下方「待办/产物/工作文件/技能与 MCP」整片挤出可视区。修复:展示上限从 6 条收紧到 3 条(`monitorJobDisplayLimit`),任务行外套一层 `maxHeight: 232` 的内层纵向 ScrollView——超高时列表内部自滚动,不再撑爆其余分区;溢出仍以「还有 X 个后台任务」提示。② 后台 `run_command` 任务失败(非零退出/超时/启动失败)回写给模型的 `<background-task-notification>` 系统消息原本只有 `exit=N` + 「自己去 call get_job_output」提示,模型还得多花一轮拉日志。现对「需要关注」的失败任务,把最近输出尾部(tail 40 行,经 `AgentSandboxPolicy.scrub` 脱敏、上限 4000 字)内联进通知(`backgroundJobCompletionNotice`),模型当轮即可定位失败原因继续处理;成功/被杀任务仍走轻量字节数提示。App 不在前台时系统通知横幅(`notifyJobFinished`,1.105.0-rc19 起的失败闭环)照常提醒。
 - **用户气泡圆角矩形包住时间戳/复制行（1.108.0-rc7）** —— Agent mode 用户消息气泡非 hover 时只包正文、把底部时间戳/复制行漏在框外,hover 又变大。根因:TextKit 渲染里正文带 `.agentChatHistoryBubbleKind`(画气泡),但非 hover 时 footer 走 `applyBodyChrome`(无 bubbleKind)。修复:用户消息正文+footer 整段恒走 `applyBubbleChrome`,气泡恒为 hover 大小并包住时间戳/复制;复制图标可见性仍 hover 门控但占位计入气泡,rest/hover 尺寸一致不跳动。
 - **Agent 窗口 ⌘N 改为「新聊天」+ 新开窗口焦点落到输入框（1.108.0-rc6）** —— 两个 agent 窗口的 UX bugfix。其一:侧边栏「新聊天」画着 `⌘N` 标签却只是装饰,真 ⌘N 全局命令一直硬绑「开新 editor 窗口」,用户在 agent 窗口按 ⌘N 弹出的是空文件 editor 窗口。修法:新增 `FocusedValues.agentWindowActive`,agent 窗口 `.focusedSceneValue` 在自己 key 时打标记,⌘N 命令读 `@FocusedValue` 分流——agent 前台→`startNewAgentSession()`(经 `EditorAppStateRegistry.shared.current`,agent 窗口不走 `setCurrent` 故 `@FocusedObject` 取不到)并置焦输入框;editor 前台→维持开新窗口。菜单标题随上下文在「新聊天/新建窗口」间切。焦点值用常量 `true`,不在闭包捕获 AppState,避开流式每 token 重算菜单树的老坑。其二:agent 窗口新开时 AppKit 把默认 first responder 给到侧边栏第一个按钮,原 `.onAppear` 同步置焦被盖掉;改到 `DispatchQueue.main.async` 下一拍置焦,焦点稳落输入框、开门见山能打字。

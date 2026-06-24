@@ -169,9 +169,7 @@ struct AgentPanelView: View {
                         AgentErrorCard(message: error, details: appState.agentErrorDetails)
                     }
 
-                    ForEach(appState.agentPatchProposals) { proposal in
-                        AgentPatchProposalCard(proposal: proposal)
-                    }
+                    AgentPatchProposalList(proposals: appState.agentPatchProposals)
 
                     if appState.agentSessionDidEditFiles && !appState.agentWorktreeChanges.isEmpty {
                         AgentWorktreeChangeCard()

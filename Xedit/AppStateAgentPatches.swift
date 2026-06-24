@@ -68,6 +68,30 @@ extension AppState {
         return resolvedCount
     }
 
+    /// Apply every still-pending proposal that belongs to one assistant
+    /// message (one turn). Backs the "Apply All" button on the collapsed
+    /// patch group card. Reuses the single-proposal apply path so disk
+    /// writes, tab sync and status messages stay identical.
+    func applyAgentPatchProposals(forMessageID messageID: AgentMessage.ID) {
+        let ids = agentPatchProposals
+            .filter { $0.messageID == messageID && $0.status == .pending }
+            .map(\.id)
+        for id in ids {
+            applyAgentPatchProposal(id: id)
+        }
+    }
+
+    /// Reject every still-pending proposal from one assistant message.
+    /// Backs the "Reject All" button on the collapsed patch group card.
+    func rejectAgentPatchProposals(forMessageID messageID: AgentMessage.ID) {
+        let ids = agentPatchProposals
+            .filter { $0.messageID == messageID && $0.status == .pending }
+            .map(\.id)
+        for id in ids {
+            rejectAgentPatchProposal(id: id)
+        }
+    }
+
     func applyAgentPatchProposal(id: AgentPatchProposal.ID) {
         guard let index = agentPatchProposals.firstIndex(where: { $0.id == id }) else { return }
 
