@@ -408,6 +408,10 @@ enum L10n {
             let template = String(localized: "agent-patch-error.hunk-did-not-match", defaultValue: "A patch hunk did not match the current file content: %@")
             return String(format: template, a1)
         }
+        static func targetAlreadyExists(_ a1: String) -> String {
+            let template = String(localized: "agent-patch-error.target-already-exists", defaultValue: "Cannot create %@ — it already exists. Use a modify diff instead.")
+            return String(format: template, a1)
+        }
     }
 
     enum AgentSidePanel {
@@ -795,6 +799,8 @@ enum L10n {
         static let askUserOtherAnswerPlaceholder = String(localized: "tool-card.ask-user.other-answer-placeholder", defaultValue: "Other answer (optional)")
         static let askUserSkip = String(localized: "tool-card.ask-user.skip", defaultValue: "Skip")
         static let askUserSend = String(localized: "tool-card.ask-user.send", defaultValue: "Send")
+        static let askUserAnswered = String(localized: "tool-card.ask-user.answered", defaultValue: "You answered")
+        static let askUserSkipped = String(localized: "tool-card.ask-user.skipped", defaultValue: "You skipped this question")
     }
 
     enum AgentJobs {

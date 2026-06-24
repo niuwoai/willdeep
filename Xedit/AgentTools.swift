@@ -148,8 +148,16 @@ enum AgentToolRunner {
             guard url.path == rootPath || url.path.hasPrefix(rootPath + "/") else {
                 throw AgentToolError.pathOutsideWorkspace(change.path)
             }
-            guard FileManager.default.fileExists(atPath: url.path) else {
-                throw AgentToolError.notFound(change.path)
+            if change.isNewFile {
+                // Creation diff: the file must NOT already exist (use a
+                // modify diff to change an existing file).
+                if FileManager.default.fileExists(atPath: url.path) {
+                    throw AgentToolError.invalidArgument("apply_patch new-file diff targets a path that already exists: \(change.path). Use a normal modify diff instead.")
+                }
+            } else {
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    throw AgentToolError.notFound(change.path)
+                }
             }
         }
 

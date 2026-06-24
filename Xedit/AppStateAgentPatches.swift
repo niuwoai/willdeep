@@ -175,6 +175,17 @@ extension AppState {
 
         for change in changes {
             let url = try resolveAgentPatchURL(change.path, root: root, rootPath: rootPath)
+            if change.isNewFile {
+                // Creating a file: no existing content to read; the diff's
+                // added lines are the whole file.
+                guard !FileManager.default.fileExists(atPath: url.path) else {
+                    throw AgentPatchError.targetAlreadyExists(change.path)
+                }
+                let newContent = try AgentPatchApplier.apply(change, to: "")
+                let relativePath = Self.relativeWorkspacePath(for: url, root: root, rootPath: rootPath)
+                pendingWrites.append((url, newContent, relativePath))
+                continue
+            }
             guard FileManager.default.fileExists(atPath: url.path) else {
                 throw AgentPatchError.missingFile(change.path)
             }
@@ -186,6 +197,11 @@ extension AppState {
         }
 
         for pendingWrite in pendingWrites {
+            // Ensure parent directories exist for newly created files.
+            try FileManager.default.createDirectory(
+                at: pendingWrite.url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
             try pendingWrite.content.write(to: pendingWrite.url, atomically: true, encoding: .utf8)
             applyAgentPatchedContent(pendingWrite.content, to: pendingWrite.url)
         }

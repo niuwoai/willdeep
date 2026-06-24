@@ -10,6 +10,10 @@ import Foundation
 struct AgentPatchFileChange: Equatable {
     let path: String
     let hunks: [AgentPatchHunk]
+    /// True for a creation diff (`--- /dev/null` / `new file mode`). The
+    /// target file is expected NOT to exist yet; applying it writes the
+    /// hunk's added lines as the whole new file.
+    var isNewFile: Bool = false
 }
 
 struct AgentPatchHunk: Equatable {
@@ -77,6 +81,7 @@ enum AgentPatchApplier {
         var currentHunks: [AgentPatchHunk] = []
         var currentHunkStart: Int?
         var currentHunkLines: [AgentPatchLine] = []
+        var currentIsNewFile = false
 
         func flushHunk() {
             guard let start = currentHunkStart else { return }
@@ -88,9 +93,10 @@ enum AgentPatchApplier {
         func flushFile() {
             flushHunk()
             guard let path = currentPath else { return }
-            changes.append(AgentPatchFileChange(path: path, hunks: currentHunks))
+            changes.append(AgentPatchFileChange(path: path, hunks: currentHunks, isNewFile: currentIsNewFile))
             currentPath = nil
             currentHunks = []
+            currentIsNewFile = false
         }
 
         for rawLine in lines {
@@ -99,8 +105,17 @@ enum AgentPatchApplier {
                 continue
             }
 
+            // Git emits this right after `diff --git` for a creation; treat
+            // it as a new-file hint even if the `--- /dev/null` line is
+            // absent or reordered.
+            if rawLine.hasPrefix("new file mode") {
+                currentIsNewFile = true
+                continue
+            }
+
             if rawLine.hasPrefix("+++ ") {
                 let path = String(rawLine.dropFirst(4)).trimmingCharacters(in: .whitespaces)
+                // `+++ /dev/null` is a deletion — not supported yet.
                 guard path != "/dev/null" else { throw AgentPatchError.unsupportedDiff }
                 currentPath = normalizedPath(path)
                 continue
@@ -108,7 +123,11 @@ enum AgentPatchApplier {
 
             if rawLine.hasPrefix("--- ") {
                 let path = String(rawLine.dropFirst(4)).trimmingCharacters(in: .whitespaces)
-                guard path != "/dev/null" else { throw AgentPatchError.unsupportedDiff }
+                // `--- /dev/null` means the file is being CREATED (no old
+                // version). Allow it and mark the change as a new file.
+                if path == "/dev/null" {
+                    currentIsNewFile = true
+                }
                 continue
             }
 
@@ -143,6 +162,15 @@ enum AgentPatchApplier {
     }
 
     static func apply(_ change: AgentPatchFileChange, to content: String) throws -> String {
+        // New file: there's no base content to match against — the whole
+        // file is the hunks' added lines, in order.
+        if change.isNewFile {
+            let added = change.hunks.flatMap { hunk in
+                hunk.lines.compactMap { $0.kind == .added ? $0.text : nil }
+            }
+            return added.joined(separator: "\n")
+        }
+
         var lines = content.components(separatedBy: "\n")
         var searchOffset = 0
 

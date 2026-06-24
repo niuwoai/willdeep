@@ -1112,6 +1112,7 @@ enum AgentPatchError: LocalizedError {
     case pathOutsideWorkspace(String)
     case missingFile(String)
     case hunkDidNotMatch(String)
+    case targetAlreadyExists(String)
 
     var errorDescription: String? {
         switch self {
@@ -1127,6 +1128,8 @@ enum AgentPatchError: LocalizedError {
             return L10n.AgentPatchError.missingFile(path)
         case .hunkDidNotMatch(let path):
             return L10n.AgentPatchError.hunkDidNotMatch(path)
+        case .targetAlreadyExists(let path):
+            return L10n.AgentPatchError.targetAlreadyExists(path)
         }
     }
 }
