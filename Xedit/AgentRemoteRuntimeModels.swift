@@ -191,6 +191,7 @@ struct RuntimeDescriptor: Identifiable, Codable, Equatable {
     var identityFilePath: String?
     var daemonBaseURL: String?
     var defaultWorkspacePath: String
+    var terminalProfile: RuntimeTerminalProfile?
     var platform: RuntimePlatform
     var arch: RuntimeArch
     var lastProbeAt: Date?
@@ -206,6 +207,7 @@ struct RuntimeDescriptor: Identifiable, Codable, Equatable {
         identityFilePath: String? = nil,
         daemonBaseURL: String? = nil,
         defaultWorkspacePath: String,
+        terminalProfile: RuntimeTerminalProfile? = nil,
         platform: RuntimePlatform = .unknown,
         arch: RuntimeArch = .unknown,
         lastProbeAt: Date? = nil,
@@ -220,6 +222,7 @@ struct RuntimeDescriptor: Identifiable, Codable, Equatable {
         self.identityFilePath = identityFilePath
         self.daemonBaseURL = daemonBaseURL
         self.defaultWorkspacePath = defaultWorkspacePath
+        self.terminalProfile = terminalProfile
         self.platform = platform
         self.arch = arch
         self.lastProbeAt = lastProbeAt
@@ -240,6 +243,7 @@ struct RuntimeDescriptor: Identifiable, Codable, Equatable {
             copy.daemonBaseURL = nil
         }
         copy.defaultWorkspacePath = RemotePathValidator.normalizedWorkspaceRoot(copy.defaultWorkspacePath)
+        copy.terminalProfile = copy.terminalProfile?.normalized
         copy.port = min(max(copy.port, 1), 65535)
         if copy.displayName.isEmpty {
             copy.displayName = copy.host.isEmpty ? "Remote Runtime" : copy.host

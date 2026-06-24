@@ -173,7 +173,8 @@ enum AgentSandboxPolicy {
                 reason: "Deleting a user skill is destructive.",
                 prefixRule: nil
             )
-        case "call_mcp_tool", "kill_job", "add_memory", "create_user_skill", "update_user_skill", "suggest_mcp_server", "configure_mcp_server":
+        case "call_mcp_tool", "kill_job", "add_memory", "create_user_skill", "update_user_skill", "suggest_mcp_server", "configure_mcp_server",
+             "terminal_send_command", "terminal_send_control":
             return AgentSandboxDecision(
                 mode: .workspaceWrite,
                 requiresUserApproval: true,

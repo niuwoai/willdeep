@@ -82,6 +82,10 @@ struct AgentToolContext {
     /// unified diff into the session's review UI; applying it to disk is
     /// still handled by the existing user-approved patch flow.
     let patchProposalSink: (@MainActor (String?, String) async throws -> AgentPatchProposal)?
+    /// Live Agent-mode terminal controller. Terminal tools are intentionally
+    /// tied to the visible side-panel session instead of creating hidden SSH
+    /// sessions on the model's behalf.
+    let terminalController: AgentInteractiveTerminalController?
     /// When set, apply_patch should ask the host to immediately apply the
     /// queued proposal using the existing patch applier and audit status.
     let patchAutoApplySource: AgentToolApprovalSource?
@@ -94,7 +98,8 @@ struct AgentToolContext {
         jobRegistry: AgentJobRegistry? = nil,
         sandboxMode: AgentSandboxMode = .readOnly,
         patchProposalSink: (@MainActor (String?, String) async throws -> AgentPatchProposal)? = nil,
-        patchAutoApplySource: AgentToolApprovalSource? = nil
+        patchAutoApplySource: AgentToolApprovalSource? = nil,
+        terminalController: AgentInteractiveTerminalController? = nil
     ) {
         self.rootDirectory = rootDirectory
         self.workspaceLocation = workspaceLocation ?? rootDirectory.map { .local(path: $0.standardizedFileURL.path) }
@@ -104,6 +109,7 @@ struct AgentToolContext {
         self.sandboxMode = sandboxMode
         self.patchProposalSink = patchProposalSink
         self.patchAutoApplySource = patchAutoApplySource
+        self.terminalController = terminalController
     }
 
     var sshBackend: SSHRuntimeBackend? {

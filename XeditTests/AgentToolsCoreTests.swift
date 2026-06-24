@@ -389,6 +389,50 @@ struct AgentToolsCoreTests {
     }
 
     @Test
+    func agentTerminalToolsKeepSnapshotReadOnlyAndWritesApproved() {
+        let snapshot = AgentToolRegistry.descriptor(for: "terminal_snapshot")
+        let sendCommand = AgentToolRegistry.descriptor(for: "terminal_send_command")
+        let sendControl = AgentToolRegistry.descriptor(for: "terminal_send_control")
+
+        #expect(snapshot?.risk == .read)
+        #expect(sendCommand?.risk == .write)
+        #expect(sendControl?.risk == .write)
+
+        let commandDecision = AgentSandboxPolicy.decision(
+            toolName: "terminal_send_command",
+            arguments: ["command": .string("systemctl status nginx --no-pager")],
+            rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        )
+        #expect(commandDecision.mode == .workspaceWrite)
+        #expect(commandDecision.requiresUserApproval == true)
+        #expect(commandDecision.requiresTypedConfirmation == false)
+
+        let snapshotDecision = AgentSandboxPolicy.decision(
+            toolName: "terminal_snapshot",
+            arguments: [:],
+            rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        )
+        #expect(snapshotDecision.mode == .readOnly)
+        #expect(snapshotDecision.requiresUserApproval == false)
+    }
+
+    @Test
+    func agentTerminalOutputRedactsCommonSecretShapes() {
+        let output = """
+        export API_TOKEN=abcdef123456
+        Authorization: Bearer sk-live-secret
+        password = hunter2
+        jwt=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature
+        """
+        let redacted = AgentTerminalRedactor.redact(output)
+        #expect(!redacted.contains("abcdef123456"))
+        #expect(!redacted.contains("sk-live-secret"))
+        #expect(!redacted.contains("hunter2"))
+        #expect(!redacted.contains("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature"))
+        #expect(redacted.contains("[redacted]"))
+    }
+
+    @Test
     func delegatedAgentCommandTimeoutDefaultsAvoidPrematureKills() {
         let background = AgentToolRunner.delegatedAgentForwardedCommandArguments(
             command: "codex exec task",

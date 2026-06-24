@@ -119,13 +119,12 @@ final class AgentChatHistoryNSTextView: NSTextView {
     private var expandedToolGroupIDs = Set<String>()
     private var hoveredUserMessageID: UUID?
     private var hoverTrackingArea: NSTrackingArea?
-    /// Pending "restore copy button label" work items, one per outstanding
-    /// click. Rapid repeated clicks on the same (or different) copy
-    /// buttons cancel the prior pending restore — pre-rc38 these
-    /// asyncAfter blocks accumulated, causing the label to flicker
-    /// "Copied"→"Copy"→"Copied" out of order.
-    private var pendingCodeCopyRestore: DispatchWorkItem?
-    private var pendingFooterCopyRestore: DispatchWorkItem?
+    /// Pending "restore copy button label" work items keyed by the
+    /// button's stable text-storage location. Rapid repeated clicks on
+    /// the same button refresh that button's countdown without preventing
+    /// other copied buttons from restoring themselves.
+    private var pendingCodeCopyRestores: [Int: DispatchWorkItem] = [:]
+    private var pendingFooterCopyRestores: [Int: DispatchWorkItem] = [:]
     var onRetryLastTurn: (() -> Void)?
     /// 1.103.0-rc11: TextKit footer 里 doc.text 图标被点时回调 SwiftUI 侧
     /// 弹出 AgentTurnReportCard popover —— 见 AgentChatTranscript。
@@ -191,6 +190,19 @@ final class AgentChatHistoryNSTextView: NSTextView {
     override func mouseExited(with event: NSEvent) {
         updateHoveredUserMessage(id: nil)
         super.mouseExited(with: event)
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        let horizontalDelta = event.scrollingDeltaX
+        let shiftDelta = event.modifierFlags.contains(.shift) ? event.scrollingDeltaY : 0
+        let shouldScrollCode = abs(horizontalDelta) > abs(event.scrollingDeltaY) || shiftDelta != 0
+        let delta = shiftDelta != 0 ? shiftDelta : horizontalDelta
+        if shouldScrollCode,
+           abs(delta) > 0.1,
+           scrollCodeBlock(at: convert(event.locationInWindow, from: nil), delta: delta) {
+            return
+        }
+        super.scrollWheel(with: event)
     }
 
     /// Swap text storage only when the attributed string actually
@@ -281,8 +293,68 @@ final class AgentChatHistoryNSTextView: NSTextView {
             return
         }
         lastContentHash = hash
+        (layoutManager as? AgentChatHistoryBubbleLayoutManager)?.codeBlockHorizontalOffsets.removeAll()
         textStorage?.setAttributedString(attr)
         invalidateIntrinsicContentSize()
+    }
+
+    private func characterIndex(at point: NSPoint) -> Int? {
+        guard let layoutManager, let textContainer, let textStorage, textStorage.length > 0 else {
+            return nil
+        }
+        var containerPoint = point
+        containerPoint.x -= textContainerInset.width
+        containerPoint.y -= textContainerInset.height
+        guard containerPoint.x >= 0, containerPoint.y >= 0 else { return nil }
+        layoutManager.ensureLayout(for: textContainer)
+        let glyphIndex = layoutManager.glyphIndex(for: containerPoint, in: textContainer)
+        guard glyphIndex < layoutManager.numberOfGlyphs else { return nil }
+        let charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+        guard charIndex < textStorage.length else { return nil }
+        return charIndex
+    }
+
+    private func scrollCodeBlock(at point: NSPoint, delta: CGFloat) -> Bool {
+        guard let textStorage,
+              let layoutManager = layoutManager as? AgentChatHistoryBubbleLayoutManager,
+              let charIndex = characterIndex(at: point),
+              let codeID = textStorage.attribute(
+                .agentChatHistoryCodeBlockID,
+                at: charIndex,
+                effectiveRange: nil
+              ) as? NSNumber else {
+            return false
+        }
+        let id = codeID.intValue
+        let maxOffset = maxCodeBlockHorizontalOffset(id: id)
+        guard maxOffset > 0 else { return false }
+        let current = layoutManager.codeBlockHorizontalOffsets[id] ?? 0
+        let next = min(max(current + delta, 0), maxOffset)
+        guard abs(next - current) > 0.1 else { return true }
+        layoutManager.codeBlockHorizontalOffsets[id] = next
+        needsDisplay = true
+        return true
+    }
+
+    private func maxCodeBlockHorizontalOffset(id: Int) -> CGFloat {
+        guard let textStorage else { return 0 }
+        let fullRange = NSRange(location: 0, length: textStorage.length)
+        var bodyRange = NSRange(location: NSNotFound, length: 0)
+        textStorage.enumerateAttribute(.agentChatHistoryCodeBlockBodyID, in: fullRange) { value, range, stop in
+            guard (value as? NSNumber)?.intValue == id else { return }
+            bodyRange = range
+            stop.pointee = true
+        }
+        guard bodyRange.location != NSNotFound, bodyRange.length > 0 else { return 0 }
+        let body = textStorage.attributedSubstring(from: bodyRange)
+        let fallbackFont = NSFont.monospacedSystemFont(ofSize: currentBaseFontSize, weight: .regular)
+        let font = body.attribute(.font, at: 0, effectiveRange: nil) as? NSFont ?? fallbackFont
+        let longestLineWidth = body.string
+            .components(separatedBy: .newlines)
+            .map { ($0 as NSString).size(withAttributes: [.font: font]).width }
+            .max() ?? 0
+        let visibleWidth = max(bounds.width - 112, 120)
+        return max(0, longestLineWidth - visibleWidth + 24)
     }
 
     private func updateHoveredUserMessage(at point: NSPoint) {
@@ -363,14 +435,21 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             at: charIndex,
             effectiveRange: &codeButtonRange
         ) as? String {
+            codeButtonRange = AgentChatHistoryCopyRangeResolver.contiguousRange(
+                in: textStorage,
+                key: .agentChatHistoryCodeCopyText,
+                matching: code,
+                seedRange: codeButtonRange
+            )
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(code, forType: .string)
             replaceCopyButton(in: codeButtonRange, copied: true, code: code)
-            pendingCodeCopyRestore?.cancel()
+            let restoreKey = codeButtonRange.location
+            pendingCodeCopyRestores[restoreKey]?.cancel()
             let work = DispatchWorkItem { [weak self] in
-                self?.restoreCopyButtonIfNeeded(range: codeButtonRange, code: code)
+                self?.restoreCopyButtonIfNeeded(range: codeButtonRange, code: code, restoreKey: restoreKey)
             }
-            pendingCodeCopyRestore = work
+            pendingCodeCopyRestores[restoreKey] = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: work)
             return true
         }
@@ -381,14 +460,21 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             at: charIndex,
             effectiveRange: &footerButtonRange
         ) as? String {
+            footerButtonRange = AgentChatHistoryCopyRangeResolver.contiguousRange(
+                in: textStorage,
+                key: .agentChatHistoryMessageCopyText,
+                matching: message,
+                seedRange: footerButtonRange
+            )
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(message, forType: .string)
             replaceFooterCopyButton(in: footerButtonRange, copied: true, message: message)
-            pendingFooterCopyRestore?.cancel()
+            let restoreKey = footerButtonRange.location
+            pendingFooterCopyRestores[restoreKey]?.cancel()
             let work = DispatchWorkItem { [weak self] in
-                self?.restoreFooterCopyButtonIfNeeded(range: footerButtonRange, message: message)
+                self?.restoreFooterCopyButtonIfNeeded(range: footerButtonRange, message: message, restoreKey: restoreKey)
             }
-            pendingFooterCopyRestore = work
+            pendingFooterCopyRestores[restoreKey] = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: work)
             return true
         }
@@ -458,7 +544,8 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
         ].contains(value)
     }
 
-    private func restoreCopyButtonIfNeeded(range: NSRange, code: String) {
+    private func restoreCopyButtonIfNeeded(range: NSRange, code: String, restoreKey: Int) {
+        pendingCodeCopyRestores[restoreKey] = nil
         guard let textStorage,
               NSMaxRange(range) <= textStorage.length,
               textStorage.attributedSubstring(from: range).string == AgentChatHistoryCodeCopyChrome.copiedLabel else {
@@ -483,7 +570,8 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
         invalidateIntrinsicContentSize()
     }
 
-    private func restoreFooterCopyButtonIfNeeded(range: NSRange, message: String) {
+    private func restoreFooterCopyButtonIfNeeded(range: NSRange, message: String, restoreKey: Int) {
+        pendingFooterCopyRestores[restoreKey] = nil
         guard let textStorage,
               NSMaxRange(range) <= textStorage.length,
               textStorage.attributedSubstring(from: range).string == AgentChatHistoryFooterChrome.copyCopiedLabel else {
@@ -532,32 +620,111 @@ enum AgentChatHistoryFilePathLink {
     static let value = "agent-chat-history-file-path"
 }
 
-extension NSAttributedString.Key {
-    static let agentChatHistoryBubbleKind = NSAttributedString.Key("AgentChatHistoryBubbleKind")
-    static let agentChatHistoryCodeBlockID = NSAttributedString.Key("AgentChatHistoryCodeBlockID")
-    static let agentChatHistoryCodeCopyText = NSAttributedString.Key("AgentChatHistoryCodeCopyText")
-    static let agentChatHistoryMessageCopyText = NSAttributedString.Key("AgentChatHistoryMessageCopyText")
-    static let agentChatHistoryRetryLastTurn = NSAttributedString.Key("AgentChatHistoryRetryLastTurn")
-    static let agentChatHistoryShowTurnReport = NSAttributedString.Key("AgentChatHistoryShowTurnReport")
-    static let agentChatHistoryTableBlockID = NSAttributedString.Key("AgentChatHistoryTableBlockID")
-    static let agentChatHistoryTablePayload = NSAttributedString.Key("AgentChatHistoryTablePayload")
-    static let agentChatHistoryTextAttachment = NSAttributedString.Key("AgentChatHistoryTextAttachment")
-    static let agentChatHistoryFilePath = NSAttributedString.Key("AgentChatHistoryFilePath")
-    static let agentChatHistoryToolGroupID = NSAttributedString.Key("AgentChatHistoryToolGroupID")
-    static let agentChatHistoryUserMessageID = NSAttributedString.Key("AgentChatHistoryUserMessageID")
-    /// Markup so the formatter's `applyBubbleChrome` step can swap in a
-    /// heading-specific paragraph style (extra `paragraphSpacingBefore`
-    /// + `paragraphSpacing`). The raw value is the heading level (1-6)
-    /// so future styling can scale spacing per level.
-    static let agentChatHistoryHeadingLevel = NSAttributedString.Key("AgentChatHistoryHeadingLevel")
+enum AgentChatHistoryCopyRangeResolver {
+    static func contiguousRange(
+        in attributed: NSAttributedString,
+        key: NSAttributedString.Key,
+        matching expectedValue: String,
+        seedRange: NSRange
+    ) -> NSRange {
+        guard attributed.length > 0 else { return seedRange }
+        let storageLength = attributed.length
+        let seedLocation = min(max(seedRange.location, 0), storageLength - 1)
+        var lowerBound = seedLocation
+        var upperBound = min(max(NSMaxRange(seedRange), seedLocation + 1), storageLength)
+
+        while lowerBound > 0,
+              (attributed.attribute(key, at: lowerBound - 1, effectiveRange: nil) as? String) == expectedValue {
+            lowerBound -= 1
+        }
+        while upperBound < storageLength,
+              (attributed.attribute(key, at: upperBound, effectiveRange: nil) as? String) == expectedValue {
+            upperBound += 1
+        }
+
+        return NSRange(location: lowerBound, length: upperBound - lowerBound)
+    }
 }
 
 private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
+    var codeBlockHorizontalOffsets: [Int: CGFloat] = [:]
+
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         drawAgentBubbles(forGlyphRange: glyphsToShow, at: origin)
         drawAgentTables(forGlyphRange: glyphsToShow, at: origin)
         drawAgentCodeBlocks(forGlyphRange: glyphsToShow, at: origin)
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
+    }
+
+    override func drawGlyphs(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        guard let textStorage, !codeBlockHorizontalOffsets.isEmpty else {
+            super.drawGlyphs(forGlyphRange: glyphsToShow, at: origin)
+            return
+        }
+        let characterRange = self.characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
+        var shiftedGlyphRanges: [(range: NSRange, id: Int)] = []
+        textStorage.enumerateAttribute(.agentChatHistoryCodeBlockBodyID, in: characterRange, options: []) { value, range, _ in
+            guard let id = (value as? NSNumber)?.intValue,
+                  (codeBlockHorizontalOffsets[id] ?? 0) > 0 else { return }
+            let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            let visibleRange = NSIntersectionRange(glyphRange, glyphsToShow)
+            guard visibleRange.length > 0 else { return }
+            shiftedGlyphRanges.append((visibleRange, id))
+        }
+        guard !shiftedGlyphRanges.isEmpty else {
+            super.drawGlyphs(forGlyphRange: glyphsToShow, at: origin)
+            return
+        }
+
+        var cursor = glyphsToShow.location
+        for item in shiftedGlyphRanges.sorted(by: { $0.range.location < $1.range.location }) {
+            if cursor < item.range.location {
+                super.drawGlyphs(
+                    forGlyphRange: NSRange(location: cursor, length: item.range.location - cursor),
+                    at: origin
+                )
+            }
+            drawShiftedCodeGlyphs(forGlyphRange: item.range, codeBlockID: item.id, at: origin)
+            cursor = NSMaxRange(item.range)
+        }
+        let glyphsEnd = NSMaxRange(glyphsToShow)
+        if cursor < glyphsEnd {
+            super.drawGlyphs(
+                forGlyphRange: NSRange(location: cursor, length: glyphsEnd - cursor),
+                at: origin
+            )
+        }
+    }
+
+    private func drawShiftedCodeGlyphs(forGlyphRange glyphRange: NSRange, codeBlockID: Int, at origin: NSPoint) {
+        guard let textStorage,
+              let context = NSGraphicsContext.current?.cgContext,
+              let offset = codeBlockHorizontalOffsets[codeBlockID],
+              offset > 0 else {
+            super.drawGlyphs(forGlyphRange: glyphRange, at: origin)
+            return
+        }
+        let charRange = characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
+        let fullStorageRange = NSRange(location: 0, length: textStorage.length)
+        var codeRange = NSRange(location: 0, length: 0)
+        _ = textStorage.attribute(
+            .agentChatHistoryCodeBlockID,
+            at: charRange.location,
+            longestEffectiveRange: &codeRange,
+            in: fullStorageRange
+        )
+        guard codeRange.length > 0 else {
+            super.drawGlyphs(forGlyphRange: glyphRange, at: origin)
+            return
+        }
+        let codeGlyphRange = self.glyphRange(forCharacterRange: codeRange, actualCharacterRange: nil)
+        let clipRect = codeBlockRect(forGlyphRange: codeGlyphRange, at: origin)
+            .insetBy(dx: 10, dy: 0)
+        context.saveGState()
+        context.clip(to: clipRect)
+        context.translateBy(x: -offset, y: 0)
+        super.drawGlyphs(forGlyphRange: glyphRange, at: origin)
+        context.restoreGState()
     }
 
     private func drawAgentBubbles(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {

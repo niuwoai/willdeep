@@ -755,7 +755,8 @@ extension AppState {
                             autoApplySource: patchAutoApplySource
                         )
                     },
-                    patchAutoApplySource: patchAutoApplySource
+                    patchAutoApplySource: patchAutoApplySource,
+                    terminalController: agentTerminalController
                 )
                 do {
                     let result = try await AgentToolRunner.run(

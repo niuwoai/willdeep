@@ -32,6 +32,12 @@ enum AgentToolRunner {
             return try await AgentFileTools.gitStatus(context: context)
         case "run_command":
             return try await runCommand(arguments: arguments, context: context)
+        case "terminal_snapshot":
+            return try await AgentTerminalTools.snapshot(arguments: arguments, context: context)
+        case "terminal_send_command":
+            return try await AgentTerminalTools.sendCommand(arguments: arguments, context: context)
+        case "terminal_send_control":
+            return try await AgentTerminalTools.sendControl(arguments: arguments, context: context)
         case "apply_patch":
             return try await applyPatch(arguments: arguments, context: context)
         case "claude_code":

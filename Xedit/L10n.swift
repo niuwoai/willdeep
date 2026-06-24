@@ -414,6 +414,7 @@ enum L10n {
         static let preview = String(localized: "agent-side-panel.preview", defaultValue: "Preview")
         static let diff = String(localized: "agent-side-panel.diff", defaultValue: "Diff")
         static let files = String(localized: "agent-side-panel.files", defaultValue: "Files")
+        static let terminal = String(localized: "agent-side-panel.terminal", defaultValue: "Terminal")
         static let backgroundTasks = String(localized: "agent-side-panel.background-tasks", defaultValue: "Background tasks")
         static let plan = String(localized: "agent-side-panel.plan", defaultValue: "Plan")
         static let close = String(localized: "agent-side-panel.close", defaultValue: "Close Panel")
@@ -431,6 +432,52 @@ enum L10n {
         static let previewEmpty = String(localized: "agent-side-panel.preview-empty", defaultValue: "Pick a markdown or HTML file to preview.")
         static let previewChoose = String(localized: "agent-side-panel.preview-choose", defaultValue: "Choose File…")
         static let previewUnsupported = String(localized: "agent-side-panel.preview-unsupported", defaultValue: "Only Markdown and HTML can be previewed here.")
+    }
+
+    enum AgentTerminal {
+        static let clear = String(localized: "agent-terminal.clear", defaultValue: "Clear")
+        static let connect = String(localized: "agent-terminal.connect", defaultValue: "Connect")
+        static let disconnect = String(localized: "agent-terminal.disconnect", defaultValue: "Disconnect")
+        static let disconnected = String(localized: "agent-terminal.disconnected", defaultValue: "Disconnected")
+        static let disconnectedRuntime = String(localized: "agent-terminal.disconnected-runtime", defaultValue: "No terminal")
+        static let noRuntime = String(localized: "agent-terminal.no-runtime", defaultValue: "No SSH runtime configured.")
+        static let noRuntimeShort = String(localized: "agent-terminal.no-runtime-short", defaultValue: "No runtime")
+        static let emptyOutput = String(localized: "agent-terminal.empty-output", defaultValue: "Connect an SSH runtime to start an interactive terminal.")
+        static let copyOutput = String(localized: "agent-terminal.copy-output", defaultValue: "Copy Output")
+        static let services = String(localized: "agent-terminal.services", defaultValue: "Service Commands")
+        static let noServices = String(localized: "agent-terminal.no-services", defaultValue: "No services configured.")
+        static let pendingAutoCommands = String(localized: "agent-terminal.pending-auto-commands", defaultValue: "Pending auto commands")
+        static let serviceStatus = String(localized: "agent-terminal.service.status", defaultValue: "Status")
+        static let serviceRestart = String(localized: "agent-terminal.service.restart", defaultValue: "Restart")
+        static let serviceLogs = String(localized: "agent-terminal.service.logs", defaultValue: "Logs")
+        static let serviceLogsFollow = String(localized: "agent-terminal.service.logs-follow", defaultValue: "Follow Logs")
+        static let dockerPs = String(localized: "agent-terminal.docker.ps", defaultValue: "Docker ps")
+        static let dockerLogs = String(localized: "agent-terminal.docker.logs", defaultValue: "Docker logs")
+
+        static func connecting(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "agent-terminal.connecting", defaultValue: "Connecting %@ (%@)")
+            return String(format: template, a1, a2)
+        }
+        static func connected(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "agent-terminal.connected", defaultValue: "Connected to %@ (%@)")
+            return String(format: template, a1, a2)
+        }
+        static func exited(_ a1: Int32) -> String {
+            let template = String(localized: "agent-terminal.exited", defaultValue: "terminal exited %@")
+            return String(format: template, "\(a1)")
+        }
+        static func ptyFailed(_ a1: String) -> String {
+            let template = String(localized: "agent-terminal.pty-failed", defaultValue: "failed to allocate pseudo terminal: %@")
+            return String(format: template, a1)
+        }
+        static func spawnFailed(_ a1: String) -> String {
+            let template = String(localized: "agent-terminal.spawn-failed", defaultValue: "failed to spawn SSH terminal: %@")
+            return String(format: template, a1)
+        }
+        static func writeFailed(_ a1: String) -> String {
+            let template = String(localized: "agent-terminal.write-failed", defaultValue: "terminal write failed: %@")
+            return String(format: template, a1)
+        }
     }
 
     enum AgentPanel {
@@ -1178,6 +1225,21 @@ enum L10n {
             static let workspacePathLabel = String(localized: "settings.remote-runtimes.workspace-path", defaultValue: "Remote workspace path")
             static let workspacePathPrompt = String(localized: "settings.remote-runtimes.workspace-path.prompt", defaultValue: "/path/to/workspace")
             static let sshDescription = String(localized: "settings.remote-runtimes.ssh-description", defaultValue: "Uses the system ssh client with BatchMode authentication. Configure hosts in your normal SSH config or provide an optional identity-file path; WillDeep stores only the path, never private key contents.")
+            static let terminalSection = String(localized: "settings.remote-runtimes.terminal-section", defaultValue: "Interactive Terminal")
+            static let terminalAutoRunLabel = String(localized: "settings.remote-runtimes.terminal-auto-run", defaultValue: "Run terminal startup queue after connect")
+            static let terminalStartupDirectoryLabel = String(localized: "settings.remote-runtimes.terminal-startup-directory", defaultValue: "Startup directory")
+            static let terminalStartupDirectoryPrompt = String(localized: "settings.remote-runtimes.terminal-startup-directory.prompt", defaultValue: "/var/www/app")
+            static let terminalStartupCommandsLabel = String(localized: "settings.remote-runtimes.terminal-startup-commands", defaultValue: "Auto commands")
+            static let terminalStartupCommandsHelp = String(localized: "settings.remote-runtimes.terminal-startup-commands.help", defaultValue: "One command per line. These run before jump commands.")
+            static let terminalJumpCommandsLabel = String(localized: "settings.remote-runtimes.terminal-jump-commands", defaultValue: "Jump commands")
+            static let terminalJumpCommandsHelp = String(localized: "settings.remote-runtimes.terminal-jump-commands.help", defaultValue: "One command per line. These run after auto commands, for bastion or second-hop shells.")
+            static let terminalDelayLabel = String(localized: "settings.remote-runtimes.terminal-delay", defaultValue: "Command delay (ms)")
+            static let terminalDelayPrompt = String(localized: "settings.remote-runtimes.terminal-delay.prompt", defaultValue: "450")
+            static let terminalIdleTimeoutLabel = String(localized: "settings.remote-runtimes.terminal-idle-timeout", defaultValue: "Idle timeout (s)")
+            static let terminalIdleTimeoutPrompt = String(localized: "settings.remote-runtimes.terminal-idle-timeout.prompt", defaultValue: "5")
+            static let terminalServicesLabel = String(localized: "settings.remote-runtimes.terminal-services", defaultValue: "Common services")
+            static let terminalServicesHelp = String(localized: "settings.remote-runtimes.terminal-services.help", defaultValue: "One service name per line for the Agent Terminal service menu.")
+            static let terminalDescription = String(localized: "settings.remote-runtimes.terminal-description", defaultValue: "The Agent Terminal uses an interactive SSH PTY. User typing goes straight to the terminal; AI command input still requires approval.")
             static let probeSection = String(localized: "settings.remote-runtimes.probe-section", defaultValue: "Probe")
             static let platformLabel = String(localized: "settings.remote-runtimes.platform", defaultValue: "Platform")
             static let capabilitiesLabel = String(localized: "settings.remote-runtimes.capabilities", defaultValue: "Capabilities")

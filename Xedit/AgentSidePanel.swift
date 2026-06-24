@@ -31,6 +31,7 @@ enum AgentSidePanelKind: String, CaseIterable, Identifiable {
     case preview
     case diff
     case files
+    case terminal
     case backgroundTasks
     case plan
 
@@ -41,6 +42,7 @@ enum AgentSidePanelKind: String, CaseIterable, Identifiable {
         case .preview: return L10n.AgentSidePanel.preview
         case .diff: return L10n.AgentSidePanel.diff
         case .files: return L10n.AgentSidePanel.files
+        case .terminal: return L10n.AgentSidePanel.terminal
         case .backgroundTasks: return "任务监控"
         case .plan: return L10n.AgentSidePanel.plan
         }
@@ -53,6 +55,7 @@ enum AgentSidePanelKind: String, CaseIterable, Identifiable {
         case .preview: return "play.rectangle"
         case .diff: return "rectangle.split.2x1.fill"
         case .files: return "folder"
+        case .terminal: return "terminal"
         case .backgroundTasks: return "list.bullet.rectangle"
         case .plan: return "checklist"
         }
@@ -115,6 +118,8 @@ struct AgentSidePanelHost: View {
             AgentSidePanelDiffView()
         case .files:
             AgentSidePanelFilesView(selectedFile: $selectedFile, kind: $kind)
+        case .terminal:
+            AgentSidePanelTerminalView()
         case .plan:
             AgentSidePanelPlanView()
         case .preview:

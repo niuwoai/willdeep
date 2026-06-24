@@ -40,9 +40,45 @@ struct AgentChatHistoryRendererTests {
         #expect(rendered.string.contains(" Copy"))
         #expect(firstAttributeRange(.agentChatHistoryCodeCopyText, containing: "let value = 1", in: rendered) != nil)
         #expect(rendered.string.contains("let value = 1"))
+        let codeBodyRange = try? #require(firstAttributeRange(
+            .agentChatHistoryCodeBlockBodyID,
+            containing: "let value = 1",
+            in: rendered
+        ))
+        #expect(codeBodyRange != nil)
+        if let codeBodyRange {
+            let paragraphStyle = rendered.attribute(
+                .paragraphStyle,
+                at: codeBodyRange.location,
+                effectiveRange: nil
+            ) as? NSParagraphStyle
+            #expect(paragraphStyle?.lineBreakMode == .byClipping)
+        }
         #expect(!rendered.string.contains("# Title"))
         #expect(!rendered.string.contains("**bold**"))
         #expect(!rendered.string.contains("```"))
+    }
+
+    @Test
+    func codeCopyRangeExpandsAcrossIconAndLabel() {
+        let button = AgentChatHistoryCodeCopyChrome.button(
+            copied: false,
+            code: "let value = 1",
+            font: NSFont.monospacedSystemFont(ofSize: 12, weight: .medium),
+            color: .secondaryLabelColor
+        )
+
+        let iconOnlyRange = NSRange(location: 0, length: 1)
+        let resolved = AgentChatHistoryCopyRangeResolver.contiguousRange(
+            in: button,
+            key: .agentChatHistoryCodeCopyText,
+            matching: "let value = 1",
+            seedRange: iconOnlyRange
+        )
+
+        #expect(resolved.location == 0)
+        #expect(resolved.length == button.length)
+        #expect((button.string as NSString).substring(with: resolved).contains(" Copy"))
     }
 
     @Test

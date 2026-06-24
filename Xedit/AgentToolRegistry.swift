@@ -76,6 +76,30 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "terminal_snapshot",
+            description: "Read the visible Agent Terminal side panel state and output tail. Read-only. Use this to inspect a user-opened SSH terminal, including login banners, service status output, and prompts. Does not start a terminal and redacts common secrets before returning output.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "max_characters", type: .integer, description: "Maximum output-tail characters to return. Defaults to 16000, capped at 40000.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "terminal_send_command",
+            description: "Send one visible command line to the currently connected Agent Terminal side panel. Requires user approval before the command is written to the terminal. Does not read passwords or hidden input.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "command", type: .string, description: "Command line to send, without a trailing newline. WillDeep appends Enter after approval.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "terminal_send_control",
+            description: "Send a whitelisted control key to the currently connected Agent Terminal side panel. Requires user approval; use ctrl_c to interrupt a foreground command, enter to submit the current line, or escape to cancel terminal UI modes.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "control", type: .string, description: "One of: ctrl_c, enter, escape.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "apply_patch",
             description: "Submit a conservative unified diff for existing workspace files to WillDeep's right-side patch review panel. This tool validates the diff shape and queues a patch proposal. In normal modes it does not write files until the user clicks Apply; in Goal mode or workspace-access approval mode the host may immediately apply the queued proposal through the same patch applier and mark it applied.",
             risk: .read,

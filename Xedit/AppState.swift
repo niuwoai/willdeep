@@ -222,6 +222,7 @@ final class AppState: ObservableObject {
         }
     }
     var editorTerminalSession = EditorTerminalSession()
+    let agentTerminalController = AgentInteractiveTerminalController()
 
     /// Internal flag to suppress re-entrant `onChange` processing when a URL
     /// change is a programmatic revert (e.g. binary file rejected, user cancelled).
@@ -253,6 +254,7 @@ final class AppState: ObservableObject {
     /// changes only repaint that one row.
     private var activeRuntimeSubscription: AnyCancellable?
     private var terminalSessionSubscription: AnyCancellable?
+    private var agentTerminalSubscription: AnyCancellable?
     /// Republishes background job registry changes through AppState so
     /// any view binding `appState.*` repaints when a job starts /
     /// finishes / streams output. Views that need finer-grained
@@ -383,6 +385,10 @@ final class AppState: ObservableObject {
                 self?.objectWillChange.send()
             }
         terminalSessionSubscription = editorTerminalSession.objectWillChange
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+        agentTerminalSubscription = agentTerminalController.objectWillChange
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
             }

@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.106.0-rc2 - 2026-06-24
+
+### Fixed
+- 修复 Agent 聊天历史 Markdown 代码块复制控件点到图标半区时只替换半个按钮的问题,避免再次点击后出现两个 `Done`,并确保复制成功状态约 3 秒后恢复为待复制状态。
+- Agent 聊天历史 Markdown 代码块正文改为不自动折行,在代码块区域横向滚动时只移动代码正文,方便查看长命令、长路径和长单行输出的完整内容。
+- 代码块和消息 footer 的复制成功复位改为按按钮实例独立计时,复制另一个按钮不会取消前一个按钮的恢复任务。
+
+### Changed
+- 版本号从 **1.106.0-rc1** 提升为 **1.106.0-rc2**（Markdown 代码块复制 `Done` 状态复位与横向滚动修复）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.106.0-rc1 - 2026-06-24
+
+### Added
+- Agent mode 右侧辅助栏新增 Terminal 面板,复用现有 `AgentSidePanelKind` 架构,可在不挤压左侧 sessions sidebar 的情况下连接 SSH runtime。
+- 新增 `RuntimeTerminalProfile`,每台 SSH runtime 可配置启动目录、自动命令、二跳命令、自动执行开关、命令间隔、空闲超时和常用服务名;连接后执行顺序固定为启动目录 / 自动命令 / 二跳命令。
+- 新增交互式 SSH PTY 会话层,通过 `/usr/bin/ssh -tt` 启动真实终端,用户可手动输入密码、2FA、sudo 等交互内容;终端输出保存在内存 ring buffer 中供 UI 与 AI snapshot 使用。
+- 新增 `terminal_snapshot`、`terminal_send_command`、`terminal_send_control` 三个 Agent 工具。snapshot 为只读;写命令和控制键默认走现有审批卡。
+- Terminal 面板提供 runtime 选择、连接 / 断开、清屏、复制输出和常用 Linux 服务命令菜单,覆盖 `systemctl`、`journalctl`、`docker` 等入口。
+- 新增 `scripts/agent_terminal_smoke.rb`,输出 `build/agent_terminal_smoke/report.json` 与 `report.md`,覆盖终端 PTY、工具注册、审批策略、侧栏入口和 runtime 配置的轻量冒烟检查。
+
+### Changed
+- 终端输出进入 AI snapshot 前会做常见 token / password / Authorization / JWT / `sk-` 形态脱敏;不保存密码、token 或未回显输入。
+- 版本号从 **1.105.0-rc20** 提升为 **1.106.0-rc1**（Agent mode 交互式远程终端新增功能）。pbxproj×6 / Go agent / Help Info.plist / README badge / product-overview / docs ×2 同步。
+
 ## 1.105.0-rc20 - 2026-06-24
 
 ### Fixed

@@ -27,6 +27,13 @@ struct AgentRuntimeSettingsView: View {
     @State private var daemonToken = ""
     @State private var transport: RuntimeTransport = .ssh
     @State private var workspacePath = ""
+    @State private var terminalStartupDirectory = ""
+    @State private var terminalStartupCommands = ""
+    @State private var terminalJumpCommands = ""
+    @State private var terminalAutoRunOnConnect = false
+    @State private var terminalCommandDelayMilliseconds = RuntimeTerminalProfile.default.commandDelayMilliseconds
+    @State private var terminalIdleTimeoutSeconds = RuntimeTerminalProfile.default.idleTimeoutSeconds
+    @State private var terminalServiceNames = RuntimeTerminalProfile.default.serviceNames.joined(separator: "\n")
 
     private var selectedRuntime: RuntimeDescriptor? {
         guard let selectedRuntimeID else { return nil }
@@ -177,6 +184,53 @@ struct AgentRuntimeSettingsView: View {
                 )
             }
 
+            if transport == .ssh {
+                Section(L10n.Settings.RemoteRuntimes.terminalSection) {
+                    Toggle(L10n.Settings.RemoteRuntimes.terminalAutoRunLabel, isOn: $terminalAutoRunOnConnect)
+                    textInput(
+                        L10n.Settings.RemoteRuntimes.terminalStartupDirectoryLabel,
+                        text: $terminalStartupDirectory,
+                        prompt: L10n.Settings.RemoteRuntimes.terminalStartupDirectoryPrompt
+                    )
+                    multilineInput(
+                        L10n.Settings.RemoteRuntimes.terminalStartupCommandsLabel,
+                        text: $terminalStartupCommands,
+                        help: L10n.Settings.RemoteRuntimes.terminalStartupCommandsHelp
+                    )
+                    multilineInput(
+                        L10n.Settings.RemoteRuntimes.terminalJumpCommandsLabel,
+                        text: $terminalJumpCommands,
+                        help: L10n.Settings.RemoteRuntimes.terminalJumpCommandsHelp
+                    )
+                    LabeledContent(L10n.Settings.RemoteRuntimes.terminalDelayLabel) {
+                        TextField(
+                            L10n.Settings.RemoteRuntimes.terminalDelayPrompt,
+                            value: $terminalCommandDelayMilliseconds,
+                            format: .number.grouping(.never)
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 92)
+                    }
+                    LabeledContent(L10n.Settings.RemoteRuntimes.terminalIdleTimeoutLabel) {
+                        TextField(
+                            L10n.Settings.RemoteRuntimes.terminalIdleTimeoutPrompt,
+                            value: $terminalIdleTimeoutSeconds,
+                            format: .number.grouping(.never)
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 92)
+                    }
+                    multilineInput(
+                        L10n.Settings.RemoteRuntimes.terminalServicesLabel,
+                        text: $terminalServiceNames,
+                        help: L10n.Settings.RemoteRuntimes.terminalServicesHelp
+                    )
+                    Text(L10n.Settings.RemoteRuntimes.terminalDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             if let selectedRuntime {
                 Section(L10n.Settings.RemoteRuntimes.probeSection) {
                     LabeledContent(L10n.Settings.RemoteRuntimes.platformLabel) {
@@ -252,6 +306,12 @@ struct AgentRuntimeSettingsView: View {
         .onCompatibleChange(of: port) { _, newPort in
             port = clampedPort(newPort)
         }
+        .onCompatibleChange(of: terminalCommandDelayMilliseconds) { _, newValue in
+            terminalCommandDelayMilliseconds = min(max(newValue, 100), 10_000)
+        }
+        .onCompatibleChange(of: terminalIdleTimeoutSeconds) { _, newValue in
+            terminalIdleTimeoutSeconds = min(max(newValue, 1), 120)
+        }
     }
 
     private var portInput: some View {
@@ -291,6 +351,25 @@ struct AgentRuntimeSettingsView: View {
         .padding(.vertical, 2)
     }
 
+    private func multilineInput(_ title: String, text: Binding<String>, help: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextEditor(text: text)
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 64)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+                )
+            Text(help)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
+    }
+
     private func loadSelectedRuntime() {
         guard let selectedRuntime else {
             displayName = ""
@@ -302,6 +381,7 @@ struct AgentRuntimeSettingsView: View {
             daemonToken = ""
             transport = .ssh
             workspacePath = ""
+            loadTerminalProfile(.default)
             return
         }
         displayName = selectedRuntime.displayName
@@ -313,6 +393,7 @@ struct AgentRuntimeSettingsView: View {
         daemonToken = selectedRuntime.transport == .daemon ? RemoteRuntimeSecretStore.daemonToken(runtimeID: selectedRuntime.id) : ""
         transport = selectedRuntime.transport
         workspacePath = selectedRuntime.defaultWorkspacePath
+        loadTerminalProfile(selectedRuntime.terminalProfile ?? .default)
     }
 
     private func saveCurrent() {
@@ -345,6 +426,7 @@ struct AgentRuntimeSettingsView: View {
             RemoteRuntimeSecretStore.saveDaemonToken(daemonToken, runtimeID: runtime.id)
         }
         runtime.defaultWorkspacePath = workspacePath
+        runtime.terminalProfile = transport == .ssh ? currentTerminalProfile() : nil
         upsertLocal(runtime.normalized)
         statusMessage = L10n.Settings.RemoteRuntimes.savedStatus
     }
@@ -415,6 +497,35 @@ struct AgentRuntimeSettingsView: View {
         case .local:
             return false
         }
+    }
+
+    private func loadTerminalProfile(_ profile: RuntimeTerminalProfile) {
+        let normalized = profile.normalized
+        terminalStartupDirectory = normalized.startupDirectory
+        terminalStartupCommands = normalized.startupCommands.joined(separator: "\n")
+        terminalJumpCommands = normalized.jumpCommands.joined(separator: "\n")
+        terminalAutoRunOnConnect = normalized.autoRunOnConnect
+        terminalCommandDelayMilliseconds = normalized.commandDelayMilliseconds
+        terminalIdleTimeoutSeconds = normalized.idleTimeoutSeconds
+        terminalServiceNames = normalized.serviceNames.joined(separator: "\n")
+    }
+
+    private func currentTerminalProfile() -> RuntimeTerminalProfile {
+        RuntimeTerminalProfile(
+            startupDirectory: terminalStartupDirectory,
+            startupCommands: lines(from: terminalStartupCommands),
+            jumpCommands: lines(from: terminalJumpCommands),
+            autoRunOnConnect: terminalAutoRunOnConnect,
+            commandDelayMilliseconds: terminalCommandDelayMilliseconds,
+            idleTimeoutSeconds: terminalIdleTimeoutSeconds,
+            serviceNames: lines(from: terminalServiceNames)
+        ).normalized
+    }
+
+    private func lines(from value: String) -> [String] {
+        value.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("#") }
     }
 
     private func capabilityLine(_ runtime: RuntimeDescriptor) -> String {

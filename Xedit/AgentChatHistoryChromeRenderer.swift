@@ -423,6 +423,7 @@ extension AgentChatHistoryRenderer {
 
     private static func codeBlockParagraphStyle(from baseStyle: NSParagraphStyle) -> NSParagraphStyle {
         let style = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        style.lineBreakMode = .byClipping
         if baseStyle.alignment != .right {
             style.headIndent = baseStyle.headIndent + 8
             style.firstLineHeadIndent = baseStyle.firstLineHeadIndent + 8

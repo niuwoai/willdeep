@@ -142,4 +142,67 @@ struct AgentRemoteRuntimeTests {
         #expect(capabilities.ghVersion == nil)
         #expect(capabilities.proxyEnvironment.isEmpty)
     }
+
+    @Test("runtime descriptor decodes old JSON without terminal profile")
+    func runtimeDescriptorDecodesOldJSONWithoutTerminalProfile() throws {
+        let json = """
+        {
+          "id": "22222222-2222-2222-2222-222222222222",
+          "displayName": "legacy host",
+          "transport": "ssh",
+          "host": "legacy.example.com",
+          "port": 22,
+          "username": "deploy",
+          "defaultWorkspacePath": "/srv/app",
+          "platform": "linux",
+          "arch": "x86_64",
+          "capabilities": {
+            "hasGit": true,
+            "hasRipgrep": true,
+            "proxyEnvironment": {}
+          }
+        }
+        """
+        let runtime = try JSONDecoder().decode(RuntimeDescriptor.self, from: Data(json.utf8))
+        #expect(runtime.displayName == "legacy host")
+        #expect(runtime.terminalProfile == nil)
+    }
+
+    @Test("terminal profile encodes and normalizes queue settings")
+    func terminalProfileEncodingAndQueueOrder() throws {
+        let profile = RuntimeTerminalProfile(
+            startupDirectory: " /srv/app ",
+            startupCommands: [" source .env ", "", "uptime"],
+            jumpCommands: [" ssh app2 ", "tmux attach || tmux new"],
+            autoRunOnConnect: true,
+            commandDelayMilliseconds: 10,
+            idleTimeoutSeconds: 400,
+            serviceNames: [" nginx ", "", "redis"]
+        ).normalized
+
+        #expect(profile.startupDirectory == "/srv/app")
+        #expect(profile.startupCommands == ["source .env", "uptime"])
+        #expect(profile.jumpCommands == ["ssh app2", "tmux attach || tmux new"])
+        #expect(profile.commandDelayMilliseconds == 100)
+        #expect(profile.idleTimeoutSeconds == 120)
+        #expect(profile.serviceNames == ["nginx", "redis"])
+        #expect(profile.queuedConnectCommands == [
+            "cd '/srv/app'",
+            "source .env",
+            "uptime",
+            "ssh app2",
+            "tmux attach || tmux new"
+        ])
+
+        let runtime = RuntimeDescriptor(
+            displayName: "ops",
+            host: "ops.example.com",
+            username: "deploy",
+            defaultWorkspacePath: "/srv/app",
+            terminalProfile: profile
+        )
+        let encoded = try JSONEncoder().encode(runtime)
+        let decoded = try JSONDecoder().decode(RuntimeDescriptor.self, from: encoded)
+        #expect(decoded.terminalProfile == profile)
+    }
 }

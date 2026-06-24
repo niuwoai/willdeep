@@ -605,7 +605,6 @@ enum AgentChatHistoryRenderer {
         }
 
         var didAppendBlock = false
-        var codeBlockIndex = 0
         var tableBlockIndex = 0
         func appendBlockSeparator() {
             if didAppendBlock {
@@ -713,8 +712,7 @@ enum AgentChatHistoryRenderer {
                     ))
                 }
                 let codeBlockStart = result.length
-                let codeBlockID = codeBlockIndex
-                codeBlockIndex += 1
+                let codeBlockID = codeBlockStart
                 let language = block.info?.trimmingCharacters(in: .whitespacesAndNewlines)
                 let displayLanguage = (language?.isEmpty == false) ? language! : "code"
                 let codeHeaderFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .medium)
@@ -738,6 +736,7 @@ enum AgentChatHistoryRenderer {
                         .foregroundColor: secondaryColor,
                     ]
                 ))
+                let codeBodyStart = result.length
                 result.append(highlightedCodeBlock(
                     block.text,
                     languageHint: block.info,
@@ -751,6 +750,11 @@ enum AgentChatHistoryRenderer {
                         .agentChatHistoryCodeBlockID,
                         value: NSNumber(value: codeBlockID),
                         range: NSRange(location: codeBlockStart, length: result.length - codeBlockStart)
+                    )
+                    result.addAttribute(
+                        .agentChatHistoryCodeBlockBodyID,
+                        value: NSNumber(value: codeBlockID),
+                        range: NSRange(location: codeBodyStart, length: result.length - codeBodyStart)
                     )
                 }
 

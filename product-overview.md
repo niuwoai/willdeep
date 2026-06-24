@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-24 | Current version: v1.105.0-rc20
+> Last updated: 2026-06-24 | Current version: v1.106.0-rc2
 
 ## Positioning
 
@@ -67,6 +67,8 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **任务监控空态收起 + ask_user 跟随皮肤（1.105.0-rc18）** —— Agent mode 右侧任务监控侧栏在任务、待办、工作文件、学习建议、后台任务和待处理工具全部清空后会自动收起,避免停在一屏空状态。任务监控栏会展示后台任务状态、命令摘要、耗时、exit code 和停止按钮,失败类任务保留为需要关注内容;后台任务通知按完成 / 失败 / 停止区分标题。`ask_user` 等待回答卡片移除固定紫色,选项、边框、图标和交互工具组强调色改读当前 `interfaceSkin.palette`,并补齐 Send / Skip / 占位符本地化。
 - **后台任务监控与失败通知闭环（1.105.0-rc19）** —— 任务监控 Rail 的 snapshot 纳入后台 job digest,后台任务创建、完成、失败、超时或启动失败都会触发侧栏按需展开判断。系统通知首次授权改为授权回调后继续投递当前提醒,失败 / 超时 / 启动失败即使 App 活跃也走需要关注路径,避免后台任务失败时用户还得主动追问。
 - **后台任务点击查看（1.105.0-rc20）** —— 任务监控 Rail 中的后台任务行变成可点击入口,点击会把“查看该 job 状态和输出”的 `get_job_output(job_id: "...")` 请求预填到 Agent composer 并自动聚焦输入框;运行中任务的 stop 按钮仍保持独立操作,避免查看状态时误停任务。
+- **Agent Mode 交互式远程终端（1.106.0-rc1）** —— Agent mode 右侧辅助栏新增 Terminal 面板,复用 Settings → Runtimes 的 SSH 配置启动真实 `/usr/bin/ssh -tt` 交互式 PTY。每台 runtime 可配置启动目录、自动命令、二跳命令、命令间隔、空闲超时和常用服务名;连接顺序固定为主机连接 → 自动命令 → 二跳命令。AI 通过 `terminal_snapshot` 只读当前终端输出,通过 `terminal_send_command` / `terminal_send_control` 写入时仍走现有审批卡;面板内提供 systemctl、journalctl、docker 等常用服务命令模板。
+- **代码块复制状态与横向滚动修复（1.106.0-rc2）** —— TextKit 聊天历史里的 fenced code 复制控件现在会把图标和文字作为同一个可替换范围处理,点击复制后只显示一个 `Done`,3 秒后按按钮实例独立恢复为可复制状态;代码块正文不再自动折行,在代码块区域横向滚动可查看长命令、长路径和长单行输出的完整内容。
 - **Composer 模型热门/上新分组（1.102.0-rc7）** —— Agent composer 模型菜单消费 some.im `/v1/models` / 公开模型定价里的 `is_hot`、`is_new` 标记,在 Recently used 后展示 Hot / New 分组,并与 Recently fetched 去重。
 - **CLI 缺失文件新建（1.102.0-rc2）** —— `willdeep <path>` 现在通过 `willdeep://open?path=...` 把路径交给 App 处理,不存在但父目录存在的文件会自动创建空文件并打开,避免 macOS `open` 在 App 启动前直接报 "does not exist"。
 - **some.im 多模态整合（1.102.0-rc1）** —— Settings 与 Onboarding 新增 some.im 配置入口,API Key 存 Keychain,可拉取模型并设置图片/视频生成首选与优先模型；内置 `generate_image` 工具在 some.im 配置后直接调用 relay 图片生成接口,默认 `gpt-image-2`,并且 OpenAI Chat 兼容请求会过滤 `.widget` / `.workflowReport` 本地卡片,避免 UI-only role 泄漏给 some.im。
@@ -273,7 +275,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **bugfix**（含文档、release 流程改进）：只递增 `rcN`。
 - **feature 新增**：可提升 `PATCH` / `MINOR`，rc 归位 `rc1`。
 - 前后端版本号必须一致——这里"后端"指 `AgentClient` 出站请求的 `X-App-Version` header（值从 `Bundle.main.CFBundleShortVersionString` 取，等价 pbxproj `MARKETING_VERSION`）。
-- 10 处需同步更新：`Xedit.xcodeproj/project.pbxproj` 里 6 个 `MARKETING_VERSION` 块（debug / release × 三个 target）、`willdeep-agent/internal/agent/version.go`、`Help/WillDeep.help/Contents/Info.plist`、README version badge 与本文件顶部 `Current version` 一并同步。
+- 12 处需同步更新：`Xedit.xcodeproj/project.pbxproj` 里 6 个 `MARKETING_VERSION` 块（debug / release × 三个 target）、`willdeep-agent/internal/agent/version.go`、`Help/WillDeep.help/Contents/Info.plist`、README version badge、本文件顶部 `Current version`、`docs/MOBILE_GATEWAY_REQUIREMENTS.md` 与 `docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md` 一并同步。
 - 每次版本变更必须同步在 `CHANGELOG.md` 顶部写一节、更新本文件头部的 `Current version` 字段。
 - git commit 后建议打 `v{版本号}` tag 并推送 origin（`scripts/release.sh` 公证完成后会交互确认是否打 tag/push）。
 
