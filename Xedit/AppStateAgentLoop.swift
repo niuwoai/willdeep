@@ -373,13 +373,27 @@ extension AppState {
             )
             if let remoteRuntimeDescriptor,
                case .remote(_, let remotePath) = workspaceLocation {
+                let transportLabel = remoteRuntimeDescriptor.transport == .daemon ? "daemon" : "SSH"
                 systemPrompt += """
 
-                Remote workspace:
+                === REMOTE WORKSPACE (\(transportLabel)) ===
                 - Runtime: \(remoteRuntimeDescriptor.displayName) (\(remoteRuntimeDescriptor.sshTarget))
                 - Platform: \(remoteRuntimeDescriptor.platform.displayName) / \(remoteRuntimeDescriptor.arch.displayName)
-                - Root: \(remotePath)
-                - Tools and shell commands execute on the remote runtime through SSH. Tell the user when a command is remote if it matters.
+                - Remote root: \(remotePath)
+
+                Not every tool runs on the remote box. Know the split before you act:
+
+                RUN ON THE REMOTE RUNTIME (these reach \(remoteRuntimeDescriptor.sshTarget)):
+                - search_files, grep_files, read_file, list_directory, git_status — read remote files.
+                - run_command — executes on the remote box, in the remote root. This is your main hands-on tool here; use it for edits too (e.g. `sed -i`, `python - <<'PY'`, `git apply`, writing heredocs), inspecting processes, services, disk, logs.
+                - claude_code / codex_cli / cursor_agent / cline_cli — the delegated CLI runs on the remote box (it must be installed there).
+
+                RUN ON THE LOCAL MAC, NOT the remote box — do NOT use these to change or inspect the remote workspace:
+                - apply_patch — patches LOCAL files via the review panel; it does NOT edit remote files. For remote edits use run_command.
+                - terminal_snapshot / terminal_send_command / terminal_send_control — drive the visible side-panel terminal, which is a LOCAL shell by default (unless the user themselves opened an SSH tab to this host)\(remoteRuntimeDescriptor.transport == .daemon ? "; for a daemon runtime it can never reach the remote box" : ""). To run something on the remote box, use run_command, not the terminal tools.
+                - skills / memory / MCP management (list_skills, read_skill, add_memory, create_user_skill, update_user_skill, delete_user_skill, search_mcp_servers, suggest_mcp_server, configure_mcp_server), chrome_*, web_search, web_fetch, generate_image, visual_qa_screenshot — these are about the local WillDeep install / this Mac, not the remote host. web_fetch also can't reach the remote box's private/loopback services.
+
+                Tell the user when an action is local vs remote if it matters.
                 """
             }
             if let memoryContextBlock {

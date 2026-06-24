@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.107.0-rc4 - 2026-06-24
+
+### Fixed
+- **远程 runtime(SSH / daemon)的系统提示词现在如实说明哪些工具跑在远端、哪些只在本机。** 之前远程 workspace 的提示词只有一句「Tools and shell commands execute on the remote runtime through SSH」,但实际并非所有工具都转发到远端 —— 经全量梳理:
+  - **跑在远端**:`search_files` / `grep_files` / `read_file` / `list_directory` / `git_status` / `run_command`,以及委派 CLI(`claude_code` / `codex_cli` / `cursor_agent` / `cline_cli`,需远端已装)。
+  - **只在本机 Mac、不碰远端 workspace**:`apply_patch`(改的是本地文件,远端改文件要用 `run_command` 的 sed/heredoc/git)、`terminal_*`(侧边栏终端默认是本地 shell,daemon runtime 根本到不了远端)、以及 skills / memory / MCP 管理、`chrome_*` / `web_*` / `generate_image` / `visual_qa_screenshot`(都是本地 WillDeep / 本机概念)。
+  提示词按 SSH / daemon transport 自动区分措辞,引导模型在远程会话里用 `run_command` 改远端文件、用 `terminal_*` 时知道那是本地终端。
+
+### Changed
+- 版本号从 **1.107.0-rc3** 提升为 **1.107.0-rc4**（远程 runtime 工具可用性系统提示词梳理与修正）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.107.0-rc3 - 2026-06-24
 
 ### Fixed
