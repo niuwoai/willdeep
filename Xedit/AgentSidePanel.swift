@@ -234,14 +234,15 @@ struct AgentSidePanelDiffView: View {
                 .controlSize(.small)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .loaded(let diff, _):
+            let palette = appState.editorSettings.interfaceSkin.palette
             ScrollView([.vertical, .horizontal]) {
-                Text(diff)
+                Text(AgentDiffColorizer.attributed(diff, palette: palette))
                     .font(.system(size: 11, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
             }
-            .background(Color(nsColor: .textBackgroundColor))
+            .background(AgentDiffColorizer.background(for: palette))
         case .empty:
             placeholder(systemImage: "checkmark.seal", text: L10n.AgentSidePanel.diffEmpty)
         case .noWorkspace:
@@ -664,5 +665,67 @@ struct AgentSidePanelPreviewView: View {
 private enum PreviewPaneCompatibility {
     static func supports(_ language: Language?) -> Bool {
         language == .markdown || language == .html
+    }
+}
+
+/// Colorizes a unified-diff string for the side-panel diff view: additions
+/// green, deletions red, hunk headers in the skin accent, file/meta headers
+/// muted, context in the skin's primary ink. Background follows the skin so
+/// the diff sits in the same palette as the rest of the app. Built once per
+/// load into a single AttributedString so selection/copy still work.
+enum AgentDiffColorizer {
+    static func background(for palette: EditorInterfaceSkinPalette) -> Color {
+        palette.previewBase
+    }
+
+    static func attributed(_ diff: String, palette: EditorInterfaceSkinPalette) -> AttributedString {
+        // Red/green that read well on both light and dark skin backgrounds.
+        let addition = Color(red: 0.18, green: 0.62, blue: 0.31)
+        let deletion = Color(red: 0.83, green: 0.24, blue: 0.30)
+        let hunk = palette.accent
+        let meta = palette.secondaryText
+        let context = palette.previewInk
+
+        var result = AttributedString()
+        let lines = diff.components(separatedBy: "\n")
+        for (index, line) in lines.enumerated() {
+            var piece = AttributedString(line)
+            piece.foregroundColor = color(
+                forDiffLine: line,
+                addition: addition,
+                deletion: deletion,
+                hunk: hunk,
+                meta: meta,
+                context: context
+            )
+            result.append(piece)
+            if index < lines.count - 1 {
+                result.append(AttributedString("\n"))
+            }
+        }
+        return result
+    }
+
+    private static func color(
+        forDiffLine line: String,
+        addition: Color,
+        deletion: Color,
+        hunk: Color,
+        meta: Color,
+        context: Color
+    ) -> Color {
+        if line.hasPrefix("@@") { return hunk }
+        // File/metadata headers — keep these muted, and check them before
+        // the +/- additions/deletions so `+++`/`---` aren't tinted green/red.
+        if line.hasPrefix("+++") || line.hasPrefix("---")
+            || line.hasPrefix("diff ") || line.hasPrefix("index ")
+            || line.hasPrefix("new file") || line.hasPrefix("deleted file")
+            || line.hasPrefix("rename ") || line.hasPrefix("similarity ")
+            || line.hasPrefix("old mode") || line.hasPrefix("new mode") {
+            return meta
+        }
+        if line.hasPrefix("+") { return addition }
+        if line.hasPrefix("-") { return deletion }
+        return context
     }
 }

@@ -442,6 +442,18 @@ struct AgentWorktreeChangeCard: View {
     @Environment(\.openWindow) private var openWindow
     @State private var showsAllFiles = false
     private let collapsedFileLimit = 3
+    /// How "审查" / a file-row tap surfaces the diff. Agent mode passes a
+    /// closure that opens the right side-panel `.diff`; the editor-dock
+    /// panel leaves it nil and falls back to the standalone sheet.
+    var onReview: (() -> Void)? = nil
+
+    private func review() {
+        if let onReview {
+            onReview()
+        } else {
+            appState.showAgentWorktreeDiff()
+        }
+    }
 
     var body: some View {
         let visibleFiles = visibleChanges
@@ -501,7 +513,7 @@ struct AgentWorktreeChangeCard: View {
                 }
                 Spacer(minLength: 0)
                 Button {
-                    appState.showAgentWorktreeDiff()
+                    review()
                 } label: {
                     Text("审查")
                         .font(.caption)
@@ -544,7 +556,14 @@ struct AgentWorktreeChangeCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
             Button {
-                openInXeditWindow(change)
+                // 点击文件行:agent 模式下打开右侧 diff 面板(看改动),
+                // 而不是把文件丢进 editor 窗口;编辑器停靠面板无 onReview
+                // 时仍退回到在 editor 打开。用「打开方式」菜单显式开文件。
+                if onReview != nil {
+                    review()
+                } else {
+                    openInXeditWindow(change)
+                }
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(change.path)
