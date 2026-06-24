@@ -94,9 +94,9 @@ extension EditorSettingsTab {
     var group: SettingsGroup {
         switch self {
         case .typography, .appearance, .workspace: return .editor
-        case .agent, .memory, .rules, .skills, .mcp: return .ai
+        case .agent, .memory, .rules, .skills, .mcp, .tools: return .ai
         case .localAgents, .remoteRuntimes, .mobileGateway: return .runtimes
-        case .tools, .terminal: return .tools
+        case .terminal: return .terminal
         case .someIM, .connectors: return .integrations
         case .voice: return .voice
         }
@@ -132,8 +132,8 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
     case editor
     case ai
     case runtimes
-    case tools
     case integrations
+    case terminal
     case voice
 
     var id: Self { self }
@@ -143,10 +143,10 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
     var tabs: [EditorSettingsTab] {
         switch self {
         case .editor: return [.typography, .appearance, .workspace]
-        case .ai: return [.agent, .memory, .rules, .skills, .mcp]
+        case .ai: return [.agent, .memory, .rules, .skills, .mcp, .tools]
         case .runtimes: return [.localAgents, .remoteRuntimes, .mobileGateway]
-        case .tools: return [.tools, .terminal]
         case .integrations: return [.someIM, .connectors]
+        case .terminal: return [.terminal]
         case .voice: return [.voice]
         }
     }
@@ -156,8 +156,8 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
         case .editor: return String(localized: "settings.group.editor", defaultValue: "Editor")
         case .ai: return String(localized: "settings.group.ai", defaultValue: "AI Agents")
         case .runtimes: return String(localized: "settings.group.runtimes", defaultValue: "Runtimes")
-        case .tools: return String(localized: "settings.group.tools", defaultValue: "Tools")
         case .integrations: return String(localized: "settings.group.integrations", defaultValue: "Integrations")
+        case .terminal: return String(localized: "settings.group.terminal", defaultValue: "Terminal")
         case .voice: return String(localized: "settings.group.voice", defaultValue: "Voice")
         }
     }
@@ -167,8 +167,8 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
         case .editor: return "textformat"
         case .ai: return "sparkles"
         case .runtimes: return "network"
-        case .tools: return "terminal"
         case .integrations: return "puzzlepiece.extension"
+        case .terminal: return "rectangle.bottomthird.inset.filled"
         case .voice: return "waveform"
         }
     }

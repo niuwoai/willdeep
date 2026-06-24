@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.108.0-rc15 - 2026-06-24
+
+### Fixed
+- rc14 整合 Settings tab 时把**终端设置（字体/字号/颜色方案/光标）误塞进了「Tools」分组的二级分段**，「Tools」这个名字不暗示终端、藏得太深，等于找不到。修复 [EditorSettingsSupport.swift](Xedit/EditorSettingsSupport.swift)：把 **Terminal 提为独立的顶层分组**（图标即终端，一眼可见，恢复整合前的可发现性），原「Tools」里的命令白名单（`.tools`）并入「AI Agents」分组（命令白名单本就是 agent 执行设置）。顶层分组现为 **Editor / AI Agents / Runtimes / Integrations / Terminal / Voice**。
+
+### Changed
+- 版本号从 **1.108.0-rc14** 提升为 **1.108.0-rc15**（终端设置提为独立顶层分组，修复 rc14 整合后终端字体/颜色设置难找）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.108.0-rc14 - 2026-06-24
 
 ### Changed
