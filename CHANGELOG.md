@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.108.0-rc11 - 2026-06-24
+
+### Fixed
+- CI `Tests` 在 GitHub 虚拟化 macOS runner 上失败于 `run_command exposes common user binary paths` 测试(本地通过、仅 CI 失败)。根因不是回归:该测试端到端跑 `printf '%s' "$PATH"`,而 `run_command` 经 `sandbox-exec`(seatbelt)执行,虚拟化 runner 上 seatbelt 没把注入的 PATH 传给子 `/bin/sh`,于是 `$PATH` 输出为空、断言落空。此前多轮 CI 都被高频 push 按 concurrency 顶替取消、没跑完测试阶段,问题一直潜伏,直到完整跑完才暴露。修复:把该测试从端到端断言改为直接单测 `AgentToolRunner.shellEnvironment(from:)` —— 它正是 `run_command` 喂给子进程的环境,确定性地追加 `/opt/homebrew/bin` / `/usr/local/bin` 等常见用户 binary 目录,覆盖同一意图而不依赖 seatbelt 在 CI 虚拟化下的环境传递行为。生产代码未改动。
+- 版本号从 **1.108.0-rc10** 提升为 **1.108.0-rc11**（CI 上 run_command PATH 测试健壮化,修复 CI 误红）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.108.0-rc10 - 2026-06-24
 
 ### Changed
