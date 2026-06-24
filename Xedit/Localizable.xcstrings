@@ -94,6 +94,9 @@
     "%lld" : {
 
     },
+    "%lld B" : {
+
+    },
     "%lld pt" : {
 
     },
@@ -176,42 +179,6 @@
         }
       }
     },
-    "agent-jobs.kill" : {
-      "comment" : "Kill button on a running background job",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kill job"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "终止任务"
-          }
-        }
-      }
-    },
-    "agent-jobs.no-output" : {
-      "comment" : "Shown when a job has not yet produced any captured output",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "(no output captured yet)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "（暂无输出）"
-          }
-        }
-      }
-    },
     "agent-jobs.inspect-output.help" : {
       "comment" : "Tooltip for clicking a background job row in the task monitor",
       "extractionState" : "manual",
@@ -244,6 +211,42 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请查看后台任务 %1$@ 的状态和输出：get_job_output(job_id: \"%2$@\")"
+          }
+        }
+      }
+    },
+    "agent-jobs.kill" : {
+      "comment" : "Kill button on a running background job",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kill job"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终止任务"
+          }
+        }
+      }
+    },
+    "agent-jobs.no-output" : {
+      "comment" : "Shown when a job has not yet produced any captured output",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "(no output captured yet)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "（暂无输出）"
           }
         }
       }
@@ -1017,41 +1020,6 @@
         }
       }
     },
-    "agent-terminal.new-tab" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "New Terminal Tab" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "新建终端标签页" } }
-      }
-    },
-    "agent-terminal.new-local-tab" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "New Local Shell" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "新建本地 Shell" } }
-      }
-    },
-    "agent-terminal.new-ssh-tab" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "SSH: %@" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "SSH：%@" } }
-      }
-    },
-    "agent-terminal.local-shell-tooltip" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Local shell" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地 shell" } }
-      }
-    },
-    "agent-terminal.opened-by-this-session" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Opened by this chat session" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "由当前会话打开" } }
-      }
-    },
     "agent-terminal.connect" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1239,6 +1207,74 @@
         }
       }
     },
+    "agent-terminal.local-shell-tooltip" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Local shell"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地 shell"
+          }
+        }
+      }
+    },
+    "agent-terminal.new-local-tab" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New Local Shell"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建本地 Shell"
+          }
+        }
+      }
+    },
+    "agent-terminal.new-ssh-tab" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSH: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSH：%@"
+          }
+        }
+      }
+    },
+    "agent-terminal.new-tab" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New Terminal Tab"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建终端标签页"
+          }
+        }
+      }
+    },
     "agent-terminal.no-runtime" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1286,6 +1322,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "尚未配置常用服务。"
+          }
+        }
+      }
+    },
+    "agent-terminal.opened-by-this-session" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opened by this chat session"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "由当前会话打开"
           }
         }
       }
@@ -6625,9 +6678,6 @@
 
     },
     "OpenAI Responses" : {
-
-    },
-    "Other answer (optional)" : {
 
     },
     "Pick provider + model for this chat. The active provider also drives Auto/Flash/Pro routing." : {
@@ -18605,6 +18655,23 @@
         }
       }
     },
+    "tool-card.arguments" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arguments"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "参数"
+          }
+        }
+      }
+    },
     "tool-card.ask-user.answer-placeholder" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -18669,23 +18736,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "跳过"
-          }
-        }
-      }
-    },
-    "tool-card.arguments" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Arguments"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "参数"
           }
         }
       }
@@ -21075,9 +21125,6 @@
     "You're all set" : {
 
     },
-    "Your answer" : {
-
-    },
     "任务监控" : {
 
     },
@@ -21130,6 +21177,9 @@
 
     },
     "详情" : {
+
+    },
+    "还有 %lld 个后台任务" : {
 
     },
     "还有 %lld 个文件" : {

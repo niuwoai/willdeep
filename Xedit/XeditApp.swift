@@ -14,14 +14,18 @@ struct WillDeepApp: App {
     @NSApplicationDelegateAdaptor(WillDeepAppDelegate.self) private var appDelegate
 
     var body: some Scene {
+        let defaultSize = Self.defaultWindowSize
+
         WindowGroup(id: EditorWindowID.value) {
             WindowRootView()
         }
         .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: defaultSize.width, height: defaultSize.height)
         WindowGroup(for: URL.self) { $url in
             WindowRootView(initialExternalURL: url)
         }
         .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: defaultSize.width, height: defaultSize.height)
         .commands {
             WillDeepCommands()
         }
@@ -32,11 +36,23 @@ struct WillDeepApp: App {
         Window(L10n.AgentWindow.title, id: AgentWindowID.value) {
             AgentWindowRootView()
         }
+        .defaultSize(width: defaultSize.width, height: defaultSize.height)
 
         Settings {
             EditorSettingsView()
                 .environmentObject(AppState())
         }
+    }
+
+    /// First-launch default window size: ~80% of the main screen's
+    /// visible width and ~85% of its height, centered by SwiftUI. Only
+    /// applies when there's no restored frame, so a user's later resize
+    /// is respected across relaunches.
+    private static var defaultWindowSize: CGSize {
+        let visible = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let width = max(900, visible.width * 0.80)
+        let height = max(600, visible.height * 0.85)
+        return CGSize(width: width, height: height)
     }
 }
 

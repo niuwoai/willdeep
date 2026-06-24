@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.107.0-rc2 - 2026-06-24
+
+### Changed
+- 窗口首次启动默认尺寸改为主屏可见区域的约 **80% 宽 × 85% 高**（居中，最小 900×600）。通过场景 `.defaultSize` 计算自 `NSScreen.main.visibleFrame`，只在没有已保存窗口 frame 时生效，用户之后手动调整的尺寸仍会被记住。editor / URL / Agent 三类窗口一致。
+- Agent mode 右侧侧栏现在**可拖动调宽**：聊天主区与侧栏之间的分隔条变成可拖拽手柄（hover 显示左右调整光标，向左拖加宽侧栏），宽度限制 240–760pt 并通过 `@AppStorage("agentSidePanelWidth")` 持久化。最左侧会话侧栏宽度仍然固定（不受影响）。
+
 ## 1.107.0-rc1 - 2026-06-24
 
 ### Added

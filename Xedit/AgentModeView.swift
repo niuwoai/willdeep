@@ -22,6 +22,11 @@ struct AgentModeView: View {
     @State private var sidePanelFile: URL?
     @State private var lastTaskMonitorSnapshot: AgentTaskMonitorSnapshot?
     @State private var didObserveAgentTaskMonitorActivity = false
+    /// User-resizable width of the right side panel. Persisted so the
+    /// choice survives relaunch. The leftmost sessions sidebar stays
+    /// fixed; only the chat ↔ side-panel boundary is draggable.
+    @AppStorage("agentSidePanelWidth") private var sidePanelWidth: Double = 320
+    private let sidePanelWidthRange: ClosedRange<Double> = 240...760
 
     var body: some View {
         let skin = appState.editorSettings.interfaceSkin
@@ -52,10 +57,18 @@ struct AgentModeView: View {
             .background(skin.windowBackground)
 
             if sidePanel != nil {
-                Divider()
-                AgentSidePanelHost(kind: $sidePanel, selectedFile: $sidePanelFile)
-                    // 同 sidebar:固定宽度,父 HStack 不要靠压缩侧面板
-                    // 来腾位置。侧面板自己有 `.frame(width: 320)`。
+                // 可拖动的分隔条:拖它来调聊天主区 ↔ 侧栏的边界。
+                // 侧栏在右侧,所以向左拖(translation.width 变负)= 加宽侧栏。
+                AgentSidePanelResizeHandle(
+                    width: $sidePanelWidth,
+                    range: sidePanelWidthRange
+                )
+                AgentSidePanelHost(
+                    kind: $sidePanel,
+                    selectedFile: $sidePanelFile,
+                    width: CGFloat(sidePanelWidth)
+                )
+                    // 固定到用户选定的宽度,父 HStack 不靠压缩它来腾位置。
                     .fixedSize(horizontal: true, vertical: false)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
@@ -116,6 +129,46 @@ struct AgentModeView: View {
             return
         }
         sidePanel = .backgroundTasks
+    }
+}
+
+/// Thin draggable divider between the chat content and the right side
+/// panel. Shows a resize cursor on hover and drives `width` (clamped to
+/// `range`). The panel sits on the right, so dragging left widens it.
+private struct AgentSidePanelResizeHandle: View {
+    @Binding var width: Double
+    let range: ClosedRange<Double>
+
+    @State private var dragStartWidth: Double?
+    @State private var isHovering = false
+
+    var body: some View {
+        Divider()
+            .overlay(
+                Rectangle()
+                    .fill(Color.clear)
+                    .frame(width: 7)
+                    .contentShape(Rectangle())
+            )
+            .background(isHovering ? Color.accentColor.opacity(0.25) : Color.clear)
+            .onHover { hovering in
+                isHovering = hovering
+                if hovering {
+                    NSCursor.resizeLeftRight.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        let base = dragStartWidth ?? width
+                        if dragStartWidth == nil { dragStartWidth = base }
+                        let proposed = base - Double(value.translation.width)
+                        width = min(max(proposed, range.lowerBound), range.upperBound)
+                    }
+                    .onEnded { _ in dragStartWidth = nil }
+            )
     }
 }
 

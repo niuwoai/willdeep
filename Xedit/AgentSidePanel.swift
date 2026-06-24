@@ -66,6 +66,8 @@ struct AgentSidePanelHost: View {
     @EnvironmentObject var appState: AppState
     @Binding var kind: AgentSidePanelKind?
     @Binding var selectedFile: URL?
+    /// Width is driven by the draggable divider in AgentModeView.
+    var width: CGFloat = 320
 
     var body: some View {
         let palette = appState.editorSettings.interfaceSkin.palette
@@ -74,7 +76,7 @@ struct AgentSidePanelHost: View {
             Rectangle().fill(palette.hairline).frame(height: 1)
             content
         }
-        .frame(width: 320)
+        .frame(width: width)
         .background(palette.panelFill)
     }
 
