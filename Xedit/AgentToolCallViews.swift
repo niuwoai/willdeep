@@ -342,6 +342,8 @@ struct AgentToolCallCard: View {
                 }
             } else if call.status == .awaitingUserAnswer {
                 askUserBody
+            } else if call.toolName == "ask_user" {
+                askUserResolvedRow
             }
         }
         .padding(.horizontal, 7)
@@ -426,6 +428,56 @@ struct AgentToolCallCard: View {
                 .disabled(!canSubmitAskUser(isMultiSelect: isMultiSelect))
             }
             .font(.caption)
+        }
+    }
+
+    // After the question resolves the interactive card is gone, but the
+    // chosen answer used to survive only inside the collapsed "output"
+    // expander — so the transcript looked like the user's selection
+    // vanished. Echo it back as an always-visible, clearly-attributed row
+    // so the conversation reads coherently. (The model still receives the
+    // answer via the `<user_answer>` tool message; this is render-only.)
+    @ViewBuilder
+    private var askUserResolvedRow: some View {
+        let answer = (call.result?.payload ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if call.status == .succeeded, !answer.isEmpty {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: "arrow.turn.down.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(askUserSecondaryAccentColor.opacity(0.72))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L10n.ToolCard.askUserAnswered)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Text(answer)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(askUserAccentColor.opacity(0.08))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(askUserAccentColor.opacity(0.28), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        } else if call.status == .denied {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: "arrow.turn.down.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary.opacity(0.6))
+                Text(L10n.ToolCard.askUserSkipped)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
         }
     }
 

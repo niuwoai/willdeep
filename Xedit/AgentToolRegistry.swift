@@ -67,7 +67,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "run_command",
-            description: "Run a shell command in the workspace root. Requires user approval. Refuses commands that escape the workspace. Pass `run_in_background: true` for long-running tasks (dev servers, watchers, big builds, test suites that take minutes) — the call returns immediately with a job handle and you receive a system notification when the job finishes; meanwhile inspect partial output with `get_job_output` or stop it with `kill_job`.",
+            description: "Run a shell command in the workspace root. This is the DEFAULT way to execute any shell command — including ones that reach other machines (scp / rsync / ssh remote-host), file copies, builds, installs, and tests. Only use terminal_send_command instead when the user explicitly asks for the command to be run in the visible side-panel terminal. Requires user approval. Refuses commands that escape the workspace. Pass `run_in_background: true` for long-running tasks (dev servers, watchers, big builds, test suites that take minutes) — the call returns immediately with a job handle and you receive a system notification when the job finishes; meanwhile inspect partial output with `get_job_output` or stop it with `kill_job`.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "command", type: .string, description: "Shell command line. Runs through /bin/sh -c.", required: true),
@@ -85,7 +85,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "terminal_send_command",
-            description: "Type one command line into the VISIBLE Agent Terminal side-panel tab and press Enter, so the user sees it run live in their own terminal. PREFER THIS over run_command whenever the user asks you to operate / type into / run something in the side-panel terminal (e.g. \"在侧边栏终端里执行 du\", \"run df in the terminal\"). Works with the default local shell — no SSH required; if no terminal tab is open yet, WillDeep opens a local shell automatically. Requires user approval. Does not read hidden/password input.",
+            description: "Type one command line into the VISIBLE Agent Terminal side-panel tab and press Enter, so the user sees it run live in their own terminal. Use this ONLY when the user EXPLICITLY asks for the command to be run / typed into the side-panel terminal (e.g. \"在侧边栏终端里执行 du\", \"type df into the terminal\", \"run this in the terminal so I can watch it\"). For ALL other command execution — including copying a file to another machine (scp / rsync), SSH-ing to a remote host, builds, installs, tests, and any ordinary shell work — use run_command instead; do NOT route normal commands through the terminal just because they touch another host. Works with the default local shell — no SSH required; if no terminal tab is open yet, WillDeep opens a local shell automatically. Requires user approval. Does not read hidden/password input.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "command", type: .string, description: "Command line to send, without a trailing newline. WillDeep appends Enter after approval.", required: true)
