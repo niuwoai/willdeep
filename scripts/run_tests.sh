@@ -37,20 +37,21 @@ if [ ${#EXTRA_ARGS[@]} -eq 0 ]; then
 fi
 
 echo "▶ xcodebuild test  ${EXTRA_ARGS[*]}"
-set +e
-xcodebuild test \
-  -project "${ROOT_DIR}/Xedit.xcodeproj" \
-  -scheme Xedit \
-  -destination 'platform=macOS' \
-  -resultBundlePath "${XCRESULT}" \
-  -derivedDataPath "${OUT_DIR}/DerivedData" \
-  CODE_SIGNING_ALLOWED=NO \
-  CODE_SIGNING_REQUIRED=NO \
-  CODE_SIGN_IDENTITY="" \
-  "${EXTRA_ARGS[@]}" \
-  | tee "${LOG}"
-TEST_EXIT=${PIPESTATUS[0]}
-set -e
+ruby "${ROOT_DIR}/scripts/xcodebuild_ci.rb" \
+  --log "${LOG}" \
+  --pass-grace 180 \
+  -- \
+  xcodebuild test \
+    -project "${ROOT_DIR}/Xedit.xcodeproj" \
+    -scheme Xedit \
+    -destination 'platform=macOS' \
+    -resultBundlePath "${XCRESULT}" \
+    -derivedDataPath "${OUT_DIR}/DerivedData" \
+    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGNING_REQUIRED=NO \
+    CODE_SIGN_IDENTITY="" \
+    "${EXTRA_ARGS[@]}"
+TEST_EXIT=$?
 
 echo "▶ generating report → ${REPORT_MD}, ${REPORT_JSON}"
 ruby "${ROOT_DIR}/scripts/xcresult_report.rb" "${XCRESULT}" "${REPORT_MD}" "${REPORT_JSON}"

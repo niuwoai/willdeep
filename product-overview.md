@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-24 | Current version: v1.106.0-rc2
+> Last updated: 2026-06-24 | Current version: v1.106.0-rc3
 
 ## Positioning
 
@@ -69,6 +69,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **后台任务点击查看（1.105.0-rc20）** —— 任务监控 Rail 中的后台任务行变成可点击入口,点击会把“查看该 job 状态和输出”的 `get_job_output(job_id: "...")` 请求预填到 Agent composer 并自动聚焦输入框;运行中任务的 stop 按钮仍保持独立操作,避免查看状态时误停任务。
 - **Agent Mode 交互式远程终端（1.106.0-rc1）** —— Agent mode 右侧辅助栏新增 Terminal 面板,复用 Settings → Runtimes 的 SSH 配置启动真实 `/usr/bin/ssh -tt` 交互式 PTY。每台 runtime 可配置启动目录、自动命令、二跳命令、命令间隔、空闲超时和常用服务名;连接顺序固定为主机连接 → 自动命令 → 二跳命令。AI 通过 `terminal_snapshot` 只读当前终端输出,通过 `terminal_send_command` / `terminal_send_control` 写入时仍走现有审批卡;面板内提供 systemctl、journalctl、docker 等常用服务命令模板。
 - **代码块复制状态与横向滚动修复（1.106.0-rc2）** —— TextKit 聊天历史里的 fenced code 复制控件现在会把图标和文字作为同一个可替换范围处理,点击复制后只显示一个 `Done`,3 秒后按按钮实例独立恢复为可复制状态;代码块正文不再自动折行,在代码块区域横向滚动可查看长命令、长路径和长单行输出的完整内容。
+- **CI xcodebuild 收尾 watchdog（1.106.0-rc3）** —— GitHub macOS runner 上如果 Swift 测试已经整轮通过但 `xcodebuild` 收尾不退出,`scripts/xcodebuild_ci.rb` 会在宽限期后清理 stale 进程,保留 `xcodebuild.log` 与 `xcresult` 报告,避免 CI job 被 30 分钟总超时误伤。
 - **Composer 模型热门/上新分组（1.102.0-rc7）** —— Agent composer 模型菜单消费 some.im `/v1/models` / 公开模型定价里的 `is_hot`、`is_new` 标记,在 Recently used 后展示 Hot / New 分组,并与 Recently fetched 去重。
 - **CLI 缺失文件新建（1.102.0-rc2）** —— `willdeep <path>` 现在通过 `willdeep://open?path=...` 把路径交给 App 处理,不存在但父目录存在的文件会自动创建空文件并打开,避免 macOS `open` 在 App 启动前直接报 "does not exist"。
 - **some.im 多模态整合（1.102.0-rc1）** —— Settings 与 Onboarding 新增 some.im 配置入口,API Key 存 Keychain,可拉取模型并设置图片/视频生成首选与优先模型；内置 `generate_image` 工具在 some.im 配置后直接调用 relay 图片生成接口,默认 `gpt-image-2`,并且 OpenAI Chat 兼容请求会过滤 `.widget` / `.workflowReport` 本地卡片,避免 UI-only role 泄漏给 some.im。

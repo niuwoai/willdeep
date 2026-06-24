@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.106.0-rc3 - 2026-06-24
+
+### Fixed
+- 修复 GitHub macOS runner 上 `xcodebuild test` 在 Swift 测试已全部通过后仍不退出,最终耗尽 30 分钟 job 超时的问题;新增 `scripts/xcodebuild_ci.rb` 包装器,仅在整轮测试通过后等待宽限期仍卡住时清理 stale `xcodebuild` 进程并保留日志 / xcresult 报告。
+
+### Changed
+- 版本号从 **1.106.0-rc2** 提升为 **1.106.0-rc3**（CI 中 Xcode 测试通过后收尾卡死修复）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.106.0-rc2 - 2026-06-24
 
 ### Fixed
