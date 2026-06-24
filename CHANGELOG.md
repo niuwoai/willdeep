@@ -4,6 +4,7 @@
 
 ### Fixed
 - 侧边栏「任务监控」的「最近任务」列表在任务多时会无限往下堆,把下方「待办 / 产物 / 工作文件 / 技能与 MCP」整片模块挤出可视区域。修复:最近任务展示上限从 **6 条收紧到 3 条**([AgentTaskMonitorRail.swift](Xedit/AgentTaskMonitorRail.swift) `monitorJobDisplayLimit`),并给任务行套一层 `maxHeight: 232` 的内层纵向 `ScrollView` —— 超过该高度时任务列表内部自滚动,不再撑爆右栏其余分区;超出条数仍以「还有 X 个后台任务」提示。
+- 后台 `run_command` 任务**失败**(非零退出 / 超时 / 启动失败)时,回写给模型的 `<background-task-notification>` 系统消息以前只有 `exit=N` + 「N bytes 已捕获,自己去 call get_job_output」的提示,模型还得多花一轮去拉日志才知道为啥挂了。修复:对「需要关注」的失败任务,直接把**最近输出尾部(tail 40 行,经 `AgentSandboxPolicy.scrub` 脱敏,上限 4000 字)内联**进通知里([AppStateAgentLoop.swift](Xedit/AppStateAgentLoop.swift) `backgroundJobCompletionNotice`),模型当轮即可定位失败原因并继续处理;成功 / 被杀的任务仍走轻量的字节数提示,不污染上下文。后台失败时若 App 不在前台,系统通知(`AgentToolApprovalNotifier.notifyJobFinished`,1.105.0-rc19 起)照常弹横幅提醒。
 
 ### Changed
 - 版本号从 **1.108.0-rc7** 提升为 **1.108.0-rc8**（任务监控最近任务限 3 条 + 内层限高滚动）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。

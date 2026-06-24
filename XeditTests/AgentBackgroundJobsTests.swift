@@ -189,6 +189,63 @@ struct AgentBackgroundJobsTests {
         #expect(notice.contains("get_job_output") == false)
     }
 
+    /// Failed jobs (e.g. a backgrounded `docker build`) inline a tail of
+    /// recent output in the completion notice so the model can diagnose
+    /// *why* it failed in the same turn, instead of burning a round on
+    /// get_job_output. Verify the rendered notice carries the exit code,
+    /// the fenced tail, and still keeps the full-log hint.
+    @Test
+    func completionNoticeInlinesRecentOutputForFailure() {
+        let job = makeStubJob(
+            command: "docker build .",
+            status: .failed,
+            exitCode: 1,
+            finishedAfter: 30,
+            outputByteCount: 2048
+        )
+
+        let notice = AppState.backgroundJobCompletionNotice(
+            for: job,
+            recentOutput: "Step 7/9 : RUN make\nmake: *** [build] Error 2"
+        )
+        #expect(notice.contains("failed"))
+        #expect(notice.contains("exit=1"))
+        #expect(notice.contains("Recent output (tail, secrets redacted):"))
+        #expect(notice.contains("make: *** [build] Error 2"))
+        // Full-log hint stays so the model can fetch more if the tail
+        // isn't enough.
+        #expect(notice.contains("get_job_output"))
+    }
+
+    /// Without inlined output (the default, used for success / killed
+    /// jobs) the notice must NOT grow a "Recent output" block — that path
+    /// stays as lean as before.
+    @Test
+    func completionNoticeOmitsRecentOutputBlockWhenNil() {
+        let job = makeStubJob(
+            command: "npm test",
+            status: .completed,
+            exitCode: 0,
+            finishedAfter: 5,
+            outputByteCount: 128
+        )
+
+        let notice = AppState.backgroundJobCompletionNotice(for: job)
+        #expect(notice.contains("Recent output") == false)
+    }
+
+    /// The tail the agent loop inlines is run through
+    /// `AgentSandboxPolicy.scrub` first — that's the layer that keeps
+    /// tokens/keys out of persisted model history. Pin the contract so a
+    /// refactor can't silently drop the redaction step.
+    @Test
+    func scrubRedactsSecretsBeforeInlining() {
+        let raw = "fatal: push rejected\ntoken=ghp_0123456789abcdefghij0123456789"
+        let scrubbed = AgentSandboxPolicy.scrub(raw)
+        #expect(scrubbed.contains("[REDACTED]"))
+        #expect(scrubbed.contains("ghp_0123456789abcdefghij0123456789") == false)
+    }
+
     // MARK: - Lifecycle (real /bin/sh)
 
     /// End-to-end: a trivial `true` command exits 0 quickly, the

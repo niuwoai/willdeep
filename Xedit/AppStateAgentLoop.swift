@@ -322,10 +322,26 @@ extension AppState {
             // field; Gemini / Responses do the same coalescing).
             let pendingCompletions = agentJobRegistry.consumePendingCompletions(forRuntime: runtime.id)
             for finishedJob in pendingCompletions {
+                // For jobs that need attention (failed / timed out / launch
+                // failed) inline a secret-redacted tail of the captured
+                // output so the model can diagnose the failure in this same
+                // turn instead of spending a round calling get_job_output.
+                // Success / killed jobs keep the lighter byte-count hint.
+                let recentOutput: String? = {
+                    guard finishedJob.needsAttention, finishedJob.outputByteCount > 0 else { return nil }
+                    let tail = agentJobRegistry.output(id: finishedJob.id, tailLines: 40)
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !tail.isEmpty else { return nil }
+                    let scrubbed = AgentSandboxPolicy.scrub(tail)
+                    return scrubbed.count > 4000 ? "…" + String(scrubbed.suffix(4000)) : scrubbed
+                }()
                 runtime.messages.append(
                     AgentMessage(
                         role: .system,
-                        content: Self.backgroundJobCompletionNotice(for: finishedJob)
+                        content: Self.backgroundJobCompletionNotice(
+                            for: finishedJob,
+                            recentOutput: recentOutput
+                        )
                     )
                 )
             }
@@ -929,7 +945,19 @@ extension AppState {
     /// finishes. Kept short and unambiguous: the model should react to
     /// it (summarize, follow up, kick off next steps) or quietly note
     /// it depending on the originating user intent.
-    nonisolated static func backgroundJobCompletionNotice(for job: AgentBackgroundJob) -> String {
+    ///
+    /// `recentOutput` is an already-tailed, already-secret-redacted slice
+    /// the caller inlines for jobs that need attention (failed / timed out
+    /// / launch failed). Surfacing *why* a job failed in the notice itself
+    /// saves the model a `get_job_output` round-trip before it can react —
+    /// without it, a backgrounded `docker build` that fails just reads as
+    /// "exit=1, 5 KB captured" and the model has to fetch the log to learn
+    /// anything. Pass `nil` (the default) for success / killed jobs, which
+    /// keep the lighter byte-count hint.
+    nonisolated static func backgroundJobCompletionNotice(
+        for job: AgentBackgroundJob,
+        recentOutput: String? = nil
+    ) -> String {
         let durationText: String = {
             let total = Int(job.duration.rounded())
             if total < 60 { return "\(total)s" }
@@ -945,14 +973,22 @@ extension AppState {
         let outputHint = job.outputByteCount > 0
             ? "\(job.outputByteCount) bytes of output captured — call `get_job_output(job_id: \"\(job.displayHandle)\")` to read."
             : "no output captured."
-        return """
-        <background-task-notification>
-        Background job \(job.displayHandle) finished while you were not in this turn.
-        Command: \(trimmedCommand)
-        Status: \(job.status.rawValue) (\(exitText)), duration \(durationText).
-        \(outputHint)
-        </background-task-notification>
-        """
+
+        var lines = [
+            "<background-task-notification>",
+            "Background job \(job.displayHandle) finished while you were not in this turn.",
+            "Command: \(trimmedCommand)",
+            "Status: \(job.status.rawValue) (\(exitText)), duration \(durationText).",
+            outputHint
+        ]
+        if let recentOutput, !recentOutput.isEmpty {
+            lines.append("Recent output (tail, secrets redacted):")
+            lines.append("```")
+            lines.append(recentOutput)
+            lines.append("```")
+        }
+        lines.append("</background-task-notification>")
+        return lines.joined(separator: "\n")
     }
 
     /// Execute one `spawn_agent` tool call: synchronous runs await the
