@@ -85,6 +85,95 @@ enum EditorSettingsTab: Hashable {
     case voice
 }
 
+extension EditorSettingsTab {
+    /// Top-level group this pane lives under. The Settings window used to
+    /// show all 16 panes as flat tabs (cramped, labels truncated); they're
+    /// now bucketed into a handful of groups with a second-level segmented
+    /// picker. Keeping all 16 cases intact means existing deep-links
+    /// (e.g. `selectedTab = .mobileGateway`) still resolve to the right group.
+    var group: SettingsGroup {
+        switch self {
+        case .typography, .appearance, .workspace: return .editor
+        case .agent, .memory, .rules, .skills, .mcp: return .ai
+        case .localAgents, .remoteRuntimes, .mobileGateway: return .runtimes
+        case .tools, .terminal: return .tools
+        case .someIM, .connectors: return .integrations
+        case .voice: return .voice
+        }
+    }
+
+    /// Short label for the second-level segmented picker — reuses the
+    /// existing per-pane menu titles so nothing new needs translating.
+    var shortTitle: String {
+        switch self {
+        case .typography: return L10n.Settings.tabTypography
+        case .appearance: return L10n.Settings.tabAppearance
+        case .workspace: return L10n.Settings.tabWorkspace
+        case .agent: return L10n.Settings.tabAgent
+        case .someIM: return L10n.Settings.tabSomeIM
+        case .localAgents: return L10n.Settings.tabLocalAgents
+        case .remoteRuntimes: return L10n.Settings.tabRemoteRuntimes
+        case .mobileGateway: return L10n.Settings.tabMobileGateway
+        case .memory: return L10n.Settings.tabMemory
+        case .rules: return L10n.Settings.tabRules
+        case .skills: return L10n.Settings.tabSkills
+        case .connectors: return L10n.Settings.tabConnectors
+        case .mcp: return L10n.Settings.tabMcp
+        case .tools: return L10n.Settings.tabTools
+        case .terminal: return L10n.Settings.tabTerminal
+        case .voice: return L10n.Settings.tabVoice
+        }
+    }
+}
+
+/// Top-level Settings groupings. Each becomes one tab in the Settings window;
+/// groups with more than one pane render a second-level segmented picker.
+enum SettingsGroup: Hashable, CaseIterable, Identifiable {
+    case editor
+    case ai
+    case runtimes
+    case tools
+    case integrations
+    case voice
+
+    var id: Self { self }
+
+    /// Panes in display order. Drives both the segmented picker and which
+    /// pane a freshly-selected group falls back to.
+    var tabs: [EditorSettingsTab] {
+        switch self {
+        case .editor: return [.typography, .appearance, .workspace]
+        case .ai: return [.agent, .memory, .rules, .skills, .mcp]
+        case .runtimes: return [.localAgents, .remoteRuntimes, .mobileGateway]
+        case .tools: return [.tools, .terminal]
+        case .integrations: return [.someIM, .connectors]
+        case .voice: return [.voice]
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .editor: return String(localized: "settings.group.editor", defaultValue: "Editor")
+        case .ai: return String(localized: "settings.group.ai", defaultValue: "AI Agents")
+        case .runtimes: return String(localized: "settings.group.runtimes", defaultValue: "Runtimes")
+        case .tools: return String(localized: "settings.group.tools", defaultValue: "Tools")
+        case .integrations: return String(localized: "settings.group.integrations", defaultValue: "Integrations")
+        case .voice: return String(localized: "settings.group.voice", defaultValue: "Voice")
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .editor: return "textformat"
+        case .ai: return "sparkles"
+        case .runtimes: return "network"
+        case .tools: return "terminal"
+        case .integrations: return "puzzlepiece.extension"
+        case .voice: return "waveform"
+        }
+    }
+}
+
 @MainActor
 final class EditorSettingsNavigation: ObservableObject {
     static let shared = EditorSettingsNavigation()
@@ -237,16 +326,26 @@ struct RevealableSecretField: View {
 /// cap, and give it a sensible content min size.
 struct SettingsWindowResizableEnforcer: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
-        let view = NSView(frame: .zero)
-        DispatchQueue.main.async { Self.apply(to: view.window) }
-        return view
+        EnforcerView()
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
         DispatchQueue.main.async { Self.apply(to: nsView.window) }
     }
 
-    private static func apply(to window: NSWindow?) {
+    /// `viewDidMoveToWindow` fires exactly when the view is attached to the
+    /// host NSPanel, so `window` is guaranteed non-nil there. The previous
+    /// one-shot `DispatchQueue.main.async` in makeNSView could run before the
+    /// view had a window and then silently no-op — leaving the panel stuck at
+    /// its default non-resizable styleMask (the "can't drag the corners" bug).
+    private final class EnforcerView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            SettingsWindowResizableEnforcer.apply(to: window)
+        }
+    }
+
+    fileprivate static func apply(to window: NSWindow?) {
         guard let window else { return }
         var mask = window.styleMask
         mask.insert(.resizable)

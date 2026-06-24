@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.108.0-rc14 - 2026-06-24
+
+### Changed
+- **Settings 窗口 tab 整合**：原本 16 个面板平铺成一排 tab（拥挤、标签被截断），现归并为 **6 个顶层分组**（Editor / AI Agents / Runtimes / Tools / Integrations / Voice），分组内多于一个面板时用二级 segmented 选择器切换。实现保留全部 16 个 `EditorSettingsTab` case（[EditorSettingsSupport.swift](Xedit/EditorSettingsSupport.swift) 新增 `SettingsGroup` 分组层 + `EditorSettingsTab.group`），所以现有深链跳转（如 `selectedTab = .mobileGateway` → 自动落在 Runtimes 组并选中该面板）一律不破坏；[EditorSettingsView.swift](Xedit/EditorSettingsView.swift) 顶层 TabView 改为 6 个分组，每组容器按当前选中面板渲染对应子页（子页 View 全部复用，未重写）。
+
+### Fixed
+- **Settings 窗口现在能正常拖拽改变大小**。SwiftUI `Settings { }` 装的 `NSPanel` 默认 styleMask 不含 `.resizable`；原 `SettingsWindowResizableEnforcer` 在 `makeNSView` 里用一次性 `DispatchQueue.main.async` 读 `view.window`，可能在 view 尚未挂到窗口（`window == nil`）时执行而静默 no-op，导致窗口卡在不可调大小状态。改为用 `EnforcerView.viewDidMoveToWindow()`（挂载时机 `window` 必定非 nil）注入 `.resizable` + 解除最大尺寸上限（[EditorSettingsSupport.swift](Xedit/EditorSettingsSupport.swift)），可靠生效。
+
+### Changed
+- 版本号从 **1.108.0-rc13** 提升为 **1.108.0-rc14**（Settings tab 整合为 6 分组 + 窗口可靠 resize）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.108.0-rc13 - 2026-06-24
 
 ### Fixed

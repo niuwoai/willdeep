@@ -65,102 +65,14 @@ struct EditorSettingsView: View {
     @State private var planSilentlyApprovedForWorkspace: Bool = false
 
     var body: some View {
-        TabView(selection: $settingsNavigation.selectedTab) {
-            typographySettings
-                .tag(EditorSettingsTab.typography)
-                .tabItem {
-                    Label(L10n.Settings.tabTypography, systemImage: "textformat")
-                }
-
-            appearanceSettings
-                .tag(EditorSettingsTab.appearance)
-                .tabItem {
-                    Label(L10n.Settings.tabAppearance, systemImage: "slider.horizontal.3")
-                }
-
-            workspaceSettings
-                .tag(EditorSettingsTab.workspace)
-                .tabItem {
-                    Label(L10n.Settings.tabWorkspace, systemImage: "sidebar.left")
-                }
-
-            agentSettings
-                .tag(EditorSettingsTab.agent)
-                .tabItem {
-                    Label(L10n.Settings.tabAgent, systemImage: "sparkles")
-                }
-
-            SomeIMIntegrationSettingsView()
-                .tag(EditorSettingsTab.someIM)
-                .tabItem {
-                    Label(L10n.Settings.tabSomeIM, systemImage: "sparkles.square.filled.on.square")
-                }
-
-            localAgentSettings
-                .tag(EditorSettingsTab.localAgents)
-                .tabItem {
-                    Label(L10n.Settings.tabLocalAgents, systemImage: "cpu")
-                }
-
-            AgentRuntimeSettingsView()
-                .tag(EditorSettingsTab.remoteRuntimes)
-                .tabItem {
-                    Label(L10n.Settings.tabRemoteRuntimes, systemImage: "network")
-                }
-
-            MobileGatewaySettingsView()
-                .tag(EditorSettingsTab.mobileGateway)
-                .tabItem {
-                    Label(L10n.Settings.tabMobileGateway, systemImage: "iphone.radiowaves.left.and.right")
-                }
-
-            AgentMemorySettingsView()
-                .tag(EditorSettingsTab.memory)
-                .tabItem {
-                    Label(L10n.Settings.tabMemory, systemImage: "brain.head.profile")
-                }
-
-            AgentGlobalRulesSettingsView()
-                .tag(EditorSettingsTab.rules)
-                .tabItem {
-                    Label(L10n.Settings.tabRules, systemImage: "doc.text.magnifyingglass")
-                }
-
-            AgentSkillSettingsView()
-                .tag(EditorSettingsTab.skills)
-                .tabItem {
-                    Label(L10n.Settings.tabSkills, systemImage: "wand.and.stars")
-                }
-
-            CollaborationConnectorSettingsView()
-                .tag(EditorSettingsTab.connectors)
-                .tabItem {
-                    Label(L10n.Settings.tabConnectors, systemImage: "puzzlepiece.extension")
-                }
-
-            AgentMCPSettingsView()
-                .tag(EditorSettingsTab.mcp)
-                .tabItem {
-                    Label(L10n.Settings.tabMcp, systemImage: "globe")
-                }
-
-            toolsSettings
-                .tag(EditorSettingsTab.tools)
-                .tabItem {
-                    Label(L10n.Settings.tabTools, systemImage: "terminal")
-                }
-
-            terminalSettings
-                .tag(EditorSettingsTab.terminal)
-                .tabItem {
-                    Label(L10n.Settings.tabTerminal, systemImage: "rectangle.bottomthird.inset.filled")
-                }
-
-            VoiceSettingsView()
-                .tag(EditorSettingsTab.voice)
-                .tabItem {
-                    Label(L10n.Settings.tabVoice, systemImage: "waveform")
-                }
+        TabView(selection: groupSelection) {
+            ForEach(SettingsGroup.allCases) { group in
+                settingsGroupContainer(group)
+                    .tag(group)
+                    .tabItem {
+                        Label(group.title, systemImage: group.icon)
+                    }
+            }
         }
         .padding(20)
         .frame(
@@ -176,6 +88,75 @@ struct EditorSettingsView: View {
         .onAppear {
             refreshCLIState()
             refreshLocalAgentDiscovery()
+        }
+    }
+
+    // MARK: Grouped tab navigation
+
+    /// Drives the top-level TabView. Reads the group of whatever pane is
+    /// selected; switching groups jumps to that group's first pane. Keeps the
+    /// 16 underlying `EditorSettingsTab` cases (and their deep-links) intact.
+    private var groupSelection: Binding<SettingsGroup> {
+        Binding(
+            get: { settingsNavigation.selectedTab.group },
+            set: { newGroup in
+                if settingsNavigation.selectedTab.group != newGroup {
+                    settingsNavigation.selectedTab = newGroup.tabs.first ?? settingsNavigation.selectedTab
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func settingsGroupContainer(_ group: SettingsGroup) -> some View {
+        VStack(spacing: 12) {
+            if group.tabs.count > 1 {
+                Picker("", selection: subTabBinding(for: group)) {
+                    ForEach(group.tabs, id: \.self) { tab in
+                        Text(tab.shortTitle).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+            settingsPage(for: resolvedTab(in: group))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    /// Second-level segmented-picker binding, scoped to one group.
+    private func subTabBinding(for group: SettingsGroup) -> Binding<EditorSettingsTab> {
+        Binding(
+            get: { resolvedTab(in: group) },
+            set: { settingsNavigation.selectedTab = $0 }
+        )
+    }
+
+    /// The selected pane if it belongs to `group`, otherwise the group's first.
+    private func resolvedTab(in group: SettingsGroup) -> EditorSettingsTab {
+        let current = settingsNavigation.selectedTab
+        return current.group == group ? current : (group.tabs.first ?? current)
+    }
+
+    @ViewBuilder
+    private func settingsPage(for tab: EditorSettingsTab) -> some View {
+        switch tab {
+        case .typography: typographySettings
+        case .appearance: appearanceSettings
+        case .workspace: workspaceSettings
+        case .agent: agentSettings
+        case .someIM: SomeIMIntegrationSettingsView()
+        case .localAgents: localAgentSettings
+        case .remoteRuntimes: AgentRuntimeSettingsView()
+        case .mobileGateway: MobileGatewaySettingsView()
+        case .memory: AgentMemorySettingsView()
+        case .rules: AgentGlobalRulesSettingsView()
+        case .skills: AgentSkillSettingsView()
+        case .connectors: CollaborationConnectorSettingsView()
+        case .mcp: AgentMCPSettingsView()
+        case .tools: toolsSettings
+        case .terminal: terminalSettings
+        case .voice: VoiceSettingsView()
         }
     }
 
