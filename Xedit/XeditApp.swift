@@ -66,6 +66,22 @@ enum EditorWindowID {
     static let value = "editor-window"
 }
 
+/// Agent 窗口在前台时发的标记。⌘N 是 app 全局命令，靠这个分流：
+/// agent 窗口 key 时 ⌘N = 新聊天，否则 = 开新 editor 窗口。
+/// **故意用常量 `true`**：focusedSceneValue 只在窗口聚焦切换时变化，
+/// 不随 AppState 流式重算 republish —— 不能在这里捕获 appState 闭包，
+/// 否则又踩回 WillDeepCommands 那个「每 token 重算菜单树」的坑。
+private struct AgentWindowActiveKey: FocusedValueKey {
+    typealias Value = Bool
+}
+
+extension FocusedValues {
+    var agentWindowActive: Bool? {
+        get { self[AgentWindowActiveKey.self] }
+        set { self[AgentWindowActiveKey.self] = newValue }
+    }
+}
+
 /// 菜单命令独立成 Commands 结构体，@FocusedObject 只能放这里、
 /// 不能放回 App 顶层：@FocusedObject 订阅 AppState.objectWillChange，
 /// 挂在 App 上时每次 publish（流式期间每个 token、动画期间每帧的
@@ -75,12 +91,27 @@ enum EditorWindowID {
 /// 放在 Commands 里，invalidation 只波及菜单树。
 private struct WillDeepCommands: Commands {
     @FocusedObject private var appState: AppState?
+    /// agent 窗口 key 时为 true，editor 窗口 key 时为 nil。
+    @FocusedValue(\.agentWindowActive) private var agentWindowActive
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
             CommandGroup(replacing: .newItem) {
-                Button(L10n.Menu.fileNewWindow) {
-                    openWindow(id: EditorWindowID.value)
+                // agent 窗口前台时 ⌘N 走「新聊天」，名实相符（侧边栏那
+                // 个 ⌘N 标签过去只是画着看，从不真的触发）。editor 窗口
+                // 前台时维持原行为：开一个新 editor 窗口。
+                Button(agentWindowActive == true ? L10n.Sidebar.newChatAction : L10n.Menu.fileNewWindow) {
+                    if agentWindowActive == true {
+                        // agent 窗口不走 setCurrent，@FocusedObject 取不到，
+                        // 直接问 registry 要当前跟随的 AppState。
+                        if let agentAppState = EditorAppStateRegistry.shared.current {
+                            agentAppState.startNewAgentSession()
+                            // 键盘新建会话后焦点直接落到输入框，立刻能打字。
+                            agentAppState.agentComposerFocusRevision += 1
+                        }
+                    } else {
+                        openWindow(id: EditorWindowID.value)
+                    }
                 }
                 .keyboardShortcut("n", modifiers: .command)
 

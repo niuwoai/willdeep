@@ -44,6 +44,9 @@ struct AgentWindowRootView: View {
             }
         }
         .frame(minWidth: 720, minHeight: 480)
+        // 标记「agent 窗口在前台」，供全局 ⌘N 命令分流到「新聊天」。
+        // 常量值，不随 transcript 流式刷新 republish。
+        .focusedSceneValue(\.agentWindowActive, true)
         .onAppear {
             // 冷启动只开 agent 窗口、还没任何 editor 注册时,惰性建一个
             // headless AppState 顶上,保证「editor 没开 / 没选 workspace

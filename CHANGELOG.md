@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.108.0-rc6 - 2026-06-24
+
+### Fixed
+- **Agent 窗口下 ⌘N 名实不符**：侧边栏「新聊天」画着 `⌘N` 标签，但那只是装饰——真正的 ⌘N 全局命令（[XeditApp.swift](Xedit/XeditApp.swift) `CommandGroup(replacing: .newItem)`）一直硬绑到「开一个新的 editor 窗口」，于是用户在 agent 窗口里按 ⌘N，弹出来的是个空文件的 editor 窗口，而不是新建会话。根因：editor 窗口和 agent 窗口是两个独立 Scene，⌘N 是 app 全局命令，过去无条件走 `openWindow(id: EditorWindowID.value)`。修复：新增 `FocusedValues.agentWindowActive` 焦点值，[AgentWindowRootView](Xedit/AgentWindowRootView.swift) 用 `.focusedSceneValue(\.agentWindowActive, true)` 在自己 key 时打标记；⌘N 命令读 `@FocusedValue` 分流——agent 窗口前台 → `EditorAppStateRegistry.shared.current.startNewAgentSession()`（agent 窗口不走 `setCurrent`，`@FocusedObject` 取不到，直接问 registry 要当前跟随的 AppState）并顺手 `agentComposerFocusRevision += 1` 让焦点落到输入框；editor 窗口前台 → 维持原「开新窗口」行为。菜单标题也跟着上下文在「新聊天 / 新建窗口」之间切换。**故意用常量 `true` 做焦点值**，避免在闭包里捕获 AppState 导致流式每 token republish 焦点值、重算菜单树（[XeditApp.swift](Xedit/XeditApp.swift) 那条 1.58.0-rc9 性能注释记录的老坑）。
+- **Agent 窗口新开时焦点没落在输入框**：窗口刚打开时 AppKit 会把默认 first responder 指派给窗口里第一个可聚焦控件（侧边栏「新聊天」按钮），而 [AgentModeComposerView.swift](Xedit/AgentModeComposerView.swift) 原本在 `.onAppear` 里**同步**置 `inputFocused = true`，正好被那次默认指派盖掉，结果光标不在输入框、不能开门见山打字。修复：把置焦点改到下一拍 `DispatchQueue.main.async` 执行，抢在 AppKit 默认指派之后，焦点稳稳落在输入框。
+
+### Changed
+- 版本号从 **1.108.0-rc5** 提升为 **1.108.0-rc6**（agent 窗口 ⌘N 改为「新聊天」+ 新开窗口焦点落到输入框，两个 UX bugfix）。pbxproj×6 / Go agent / Help Info.plist / docs ×2 / product-overview 同步。
+
 ## 1.108.0-rc5 - 2026-06-24
 
 ### Fixed

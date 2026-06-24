@@ -495,7 +495,13 @@ private struct ComposerCard: View {
             RoundedRectangle(cornerRadius: AgentDesign.inputCornerRadius)
                 .stroke(palette.hairline, lineWidth: 1)
         )
-        .onAppear { inputFocused = true }
+        .onAppear {
+            // 窗口新开时 AppKit 会把默认 first responder 给到窗口里第一个
+            // 可聚焦控件（侧边栏「新聊天」按钮），同步在 onAppear 里设
+            // inputFocused 会被那次默认指派盖掉。下一拍 async 再设，抢在
+            // 默认指派之后，焦点稳稳落在输入框 —— agent mode 开门见山能打字。
+            DispatchQueue.main.async { inputFocused = true }
+        }
         .onCompatibleChange(of: appState.agentComposerFocusRevision) { _, _ in
             inputFocused = true
         }
