@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.108.0-rc13 - 2026-06-24
+
+### Fixed
+- **没有工作区时发消息「石沉大海」**（重大、高频复现）：没选工作区/没有活动会话时（独立 Agent 窗口、删掉当前会话后、冷启动未选会话），用户敲的字进不了任何 runtime——`agentInput` 的 setter 在 `activeRuntime == nil` 时是空操作，文本只活在本地 NSTextView；发送时 `sendAgentMessage` 读到空 input 被「空消息」guard 静默 return，输入框却因绑定到新建的空会话被清空，于是「像什么都没发生」。修复 [AppStateAgentRuntimeAccessors.swift](Xedit/AppStateAgentRuntimeAccessors.swift)：setter 在无会话且用户真输入（非空）时先建一个会话，文本永远有真实 runtime 可落（没工作区也能正常发，会话 `workspaceLocation` 为 nil 是合法的）；空写入（绑定初始化/发送后清空）不触发建会话，避免空会话。
+- **侧边栏终端乱码（Nerd Font glyph 显示成方块）**：默认字体 Monaco 不含 Nerd Font 私有区图标，且原本只靠硬编码字体族名探测 Nerd Font，用户装了但名字不完全匹配就认不出、列表为空、只能回退 Monaco → powerline/图标乱码。修复 [EditorTerminalModels.swift](Xedit/EditorTerminalModels.swift)：① `installedNerdFonts()` 改为**动态扫描** `NSFontManager.availableFontFamilies` 中所有名字含「Nerd Font」的字体族（不再靠猜名字，装了什么都能被发现），同时保留已知候选的稳定 id 以兼容旧设置；② 新增 `customFontName` 字段 + Settings → Terminal 的「Custom font」输入框，用户可手填任意已装字体名，优先级最高——彻底兜底任何未被自动探测到的字体。
+- **「Open Agent Window」菜单项**：① 当前已经在 Agent 窗口时该项置灰禁用（再点只是把单例窗口重新聚焦，无意义）——[XeditApp.swift](Xedit/XeditApp.swift) 复用现成的 `@FocusedValue(\.agentWindowActive)` 加 `.disabled`；② 补上缺失的中文翻译「打开 Agent 窗口」（[Localizable.xcstrings](Xedit/Localizable.xcstrings) 的 `menu.view.open-agent-window` 原本只有英文，中文系统下回退英文）。
+
+### Changed
+- 版本号从 **1.108.0-rc12** 提升为 **1.108.0-rc13**（无工作区发消息丢失 / 终端乱码 / Open Agent Window 菜单 三处修复）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.108.0-rc12 - 2026-06-24
 
 ### Changed

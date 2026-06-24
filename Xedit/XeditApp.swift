@@ -261,6 +261,10 @@ private struct WillDeepCommands: Commands {
                     openWindow(id: AgentWindowID.value)
                 }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
+                // Already in the Agent window → opening it is a no-op (the
+                // singleton just refocuses itself), so disable the item to
+                // make that obvious.
+                .disabled(agentWindowActive == true)
             }
 
             CommandGroup(before: .windowArrangement) {

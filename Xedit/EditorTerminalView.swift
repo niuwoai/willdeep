@@ -139,6 +139,14 @@ extension EditorSettingsView {
                     }
                 }
 
+                LabeledContent("Custom font") {
+                    TextField("e.g. JetBrainsMono Nerd Font", text: terminalSetting(\.customFontName))
+                        .textFieldStyle(.roundedBorder)
+                }
+                Text("Type the exact name of any installed font to override the picker — use this to apply a Nerd Font that isn't auto-detected so powerline/icon glyphs stop showing as boxes. Leave empty to use the selection above.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 LabeledContent("Size") {
                     HStack {
                         Slider(value: terminalSetting(\.fontSize), in: 10...20, step: 1)

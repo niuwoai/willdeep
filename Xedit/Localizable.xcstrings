@@ -5935,12 +5935,19 @@
       }
     },
     "menu.view.open-agent-window" : {
-      "extractionState" : "extracted_with_value",
+      "comment" : "Button label in View menu",
+      "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
-            "state" : "new",
+            "state" : "translated",
             "value" : "Open Agent Window"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开 Agent 窗口"
           }
         }
       }

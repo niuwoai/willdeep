@@ -19,6 +19,12 @@ struct EditorTerminalSettings: Codable, Equatable {
     /// block / bar / underline. Decoded leniently (older sessions lack it).
     var cursorStyleID: String = EditorTerminalCursorStyle.block.id
     var cursorBlinks: Bool = true
+    /// Exact font name the user typed in Settings. When non-empty it overrides
+    /// `fontName` — the escape hatch for using any installed font we didn't
+    /// auto-detect (most importantly a Nerd Font whose packaged name doesn't
+    /// match our probes), which is what fixes powerline/icon glyphs rendering
+    /// as boxes. Default-valued so older saved settings decode leniently.
+    var customFontName: String = ""
 
     static var `default`: EditorTerminalSettings {
         EditorTerminalSettings(
@@ -104,8 +110,16 @@ extension EditorTerminalSettings {
     }
 
     var font: NSFont {
-        EditorTerminalFont.byID(fontName)?.font(size: CGFloat(fontSize))
-            ?? NSFont.monospacedSystemFont(ofSize: CGFloat(fontSize), weight: .regular)
+        let size = CGFloat(fontSize)
+        // A user-typed custom name wins: it's the escape hatch for any
+        // installed font we didn't enumerate, which is how a user fixes a
+        // Nerd Font whose packaged name didn't match our probes.
+        let custom = customFontName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !custom.isEmpty, let font = NSFont(name: custom, size: size) {
+            return font
+        }
+        return EditorTerminalFont.byID(fontName)?.font(size: size)
+            ?? NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
     }
 
     var colorScheme: EditorTerminalColorScheme {
@@ -145,10 +159,25 @@ struct EditorTerminalFont: Identifiable, Equatable {
     ]
 
     static func installedNerdFonts() -> [EditorTerminalFont] {
-        nerdFontCandidates.compactMap { candidate in
-            guard NSFont(name: candidate.family, size: 12) != nil else { return nil }
-            return EditorTerminalFont(id: candidate.id, displayName: candidate.display, postScriptName: candidate.family)
+        var result: [EditorTerminalFont] = []
+        var seenFamilies = Set<String>()
+        // Known candidates first so they keep their stable ids — previously
+        // saved settings (e.g. "meslo-nf") still resolve after an upgrade.
+        for candidate in nerdFontCandidates where NSFont(name: candidate.family, size: 12) != nil {
+            result.append(EditorTerminalFont(id: candidate.id, displayName: candidate.display, postScriptName: candidate.family))
+            seenFamilies.insert(candidate.family)
         }
+        // Then discover ANY other installed Nerd Font by scanning family names
+        // for the "Nerd Font" convention, instead of depending on us having
+        // hardcoded the exact packaged name. This is the real fix for "I
+        // installed a Nerd Font but it never shows up / terminal still has
+        // boxes": whatever variant the user installed now gets offered.
+        for family in NSFontManager.shared.availableFontFamilies
+        where family.localizedCaseInsensitiveContains("Nerd Font") && !seenFamilies.contains(family) {
+            result.append(EditorTerminalFont(id: "nf:" + family, displayName: family, postScriptName: family))
+            seenFamilies.insert(family)
+        }
+        return result
     }
 
     static var all: [EditorTerminalFont] {

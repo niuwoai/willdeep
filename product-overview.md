@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-24 | Current version: v1.108.0-rc12
+> Last updated: 2026-06-24 | Current version: v1.108.0-rc13
 
 ## Positioning
 
@@ -70,6 +70,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **Agent Mode 交互式远程终端（1.106.0-rc1）** —— Agent mode 右侧辅助栏新增 Terminal 面板,复用 Settings → Runtimes 的 SSH 配置启动真实 `/usr/bin/ssh -tt` 交互式 PTY。每台 runtime 可配置启动目录、自动命令、二跳命令、命令间隔、空闲超时和常用服务名;连接顺序固定为主机连接 → 自动命令 → 二跳命令。AI 通过 `terminal_snapshot` 只读当前终端输出,通过 `terminal_send_command` / `terminal_send_control` 写入时仍走现有审批卡;面板内提供 systemctl、journalctl、docker 等常用服务命令模板。
 - **代码块复制状态与横向滚动修复（1.106.0-rc2）** —— TextKit 聊天历史里的 fenced code 复制控件现在会把图标和文字作为同一个可替换范围处理,点击复制后只显示一个 `Done`,3 秒后按按钮实例独立恢复为可复制状态;代码块正文不再自动折行,在代码块区域横向滚动可查看长命令、长路径和长单行输出的完整内容。
 - **CI xcodebuild 收尾 watchdog（1.106.0-rc3）** —— GitHub macOS runner 上如果 Swift 测试已经整轮通过但 `xcodebuild` 收尾不退出,`scripts/xcodebuild_ci.rb` 会在宽限期后清理 stale 进程,保留 `xcodebuild.log` 与 `xcresult` 报告,避免 CI job 被 30 分钟总超时误伤。
+- **无工作区发消息丢失 / 终端乱码 / Open Agent Window 菜单 三修复（1.108.0-rc13）** —— ① **重大 bug**:没选工作区或没有活动会话时发消息「像什么都没发生」——`agentInput` setter 在 `activeRuntime == nil` 时是空操作,字进不了任何 runtime,发送读到空 input 被静默 guard 掉。修法:setter 在无会话且用户真输入时先建会话,文本永远有处可落(没工作区也能发)。② **终端乱码**:默认 Monaco 不含 Nerd glyph,且只靠硬编码名探测 Nerd Font。改为动态扫描系统所有含「Nerd Font」的字体族 + 新增「Custom font」手填字体名(优先级最高),彻底兜底。③ **Open Agent Window 菜单**:已在 Agent 窗口时该项置灰禁用(复用 `@FocusedValue(\.agentWindowActive)`),并补中文翻译「打开 Agent 窗口」。
 - **CI run_command PATH 测试健壮化（1.108.0-rc11）** —— `run_command exposes common user binary paths` 测试在 GitHub 虚拟化 runner 上误红(本地通过):该测试端到端跑 `printf "$PATH"`,而 `run_command` 经 `sandbox-exec` 执行,虚拟化 runner 上 seatbelt 不把注入的 PATH 传给子进程,`$PATH` 输出为空。改为直接单测 `AgentToolRunner.shellEnvironment(from:)`(run_command 喂给子进程的环境)确定性地追加 `/opt/homebrew/bin` 等目录,覆盖同一意图、不依赖 CI sandbox 行为。生产代码未改。配合本会话早先的 CI watchdog 静默超时修复(rc5),CI 发布验证恢复稳定。
 - **已处理的补丁建议卡片不再显示（1.108.0-rc10）** —— 用户已应用 / 已拒绝过的补丁建议卡片处理后即从 transcript 和右侧面板移除,不再占地方:已应用的改动由「工作区变更」卡片反映,已拒绝的无需后续操作。`AgentPatchProposalList` 分组时只保留 `.pending`(待决定)与 `.failed`(应用出错需告知),过滤 `.applied` / `.rejected`。配合 rc9 折叠组卡:同轮多条被逐条处理后组卡只剩未决项,全部处理完整组卡自动消失。
 - **补丁建议同轮自动折叠组卡（1.108.0-rc9）** —— Agent 模式下同一轮(同一条 assistant message,`messageID` 相同)产出的多个补丁应用建议,以前每条占一张卡片,一轮三集剧本就是三张卡把 transcript / 右侧面板撑得老长。现在 ≥2 条时自动折叠成一张 `AgentPatchProposalGroup` 组卡:组头「本轮 N 个补丁建议」+ 状态汇总(如「3 applied」「2 pending · 1 applied」),仍有 pending 时附「全部应用 / 全部拒绝」;点开 chevron 逐条展开原单卡,每条仍可单独应用/拒绝/看 diff。单条建议保持原单卡。实现:新增 `AgentPatchProposalList`(按 `messageID` 首现顺序分组)与 `AppState.applyAgentPatchProposals(forMessageID:)`/`rejectAgentPatchProposals(forMessageID:)`,transcript 与右侧面板共用。

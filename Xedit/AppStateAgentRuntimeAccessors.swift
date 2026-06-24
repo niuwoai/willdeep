@@ -39,7 +39,25 @@ extension AppState {
 
     var agentInput: String {
         get { activeRuntime?.input ?? "" }
-        set { activeRuntime?.input = newValue }
+        set {
+            if let runtime = activeRuntime {
+                runtime.input = newValue
+            } else if !newValue.isEmpty {
+                // No active session yet (standalone Agent window, just after
+                // deleting the current session, or a cold start that never
+                // selected one) but the user is typing. Without a runtime this
+                // setter is a no-op: the keystrokes only live in the local
+                // NSTextView, so `sendAgentMessage` reads an empty input and
+                // the empty-message guard silently returns — the bug where
+                // sending "does nothing" with no workspace selected. Lazily
+                // create a session so the text always has a real runtime to
+                // land in. (A session with no workspace is valid — its
+                // workspaceLocation is just nil.) Empty writes (binding init /
+                // post-send clear) are ignored so we never spawn a phantom
+                // session.
+                activeRuntimeAfterCreatingNewSession()?.input = newValue
+            }
+        }
     }
 
     var isAgentResponding: Bool {
