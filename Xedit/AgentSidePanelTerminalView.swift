@@ -37,6 +37,13 @@ struct AgentSidePanelTerminalView: View {
         return Color(nsColor: settings.colorScheme.background)
     }
 
+    /// Accent pulled from the active interface skin so the tab chips match the
+    /// app's skin instead of the system accent color (which reads as an
+    /// off-theme purple regardless of the chosen skin).
+    private var skinAccent: Color {
+        appState.editorSettings.interfaceSkin.palette.accent
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             tabBar
@@ -108,7 +115,7 @@ struct AgentSidePanelTerminalView: View {
         .padding(.vertical, 4)
         .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(isActive ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.05))
+                .fill(isActive ? skinAccent.opacity(0.18) : Color.primary.opacity(0.05))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -197,7 +204,7 @@ struct AgentSidePanelTerminalView: View {
     }
 
     private func originBadgeColor(_ tab: AgentTerminalTab) -> Color {
-        isOpenedByCurrentSession(tab) ? Color.accentColor.opacity(0.55) : Color.clear
+        isOpenedByCurrentSession(tab) ? skinAccent.opacity(0.55) : Color.clear
     }
 
     private func tabTooltip(_ tab: AgentTerminalTab) -> String {

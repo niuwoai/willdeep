@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.108.0-rc16 - 2026-06-24
+
+### Fixed
+- 侧边栏终端的标签页（tab chip）选中态背景与「当前会话打开」描边原本用固定的 `Color.accentColor`（系统强调色，常显为紫色），不跟随 app 的 interface skin、与整体皮肤不协调。修复 [AgentSidePanelTerminalView.swift](Xedit/AgentSidePanelTerminalView.swift)：改用 `interfaceSkin.palette.accent`（新增 `skinAccent` 计算属性），tab 头颜色随皮肤走。
+- （说明，非代码改动）侧边栏终端在 zsh 下底部 prompt 出现方块「乱码」，是 zsh 主题（powerlevel10k / starship 等）使用了 Nerd Font 私有区图标字符，而默认 Monaco 字体不含这些 glyph（换 bash 无此 prompt 故正常）。解决：安装任一 Nerd Font（如 `brew install --cask font-meslo-lg-nerd-font`）后在 Settings → Terminal 选用，或在「Custom font」手填字体名——这些入口已于 rc13 提供。
+
+### Changed
+- 版本号从 **1.108.0-rc15** 提升为 **1.108.0-rc16**（侧边栏终端 tab 头颜色跟随 interface skin）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.108.0-rc15 - 2026-06-24
 
 ### Fixed
