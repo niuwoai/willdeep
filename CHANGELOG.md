@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.108.0-rc17 - 2026-06-24
+
+### Added
+- **终端字体 Nerd Font 级联回退（fallback）**：默认终端字体仍是 Monaco（保持干净经典），但现在给它附加一个 `cascadeList` 指向**已安装的 Nerd Font（优先 MesloLGS NF）**——普通字符照常用 Monaco，Monaco 没有的字形（zsh 主题 powerlevel10k / starship 的 powerline 分隔符与 Nerd Font 私有区图标）由 Nerd Font 回退渲染，不再显示成方块。这正是 Ghostty 的「主字体 + 回退」模型，也是用户期望的「默认 Monaco、回退 MesloLGS NF」。实现 [EditorTerminalModels.swift](Xedit/EditorTerminalModels.swift)：新增 `EditorTerminalFont.withNerdFontFallback(_:)` / `nerdFallbackFont(size:)`，`EditorTerminalSettings.font` 对最终字体(含 Monaco / 自定义字体 / 任意选择)统一附加回退；已确认 SwiftTerm 走 `CTLineCreateWithAttributedString` 的 CoreText 渲染路径，尊重 NSFont 的 cascadeList，回退确实生效。无已装 Nerd Font 时无回退（行为同前）。
+
+### Changed
+- 版本号从 **1.108.0-rc16** 提升为 **1.108.0-rc17**（终端字体 Nerd Font 级联回退，默认 Monaco 也能正常显示 zsh 主题图标）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.108.0-rc16 - 2026-06-24
 
 ### Fixed

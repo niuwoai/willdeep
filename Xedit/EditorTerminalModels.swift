@@ -111,15 +111,21 @@ extension EditorTerminalSettings {
 
     var font: NSFont {
         let size = CGFloat(fontSize)
+        let base: NSFont
         // A user-typed custom name wins: it's the escape hatch for any
         // installed font we didn't enumerate, which is how a user fixes a
         // Nerd Font whose packaged name didn't match our probes.
         let custom = customFontName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !custom.isEmpty, let font = NSFont(name: custom, size: size) {
-            return font
+        if !custom.isEmpty, let f = NSFont(name: custom, size: size) {
+            base = f
+        } else {
+            base = EditorTerminalFont.byID(fontName)?.font(size: size)
+                ?? NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
         }
-        return EditorTerminalFont.byID(fontName)?.font(size: size)
-            ?? NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        // Keep the chosen font (e.g. Monaco) for normal text but cascade to an
+        // installed Nerd Font for glyphs it lacks — so zsh prompt icons stop
+        // rendering as boxes without forcing the whole terminal to a Nerd Font.
+        return EditorTerminalFont.withNerdFontFallback(base)
     }
 
     var colorScheme: EditorTerminalColorScheme {
@@ -195,6 +201,34 @@ struct EditorTerminalFont: Identifiable, Equatable {
 
     static func byID(_ id: String) -> EditorTerminalFont? {
         all.first { $0.id == id }
+    }
+
+    /// An installed Nerd Font to use as the cascade fallback, preferring
+    /// MesloLGS NF (what `p10k configure` recommends and installs). Returns nil
+    /// when no Nerd Font is installed — then nothing falls back and the user
+    /// still sees boxes until they install one.
+    static func nerdFallbackFont(size: CGFloat) -> NSFont? {
+        let installed = installedNerdFonts()
+        let chosen = installed.first { ($0.postScriptName ?? "").localizedCaseInsensitiveContains("Meslo") }
+            ?? installed.first
+        guard let name = chosen?.postScriptName else { return nil }
+        return NSFont(name: name, size: size)
+    }
+
+    /// Return `font` with an installed Nerd Font appended as a cascade
+    /// fallback. CoreText resolves a missing glyph (powerline separators, the
+    /// Nerd Font private-use icons used by powerlevel10k / starship) from the
+    /// fallback while ordinary text keeps using `font`. This is what makes the
+    /// default Monaco show prompt icons correctly — same model as Ghostty's
+    /// primary-font + fallback list. No-ops if the font already is the Nerd
+    /// Font or none is installed.
+    static func withNerdFontFallback(_ font: NSFont) -> NSFont {
+        guard let fallback = nerdFallbackFont(size: font.pointSize),
+              font.fontName != fallback.fontName else { return font }
+        let descriptor = font.fontDescriptor.addingAttributes([
+            .cascadeList: [fallback.fontDescriptor]
+        ])
+        return NSFont(descriptor: descriptor, size: font.pointSize) ?? font
     }
 
     func font(size: CGFloat) -> NSFont {
