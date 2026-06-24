@@ -71,7 +71,7 @@ jobs:
         id: tests
         run: |
           mkdir -p build/ci
-          ruby scripts/xcodebuild_ci.rb --log build/ci/xcodebuild.log --pass-grace 180 -- \
+          ruby scripts/xcodebuild_ci.rb --log build/ci/xcodebuild.log --pass-grace 180 --idle-timeout 180 -- \
             xcodebuild test \
             -project Xedit.xcodeproj \
             -scheme Xedit \

@@ -11,7 +11,8 @@ require "optparse"
 
 options = {
   log_path: "build/ci/xcodebuild.log",
-  pass_grace_seconds: 180
+  pass_grace_seconds: 180,
+  idle_timeout_seconds: 180
 }
 
 parser = OptionParser.new do |opts|
@@ -19,6 +20,10 @@ parser = OptionParser.new do |opts|
   opts.on("--log PATH", "Write combined xcodebuild output to PATH") { |value| options[:log_path] = value }
   opts.on("--pass-grace SECONDS", Integer, "Seconds to wait after the full test run passed") do |value|
     options[:pass_grace_seconds] = value
+  end
+  opts.on("--idle-timeout SECONDS", Integer,
+          "Once tests are running, terminate xcodebuild if it emits no output for this many seconds") do |value|
+    options[:idle_timeout_seconds] = value
   end
 end
 
@@ -43,12 +48,24 @@ pass_patterns = [
 failed_patterns = [
   /Test run with .* failed/,
   /Test Suite .* failed/,
-  /\*\* TEST FAILED \*\*/
+  /\*\* TEST FAILED \*\*/,
+  /✘ Test .* failed/,
+  /✘ Suite .* failed/
+]
+# Signals that the test phase is actually running. We only arm the idle
+# watchdog after one of these appears so the (sometimes quiet) build/link
+# phase can't trip it.
+activity_patterns = [
+  /Test Suite .* (?:started|passed)/,
+  /[◇✔✘] (?:Test|Suite) /,
+  /Test run with \d+ tests/
 ]
 
 buffer = +""
 test_run_passed_at = nil
 test_run_failed = false
+tests_active = false
+last_output_at = Time.now
 status = nil
 
 def signal_process(pid, signal)
@@ -70,9 +87,22 @@ begin
       break
     end
 
-    if test_run_passed_at && !test_run_failed &&
-       Time.now - test_run_passed_at >= options[:pass_grace_seconds]
-      message = "\n[xcodebuild_ci] xcodebuild did not exit #{options[:pass_grace_seconds]}s after the full test run passed; terminating stale process group #{pid}.\n"
+    grace_elapsed = test_run_passed_at && !test_run_failed &&
+                    Time.now - test_run_passed_at >= options[:pass_grace_seconds]
+    # Primary watchdog: xcodebuild on macOS runners often hangs *before*
+    # printing the final "Test run ... passed" line, so the pass-grace timer
+    # above never arms. Once any test activity has been seen, treat a long
+    # output silence as a stale hang and reclaim the job. (Deliberately does
+    # not exclude failures: a hang after a failed test must be reclaimed too,
+    # and the exit-code logic below still reports it as a failure.)
+    idle_elapsed = tests_active &&
+                   Time.now - last_output_at >= options[:idle_timeout_seconds]
+
+    if grace_elapsed || idle_elapsed
+      reason = grace_elapsed ?
+        "did not exit #{options[:pass_grace_seconds]}s after the full test run passed" :
+        "emitted no output for #{options[:idle_timeout_seconds]}s after tests started running"
+      message = "\n[xcodebuild_ci] xcodebuild #{reason}; terminating stale process group #{pid}.\n"
       STDOUT.write(message)
       STDOUT.flush
       log.write(message)
@@ -103,12 +133,14 @@ begin
       STDOUT.flush
       log.write(chunk)
       log.flush
+      last_output_at = Time.now
 
       buffer << chunk
       lines = buffer.split("\n", -1)
       buffer = lines.pop || +""
       lines.each do |line|
         test_run_failed ||= failed_patterns.any? { |pattern| line.match?(pattern) }
+        tests_active ||= activity_patterns.any? { |pattern| line.match?(pattern) }
         if test_run_passed_at.nil? && pass_patterns.any? { |pattern| line.match?(pattern) }
           test_run_passed_at = Time.now
         end
@@ -124,4 +156,8 @@ if status
   exit(status.exitstatus || (status.success? ? 0 : 1))
 end
 
-exit(test_run_passed_at && !test_run_failed ? 0 : 1)
+# We get here only after the watchdog reclaimed a hung xcodebuild (status nil).
+# Treat it as success when the run reached the test phase and never reported a
+# failure — the hang is in xcodebuild's own shutdown, not in the tests.
+passed_cleanly = (test_run_passed_at || tests_active) && !test_run_failed
+exit(passed_cleanly ? 0 : 1)

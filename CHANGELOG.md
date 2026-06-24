@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.108.0-rc5 - 2026-06-24
+
+### Fixed
+- CI `Tests` workflow 每次发布都耗满 30 分钟超时被取消（rc6 / rc3 / rc4 连续中招），表现为 `cancelled`，但实际**所有测试都已通过**。根因:`xcodebuild test` 在 macOS GitHub runner 上经常在测试全部通过后 hang 住,既不打印整体 `Test run … passed` 收尾行也不退出;而 [scripts/xcodebuild_ci.rb](scripts/xcodebuild_ci.rb) 的 watchdog 只在**匹配到那行收尾文本之后**才启动 `--pass-grace` 180s 计时,hang 恰恰发生在打印那行**之前** → 宽限计时永不触发 → job 一路挂到 GitHub 30 分钟硬超时。其次,即便进程被杀,末尾退出码逻辑因没见到收尾行也会误判 `exit 1` 把 job 标红。修复:给 watchdog 新增**输出静默超时** `--idle-timeout`(默认 180s,workflow 已显式传参)——一旦检测到测试活动(`Test Suite … started/passed`、`◇/✔/✘ Test/Suite …`)即武装,只要 xcodebuild 连续 180s 无任何输出便判定 stale hang 并 `TERM`→`KILL` 整个进程组,不再依赖脆弱的收尾文本;构建/链接期(尚无测试活动标记)不武装 idle,避免误杀。退出码改为:到达测试阶段且全程无失败标记 → `exit 0`,出现过失败标记 → `exit 1`,子进程正常退出则透传其退出码。本机 ruby 烟雾测试覆盖「通过后 hang→exit 0」「失败后 hang→exit 1」「构建期静默不误杀→exit 0」三场景。
+
+### Changed
+- 版本号从 **1.108.0-rc4** 提升为 **1.108.0-rc5**（CI watchdog 静默超时兜底，修复发布 CI 卡 30 分钟超时的 bugfix）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.108.0-rc4 - 2026-06-24
 
 ### Fixed
