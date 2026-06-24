@@ -22,6 +22,9 @@
     "· Sandbox: no network, no navigation · sendPrompt() available" : {
 
     },
+    "“Follow App Skin” derives the terminal background, foreground, and cursor from your interface skin; ANSI program colors stay standard so output stays readable. Line spacing isn't adjustable with the current terminal engine." : {
+
+    },
     "(%lld)" : {
 
     },
@@ -2919,6 +2922,9 @@
     "Base URL" : {
 
     },
+    "Blink cursor" : {
+
+    },
     "Cancel" : {
 
     },
@@ -4304,6 +4310,9 @@
     "Copy Relative Path" : {
 
     },
+    "Cursor" : {
+
+    },
     "Default model" : {
 
     },
@@ -5148,6 +5157,9 @@
           }
         }
       }
+    },
+    "Follow App Skin" : {
+
     },
     "Font" : {
 
