@@ -60,6 +60,14 @@ struct AgentBackgroundJob: Identifiable, Equatable {
     var outputByteCount: Int
 
     var isAlive: Bool { status == .running }
+    nonisolated var needsAttention: Bool {
+        switch status {
+        case .failed, .timedOut, .launchFailed:
+            return true
+        case .running, .completed, .killed:
+            return false
+        }
+    }
     nonisolated var duration: TimeInterval {
         (finishedAt ?? Date()).timeIntervalSince(startedAt)
     }

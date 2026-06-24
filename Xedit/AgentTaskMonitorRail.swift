@@ -40,6 +40,21 @@ struct AgentTaskMonitorRail: View {
                     .truncationMode(.tail)
                     .padding(.top, 2)
             }
+            if !runtimeJobs.isEmpty {
+                VStack(alignment: .leading, spacing: 7) {
+                    ForEach(runtimeJobs.prefix(6)) { job in
+                        AgentRailJobRow(job: job) {
+                            _ = appState.agentJobRegistry.kill(id: job.id)
+                        }
+                    }
+                    if runtimeJobs.count > 6 {
+                        Text("还有 \(runtimeJobs.count - 6) 个后台任务")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.top, 4)
+            }
         }
     }
 
@@ -151,6 +166,11 @@ struct AgentTaskMonitorRail: View {
         return []
     }
 
+    private var runtimeJobs: [AgentBackgroundJob] {
+        guard let runtimeID = appState.activeAgentSessionID else { return [] }
+        return appState.agentJobRegistry.jobs(forRuntime: runtimeID)
+    }
+
     private func todoStatus(
         for stepStatus: AgentPlan.StepStatus,
         offset: Int,
@@ -232,6 +252,7 @@ struct AgentTaskMonitorSnapshot: Equatable {
     var isCompressingContext: Bool
     var runningTaskCount: Int
     var attentionToolIDs: [String]
+    var jobDigest: [String]
     var todoDigest: [String]
     var workFileDigest: [String]
     var learningDigest: [String]
@@ -248,6 +269,7 @@ struct AgentTaskMonitorSnapshot: Equatable {
 
     var hasVisibleMonitorContent: Bool {
         isAgentActivityActive
+            || !jobDigest.isEmpty
             || !todoDigest.isEmpty
             || !workFileDigest.isEmpty
             || !learningDigest.isEmpty
@@ -269,6 +291,7 @@ struct AgentTaskMonitorSnapshot: Equatable {
                     }
                 }
                 .map { "\($0.id.uuidString):\($0.status.rawValue):\($0.toolName)" },
+            jobDigest: jobDigest(from: appState),
             todoDigest: todoDigest(from: appState),
             workFileDigest: appState.agentWorktreeChanges.files.map { change in
                 [
@@ -294,6 +317,20 @@ struct AgentTaskMonitorSnapshot: Equatable {
             }
         }
         return []
+    }
+
+    private static func jobDigest(from appState: AppState) -> [String] {
+        guard let runtimeID = appState.activeAgentSessionID else { return [] }
+        return appState.agentJobRegistry.jobs(forRuntime: runtimeID).map { job in
+            [
+                job.id.uuidString,
+                job.status.rawValue,
+                String(job.exitCode ?? Int32.min),
+                String(job.outputByteCount),
+                String(Int((job.finishedAt ?? job.startedAt).timeIntervalSince1970)),
+                job.command
+            ].joined(separator: ":")
+        }
     }
 
     private static func learningDigest(from appState: AppState) -> [String] {
@@ -448,6 +485,109 @@ private struct AgentRailDirectoryGroup: Identifiable {
     var name: String
     var count: Int
     var preview: [String]
+}
+
+private struct AgentRailJobRow: View {
+    let job: AgentBackgroundJob
+    let kill: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 7) {
+                Image(systemName: iconName)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 15)
+                Text(job.displayHandle)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.primary)
+                Text(statusText)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(tint.opacity(0.12))
+                    .clipShape(Capsule())
+                Spacer(minLength: 0)
+                if job.isAlive {
+                    Button(action: kill) {
+                        Image(systemName: "stop.circle")
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.borderless)
+                    .help(L10n.AgentJobs.kill)
+                }
+            }
+            Text(job.command)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .truncationMode(.tail)
+                .textSelection(.enabled)
+            HStack(spacing: 6) {
+                Text(Self.formatDuration(job.duration))
+                    .font(.system(size: 10).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                if let exitCode = job.exitCode {
+                    Text("exit \(exitCode)")
+                        .font(.system(size: 10, weight: .medium).monospacedDigit())
+                        .foregroundStyle(exitCode == 0 ? .green : .red)
+                }
+                if job.outputByteCount > 0 {
+                    Text("\(job.outputByteCount) B")
+                        .font(.system(size: 10).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(8)
+        .background(tint.opacity(job.needsAttention ? 0.10 : 0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(tint.opacity(job.needsAttention ? 0.24 : 0.10), lineWidth: 1)
+        )
+    }
+
+    private var iconName: String {
+        switch job.status {
+        case .running: return "play.circle.fill"
+        case .completed: return "checkmark.circle.fill"
+        case .failed: return "xmark.circle.fill"
+        case .killed: return "stop.circle.fill"
+        case .timedOut: return "clock.badge.exclamationmark.fill"
+        case .launchFailed: return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private var tint: Color {
+        switch job.status {
+        case .running: return .green
+        case .completed: return .secondary
+        case .failed, .launchFailed: return .red
+        case .killed, .timedOut: return .orange
+        }
+    }
+
+    private var statusText: String {
+        switch job.status {
+        case .running: return L10n.AgentJobs.statusRunning
+        case .completed: return L10n.AgentJobs.statusCompleted
+        case .failed: return L10n.AgentJobs.statusFailed
+        case .killed: return L10n.AgentJobs.statusKilled
+        case .timedOut: return L10n.AgentJobs.statusTimedOut
+        case .launchFailed: return L10n.AgentJobs.statusLaunchFailed
+        }
+    }
+
+    private static func formatDuration(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds))
+        if total < 60 { return "\(total)s" }
+        let minutes = total / 60
+        let remaining = total % 60
+        if minutes < 60 { return "\(minutes)m \(remaining)s" }
+        return "\(minutes / 60)h \(minutes % 60)m"
+    }
 }
 
 private struct AgentRailSection<Content: View>: View {

@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-24 | Current version: v1.105.0-rc17
+> Last updated: 2026-06-24 | Current version: v1.105.0-rc19
 
 ## Positioning
 
@@ -64,6 +64,8 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **切回 app 保持在最新消息 + run_command PWD 修复（1.105.0-rc15）** —— 切走 app 再切回来时 transcript 会重置到顶部;`AgentChatTranscript` 新增 `.onAppear` + `NSApplication.didBecomeActiveNotification` 两个重锚时机把滚动拉回底部哨兵,切回来仍停在最新消息。另外修掉一个 CI flaky 测试的根因:`run_command` 用 `currentDirectoryURL` chdir 到工作目录,但 shell 继承了宿主陈旧的 `$PWD`,`pwd` builtin 信任 `$PWD` 于是打印错目录;现在显式把 `$PWD` 同步成真实 cwd,`pwd` 行为确定。
 - **排队消息钉到 composer 上方（1.105.0-rc16）** —— 排队中的消息卡片以前夹在 transcript 中段(思考指示器下、压缩/错误/patch/worktree/turn-report 卡片之上),离 composer 很远。现在移到 transcript 最底部、紧贴 composer 顶部的「思考中」状态条,让「已排队」和「正在处理」视觉上挨在一起;新排队消息进来时也会自动滚到底部。
 - **Apply patch 认 agent workspace + 按钮本地化（1.105.0-rc17）** —— `applyAgentPatch` 之前只看 editor 窗口的 `rootDirectory`,Agent mode 下它常为 nil,于是即便用户明明在某个 workspace 里也报「请先打开项目文件夹再 Apply patch」。改成 `agentPatchWorkspaceRoot()`,优先级 git repo root → 会话 `workspaceRootPath` → editor `rootDirectory`,和 worktree diff 一致。Patch 卡片的 Apply / Reject / Show Diff / Hide Diff 全部走 `L10n.AgentPatch`,补 zh-Hans。
+- **任务监控空态收起 + ask_user 跟随皮肤（1.105.0-rc18）** —— Agent mode 右侧任务监控侧栏在任务、待办、工作文件、学习建议、后台任务和待处理工具全部清空后会自动收起,避免停在一屏空状态。任务监控栏会展示后台任务状态、命令摘要、耗时、exit code 和停止按钮,失败类任务保留为需要关注内容;后台任务通知按完成 / 失败 / 停止区分标题。`ask_user` 等待回答卡片移除固定紫色,选项、边框、图标和交互工具组强调色改读当前 `interfaceSkin.palette`,并补齐 Send / Skip / 占位符本地化。
+- **后台任务监控与失败通知闭环（1.105.0-rc19）** —— 任务监控 Rail 的 snapshot 纳入后台 job digest,后台任务创建、完成、失败、超时或启动失败都会触发侧栏按需展开判断。系统通知首次授权改为授权回调后继续投递当前提醒,失败 / 超时 / 启动失败即使 App 活跃也走需要关注路径,避免后台任务失败时用户还得主动追问。
 - **Composer 模型热门/上新分组（1.102.0-rc7）** —— Agent composer 模型菜单消费 some.im `/v1/models` / 公开模型定价里的 `is_hot`、`is_new` 标记,在 Recently used 后展示 Hot / New 分组,并与 Recently fetched 去重。
 - **CLI 缺失文件新建（1.102.0-rc2）** —— `willdeep <path>` 现在通过 `willdeep://open?path=...` 把路径交给 App 处理,不存在但父目录存在的文件会自动创建空文件并打开,避免 macOS `open` 在 App 启动前直接报 "does not exist"。
 - **some.im 多模态整合（1.102.0-rc1）** —— Settings 与 Onboarding 新增 some.im 配置入口,API Key 存 Keychain,可拉取模型并设置图片/视频生成首选与优先模型；内置 `generate_image` 工具在 some.im 配置后直接调用 relay 图片生成接口,默认 `gpt-image-2`,并且 OpenAI Chat 兼容请求会过滤 `.widget` / `.workflowReport` 本地卡片,避免 UI-only role 泄漏给 some.im。

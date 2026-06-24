@@ -736,6 +736,10 @@ enum L10n {
         static let statusDone = String(localized: "tool-card.status.done", defaultValue: "Done")
         static let statusFailed = String(localized: "tool-card.status.failed", defaultValue: "Failed")
         static let statusDenied = String(localized: "tool-card.status.denied", defaultValue: "Denied")
+        static let askUserAnswerPlaceholder = String(localized: "tool-card.ask-user.answer-placeholder", defaultValue: "Your answer")
+        static let askUserOtherAnswerPlaceholder = String(localized: "tool-card.ask-user.other-answer-placeholder", defaultValue: "Other answer (optional)")
+        static let askUserSkip = String(localized: "tool-card.ask-user.skip", defaultValue: "Skip")
+        static let askUserSend = String(localized: "tool-card.ask-user.send", defaultValue: "Send")
     }
 
     enum AgentJobs {
@@ -752,6 +756,9 @@ enum L10n {
         static let statusTimedOut = String(localized: "agent-jobs.status.timed-out", defaultValue: "timed out")
         static let statusLaunchFailed = String(localized: "agent-jobs.status.launch-failed", defaultValue: "launch failed")
         static let notificationTitle = String(localized: "agent-jobs.notification.title", defaultValue: "Background job finished")
+        static let notificationTitleCompleted = String(localized: "agent-jobs.notification.title.completed", defaultValue: "Background job finished")
+        static let notificationTitleFailed = String(localized: "agent-jobs.notification.title.failed", defaultValue: "Background job failed")
+        static let notificationTitleStopped = String(localized: "agent-jobs.notification.title.stopped", defaultValue: "Background job stopped")
     }
 
     enum Settings {

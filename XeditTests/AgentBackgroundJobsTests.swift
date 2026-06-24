@@ -88,6 +88,24 @@ struct AgentBackgroundJobsTests {
         }
     }
 
+    /// Only failure-like terminal states should be treated as
+    /// attention-worthy. A user-initiated kill is visible in the
+    /// monitor, but should not be dressed up as an unexpected failure.
+    @Test
+    func attentionStatusesOnlyCoverFailuresAndTimeouts() {
+        for (status, expectedAttention) in [
+            (AgentBackgroundJob.Status.running, false),
+            (.completed, false),
+            (.failed, true),
+            (.killed, false),
+            (.timedOut, true),
+            (.launchFailed, true)
+        ] {
+            let job = makeStubJob(status: status)
+            #expect(job.needsAttention == expectedAttention, "status \(status.rawValue) should needAttention=\(expectedAttention)")
+        }
+    }
+
     /// Empty / whitespace-only commands are rejected at the registry
     /// boundary — runCommand never makes it to the Process. The error
     /// is the typed `.emptyCommand`, not a generic launch failure,

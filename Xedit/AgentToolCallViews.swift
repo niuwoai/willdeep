@@ -9,6 +9,7 @@ import SwiftUI
 import AppKit
 
 struct AgentToolCallGroup: View {
+    @EnvironmentObject var appState: AppState
     let calls: [AgentToolCall]
     /// Optional codex-style headline ("已运行 3 条命令"). When set, it
     /// replaces the default "N tools" label and we also swap the icon
@@ -213,12 +214,12 @@ struct AgentToolCallGroup: View {
     private var groupIconColor: Color {
         if calls.contains(where: { $0.status == .failed }) { return .orange }
         if calls.contains(where: { $0.status == .running }) { return .secondary }
-        if containsInteractiveCall { return .blue }
+        if containsInteractiveCall { return appState.editorSettings.interfaceSkin.palette.accent }
         return .secondary
     }
 
     private var groupBorderColor: Color {
-        if containsInteractiveCall { return Color.blue.opacity(0.28) }
+        if containsInteractiveCall { return appState.editorSettings.interfaceSkin.palette.accent.opacity(0.28) }
         if calls.contains(where: { $0.status == .failed }) { return Color.orange.opacity(0.28) }
         return Color.primary.opacity(0.04)
     }
@@ -399,7 +400,7 @@ struct AgentToolCallCard: View {
 
             // Free-form text input is always available — even with preset
             // options, the user may want to write "none of these".
-            TextField(options.isEmpty ? "Your answer" : "Other answer (optional)",
+            TextField(options.isEmpty ? L10n.ToolCard.askUserAnswerPlaceholder : L10n.ToolCard.askUserOtherAnswerPlaceholder,
                       text: $answerInput,
                       axis: .vertical)
                 .textFieldStyle(.roundedBorder)
@@ -409,12 +410,12 @@ struct AgentToolCallCard: View {
             // rc16:Skip 在左、Send 在右,对齐「正向操作右、误触概率低」的
             // macOS 习惯。Send 的 disabled 状态自然把视觉重心保留在右侧。
             HStack(spacing: 6) {
-                Button("Skip") {
+                Button(L10n.ToolCard.askUserSkip) {
                     appState.denyAgentToolCall(id: call.id)
                     resetAskUserInputs()
                 }
                 Spacer(minLength: 0)
-                Button("Send") {
+                Button(L10n.ToolCard.askUserSend) {
                     submitAnswer(options: options, isMultiSelect: isMultiSelect)
                 }
                 .disabled(!canSubmitAskUser(isMultiSelect: isMultiSelect))
@@ -438,16 +439,16 @@ struct AgentToolCallCard: View {
                         Spacer(minLength: 8)
                         Image(systemName: "arrow.turn.down.left")
                             .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(Color.purple.opacity(0.65))
+                            .foregroundStyle(askUserSecondaryAccentColor.opacity(0.72))
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .foregroundStyle(.primary)
-                    .background(Color.purple.opacity(0.08))
+                    .background(askUserAccentColor.opacity(0.08))
                     .overlay(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(Color.purple.opacity(0.28), lineWidth: 1)
+                            .stroke(askUserAccentColor.opacity(0.28), lineWidth: 1)
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
@@ -475,10 +476,10 @@ struct AgentToolCallCard: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(selectedOptions.contains(option) ? Color.purple.opacity(0.10) : Color(nsColor: .textBackgroundColor).opacity(0.58))
+                .background(selectedOptions.contains(option) ? askUserAccentColor.opacity(0.10) : appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.58))
                 .overlay(
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .stroke(selectedOptions.contains(option) ? Color.purple.opacity(0.32) : Color.primary.opacity(0.08), lineWidth: 1)
+                        .stroke(selectedOptions.contains(option) ? askUserAccentColor.opacity(0.32) : appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
@@ -576,9 +577,9 @@ struct AgentToolCallCard: View {
 
     private var iconColor: Color {
         switch call.status {
-        case .pendingApproval: return .blue
+        case .pendingApproval: return appState.editorSettings.interfaceSkin.palette.accent
         case .awaitingConfirm: return destructiveAccentColor
-        case .awaitingUserAnswer: return .purple
+        case .awaitingUserAnswer: return askUserAccentColor
         case .running: return .secondary
         case .succeeded: return .secondary
         case .failed: return .orange
@@ -588,9 +589,9 @@ struct AgentToolCallCard: View {
 
     private var statusColor: Color {
         switch call.status {
-        case .pendingApproval: return .blue
+        case .pendingApproval: return appState.editorSettings.interfaceSkin.palette.accent
         case .awaitingConfirm: return destructiveAccentColor
-        case .awaitingUserAnswer: return .purple
+        case .awaitingUserAnswer: return askUserAccentColor
         case .failed: return .orange
         case .running, .succeeded, .denied: return .secondary
         }
@@ -646,9 +647,9 @@ struct AgentToolCallCard: View {
 
     private var cardBackground: Color {
         if isInteractive {
-            return Color(nsColor: .controlBackgroundColor).opacity(0.72)
+            return appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72)
         }
-        return Color(nsColor: .controlBackgroundColor).opacity(0.38)
+        return appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.38)
     }
 
     private var statusText: String {
@@ -678,9 +679,9 @@ struct AgentToolCallCard: View {
 
     private var borderColor: Color {
         switch call.status {
-        case .pendingApproval: return Color.blue.opacity(0.4)
+        case .pendingApproval: return appState.editorSettings.interfaceSkin.palette.accent.opacity(0.4)
         case .awaitingConfirm: return destructiveAccentColor.opacity(0.42)
-        case .awaitingUserAnswer: return Color.purple.opacity(0.4)
+        case .awaitingUserAnswer: return askUserAccentColor.opacity(0.4)
         case .failed: return Color.orange.opacity(0.4)
         case .denied: return Color.secondary.opacity(0.3)
         default: return Color.clear
@@ -689,5 +690,13 @@ struct AgentToolCallCard: View {
 
     private var destructiveAccentColor: Color {
         Color(red: 0.68, green: 0.16, blue: 0.16)
+    }
+
+    private var askUserAccentColor: Color {
+        appState.editorSettings.interfaceSkin.palette.accent
+    }
+
+    private var askUserSecondaryAccentColor: Color {
+        appState.editorSettings.interfaceSkin.palette.secondaryAccent
     }
 }

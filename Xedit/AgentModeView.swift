@@ -104,6 +104,11 @@ struct AgentModeView: View {
 
         let baseline = lastTaskMonitorSnapshot ?? oldSnapshot
         defer { lastTaskMonitorSnapshot = newSnapshot }
+        if sidePanel == .backgroundTasks, !newSnapshot.hasVisibleMonitorContent {
+            sidePanel = nil
+            return
+        }
+
         guard didObserveAgentTaskMonitorActivity,
               newSnapshot.hasVisibleMonitorContent,
               newSnapshot != baseline,

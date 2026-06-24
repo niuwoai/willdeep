@@ -28,8 +28,6 @@ import Foundation
 @preconcurrency import UserNotifications
 
 enum AgentToolApprovalNotifier {
-    private static var hasRequestedAuthorization = false
-
     @MainActor
     static func notifyIfBackgrounded(
         toolName: String,
@@ -45,8 +43,6 @@ enum AgentToolApprovalNotifier {
             return
         }
 
-        requestAuthorizationIfNeeded()
-
         let title = titleText(for: status)
         let content = UNMutableNotificationContent()
         content.title = title
@@ -56,20 +52,8 @@ enum AgentToolApprovalNotifier {
             content.attachments = [attachment]
         }
 
-        let center = UNUserNotificationCenter.current()
-        center.getNotificationSettings { settings in
-            guard settings.authorizationStatus == .authorized
-                || settings.authorizationStatus == .provisional else {
-                return
-            }
-            let identifier = "willdeep.agent.toolApproval.\(Int(Date().timeIntervalSince1970 * 1000))"
-            let request = UNNotificationRequest(
-                identifier: identifier,
-                content: content,
-                trigger: nil
-            )
-            center.add(request, withCompletionHandler: nil)
-        }
+        let identifier = "willdeep.agent.toolApproval.\(Int(Date().timeIntervalSince1970 * 1000))"
+        postNotificationWhenAuthorized(identifier: identifier, content: content)
     }
 
     /// Background `run_command` job finished while the user wasn't
@@ -77,8 +61,7 @@ enum AgentToolApprovalNotifier {
     /// notifier — see header comment for rationale.
     @MainActor
     static func notifyJobFinished(job: AgentBackgroundJob) {
-        if NSApp.isActive { return }
-        requestAuthorizationIfNeeded()
+        if NSApp.isActive, !job.needsAttention { return }
 
         let statusWord: String
         switch job.status {
@@ -90,36 +73,60 @@ enum AgentToolApprovalNotifier {
         case .running: return // shouldn't happen — we only fire on finish
         }
         let content = UNMutableNotificationContent()
-        content.title = L10n.AgentJobs.notificationTitle
+        content.title = notificationTitle(for: job)
         // Keep the body short — handle + status is enough to recognize which
         // job finished. The full command used to be dumped here; users found
         // it noisy and it leaked long paths into the banner.
-        content.body = "\(job.displayHandle) · \(statusWord)"
+        content.body = "\(job.displayHandle) · \(statusWord) · \(commandSummary(job.command))"
         content.sound = .default
         if let attachment = AgentNotificationIcon.attachment() {
             content.attachments = [attachment]
         }
 
+        let identifier = "willdeep.agent.jobFinished.\(job.id.uuidString)"
+        postNotificationWhenAuthorized(identifier: identifier, content: content)
+    }
+
+    @MainActor
+    private static func postNotificationWhenAuthorized(
+        identifier: String,
+        content: UNMutableNotificationContent
+    ) {
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in
-            guard settings.authorizationStatus == .authorized
-                || settings.authorizationStatus == .provisional else {
+            switch settings.authorizationStatus {
+            case .authorized, .provisional:
+                addNotification(center: center, identifier: identifier, content: content)
+            case .notDetermined:
+                requestAuthorizationIfNeeded { granted in
+                    guard granted else { return }
+                    addNotification(center: center, identifier: identifier, content: content)
+                }
+            case .denied, .ephemeral:
+                return
+            @unknown default:
                 return
             }
-            let identifier = "willdeep.agent.jobFinished.\(job.id.uuidString)"
-            let request = UNNotificationRequest(
-                identifier: identifier,
-                content: content,
-                trigger: nil
-            )
-            center.add(request, withCompletionHandler: nil)
         }
     }
 
-    private static func requestAuthorizationIfNeeded() {
-        guard !hasRequestedAuthorization else { return }
-        hasRequestedAuthorization = true
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    private static func requestAuthorizationIfNeeded(completion: @escaping (Bool) -> Void) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            completion(granted)
+        }
+    }
+
+    private static func addNotification(
+        center: UNUserNotificationCenter,
+        identifier: String,
+        content: UNMutableNotificationContent
+    ) {
+        let request = UNNotificationRequest(
+            identifier: identifier,
+            content: content,
+            trigger: nil
+        )
+        center.add(request, withCompletionHandler: nil)
     }
 
     private static func titleText(for status: AgentToolCallStatus) -> String {
@@ -166,6 +173,19 @@ enum AgentToolApprovalNotifier {
             return "\(toolName) · \((path as NSString).lastPathComponent)"
         }
         return toolName
+    }
+
+    private static func notificationTitle(for job: AgentBackgroundJob) -> String {
+        switch job.status {
+        case .completed:
+            return L10n.AgentJobs.notificationTitleCompleted
+        case .failed, .timedOut, .launchFailed:
+            return L10n.AgentJobs.notificationTitleFailed
+        case .killed:
+            return L10n.AgentJobs.notificationTitleStopped
+        case .running:
+            return L10n.AgentJobs.notificationTitleCompleted
+        }
     }
 
     /// Condense a shell command to "program" or "program subcommand" so the
