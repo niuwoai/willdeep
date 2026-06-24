@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.107.0-rc6 - 2026-06-24
+
+### Fixed
+- `spawn_agent` 派生的子 agent 在远程(ssh/daemon)workspace 下仍读本地 Mac 的文件,而不是父会话所连的远端机器。根因:`AgentSubagentRunner.executeToolCall` 用 `AgentToolContext(rootDirectory:)` 单参构造工具上下文,丢掉了父会话的 `runtimeDescriptor` 与 `workspaceLocation`,导致 `context.remoteBackend` 为 `nil`,只读工具(`search_files` / `grep_files` / `read_file` / `list_directory` / `git_status` / `run_command`)全部落在本机执行。修复:把父 context 的 `runtimeDescriptor`(`RuntimeDescriptor?`)+ `workspaceLocation`(`WorkspaceLocation?`)沿 `executeSpawnAgentToolCall → AgentSubagentRegistry.startBackground / AgentSubagentRunner.run → executeToolCall → AgentToolContext(...)` 一路透传,前台与后台两条子 agent 路径都让其指向与父会话同一个远端 backend。只读文件工具静态分级 `.read` 不受 `rootDirectory` 影响,照常通过子 agent 的只读闸门执行;远端 `run_command` 仍按既有沙箱策略分级(可能为 `.write` 而被子 agent 拒绝,可接受 —— 子 agent 本就只读)。
+
+### Changed
+- 版本号从 **1.107.0-rc5** 提升为 **1.107.0-rc6**（`spawn_agent` 子 agent 继承父会话远程 backend 的 bugfix）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.107.0-rc5 - 2026-06-24
 
 ### Fixed

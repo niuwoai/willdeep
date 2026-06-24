@@ -740,7 +740,9 @@ extension AppState {
                         arguments: argsDict,
                         runtime: runtime,
                         configuration: configuration,
-                        workspaceURL: workspaceURL
+                        workspaceURL: workspaceURL,
+                        runtimeDescriptor: remoteRuntimeDescriptor,
+                        workspaceLocation: workspaceLocation
                     )
                     continue
                 }
@@ -945,7 +947,9 @@ extension AppState {
         arguments: [String: AgentJSONValue],
         runtime: AgentRuntime,
         configuration: AgentConfiguration,
-        workspaceURL: URL?
+        workspaceURL: URL?,
+        runtimeDescriptor: RuntimeDescriptor?,
+        workspaceLocation: WorkspaceLocation?
     ) async {
         func finishRecord(status: AgentToolCallStatus, summary: String, payload: String, errorMessage: String? = nil) {
             if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
@@ -997,6 +1001,8 @@ extension AppState {
                     label: label,
                     configuration: childConfiguration,
                     workspaceURL: workspaceURL,
+                    runtimeDescriptor: runtimeDescriptor,
+                    workspaceLocation: workspaceLocation,
                     parentRuntimeID: runtime.id
                 )
                 finishRecord(
@@ -1019,7 +1025,9 @@ extension AppState {
             let outcome = try await AgentSubagentRunner.run(
                 prompt: prompt,
                 configuration: childConfiguration,
-                workspaceURL: workspaceURL
+                workspaceURL: workspaceURL,
+                runtimeDescriptor: runtimeDescriptor,
+                workspaceLocation: workspaceLocation
             )
             let stats = "(subagent \(label): \(outcome.roundCount) round\(outcome.roundCount == 1 ? "" : "s"), \(outcome.toolInvocationCount) tool call\(outcome.toolInvocationCount == 1 ? "" : "s")\(outcome.usageTokens > 0 ? ", \(outcome.usageTokens) tokens" : ""))"
             finishRecord(

@@ -120,6 +120,8 @@ final class AgentSubagentRegistry: ObservableObject {
         label: String,
         configuration: AgentConfiguration,
         workspaceURL: URL?,
+        runtimeDescriptor: RuntimeDescriptor? = nil,
+        workspaceLocation: WorkspaceLocation? = nil,
         parentRuntimeID: UUID
     ) throws -> AgentSubagentRun {
         guard activeCount(forParentRuntime: parentRuntimeID) < Self.maxConcurrentPerRuntime else {
@@ -144,7 +146,9 @@ final class AgentSubagentRegistry: ObservableObject {
                 outcome = try await AgentSubagentRunner.run(
                     prompt: prompt,
                     configuration: configuration,
-                    workspaceURL: workspaceURL
+                    workspaceURL: workspaceURL,
+                    runtimeDescriptor: runtimeDescriptor,
+                    workspaceLocation: workspaceLocation
                 )
             } catch is CancellationError {
                 self?.finish(id: id, status: .cancelled, report: "(subagent cancelled)")
@@ -325,10 +329,17 @@ enum AgentSubagentRunner {
     /// 再 Codable 解到 typed model)。任何一次校验失败的 `structured_output`
     /// 调用都会把 issues 当作 tool result 回灌给模型,让它在剩余轮次内
     /// 重试。最终 round cap 到了仍没成功 → 抛 `WorkflowError.structuredOutputUnavailable`。
+    /// `runtimeDescriptor` + `workspaceLocation` carry the parent session's
+    /// remote runtime binding. When the parent workspace is an ssh/daemon
+    /// runtime these must be forwarded, otherwise the child's
+    /// `AgentToolContext.remoteBackend` is nil and read-only tools run
+    /// against the local Mac instead of the remote box.
     static func run(
         prompt: String,
         configuration: AgentConfiguration,
         workspaceURL: URL?,
+        runtimeDescriptor: RuntimeDescriptor? = nil,
+        workspaceLocation: WorkspaceLocation? = nil,
         outputSchema: AgentStructuredSchema? = nil
     ) async throws -> Outcome {
         let client = AgentClient(configuration: configuration)
@@ -411,7 +422,12 @@ enum AgentSubagentRunner {
             for call in toolCalls where call.toolName != structuredOutputToolName {
                 try Task.checkCancellation()
                 toolInvocations += 1
-                let payload = await executeToolCall(call, workspaceURL: workspaceURL)
+                let payload = await executeToolCall(
+                    call,
+                    workspaceURL: workspaceURL,
+                    runtimeDescriptor: runtimeDescriptor,
+                    workspaceLocation: workspaceLocation
+                )
                 transcript.append(AgentMessage(
                     role: .tool,
                     content: payload,
@@ -498,7 +514,9 @@ enum AgentSubagentRunner {
     /// what went wrong and adapt, exactly like the parent loop does.
     private static func executeToolCall(
         _ call: AgentMessageToolCall,
-        workspaceURL: URL?
+        workspaceURL: URL?,
+        runtimeDescriptor: RuntimeDescriptor? = nil,
+        workspaceLocation: WorkspaceLocation? = nil
     ) async -> String {
         guard allowedToolNames.contains(call.toolName) else {
             return "Denied: tool `\(call.toolName)` is not available to subagents. Available tools: \(allowedToolNames.sorted().joined(separator: ", "))."
@@ -524,7 +542,14 @@ enum AgentSubagentRunner {
             return "Denied: subagents may only run read-only operations, and this call classified as `\(risk.rawValue)`. Report the suggested change to the parent agent instead of performing it."
         }
 
-        let context = AgentToolContext(rootDirectory: workspaceURL)
+        // Forward the parent's remote runtime binding so read-only tools
+        // resolve `context.remoteBackend` and execute on the same ssh/daemon
+        // box the parent uses — not the local Mac.
+        let context = AgentToolContext(
+            rootDirectory: workspaceURL,
+            workspaceLocation: workspaceLocation,
+            runtimeDescriptor: runtimeDescriptor
+        )
         do {
             let result = try await AgentToolRunner.run(
                 name: call.toolName,
