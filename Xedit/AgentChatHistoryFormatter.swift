@@ -406,23 +406,22 @@ enum AgentChatHistoryRenderer {
                 )
                 if hasMessageBubbleContent && message.toolCalls.isEmpty {
                     let messageRange = NSRange(location: messageBubbleStart, length: result.length - messageBubbleStart)
-                    if message.role == .user && !isHoveredUserMessage {
-                        applyBodyChrome(
-                            to: result,
-                            range: messageRange,
-                            paragraphStyle: bodyParagraphStyle(for: message.role),
-                            userMessageID: message.id
-                        )
-                    } else {
-                        applyBubbleChrome(
-                            kind: bubbleKind(for: message.role),
-                            to: result,
-                            range: messageRange,
-                            paragraphStyle: bodyParagraphStyle(for: message.role),
-                            userMessageID: message.role == .user ? message.id : nil,
-                            foregroundColor: nil
-                        )
-                    }
+                    // Always draw the bubble across body + footer so the
+                    // rounded rect wraps the timestamp/copy row and the
+                    // bubble is the SAME size at rest as on hover — only the
+                    // copy/clock chrome's *visibility* is hover-gated (via
+                    // `isVisible` on appendMessageFooter above). Previously
+                    // the rest state used applyBodyChrome (no bubbleKind on
+                    // the footer range), so the footer fell outside the
+                    // rounded rect and the bubble grew on hover.
+                    applyBubbleChrome(
+                        kind: bubbleKind(for: message.role),
+                        to: result,
+                        range: messageRange,
+                        paragraphStyle: bodyParagraphStyle(for: message.role),
+                        userMessageID: message.role == .user ? message.id : nil,
+                        foregroundColor: nil
+                    )
                     let footerRange = NSRange(location: footerStart, length: result.length - footerStart)
                     result.addAttribute(
                         .paragraphStyle,

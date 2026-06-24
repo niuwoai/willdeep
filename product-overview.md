@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-24 | Current version: v1.108.0-rc6
+> Last updated: 2026-06-24 | Current version: v1.108.0-rc7
 
 ## Positioning
 
@@ -70,6 +70,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **Agent Mode 交互式远程终端（1.106.0-rc1）** —— Agent mode 右侧辅助栏新增 Terminal 面板,复用 Settings → Runtimes 的 SSH 配置启动真实 `/usr/bin/ssh -tt` 交互式 PTY。每台 runtime 可配置启动目录、自动命令、二跳命令、命令间隔、空闲超时和常用服务名;连接顺序固定为主机连接 → 自动命令 → 二跳命令。AI 通过 `terminal_snapshot` 只读当前终端输出,通过 `terminal_send_command` / `terminal_send_control` 写入时仍走现有审批卡;面板内提供 systemctl、journalctl、docker 等常用服务命令模板。
 - **代码块复制状态与横向滚动修复（1.106.0-rc2）** —— TextKit 聊天历史里的 fenced code 复制控件现在会把图标和文字作为同一个可替换范围处理,点击复制后只显示一个 `Done`,3 秒后按按钮实例独立恢复为可复制状态;代码块正文不再自动折行,在代码块区域横向滚动可查看长命令、长路径和长单行输出的完整内容。
 - **CI xcodebuild 收尾 watchdog（1.106.0-rc3）** —— GitHub macOS runner 上如果 Swift 测试已经整轮通过但 `xcodebuild` 收尾不退出,`scripts/xcodebuild_ci.rb` 会在宽限期后清理 stale 进程,保留 `xcodebuild.log` 与 `xcresult` 报告,避免 CI job 被 30 分钟总超时误伤。
+- **用户气泡圆角矩形包住时间戳/复制行（1.108.0-rc7）** —— Agent mode 用户消息气泡非 hover 时只包正文、把底部时间戳/复制行漏在框外,hover 又变大。根因:TextKit 渲染里正文带 `.agentChatHistoryBubbleKind`(画气泡),但非 hover 时 footer 走 `applyBodyChrome`(无 bubbleKind)。修复:用户消息正文+footer 整段恒走 `applyBubbleChrome`,气泡恒为 hover 大小并包住时间戳/复制;复制图标可见性仍 hover 门控但占位计入气泡,rest/hover 尺寸一致不跳动。
 - **Agent 窗口 ⌘N 改为「新聊天」+ 新开窗口焦点落到输入框（1.108.0-rc6）** —— 两个 agent 窗口的 UX bugfix。其一:侧边栏「新聊天」画着 `⌘N` 标签却只是装饰,真 ⌘N 全局命令一直硬绑「开新 editor 窗口」,用户在 agent 窗口按 ⌘N 弹出的是空文件 editor 窗口。修法:新增 `FocusedValues.agentWindowActive`,agent 窗口 `.focusedSceneValue` 在自己 key 时打标记,⌘N 命令读 `@FocusedValue` 分流——agent 前台→`startNewAgentSession()`(经 `EditorAppStateRegistry.shared.current`,agent 窗口不走 `setCurrent` 故 `@FocusedObject` 取不到)并置焦输入框;editor 前台→维持开新窗口。菜单标题随上下文在「新聊天/新建窗口」间切。焦点值用常量 `true`,不在闭包捕获 AppState,避开流式每 token 重算菜单树的老坑。其二:agent 窗口新开时 AppKit 把默认 first responder 给到侧边栏第一个按钮,原 `.onAppear` 同步置焦被盖掉;改到 `DispatchQueue.main.async` 下一拍置焦,焦点稳落输入框、开门见山能打字。
 - **CI watchdog 静默超时兜底,修每次发布卡满 30 分钟超时（1.108.0-rc5）** —— `xcodebuild test` 在 macOS runner 上经常在所有测试已通过后 hang 住、既不打印整体 `Test run … passed` 收尾行也不退出。原 `scripts/xcodebuild_ci.rb` 的 watchdog 只在**匹配到那行收尾文本后**才启动 180s 宽限计时,而 hang 恰恰发生在打印那行**之前** → 宽限永不触发 → job 一路挂到 GitHub 30 分钟硬超时被杀,CI 标红(rc6/rc3/rc4 连续中招,测试其实全过)。且即便杀掉,退出码逻辑因没见到收尾行会误判 `exit 1`。修复:给 watchdog 加**输出静默超时(`--idle-timeout`,默认 180s)**——一旦检测到测试活动(`Test Suite … started/passed`、`◇/✔/✘ Test …`),只要 xcodebuild 连续 180s 无任何输出即判定 stale hang 并 TERM/KILL 进程组,不再依赖脆弱的收尾文本;退出码改为「到达测试阶段且全程无失败标记 → exit 0,出现过失败 → exit 1」。构建/链接期(无测试活动标记)不武装 idle,避免误杀。本机 ruby 烟雾测试覆盖通过后 hang、失败后 hang、构建期静默三种场景。
 - **`glob` 幻觉工具兼容别名（1.108.0-rc4）** —— 模型有时幻觉调用并不存在的 `glob`(在 Claude Code 等框架见过 `Glob`),WillDeep 不暴露 `glob`,它落到「未知工具」分支被风险分类器一律判 `.danger`,弹「破坏性命令,确认后再执行」,而确认后又 `throw unknownTool` 必失败——纯只读列文件被当破坏性且注定报错。修复:注册隐形 `glob` 兼容别名(不向模型宣传,正道仍 `grep_files`/`list_directory`),`risk(for:)` 判 `.read`,新增 `AgentFileTools.glob` 做只读 workspace 路径扫描(复用 `fnmatch`/`globMatches`,支持 `**`/`*`/`?`/`[...]`/`{a,b}`)。越界到 workspace 外(如 `~/.willdeep/skills/…`)不开安全口子而引导用 `list_skills`/`read_skill`;远程引导用 `grep_files`/`list_directory`。

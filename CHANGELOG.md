@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.108.0-rc7 - 2026-06-24
+
+### Fixed
+- Agent mode 用户消息气泡的圆角矩形在「非 hover」时只包住正文,没把底部的时间戳 / 复制按钮那一行包进去,hover 时气泡又会变大 —— 大小不一致、复制按钮露在框外。根因:TextKit 历史渲染里,正文 range 一直带 `.agentChatHistoryBubbleKind`(所以画气泡),但 footer range 在非 hover 时走的是 `applyBodyChrome`(不带 bubbleKind),气泡就不覆盖 footer 行。修复:用户消息的「正文 + footer」整段始终走 `applyBubbleChrome`,气泡恒定为 hover 大小并包住时间戳 / 复制行;复制等交互图标的「可见性」仍只在 hover 时显示(`appendMessageFooter` 的 `isVisible` 不变),但其占位空间已计入气泡,rest 与 hover 尺寸一致、不再跳动。
+
+### Changed
+- 版本号从 **1.108.0-rc6** 提升为 **1.108.0-rc7**（用户气泡圆角矩形包住 footer / 复制按钮,rest 与 hover 尺寸一致）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.108.0-rc6 - 2026-06-24
 
 ### Fixed
