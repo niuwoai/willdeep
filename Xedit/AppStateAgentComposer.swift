@@ -966,6 +966,17 @@ extension AppState {
         agentPendingTextAttachments.removeAll { $0.id == id }
     }
 
+    func prefillAgentJobInspectionPrompt(for job: AgentBackgroundJob) {
+        let prompt = L10n.AgentJobs.inspectOutputPrompt(job.displayHandle)
+        let trimmedInput = agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedInput.isEmpty {
+            agentInput = prompt
+        } else if !agentInput.contains(job.displayHandle) {
+            agentInput += "\n\n\(prompt)"
+        }
+        agentComposerFocusRevision += 1
+    }
+
     private func stageEditorSelection(_ selection: AgentEditorSelectionContext, prefillQuestion: Bool) {
         let content = AgentTextAttachment.sanitizedPastedContent(selection.text)
         guard !content.isEmpty else { return }

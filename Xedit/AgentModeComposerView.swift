@@ -496,6 +496,9 @@ private struct ComposerCard: View {
                 .stroke(palette.hairline, lineWidth: 1)
         )
         .onAppear { inputFocused = true }
+        .onCompatibleChange(of: appState.agentComposerFocusRevision) { _, _ in
+            inputFocused = true
+        }
     }
 
     /// Runs the currently-highlighted slash command. Returns true when a

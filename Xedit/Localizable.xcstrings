@@ -212,6 +212,42 @@
         }
       }
     },
+    "agent-jobs.inspect-output.help" : {
+      "comment" : "Tooltip for clicking a background job row in the task monitor",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fill the composer with a request to inspect this job"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在输入框中填入查看这个任务的请求"
+          }
+        }
+      }
+    },
+    "agent-jobs.inspect-output.prompt" : {
+      "comment" : "Composer prefill text inserted when the user clicks a background job row; placeholders are the same job handle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check background job %1$@ status and output: get_job_output(job_id: \"%2$@\")"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请查看后台任务 %1$@ 的状态和输出：get_job_output(job_id: \"%2$@\")"
+          }
+        }
+      }
+    },
     "agent-jobs.notification.title" : {
       "comment" : "System notification banner title when a background job completes while the app is not active",
       "extractionState" : "manual",

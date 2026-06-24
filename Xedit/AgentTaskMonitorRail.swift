@@ -43,9 +43,15 @@ struct AgentTaskMonitorRail: View {
             if !runtimeJobs.isEmpty {
                 VStack(alignment: .leading, spacing: 7) {
                     ForEach(runtimeJobs.prefix(6)) { job in
-                        AgentRailJobRow(job: job) {
-                            _ = appState.agentJobRegistry.kill(id: job.id)
-                        }
+                        AgentRailJobRow(
+                            job: job,
+                            inspect: {
+                                appState.prefillAgentJobInspectionPrompt(for: job)
+                            },
+                            kill: {
+                                _ = appState.agentJobRegistry.kill(id: job.id)
+                            }
+                        )
                     }
                     if runtimeJobs.count > 6 {
                         Text("还有 \(runtimeJobs.count - 6) 个后台任务")
@@ -489,26 +495,61 @@ private struct AgentRailDirectoryGroup: Identifiable {
 
 private struct AgentRailJobRow: View {
     let job: AgentBackgroundJob
+    let inspect: () -> Void
     let kill: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 7) {
-                Image(systemName: iconName)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(tint)
-                    .frame(width: 15)
-                Text(job.displayHandle)
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.primary)
-                Text(statusText)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(tint)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(tint.opacity(0.12))
-                    .clipShape(Capsule())
-                Spacer(minLength: 0)
+        HStack(alignment: .top, spacing: 6) {
+            Button(action: inspect) {
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 7) {
+                        Image(systemName: iconName)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(tint)
+                            .frame(width: 15)
+                        Text(job.displayHandle)
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.primary)
+                        Text(statusText)
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(tint)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(tint.opacity(0.12))
+                            .clipShape(Capsule())
+                        Spacer(minLength: 0)
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(job.command)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .textSelection(.enabled)
+                    HStack(spacing: 6) {
+                        Text(Self.formatDuration(job.duration))
+                            .font(.system(size: 10).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                        if let exitCode = job.exitCode {
+                            Text("exit \(exitCode)")
+                                .font(.system(size: 10, weight: .medium).monospacedDigit())
+                                .foregroundStyle(exitCode == 0 ? .green : .red)
+                        }
+                        if job.outputByteCount > 0 {
+                            Text("\(job.outputByteCount) B")
+                                .font(.system(size: 10).monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(L10n.AgentJobs.inspectOutputHelp)
+
+            VStack(spacing: 0) {
                 if job.isAlive {
                     Button(action: kill) {
                         Image(systemName: "stop.circle")
@@ -516,27 +557,6 @@ private struct AgentRailJobRow: View {
                     }
                     .buttonStyle(.borderless)
                     .help(L10n.AgentJobs.kill)
-                }
-            }
-            Text(job.command)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .truncationMode(.tail)
-                .textSelection(.enabled)
-            HStack(spacing: 6) {
-                Text(Self.formatDuration(job.duration))
-                    .font(.system(size: 10).monospacedDigit())
-                    .foregroundStyle(.secondary)
-                if let exitCode = job.exitCode {
-                    Text("exit \(exitCode)")
-                        .font(.system(size: 10, weight: .medium).monospacedDigit())
-                        .foregroundStyle(exitCode == 0 ? .green : .red)
-                }
-                if job.outputByteCount > 0 {
-                    Text("\(job.outputByteCount) B")
-                        .font(.system(size: 10).monospacedDigit())
-                        .foregroundStyle(.secondary)
                 }
             }
         }

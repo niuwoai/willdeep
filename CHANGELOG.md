@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.105.0-rc20 - 2026-06-24
+
+### Fixed
+- 任务监控 Rail 的后台任务行现在可点击，点击会把 `get_job_output(job_id: "...")` 查看请求预填到聊天输入框，并把焦点带回 composer；停止按钮保持独立，不会误触发预填。
+- 查看后台任务输出的预填文案与提示补走 `L10n.AgentJobs`，避免新增可见文本绕过本地化。
+
+### Changed
+- 版本号从 **1.105.0-rc19** 提升为 **1.105.0-rc20**（任务监控后台任务点击查看 / 预填 composer 修复）。pbxproj×6 / Go agent / Help Info.plist / README badge / product-overview / docs ×2 同步。
+
 ## 1.105.0-rc19 - 2026-06-24
 
 ### Fixed

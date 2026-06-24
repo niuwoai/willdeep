@@ -106,6 +106,17 @@ struct AgentBackgroundJobsTests {
         }
     }
 
+    /// Clicking a job in the task monitor pre-fills the composer with
+    /// the model-facing output tool call. Keep that generated prompt
+    /// anchored to the stable handle and tool name.
+    @Test
+    func inspectionPromptIncludesHandleAndOutputToolCall() {
+        let prompt = L10n.AgentJobs.inspectOutputPrompt("job_ab12cd")
+        #expect(prompt.contains("job_ab12cd"))
+        #expect(prompt.contains("get_job_output"))
+        #expect(prompt.contains("job_id"))
+    }
+
     /// Empty / whitespace-only commands are rejected at the registry
     /// boundary — runCommand never makes it to the Process. The error
     /// is the typed `.emptyCommand`, not a generic launch failure,

@@ -755,10 +755,19 @@ enum L10n {
         static let statusKilled = String(localized: "agent-jobs.status.killed", defaultValue: "killed")
         static let statusTimedOut = String(localized: "agent-jobs.status.timed-out", defaultValue: "timed out")
         static let statusLaunchFailed = String(localized: "agent-jobs.status.launch-failed", defaultValue: "launch failed")
+        static let inspectOutputHelp = String(localized: "agent-jobs.inspect-output.help", defaultValue: "Fill the composer with a request to inspect this job")
         static let notificationTitle = String(localized: "agent-jobs.notification.title", defaultValue: "Background job finished")
         static let notificationTitleCompleted = String(localized: "agent-jobs.notification.title.completed", defaultValue: "Background job finished")
         static let notificationTitleFailed = String(localized: "agent-jobs.notification.title.failed", defaultValue: "Background job failed")
         static let notificationTitleStopped = String(localized: "agent-jobs.notification.title.stopped", defaultValue: "Background job stopped")
+
+        static func inspectOutputPrompt(_ jobID: String) -> String {
+            let template = String(
+                localized: "agent-jobs.inspect-output.prompt",
+                defaultValue: "Check background job %@ status and output: get_job_output(job_id: \"%@\")"
+            )
+            return String(format: template, jobID, jobID)
+        }
     }
 
     enum Settings {
