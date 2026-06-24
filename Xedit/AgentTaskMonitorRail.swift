@@ -42,19 +42,27 @@ struct AgentTaskMonitorRail: View {
             }
             if !runtimeJobs.isEmpty {
                 VStack(alignment: .leading, spacing: 7) {
-                    ForEach(runtimeJobs.prefix(6)) { job in
-                        AgentRailJobRow(
-                            job: job,
-                            inspect: {
-                                appState.prefillAgentJobInspectionPrompt(for: job)
-                            },
-                            kill: {
-                                _ = appState.agentJobRegistry.kill(id: job.id)
+                    // 最近任务最多展示 3 条，超出部分在内部纵向滚动，
+                    // 避免任务列表把下方「待办/产物/工作文件」等模块撑出可视区域。
+                    ScrollView(.vertical, showsIndicators: true) {
+                        VStack(alignment: .leading, spacing: 7) {
+                            ForEach(runtimeJobs.prefix(monitorJobDisplayLimit)) { job in
+                                AgentRailJobRow(
+                                    job: job,
+                                    inspect: {
+                                        appState.prefillAgentJobInspectionPrompt(for: job)
+                                    },
+                                    kill: {
+                                        _ = appState.agentJobRegistry.kill(id: job.id)
+                                    }
+                                )
                             }
-                        )
+                        }
                     }
-                    if runtimeJobs.count > 6 {
-                        Text("还有 \(runtimeJobs.count - 6) 个后台任务")
+                    .frame(maxHeight: monitorJobListMaxHeight)
+                    .fixedSize(horizontal: false, vertical: true)
+                    if runtimeJobs.count > monitorJobDisplayLimit {
+                        Text("还有 \(runtimeJobs.count - monitorJobDisplayLimit) 个后台任务")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -176,6 +184,12 @@ struct AgentTaskMonitorRail: View {
         guard let runtimeID = appState.activeAgentSessionID else { return [] }
         return appState.agentJobRegistry.jobs(forRuntime: runtimeID)
     }
+
+    /// 任务监控里「最近任务」最多展示的条数。
+    private var monitorJobDisplayLimit: Int { 3 }
+
+    /// 最近任务列表的最大高度，超出后内部纵向滚动，避免撑爆右栏其余模块。
+    private var monitorJobListMaxHeight: CGFloat { 232 }
 
     private func todoStatus(
         for stepStatus: AgentPlan.StepStatus,
