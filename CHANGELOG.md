@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.108.0-rc12 - 2026-06-24
+
+### Changed
+- 侧边栏终端内容左右各加 8pt 留白,不再怼着边缘(尤其左边贴得太近)。[AgentSidePanelTerminalView.swift](Xedit/AgentSidePanelTerminalView.swift) 给终端 surface 加 `.padding(.horizontal, 8)`,并用 `.background(terminalBackground)` 把留白区域填成和终端一致的背景色(跟随 skin 时取 `skin.background`,否则取 `colorScheme.background`,镜像 `TerminalAppearance.apply` 的取色),所以留白读起来是终端从边缘「呼吸」开,而不是露出一条窗口底色竖纹。
+- 版本号从 **1.108.0-rc11** 提升为 **1.108.0-rc12**（侧边栏终端左右留白）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.108.0-rc11 - 2026-06-24
 
 ### Fixed

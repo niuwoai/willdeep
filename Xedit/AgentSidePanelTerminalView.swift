@@ -27,6 +27,16 @@ struct AgentSidePanelTerminalView: View {
             : nil
     }
 
+    /// Resolved terminal background, mirroring `TerminalAppearance.apply`.
+    /// Used to fill the horizontal padding gutter so the inset reads as the
+    /// terminal breathing from the edges rather than a stripe of window chrome.
+    private var terminalBackground: Color {
+        if settings.followsInterfaceSkin, let skin = skinColors {
+            return Color(nsColor: skin.background)
+        }
+        return Color(nsColor: settings.colorScheme.background)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             tabBar
@@ -153,6 +163,8 @@ struct AgentSidePanelTerminalView: View {
     private var terminalSurface: some View {
         if let tab = controller.activeTab {
             AgentTerminalViewRepresentable(terminalView: tab.terminalView)
+                .padding(.horizontal, 8)
+                .background(terminalBackground)
                 .id(tab.id)
         } else {
             VStack(spacing: 8) {
