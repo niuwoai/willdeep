@@ -155,11 +155,13 @@ struct EditorTerminalFont: Identifiable, Equatable {
         [.systemMono, .sfMono, .menlo, .monaco] + installedNerdFonts()
     }
 
-    /// Default font id for a fresh terminal: prefer an installed Nerd
-    /// Font so prompt themes render correctly out of the box; otherwise
-    /// fall back to the system monospace.
+    /// Default font id for a fresh terminal: Monaco (ships with macOS,
+    /// clean classic terminal look). Note this is not a Nerd Font, so
+    /// prompt themes (powerlevel10k / starship) that use Nerd Font icons
+    /// will show placeholder boxes until the user picks an installed
+    /// Nerd Font in Settings.
     static var preferredDefaultID: String {
-        installedNerdFonts().first?.id ?? systemMono.id
+        monaco.id
     }
 
     static func byID(_ id: String) -> EditorTerminalFont? {

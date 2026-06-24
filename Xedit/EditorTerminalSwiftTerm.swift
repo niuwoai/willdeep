@@ -90,12 +90,20 @@ final class EditorTerminalSession: ObservableObject, LocalProcessTerminalViewDel
     @Published var workingDirectoryPath: String = FileManager.default.homeDirectoryForCurrentUser.path
     @Published private(set) var isRunning = false
 
-    let terminalView: AgentLocalProcessTerminalView
+    /// Created lazily on first access (i.e. when the editor terminal pane
+    /// is actually shown). AppState holds an EditorTerminalSession as a
+    /// stored property, so eager creation here would spin up a SwiftTerm
+    /// (Metal-backed) NSView for every AppState() — including the many
+    /// constructed in headless unit tests, where GPU/Metal view init is
+    /// unsafe and crashed CI. Lazy keeps test-time AppState() cheap and
+    /// view-free.
+    lazy var terminalView: AgentLocalProcessTerminalView = {
+        let view = AgentLocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 640, height: 220))
+        view.processDelegate = self
+        return view
+    }()
 
-    init() {
-        terminalView = AgentLocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 640, height: 220))
-        terminalView.processDelegate = self
-    }
+    init() {}
 
     func setWorkingDirectory(_ url: URL) {
         workingDirectoryPath = url.standardizedFileURL.path

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.108.0-rc2 - 2026-06-24
+
+### Fixed
+- 修复 1.108.0-rc1 的 CI 失败（exit 65）：`EditorTerminalSession` 在 `init` 里就创建 SwiftTerm（Metal 支持的）`TerminalView`，而 `AppState` 把它作为存储属性持有，于是每次 `AppState()` —— 包括单元测试里大量构造的 —— 都会在无显示的 CI 虚拟机里初始化 Metal 视图并崩溃。改成 `lazy`，只在编辑器终端面板真正显示、首次访问 `terminalView` 时才创建；测试期 `AppState()` 不再创建任何终端视图（与侧栏终端的懒加载一致）。
+
+### Changed
+- 终端默认字体改为 **Monaco**（macOS 自带，经典等宽观感）。注意 Monaco 不是 Nerd Font，powerlevel10k / starship 等用 Nerd Font 图标的主题在默认字体下会显示成方框，需要在 Settings → 终端字体里选一个已安装的 Nerd Font。只影响新装/重置时的默认值；已设置过字体的用户不变，可在设置里手动选 Monaco。
+- 版本号从 **1.108.0-rc1** 提升为 **1.108.0-rc2**（终端默认字体改为 Monaco）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.108.0-rc1 - 2026-06-24
 
 ### Added
