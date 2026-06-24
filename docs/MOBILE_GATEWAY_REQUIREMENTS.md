@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-06-24 | Target version: v1.108.0-rc19
+> Last updated: 2026-06-24 | Target version: v1.108.0-rc20
 
 ## Summary
 
@@ -66,8 +66,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.108.0-rc19`
-- `X-Server-Version: 1.108.0-rc19`
+- `X-App-Version: 1.108.0-rc20`
+- `X-Server-Version: 1.108.0-rc20`
 
 ### `GET /mobile/health`
 
@@ -79,7 +79,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.108.0-rc19",
+    "version": "1.108.0-rc20",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"

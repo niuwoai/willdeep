@@ -184,12 +184,16 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
         switch kind {
         case .localShell:
             let shell = Self.loginShellPath()
+            // No workspace → open the shell in the user's home, never the app
+            // process cwd (which is "/" for a bundled app). A fresh terminal
+            // should land in the current workspace or ~, not the filesystem root.
+            let cwd = workingDirectory ?? FileManager.default.homeDirectoryForCurrentUser.path
             terminalView.startProcess(
                 executable: shell,
                 args: ["-l"],
                 environment: env,
                 execName: "-" + (shell as NSString).lastPathComponent,
-                currentDirectory: workingDirectory
+                currentDirectory: cwd
             )
         case .ssh(_, _, let target):
             guard let descriptor = sshDescriptor() else {

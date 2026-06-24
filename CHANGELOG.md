@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.108.0-rc20 - 2026-06-24
+
+### Fixed
+- 新建本地侧边栏终端时落在文件系统根目录 `/`，而不是当前 workspace 或 home。根因：没有 workspace 时 UI 传给 shell 的工作目录是 nil，SwiftTerm 不设 `currentDirectory`，子进程便继承 app 进程的 cwd（bundled app 启动时是 `/`）。修复 [AgentInteractiveTerminal.swift](Xedit/AgentInteractiveTerminal.swift)：本地 shell 启动时 `workingDirectory ?? FileManager.default.homeDirectoryForCurrentUser.path`——有 workspace 用 workspace，否则回退到 `~`，绝不再用 `/`。兜底放在 shell 启动处，覆盖所有建标签路径（含默认自动建的标签）。
+
+### Changed
+- 版本号从 **1.108.0-rc19** 提升为 **1.108.0-rc20**（新建本地终端回退到 workspace / home 而非根目录）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.108.0-rc19 - 2026-06-24
 
 ### Fixed
