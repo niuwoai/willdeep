@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.107.0-rc1 - 2026-06-24
+
+### Added
+- **侧栏终端重写为 SwiftTerm 多标签本地终端。** 集成 SwiftTerm（`LocalProcessTerminalView`），侧栏终端现在是真·VT100/ANSI 终端仿真：颜色、光标寻址、vim/htop/less 等全屏 TUI 正常渲染，用户输入体验与 Terminal / Ghostty 一致。
+  - **默认本地 shell**：新标签默认起一个本地登录 shell（`$SHELL -l`，工作目录跟随当前 agent 会话的 workspace），不再必须先配置 SSH。SSH 仍可用 —— `+` 菜单里选某个 runtime 即以 `ssh -tt` 起一个 SSH 标签。
+  - **多标签**：支持多个终端标签，标签栏可切换 / 关闭 / `+` 新建；每个标签是独立的终端会话与进程。
+  - **会话归属**：每个标签记住「由哪个 agent 会话打开」（`originAgentSessionID`），当前会话打开的标签在标签栏高亮描边，tooltip 注明。
+  - **空闲自动回收**：每 30s 采样各标签缓冲区，空闲超过 5 分钟的后台标签自动终止并移除；当前正在查看的标签永不被回收。
+  - Agent 工具 `terminal_snapshot` / `terminal_send_command` / `terminal_send_control` 改为作用于当前活动标签，快照从 SwiftTerm 缓冲区读取可见屏幕并脱敏，写操作仍需用户审批。
+- CI 新增「Ensure Metal toolchain」步骤：SwiftTerm 编译 Metal shader，Xcode 26 把 Metal 编译器拆成按需组件，CI 先确保其存在（已存在则秒过）。`actions/setup-go` 从 v5 升到 v6（Node.js 24，消除 Node 20 弃用告警）。
+
+### Changed
+- 版本号从 **1.106.0-rc3** 提升为 **1.107.0-rc1**（侧栏 SwiftTerm 多标签本地终端新功能）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。新增 SwiftTerm 1.13.0 + swift-argument-parser 1.8.2 SPM 依赖（`Package.resolved` 已锁定）。
+
 ## 1.106.0-rc3 - 2026-06-24
 
 ### Fixed

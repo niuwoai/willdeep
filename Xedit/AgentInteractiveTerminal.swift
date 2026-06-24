@@ -2,13 +2,26 @@
 //  AgentInteractiveTerminal.swift
 //  WillDeep
 //
-//  Interactive Agent-mode terminal sessions. Kept separate from the editor
-//  bottom terminal so Agent tools can read/send through one audited surface.
+//  Interactive Agent-mode terminal. Rebuilt on SwiftTerm
+//  (LocalProcessTerminalView) so each tab is a real VT100/ANSI terminal
+//  emulator — colors, cursor addressing, and full-screen TUIs (vim,
+//  htop, less) render correctly, and user typing behaves like Terminal /
+//  Ghostty. Supports multiple tabs, defaults to a LOCAL login shell (no
+//  SSH required), remembers which Agent session opened each tab, and
+//  reaps tabs that sit idle for too long.
+//
+//  Agent tools (terminal_snapshot / terminal_send_command /
+//  terminal_send_control) operate on the active tab through the same
+//  controller surface as before.
 //
 
+import AppKit
 import Combine
 import Darwin
 import Foundation
+import SwiftTerm
+
+// MARK: - Runtime terminal profile (unchanged surface; used by SSH tabs)
 
 struct RuntimeTerminalProfile: Codable, Equatable {
     var startupDirectory: String
@@ -68,75 +81,6 @@ struct AgentTerminalSnapshot: Equatable {
     let recentCommands: [String]
 }
 
-@MainActor
-final class AgentInteractiveTerminalController: ObservableObject {
-    @Published private(set) var session = AgentInteractiveTerminalSession()
-    @Published var selectedRuntimeID: UUID?
-
-    private var sessionSubscription: AnyCancellable?
-
-    init() {
-        subscribeToSession()
-    }
-
-    var selectedRuntime: RuntimeDescriptor? {
-        guard let selectedRuntimeID else { return nil }
-        return AgentRuntimeStore.descriptor(id: selectedRuntimeID)
-    }
-
-    var runtimeOptions: [RuntimeDescriptor] {
-        AgentRuntimeStore.loadDescriptors().filter { $0.transport == .ssh }
-    }
-
-    func selectRuntimeIfNeeded() {
-        if selectedRuntime != nil { return }
-        selectedRuntimeID = runtimeOptions.first?.id
-    }
-
-    func connect(settings: EditorTerminalSettings) {
-        guard let runtime = selectedRuntime?.normalized else {
-            session.appendHostNotice(L10n.AgentTerminal.noRuntime)
-            return
-        }
-        session.connect(runtime: runtime, settings: settings.normalized())
-    }
-
-    func disconnect() {
-        session.terminate()
-    }
-
-    func clear() {
-        session.clear()
-    }
-
-    func sendUserInput(_ data: Data) {
-        session.send(data)
-    }
-
-    func sendUserText(_ text: String) {
-        session.send(text)
-    }
-
-    func sendApprovedCommand(_ command: String) throws -> AgentToolResult {
-        try session.sendApprovedCommand(command)
-    }
-
-    func sendApprovedControl(_ control: AgentTerminalControl) throws -> AgentToolResult {
-        try session.sendApprovedControl(control)
-    }
-
-    func snapshot(maxCharacters: Int = 16_000) -> AgentTerminalSnapshot {
-        session.snapshot(maxCharacters: maxCharacters)
-    }
-
-    private func subscribeToSession() {
-        sessionSubscription = session.objectWillChange
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-    }
-}
-
 enum AgentTerminalControl: String, CaseIterable {
     case ctrlC = "ctrl_c"
     case enter
@@ -159,82 +103,158 @@ enum AgentTerminalControl: String, CaseIterable {
     }
 }
 
-@MainActor
-final class AgentInteractiveTerminalSession: ObservableObject {
-    @Published private(set) var output: String = ""
-    @Published private(set) var isRunning = false
-    @Published private(set) var runtimeName = L10n.AgentTerminal.disconnectedRuntime
-    @Published private(set) var runtimeTarget = ""
-    @Published private(set) var pendingAutoCommands: [String] = []
-    @Published private(set) var recentCommands: [String] = []
-    @Published private(set) var isAutoQueuePaused = false
+// MARK: - Tab kind
 
-    private var childPID: pid_t?
-    private var masterFileHandle: FileHandle?
-    private var processSource: DispatchSourceProcess?
-    private var autoQueueTask: Task<Void, Never>?
-    private let maxOutputCharacters = 120_000
+enum AgentTerminalTabKind: Equatable {
+    case localShell
+    case ssh(runtimeID: UUID, displayName: String, target: String)
+
+    var isSSH: Bool { if case .ssh = self { return true }; return false }
+}
+
+// MARK: - SwiftTerm view subclass that reports user activity
+
+/// LocalProcessTerminalView subclass. `paste` is `open` in SwiftTerm so
+/// we hook it for activity; `keyDown` is only `public` (not overridable
+/// cross-module), so typed-keystroke activity is instead inferred from
+/// echoed output via the controller's buffer-hash sampling — plus the
+/// active (visible) tab is always exempt from the idle reaper, which is
+/// the only tab the user can actually be typing into.
+final class AgentLocalProcessTerminalView: LocalProcessTerminalView {
+    var onUserActivity: (() -> Void)?
+
+    override func paste(_ sender: Any) {
+        onUserActivity?()
+        super.paste(sender)
+    }
+}
+
+// MARK: - One terminal tab
+
+@MainActor
+final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTerminalViewDelegate {
+    let id = UUID()
+    /// Which Agent session opened this tab. nil for tabs the user opened
+    /// manually with no active session context.
+    let originAgentSessionID: UUID?
+    let kind: AgentTerminalTabKind
+    let terminalView: AgentLocalProcessTerminalView
+
+    @Published var title: String
+    @Published private(set) var isRunning = false
+    @Published private(set) var recentCommands: [String] = []
+
+    /// Last moment the tab saw user input or fresh process output. Drives
+    /// the idle reaper. Not @Published — sampled by a timer, not the UI.
+    private(set) var lastActivity = Date()
+    private var lastBufferHash = 0
     private let maxRecentCommands = 20
 
-    func connect(runtime: RuntimeDescriptor, settings: EditorTerminalSettings) {
-        terminate()
-        let profile = (runtime.terminalProfile ?? .default).normalized
-        runtimeName = runtime.displayName
-        runtimeTarget = runtime.sshTarget
-        appendHostNotice(L10n.AgentTerminal.connecting(runtime.displayName, runtime.sshTarget))
-        startSSHPTY(runtime: runtime, settings: settings)
-        if isRunning, profile.autoRunOnConnect {
-            pendingAutoCommands = profile.queuedConnectCommands
-            drainAutoQueue(profile: profile)
+    init(
+        kind: AgentTerminalTabKind,
+        originAgentSessionID: UUID?,
+        title: String,
+        settings: EditorTerminalSettings
+    ) {
+        self.kind = kind
+        self.originAgentSessionID = originAgentSessionID
+        self.title = title
+        self.terminalView = AgentLocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 640, height: 360))
+        applyAppearance(settings)
+        terminalView.processDelegate = self
+        terminalView.onUserActivity = { [weak self] in
+            self?.lastActivity = Date()
+        }
+    }
+
+    func applyAppearance(_ settings: EditorTerminalSettings) {
+        let scheme = settings.colorScheme
+        terminalView.font = settings.font
+        terminalView.nativeForegroundColor = scheme.foreground
+        terminalView.nativeBackgroundColor = scheme.background
+    }
+
+    // MARK: Launch
+
+    func start(
+        settings: EditorTerminalSettings,
+        workingDirectory: String?,
+        profile: RuntimeTerminalProfile?
+    ) {
+        let env = Self.environmentArray(settings: settings)
+        switch kind {
+        case .localShell:
+            let shell = Self.loginShellPath()
+            terminalView.startProcess(
+                executable: shell,
+                args: ["-l"],
+                environment: env,
+                execName: "-" + (shell as NSString).lastPathComponent,
+                currentDirectory: workingDirectory
+            )
+        case .ssh(_, _, let target):
+            guard let descriptor = sshDescriptor() else {
+                isRunning = false
+                return
+            }
+            var args = ["-tt", "-p", "\(descriptor.port)"]
+            if let identity = descriptor.identityFilePath, !identity.isEmpty {
+                args += ["-i", Self.expandedPath(identity)]
+            }
+            args.append(target)
+            terminalView.startProcess(
+                executable: "/usr/bin/ssh",
+                args: args,
+                environment: env,
+                currentDirectory: workingDirectory
+            )
+            if let profile = profile?.normalized, profile.autoRunOnConnect {
+                drainConnectCommands(profile.queuedConnectCommands, delayMs: profile.commandDelayMilliseconds)
+            }
+        }
+        isRunning = true
+        lastActivity = Date()
+    }
+
+    private func sshDescriptor() -> RuntimeDescriptor? {
+        guard case .ssh(let runtimeID, _, _) = kind else { return nil }
+        return AgentRuntimeStore.descriptor(id: runtimeID)?.normalized
+    }
+
+    private func drainConnectCommands(_ commands: [String], delayMs: Int) {
+        guard !commands.isEmpty else { return }
+        Task { [weak self] in
+            let delay = UInt64(max(100, delayMs)) * 1_000_000
+            for command in commands {
+                try? await Task.sleep(nanoseconds: delay)
+                await MainActor.run {
+                    guard let self, self.isRunning else { return }
+                    self.recordCommand(command)
+                    self.terminalView.send(txt: command + "\n")
+                }
+            }
         }
     }
 
     func terminate() {
-        autoQueueTask?.cancel()
-        autoQueueTask = nil
-        pendingAutoCommands = []
-        isAutoQueuePaused = false
-        if let childPID {
-            kill(childPID, SIGTERM)
-        }
-        cleanup()
+        guard isRunning else { return }
+        terminalView.terminate()
+        isRunning = false
     }
 
-    func clear() {
-        output = ""
-    }
-
-    func appendHostNotice(_ text: String) {
-        append("\n[\(text)]\n")
-    }
-
-    func send(_ string: String) {
-        guard let data = string.data(using: .utf8) else { return }
-        send(data)
-    }
-
-    func send(_ data: Data) {
-        guard let masterFileHandle, isRunning else { return }
-        do {
-            try masterFileHandle.write(contentsOf: data)
-        } catch {
-            appendHostNotice(L10n.AgentTerminal.writeFailed(error.localizedDescription))
-        }
-    }
+    // MARK: Agent-tool surface
 
     func sendApprovedCommand(_ command: String) throws -> AgentToolResult {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            throw AgentToolError.missingArgument("command")
-        }
+        guard !trimmed.isEmpty else { throw AgentToolError.missingArgument("command") }
         guard isRunning else {
-            throw AgentToolError.invalidArgument("Open and connect the Agent Terminal side panel before sending commands.")
+            throw AgentToolError.invalidArgument("Open and start an Agent Terminal tab before sending commands.")
         }
         recordCommand(trimmed)
-        send(trimmed + "\n")
+        lastActivity = Date()
+        terminalView.send(txt: trimmed + "\n")
         let payload = """
-        Sent command to Agent Terminal.
-        Runtime: \(runtimeName) \(runtimeTarget.isEmpty ? "" : "(\(runtimeTarget))")
+        Sent command to Agent Terminal tab \"\(title)\".
         Command: \(trimmed)
         """
         return AgentToolResult(summary: "terminal: \(trimmed.prefix(80))", payload: payload)
@@ -242,117 +262,29 @@ final class AgentInteractiveTerminalSession: ObservableObject {
 
     func sendApprovedControl(_ control: AgentTerminalControl) throws -> AgentToolResult {
         guard isRunning else {
-            throw AgentToolError.invalidArgument("Open and connect the Agent Terminal side panel before sending control input.")
+            throw AgentToolError.invalidArgument("Open and start an Agent Terminal tab before sending control input.")
         }
-        send(Data(control.bytes))
-        let payload = "Sent \(control.displayName) to Agent Terminal on \(runtimeName)."
+        lastActivity = Date()
+        terminalView.send(control.bytes)
+        let payload = "Sent \(control.displayName) to Agent Terminal tab \"\(title)\"."
         return AgentToolResult(summary: "terminal: \(control.displayName)", payload: payload)
     }
 
-    func snapshot(maxCharacters: Int) -> AgentTerminalSnapshot {
-        let redacted = AgentTerminalRedactor.redact(output)
-        let suffix = String(redacted.suffix(max(1, maxCharacters)))
-        return AgentTerminalSnapshot(
-            isRunning: isRunning,
-            runtimeName: runtimeName,
-            runtimeTarget: runtimeTarget,
-            output: suffix,
-            pendingCommands: pendingAutoCommands,
-            recentCommands: recentCommands
+    /// Visible-screen-plus-recent-scrollback text, secrets redacted.
+    func snapshotText(maxCharacters: Int) -> String {
+        let terminal = terminalView.getTerminal()
+        let rows = terminal.rows
+        let cols = terminal.cols
+        guard rows > 0, cols > 0 else { return "" }
+        let bottom = terminal.buffer.yDisp + rows - 1
+        let wantRows = min(400, bottom + 1)
+        let startRow = max(0, bottom - wantRows + 1)
+        let raw = terminal.getText(
+            start: Position(col: 0, row: startRow),
+            end: Position(col: cols - 1, row: bottom)
         )
-    }
-
-    deinit {
-        if let childPID {
-            kill(childPID, SIGTERM)
-        }
-        autoQueueTask?.cancel()
-        processSource?.cancel()
-        masterFileHandle?.readabilityHandler = nil
-        try? masterFileHandle?.close()
-    }
-
-    private func startSSHPTY(runtime: RuntimeDescriptor, settings: EditorTerminalSettings) {
-        var masterFD: Int32 = -1
-        var slaveFD: Int32 = -1
-        guard openpty(&masterFD, &slaveFD, nil, nil, nil) == 0 else {
-            appendHostNotice(L10n.AgentTerminal.ptyFailed(String(cString: strerror(errno))))
-            return
-        }
-        guard let slavePathPointer = ttyname(slaveFD) else {
-            appendHostNotice(L10n.AgentTerminal.ptyFailed(String(cString: strerror(errno))))
-            close(masterFD)
-            close(slaveFD)
-            return
-        }
-        let slavePath = String(cString: slavePathPointer)
-        let launch = Self.sshLaunch(runtime: runtime, settings: settings)
-        guard let pid = Self.spawnPTYProcess(
-            executablePath: launch.executablePath,
-            arguments: launch.arguments,
-            environment: launch.environment,
-            masterFD: masterFD,
-            slaveFD: slaveFD,
-            slavePath: slavePath
-        ) else {
-            appendHostNotice(L10n.AgentTerminal.spawnFailed(String(cString: strerror(errno))))
-            close(masterFD)
-            close(slaveFD)
-            return
-        }
-
-        close(slaveFD)
-        let handle = FileHandle(fileDescriptor: masterFD, closeOnDealloc: true)
-        masterFileHandle = handle
-        childPID = pid
-        isRunning = true
-
-        handle.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            let text = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
-            Task { @MainActor [weak self, text] in
-                self?.append(text)
-            }
-        }
-
-        let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .main)
-        source.setEventHandler { [weak self] in
-            guard let self else { return }
-            var status: Int32 = 0
-            waitpid(pid, &status, WNOHANG)
-            let code = Self.exitCode(fromWaitStatus: status)
-            appendHostNotice(L10n.AgentTerminal.exited(code))
-            cleanup()
-        }
-        processSource = source
-        source.resume()
-    }
-
-    private func drainAutoQueue(profile: RuntimeTerminalProfile) {
-        autoQueueTask?.cancel()
-        autoQueueTask = Task { [weak self] in
-            let delay = UInt64(profile.commandDelayMilliseconds) * 1_000_000
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: delay)
-                await MainActor.run {
-                    guard let self, self.isRunning, !self.pendingAutoCommands.isEmpty else { return }
-                    let command = self.pendingAutoCommands.removeFirst()
-                    self.recordCommand(command)
-                    self.send(command + "\n")
-                }
-                await MainActor.run {
-                    guard let self else { return }
-                    if self.pendingAutoCommands.isEmpty {
-                        self.autoQueueTask?.cancel()
-                        self.autoQueueTask = nil
-                    }
-                }
-                if await MainActor.run(body: { self?.pendingAutoCommands.isEmpty ?? true }) {
-                    return
-                }
-            }
-        }
+        let redacted = AgentTerminalRedactor.redact(raw)
+        return String(redacted.suffix(max(1, maxCharacters)))
     }
 
     private func recordCommand(_ command: String) {
@@ -363,122 +295,282 @@ final class AgentInteractiveTerminalSession: ObservableObject {
         }
     }
 
-    private func append(_ text: String) {
-        output += normalizedTerminalOutput(text)
-        if output.count > maxOutputCharacters {
-            output.removeFirst(output.count - maxOutputCharacters)
+    // MARK: Idle bookkeeping
+
+    var runtimeTarget: String {
+        if case .ssh(_, _, let target) = kind { return target }
+        return "local"
+    }
+
+    func idleSeconds(now: Date) -> TimeInterval {
+        now.timeIntervalSince(lastActivity)
+    }
+
+    /// Sample the visible buffer; if it changed since last sample the tab
+    /// produced output → it's active. Returns true if activity bumped.
+    @discardableResult
+    func refreshActivityFromBuffer(now: Date) -> Bool {
+        let terminal = terminalView.getTerminal()
+        let rows = terminal.rows
+        let cols = terminal.cols
+        guard rows > 0, cols > 0 else { return false }
+        let bottom = terminal.buffer.yDisp + rows - 1
+        let startRow = max(0, bottom - rows + 1)
+        let text = terminal.getText(
+            start: Position(col: 0, row: startRow),
+            end: Position(col: cols - 1, row: bottom)
+        )
+        let hash = text.hashValue
+        if hash != lastBufferHash {
+            lastBufferHash = hash
+            lastActivity = now
+            return true
+        }
+        return false
+    }
+
+    // MARK: LocalProcessTerminalViewDelegate
+
+    func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
+
+    func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        // Keep the user/origin label as the primary title; the OSC title
+        // is noisy. Only adopt it for local tabs that still carry the
+        // generic default name.
+        if kind == .localShell, self.title.hasPrefix("Shell") {
+            self.title = String(trimmed.prefix(40))
         }
     }
 
-    private func normalizedTerminalOutput(_ text: String) -> String {
-        text.replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
-    }
+    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
 
-    private func cleanup() {
-        masterFileHandle?.readabilityHandler = nil
-        try? masterFileHandle?.close()
-        masterFileHandle = nil
-        processSource?.cancel()
-        processSource = nil
-        childPID = nil
+    func processTerminated(source: TerminalView, exitCode: Int32?) {
         isRunning = false
-        pendingAutoCommands = []
-        autoQueueTask?.cancel()
-        autoQueueTask = nil
     }
 
-    private static func sshLaunch(
-        runtime: RuntimeDescriptor,
-        settings: EditorTerminalSettings
-    ) -> (executablePath: String, arguments: [String], environment: [String: String]) {
-        var args = ["-tt", "-p", "\(runtime.port)"]
-        if let identityFilePath = runtime.identityFilePath, !identityFilePath.isEmpty {
-            args += ["-i", expandedIdentityFilePath(identityFilePath)]
-        }
-        args.append(runtime.sshTarget)
+    // MARK: Helpers
 
+    private static func loginShellPath() -> String {
+        if let shell = ProcessInfo.processInfo.environment["SHELL"], !shell.isEmpty {
+            return shell
+        }
+        return "/bin/zsh"
+    }
+
+    private static func environmentArray(settings: EditorTerminalSettings) -> [String] {
         var environment = ProcessInfo.processInfo.environment
-        environment["TERM"] = environment["TERM"] ?? "xterm-256color"
+        environment["TERM"] = "xterm-256color"
         environment["WILLDEEP_AGENT_TERMINAL"] = "1"
+        environment["LANG"] = environment["LANG"] ?? "en_US.UTF-8"
         for (key, value) in settings.environment {
             environment[key] = value
         }
-        return ("/usr/bin/ssh", args, environment)
+        return environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
     }
 
-    private static func spawnPTYProcess(
-        executablePath: String,
-        arguments: [String],
-        environment: [String: String],
-        masterFD: Int32,
-        slaveFD: Int32,
-        slavePath: String
-    ) -> pid_t? {
-        var fileActions: posix_spawn_file_actions_t?
-        guard posix_spawn_file_actions_init(&fileActions) == 0 else { return nil }
-        defer { posix_spawn_file_actions_destroy(&fileActions) }
-
-        guard posix_spawn_file_actions_addopen(&fileActions, STDIN_FILENO, slavePath, O_RDWR, 0) == 0,
-              posix_spawn_file_actions_adddup2(&fileActions, STDIN_FILENO, STDOUT_FILENO) == 0,
-              posix_spawn_file_actions_adddup2(&fileActions, STDIN_FILENO, STDERR_FILENO) == 0,
-              posix_spawn_file_actions_addclose(&fileActions, masterFD) == 0,
-              posix_spawn_file_actions_addclose(&fileActions, slaveFD) == 0 else {
-            return nil
-        }
-
-        var attributes: posix_spawnattr_t?
-        guard posix_spawnattr_init(&attributes) == 0 else { return nil }
-        defer { posix_spawnattr_destroy(&attributes) }
-        posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETSID))
-
-        let argv = [URL(fileURLWithPath: executablePath).lastPathComponent] + arguments
-        let envp = environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
-        var pid: pid_t = 0
-        let result = withCStringArray(argv) { argvPointer in
-            withCStringArray(envp) { envPointer in
-                executablePath.withCString { executableCString in
-                    posix_spawn(&pid, executableCString, &fileActions, &attributes, argvPointer, envPointer)
-                }
-            }
-        }
-        guard result == 0 else {
-            errno = result
-            return nil
-        }
-        return pid
-    }
-
-    private static func exitCode(fromWaitStatus status: Int32) -> Int32 {
-        if status & 0x7f == 0 {
-            return (status >> 8) & 0xff
-        }
-        return status
-    }
-
-    private static func expandedIdentityFilePath(_ value: String) -> String {
+    private static func expandedPath(_ value: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix("~") else { return trimmed }
         return (trimmed as NSString).expandingTildeInPath
     }
+}
 
-    private static func withCStringArray<Result>(
-        _ strings: [String],
-        _ body: (UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Result
-    ) -> Result {
-        let cStrings = strings.map { strdup($0) }
-        defer {
-            for pointer in cStrings {
-                free(pointer)
-            }
-        }
-        var pointers: [UnsafeMutablePointer<CChar>?] = cStrings.map { $0 }
-        pointers.append(nil)
-        return pointers.withUnsafeMutableBufferPointer { buffer in
-            body(buffer.baseAddress!)
+// MARK: - Controller: owns tabs + idle reaper + agent-tool surface
+
+@MainActor
+final class AgentInteractiveTerminalController: ObservableObject {
+    @Published private(set) var tabs: [AgentTerminalTab] = []
+    @Published var activeTabID: UUID?
+    /// Default runtime for new SSH tabs.
+    @Published var selectedRuntimeID: UUID?
+
+    /// Tabs idle longer than this are auto-terminated and removed. The
+    /// currently-visible tab is exempt so we never close what the user is
+    /// looking at.
+    private let idleTimeout: TimeInterval = 300
+    private var idleTimer: Timer?
+    private var localShellCounter = 0
+
+    init() {
+        startIdleReaper()
+    }
+
+    deinit {
+        idleTimer?.invalidate()
+    }
+
+    var activeTab: AgentTerminalTab? {
+        guard let activeTabID else { return tabs.first }
+        return tabs.first { $0.id == activeTabID } ?? tabs.first
+    }
+
+    var runtimeOptions: [RuntimeDescriptor] {
+        AgentRuntimeStore.loadDescriptors().filter { $0.transport == .ssh }
+    }
+
+    func selectRuntimeIfNeeded() {
+        if selectedRuntimeID == nil {
+            selectedRuntimeID = runtimeOptions.first?.id
         }
     }
+
+    // MARK: Tab lifecycle
+
+    @discardableResult
+    func openLocalTab(
+        originAgentSessionID: UUID?,
+        workingDirectory: String?,
+        settings: EditorTerminalSettings
+    ) -> AgentTerminalTab {
+        localShellCounter += 1
+        let tab = AgentTerminalTab(
+            kind: .localShell,
+            originAgentSessionID: originAgentSessionID,
+            title: "Shell \(localShellCounter)",
+            settings: settings
+        )
+        tab.start(settings: settings, workingDirectory: workingDirectory, profile: nil)
+        register(tab)
+        return tab
+    }
+
+    @discardableResult
+    func openSSHTab(
+        runtime: RuntimeDescriptor,
+        originAgentSessionID: UUID?,
+        settings: EditorTerminalSettings
+    ) -> AgentTerminalTab {
+        let normalized = runtime.normalized
+        let tab = AgentTerminalTab(
+            kind: .ssh(runtimeID: normalized.id, displayName: normalized.displayName, target: normalized.sshTarget),
+            originAgentSessionID: originAgentSessionID,
+            title: normalized.displayName,
+            settings: settings
+        )
+        tab.start(
+            settings: settings,
+            workingDirectory: nil,
+            profile: normalized.terminalProfile
+        )
+        register(tab)
+        return tab
+    }
+
+    private func register(_ tab: AgentTerminalTab) {
+        // Re-publish each tab's changes so the side panel updates live.
+        let cancellable = tab.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+        tabSubscriptions[tab.id] = cancellable
+        tabs.append(tab)
+        activeTabID = tab.id
+    }
+
+    func closeTab(id: UUID) {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        tabs[index].terminate()
+        tabSubscriptions[id]?.cancel()
+        tabSubscriptions[id] = nil
+        tabs.remove(at: index)
+        if activeTabID == id {
+            activeTabID = tabs.last?.id
+        }
+    }
+
+    /// Make sure the panel always has at least one live tab to show; opens
+    /// a local shell rooted at `workingDirectory` if there are none.
+    func ensureAtLeastOneTab(
+        originAgentSessionID: UUID?,
+        workingDirectory: String?,
+        settings: EditorTerminalSettings
+    ) {
+        if tabs.isEmpty {
+            openLocalTab(
+                originAgentSessionID: originAgentSessionID,
+                workingDirectory: workingDirectory,
+                settings: settings
+            )
+        }
+    }
+
+    func applyAppearanceToAll(_ settings: EditorTerminalSettings) {
+        for tab in tabs {
+            tab.applyAppearance(settings)
+        }
+    }
+
+    private var tabSubscriptions: [UUID: AnyCancellable] = [:]
+
+    // MARK: Idle reaper
+
+    private func startIdleReaper() {
+        let timer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.tickIdle()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        idleTimer = timer
+    }
+
+    private func tickIdle() {
+        guard !tabs.isEmpty else { return }
+        let now = Date()
+        var doomed: [UUID] = []
+        for tab in tabs {
+            tab.refreshActivityFromBuffer(now: now)
+            // Never reap the tab the user is currently viewing.
+            if tab.id == activeTabID { continue }
+            if tab.idleSeconds(now: now) > idleTimeout {
+                doomed.append(tab.id)
+            }
+        }
+        for id in doomed {
+            closeTab(id: id)
+        }
+    }
+
+    // MARK: Agent-tool surface (operate on the active tab)
+
+    func snapshot(maxCharacters: Int = 16_000) -> AgentTerminalSnapshot {
+        guard let tab = activeTab else {
+            return AgentTerminalSnapshot(
+                isRunning: false,
+                runtimeName: L10n.AgentTerminal.disconnectedRuntime,
+                runtimeTarget: "",
+                output: "",
+                pendingCommands: [],
+                recentCommands: []
+            )
+        }
+        return AgentTerminalSnapshot(
+            isRunning: tab.isRunning,
+            runtimeName: tab.title,
+            runtimeTarget: tab.runtimeTarget,
+            output: tab.snapshotText(maxCharacters: maxCharacters),
+            pendingCommands: [],
+            recentCommands: tab.recentCommands
+        )
+    }
+
+    func sendApprovedCommand(_ command: String) throws -> AgentToolResult {
+        guard let tab = activeTab else {
+            throw AgentToolError.invalidArgument("Open the Agent Terminal side panel and start a tab before sending commands.")
+        }
+        return try tab.sendApprovedCommand(command)
+    }
+
+    func sendApprovedControl(_ control: AgentTerminalControl) throws -> AgentToolResult {
+        guard let tab = activeTab else {
+            throw AgentToolError.invalidArgument("Open the Agent Terminal side panel and start a tab before sending control input.")
+        }
+        return try tab.sendApprovedControl(control)
+    }
 }
+
+// MARK: - Secret redaction (unchanged)
 
 enum AgentTerminalRedactor {
     private static let patterns: [String] = [

@@ -12,6 +12,7 @@
 		5CA6B0B42FDDF001006DFCCC /* AIPipe.m in Sources */ = {isa = PBXBuildFile; fileRef = 5CA6B0AE2FDDF001006DFCCC /* AIPipe.m */; };
 		5CA6B0B52FDDF001006DFCCC /* AIPipeConfig.m in Sources */ = {isa = PBXBuildFile; fileRef = 5CA6B0B02FDDF001006DFCCC /* AIPipeConfig.m */; };
 		5CA6B0B62FDDF001006DFCCC /* AIPipeLogItem.m in Sources */ = {isa = PBXBuildFile; fileRef = 5CA6B0B22FDDF001006DFCCC /* AIPipeLogItem.m */; };
+			5CA6B0D02FE2A000006DFCCC /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 5CA6B0D22FE2A000006DFCCC /* SwiftTerm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -90,6 +91,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5CA6B0D02FE2A000006DFCCC /* SwiftTerm in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -192,6 +194,7 @@
 			);
 			name = Xedit;
 			packageProductDependencies = (
+				5CA6B0D22FE2A000006DFCCC /* SwiftTerm */,
 			);
 			productName = WillDeep;
 			productReference = 5CA6B0612FC6D8F9006DFCCC /* WillDeep.app */;
@@ -276,6 +279,9 @@
 			);
 			mainGroup = 5CA6B0582FC6D8F9006DFCCC;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				5CA6B0D12FE2A000006DFCCC /* XCRemoteSwiftPackageReference "SwiftTerm" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5CA6B0622FC6D8F9006DFCCC /* Products */;
 			projectDirPath = "";
@@ -431,7 +437,7 @@
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
 					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
 				);
-				MARKETING_VERSION = "1.106.0-rc3";
+				MARKETING_VERSION = "1.107.0-rc1";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
@@ -486,7 +492,7 @@
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
 					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
 				);
-				MARKETING_VERSION = "1.106.0-rc3";
+				MARKETING_VERSION = "1.107.0-rc1";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
@@ -634,7 +640,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = "1.106.0-rc3";
+				MARKETING_VERSION = "1.107.0-rc1";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -655,7 +661,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = "1.106.0-rc3";
+				MARKETING_VERSION = "1.107.0-rc1";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -674,7 +680,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.106.0-rc3";
+				MARKETING_VERSION = "1.107.0-rc1";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -693,7 +699,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.106.0-rc3";
+				MARKETING_VERSION = "1.107.0-rc1";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -745,6 +751,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		5CA6B0D12FE2A000006DFCCC /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.5.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5CA6B0D22FE2A000006DFCCC /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5CA6B0D12FE2A000006DFCCC /* XCRemoteSwiftPackageReference "SwiftTerm" */;
+			productName = SwiftTerm;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 5CA6B0592FC6D8F9006DFCCC /* Project object */;
 }

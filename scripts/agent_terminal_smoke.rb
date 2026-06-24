@@ -37,19 +37,34 @@ terminal_view = read_source(repo_root, "Xedit/AgentSidePanelTerminalView.swift")
 runtime_settings = read_source(repo_root, "Xedit/AgentRuntimeSettingsView.swift")
 l10n = read_source(repo_root, "Xedit/L10n.swift")
 
-order_cd = terminal.index('commands.append("cd')
-order_startup = terminal.index("commands.append(contentsOf: startupCommands)")
-order_jump = terminal.index("commands.append(contentsOf: jumpCommands)")
-
 checks = [
-  check("interactive PTY uses openpty", "Agent terminal allocates a pseudo terminal") {
-    terminal.include?("openpty(")
+  check("terminal backed by SwiftTerm", "Agent terminal uses SwiftTerm LocalProcessTerminalView") {
+    terminal.include?("import SwiftTerm") &&
+      terminal.include?("LocalProcessTerminalView") &&
+      terminal.include?("startProcess(")
   },
-  check("SSH launches real interactive session", "SSH command uses /usr/bin/ssh with -tt") {
-    terminal.include?('"/usr/bin/ssh"') && terminal.include?('"-tt"')
+  check("local shell is the default tab", "openLocalTab launches the login shell, no SSH required") {
+    terminal.include?("func openLocalTab") &&
+      terminal.include?("loginShellPath()") &&
+      terminal.include?('args: ["-l"]')
   },
-  check("startup commands precede jump commands", "Queue order is cd/startup before jump") {
-    [order_cd, order_startup, order_jump].all? && order_cd < order_startup && order_startup < order_jump
+  check("SSH remains available", "openSSHTab still launches /usr/bin/ssh with -tt") {
+    terminal.include?("func openSSHTab") &&
+      terminal.include?('"/usr/bin/ssh"') && terminal.include?('"-tt"')
+  },
+  check("multiple tabs supported", "Controller manages a tabs array with active selection") {
+    terminal.include?("var tabs: [AgentTerminalTab]") &&
+      terminal.include?("var activeTabID") &&
+      terminal.include?("func closeTab(")
+  },
+  check("tabs remember their origin session", "AgentTerminalTab records originAgentSessionID") {
+    terminal.include?("originAgentSessionID") &&
+      terminal_view.include?("originAgentSessionID: appState.activeAgentSessionID")
+  },
+  check("idle tabs auto-exit", "Idle reaper terminates tabs past idleTimeout") {
+    terminal.include?("idleTimeout") &&
+      terminal.include?("startIdleReaper") &&
+      terminal.include?("idleSeconds(now:")
   },
   check("terminal tools registered", "snapshot/send_command/send_control are exposed") {
     %w[terminal_snapshot terminal_send_command terminal_send_control].all? { |name| tools.include?(name) && runner.include?(name) }
@@ -60,9 +75,6 @@ checks = [
   },
   check("side panel has terminal kind", "AgentSidePanelKind exposes .terminal") {
     side_panel.include?("case terminal") && side_panel.include?("AgentSidePanelTerminalView()")
-  },
-  check("service command menu exists", "Terminal panel exposes systemctl/journalctl/docker templates") {
-    %w[systemctl journalctl docker].all? { |token| terminal_view.include?(token) }
   },
   check("runtime settings persist terminal profile", "Settings -> Runtimes writes terminalProfile") {
     runtime_settings.include?("terminalProfile") &&

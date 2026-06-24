@@ -1017,6 +1017,41 @@
         }
       }
     },
+    "agent-terminal.new-tab" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New Terminal Tab" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "新建终端标签页" } }
+      }
+    },
+    "agent-terminal.new-local-tab" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New Local Shell" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "新建本地 Shell" } }
+      }
+    },
+    "agent-terminal.new-ssh-tab" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "SSH: %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "SSH：%@" } }
+      }
+    },
+    "agent-terminal.local-shell-tooltip" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Local shell" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地 shell" } }
+      }
+    },
+    "agent-terminal.opened-by-this-session" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Opened by this chat session" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "由当前会话打开" } }
+      }
+    },
     "agent-terminal.connect" : {
       "extractionState" : "manual",
       "localizations" : {

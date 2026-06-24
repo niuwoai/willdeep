@@ -453,6 +453,14 @@ enum L10n {
         static let serviceLogsFollow = String(localized: "agent-terminal.service.logs-follow", defaultValue: "Follow Logs")
         static let dockerPs = String(localized: "agent-terminal.docker.ps", defaultValue: "Docker ps")
         static let dockerLogs = String(localized: "agent-terminal.docker.logs", defaultValue: "Docker logs")
+        static let newTab = String(localized: "agent-terminal.new-tab", defaultValue: "New Terminal Tab")
+        static let newLocalTab = String(localized: "agent-terminal.new-local-tab", defaultValue: "New Local Shell")
+        static let localShellTooltip = String(localized: "agent-terminal.local-shell-tooltip", defaultValue: "Local shell")
+        static let openedByThisSession = String(localized: "agent-terminal.opened-by-this-session", defaultValue: "Opened by this chat session")
+        static func newSSHTab(_ a1: String) -> String {
+            let template = String(localized: "agent-terminal.new-ssh-tab", defaultValue: "SSH: %@")
+            return String(format: template, a1)
+        }
 
         static func connecting(_ a1: String, _ a2: String) -> String {
             let template = String(localized: "agent-terminal.connecting", defaultValue: "Connecting %@ (%@)")

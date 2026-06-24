@@ -2,7 +2,9 @@
 //  AgentSidePanelTerminalView.swift
 //  WillDeep
 //
-//  Right-side Agent-mode terminal panel.
+//  Right-side Agent-mode terminal panel. Multi-tab, SwiftTerm-backed.
+//  Each tab is a full terminal emulator; tabs default to a local login
+//  shell and remember which Agent session opened them.
 //
 
 import AppKit
@@ -15,189 +17,184 @@ struct AgentSidePanelTerminalView: View {
         appState.agentTerminalController
     }
 
-    private var session: AgentInteractiveTerminalSession {
-        controller.session
-    }
-
     private var settings: EditorTerminalSettings {
         appState.editorTerminalSettings.normalized()
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            toolbar
+            tabBar
             Divider().opacity(0.5)
             terminalSurface
-            if !session.pendingAutoCommands.isEmpty {
-                pendingQueue
-            }
         }
         .onAppear {
             controller.selectRuntimeIfNeeded()
+            controller.ensureAtLeastOneTab(
+                originAgentSessionID: appState.activeAgentSessionID,
+                workingDirectory: workingDirectory,
+                settings: settings
+            )
+            controller.applyAppearanceToAll(settings)
         }
     }
 
-    private var toolbar: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 6) {
-                Picker("", selection: runtimeSelection) {
-                    if controller.runtimeOptions.isEmpty {
-                        Text(L10n.AgentTerminal.noRuntimeShort).tag(UUID?.none)
-                    } else {
-                        ForEach(controller.runtimeOptions) { runtime in
-                            Text(runtime.displayName).tag(Optional(runtime.id))
-                        }
+    // MARK: Tab bar
+
+    private var tabBar: some View {
+        HStack(spacing: 4) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(controller.tabs) { tab in
+                        tabChip(tab)
                     }
                 }
-                .labelsHidden()
-                .frame(maxWidth: .infinity)
-
-                Button {
-                    if session.isRunning {
-                        controller.disconnect()
-                    } else {
-                        controller.connect(settings: settings)
-                    }
-                } label: {
-                    Image(systemName: session.isRunning ? "stop.fill" : "play.fill")
-                }
-                .buttonStyle(.borderless)
-                .help(session.isRunning ? L10n.AgentTerminal.disconnect : L10n.AgentTerminal.connect)
-
-                Menu {
-                    serviceMenuContent
-                } label: {
-                    Image(systemName: "server.rack")
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .help(L10n.AgentTerminal.services)
-                .disabled(!session.isRunning)
-
-                Button {
-                    copyOutput()
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                }
-                .buttonStyle(.borderless)
-                .help(L10n.AgentTerminal.copyOutput)
-                .disabled(session.output.isEmpty)
-
-                Button {
-                    controller.clear()
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .buttonStyle(.borderless)
-                .help(L10n.AgentTerminal.clear)
-                .disabled(session.output.isEmpty)
+                .padding(.horizontal, 6)
             }
-
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(session.isRunning ? Color.green : Color.secondary.opacity(0.55))
-                    .frame(width: 7, height: 7)
-                Text(statusText)
-                    .font(AgentDesign.captionFont)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: 0)
-            }
+            Spacer(minLength: 0)
+            addTabMenu
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .frame(height: 30)
+        .padding(.trailing, 6)
     }
 
-    private var terminalSurface: some View {
-        EditorTerminalTextSurface(
-            text: session.output.isEmpty ? L10n.AgentTerminal.emptyOutput : session.output,
-            settings: settings,
-            onInput: { data in
-                controller.sendUserInput(data)
-            },
-            onPasteText: { text in
-                controller.sendUserText(text)
+    private func tabChip(_ tab: AgentTerminalTab) -> some View {
+        let isActive = controller.activeTabID == tab.id
+        return HStack(spacing: 5) {
+            Image(systemName: tab.kind.isSSH ? "network" : "terminal")
+                .font(.system(size: 9))
+                .foregroundStyle(tab.isRunning ? Color.green : Color.secondary)
+            Text(tab.title)
+                .font(.system(size: 11))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Button {
+                controller.closeTab(id: tab.id)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .semibold))
             }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(isActive ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.05))
         )
-        .background(Color(nsColor: settings.colorScheme.background))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(originBadgeColor(tab), lineWidth: isOpenedByCurrentSession(tab) ? 1 : 0)
+        )
+        .help(tabTooltip(tab))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            controller.activeTabID = tab.id
+        }
     }
 
-    private var pendingQueue: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(L10n.AgentTerminal.pendingAutoCommands)
-                .font(AgentDesign.captionFont.weight(.semibold))
-                .foregroundStyle(.secondary)
-            ForEach(Array(session.pendingAutoCommands.enumerated()), id: \.offset) { _, command in
-                Text(command)
-                    .font(.system(size: 10, design: .monospaced))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+    private var addTabMenu: some View {
+        Menu {
+            Button {
+                controller.openLocalTab(
+                    originAgentSessionID: appState.activeAgentSessionID,
+                    workingDirectory: workingDirectory,
+                    settings: settings
+                )
+            } label: {
+                Label(L10n.AgentTerminal.newLocalTab, systemImage: "terminal")
             }
+            if !controller.runtimeOptions.isEmpty {
+                Divider()
+                ForEach(controller.runtimeOptions) { runtime in
+                    Button {
+                        controller.openSSHTab(
+                            runtime: runtime,
+                            originAgentSessionID: appState.activeAgentSessionID,
+                            settings: settings
+                        )
+                    } label: {
+                        Label(L10n.AgentTerminal.newSSHTab(runtime.displayName), systemImage: "network")
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "plus")
         }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.035))
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(L10n.AgentTerminal.newTab)
     }
+
+    // MARK: Terminal surface
 
     @ViewBuilder
-    private var serviceMenuContent: some View {
-        let services = controller.selectedRuntime?.terminalProfile?.normalized.serviceNames
-            ?? RuntimeTerminalProfile.default.serviceNames
-        if services.isEmpty {
-            Text(L10n.AgentTerminal.noServices)
+    private var terminalSurface: some View {
+        if let tab = controller.activeTab {
+            AgentTerminalViewRepresentable(terminalView: tab.terminalView)
+                .id(tab.id)
         } else {
-            ForEach(services, id: \.self) { service in
-                Menu(service) {
-                    Button(L10n.AgentTerminal.serviceStatus) {
-                        sendTemplate("systemctl status \(AgentToolRunner.shellQuoted(service)) --no-pager")
-                    }
-                    Button(L10n.AgentTerminal.serviceRestart) {
-                        sendTemplate("sudo systemctl restart \(AgentToolRunner.shellQuoted(service))")
-                    }
-                    Button(L10n.AgentTerminal.serviceLogs) {
-                        sendTemplate("journalctl -u \(AgentToolRunner.shellQuoted(service)) -n 120 --no-pager")
-                    }
-                    Button(L10n.AgentTerminal.serviceLogsFollow) {
-                        sendTemplate("journalctl -u \(AgentToolRunner.shellQuoted(service)) -f")
-                    }
-                }
+            VStack(spacing: 8) {
+                Spacer()
+                Image(systemName: "terminal")
+                    .font(.system(size: 24))
+                    .foregroundStyle(.secondary.opacity(0.6))
+                Text(L10n.AgentTerminal.emptyOutput)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
             }
-            Divider()
-            Button(L10n.AgentTerminal.dockerPs) {
-                sendTemplate("docker ps")
-            }
-            Button(L10n.AgentTerminal.dockerLogs) {
-                sendTemplate("docker logs --tail 120 <container>")
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
-    private var runtimeSelection: Binding<UUID?> {
-        Binding {
-            controller.selectedRuntimeID
-        } set: { newValue in
-            controller.selectedRuntimeID = newValue
+    // MARK: Helpers
+
+    private var workingDirectory: String? {
+        if let path = appState.activeRuntime?.workspaceRootPath, !path.isEmpty {
+            return path
         }
+        return appState.rootDirectory?.standardizedFileURL.path
     }
 
-    private var statusText: String {
-        if session.isRunning {
-            return L10n.AgentTerminal.connected(session.runtimeName, session.runtimeTarget)
-        }
-        if controller.runtimeOptions.isEmpty {
-            return L10n.AgentTerminal.noRuntime
-        }
-        return L10n.AgentTerminal.disconnected
+    private func isOpenedByCurrentSession(_ tab: AgentTerminalTab) -> Bool {
+        guard let origin = tab.originAgentSessionID,
+              let active = appState.activeAgentSessionID else { return false }
+        return origin == active
     }
 
-    private func sendTemplate(_ command: String) {
-        controller.sendUserText(command + "\n")
+    private func originBadgeColor(_ tab: AgentTerminalTab) -> Color {
+        isOpenedByCurrentSession(tab) ? Color.accentColor.opacity(0.55) : Color.clear
     }
 
-    private func copyOutput() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(session.output, forType: .string)
+    private func tabTooltip(_ tab: AgentTerminalTab) -> String {
+        var lines = [tab.title]
+        switch tab.kind {
+        case .localShell:
+            lines.append(L10n.AgentTerminal.localShellTooltip)
+        case .ssh(_, _, let target):
+            lines.append(target)
+        }
+        if isOpenedByCurrentSession(tab) {
+            lines.append(L10n.AgentTerminal.openedByThisSession)
+        }
+        return lines.joined(separator: " · ")
     }
 }
 
+/// Hosts a SwiftTerm LocalProcessTerminalView (owned by the tab) inside
+/// SwiftUI. The view instance is stable for the tab's lifetime, so this
+/// representable just mounts/focuses it.
+struct AgentTerminalViewRepresentable: NSViewRepresentable {
+    let terminalView: AgentLocalProcessTerminalView
+
+    func makeNSView(context: Context) -> AgentLocalProcessTerminalView {
+        DispatchQueue.main.async {
+            terminalView.window?.makeFirstResponder(terminalView)
+        }
+        return terminalView
+    }
+
+    func updateNSView(_ nsView: AgentLocalProcessTerminalView, context: Context) {}
+}

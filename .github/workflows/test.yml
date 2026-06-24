@@ -31,6 +31,13 @@ jobs:
         # 当 GitHub 后续把默认 Xcode 又前进一档时，回退到 Xcode.app 软链。
         run: sudo xcode-select -s /Applications/Xcode_26.4.1.app || sudo xcode-select -s /Applications/Xcode.app
 
+      # SwiftTerm (terminal panel dependency) compiles a Metal shader
+      # (Apple/Metal/Shaders.metal). Xcode 26 ships the Metal compiler as
+      # an on-demand component, so ensure it's present before building.
+      # Idempotent + fast when the runner image already has it.
+      - name: Ensure Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain || true
+
       - name: Print toolchain
         run: |
           xcodebuild -version
@@ -49,7 +56,9 @@ jobs:
       # macos-26 runner 默认不带 Go toolchain，少了这步 `go test` 直接
       # `command not found`（exit 127），CI 从加进 Go 测试那次起就一直红。
       - name: Set up Go
-        uses: actions/setup-go@v5
+        # v6 runs on Node.js 24; v5 targeted the now-deprecated Node 20
+        # compat shim and emitted a deprecation annotation on every run.
+        uses: actions/setup-go@v6
         with:
           go-version-file: willdeep-agent/go.mod
           cache-dependency-path: willdeep-agent/go.sum
