@@ -213,14 +213,27 @@ final class AppState: ObservableObject {
     }
     @Published var editorTerminalSettings: EditorTerminalSettings = EditorTerminalSettingsStore.load() {
         didSet {
+            // When the sync notification below pushes a change in from another
+            // AppState (e.g. the Settings window's own instance), just take the
+            // value — don't re-save or re-broadcast — so terminals observing
+            // THIS instance update live without echoing back out.
+            guard !isApplyingExternalTerminalSettings else { return }
             let normalized = editorTerminalSettings.normalized()
             if normalized != editorTerminalSettings {
                 editorTerminalSettings = normalized
                 return
             }
             EditorTerminalSettingsStore.save(normalized)
+            // Broadcast so every other live AppState reloads — this is what
+            // makes a color-scheme / font change in Settings apply to the
+            // side-panel terminal immediately instead of only after relaunch.
+            NotificationCenter.default.post(name: .editorTerminalSettingsDidChange, object: self)
         }
     }
+    /// True while applying an external terminal-settings change so the didSet
+    /// above doesn't echo it back out (infinite loop guard).
+    private var isApplyingExternalTerminalSettings = false
+    private var terminalSettingsSyncSubscription: AnyCancellable?
     var editorTerminalSession = EditorTerminalSession()
     let agentTerminalController = AgentInteractiveTerminalController()
 
@@ -414,6 +427,20 @@ final class AppState: ObservableObject {
         agentJobRegistry.onJobFinished = { [weak self] job in
             self?.surfaceDelegatedBackgroundJobCompletionIfNeeded(job)
         }
+        // Keep terminal settings in sync across AppState instances (the
+        // Settings window builds its own instance). When any instance saves,
+        // reload here so `editorTerminalSettings` observers — and thus the live
+        // terminals — re-apply appearance immediately rather than at relaunch.
+        terminalSettingsSyncSubscription = NotificationCenter.default
+            .publisher(for: .editorTerminalSettingsDidChange)
+            .sink { [weak self] note in
+                guard let self, (note.object as AnyObject) !== self else { return }
+                let loaded = EditorTerminalSettingsStore.load()
+                guard loaded != self.editorTerminalSettings else { return }
+                self.isApplyingExternalTerminalSettings = true
+                self.editorTerminalSettings = loaded
+                self.isApplyingExternalTerminalSettings = false
+            }
     }
 
     deinit {
@@ -423,6 +450,7 @@ final class AppState: ObservableObject {
         activeRuntimeSubscription?.cancel()
         jobRegistrySubscription?.cancel()
         terminalSessionSubscription?.cancel()
+        terminalSettingsSyncSubscription?.cancel()
         // rc38 attempted to cancel every background runtime's
         // requestTask here via `MainActor.assumeIsolated { … }`, which
         // works in production (AppState is held by SwiftUI as a

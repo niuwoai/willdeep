@@ -85,6 +85,14 @@ enum EditorTerminalSettingsStore {
     }
 }
 
+extension Notification.Name {
+    /// Posted (with the originating AppState as `object`) after terminal
+    /// settings are saved, so other live AppState instances — notably the
+    /// Settings window's own instance vs. the one the agent window/terminal
+    /// uses — reload and re-apply terminal appearance immediately.
+    static let editorTerminalSettingsDidChange = Notification.Name("com.willdeep.editorTerminalSettingsDidChange")
+}
+
 extension EditorTerminalSettings {
     func normalized() -> EditorTerminalSettings {
         var result = self

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.108.0-rc19 - 2026-06-24
+
+### Fixed
+- 在 Settings 里切换终端配色方案 / 字体 / 字号 / 光标，**侧边栏终端不立即生效**（要重启 app 才变）。根因：SwiftUI 的 `Settings { }` scene 用一个**独立的 AppState 实例**构建（`environmentObject(AppState())`），而侧边栏终端用的是 agent 窗口跟随的另一个 AppState；在设置里改只更新了 Settings 那个实例的 `@Published editorTerminalSettings` 并写入 UserDefaults，终端所在 AppState 的 `@Published` 没变，`onCompatibleChange` 不触发。修复 [AppState.swift](Xedit/AppState.swift)：`editorTerminalSettings` 保存后通过 `NotificationCenter` 广播 `.editorTerminalSettingsDidChange`（object 带发送者，防自环）；每个 AppState 实例订阅该通知，收到后从 store 重载并赋值（用 `isApplyingExternalTerminalSettings` 标志跳过 didSet 的再保存/再广播）。这样任一实例改动，其它实例的 `@Published` 立即更新 → 终端实时重新 `applyAppearanceToAll`，配色/字体/字号/光标改完即时可见，无需重启。
+
+### Changed
+- 版本号从 **1.108.0-rc18** 提升为 **1.108.0-rc19**（终端设置跨 AppState 实例实时同步，修复设置改了不立即生效）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.108.0-rc18 - 2026-06-24
 
 ### Added
