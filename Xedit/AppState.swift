@@ -425,7 +425,15 @@ final class AppState: ObservableObject {
             return (settings, workingDirectory, self.activeAgentSessionID, skin)
         }
         agentJobRegistry.onJobFinished = { [weak self] job in
-            self?.surfaceDelegatedBackgroundJobCompletionIfNeeded(job)
+            guard let self else { return }
+            self.surfaceDelegatedBackgroundJobCompletionIfNeeded(job)
+            // The job result is now queued; if the runtime that spawned it
+            // is idle (its turn already ended saying "I'll check back"),
+            // auto-resume so the model reacts to the completion/failure
+            // instead of going silent until the user sends another message.
+            if let runtime = self.agentRuntimes[job.runtimeID] {
+                self.resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
+            }
         }
         // Keep terminal settings in sync across AppState instances (the
         // Settings window builds its own instance). When any instance saves,

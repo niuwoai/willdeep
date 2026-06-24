@@ -227,6 +227,51 @@ extension AppState {
         )
     }
 
+    /// Auto-resume the agent when a background `run_command` job finishes
+    /// AFTER the turn that spawned it has already ended.
+    ///
+    /// Background completions are pull-based: they're queued into the
+    /// registry's `pendingCompletionEvents` and only surfaced when
+    /// `runAgentLoop` drains them at the top of a round. But the model
+    /// typically says "I'll run this and check the results" and then ends
+    /// its turn — so when the job (often a FAILURE) finishes seconds or
+    /// minutes later, no turn is active to drain it, and the result just
+    /// sits there until the user happens to send another message. From the
+    /// user's side: "nothing happened." This kicks a fresh turn so the
+    /// model actually sees the completion and reacts.
+    ///
+    /// An active turn already drains completions itself, so we only kick
+    /// when the runtime is fully idle; if the provider is saturated we bow
+    /// out and let a later turn surface it (never enqueue a phantom user
+    /// message for this).
+    @MainActor
+    func resumeAgentLoopForPendingBackgroundCompletions(for runtime: AgentRuntime) {
+        guard !runtime.isResponding,
+              !runtime.isAwaitingProviderSlot,
+              !runtime.isCompressingContext,
+              runtime.requestTask == nil else { return }
+        guard agentJobRegistry.pendingCompletionCount(forRuntime: runtime.id) > 0 else { return }
+
+        let configuration = configurationForCurrentTurn(for: runtime)
+        let providerID = configuration.providerID
+        guard acquireProviderSlotIfPossible(providerID: providerID) else { return }
+
+        runtime.isAwaitingProviderSlot = false
+        runtime.errorMessage = nil
+        runtime.errorDetails = nil
+        runtime.isResponding = true
+        runtime.turnStartedAt = Date()
+
+        runtime.requestTask = Task { [weak self, weak runtime] in
+            guard let self else { return }
+            guard let runtime else {
+                self.releaseProviderSlot(providerID: providerID)
+                return
+            }
+            await self.runAgentLoop(for: runtime, configuration: configuration)
+        }
+    }
+
     func clearAgentConversation() {
         agentRequestTask?.cancel()
         if let runtimeID = activeRuntime?.id {
@@ -267,6 +312,11 @@ extension AppState {
             // sees a fully cleared `isResponding` and won't refuse to
             // dispatch a queued user message that's for the same runtime.
             releaseProviderSlot(providerID: configuration.providerID)
+            // A background job can finish in the tiny window between this
+            // turn's last drain and its end. If one did — and no queued
+            // user message just claimed the runtime above — kick a fresh
+            // turn so the completion isn't stranded until the next message.
+            resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
         }
 
         let client = AgentClient(configuration: configuration)
@@ -855,7 +905,7 @@ extension AppState {
                     appendToolMessage(
                         for: runtime,
                         toolCallID: call.externalID,
-                        payload: "Tool error: \(error.localizedDescription)",
+                        payload: "Tool error: \(error.localizedDescription)\n\n(WillDeep: this tool call failed. Do not stop here — diagnose the cause from the exit code/stderr above and try another approach to accomplish the goal. Only give up if you are genuinely blocked, and then explain what you tried and what you still need.)",
                         source: .systemNotice
                     )
                 }
