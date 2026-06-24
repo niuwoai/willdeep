@@ -280,10 +280,57 @@ struct EditorTerminalColorScheme: Identifiable, Equatable {
         muted: NSColor(calibratedRed: 0.54, green: 0.62, blue: 0.52, alpha: 1)
     )
 
-    static let all: [EditorTerminalColorScheme] = [.midnight, .graphite, .solar, .orchard]
+    // Popular dark schemes from the wider terminal/editor world, using their
+    // canonical hex values. Only background / foreground / accent / muted are
+    // themed here; the 16-color ANSI palette stays at SwiftTerm's default so
+    // program colors (ls, git, grep) remain correct.
+    static let solarizedDark = EditorTerminalColorScheme(
+        id: "solarized-dark", displayName: "Solarized Dark",
+        background: hex(0x002B36), foreground: hex(0x93A1A1), accent: hex(0x268BD2), muted: hex(0x586E75)
+    )
+    static let dracula = EditorTerminalColorScheme(
+        id: "dracula", displayName: "Dracula",
+        background: hex(0x282A36), foreground: hex(0xF8F8F2), accent: hex(0xBD93F9), muted: hex(0x6272A4)
+    )
+    static let oneDark = EditorTerminalColorScheme(
+        id: "one-dark", displayName: "One Dark",
+        background: hex(0x282C34), foreground: hex(0xABB2BF), accent: hex(0x61AFEF), muted: hex(0x5C6370)
+    )
+    static let gruvboxDark = EditorTerminalColorScheme(
+        id: "gruvbox-dark", displayName: "Gruvbox Dark",
+        background: hex(0x282828), foreground: hex(0xEBDBB2), accent: hex(0xFABD2F), muted: hex(0x928374)
+    )
+    static let nord = EditorTerminalColorScheme(
+        id: "nord", displayName: "Nord",
+        background: hex(0x2E3440), foreground: hex(0xD8DEE9), accent: hex(0x88C0D0), muted: hex(0x4C566A)
+    )
+    static let tokyoNight = EditorTerminalColorScheme(
+        id: "tokyo-night", displayName: "Tokyo Night",
+        background: hex(0x1A1B26), foreground: hex(0xC0CAF5), accent: hex(0x7AA2F7), muted: hex(0x565F89)
+    )
+    static let monokai = EditorTerminalColorScheme(
+        id: "monokai", displayName: "Monokai",
+        background: hex(0x272822), foreground: hex(0xF8F8F2), accent: hex(0xA6E22E), muted: hex(0x75715E)
+    )
+
+    static let all: [EditorTerminalColorScheme] = [
+        .midnight, .graphite, .solar, .orchard,
+        .solarizedDark, .dracula, .oneDark, .gruvboxDark, .nord, .tokyoNight, .monokai
+    ]
 
     static func byID(_ id: String) -> EditorTerminalColorScheme? {
         all.first { $0.id == id }
+    }
+
+    /// Build an sRGB color from a 0xRRGGBB literal — keeps the canonical
+    /// hex theme values readable instead of pre-divided float triples.
+    private static func hex(_ value: UInt32) -> NSColor {
+        NSColor(
+            srgbRed: CGFloat((value >> 16) & 0xFF) / 255,
+            green: CGFloat((value >> 8) & 0xFF) / 255,
+            blue: CGFloat(value & 0xFF) / 255,
+            alpha: 1
+        )
     }
 }
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.108.0-rc18 - 2026-06-24
+
+### Added
+- 终端配色方案从 4 个扩充到 **11 个**，新增 7 个程序员常用的经典暗色（黑底）方案：**Solarized Dark / Dracula / One Dark / Gruvbox Dark / Nord / Tokyo Night / Monokai**，均按各自官方 hex 值还原（[EditorTerminalModels.swift](Xedit/EditorTerminalModels.swift)，新增 `hex(_:)` 辅助以 sRGB 还原配色；仍只主题化 background/foreground/accent/muted，16 色 ANSI 调色板保持 SwiftTerm 默认以保证程序色正确）。设置里的配色色块行改为自适应换行网格（[EditorTerminalView.swift](Xedit/EditorTerminalView.swift)，`LazyVGrid(.adaptive)`），11 个色块不再溢出窗口宽度。
+
+### Changed
+- 版本号从 **1.108.0-rc17** 提升为 **1.108.0-rc18**（新增 7 个经典暗色终端配色方案 + 色块自适应换行）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.108.0-rc17 - 2026-06-24
 
 ### Added

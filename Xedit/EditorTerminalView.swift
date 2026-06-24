@@ -171,7 +171,13 @@ extension EditorSettingsView {
                     }
                 }
 
-                HStack(spacing: 8) {
+                // Adaptive grid so the swatch row wraps instead of overflowing
+                // once there are many schemes (11+ now).
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 64), spacing: 8)],
+                    alignment: .leading,
+                    spacing: 8
+                ) {
                     ForEach(EditorTerminalColorScheme.all) { scheme in
                         Button {
                             updateTerminal(\.colorSchemeID, scheme.id)
