@@ -44,7 +44,12 @@ struct AgentWindowRootView: View {
                 Color.clear
             }
         }
-        .frame(minWidth: 720, minHeight: 480)
+        // 窗口最小宽度交给 AgentModeView 的 AgentWindowMinWidthSetter
+        // 动态写进 NSWindow.contentMinSize —— SwiftUI 的静态 minWidth 会在
+        // 每次 resize layout 时把 contentMinSize 重置成固定值,压不住
+        // 「侧面板打开 → 内容更宽」的动态下限,导致最左会话列表被挤出
+        // 窗体左缘。这里只保留高度下限。
+        .frame(minHeight: 480)
         // 标记「agent 窗口在前台」，供全局 ⌘N 命令分流到「新聊天」。
         // 常量值，不随 transcript 流式刷新 republish。
         .focusedSceneValue(\.agentWindowActive, true)

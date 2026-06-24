@@ -28,6 +28,18 @@ struct AgentModeView: View {
     @AppStorage("agentSidePanelWidth") private var sidePanelWidth: Double = 320
     private let sidePanelWidthRange: ClosedRange<Double> = 240...760
 
+    /// 收窄窗口时的列宽规约(rc 用户反馈:最左列被挤出窗体左缘):
+    /// 最左会话列表(`sidebarWidth`)与右侧面板宽度恒定,只压中间 chat
+    /// 列;但中间列不允许小于 2×sidebar,也就是「整体宽度 ≥ 3×sidebar」。
+    /// 这个下限同时喂给中间列(`minWidth`)和根 HStack(`minWidth` →
+    /// 窗口 contentMinSize),窗口因此压不到内容会溢出的程度,sidebar
+    /// 不会再被挤出左缘。右面板打开时把它的宽度也计进窗口下限,否则
+    /// `sidebar + panel` 早就超过旧的固定 720 窗口宽。
+    private var chatColumnMinWidth: CGFloat { sidebarWidth * 2 }
+    private var contentMinWidth: CGFloat {
+        sidebarWidth + chatColumnMinWidth + (sidePanel != nil ? CGFloat(sidePanelWidth) : 0)
+    }
+
     var body: some View {
         let skin = appState.editorSettings.interfaceSkin
         HStack(spacing: 0) {
@@ -53,7 +65,7 @@ struct AgentModeView: View {
                 AgentChatComposer()
                 AgentChatStatusBar()
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(minWidth: chatColumnMinWidth, maxWidth: .infinity, maxHeight: .infinity)
             .background(skin.windowBackground)
 
             if sidePanel != nil {
@@ -73,7 +85,9 @@ struct AgentModeView: View {
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
+        .frame(minWidth: contentMinWidth, maxWidth: .infinity, maxHeight: .infinity)
         .background(skin.windowBackground)
+        .background(AgentWindowMinWidthSetter(minWidth: contentMinWidth))
         .animation(.easeInOut(duration: 0.18), value: sidePanel)
         .onAppear {
             let snapshot = currentTaskMonitorSnapshot
@@ -129,6 +143,43 @@ struct AgentModeView: View {
             return
         }
         sidePanel = .backgroundTasks
+    }
+}
+
+/// 把 Agent 窗口的 `contentMinSize.width` 钉到内容真正需要的最小宽度
+/// (随右侧面板开合 / 拖宽而变)。纯 SwiftUI 的 `.frame(minWidth:)` 在
+/// 这个嵌套布局里不会动态更新 NSWindow 的 contentMinSize —— 它停在
+/// scene 根创建时的静态值,于是侧面板一打开、内容需要的宽度超过那个
+/// 静态下限,窗口仍能被拖窄、HStack 溢出、最左会话列表被挤出窗体
+/// 左缘。直接写 NSWindow 才压得住。
+private struct AgentWindowMinWidthSetter: NSViewRepresentable {
+    let minWidth: CGFloat
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        applyAsync(from: view)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        applyAsync(from: nsView)
+    }
+
+    private func applyAsync(from view: NSView) {
+        let target = minWidth
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            if abs(window.contentMinSize.width - target) > 0.5 {
+                window.contentMinSize.width = target
+            }
+            // 面板刚打开、窗口当前比新下限还窄时,主动撑回下限,不必等
+            // 用户手动拖宽(否则打开瞬间内容已经溢出、左栏被挤出去)。
+            if window.frame.width < target {
+                var frame = window.frame
+                frame.size.width = target
+                window.setFrame(frame, display: true, animate: false)
+            }
+        }
     }
 }
 
