@@ -295,15 +295,20 @@ struct AgentToolCallCard: View {
                     // rc16:把 Deny 推到最左,Allow / Always Allow 在右侧簇集,
                     // 对齐 macOS「主操作右、负操作远离」防误触习惯。
                     HStack {
+                        // 拒绝:空心(描边)按钮;允许:实心(高亮)主操作。
                         Button(L10n.ToolCard.deny) { appState.denyAgentToolCall(id: call.id) }
+                            .buttonStyle(.bordered)
                         Spacer(minLength: 0)
                         if let signature = alwaysAllowSignature {
                             Button(L10n.ToolCard.alwaysAllow) { appState.alwaysAllowAgentToolCall(id: call.id) }
+                                .buttonStyle(.bordered)
                                 .help(L10n.ToolCard.alwaysAllowHelp(signature))
                         }
                         Button(L10n.ToolCard.allow) { appState.approveAgentToolCall(id: call.id) }
+                            .buttonStyle(.borderedProminent)
                     }
                     .font(.caption)
+                    .controlSize(.small)
                 }
             } else if call.status == .awaitingConfirm {
                 VStack(alignment: .leading, spacing: 6) {
