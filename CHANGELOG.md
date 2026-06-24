@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.108.0-rc4 - 2026-06-24
+
+### Fixed
+- 模型有时会幻觉调用一个并不存在的 `glob` 工具（它在 Claude Code 等框架里见过 `Glob`），WillDeep 从不暴露 `glob`，于是它落到「未知工具」分支：风险分类器 [AgentToolRegistry.swift](Xedit/AgentToolRegistry.swift) 的 `guard let descriptor … else { return .danger }` 把任何不认识的工具名一律判成 `.danger`，弹出一个 typed「这是破坏性命令，确认后再执行」的审批卡 —— 而即便确认，[AgentTools.swift](Xedit/AgentTools.swift) 也会直接 `throw unknownTool` 失败。一个纯只读的列文件操作被当成破坏性命令、且注定执行失败。修复：给同类能力注册一个**隐形 `glob` 兼容别名**（不向模型宣传，正道仍是 `grep_files`/`list_directory`）。`risk(for:)` 把 `glob` 判为 `.read`（不再 `.danger`）；新增 [AgentFileTools.glob](Xedit/AgentFileTools.swift) 做真正的只读 workspace 路径扫描（复用现有 `fnmatch`/`globMatches`，支持 `**`/`*`/`?`/`[...]`/`{a,b}`，取 pattern 末段做文件名匹配，`**/*.swift`、`src/**/*.ts`、`*.swift` 都正常）。边界处理：越界到 workspace 外（如 `~/.willdeep/skills/…`）不开安全口子，而是引导改用 `list_skills`/`read_skill`；远程 runtime 引导改用支持远程的 `grep_files`/`list_directory`。
+
+### Changed
+- 版本号从 **1.108.0-rc3** 提升为 **1.108.0-rc4**（`glob` 幻觉工具兼容别名，不再误判破坏性）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.108.0-rc3 - 2026-06-24
 
 ### Fixed

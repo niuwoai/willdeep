@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-24 | Current version: v1.108.0-rc3
+> Last updated: 2026-06-24 | Current version: v1.108.0-rc4
 
 ## Positioning
 
@@ -70,6 +70,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **Agent Mode 交互式远程终端（1.106.0-rc1）** —— Agent mode 右侧辅助栏新增 Terminal 面板,复用 Settings → Runtimes 的 SSH 配置启动真实 `/usr/bin/ssh -tt` 交互式 PTY。每台 runtime 可配置启动目录、自动命令、二跳命令、命令间隔、空闲超时和常用服务名;连接顺序固定为主机连接 → 自动命令 → 二跳命令。AI 通过 `terminal_snapshot` 只读当前终端输出,通过 `terminal_send_command` / `terminal_send_control` 写入时仍走现有审批卡;面板内提供 systemctl、journalctl、docker 等常用服务命令模板。
 - **代码块复制状态与横向滚动修复（1.106.0-rc2）** —— TextKit 聊天历史里的 fenced code 复制控件现在会把图标和文字作为同一个可替换范围处理,点击复制后只显示一个 `Done`,3 秒后按按钮实例独立恢复为可复制状态;代码块正文不再自动折行,在代码块区域横向滚动可查看长命令、长路径和长单行输出的完整内容。
 - **CI xcodebuild 收尾 watchdog（1.106.0-rc3）** —— GitHub macOS runner 上如果 Swift 测试已经整轮通过但 `xcodebuild` 收尾不退出,`scripts/xcodebuild_ci.rb` 会在宽限期后清理 stale 进程,保留 `xcodebuild.log` 与 `xcresult` 报告,避免 CI job 被 30 分钟总超时误伤。
+- **`glob` 幻觉工具兼容别名（1.108.0-rc4）** —— 模型有时幻觉调用并不存在的 `glob`(在 Claude Code 等框架见过 `Glob`),WillDeep 不暴露 `glob`,它落到「未知工具」分支被风险分类器一律判 `.danger`,弹「破坏性命令,确认后再执行」,而确认后又 `throw unknownTool` 必失败——纯只读列文件被当破坏性且注定报错。修复:注册隐形 `glob` 兼容别名(不向模型宣传,正道仍 `grep_files`/`list_directory`),`risk(for:)` 判 `.read`,新增 `AgentFileTools.glob` 做只读 workspace 路径扫描(复用 `fnmatch`/`globMatches`,支持 `**`/`*`/`?`/`[...]`/`{a,b}`)。越界到 workspace 外(如 `~/.willdeep/skills/…`)不开安全口子而引导用 `list_skills`/`read_skill`;远程引导用 `grep_files`/`list_directory`。
 - **抢不到并发槽时用户消息不再静默丢失（1.108.0-rc3）** —— 修复偶发「发消息后输入框清空、对话里却什么都没有、也没响应」。根因:`dispatchAgentMessage` 把用户消息 append + 置 `isResponding` 放在 provider 并发槽(默认每 provider 3 个)抢占**之后**;槽被占满时(常因系统代理让某 turn 网络请求挂起、迟不释放槽)新消息进了无 UI 的后台队列 `pendingDispatchQueue`,既不显示也无「处理中」提示,而 composer 已清空 → 像凭空消失。修法:把消息 append + 持久化提到抢槽**之前**,一发即可见;`PendingDispatch` 带消息 id,drain 时复用不重复;新增 `AgentRuntime.isAwaitingProviderSlot`,transcript 里显示「正在排队，等待空闲的并发槽位…」,排队不再静默。与是否选 workspace 无因果。
 - **Editor 终端 SwiftTerm 化 + 终端外观设置（1.108.0-rc1）** —— editor 底部终端从 NSTextView 原始输出重写为 SwiftTerm 完整终端(与侧栏终端同引擎):颜色 / 光标 / 全屏 TUI 正常,输入对齐 Terminal/Ghostty,保留 Run 命令 / 工作目录 / 清屏。偏好设置新增:字体(含 Nerd Font)/ 字号 / 光标类型(方块·竖线·下划线)/ 光标闪烁;颜色方案新增「Follow App Skin」从皮肤取背景·前景·光标色,ANSI 16 色保持标准以保证程序输出可读(`TerminalAppearance` 统一应用到两个终端)。行高暂不可调(SwiftTerm 单元格高度由字体度量推导)。
 - **`spawn_agent` 子 agent 继承远程 backend（1.107.0-rc6）** —— 修复子 agent 在远程(ssh/daemon)workspace 下仍读本地 Mac 文件的 bug。根因:`AgentSubagentRunner.executeToolCall` 用 `AgentToolContext(rootDirectory:)` 单参构造,丢掉了父会话的 `runtimeDescriptor` 与 `workspaceLocation`,导致 `context.remoteBackend` 为 nil,read-only 工具(search_files / grep_files / read_file / list_directory / git_status / run_command)全跑在本机。修法:把父 context 的 `runtimeDescriptor` + `workspaceLocation` 沿 `executeSpawnAgentToolCall → startBackground / AgentSubagentRunner.run → executeToolCall → AgentToolContext` 一路透传,子 agent 与父会话指向同一远端 backend。只读文件工具静态分级 `.read` 不受影响照常执行;远端 `run_command` 仍按既有策略分级(可能为 `.write` 被子 agent 拒,可接受 —— 子 agent 本就只读)。

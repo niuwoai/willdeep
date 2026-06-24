@@ -307,6 +307,107 @@ enum AgentFileTools {
         return AgentToolResult(summary: summary, payload: lines.isEmpty ? "(empty directory)" : lines.joined(separator: "\n"))
     }
 
+    /// Compatibility alias for a `glob` tool some models hallucinate — they've
+    /// seen `Glob` in other agent frameworks and call it even though WillDeep
+    /// never advertises it. WillDeep's real search is `grep_files` /
+    /// `list_directory` (ripgrep underneath). Rather than let a hallucinated
+    /// `glob` fall through to the unknown-tool path — which the risk classifier
+    /// flags as `.danger`, popping a typed "destructive command" confirm that
+    /// would only `throw unknownTool` if confirmed — route it to a real,
+    /// READ-ONLY workspace scan. Returns workspace files whose name matches the
+    /// glob `pattern` (`*`/`**`, `?`, `[...]`, `{a,b}` via `globMatches`); the
+    /// pattern's last path segment is used as the filename matcher, so
+    /// `**/*.swift`, `src/**/*.ts`, and `*.swift` all behave as expected.
+    static func glob(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        guard let pattern = arguments["pattern"]?.stringValue(),
+              !pattern.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw AgentToolError.missingArgument("pattern")
+        }
+        let trimmed = pattern.trimmingCharacters(in: .whitespaces)
+
+        // No remote glob backend — steer to tools that do support remote.
+        if context.remoteBackend != nil {
+            return AgentToolResult(
+                summary: "glob: use grep_files on remote",
+                payload: "`glob` runs only against a local workspace. On this remote session use `grep_files` (its `include` argument is a glob filter) or `list_directory`. Pattern was: \(trimmed)"
+            )
+        }
+        guard let root = context.rootDirectory else { throw AgentToolError.noWorkspace }
+        let rootPath = root.standardizedFileURL.path
+
+        // Absolute pattern pointing outside the workspace: don't open a hole in
+        // the boundary every other file tool enforces. Skill files have their
+        // own read-only tools, so route the common ~/.willdeep/skills case there.
+        if (trimmed as NSString).isAbsolutePath {
+            let prefix = URL(fileURLWithPath: globStaticPrefix(trimmed)).standardizedFileURL.path
+            let inside = prefix == rootPath || prefix.hasPrefix(rootPath + "/") || rootPath.hasPrefix(prefix + "/")
+            if !inside {
+                let hint = trimmed.contains("/.willdeep/skills/")
+                    ? " For skill files use `list_skills` / `read_skill`."
+                    : ""
+                return AgentToolResult(
+                    summary: "glob: outside workspace",
+                    payload: "`glob` only matches inside the current workspace (\(rootPath)); this pattern points outside it.\(hint) Pattern was: \(trimmed)"
+                )
+            }
+        }
+
+        // Match each workspace file's basename against the pattern's last
+        // segment — covers the common `**/*.ext` / `*.ext` intent across all
+        // depths. `globMatches` handles braces, char classes, `*` and `?`.
+        let nameGlob = trimmed.split(separator: "/").last.map(String.init) ?? trimmed
+        let limit = min(max(arguments["max_results"]?.intValue() ?? 200, 1), maxDirectoryEntries)
+
+        guard let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else {
+            throw AgentToolError.notFound(rootPath)
+        }
+
+        var matches: [String] = []
+        var visited = 0
+        var truncated = false
+        while let url = enumerator.nextObject() as? URL {
+            visited += 1
+            if visited > maxToolTraversalNodes { break }
+            let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
+            if values?.isDirectory == true {
+                if ProjectDirectoryExclusions.shouldSkip(url) { enumerator.skipDescendants() }
+                continue
+            }
+            guard values?.isRegularFile == true else { continue }
+            if globMatches(nameGlob, name: url.lastPathComponent) {
+                matches.append(relativePath(of: url, root: root))
+                if matches.count >= limit { truncated = true; break }
+            }
+        }
+        matches.sort()
+
+        let summary = "\(matches.count)\(truncated ? "+" : "") file\(matches.count == 1 && !truncated ? "" : "s") matching `\(nameGlob)`"
+        let payload = matches.isEmpty
+            ? "No files match `\(pattern)` in the workspace. (WillDeep has no native `glob`; this is a read-only alias over a workspace scan — `grep_files` / `list_directory` are the first-class tools.)"
+            : matches.joined(separator: "\n") + (truncated ? "\n...[truncated, refine the pattern]" : "")
+        return AgentToolResult(summary: summary, payload: payload)
+    }
+
+    /// The literal directory prefix of a glob pattern, up to the path segment
+    /// that first contains a wildcard. `/a/b/**/*.swift` → `/a/b`.
+    private static func globStaticPrefix(_ pattern: String) -> String {
+        let wildcards: Set<Character> = ["*", "?", "[", "{"]
+        var prefix = ""
+        for ch in pattern {
+            if wildcards.contains(ch) { break }
+            prefix.append(ch)
+        }
+        if let slash = prefix.lastIndex(of: "/") { return String(prefix[..<slash]) }
+        return prefix
+    }
+
     static func gitStatus(context: AgentToolContext) async throws -> AgentToolResult {
         if let backend = context.remoteBackend {
             return try await backend.gitStatus()

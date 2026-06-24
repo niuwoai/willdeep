@@ -446,6 +446,12 @@ enum AgentToolRegistry {
         arguments: [String: AgentJSONValue],
         rootDirectory: URL? = nil
     ) -> AgentToolRisk {
+        // `glob` isn't an advertised tool, but some models hallucinate it
+        // (they've seen `Glob` elsewhere). Treat it as the read-only
+        // workspace scan it routes to — never the `.danger` default below,
+        // which would pop a bogus "destructive command" confirm for a plain
+        // file listing. See AgentFileTools.glob / AgentTools.run.
+        if name == "glob" { return .read }
         guard let descriptor = descriptor(for: name) else { return .danger }
         if descriptor.name == "run_command", let command = arguments["command"]?.stringValue() {
             let sandboxDecision = AgentSandboxPolicy.commandDecision(command: command, rootDirectory: rootDirectory)

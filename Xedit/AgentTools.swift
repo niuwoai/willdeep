@@ -28,6 +28,10 @@ enum AgentToolRunner {
             return try await AgentFileTools.readFile(arguments: arguments, context: context)
         case "list_directory":
             return try await AgentFileTools.listDirectory(arguments: arguments, context: context)
+        case "glob":
+            // Compatibility alias for the `glob` tool some models hallucinate;
+            // read-only workspace path scan. See AgentFileTools.glob.
+            return try await AgentFileTools.glob(arguments: arguments, context: context)
         case "git_status":
             return try await AgentFileTools.gitStatus(context: context)
         case "run_command":
