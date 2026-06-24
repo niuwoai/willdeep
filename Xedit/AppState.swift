@@ -392,6 +392,15 @@ final class AppState: ObservableObject {
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
             }
+        // Let the terminal tools open a local shell on demand (rooted at
+        // the active session's workspace) when the agent wants to drive
+        // the terminal but the user hasn't opened a tab yet.
+        agentTerminalController.defaultLocalTabProvider = { [weak self] in
+            guard let self else { return nil }
+            let workingDirectory = self.activeRuntime?.workspaceRootPath
+                ?? self.rootDirectory?.standardizedFileURL.path
+            return (self.editorTerminalSettings.normalized(), workingDirectory, self.activeAgentSessionID)
+        }
         agentJobRegistry.onJobFinished = { [weak self] job in
             self?.surfaceDelegatedBackgroundJobCompletionIfNeeded(job)
         }

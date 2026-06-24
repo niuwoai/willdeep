@@ -77,7 +77,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "terminal_snapshot",
-            description: "Read the visible Agent Terminal side panel state and output tail. Read-only. Use this to inspect a user-opened SSH terminal, including login banners, service status output, and prompts. Does not start a terminal and redacts common secrets before returning output.",
+            description: "Read the visible text of the active Agent Terminal side-panel tab (a real terminal the user is watching — local shell by default, or SSH). Read-only; redacts common secrets. Use it to read back what your terminal_send_command produced, or to inspect prompts, banners, and command output.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "max_characters", type: .integer, description: "Maximum output-tail characters to return. Defaults to 16000, capped at 40000.", required: false)
@@ -85,7 +85,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "terminal_send_command",
-            description: "Send one visible command line to the currently connected Agent Terminal side panel. Requires user approval before the command is written to the terminal. Does not read passwords or hidden input.",
+            description: "Type one command line into the VISIBLE Agent Terminal side-panel tab and press Enter, so the user sees it run live in their own terminal. PREFER THIS over run_command whenever the user asks you to operate / type into / run something in the side-panel terminal (e.g. \"在侧边栏终端里执行 du\", \"run df in the terminal\"). Works with the default local shell — no SSH required; if no terminal tab is open yet, WillDeep opens a local shell automatically. Requires user approval. Does not read hidden/password input.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "command", type: .string, description: "Command line to send, without a trailing newline. WillDeep appends Enter after approval.", required: true)
@@ -93,7 +93,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "terminal_send_control",
-            description: "Send a whitelisted control key to the currently connected Agent Terminal side panel. Requires user approval; use ctrl_c to interrupt a foreground command, enter to submit the current line, or escape to cancel terminal UI modes.",
+            description: "Send a whitelisted control key to the active Agent Terminal side-panel tab. Requires user approval; use ctrl_c to interrupt a foreground command, enter to submit the current line, or escape to cancel terminal UI modes.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "control", type: .string, description: "One of: ctrl_c, enter, escape.", required: true)

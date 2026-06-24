@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.107.0-rc3 - 2026-06-24
+
+### Fixed
+- **AI 现在能真正操作侧边栏终端。** 之前 `terminal_send_command` / `terminal_snapshot` 的工具描述还停留在旧的「SSH terminal / currently connected」措辞,在线 Agent 遇到「操作侧边栏终端,看磁盘」这类请求时不认为该工具适用,转而用自己沙箱里的 `run_command` 另跑一遍。重写工具描述:明确这是用户正在看的可见终端(默认本地 shell,也可 SSH),并要求当用户说「在侧边栏终端里执行 / 操作终端」时优先用 `terminal_send_command` 而非 `run_command`。
+- 终端工具不再要求用户先手动开终端:若没有打开的终端标签,`terminal_send_command` / `terminal_send_control` 会自动开一个本地 shell 标签(工作目录跟随当前会话 workspace)再输入命令。
+- **侧边栏终端 powerline / Nerd Font 图标乱码修复(可选字体)。** powerlevel10k / starship 等主题用 Nerd Font 私有区图标渲染分隔符和图标,而原来可选的终端字体(System Mono / SF Mono / Menlo / Monaco)都不含这些字形,于是显示成 `?`/方框。现在终端字体列表会自动探测并列出已安装的常见 Nerd Font(MesloLGS / JetBrainsMono / FiraCode / Hack / SauceCodePro Nerd Font),在 Settings → 终端字体里选中即可正常显示;新装环境若已装 Nerd Font 会默认采用。切换字体对已打开的标签实时生效。
+
+### Changed
+- 版本号从 **1.107.0-rc2** 提升为 **1.107.0-rc3**（AI 驱动侧边栏终端 + 终端工具自动开标签 + Nerd Font 字体支持修乱码）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.107.0-rc2 - 2026-06-24
 
 ### Changed

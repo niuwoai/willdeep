@@ -386,6 +386,13 @@ final class AgentInteractiveTerminalController: ObservableObject {
     /// Default runtime for new SSH tabs.
     @Published var selectedRuntimeID: UUID?
 
+    /// Supplies parameters to open a local shell tab on demand when an
+    /// agent tool wants to drive the terminal but the user hasn't opened
+    /// one yet. Wired by AppState so the controller can reach live
+    /// terminal settings and the active session's workspace. Returns nil
+    /// only if there's no AppState to ask.
+    var defaultLocalTabProvider: (() -> (settings: EditorTerminalSettings, workingDirectory: String?, originAgentSessionID: UUID?)?)?
+
     /// Tabs idle longer than this are auto-terminated and removed. The
     /// currently-visible tab is exempt so we never close what the user is
     /// looking at.
@@ -556,17 +563,30 @@ final class AgentInteractiveTerminalController: ObservableObject {
     }
 
     func sendApprovedCommand(_ command: String) throws -> AgentToolResult {
-        guard let tab = activeTab else {
-            throw AgentToolError.invalidArgument("Open the Agent Terminal side panel and start a tab before sending commands.")
-        }
+        let tab = try activeTabForToolUse()
         return try tab.sendApprovedCommand(command)
     }
 
     func sendApprovedControl(_ control: AgentTerminalControl) throws -> AgentToolResult {
-        guard let tab = activeTab else {
-            throw AgentToolError.invalidArgument("Open the Agent Terminal side panel and start a tab before sending control input.")
-        }
+        let tab = try activeTabForToolUse()
         return try tab.sendApprovedControl(control)
+    }
+
+    /// The tab an agent tool should act on: the active one, or — if the
+    /// user hasn't opened the terminal yet — a freshly opened local shell
+    /// so the agent can drive the terminal without the user first
+    /// clicking around. Falls back to a clear error only when there's no
+    /// way to open one.
+    private func activeTabForToolUse() throws -> AgentTerminalTab {
+        if let tab = activeTab { return tab }
+        guard let config = defaultLocalTabProvider?() else {
+            throw AgentToolError.invalidArgument("Open the Agent Terminal side panel first so a shell is available.")
+        }
+        return openLocalTab(
+            originAgentSessionID: config.originAgentSessionID,
+            workingDirectory: config.workingDirectory,
+            settings: config.settings
+        )
     }
 }
 

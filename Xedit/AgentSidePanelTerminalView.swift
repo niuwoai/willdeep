@@ -36,6 +36,11 @@ struct AgentSidePanelTerminalView: View {
             )
             controller.applyAppearanceToAll(settings)
         }
+        .onCompatibleChange(of: appState.editorTerminalSettings) { _, _ in
+            // Live-apply font / color changes (e.g. switching to a Nerd
+            // Font to fix powerline glyphs) to already-open tabs.
+            controller.applyAppearanceToAll(settings)
+        }
     }
 
     // MARK: Tab bar

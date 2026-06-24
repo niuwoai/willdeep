@@ -17,13 +17,15 @@ struct EditorTerminalSettings: Codable, Equatable {
     var colorSchemeID: String
     var environmentText: String
 
-    static let `default` = EditorTerminalSettings(
-        shellPath: "/bin/zsh",
-        fontName: EditorTerminalFont.systemMono.id,
-        fontSize: 12,
-        colorSchemeID: EditorTerminalColorScheme.midnight.id,
-        environmentText: ""
-    )
+    static var `default`: EditorTerminalSettings {
+        EditorTerminalSettings(
+            shellPath: "/bin/zsh",
+            fontName: EditorTerminalFont.preferredDefaultID,
+            fontSize: 12,
+            colorSchemeID: EditorTerminalColorScheme.midnight.id,
+            environmentText: ""
+        )
+    }
 }
 
 enum EditorTerminalSettingsStore {
@@ -87,7 +89,36 @@ struct EditorTerminalFont: Identifiable, Equatable {
     static let monaco = EditorTerminalFont(id: "monaco", displayName: "Monaco", postScriptName: "Monaco")
     static let sfMono = EditorTerminalFont(id: "sf-mono", displayName: "SF Mono", postScriptName: "SFMono-Regular")
 
-    static let all: [EditorTerminalFont] = [.systemMono, .sfMono, .menlo, .monaco]
+    /// Common Nerd Fonts (Powerline/icon glyphs). Themes like
+    /// powerlevel10k / starship render their separators and icons from a
+    /// Nerd Font's private-use area; the plain monospace fonts above
+    /// can't show those glyphs, so they appear as `?`/boxes. We probe
+    /// for the popular ones and only offer the ones actually installed.
+    private static let nerdFontCandidates: [(id: String, display: String, family: String)] = [
+        ("meslo-nf", "MesloLGS Nerd Font", "MesloLGS NF"),
+        ("jetbrainsmono-nf", "JetBrainsMono Nerd Font", "JetBrainsMono Nerd Font"),
+        ("firacode-nf", "FiraCode Nerd Font", "FiraCode Nerd Font"),
+        ("hack-nf", "Hack Nerd Font", "Hack Nerd Font"),
+        ("sourcecodepro-nf", "SauceCodePro Nerd Font", "SauceCodePro Nerd Font")
+    ]
+
+    static func installedNerdFonts() -> [EditorTerminalFont] {
+        nerdFontCandidates.compactMap { candidate in
+            guard NSFont(name: candidate.family, size: 12) != nil else { return nil }
+            return EditorTerminalFont(id: candidate.id, displayName: candidate.display, postScriptName: candidate.family)
+        }
+    }
+
+    static var all: [EditorTerminalFont] {
+        [.systemMono, .sfMono, .menlo, .monaco] + installedNerdFonts()
+    }
+
+    /// Default font id for a fresh terminal: prefer an installed Nerd
+    /// Font so prompt themes render correctly out of the box; otherwise
+    /// fall back to the system monospace.
+    static var preferredDefaultID: String {
+        installedNerdFonts().first?.id ?? systemMono.id
+    }
 
     static func byID(_ id: String) -> EditorTerminalFont? {
         all.first { $0.id == id }
