@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.108.0-rc10 - 2026-06-24
+
+### Changed
+- 补丁应用建议卡片在用户**已应用或已拒绝**后不再继续显示——处理过的卡片只是占地方:已应用的改动由「工作区变更」卡片(N 个文件已更改)反映,已拒绝的也无需后续操作。[AgentPanelCards.swift](Xedit/AgentPanelCards.swift) 的 `AgentPatchProposalList` 分组时过滤掉 `.applied` / `.rejected`,只保留 `.pending`(待决定)与 `.failed`(应用出错,仍需让用户看到)。配合 rc9 的同轮折叠组卡:一轮多条建议被逐条处理后,组卡里只剩未决项,全部处理完整组卡自动消失。
+- 版本号从 **1.108.0-rc9** 提升为 **1.108.0-rc10**（已处理的补丁建议卡片不再显示）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.108.0-rc9 - 2026-06-24
 
 ### Changed
