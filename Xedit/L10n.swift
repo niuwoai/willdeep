@@ -401,6 +401,14 @@ enum L10n {
         static let showAll = String(localized: "agent-patch.show-all", defaultValue: "Show All")
         static let hideAll = String(localized: "agent-patch.hide-all", defaultValue: "Collapse")
 
+        /// Title of the transcript-level bar that batches every still-pending
+        /// proposal across multiple independent cards — e.g. "5 changes
+        /// awaiting review".
+        static func allPendingTitle(_ count: Int) -> String {
+            String(format: String(localized: "agent-patch.all-pending-title",
+                                   defaultValue: "%d changes awaiting review"), count)
+        }
+
         /// Title of a collapsed group bundling several patch proposals from
         /// the same turn — e.g. "3 patch proposals this turn".
         static func groupTitle(_ count: Int) -> String {

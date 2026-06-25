@@ -92,6 +92,30 @@ extension AppState {
         }
     }
 
+    /// Apply every still-pending proposal across ALL assistant messages.
+    /// Backs the transcript-level "Apply All" bar shown when several
+    /// independent patch cards stack up (e.g. one patch per turn over
+    /// many turns). Reuses the single-proposal path so disk writes, tab
+    /// sync and status messages stay identical.
+    func applyAllPendingAgentPatchProposals() {
+        let ids = agentPatchProposals
+            .filter { $0.status == .pending }
+            .map(\.id)
+        for id in ids {
+            applyAgentPatchProposal(id: id)
+        }
+    }
+
+    /// Reject every still-pending proposal across ALL assistant messages.
+    func rejectAllPendingAgentPatchProposals() {
+        let ids = agentPatchProposals
+            .filter { $0.status == .pending }
+            .map(\.id)
+        for id in ids {
+            rejectAgentPatchProposal(id: id)
+        }
+    }
+
     func applyAgentPatchProposal(id: AgentPatchProposal.ID) {
         guard let index = agentPatchProposals.firstIndex(where: { $0.id == id }) else { return }
 

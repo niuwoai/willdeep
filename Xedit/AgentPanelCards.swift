@@ -205,11 +205,19 @@ struct AgentPatchProposalGroup: View {
 /// just one proposal stays a plain `AgentPatchProposalCard`. Grouping key is
 /// `messageID`; original ordering is preserved by first appearance.
 struct AgentPatchProposalList: View {
+    @EnvironmentObject var appState: AppState
     let proposals: [AgentPatchProposal]
     /// Transcript constrains card width; the compact side panel does not.
     var maxContentWidth: CGFloat? = nil
 
     var body: some View {
+        // When pending patches are spread across 2+ independent cards
+        // (one-patch-per-turn over several turns), a single card's "Apply
+        // All" can't reach the others. Surface a transcript-level bar that
+        // applies / rejects EVERY pending patch at once.
+        if showBulkBar {
+            constrained(bulkBar)
+        }
         ForEach(groupedProposals, id: \.messageID) { group in
             constrained(
                 Group {
@@ -221,6 +229,47 @@ struct AgentPatchProposalList: View {
                 }
             )
         }
+    }
+
+    private var totalPendingCount: Int {
+        proposals.filter { $0.status == .pending }.count
+    }
+
+    /// Only when pending patches span 2+ cards/groups — a lone group
+    /// already carries its own Apply All, so a second bar would just
+    /// duplicate it.
+    private var showBulkBar: Bool {
+        groupedProposals.count >= 2 && totalPendingCount >= 2
+    }
+
+    @ViewBuilder
+    private var bulkBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checklist")
+                .foregroundStyle(.secondary)
+            Text(L10n.AgentPatch.allPendingTitle(totalPendingCount))
+                .font(.system(size: 12, weight: .semibold))
+            Spacer(minLength: 0)
+            Button {
+                appState.rejectAllPendingAgentPatchProposals()
+            } label: {
+                Label(L10n.AgentPatch.rejectAll, systemImage: "xmark.circle")
+            }
+            Button {
+                appState.applyAllPendingAgentPatchProposals()
+            } label: {
+                Label(L10n.AgentPatch.applyAll, systemImage: "checkmark.circle")
+            }
+        }
+        .labelStyle(.titleAndIcon)
+        .font(.caption)
+        .padding(9)
+        .background(Color.accentColor.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+        .overlay(
+            RoundedRectangle(cornerRadius: 7)
+                .stroke(Color.accentColor.opacity(0.25), lineWidth: 1)
+        )
     }
 
     @ViewBuilder
