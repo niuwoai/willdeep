@@ -845,13 +845,14 @@ extension AppState {
                         approvalSource: autoApproval,
                         sandboxDecision: sandboxDecision
                     ),
-                    patchProposalSink: { title, diff in
+                    patchProposalSink: { title, diff, applyImmediately in
                         try self.enqueueAgentPatchProposal(
                             for: runtime,
                             messageID: assistantID,
                             title: title,
                             diff: diff,
-                            autoApplySource: patchAutoApplySource
+                            autoApplySource: patchAutoApplySource,
+                            applyImmediately: applyImmediately
                         )
                     },
                     patchAutoApplySource: patchAutoApplySource,

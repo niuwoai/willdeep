@@ -105,7 +105,8 @@ enum AgentToolRegistry {
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "diff", type: .string, description: "Unified diff. Use workspace-relative paths (`--- a/path`, `+++ b/path`) and standard @@ hunks. To create a new file, use `--- /dev/null` / `+++ b/path` with a `new file mode` line and a single all-added hunk.", required: true),
-                AgentToolParameter(name: "title", type: .string, description: "Optional short title for the patch card. Defaults to Agent Patch.", required: false)
+                AgentToolParameter(name: "title", type: .string, description: "Optional short title for the patch card. Defaults to Agent Patch.", required: false),
+                AgentToolParameter(name: "apply_immediately", type: .boolean, description: "Set true ONLY when the user explicitly asked to write / save directly without review (e.g. \"直接写\", \"直接落盘\", \"不用审核\", \"just write it\", \"save it directly\"). An EDIT to an existing file then writes to disk immediately instead of waiting for the user to click Apply. New files always write immediately regardless of this flag. Defaults to false.", required: false)
             ]
         ),
         AgentToolDescriptor(

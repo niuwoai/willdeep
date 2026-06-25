@@ -163,7 +163,10 @@ enum AgentToolRunner {
 
         let rawTitle = arguments["title"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines)
         let title = rawTitle?.isEmpty == false ? rawTitle : nil
-        let proposal = try await sink(title, diff)
+        // The model sets apply_immediately only when the user explicitly
+        // asked to write / save directly without review.
+        let applyImmediately = arguments["apply_immediately"]?.boolValue() ?? false
+        let proposal = try await sink(title, diff, applyImmediately)
         let files = changes.map(\.path)
         let fileList = files.map { "- \($0)" }.joined(separator: "\n")
         let fileLabel = files.count == 1 ? "1 file" : "\(files.count) files"

@@ -149,7 +149,8 @@ extension AppState {
         messageID: UUID,
         title: String?,
         diff: String,
-        autoApplySource: AgentToolApprovalSource? = nil
+        autoApplySource: AgentToolApprovalSource? = nil,
+        applyImmediately: Bool = false
     ) throws -> AgentPatchProposal {
         let parsed = try AgentPatchApplier.parse(diff)
         // 创建新文件直接落地,不进审核 —— 用户反馈:新建文件不需要点
@@ -171,14 +172,17 @@ extension AppState {
             proposalIndex = runtime.patchProposals.count - 1
         }
 
-        if (autoApplySource != nil || isPureCreation),
+        // 直接落盘的三种情形:Goal / workspace-access 自动应用、纯新建
+        // 文件、以及用户本轮明确要求「直接写 / 落盘 / 不用审核」
+        // (applyImmediately)。其余编辑仍排进 chat 卡片等用户点 Apply。
+        if (autoApplySource != nil || isPureCreation || applyImmediately),
            runtime.patchProposals[proposalIndex].status == .pending {
             do {
                 try applyAgentPatch(diff)
                 runtime.patchProposals[proposalIndex].status = .applied
                 runtime.patchProposals[proposalIndex].statusMessage = autoApplySource
                     .map(autoApplyStatusMessage(for:))
-                    ?? "New file written automatically"
+                    ?? (isPureCreation ? "New file written automatically" : "Applied immediately as requested")
             } catch {
                 runtime.patchProposals[proposalIndex].status = .failed
                 runtime.patchProposals[proposalIndex].statusMessage = error.localizedDescription
