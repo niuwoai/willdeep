@@ -1112,7 +1112,7 @@ extension WillDeepTests {
         var queuedProposal: AgentPatchProposal?
         let context = AgentToolContext(
             rootDirectory: workspace,
-            patchProposalSink: { title, diff in
+            patchProposalSink: { title, diff, _ in
                 let proposal = AgentPatchProposal(
                     messageID: UUID(),
                     title: title ?? "Agent Patch",
