@@ -101,7 +101,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "apply_patch",
-            description: "Submit a conservative unified diff to WillDeep's right-side patch review panel. Handles both EDITING existing files and CREATING new files — for a new file use a creation diff (`--- /dev/null` + `+++ b/path` with a `new file mode` line and a `@@ -0,0 +1,N @@` hunk of all `+` lines); missing parent directories are created on apply. This tool validates the diff shape and queues a patch proposal. In normal modes it does not write files until the user clicks Apply; in Goal mode or workspace-access approval mode the host may immediately apply the queued proposal through the same patch applier and mark it applied.",
+            description: "Submit a conservative unified diff. CREATING a new file writes it to disk IMMEDIATELY — no review needed (use a creation diff: `--- /dev/null` + `+++ b/path` with a `new file mode` line and a `@@ -0,0 +1,N @@` hunk of all `+` lines; missing parent directories are created). EDITING an existing file shows a patch card INLINE IN THE CHAT, right below your message — there is NO separate right-side review panel — for the user to review and click Apply; in Goal mode or workspace-access approval mode the host applies the edit immediately. Validates the diff shape before queuing.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "diff", type: .string, description: "Unified diff. Use workspace-relative paths (`--- a/path`, `+++ b/path`) and standard @@ hunks. To create a new file, use `--- /dev/null` / `+++ b/path` with a `new file mode` line and a single all-added hunk.", required: true),

@@ -151,7 +151,11 @@ extension AppState {
         diff: String,
         autoApplySource: AgentToolApprovalSource? = nil
     ) throws -> AgentPatchProposal {
-        _ = try AgentPatchApplier.parse(diff)
+        let parsed = try AgentPatchApplier.parse(diff)
+        // 创建新文件直接落地,不进审核 —— 用户反馈:新建文件不需要点
+        // Apply。只有「编辑已存在文件」才排进 chat 里的审核卡片等确认
+        // (Goal / workspace-access 模式仍照常自动应用编辑)。
+        let isPureCreation = !parsed.isEmpty && parsed.allSatisfy(\.isNewFile)
 
         let proposalIndex: Int
         if let existingIndex = runtime.patchProposals.firstIndex(where: { $0.diff == diff }) {
@@ -167,12 +171,14 @@ extension AppState {
             proposalIndex = runtime.patchProposals.count - 1
         }
 
-        if let autoApplySource,
+        if (autoApplySource != nil || isPureCreation),
            runtime.patchProposals[proposalIndex].status == .pending {
             do {
                 try applyAgentPatch(diff)
                 runtime.patchProposals[proposalIndex].status = .applied
-                runtime.patchProposals[proposalIndex].statusMessage = autoApplyStatusMessage(for: autoApplySource)
+                runtime.patchProposals[proposalIndex].statusMessage = autoApplySource
+                    .map(autoApplyStatusMessage(for:))
+                    ?? "New file written automatically"
             } catch {
                 runtime.patchProposals[proposalIndex].status = .failed
                 runtime.patchProposals[proposalIndex].statusMessage = error.localizedDescription

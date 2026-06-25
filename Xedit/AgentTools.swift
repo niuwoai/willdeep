@@ -176,13 +176,17 @@ enum AgentToolRunner {
         case .rejected:
             statusLine = "Patch status: rejected."
         case .pending:
-            statusLine = "Patch status: pending. No files were modified; the user must click Apply before this patch writes to disk."
+            statusLine = "Patch status: pending. No files were modified; the user must click Apply on the patch card in the chat before this patch writes to disk."
         }
+
+        let placementLine = proposal.status == .applied
+            ? "Changes written to disk — no review was needed (new files and auto-apply modes write immediately)."
+            : "A patch card is shown inline in the chat, right below your message — there is NO separate side / review panel. The user reviews and clicks Apply there. Do NOT tell the user to look in a right-side panel."
 
         return AgentToolResult(
             summary: proposal.status == .applied ? "patch applied: \(fileLabel)" : "patch queued: \(fileLabel)",
             payload: """
-            Patch proposal queued in the right-side diff panel.
+            \(placementLine)
 
             Patch ID: \(proposal.id.uuidString)
             Title: \(proposal.title)
