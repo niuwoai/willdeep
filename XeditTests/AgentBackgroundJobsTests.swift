@@ -637,7 +637,19 @@ struct AgentBackgroundJobsTests {
         #expect(appState.agentRunningTaskSummary?.contains(job.displayHandle) == true)
 
         _ = appState.agentJobRegistry.kill(id: job.id)
-        _ = await waitUntilFinished(registry: appState.agentJobRegistry, id: job.id)
+        // `kill` only sends SIGTERM; the process's terminationHandler marks
+        // the job finished on a *later* main-actor hop (`Task { @MainActor
+        // markFinished }`). So `job.isAlive` and the `agentRunningTaskCount`
+        // we actually assert on are eventually-consistent — waiting on
+        // `isAlive` alone can return inside the window where the job has left
+        // `.running` but the count this test reads hasn't settled yet, which
+        // made this timing-sensitive test flake on faster boxes. Poll the
+        // asserted quantity itself; a genuine "never drains" regression still
+        // fails via timeout.
+        let drained = await waitUntilTrue(timeoutMs: 15000) {
+            appState.agentRunningTaskCount == 0
+        }
+        #expect(drained)
         #expect(appState.agentRunningTaskCount == 0)
     }
 
@@ -661,6 +673,22 @@ struct AgentBackgroundJobsTests {
             try? await Task.sleep(nanoseconds: 20_000_000)
         }
         return false
+    }
+
+    /// Poll until `condition` holds or the budget runs out. Same cadence
+    /// and rationale as `waitUntilFinished`, but for any main-actor state —
+    /// used to wait on eventually-consistent derived values (e.g.
+    /// `agentRunningTaskCount`) rather than a single job's `isAlive`.
+    private func waitUntilTrue(
+        timeoutMs: Int = 15000,
+        _ condition: () -> Bool
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
+        while Date() < deadline {
+            if condition() { return true }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return condition()
     }
 
     /// Synthetic job for pure-formatting tests. Bypasses the

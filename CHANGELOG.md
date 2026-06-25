@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.108.0-rc25 - 2026-06-25
+
+### Fixed
+- **修复 `appStateRunningTaskCountCombinesToolsAndJobs` 在 CI/快机器上 flaky 致测试红（1.108.0-rc25）** —— rc24 的 CI 在该测试翻车(`agentRunningTaskCount → 1` 期望 0)。根因是测试时序:`AgentJobRegistry.kill` 只发 SIGTERM,进程经 `trap 'exit 143' TERM` 退出后由 `terminationHandler` 的 `Task { @MainActor markFinished }` **异步**把作业置终态——`job.isAlive` 与测试真正断言的派生量 `agentRunningTaskCount` 是最终一致的。旧 [waitUntilFinished](XeditTests/AgentBackgroundJobsTests.swift) 只等 `job.isAlive`,会在"作业已离开 .running 但计数尚未落定"的窗口里返回,断言遂偶发读到 1。修复:新增 `waitUntilTrue(timeoutMs:_:)` 轮询助手,直接等 `agentRunningTaskCount == 0` 落定再断言(本地连跑 3×,2.9–4.5s 内稳定通过);若真出现"永不归零"的回归,轮询超时仍会失败,不掩盖问题。纯测试改动,不动产品代码。属该后台作业 flaky 测试家族(参见 56e7459b 的 withKnownIssue)的同类硬化。
+
 ## 1.108.0-rc24 - 2026-06-25
 
 ### Added
