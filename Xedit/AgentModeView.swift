@@ -216,7 +216,17 @@ private struct AgentSidePanelResizeHandle: View {
                         let base = dragStartWidth ?? width
                         if dragStartWidth == nil { dragStartWidth = base }
                         let proposed = base - Double(value.translation.width)
-                        width = min(max(proposed, range.lowerBound), range.upperBound)
+                        let clamped = min(max(proposed, range.lowerBound), range.upperBound)
+                        // 闪动根因有二:① 拖动给出的是亚像素位移,落到亚像素
+                        // 宽度后面板内容(终端/文本)每帧在分数偏移上重栅格化,
+                        // 肉眼就是抖;对齐到整数点后栅格稳定。② 宽度变化若被
+                        // 祖先 `.animation` 捕捉会插值出迟滞/重影,这里显式关掉
+                        // 隐式动画,让拖动跟手、所见即所得。
+                        let snapped = clamped.rounded()
+                        guard snapped != width else { return }
+                        var txn = Transaction()
+                        txn.disablesAnimations = true
+                        withTransaction(txn) { width = snapped }
                     }
                     .onEnded { _ in dragStartWidth = nil }
             )

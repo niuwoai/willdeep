@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.108.0-rc21 - 2026-06-25
+
+### Changed
+- **Agent 工具卡片本地化 + 命令/控制键展示更清楚（1.108.0-rc21）** —— ① 工具卡片不再裸显英文工具 id（`terminal_send_command` / `ask_user` …）。新增 [AgentToolDisplay](Xedit/AgentToolCallViews.swift) 集中维护「工具 id → 中文名」映射（终端执行命令 / 终端控制键 / 运行命令 / 读取文件 …），卡片标题、分组标题、预览摘要统一走中文名；原始 id 收进 `.help` tooltip 供排查，未收录的工具回退原 id 绝不丢信息。② 待批准的 `terminal_send_command` 之前只在头部单行截断显示 `command=…`，现在和 `run_command` 一样弹出可选中、可滚动的命令明细块，**默认最多约 3 行**（`maxHeight 62`），更长的命令在框内纵向/横向滚动查看全部。③ `terminal_send_control` 的 `control=ctrl_c` 等裸别名展开成「Ctrl-C（中断当前命令 / SIGINT）」「Enter（回车提交当前行）」「Esc（取消 / 退出终端 UI 模式）」，审批前一眼看懂要发什么键。
+- **终端侧边栏拖拽改宽更跟手、不再闪动（1.108.0-rc21）** —— Agent 右侧面板（含终端）拖拽分隔条改宽时明显闪动。根因有二：① 拖动给出的是亚像素位移，落到分数宽度后面板内容（终端 / 文本）每帧在分数偏移上重栅格化，肉眼即抖；② 宽度变化可能被祖先 `.animation` 捕捉而插值出迟滞/重影。修复 [AgentSidePanelResizeHandle](Xedit/AgentModeView.swift)：把目标宽度对齐到整数点（`rounded()`），并在拖动赋值时用 `Transaction.disablesAnimations` 显式关闭隐式动画；同时只在整点值真正变化时才写入，顺带把每帧的 `@AppStorage` 写盘抖动也削掉。
+
 ## 1.108.0-rc20 - 2026-06-24
 
 ### Fixed

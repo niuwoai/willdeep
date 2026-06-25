@@ -8,6 +8,85 @@
 import SwiftUI
 import AppKit
 
+/// 工具卡片的本地化展示助手。模型给的工具 id 是英文 snake_case
+/// （`terminal_send_command` / `ask_user` …），直接糊在卡片上对中文
+/// 用户不友好。这里集中维护「工具 id → 中文名」与控制键别名的友好
+/// 展示。与本文件里 `已读取 N 个文件` 等中文活动文案保持同一约定
+/// （Agent transcript 视图统一硬编码中文，不走 L10n 目录）。
+nonisolated enum AgentToolDisplay {
+    /// 工具 id → 中文展示名。未收录的工具回退到原始 id，绝不丢信息。
+    static func name(for toolName: String) -> String {
+        toolNames[toolName] ?? toolName
+    }
+
+    /// 带括号原始 id 的展示名，例如「终端执行命令 (terminal_send_command)」，
+    /// 既给中文用户读得懂的名字，也保留可检索的原始 id 供排查。
+    static func nameWithRawID(for toolName: String) -> String {
+        guard let localized = toolNames[toolName] else { return toolName }
+        return "\(localized)（\(toolName)）"
+    }
+
+    /// `terminal_send_control` 的 control 取值（ctrl_c / enter / escape）
+    /// 直接显示原始别名既不直观也容易被误会，这里展开成「人话 + 作用」。
+    static func controlLabel(for raw: String) -> String {
+        switch raw {
+        case "ctrl_c": return "Ctrl-C（中断当前命令 / SIGINT）"
+        case "enter": return "Enter（回车提交当前行）"
+        case "escape": return "Esc（取消 / 退出终端 UI 模式）"
+        default: return raw
+        }
+    }
+
+    static let toolNames: [String: String] = [
+        "search_files": "搜索文件",
+        "grep_files": "正则搜索",
+        "glob": "通配查找",
+        "read_file": "读取文件",
+        "list_directory": "浏览目录",
+        "git_status": "查看 Git 状态",
+        "run_command": "运行命令",
+        "terminal_snapshot": "终端快照",
+        "terminal_send_command": "终端执行命令",
+        "terminal_send_control": "终端控制键",
+        "apply_patch": "应用补丁",
+        "list_jobs": "查看后台任务",
+        "get_job_output": "读取任务输出",
+        "kill_job": "终止后台任务",
+        "list_skills": "查看技能",
+        "read_skill": "读取技能",
+        "add_memory": "记忆要点",
+        "create_user_skill": "新建技能",
+        "update_user_skill": "更新技能",
+        "delete_user_skill": "删除技能",
+        "search_mcp_servers": "搜索 MCP 服务",
+        "suggest_mcp_server": "推荐 MCP 服务",
+        "configure_mcp_server": "配置 MCP 服务",
+        "web_search": "联网搜索",
+        "web_fetch": "抓取网页",
+        "generate_image": "生成图片",
+        "visual_qa_screenshot": "截图视觉检查",
+        "chrome_status": "Chrome 状态",
+        "chrome_read_page": "读取网页",
+        "chrome_read_selection": "读取网页选区",
+        "chrome_click": "点击页面元素",
+        "chrome_type": "输入网页文本",
+        "chrome_capture_tab": "截取标签页",
+        "chrome_debugger_command": "Chrome 调试命令",
+        "list_mcp_servers": "MCP 服务列表",
+        "list_mcp_tools": "MCP 工具列表",
+        "call_mcp_tool": "调用 MCP 工具",
+        "lark_cli": "飞书 CLI",
+        "claude_code": "Claude Code",
+        "codex_cli": "Codex CLI",
+        "cursor_agent": "Cursor Agent",
+        "cline_cli": "Cline CLI",
+        "spawn_agent": "派生子代理",
+        "ask_user": "询问你",
+        "run_workflow": "运行工作流",
+        "show_widget": "展示组件",
+    ]
+}
+
 struct AgentToolCallGroup: View {
     @EnvironmentObject var appState: AppState
     let calls: [AgentToolCall]
@@ -122,7 +201,7 @@ struct AgentToolCallGroup: View {
             return activityText
         }
         if calls.count == 1, let first = calls.first {
-            return "已调用 \(first.toolName)"
+            return "已调用 \(AgentToolDisplay.name(for: first.toolName))"
         }
         return "已调用 \(calls.count) 个工具"
     }
@@ -150,7 +229,7 @@ struct AgentToolCallGroup: View {
     private var previewSummary: String? {
         guard detailsVisible else { return nil }
         let previews = calls.prefix(3).map { call in
-            var text = call.toolName
+            var text = AgentToolDisplay.name(for: call.toolName)
             if let summary = call.result?.summary, !summary.isEmpty {
                 text += " \(summary)"
             } else if let compactArguments = compactArguments(for: call), !compactArguments.isEmpty {
@@ -167,6 +246,12 @@ struct AgentToolCallGroup: View {
         if call.toolName == "run_command", let command = call.arguments["command"]?.stringValue() {
             let cwd = call.arguments["cwd"]?.stringValue().map { "  cwd: \(trimmed($0, limit: 72))" } ?? ""
             return "command: \(trimmed(command, limit: 140))\(cwd)"
+        }
+        if call.toolName == "terminal_send_command", let command = call.arguments["command"]?.stringValue() {
+            return "命令: \(trimmed(command, limit: 140))"
+        }
+        if call.toolName == "terminal_send_control", let raw = call.arguments["control"]?.stringValue() {
+            return "按键: \(AgentToolDisplay.controlLabel(for: raw))"
         }
         if call.toolName == "spawn_agent" {
             let label = call.arguments["label"]?.stringValue()
@@ -239,9 +324,11 @@ struct AgentToolCallCard: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(iconColor)
                     .frame(width: 14)
-                Text(call.toolName)
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                Text(AgentToolDisplay.name(for: call.toolName))
+                    .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .help(call.toolName)
                 Text(argumentsSummary)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -358,20 +445,22 @@ struct AgentToolCallCard: View {
 
     @ViewBuilder
     private var approvalCommandBlock: some View {
-        if let command = fullCommand {
+        if let detail = approvalDetail {
             VStack(alignment: .leading, spacing: 3) {
-                Text(L10n.ToolCard.command)
+                Text(detail.title)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 ScrollView([.horizontal, .vertical]) {
-                    Text(command)
+                    Text(detail.body)
                         .font(.system(size: 12, design: .monospaced))
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(7)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxHeight: 120)
+                // 默认最多约 3 行(12pt 行高 ~16pt × 3 + 上下内边距),更长的
+                // 命令在框内纵向/横向滚动查看全部,不再把整张卡撑得老高。
+                .frame(maxHeight: 62)
                 .background(Color(nsColor: .textBackgroundColor))
                 .clipShape(RoundedRectangle(cornerRadius: 5))
             }
@@ -595,6 +684,11 @@ struct AgentToolCallCard: View {
 
     private var argumentsSummary: String {
         guard !call.arguments.isEmpty else { return "(no arguments)" }
+        // 控制键单独展开成「人话」,别让用户对着 control=ctrl_c 猜。
+        if call.toolName == "terminal_send_control",
+           let raw = call.arguments["control"]?.stringValue() {
+            return AgentToolDisplay.controlLabel(for: raw)
+        }
         return call.arguments
             .sorted { $0.key < $1.key }
             .map { "\($0.key)=\($0.value.displaySummary)" }
@@ -609,12 +703,26 @@ struct AgentToolCallCard: View {
     }
 
     private var fullCommand: String? {
-        guard call.toolName == "run_command",
+        guard ["run_command", "terminal_send_command"].contains(call.toolName),
               let command = call.arguments["command"]?.stringValue(),
               !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return nil
         }
         return command
+    }
+
+    /// 审批时给用户看的「这次到底要做什么」明细块。命令类工具显示
+    /// 完整命令(默认约 3 行高,超出滚动查看);控制键工具显示展开后的
+    /// 友好按键说明,而不是裸的 `ctrl_c`。
+    private var approvalDetail: (title: String, body: String)? {
+        if let command = fullCommand {
+            return (L10n.ToolCard.command, command)
+        }
+        if call.toolName == "terminal_send_control",
+           let raw = call.arguments["control"]?.stringValue() {
+            return ("控制键", AgentToolDisplay.controlLabel(for: raw))
+        }
+        return nil
     }
 
     private var alwaysAllowSignature: String? {
