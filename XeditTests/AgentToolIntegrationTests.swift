@@ -1294,14 +1294,14 @@ extension WillDeepTests {
     func testApplyPatchPromptAndRegistrySurface() {
         let descriptor = AgentToolRegistry.descriptor(for: "apply_patch")
         #expect(descriptor?.risk == .read)
-        #expect(descriptor?.description.contains("right-side patch review panel") == true)
+        #expect(descriptor?.description.contains("patch card INLINE IN THE CHAT") == true)
 
         let prompt = AgentContextBuilder.stableSystemPromptPrefix(
             toolsEnabled: true,
             promptProfile: .extended
         )
         #expect(prompt.contains("Extended tool capability map"))
-        #expect(prompt.contains("apply_patch validates an existing-file unified diff"))
+        #expect(prompt.contains("apply_patch validates a unified diff"))
         #expect(prompt.contains("right-side review panel"))
     }
 
