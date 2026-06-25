@@ -83,6 +83,17 @@ struct ComposerTextEditor: NSViewRepresentable {
         textView.coordinator = context.coordinator
         textView.font = NSFont.systemFont(ofSize: 13)
         textView.isRichText = false
+        // Composer 输入的是命令 / 代码 / prompt,任何系统「智能替换」都会
+        // 篡改原文(半角直引号 "" → 弯引号 “”、`--` → 破折号、`(c)` → ©、
+        // 半角标点被当成可替换项…),让用户以为「半角被自动改成了全角」。
+        // 全部关掉,所见即所得。
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+        textView.isAutomaticSpellingCorrectionEnabled = false
+        textView.smartInsertDeleteEnabled = false
+        textView.isAutomaticDataDetectionEnabled = false
+        textView.isAutomaticLinkDetectionEnabled = false
         textView.allowsUndo = true
         textView.isEditable = true
         textView.isSelectable = true
