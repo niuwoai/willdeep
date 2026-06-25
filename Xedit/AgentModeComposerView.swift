@@ -866,12 +866,26 @@ private struct ContextRingIndicator: View {
             Text("\(percent)%")
                 .monospacedDigit()
         }
-        .help("Context: ~\(formatTokens(used)) / \(formatTokens(window)). \(formatTokens(remaining)) remaining (estimate).")
+        .help(L10n.ContextRing.tooltip(
+            formatTokens(conversationUsed),
+            formatTokens(usableWindow),
+            formatTokens(baseline),
+            formatTokens(remaining)
+        ))
     }
 
     private var window: Int { max(1, appState.agentContextWindow) }
     private var used: Int { appState.estimatedAgentTokens }
-    private var usedFraction: CGFloat { min(1, max(0, CGFloat(used) / CGFloat(window))) }
+    /// Fixed system-prompt + tool-schema overhead, present before the user
+    /// sends anything. Clamped to `used` so we never report negative
+    /// conversation usage if the estimate jitters.
+    private var baseline: Int { min(appState.estimatedAgentBaselineTokens, used) }
+    /// Window left for the conversation once the fixed overhead is set aside.
+    private var usableWindow: Int { max(1, window - baseline) }
+    /// Tokens the conversation itself has added — what the ring tracks. A
+    /// brand-new chat (no messages) has 0 here, so the ring reads 0%.
+    private var conversationUsed: Int { max(0, used - baseline) }
+    private var usedFraction: CGFloat { min(1, max(0, CGFloat(conversationUsed) / CGFloat(usableWindow))) }
     private var remaining: Int { max(0, window - used) }
     private var percent: Int { Int(usedFraction * 100) }
 

@@ -385,6 +385,32 @@ enum L10n {
         static let newChat = String(localized: "header.new-chat", defaultValue: "New Chat")
         static let switchToEditor = String(localized: "header.switch-to-editor", defaultValue: "Switch to Editor Mode")
         static let openSidePanel = String(localized: "header.open-side-panel", defaultValue: "Open Side Panel")
+        static let showSidebar = String(localized: "header.show-sidebar", defaultValue: "Show Sidebar")
+        static let hideSidebar = String(localized: "header.hide-sidebar", defaultValue: "Hide Sidebar")
+        static let searchSessions = String(localized: "header.search-sessions", defaultValue: "Search Chats")
+    }
+
+    enum ContextRing {
+        /// %1 conversation tokens used · %2 usable window · %3 reserved for
+        /// system+tools · %4 total remaining.
+        static func tooltip(_ a1: String, _ a2: String, _ a3: String, _ a4: String) -> String {
+            let template = String(
+                localized: "context-ring.tooltip",
+                defaultValue: "Conversation: ~%1$@ / %2$@ usable · %3$@ reserved for system + tools · %4$@ total remaining (estimate)."
+            )
+            return String(format: template, a1, a2, a3, a4)
+        }
+    }
+
+    enum SessionSearch {
+        static let placeholder = String(localized: "session-search.placeholder", defaultValue: "Search chats by title…")
+        static let empty = String(localized: "session-search.empty", defaultValue: "No matching chats")
+        static let prompt = String(localized: "session-search.prompt", defaultValue: "Type to search your chats")
+        static func resultCount(_ a1: String) -> String {
+            let template = String(localized: "session-search.result-count", defaultValue: "%@ results")
+            return String(format: template, a1)
+        }
+        static let close = String(localized: "session-search.close", defaultValue: "Close")
     }
 
     enum Workspace {

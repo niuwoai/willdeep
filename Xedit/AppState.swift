@@ -195,6 +195,12 @@ final class AppState: ObservableObject {
     /// 失效；同条数下（流式追加中）最多每秒重算一次。Not @Published。
     var agentTokenEstimateCache: (messageCount: Int, sessionID: AgentSession.ID?, value: Int, at: Date)?
 
+    /// Companion cache for the composer ring's *baseline* — the fixed
+    /// system-prompt + tool-schema overhead that is present before the user
+    /// sends anything. The ring subtracts it so an empty chat reads 0%.
+    /// Same invalidation rules as `agentTokenEstimateCache`. Not @Published.
+    var agentBaselineEstimateCache: (messageCount: Int, sessionID: AgentSession.ID?, value: Int, at: Date)?
+
     /// Active Agent-mode session id. nil means "scratch" — Editor-mode
     /// chat keeps working without forcing a session to exist.
     @Published var activeAgentSessionID: AgentSession.ID?

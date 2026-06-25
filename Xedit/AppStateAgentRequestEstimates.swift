@@ -68,7 +68,13 @@ extension AppState {
         return agentConfiguration.normalized.routingLabel
     }
 
-    var estimatedAgentRequestMessages: [AgentMessage] {
+    /// The single `system` message the model receives: the prompt骨架 plus
+    /// any retrieved memory. Split out of `estimatedAgentRequestMessages`
+    /// so the composer ring can price the conversation-free baseline with
+    /// the *exact* same system content (memory included), which makes the
+    /// baseline cancel cleanly out of `used` → the ring tracks only what the
+    /// conversation adds.
+    var estimatedAgentSystemMessage: AgentMessage {
         let promptProfile = AgentSystemPromptProfile.automatic(
             modelID: activeAgentModelID,
             providerID: agentConfiguration.normalized.providerID
@@ -102,6 +108,10 @@ extension AppState {
         if let memoryContext = AgentMemoryEngine.contextBlock(for: memoryResults) {
             systemPrompt += "\n\n\(memoryContext)"
         }
+        return AgentMessage(role: .system, content: systemPrompt)
+    }
+
+    var estimatedAgentRequestMessages: [AgentMessage] {
         // 估算口径必须与发往模型的 history 对齐:已经存在的 context
         // summary 在请求阶段会把旧消息折叠成一段 system 摘要,本地
         // estimator 也得用同一个 modelFacingHistory,不然「Compress」
@@ -113,8 +123,32 @@ extension AppState {
         )
         let collapsedHistory = Self.collapseOldToolResults(in: modelFacing)
         return AgentClient.providerReadyMessages([
-            AgentMessage(role: .system, content: systemPrompt)
+            estimatedAgentSystemMessage
         ] + collapsedHistory, supportsImages: agentConfiguration.normalized.supportsImageInput)
+    }
+
+    /// Fixed overhead present before the user sends a single message: the
+    /// system prompt (incl. injected memory) and every tool schema, with no
+    /// conversation history. The composer ring subtracts this so a fresh
+    /// chat reads 0% and fills as the *conversation* grows — see
+    /// `ContextRingIndicator`. Cached on the same key as the full estimate
+    /// so it isn't rebuilt (system prompt + memory retrieval) every redraw.
+    var estimatedAgentBaselineTokens: Int {
+        let now = Date()
+        let messageCount = agentMessages.count
+        let sessionID = activeAgentSessionID
+        if let cached = agentBaselineEstimateCache,
+           cached.messageCount == messageCount,
+           cached.sessionID == sessionID,
+           now.timeIntervalSince(cached.at) < 1.0 {
+            return cached.value
+        }
+        let value = Self.estimateAgentTokens(
+            messages: [estimatedAgentSystemMessage],
+            tools: AgentToolRegistry.all
+        )
+        agentBaselineEstimateCache = (messageCount, sessionID, value, now)
+        return value
     }
 
     nonisolated static func estimateAgentTokens(

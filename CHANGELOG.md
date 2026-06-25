@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.108.0-rc24 - 2026-06-25
+
+### Added
+- **Agent 顶栏新增「侧边栏开关」+「会话搜索」两个图标（1.108.0-rc24）** —— 对齐 Claude Code 的窗口标题栏交互。① 标题左侧加了 `sidebar.left` 开关（快捷键 ⌘\），可收起/展开最左侧 230pt 的会话列表，腾出空间给长对话；状态用 `@AppStorage("agentSessionsSidebarVisible")` 持久化，重启保留。侧栏收起时聊天列会贴到窗口左缘，顶栏自动给红绿灯让出 72pt（`leadingTrafficLightInset`），开关图标不会被交通灯压住。② 旁边加了放大镜（快捷键 ⌘⇧P），打开 [AgentSessionSearchView](Xedit/AgentSessionSearchView.swift) —— 跨全部工作区（含已归档）**按会话标题**大小写/变音不敏感地子串匹配，结果按最近更新排序，点行或回车打开首项跳转，Esc 关闭。本轮按约定只做标题搜索，未做消息正文全文检索。改动：[AgentModeView](Xedit/AgentModeView.swift) 增加可见性状态与 sheet 挂载、[AgentChatHeader](Xedit/AgentChatHeader.swift) 新增两枚按钮与让位逻辑、L10n 新增 `Header`/`SessionSearch` 文案（全部走 i18n，无硬编码）。
+
+### Changed
+- **composer 会话占用率圆环改为「对话相对」口径，空会话显示 0%（1.108.0-rc24）** —— 旧口径把整包请求（system prompt + 46 个工具定义 + 检索到的记忆）都算进分子，于是新开会话一条消息没发就显示约 21%，用户困惑「我还没发消息怎么就占了」。新口径把这部分**固定底座**从分子分母里一并扣除：圆环 = 对话本身占用 ÷（窗口 − 底座）。空会话 = 0%，对话越长越涨，把真实窗口填满时正好 100%——既符合直觉又不虚报可用额度。底座大小移到 tooltip 里仍可查（「reserved for system + tools」）。实现：[AppStateAgentRequestEstimates](Xedit/AppStateAgentRequestEstimates.swift) 拆出 `estimatedAgentSystemMessage` 并新增带缓存的 `estimatedAgentBaselineTokens`（[AppState](Xedit/AppState.swift) 配套 `agentBaselineEstimateCache`，与全量估算同 key 失效，避免每帧重算记忆检索）；[ContextRingIndicator](Xedit/AgentModeComposerView.swift) 改用 `conversationUsed / usableWindow`；tooltip 走 i18n（`L10n.ContextRing.tooltip`）。
+
 ## 1.108.0-rc23 - 2026-06-25
 
 ### Fixed

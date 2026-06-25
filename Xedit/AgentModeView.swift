@@ -22,6 +22,12 @@ struct AgentModeView: View {
     @State private var sidePanelFile: URL?
     @State private var lastTaskMonitorSnapshot: AgentTaskMonitorSnapshot?
     @State private var didObserveAgentTaskMonitorActivity = false
+    /// Whether the leftmost session list is shown. Toggled from the chat
+    /// header (rc24) so a user who lives in one long conversation can
+    /// reclaim the 230pt for the transcript. Persisted across relaunch.
+    @AppStorage("agentSessionsSidebarVisible") private var sessionsSidebarVisible = true
+    /// Drives the title-only session search overlay (rc24).
+    @State private var isSessionSearchPresented = false
     /// User-resizable width of the right side panel. Persisted so the
     /// choice survives relaunch. The leftmost sessions sidebar stays
     /// fixed; only the chat ↔ side-panel boundary is draggable.
@@ -37,29 +43,38 @@ struct AgentModeView: View {
     /// `sidebar + panel` 早就超过旧的固定 720 窗口宽。
     private var chatColumnMinWidth: CGFloat { sidebarWidth * 2 }
     private var contentMinWidth: CGFloat {
-        sidebarWidth + chatColumnMinWidth + (sidePanel != nil ? CGFloat(sidePanelWidth) : 0)
+        (sessionsSidebarVisible ? sidebarWidth : 0)
+            + chatColumnMinWidth
+            + (sidePanel != nil ? CGFloat(sidePanelWidth) : 0)
     }
 
     var body: some View {
         let skin = appState.editorSettings.interfaceSkin
         HStack(spacing: 0) {
-            AgentSessionsSidebar()
-                .frame(width: sidebarWidth)
-                // `.frame(width:)` 是 SwiftUI 的「建议」宽度,父 HStack
-                // 在窗口宽度不够时仍会把它继续压缩。`.fixedSize(...)`
-                // 把宽度锁死为 sidebarWidth(230),收窄窗口只会从 chat
-                // 区域吃掉空间,不会再动 sidebar —— rc12 用户反馈:
-                // 「最左栏还是会被缩小,要不就固定个宽度」。
-                .fixedSize(horizontal: true, vertical: false)
-                .background(
-                    skin.sidebarBackground
-                        .overlay(skin.palette.hoverFill.opacity(0.35))
-                )
+            if sessionsSidebarVisible {
+                AgentSessionsSidebar()
+                    .frame(width: sidebarWidth)
+                    // `.frame(width:)` 是 SwiftUI 的「建议」宽度,父 HStack
+                    // 在窗口宽度不够时仍会把它继续压缩。`.fixedSize(...)`
+                    // 把宽度锁死为 sidebarWidth(230),收窄窗口只会从 chat
+                    // 区域吃掉空间,不会再动 sidebar —— rc12 用户反馈:
+                    // 「最左栏还是会被缩小,要不就固定个宽度」。
+                    .fixedSize(horizontal: true, vertical: false)
+                    .background(
+                        skin.sidebarBackground
+                            .overlay(skin.palette.hoverFill.opacity(0.35))
+                    )
+                    .transition(.move(edge: .leading).combined(with: .opacity))
 
-            Divider()
+                Divider()
+            }
 
             VStack(spacing: 0) {
-                AgentChatHeader(sidePanel: $sidePanel)
+                AgentChatHeader(
+                    sidePanel: $sidePanel,
+                    sessionsSidebarVisible: $sessionsSidebarVisible,
+                    isSessionSearchPresented: $isSessionSearchPresented
+                )
                 Divider().opacity(0.5)
                 AgentChatTranscript()
                 AgentChatComposer()
@@ -89,6 +104,11 @@ struct AgentModeView: View {
         .background(skin.windowBackground)
         .background(AgentWindowMinWidthSetter(minWidth: contentMinWidth))
         .animation(.easeInOut(duration: 0.18), value: sidePanel)
+        .animation(.easeInOut(duration: 0.18), value: sessionsSidebarVisible)
+        .sheet(isPresented: $isSessionSearchPresented) {
+            AgentSessionSearchView()
+                .environmentObject(appState)
+        }
         .onAppear {
             let snapshot = currentTaskMonitorSnapshot
             lastTaskMonitorSnapshot = snapshot
