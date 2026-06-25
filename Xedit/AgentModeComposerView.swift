@@ -279,7 +279,7 @@ struct AgentWorktreeDiffPreviewSheet: View {
             Divider()
 
             ScrollView([.vertical, .horizontal]) {
-                Text(preview.diff)
+                Text(coloredDiff)
                     .font(.system(size: 11, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -288,6 +288,33 @@ struct AgentWorktreeDiffPreviewSheet: View {
             .background(Color(nsColor: .textBackgroundColor))
         }
         .frame(minWidth: 760, minHeight: 520)
+    }
+
+    /// 给 diff 文本按行上色:新增行绿、删除行红、hunk 头青、文件头次要
+    /// 色,其余正文用主色。用 AttributedString 整块上色,保持仍是单个
+    /// 可选中 / 可复制的 Text(逐行 Text 会破坏跨行选择)。
+    private var coloredDiff: AttributedString {
+        var result = AttributedString()
+        let lines = preview.diff.components(separatedBy: "\n")
+        for (index, line) in lines.enumerated() {
+            var piece = AttributedString(line)
+            piece.foregroundColor = diffLineColor(line)
+            result += piece
+            if index < lines.count - 1 {
+                result += AttributedString("\n")
+            }
+        }
+        return result
+    }
+
+    private func diffLineColor(_ line: String) -> Color {
+        // 顺序要紧:文件头 `+++/---` 必须先于单字符 `+/-` 判断,否则会被
+        // 误当成新增 / 删除行。
+        if line.hasPrefix("+++") || line.hasPrefix("---") { return .secondary }
+        if line.hasPrefix("@@") { return .cyan }
+        if line.hasPrefix("+") { return .green }
+        if line.hasPrefix("-") { return .red }
+        return .primary
     }
 
     private func copyDiff() {
@@ -473,12 +500,16 @@ private struct ComposerCard: View {
 
             HStack(spacing: 6) {
                 AttachButton(action: attachImageFromPanel)
+                // High-frequency controls stay inline (workspace, model,
+                // mode, approval); the low-frequency ones (executor,
+                // plugins) fold into the ⋯ overflow so the row stops
+                // forcing a huge minimum composer width that overflowed
+                // onto the sessions sidebar on a narrow window.
                 WorkspacePickerPill()
                 ModelPickerPill()
-                AgentExecutionPickerPill()
                 AgentModePickerPill()
                 AgentApprovalModePickerPill()
-                AgentPluginPickerPill()
+                ComposerOverflowPill()
                 Spacer(minLength: 0)
                 if !appState.agentQueuedMessages.isEmpty {
                     QueueBadge()
@@ -680,10 +711,9 @@ struct AgentChatStatusBar: View {
                 Text(L10n.Workspace.noWorkspace)
             }
 
-            if appState.agentSessionDidEditFiles && !appState.agentWorktreeChanges.isEmpty {
-                AgentWorktreeSummaryPill()
-            }
-
+            // 文件变更 summary 只保留 composer 顶部那条
+            // (AgentComposerWorktreeSummaryBar)。这里底部状态栏原本还有
+            // 一个 AgentWorktreeSummaryPill,和顶部那条重复,移除。
             Spacer(minLength: 0)
 
             CompressButton()

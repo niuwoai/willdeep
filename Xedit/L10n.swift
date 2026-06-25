@@ -181,6 +181,12 @@ enum L10n {
         static let queueSendHelp = String(localized: "composer.queue-send.help", defaultValue: "Queue this message after the current turn")
         static let sendHelp = String(localized: "composer.send.help", defaultValue: "Send")
         static let stopHelp = String(localized: "composer.stop.help", defaultValue: "Stop the current Agent turn")
+        static let overflowHelp = String(localized: "composer.overflow.help", defaultValue: "More settings: executor, plugins")
+        static let overflowTitle = String(localized: "composer.overflow.title", defaultValue: "More settings")
+        static let overflowWorkspace = String(localized: "composer.overflow.workspace", defaultValue: "Workspace")
+        static let overflowExecutor = String(localized: "composer.overflow.executor", defaultValue: "Executor")
+        static let overflowApproval = String(localized: "composer.overflow.approval", defaultValue: "Approval")
+        static let overflowPlugins = String(localized: "composer.overflow.plugins", defaultValue: "Plugins")
     }
 
     enum ComposerWorkspace {

@@ -873,3 +873,66 @@ struct AgentModePickerPill: View {
         appState.agentInteractionMode == .normal ? Color.secondary.opacity(0.25) : Color.clear
     }
 }
+
+/// Overflow「⋯」for the low-frequency composer controls. The bottom
+/// control row used to lay 7 pills side by side and never shrank, so it
+/// forced a very wide minimum composer width — on a narrow window the
+/// composer overflowed onto the sessions sidebar. We keep the two
+/// high-frequency pills (model + interaction mode) inline and fold the
+/// rest (workspace / executor / approval mode / plugins) behind this
+/// single pill. Each folded control keeps its full picker behaviour — it
+/// just lives inside this popover now. The current workspace name is also
+/// shown in the bottom status bar, so hiding the workspace pill here
+/// doesn't lose at-a-glance info.
+struct ComposerOverflowPill: View {
+    @EnvironmentObject var appState: AppState
+    @State private var isPresented = false
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 11, weight: .semibold))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
+            .clipShape(RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius))
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .help(L10n.Composer.overflowHelp)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(L10n.Composer.overflowTitle)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                overflowRow(L10n.Composer.overflowExecutor) { AgentExecutionPickerPill() }
+                overflowRow(L10n.Composer.overflowPlugins) { AgentPluginPickerPill() }
+            }
+            .padding(14)
+            .frame(width: 300, alignment: .leading)
+            .environmentObject(appState)
+        }
+    }
+
+    @ViewBuilder
+    private func overflowRow<Pill: View>(
+        _ title: String,
+        @ViewBuilder pill: () -> Pill
+    ) -> some View {
+        HStack(spacing: 10) {
+            Text(title)
+                .font(.system(size: 12))
+                .foregroundStyle(.primary)
+                .frame(width: 64, alignment: .leading)
+            Spacer(minLength: 0)
+            pill()
+        }
+    }
+}

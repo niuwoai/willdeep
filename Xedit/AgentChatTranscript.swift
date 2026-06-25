@@ -242,7 +242,7 @@ struct AgentChatTranscript: View {
                             // Agent 模式:审查 / 点文件 → 拉起右侧 diff 侧栏,
                             // 不再弹独立 sheet 窗口。
                             appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .diff)
-                        })
+                        }, showsSummaryRow: false)
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                     }
 

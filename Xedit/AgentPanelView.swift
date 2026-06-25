@@ -444,6 +444,11 @@ struct AgentWorktreeChangeCard: View {
     /// closure that opens the right side-panel `.diff`; the editor-dock
     /// panel leaves it nil and falls back to the standalone sheet.
     var onReview: (() -> Void)? = nil
+    /// 全屏 Agent 模式的 transcript 里,composer 顶部已经吸附了一条
+    /// `AgentComposerWorktreeSummaryBar`(N 个文件已更改 +X −Y 审查),
+    /// 这张卡片再画一遍 summary 行就重复了 —— 那个语境传 false,只保留
+    /// 有信息量的文件列表。停靠侧栏没有 composer bar,默认 true 保留。
+    var showsSummaryRow: Bool = true
 
     private func review() {
         if let onReview {
@@ -489,36 +494,38 @@ struct AgentWorktreeChangeCard: View {
                 }
             }
 
-            HStack(spacing: 8) {
-                Image(systemName: appState.isAgentResponding ? "pencil.line" : "checkmark.square")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 20, height: 20)
-                    .background(Color.primary.opacity(0.035))
-                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(summaryTitle)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.primary)
-                    HStack(spacing: 5) {
-                        Text("+\(appState.agentWorktreeChanges.totalAddedLines)")
-                            .foregroundStyle(.green)
-                        Text("-\(appState.agentWorktreeChanges.totalDeletedLines)")
-                            .foregroundStyle(.red)
+            if showsSummaryRow {
+                HStack(spacing: 8) {
+                    Image(systemName: appState.isAgentResponding ? "pencil.line" : "checkmark.square")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20, height: 20)
+                        .background(Color.primary.opacity(0.035))
+                        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(summaryTitle)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.primary)
+                        HStack(spacing: 5) {
+                            Text("+\(appState.agentWorktreeChanges.totalAddedLines)")
+                                .foregroundStyle(.green)
+                            Text("-\(appState.agentWorktreeChanges.totalDeletedLines)")
+                                .foregroundStyle(.red)
+                        }
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .monospacedDigit()
                     }
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .monospacedDigit()
+                    Spacer(minLength: 0)
+                    Button {
+                        review()
+                    } label: {
+                        Text("审查")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.primary)
+                    .help("查看当前未提交 diff")
                 }
-                Spacer(minLength: 0)
-                Button {
-                    review()
-                } label: {
-                    Text("审查")
-                        .font(.caption)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.primary)
-                .help("查看当前未提交 diff")
             }
         }
         .padding(10)

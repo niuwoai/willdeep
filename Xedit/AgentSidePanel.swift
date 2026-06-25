@@ -120,7 +120,10 @@ struct AgentSidePanelHost: View {
     private var content: some View {
         switch kind {
         case .backgroundTasks:
-            AgentTaskMonitorRail()
+            // 必须把面板宽度传进去 —— Rail 默认把自己 `.frame(width: 320)`
+            // 锁死,侧面板拖到比 320 窄时它会溢出面板、向左盖住 chat
+            // (「突破左边界」)。传 width 让它跟随面板宽度。
+            AgentTaskMonitorRail(width: width)
         case .diff:
             AgentSidePanelDiffView()
         case .files:
