@@ -609,6 +609,17 @@
         }
       }
     },
+    "agent-patch-error.target-already-exists" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Cannot create %@ — it already exists. Use a modify diff instead."
+          }
+        }
+      }
+    },
     "agent-patch-error.unsupported-diff" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -643,6 +654,83 @@
         }
       }
     },
+    "agent-patch.apply-all" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Apply All"
+          }
+        }
+      }
+    },
+    "agent-patch.count-applied" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%d applied"
+          }
+        }
+      }
+    },
+    "agent-patch.count-failed" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%d failed"
+          }
+        }
+      }
+    },
+    "agent-patch.count-pending" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%d pending"
+          }
+        }
+      }
+    },
+    "agent-patch.count-rejected" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%d rejected"
+          }
+        }
+      }
+    },
+    "agent-patch.group-title" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%d patch proposals this turn"
+          }
+        }
+      }
+    },
+    "agent-patch.hide-all" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Collapse"
+          }
+        }
+      }
+    },
     "agent-patch.hide-diff" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -673,6 +761,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "拒绝"
+          }
+        }
+      }
+    },
+    "agent-patch.reject-all" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Reject All"
+          }
+        }
+      }
+    },
+    "agent-patch.show-all" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Show All"
           }
         }
       }
@@ -4003,6 +4113,72 @@
         }
       }
     },
+    "composer.overflow.approval" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Approval"
+          }
+        }
+      }
+    },
+    "composer.overflow.executor" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Executor"
+          }
+        }
+      }
+    },
+    "composer.overflow.help" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "More settings: executor, plugins"
+          }
+        }
+      }
+    },
+    "composer.overflow.plugins" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Plugins"
+          }
+        }
+      }
+    },
+    "composer.overflow.title" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "More settings"
+          }
+        }
+      }
+    },
+    "composer.overflow.workspace" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Workspace"
+          }
+        }
+      }
+    },
     "composer.queue-send.help" : {
       "comment" : "tooltip for queueing the current composer message while Agent is responding",
       "extractionState" : "manual",
@@ -4313,6 +4489,9 @@
     "Cursor" : {
 
     },
+    "Custom font" : {
+
+    },
     "Default model" : {
 
     },
@@ -4320,6 +4499,9 @@
 
     },
     "Download model (~937 MB)" : {
+
+    },
+    "e.g. JetBrainsMono Nerd Font" : {
 
     },
     "editor-status-bar.cursor-position" : {
@@ -9865,6 +10047,72 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Saved %@."
+          }
+        }
+      }
+    },
+    "settings.group.ai" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "AI Agents"
+          }
+        }
+      }
+    },
+    "settings.group.editor" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Editor"
+          }
+        }
+      }
+    },
+    "settings.group.integrations" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Integrations"
+          }
+        }
+      }
+    },
+    "settings.group.runtimes" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Runtimes"
+          }
+        }
+      }
+    },
+    "settings.group.terminal" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Terminal"
+          }
+        }
+      }
+    },
+    "settings.group.voice" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Voice"
           }
         }
       }
@@ -18708,6 +18956,17 @@
         }
       }
     },
+    "tool-card.ask-user.answered" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "You answered"
+          }
+        }
+      }
+    },
     "tool-card.ask-user.other-answer-placeholder" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -18755,6 +19014,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "跳过"
+          }
+        }
+      }
+    },
+    "tool-card.ask-user.skipped" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "You skipped this question"
           }
         }
       }
@@ -20969,6 +21239,9 @@
           }
         }
       }
+    },
+    "Type the exact name of any installed font to override the picker — use this to apply a Nerd Font that isn't auto-detected so powerline/icon glyphs stop showing as boxes. Leave empty to use the selection above." : {
+
     },
     "Unload now" : {
 

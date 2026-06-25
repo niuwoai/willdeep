@@ -486,6 +486,20 @@ struct ComposerTextEditor: NSViewRepresentable {
 fileprivate final class ComposerNSTextView: NSTextView {
     fileprivate weak var coordinator: ComposerTextEditor.Coordinator?
 
+    // A plain-text NSTextView (`isRichText = false`) only advertises text
+    // flavors as readable, so AppKit DISABLES the `paste:` action — and
+    // our `paste(_:)` override below never fires — whenever the pasteboard
+    // holds ONLY an image and no string. That's exactly the common case:
+    // a screenshot (Cmd+Shift+Ctrl+4), "Copy Image" from a browser with no
+    // alt text, `screencapture -c`, Preview/Pixelmator copies, etc. The
+    // user pressed Cmd+V and nothing happened because the keystroke was
+    // swallowed before it ever reached us. Add the image flavors here so
+    // the paste action stays enabled when an image is present; the override
+    // then routes it into the image-attach pipeline.
+    override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
+        super.readablePasteboardTypes + [.png, .tiff]
+    }
+
     override func paste(_ sender: Any?) {
         let pasteboard = NSPasteboard.general
         // Use the shared helper instead of probing `.png`/`.tiff`

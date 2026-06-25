@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.108.0-rc23 - 2026-06-25
+
+### Fixed
+- **composer 里粘贴「纯图片」毫无反应、图片不显示（1.108.0-rc23）** —— 在 Agent composer 里 Cmd+V 粘贴一张只有图片、没有文字的剪贴板内容（系统截图 Cmd+Shift+Ctrl+4、浏览器「拷贝图像」无 alt 文本、`screencapture`、预览/Pixelmator 拷贝等），什么都不会发生。根因不在我们的粘贴处理逻辑——而是 [ComposerNSTextView](Xedit/ComposerTextInput.swift) 是纯文本视图（`isRichText = false`），AppKit 据此只把**文本类型**登记为「可读」，于是当剪贴板里**只有图片、没有字符串**时直接禁用了 `paste:` 动作，Cmd+V 在到达我们重写的 `paste(_:)` 之前就被吞掉了，图片 attach 管线一行都没机会跑。剪贴板里只要同时带一段文字，`paste:` 就被启用、图片才会被顺带处理——这正是「带文字就行、纯图片就废」的现象。修复：重写 `readablePasteboardTypes`，把 `.png` / `.tiff` 也声明为可读类型，纯图片时 `paste:` 保持启用 → 进入我们的 `paste(_:)` → 走图片 attach。已用纯 png 剪贴板实测：缩略图正常出现在 composer 上方。
+
+## 1.108.0-rc22 - 2026-06-25
+
+### Fixed
+- **补丁建议卡片的 diff 看不全、滚不动（1.108.0-rc22）** —— 待 apply 的补丁建议卡片展开后,diff 框只给了 `.horizontal` 单向滚动,纵向被 `maxHeight: 180` 卡死又没法滚——几十行的剧本 diff（如 `+1,59`）超过约 15 行后直接被裁掉、看不全。修复 [AgentPatchProposalCard](Xedit/AgentPanelCards.swift)：改成 `ScrollView([.horizontal, .vertical])` 双向滚动,Text 用 `fixedSize` 报告完整尺寸（长行不换、保 diff 对齐，横向看长行 / 纵向看多行），视口高度抬到 320 给足上下文，再长也能在框内滚动查看全部。底层 diff 从不截断（apply 用的是整份），此前纯属展示视口问题。`AgentPatchProposalGroup` 复用同一张卡，一并受益。
+
 ## 1.108.0-rc21 - 2026-06-25
 
 ### Changed

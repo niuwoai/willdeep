@@ -38,14 +38,20 @@ struct AgentPatchProposalCard: View {
             }
 
             if isExpanded {
-                ScrollView(.horizontal) {
+                // 之前只给 `.horizontal`,纵向被 maxHeight 卡死又滚不动,
+                // 长 diff(几十行的剧本)直接被裁、看不全。改成双向滚动:
+                // `fixedSize` 让 Text 报告完整尺寸(行不换、保 diff 对齐),
+                // 横向看长行、纵向看多行;视口抬到 320 给足上下文,再长也
+                // 在框内滚动查看全部(底层 diff 从不截断,apply 用的是整份)。
+                ScrollView([.horizontal, .vertical]) {
                     Text(proposal.diff)
                         .font(.system(size: 11, design: .monospaced))
                         .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: true, vertical: true)
                         .padding(8)
                 }
-                .frame(maxHeight: 180)
+                .frame(maxHeight: 320)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color(nsColor: .textBackgroundColor))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
