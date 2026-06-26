@@ -506,12 +506,13 @@ private enum AgentModelPricing {
         AgentModelPrice(providerIDs: ["deepseek"], modelHints: ["deepseek-v4-pro"], inputPerMillion: 0.435, cachedInputPerMillion: 0.003625, cacheWritePerMillion: nil, outputPerMillion: 0.87),
         AgentModelPrice(providerIDs: ["deepseek"], modelHints: ["deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"], inputPerMillion: 0.14, cachedInputPerMillion: 0.0028, cacheWritePerMillion: nil, outputPerMillion: 0.28),
 
-        // qwen3.7-max/plus (2026-05, DashScope/百炼). CNY → USD via cny().
-        // Max numbers are medium-confidence (阿里云开发者社区,非计费页原文);
-        // Plus is low-confidence — sources conflict between a ≤256K-tier
-        // ¥2/¥8 and a flat ¥0.4/¥1.6; using the former. Verify in 百炼控制台.
-        AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen3.7-max"], inputPerMillion: cny(2.5), cachedInputPerMillion: cny(0.25), cacheWritePerMillion: nil, outputPerMillion: cny(7.5)),
-        AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen3.7-plus"], inputPerMillion: cny(2.0), cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: cny(8.0)),
+        // qwen3.7-max/plus — official 阿里云百炼 (DashScope) list price 原价,
+        // 元/百万 token, from the console pricing card (2026-06). cny() → USD.
+        // Max is a flat rate; Plus is tiered by input length — we store the
+        // ≤256K tier (the 256K–1M tier costs more). Limited-time 5折/8折
+        // promos are intentionally NOT baked in (we track list price).
+        AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen3.7-max"], inputPerMillion: cny(12.0), cachedInputPerMillion: cny(2.4), cacheWritePerMillion: cny(15.0), outputPerMillion: cny(36.0)),
+        AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen3.7-plus"], inputPerMillion: cny(2.0), cachedInputPerMillion: cny(0.4), cacheWritePerMillion: cny(2.5), outputPerMillion: cny(8.0)),
         AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen3-vl-plus", "qwen-vl-plus"], inputPerMillion: 0.11, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 0.28),
         AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen-max", "qwen3-max"], inputPerMillion: 0.28, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 1.11),
         AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen-plus", "qwen3-plus", "qwen2.5-plus"], inputPerMillion: 0.11, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 0.28),
@@ -527,10 +528,13 @@ private enum AgentModelPricing {
         AgentModelPrice(providerIDs: ["kimi", "moonshot"], modelHints: ["moonshot-v1-32k"], inputPerMillion: cny(5.0), cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: cny(20.0)),
         AgentModelPrice(providerIDs: ["kimi", "moonshot"], modelHints: ["moonshot-v1-8k"], inputPerMillion: cny(2.0), cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: cny(10.0)),
 
-        // GLM-5 line. Prices are z.ai international (USD/M, high-confidence);
-        // the bigmodel.cn CNY page is a JS SPA we couldn't read, so a
-        // mainland-CNY user's actual rate may differ. glm-5.2/5.1 before
-        // glm-5 so the substring match hits the specific id first.
+        // GLM-5 has two platform prices. Via 阿里云百炼 (DashScope) it is the
+        // official CNY list price 原价 (元/百万 token, ≤32K tier, from the
+        // console pricing card 2026-06); this dashscope-scoped row matches
+        // bailian users first. Via z.ai international it is USD/M (rows below,
+        // zhipu/bigmodel-scoped). glm-5.2/5.1 before glm-5 so the substring
+        // match hits the specific id first.
+        AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["glm-5"], inputPerMillion: cny(4.0), cachedInputPerMillion: cny(0.8), cacheWritePerMillion: nil, outputPerMillion: cny(18.0)),
         AgentModelPrice(providerIDs: ["zhipu", "bigmodel"], modelHints: ["glm-5.2"], inputPerMillion: 1.4, cachedInputPerMillion: 0.26, cacheWritePerMillion: nil, outputPerMillion: 4.4),
         AgentModelPrice(providerIDs: ["zhipu", "bigmodel"], modelHints: ["glm-5.1"], inputPerMillion: 1.4, cachedInputPerMillion: 0.26, cacheWritePerMillion: nil, outputPerMillion: 4.4),
         AgentModelPrice(providerIDs: ["zhipu", "bigmodel"], modelHints: ["glm-5"], inputPerMillion: 1.0, cachedInputPerMillion: 0.2, cacheWritePerMillion: nil, outputPerMillion: 3.2),
