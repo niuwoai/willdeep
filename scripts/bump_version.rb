@@ -8,15 +8,31 @@ old = ARGV[0] or abort "need <old>"
 new = ARGV[1] or abort "need <new>"
 root = File.expand_path("..", __dir__)
 
-# 普通位点:直接把 old → new
+# 普通位点:直接把 old → new(整文件盲替换,文件里只有"当前版本"语义的引用)
 plain_files = [
   "Xedit.xcodeproj/project.pbxproj",
   "willdeep-agent/internal/agent/version.go",
   "Help/WillDeep.help/Contents/Info.plist",
-  "product-overview.md",
   "docs/MOBILE_GATEWAY_REQUIREMENTS.md",
   "docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md",
 ]
+
+# product-overview.md 正文有「历史版本」条目(如「…（1.108.0-rc26）」),整文件盲替换
+# 会把历史也改掉。只动开头的「Current version:」标识行。
+def bump_current_version_line(path, old, new)
+  text = File.read(path, encoding: "UTF-8")
+  count = 0
+  out = text.lines.map do |line|
+    if line =~ /Current version:/ && line.include?(old)
+      count += line.scan(old).size
+      line.gsub(old, new)
+    else
+      line
+    end
+  end.join
+  File.write(path, out)
+  count
+end
 
 # README 的 shields.io badge 用双横线写法: 1.108.0--rc25
 badge_old = old.sub("-rc", "--rc")
@@ -31,6 +47,12 @@ plain_files.each do |rel|
   File.write(path, text.gsub(old, new))
   total += count
   puts "#{rel}: #{count} 处"
+end
+
+po_count = bump_current_version_line(File.join(root, "product-overview.md"), old, new)
+if po_count.positive?
+  total += po_count
+  puts "product-overview.md: #{po_count} 处 (仅 Current version 行)"
 end
 
 readme = File.join(root, "README.md")

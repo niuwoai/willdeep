@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.108.0-rc27 - 2026-06-26
+
+### Added
+- **CI 新增 i18n 覆盖率守卫:缺简体中文翻译即报红（1.108.0-rc27）** —— rc26 把可翻译文案的 zh-Hans 补到 100% 后,新增脚本 [scripts/i18n_coverage_guard.rb](scripts/i18n_coverage_guard.rb) 并接进 [.github/workflows/test.yml](.github/workflows/test.yml)(紧挨 complexity guard / version consistency)。它扫描 [Localizable.xcstrings](Xedit/Localizable.xcstrings),只要有**可翻译** key 缺 `zh-Hans` 就 exit 1、CI 报红,防止以后新增 key 漏翻又让中文用户回落英文;纯符号/格式串(`""`/`":"`/`"%lld"`/`"·"` 等)按与 `i18n_extract_missing.rb` 同一口径自动豁免,输出 md+json 报告。本地实测当前 1490/1490 可翻译 key 全覆盖、pass。顺手加固 [scripts/bump_version.rb](scripts/bump_version.rb):product-overview.md 只改「Current version」标识行,不再误伤正文里引用历史版本号的条目。
+
 ## 1.108.0-rc26 - 2026-06-26
 
 ### Fixed

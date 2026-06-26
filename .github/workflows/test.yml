@@ -53,6 +53,11 @@ jobs:
       - name: Run version consistency
         run: ruby scripts/version_consistency.rb build/ci/version_report.md build/ci/version_report.json
 
+      # 守住简体中文翻译覆盖率:可翻译文案缺 zh-Hans 即报红,防止新增 key
+      # 漏翻让中文用户回落英文。纯符号/格式串自动豁免。
+      - name: Run i18n coverage guard
+        run: ruby scripts/i18n_coverage_guard.rb build/ci/i18n_report.md build/ci/i18n_report.json
+
       # macos-26 runner 默认不带 Go toolchain，少了这步 `go test` 直接
       # `command not found`（exit 127），CI 从加进 Go 测试那次起就一直红。
       - name: Set up Go
