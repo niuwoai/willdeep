@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.108.0-rc33 - 2026-06-26
+
+### Added
+- **内置 2026-06 新模型的上下文窗口与价格（claude 1M 线 / gpt-5.5 / kimi K2 256K / GLM-5 / qwen3.7 / deepseek-v4）（1.108.0-rc33）** —— 联网核对各厂官方页后,把一批新模型的 context 窗口补进 [agentContextWindow](Xedit/AppStateAgentRequestEstimates.swift)、价格补进 [AgentModelPricing](Xedit/AgentUsageStats.swift):
+  - **Claude（重要修正）**:当前旗舰线 Opus 4.6/4.7/4.8、Sonnet 4.6、Fable 5 已是 **1M 标准上下文**(非旧的 200K+1M beta 档),而代码原把整个 claude 家族估成 200K → 占用率圆环对这些模型一直偏满。改为版本感知:这些 →1M,Haiku 4.5 与更老的 Opus/Sonnet 4.0–4.5 →200K(dash/dot 两种 id 写法都认)。价格表本就吻合,未改。
+  - **gpt-5.5**:context ~1M(1,050,000),原落 `gpt-5→400k`;补 gpt-5.5-pro 价格($30/$180)。**gpt-5.6 经核实不存在,未内置。**
+  - **kimi K2**:k2.5/k2.6/k2.7-code(-highspeed) 均 **256K**(原落 128k);价格已有且与官方 CNY 价吻合。**裸 `kimi-k2.7` 官方不存在,未内置。**
+  - **GLM-5**:glm-5.2 →**1M**、glm-5/5.1 →200K(原无 glm 分支落 128k 默认);新增 glm-5/5.1/5.2 价格(z.ai 国际站 USD,high 置信;bigmodel.cn 人民币页是 JS SPA 抓不到,大陆 CNY 实价可能不同)。
+  - **qwen3.7-max/plus**:context 均 **1M**(原落 128k);新增价格 —— Max ¥2.5/¥0.25/¥7.5(medium,阿里云开发者社区,非计费页原文),Plus ¥2/¥8(**low,来源冲突**,另有一套 ¥0.4/¥1.6,已在代码注释标注,建议百炼控制台核对)。
+  - **deepseek-v4**:context(1M)已于 rc32 修;价格已有且与官方 USD 价精确吻合。
+  - 新增 [AgentModelCatalogTests](XeditTests/AgentModelCatalogTests.swift) 5 个 suite 锁定全部 context 映射。
+
 ## 1.108.0-rc32 - 2026-06-26
 
 ### Fixed

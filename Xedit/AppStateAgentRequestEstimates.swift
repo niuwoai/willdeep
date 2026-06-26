@@ -249,10 +249,25 @@ extension AppState {
         if model.contains("16k") { return 16_000 }
         if model.contains("8k") { return 8_000 }
         // Known family defaults.
+        if model.contains("gpt-5.5") { return 1_050_000 } // gpt-5.5 / -pro: ~1M window
         if model.contains("gpt-5") { return 400_000 }
         if model.contains("gpt-4.1") { return 1_000_000 }
         if model.contains("gpt-4o") || model.contains("o1") || model.contains("o3") || model.contains("o4") { return 128_000 }
-        if model.contains("claude") { return 200_000 }
+        if model.contains("claude") {
+            // Version-aware: the current flagship line — Fable/Mythos 5,
+            // Opus 4.6/4.7/4.8, Sonnet 4.6 — ships a 1M context window at
+            // standard pricing (verified against Anthropic docs, 2026-06).
+            // Haiku and the older Opus/Sonnet 4.0–4.5 line stay at the classic
+            // 200K. Match both dash (`opus-4-8`) and dot (`opus-4.8`) id forms.
+            if model.contains("fable-5") || model.contains("mythos-5")
+                || model.contains("opus-4-6") || model.contains("opus-4.6")
+                || model.contains("opus-4-7") || model.contains("opus-4.7")
+                || model.contains("opus-4-8") || model.contains("opus-4.8")
+                || model.contains("sonnet-4-6") || model.contains("sonnet-4.6") {
+                return 1_000_000
+            }
+            return 200_000
+        }
         if model.contains("deepseek") {
             // Version-aware: the bare-`deepseek`→64k default was stale. v4
             // (e.g. deepseek-v4-pro / -flash) ships a 1M window; the current
@@ -269,8 +284,23 @@ extension AppState {
             return 64_000
         }
         if model.contains("qwen-long") { return 1_000_000 }
+        if model.contains("qwen3.7") { return 1_000_000 } // qwen3.7-max/plus: 1M window
         if model.contains("qwen") || model.contains("dashscope") { return 128_000 }
-        if model.contains("kimi") || model.contains("moonshot") { return 128_000 }
+        if model.contains("kimi") || model.contains("moonshot") {
+            // Kimi K2 line (k2.5 / k2.6 / k2.7-code) is 256K. Legacy
+            // moonshot-v1-{8k,32k,128k} are already resolved by the explicit
+            // size-suffix checks near the top of this function.
+            if model.contains("kimi-k2") || model.contains("k2.5")
+                || model.contains("k2.6") || model.contains("k2.7") {
+                return 262_144
+            }
+            return 128_000
+        }
+        // Zhipu GLM-5 line: glm-5.2 is 1M; glm-5 / glm-5.1 are 200K; older
+        // glm (4.x / chatglm) default to 128K.
+        if model.contains("glm-5.2") { return 1_000_000 }
+        if model.contains("glm-5") { return 200_000 }
+        if model.contains("glm-") || model.contains("chatglm") { return 128_000 }
         if model.contains("gpt-3.5") { return 16_000 }
         if providerID == "openai" { return 128_000 }
         return 128_000

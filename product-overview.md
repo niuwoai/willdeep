@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-26 | Current version: v1.108.0-rc32
+> Last updated: 2026-06-26 | Current version: v1.108.0-rc33
 
 ## Positioning
 
@@ -73,6 +73,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **composer 纯图片粘贴无反应修复（1.108.0-rc23）** —— `ComposerNSTextView` 是纯文本视图(`isRichText=false`),AppKit 只把文本类型登记为可读,导致剪贴板里**只有图片、没有字符串**时 `paste:` 被禁用、Cmd+V 在到达重写的 `paste(_:)` 前就被吞掉,系统截图 / 浏览器「拷贝图像」无 alt 文本等纯图片粘贴全部失效(带文字时反而正常)。修复:重写 `readablePasteboardTypes` 追加 `.png`/`.tiff`,纯图片时保持 `paste:` 启用 → 进入图片 attach 管线。已实测纯 png 剪贴板缩略图正常出现。
 - **api-key 即存即生效 + 流式卡顿再压 + onboarding/Voice 全本地化（1.108.0-rc26）** —— 三件套。① **api-key 不再要重启**:onboarding 首次保存 / 设置页编辑 provider 后,key 之前只落磁盘 library、运行时 `agentConfiguration` 没同步,要重启才生效;把 `applyActiveProviderLibraryEntry()` 收进 `agentProviderLibrary.didSet`,任何 library 写入都即时闭环到运行时配置。② **流式输出再去两处主线程热点**:流式气泡去掉持续增长 `Text` 上的 `.textSelection`(每帧重建选择几何,流完即切回可选中成品视图),`AgentMarkdownNormalizer` 补 LRU 缓存避免每次 body 求值全量重扫。③ **国际化补全**:onboarding 四步引导与 Voice 设置页此前大片硬编码英文,中文用户首启全是英文——全部抽进 L10n 走 i18n;并把 xcstrings 中缺简体中文的 424 个 key 全部补齐,中文用户处处见中文、不再回落英文。
 - **CI 守住中文翻译覆盖率（1.108.0-rc27）** —— 接 rc26,新增 `scripts/i18n_coverage_guard.rb` 并入 CI:可翻译文案缺 `zh-Hans` 即报红,挡住以后新增 key 漏翻让中文用户回落英文;纯符号/格式串自动豁免。当前 1490/1490 全覆盖。
+- **内置 2026-06 新模型 context 窗口与价格（1.108.0-rc33）** —— 联网核对官方页后补齐:Claude 旗舰线 Opus 4.6/4.7/4.8·Sonnet 4.6·Fable 5 已是 **1M 标准上下文**(代码原误估 200K,占用率偏满,已改版本感知,Haiku/旧版仍 200K);gpt-5.5 ~1M(+gpt-5.5-pro 价);kimi K2.5/2.6/2.7-code 均 256K;GLM-5.2→1M、5/5.1→200K(+z.ai USD 价);qwen3.7-max/plus→1M(+价,Max medium、Plus low 来源冲突已注释)。核实 **gpt-5.6 与裸 kimi-k2.7 官方不存在,未内置**。补 AgentModelCatalogTests 锁定。
 - **deepseek-v4 上下文窗口估值修正,占用率不再提前顶 100%（1.108.0-rc32）** —— 占用率圆环的「窗口」来自按模型名估值的 `agentContextWindow`,deepseek 家族原被一刀切成 64k,而 `deepseek-v4-pro` 实际 1M,导致一轮 64.5k 输入就顶满。改为版本感知:v4(pro/flash)→1M、v3.1/v3.2/reasoner/chat→128k、老版本兜底 64k。自动压缩(75% 阈值)本就只在两轮之间、不打断流式,属预期。
 - **新建文件改用专门的 `create_file` 工具（1.108.0-rc30）** —— 此前 Agent 新建文件靠手写 `--- /dev/null` 创建 diff 走 apply_patch,模型常拼错。新增 `create_file(path, content)` 工具:直白给路径+内容、立即落盘;内部合成创建 diff 复用 apply_patch 管线,文件卡片/工作区变更/撤销/即时落盘语义不变。已存在即报错(改已有文件仍用 apply_patch),空文件/`./` 前缀/内容含 diff 控制符均 round-trip 测试锁定。apply_patch 收紧为「仅编辑已有文件」,系统提示词与远程工具说明同步引导;apply_patch 仍兼容解析 `/dev/null` 创建 diff 作兜底。
 - **已更改文件列表中文名八进制乱码修复（1.108.0-rc31）** —— composer 上方 worktree 改动列表里中文文件名显示成 `"docs/\351\207\215…"`。根因:git 默认 `core.quotePath=true` 把非 ASCII 路径八进制转义。修复:`runGitCommand` 给所有 git 调用统一前插 `-c core.quotePath=false` 直吐 UTF-8;并加 `unquoteGitPath` 兜底解码 C-quoted 路径(`\NNN` 八进制等),porcelain/numstat 解析各应用一次。补测试锁定中文路径解码。

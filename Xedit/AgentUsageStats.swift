@@ -474,6 +474,7 @@ private enum AgentModelPricing {
     // by the provider's public API pricing page. Keep model-specific rows
     // before broader family rows so substring matching stays deterministic.
     private static let prices: [AgentModelPrice] = [
+        AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5.5-pro"], inputPerMillion: 30.0, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 180.0),
         AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5.5"], inputPerMillion: 5.0, cachedInputPerMillion: 0.5, cacheWritePerMillion: nil, outputPerMillion: 30.0),
         AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5.4-mini"], inputPerMillion: 0.75, cachedInputPerMillion: 0.075, cacheWritePerMillion: nil, outputPerMillion: 4.5),
         AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5.4"], inputPerMillion: 2.5, cachedInputPerMillion: 0.25, cacheWritePerMillion: nil, outputPerMillion: 15.0),
@@ -505,6 +506,12 @@ private enum AgentModelPricing {
         AgentModelPrice(providerIDs: ["deepseek"], modelHints: ["deepseek-v4-pro"], inputPerMillion: 0.435, cachedInputPerMillion: 0.003625, cacheWritePerMillion: nil, outputPerMillion: 0.87),
         AgentModelPrice(providerIDs: ["deepseek"], modelHints: ["deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"], inputPerMillion: 0.14, cachedInputPerMillion: 0.0028, cacheWritePerMillion: nil, outputPerMillion: 0.28),
 
+        // qwen3.7-max/plus (2026-05, DashScope/百炼). CNY → USD via cny().
+        // Max numbers are medium-confidence (阿里云开发者社区,非计费页原文);
+        // Plus is low-confidence — sources conflict between a ≤256K-tier
+        // ¥2/¥8 and a flat ¥0.4/¥1.6; using the former. Verify in 百炼控制台.
+        AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen3.7-max"], inputPerMillion: cny(2.5), cachedInputPerMillion: cny(0.25), cacheWritePerMillion: nil, outputPerMillion: cny(7.5)),
+        AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen3.7-plus"], inputPerMillion: cny(2.0), cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: cny(8.0)),
         AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen3-vl-plus", "qwen-vl-plus"], inputPerMillion: 0.11, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 0.28),
         AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen-max", "qwen3-max"], inputPerMillion: 0.28, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 1.11),
         AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen-plus", "qwen3-plus", "qwen2.5-plus"], inputPerMillion: 0.11, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 0.28),
@@ -520,6 +527,13 @@ private enum AgentModelPricing {
         AgentModelPrice(providerIDs: ["kimi", "moonshot"], modelHints: ["moonshot-v1-32k"], inputPerMillion: cny(5.0), cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: cny(20.0)),
         AgentModelPrice(providerIDs: ["kimi", "moonshot"], modelHints: ["moonshot-v1-8k"], inputPerMillion: cny(2.0), cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: cny(10.0)),
 
+        // GLM-5 line. Prices are z.ai international (USD/M, high-confidence);
+        // the bigmodel.cn CNY page is a JS SPA we couldn't read, so a
+        // mainland-CNY user's actual rate may differ. glm-5.2/5.1 before
+        // glm-5 so the substring match hits the specific id first.
+        AgentModelPrice(providerIDs: ["zhipu", "bigmodel"], modelHints: ["glm-5.2"], inputPerMillion: 1.4, cachedInputPerMillion: 0.26, cacheWritePerMillion: nil, outputPerMillion: 4.4),
+        AgentModelPrice(providerIDs: ["zhipu", "bigmodel"], modelHints: ["glm-5.1"], inputPerMillion: 1.4, cachedInputPerMillion: 0.26, cacheWritePerMillion: nil, outputPerMillion: 4.4),
+        AgentModelPrice(providerIDs: ["zhipu", "bigmodel"], modelHints: ["glm-5"], inputPerMillion: 1.0, cachedInputPerMillion: 0.2, cacheWritePerMillion: nil, outputPerMillion: 3.2),
         AgentModelPrice(providerIDs: ["zhipu", "bigmodel"], modelHints: ["glm-4.5"], inputPerMillion: cny(0.8), cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: cny(2.0))
     ]
 }
