@@ -34,17 +34,23 @@ struct AgentModeView: View {
     @AppStorage("agentSidePanelWidth") private var sidePanelWidth: Double = 320
     private let sidePanelWidthRange: ClosedRange<Double> = 240...760
 
-    /// 收窄窗口时的列宽规约(rc 用户反馈:最左列被挤出窗体左缘):
-    /// 最左会话列表(`sidebarWidth`)与右侧面板宽度恒定,只压中间 chat
-    /// 列;但中间列不允许小于 2×sidebar,也就是「整体宽度 ≥ 3×sidebar」。
-    /// 这个下限同时喂给中间列(`minWidth`)和根 HStack(`minWidth` →
-    /// 窗口 contentMinSize),窗口因此压不到内容会溢出的程度,sidebar
-    /// 不会再被挤出左缘。右面板打开时把它的宽度也计进窗口下限,否则
-    /// `sidebar + panel` 早就超过旧的固定 720 窗口宽。
-    private var chatColumnMinWidth: CGFloat { sidebarWidth * 2 }
+    /// 收窄窗口时的列宽规约(rc 用户反馈:最左列被挤出窗体左缘 /
+    /// composer 盖住侧栏 / 右侧内容被文件面板遮住):左右两栏(会话列表、
+    /// 文件面板)宽度恒定(`.fixedSize`),中间 chat 列是**唯一**可被压缩
+    /// 的列 —— 它**不**设硬 `minWidth`,窗口变窄时由它独自吃掉差额并
+    /// `.clipped()` 自我裁切,绝不按本征宽度居中外溢盖住左右邻居。
+    ///
+    /// 下面 `chatColumnComfortWidth` 只是喂给窗口 `contentMinSize` 的
+    /// 「舒适下限」,保证正常拖拽时 chat 列不至于被拖成没法用的细条;
+    /// 但它**不**作为中间列的布局硬下限,所以即便平铺工具 / 编程式
+    /// resize 把窗口强行压到它以下(`contentMinSize` 只挡交互式拖拽,
+    /// 挡不住这些),中间列也只是继续裁切,不会再发生列间相互遮盖。
+    /// 右面板打开时把它的宽度计进窗口下限,否则 `sidebar + panel` 早
+    /// 就超过旧的固定 720 窗口宽。
+    private var chatColumnComfortWidth: CGFloat { sidebarWidth * 1.4 }
     private var contentMinWidth: CGFloat {
         (sessionsSidebarVisible ? sidebarWidth : 0)
-            + chatColumnMinWidth
+            + chatColumnComfortWidth
             + (sidePanel != nil ? CGFloat(sidePanelWidth) : 0)
     }
 
@@ -80,8 +86,12 @@ struct AgentModeView: View {
                 AgentChatComposer()
                 AgentChatStatusBar()
             }
-            .frame(minWidth: chatColumnMinWidth, maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(skin.windowBackground)
+            // 中间列是唯一可压缩列:窗口被压到比内容窄时由它吃差额,
+            // `.clipped()` 让 composer / transcript 在列边界处自我裁切,
+            // 而不是按本征宽度外溢、用不透明背景盖住左侧会话栏。
+            .clipped()
 
             if sidePanel != nil {
                 // 可拖动的分隔条:拖它来调聊天主区 ↔ 侧栏的边界。

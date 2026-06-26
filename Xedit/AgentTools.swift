@@ -42,6 +42,8 @@ enum AgentToolRunner {
             return try await AgentTerminalTools.sendCommand(arguments: arguments, context: context)
         case "terminal_send_control":
             return try await AgentTerminalTools.sendControl(arguments: arguments, context: context)
+        case "create_file":
+            return try await createFile(arguments: arguments, context: context)
         case "apply_patch":
             return try await applyPatch(arguments: arguments, context: context)
         case "claude_code":
@@ -113,6 +115,56 @@ enum AgentToolRunner {
         default:
             throw AgentToolError.unknownTool(name)
         }
+    }
+
+    // MARK: create_file
+
+    /// Build the unified creation diff that `apply_patch` already knows how to
+    /// parse and apply. Splitting on "\n" and prefixing each line with `+`
+    /// round-trips exactly through `AgentPatchApplier.apply` (which, for a new
+    /// file, joins the added lines back with "\n"), so the file lands byte-for
+    /// -byte equal to `content`. Empty content → a single empty added line →
+    /// an empty file.
+    static func makeCreationDiff(path: String, content: String) -> String {
+        let lines = content.components(separatedBy: "\n")
+        let body = lines.map { "+\($0)" }.joined(separator: "\n")
+        let header = "--- /dev/null\n+++ b/\(path)\nnew file mode 100644\n@@ -0,0 +1,\(lines.count) @@"
+        return body.isEmpty ? header : "\(header)\n\(body)"
+    }
+
+    /// Dedicated "create a new file" tool. Internally synthesizes a creation
+    /// diff and reuses the `apply_patch` pipeline so the inline file card,
+    /// worktree-change tracking, undo, and immediate-write semantics stay
+    /// identical to how new files behaved when models hand-crafted the diff —
+    /// the model just hands us a path + content instead of a unified diff.
+    private static func createFile(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        guard let rawPath = arguments["path"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawPath.isEmpty else {
+            throw AgentToolError.missingArgument("path")
+        }
+        // `content` may legitimately be empty (empty file), so only the key's
+        // absence — not an empty string — is an error.
+        guard let content = arguments["content"]?.stringValue() else {
+            throw AgentToolError.missingArgument("content")
+        }
+        // Strip an accidental leading `./`; apply_patch resolves the rest
+        // workspace-relative and rejects paths outside the workspace.
+        let path = rawPath.hasPrefix("./") ? String(rawPath.dropFirst(2)) : rawPath
+        let diff = makeCreationDiff(path: path, content: content)
+
+        let rawTitle = arguments["title"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = (rawTitle?.isEmpty == false) ? rawTitle! : "创建文件: \(path)"
+        // New files always write immediately — mirror the long-standing
+        // new-file behavior of apply_patch.
+        let patchArguments: [String: AgentJSONValue] = [
+            "diff": .string(diff),
+            "title": .string(title),
+            "apply_immediately": .bool(true)
+        ]
+        return try await applyPatch(arguments: patchArguments, context: context)
     }
 
     // MARK: apply_patch

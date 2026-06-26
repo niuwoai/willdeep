@@ -172,6 +172,8 @@ enum AgentChatToolSummaryFormatter {
             preferredKeys = ["label", "prompt"]
         case "claude_code", "codex_cli", "cursor_agent":
             preferredKeys = ["prompt", "permission_mode"]
+        case "create_file":
+            preferredKeys = ["path", "title"]
         case "apply_patch":
             preferredKeys = ["title", "diff"]
         default:

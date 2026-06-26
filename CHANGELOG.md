@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.108.0-rc30 - 2026-06-26
+
+### Added
+- **新建文件改用专门的 `create_file` 工具,不再让模型拼 apply_patch 的 `/dev/null` diff（1.108.0-rc30）** —— 此前 Agent 新建文件得自己手写一段 `--- /dev/null` / `+++ b/path` / `@@ -0,0 +1,N @@` 的创建 diff 走 [apply_patch](Xedit/AgentTools.swift),模型经常拼错(漏 `new file mode`、行数算错、把内容首字符当成 diff 控制符)。现新增 [create_file](Xedit/AgentToolRegistry.swift) 工具:模型只给 `path` + 完整 `content`,直白创建、立即落盘。实现上 `create_file` 内部用 [AgentToolRunner.makeCreationDiff](Xedit/AgentTools.swift) 把 (path, content) 合成成创建 diff,再复用现有 apply_patch 管线 —— 内联文件卡片、工作区变更追踪、撤销、即时落盘语义全部保持一致,模型侧只是把「拼 diff」换成「给内容」。`create_file` 在目标已存在时报错(改已有文件仍用 apply_patch);`./` 前缀、空文件、内容里含 `+`/`-`/`@@` 等都已 round-trip 测试锁定([AgentCreateFileToolTests](XeditTests/AgentCreateFileToolTests.swift) 5 例全过)。apply_patch 描述同步收紧为「仅编辑已有文件」,系统提示词([AgentContextBuilder](Xedit/AgentContextBuilder.swift))三处指引、远程工具说明([AppStateAgentLoop](Xedit/AppStateAgentLoop.swift))、卡片中文名、分组、摘要 preferredKeys、自动落盘判定全部补齐。apply_patch 仍保留对 `/dev/null` 创建 diff 的兼容解析作兜底,模型偶尔回退也不破。
+
+## 1.108.0-rc29 - 2026-06-26
+
+### Fixed
+- **改窗口宽度时 composer 盖住左侧会话栏、右侧内容被文件面板遮住（1.108.0-rc29）** —— Agent 窗口拉窄到一定程度时,中间的输入框(composer)会向左压到左侧会话列表上面,中间内容的右半又被右侧「文件」面板盖住。根因在 [AgentModeView](Xedit/AgentModeView.swift) 的三栏根 `HStack`:左侧会话栏与右侧文件面板都是 `.fixedSize` 锁死宽度,而中间 chat 列硬给了 `minWidth = sidebarWidth * 2`(≈460)。三列的最小/刚性宽度之和很大,窗口被压到比它窄时(`AgentWindowMinWidthSetter` 用 `contentMinSize` 兜底,但它只挡交互式拖拽、且异步,挡不住平铺工具/编程式 resize),`HStack` 空间不够,带 `minWidth`/`fixedSize` 的子视图会按各自**本征宽度居中**渲染到被压缩的格子上 → 中间列(不透明背景+composer)向左盖住会话栏、文件面板向左盖住中间列右半。修复:让中间 chat 列成为**唯一可压缩列** —— 去掉它的硬 `minWidth`,并加 `.clipped()`;窗口变窄时由它独自吃掉差额、在列边界处自我裁切,不再按本征宽度外溢盖邻居。原 `chatColumnMinWidth`(2×sidebar)降级为只喂窗口 `contentMinSize` 的「舒适下限」`chatColumnComfortWidth`(1.4×sidebar),保证正常拖拽时 chat 列仍够用,但不再作为布局硬下限。左右两栏宽度不受影响。
+
 ## 1.108.0-rc28 - 2026-06-26
 
 ### Fixed

@@ -100,13 +100,23 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
-            name: "apply_patch",
-            description: "Submit a conservative unified diff. CREATING a new file writes it to disk IMMEDIATELY — no review needed (use a creation diff: `--- /dev/null` + `+++ b/path` with a `new file mode` line and a `@@ -0,0 +1,N @@` hunk of all `+` lines; missing parent directories are created). EDITING an existing file shows a patch card INLINE IN THE CHAT, right below your message — there is NO separate right-side review panel — for the user to review and click Apply; in Goal mode or workspace-access approval mode the host applies the edit immediately. Validates the diff shape before queuing.",
+            name: "create_file",
+            description: "Create a BRAND-NEW file and write it to disk IMMEDIATELY. This is the ONLY correct way to make a new file — do NOT use apply_patch for creation. Pass the workspace-relative path and the full file content directly; no diff to hand-craft. Fails if the path already exists (to change an existing file, use apply_patch instead). Missing parent directories are created. A file card showing the new file appears inline in the chat for auditability.",
             risk: .read,
             parameters: [
-                AgentToolParameter(name: "diff", type: .string, description: "Unified diff. Use workspace-relative paths (`--- a/path`, `+++ b/path`) and standard @@ hunks. To create a new file, use `--- /dev/null` / `+++ b/path` with a `new file mode` line and a single all-added hunk.", required: true),
+                AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the NEW file, e.g. `src/utils/date.ts` or `docs/README.md`. Must not already exist.", required: true),
+                AgentToolParameter(name: "content", type: .string, description: "Full contents of the new file, written verbatim. Pass an empty string for an empty file.", required: true),
+                AgentToolParameter(name: "title", type: .string, description: "Optional short title for the file card. Defaults to `创建文件: <path>`.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "apply_patch",
+            description: "EDIT an EXISTING file via a conservative unified diff. To CREATE a new file, use `create_file` instead — NOT this tool. An edit shows a patch card INLINE IN THE CHAT, right below your message — there is NO separate right-side review panel — for the user to review and click Apply; in Goal mode or workspace-access approval mode the host applies the edit immediately. Validates the diff shape before queuing.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "diff", type: .string, description: "Unified diff for an EXISTING file. Use workspace-relative paths (`--- a/path`, `+++ b/path`) and standard @@ hunks. (New files: use `create_file`, not a `/dev/null` diff here.)", required: true),
                 AgentToolParameter(name: "title", type: .string, description: "Optional short title for the patch card. Defaults to Agent Patch.", required: false),
-                AgentToolParameter(name: "apply_immediately", type: .boolean, description: "Set true ONLY when the user explicitly asked to write / save directly without review (e.g. \"直接写\", \"直接落盘\", \"不用审核\", \"just write it\", \"save it directly\"). An EDIT to an existing file then writes to disk immediately instead of waiting for the user to click Apply. New files always write immediately regardless of this flag. Defaults to false.", required: false)
+                AgentToolParameter(name: "apply_immediately", type: .boolean, description: "Set true ONLY when the user explicitly asked to write / save directly without review (e.g. \"直接写\", \"直接落盘\", \"不用审核\", \"just write it\", \"save it directly\"). The edit then writes to disk immediately instead of waiting for the user to click Apply. Defaults to false.", required: false)
             ]
         ),
         AgentToolDescriptor(

@@ -40,7 +40,7 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
             return .codexCLI
         case "cursor_agent":
             return .cursorAgent
-        case "apply_patch":
+        case "apply_patch", "create_file":
             return .applyPatch
         case "ask_user":
             return .askUser
