@@ -99,6 +99,49 @@ extension AppState {
         }
     }
 
+    /// 解码 git 的 C 风格带引号路径。即使加了 `core.quotePath=false`,
+    /// git 对含双引号 / 反斜杠 / 制表符 / 换行等特殊字节的路径仍会用
+    /// `"..."` 包裹并转义;这里做兜底解码,保证任何路径都还原成可读文本。
+    /// 非引号包裹的路径原样返回。
+    ///
+    /// 转义规则(对应 git unquote):`\\` `\"` `\t` `\n` `\r`,以及 `\NNN`
+    /// 三位八进制字节。多字节 UTF-8(如中文)是连续多个 `\NNN`,必须先收成
+    /// 字节再整体按 UTF-8 解码,不能逐字节当字符。
+    nonisolated static func unquoteGitPath(_ raw: String) -> String {
+        guard raw.count >= 2, raw.hasPrefix("\""), raw.hasSuffix("\"") else { return raw }
+        let inner = Array(raw.dropFirst().dropLast())
+        var bytes: [UInt8] = []
+        var i = 0
+        while i < inner.count {
+            let ch = inner[i]
+            if ch == "\\", i + 1 < inner.count {
+                let next = inner[i + 1]
+                switch next {
+                case "n": bytes.append(0x0A); i += 2
+                case "t": bytes.append(0x09); i += 2
+                case "r": bytes.append(0x0D); i += 2
+                case "\"": bytes.append(0x22); i += 2
+                case "\\": bytes.append(0x5C); i += 2
+                default:
+                    // \NNN 三位八进制
+                    if i + 3 < inner.count,
+                       next.isNumber,
+                       let b = UInt8(String(inner[(i + 1)...(i + 3)]), radix: 8) {
+                        bytes.append(b)
+                        i += 4
+                    } else {
+                        bytes.append(contentsOf: Array(String(ch).utf8))
+                        i += 1
+                    }
+                }
+            } else {
+                bytes.append(contentsOf: Array(String(ch).utf8))
+                i += 1
+            }
+        }
+        return String(decoding: bytes, as: UTF8.self)
+    }
+
     nonisolated static func parseGitNumstat(_ output: String) -> [String: AgentLineChangeStats] {
         var result: [String: AgentLineChangeStats] = [:]
 
@@ -108,10 +151,10 @@ extension AppState {
 
             let added = Int(parts[0])
             let deleted = Int(parts[1])
-            let path = parts.dropFirst(2).joined(separator: "\t")
+            let path = unquoteGitPath(parts.dropFirst(2).joined(separator: "\t"))
             guard !path.isEmpty else { continue }
 
-            result[String(path)] = AgentLineChangeStats(added: added, deleted: deleted)
+            result[path] = AgentLineChangeStats(added: added, deleted: deleted)
         }
 
         return result
@@ -135,6 +178,7 @@ extension AppState {
             if let renameRange = path.range(of: " -> ") {
                 path = String(path[renameRange.upperBound...])
             }
+            path = unquoteGitPath(path)
 
             result[path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))] = GitFileStatusKind(indexStatus: x, workTreeStatus: y)
         }
@@ -195,7 +239,13 @@ extension AppState {
         let stderrCollector = ProcessOutputCollector(limit: maxGitOutputBytes)
         let runState = TimedProcessState()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = arguments
+        // `core.quotePath=false`:git 默认把路径里的非 ASCII 字节用八进制
+        // 转义(并加双引号)输出,中文文件名于是显示成 "\351\207\215…"
+        // (用户反馈:composer 上方已更改文件列表全是反斜杠数字)。关掉它
+        // 让 git 直接吐 UTF-8 路径。`-c key=value` 是全局选项,必须排在子
+        // 命令前面,所以前插到 arguments。对所有 git 调用统一生效(status /
+        // diff numstat / branch / worktree list / rev-parse …)。
+        process.arguments = ["-c", "core.quotePath=false"] + arguments
         process.currentDirectoryURL = repositoryRoot
         process.environment = ProcessInfo.processInfo.environment.merging([
             "GIT_OPTIONAL_LOCKS": "0",

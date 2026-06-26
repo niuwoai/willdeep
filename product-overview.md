@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-26 | Current version: v1.108.0-rc30
+> Last updated: 2026-06-26 | Current version: v1.108.0-rc31
 
 ## Positioning
 
@@ -74,6 +74,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **api-key 即存即生效 + 流式卡顿再压 + onboarding/Voice 全本地化（1.108.0-rc26）** —— 三件套。① **api-key 不再要重启**:onboarding 首次保存 / 设置页编辑 provider 后,key 之前只落磁盘 library、运行时 `agentConfiguration` 没同步,要重启才生效;把 `applyActiveProviderLibraryEntry()` 收进 `agentProviderLibrary.didSet`,任何 library 写入都即时闭环到运行时配置。② **流式输出再去两处主线程热点**:流式气泡去掉持续增长 `Text` 上的 `.textSelection`(每帧重建选择几何,流完即切回可选中成品视图),`AgentMarkdownNormalizer` 补 LRU 缓存避免每次 body 求值全量重扫。③ **国际化补全**:onboarding 四步引导与 Voice 设置页此前大片硬编码英文,中文用户首启全是英文——全部抽进 L10n 走 i18n;并把 xcstrings 中缺简体中文的 424 个 key 全部补齐,中文用户处处见中文、不再回落英文。
 - **CI 守住中文翻译覆盖率（1.108.0-rc27）** —— 接 rc26,新增 `scripts/i18n_coverage_guard.rb` 并入 CI:可翻译文案缺 `zh-Hans` 即报红,挡住以后新增 key 漏翻让中文用户回落英文;纯符号/格式串自动豁免。当前 1490/1490 全覆盖。
 - **新建文件改用专门的 `create_file` 工具（1.108.0-rc30）** —— 此前 Agent 新建文件靠手写 `--- /dev/null` 创建 diff 走 apply_patch,模型常拼错。新增 `create_file(path, content)` 工具:直白给路径+内容、立即落盘;内部合成创建 diff 复用 apply_patch 管线,文件卡片/工作区变更/撤销/即时落盘语义不变。已存在即报错(改已有文件仍用 apply_patch),空文件/`./` 前缀/内容含 diff 控制符均 round-trip 测试锁定。apply_patch 收紧为「仅编辑已有文件」,系统提示词与远程工具说明同步引导;apply_patch 仍兼容解析 `/dev/null` 创建 diff 作兜底。
+- **已更改文件列表中文名八进制乱码修复（1.108.0-rc31）** —— composer 上方 worktree 改动列表里中文文件名显示成 `"docs/\351\207\215…"`。根因:git 默认 `core.quotePath=true` 把非 ASCII 路径八进制转义。修复:`runGitCommand` 给所有 git 调用统一前插 `-c core.quotePath=false` 直吐 UTF-8;并加 `unquoteGitPath` 兜底解码 C-quoted 路径(`\NNN` 八进制等),porcelain/numstat 解析各应用一次。补测试锁定中文路径解码。
 - **改窗口宽度时 composer 盖住左侧栏 / 右侧被文件面板遮住修复（1.108.0-rc29）** —— Agent 窗口拉窄时,中间输入框向左盖住左侧会话列表、中间内容右半被右侧文件面板遮住。根因:`AgentModeView` 三栏 `HStack` 里左右两栏 `.fixedSize` 锁宽,中间 chat 列硬给 `minWidth=2×sidebar`,三列最小宽度之和过大;窗口被压到比它窄时(平铺工具/编程式 resize 能绕过 `contentMinSize` 兜底),带 `minWidth`/`fixedSize` 的子视图按本征宽度居中渲染到被压扁的格子上,互相盖。修复:中间 chat 列改为唯一可压缩列——去掉硬 `minWidth` 并加 `.clipped()`,窗口变窄时由它独吃差额、边界裁切,不再外溢盖邻居;原 2×sidebar 降级为只喂窗口 `contentMinSize` 的舒适下限(1.4×sidebar)。
 - **`GB/T` 等带斜杠普通词不再被误染成文件链接（1.108.0-rc28）** —— 历史消息正文里 `GB/T 45654—2025`、`TCP/IP`、`I/O`、`和/或`、日期 `01/02` 被 `applyPathChipAttributes` 的「含斜杠即路径」正则误判成可点文件引用。收紧为只认带路径锚点(`/`、`./`、`~/`)或带已知文件后缀的引用,`GB/T` 不再命中;真实路径(`src/main.ts`、`Xedit/AppState.swift:81`、`/usr/bin/ssh`)照常成 chip。补测试锁定。
 - **补丁建议 diff 双向滚动看全（1.108.0-rc22）** —— 待 apply 的补丁建议卡片展开后,diff 框原本只 `.horizontal` 单向滚、纵向被 `maxHeight:180` 卡死又滚不动,几十行的剧本 diff 超过约 15 行就被裁掉看不全。改成 `ScrollView([.horizontal,.vertical])` 双向滚动 + `fixedSize`(长行不换保对齐) + 视口抬到 320,再长也在框内滚动查看全部;底层 diff 从不截断(apply 用整份),此前纯属展示视口问题。

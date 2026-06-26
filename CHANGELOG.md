@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.108.0-rc31 - 2026-06-26
+
+### Fixed
+- **composer 上方已更改文件列表里中文文件名显示成八进制乱码（1.108.0-rc31）** —— 文件名如「重启…」被显示成 `"docs/\351\207\215\345\220\257…"`(反斜杠 + 三位八进制)。根因:git 默认 `core.quotePath=true`,对路径里的非 ASCII 字节做八进制转义并加双引号输出,[AppStateGitStatus](Xedit/AppStateGitStatus.swift) 解析 `git status --porcelain` / `git diff --numstat` 时把这串原样当路径用了。修复:① 在 [runGitCommand](Xedit/AppStateGitStatus.swift) 给**所有** git 调用统一前插 `-c core.quotePath=false`,让 git 直接吐 UTF-8 路径(status / numstat / branch / worktree list / rev-parse 全覆盖);② 新增 `unquoteGitPath` 兜底解码器,对万一仍被 `"..."` 包裹的特殊字符路径(含 `\NNN` 八进制、`\t`/`\n`/`\"`/`\\`)还原 —— 多字节 UTF-8 先收成字节再整体解码,在 porcelain / numstat 两个解析器各应用一次。补 [GitWorktreeCoreTests](XeditTests/GitWorktreeCoreTests.swift) 两个测试锁定中文路径解码。
+
 ## 1.108.0-rc30 - 2026-06-26
 
 ### Added

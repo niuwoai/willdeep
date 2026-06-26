@@ -92,6 +92,35 @@ struct GitWorktreeCoreTests {
         #expect(stats["Docs/Name With Spaces.md"]?.deleted == 0)
     }
 
+    @Test("git C-quoted path with octal-escaped CJK bytes decodes to UTF-8")
+    func testUnquoteGitPathDecodesCJK() {
+        // git 默认 core.quotePath=true 把「重启.md」输出成
+        // "docs/\351\207\215\345\220\257.md"(重=E9 87 8D,启=E5 90 AF)。
+        #expect(AppState.unquoteGitPath(#""docs/\351\207\215\345\220\257.md""#) == "docs/重启.md")
+        // 含转义字符的常规情况
+        #expect(AppState.unquoteGitPath(#""a\tb\\c\"d.md""#) == "a\tb\\c\"d.md")
+        // 未加引号的路径原样返回(加了 core.quotePath=false 后的常态)
+        #expect(AppState.unquoteGitPath("docs/重启.md") == "docs/重启.md")
+        #expect(AppState.unquoteGitPath("Xedit/AppState.swift") == "Xedit/AppState.swift")
+    }
+
+    @Test("porcelain + numstat parsers decode octal-escaped CJK paths")
+    func testParsersDecodeQuotedCJKPaths() {
+        let entries = AppState.parseGitStatusPorcelain(
+            #" M "docs/\351\207\215\345\220\257.md""# + "\n" +
+            #"R  "old.md" -> "docs/\345\220\257\345\212\250.md""#
+        )
+        #expect(entries["docs/重启.md"] == .modified)
+        #expect(entries["docs/启动.md"] == .renamed)
+
+        // numstat 字段用真实 tab 分隔;路径里的反斜杠用 \\ 写成字面量。
+        let stats = AppState.parseGitNumstat(
+            "3\t1\t\"docs/\\351\\207\\215\\345\\220\\257.md\""
+        )
+        #expect(stats["docs/重启.md"]?.added == 3)
+        #expect(stats["docs/重启.md"]?.deleted == 1)
+    }
+
     @Test("worktree change summary combines porcelain entries and numstat")
     func testWorktreeChangeSummaryTotals() {
         let root = URL(fileURLWithPath: "/tmp/willdeep-git-root")
