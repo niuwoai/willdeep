@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.108.0-rc34 - 2026-06-26
+
+### Fixed
+- **修 rc33 引入的 CI 红:旧测试仍断言 `gpt-5.5 context == 400k`（1.108.0-rc34）** —— rc33 把 gpt-5.5 的 context 改成正确的 ~1M(1,050,000)后,[XeditTests](XeditTests/XeditTests.swift) 里 `testAgentContextWindowModernModels` 那条**陈旧断言**(原假设 gpt-5.5 继承 gpt-5 的 400k)开始失败,CI 报红。本地当时只跑了新建的 `AgentModelCatalogTests` 独立 suite、没跑全套 `WillDeepTests`,漏掉这条。改断言为 `gpt-5.5 → 1_050_000`,并补一条 `gpt-5 → 400_000` 锁定「只有裸 gpt-5 是 400k」。纯测试改动。
+
 ## 1.108.0-rc33 - 2026-06-26
 
 ### Added

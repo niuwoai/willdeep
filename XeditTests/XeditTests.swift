@@ -1123,7 +1123,9 @@ struct WillDeepTests {
 
     @Test("agent context window recognizes modern large-context models")
     func testAgentContextWindowModernModels() {
-        #expect(AppState.agentContextWindow(model: "gpt-5.5", providerID: "openai") == 400_000)
+        // gpt-5.5 (and -pro) is a ~1M window; only plain gpt-5 stays 400K.
+        #expect(AppState.agentContextWindow(model: "gpt-5.5", providerID: "openai") == 1_050_000)
+        #expect(AppState.agentContextWindow(model: "gpt-5", providerID: "openai") == 400_000)
         #expect(AppState.agentContextWindow(model: "gpt-4.1", providerID: "openai") == 1_000_000)
         #expect(AppState.agentContextWindow(model: "custom-model", providerID: "custom") == 128_000)
         // deepseek is version-aware: v4 (pro/flash) is a 1M window, the
