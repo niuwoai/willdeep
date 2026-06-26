@@ -10,7 +10,38 @@
 import Foundation
 
 enum AgentMarkdownNormalizer {
+    // Bounded LRU keyed by source hash. During streaming this function is
+    // called on every SwiftUI body evaluation of the live bubble (≥ once per
+    // 100ms flush, plus extra layout/measure passes). Without a cache each of
+    // those passes re-scans the whole growing string — O(n) per pass, O(n²)
+    // across the stream. Repeated passes at the *same* content now hand back
+    // the prior result; only a genuinely new content value pays the scan.
+    private static var cache: [Int: String] = [:]
+    private static var cacheOrder: [Int] = []
+    private static let cacheLock = NSLock()
+    private static let cacheLimit = 128
+
     static func normalizedForChatRendering(_ source: String) -> String {
+        let key = source.hashValue
+        cacheLock.lock()
+        let hit = cache[key]
+        cacheLock.unlock()
+        if let hit { return hit }
+
+        let result = computeNormalized(source)
+
+        cacheLock.lock()
+        cache[key] = result
+        cacheOrder.append(key)
+        if cacheOrder.count > cacheLimit {
+            let evict = cacheOrder.removeFirst()
+            cache.removeValue(forKey: evict)
+        }
+        cacheLock.unlock()
+        return result
+    }
+
+    private static func computeNormalized(_ source: String) -> String {
         let lines = source.components(separatedBy: .newlines)
         var output: [String] = []
         var index = 0

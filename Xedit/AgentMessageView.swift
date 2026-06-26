@@ -298,10 +298,16 @@ private struct AgentAssistantStreamingBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
+            // No `.textSelection(.enabled)` on the *live* streaming bubble:
+            // SwiftUI rebuilds the entire selection geometry for the whole
+            // (growing) Text on every flush, which is a main-thread hotspot and
+            // a primary source of streaming jank. The user can't meaningfully
+            // select text that's still moving anyway — selection is restored
+            // the moment streaming ends and the body flips to the finished
+            // renderer (rich Text / NSTextView history), both selectable.
             Text(AgentLongTokenBreaker.inject(into: AgentMarkdownNormalizer.normalizedForChatRendering(content)))
                 .font(.system(size: baseFontSize))
                 .foregroundStyle(.primary)
-                .textSelection(.enabled)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
             AgentStreamingCursor()

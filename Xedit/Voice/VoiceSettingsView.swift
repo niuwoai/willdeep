@@ -39,9 +39,9 @@ struct VoiceSettingsView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("On-device Voice (SenseVoice)", systemImage: "waveform")
+            Label(L10n.Settings.Voice.headerTitle, systemImage: "waveform")
                 .font(.title3.weight(.semibold))
-            Text("Push-to-talk in the composer transcribes 100% on-device. Nothing leaves your Mac.")
+            Text(L10n.Settings.Voice.headerDescription)
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -54,12 +54,12 @@ struct VoiceSettingsView: View {
                 .foregroundStyle(VoiceModelDownloader.isModelInstalled ? .green : .accentColor)
             VStack(alignment: .leading, spacing: 4) {
                 Text(VoiceModelDownloader.isModelInstalled
-                     ? "SenseVoice model installed"
-                     : "Model not installed yet")
+                     ? L10n.Settings.Voice.statusInstalledTitle
+                     : L10n.Settings.Voice.statusNotInstalledTitle)
                     .font(.system(size: 13, weight: .medium))
                 Text(VoiceModelDownloader.isModelInstalled
-                     ? "Mic button in composer is enabled. Press and hold to record, release to transcribe. Tip: hold the Fn key anywhere in the app for the same push-to-talk."
-                     : "Click Download below (~937 MB). After install the mic button in composer goes live and the Fn-key push-to-talk shortcut starts working.")
+                     ? L10n.Settings.Voice.statusInstalledDetail
+                     : L10n.Settings.Voice.statusNotInstalledDetail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -79,7 +79,7 @@ struct VoiceSettingsView: View {
                 Button {
                     Task { await downloader.download() }
                 } label: {
-                    Label("Download model (~937 MB)", systemImage: "arrow.down.to.line")
+                    Label(L10n.Settings.Voice.downloadButton, systemImage: "arrow.down.to.line")
                         .frame(minWidth: 220)
                 }
                 .buttonStyle(.borderedProminent)
@@ -90,21 +90,21 @@ struct VoiceSettingsView: View {
                     Button {
                         Task { try? await downloader.importFromFastv() }
                     } label: {
-                        Label("Import from fastv (0 MB)", systemImage: "link")
+                        Label(L10n.Settings.Voice.importButton, systemImage: "link")
                     }
                     .disabled(isBusy)
-                    .help("Symlink an existing fastv model copy — no download.")
+                    .help(L10n.Settings.Voice.importHelp)
                 }
             } else {
                 Button {
                     NSWorkspace.shared.activateFileViewerSelecting([VoiceModelLocation.modelDirectory])
                 } label: {
-                    Label("Reveal in Finder", systemImage: "folder")
+                    Label(L10n.Settings.Voice.revealInFinder, systemImage: "folder")
                 }
             }
 
             if isBusy {
-                Button("Cancel") { downloader.cancel() }
+                Button(L10n.Settings.Voice.cancel) { downloader.cancel() }
             }
 
             Spacer()
@@ -119,7 +119,7 @@ struct VoiceSettingsView: View {
         case .importing:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text("Importing from fastv…")
+                Text(L10n.Settings.Voice.importing)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -220,7 +220,7 @@ struct VoiceSettingsView: View {
 
     private var lifecycleSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Memory")
+            Text(L10n.Settings.Voice.memorySection)
                 .font(.headline)
 
             Toggle(isOn: Binding(
@@ -234,9 +234,9 @@ struct VoiceSettingsView: View {
                 }
             )) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Preload on launch")
+                    Text(L10n.Settings.Voice.preloadToggle)
                         .font(.system(size: 13))
-                    Text("After your first transcription, warm the ~937 MB model on each app start so push-to-talk responds instantly. Disable to save memory at the cost of a 1-5 s cold start.")
+                    Text(L10n.Settings.Voice.preloadDescription)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -249,13 +249,13 @@ struct VoiceSettingsView: View {
                     Circle()
                         .fill(modelInMemory ? Color.green : Color.secondary.opacity(0.5))
                         .frame(width: 8, height: 8)
-                    Text(modelInMemory ? "Loaded in memory" : "Not in memory")
+                    Text(modelInMemory ? L10n.Settings.Voice.loadedInMemory : L10n.Settings.Voice.notInMemory)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
                 if modelInMemory {
-                    Button("Unload now") {
+                    Button(L10n.Settings.Voice.unloadNow) {
                         Task {
                             await VoiceModelLifecycleController.shared.unloadNow()
                             await refreshMemoryStatus()
@@ -273,10 +273,10 @@ struct VoiceSettingsView: View {
                         .font(.system(size: 11))
                 }
                 .buttonStyle(.borderless)
-                .help("Refresh status")
+                .help(L10n.Settings.Voice.refreshStatusHelp)
             }
 
-            Text("The model also auto-unloads after 5 minutes of foreground idle, 10 minutes of background, or when the app's resident memory exceeds 4 GB.")
+            Text(L10n.Settings.Voice.autoUnloadNote)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -297,7 +297,7 @@ struct VoiceSettingsView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Model location")
+            Text(L10n.Settings.Voice.modelLocation)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             Text(VoiceModelLocation.modelDirectory.path)

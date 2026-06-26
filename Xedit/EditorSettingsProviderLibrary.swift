@@ -348,10 +348,10 @@ private struct AgentProviderEntryEditor: View {
             fieldRow(L10n.Settings.Provider.protocolLabel) {
                 Picker("", selection: $customKindOverride) {
                     Text(L10n.Settings.Provider.openAIChatDefault).tag(AgentProviderKind?.none)
-                    Text("OpenAI Chat").tag(AgentProviderKind?.some(.openAIChat))
-                    Text("Anthropic Messages").tag(AgentProviderKind?.some(.anthropicMessages))
-                    Text("Google Gemini").tag(AgentProviderKind?.some(.geminiGenerateContent))
-                    Text("OpenAI Responses").tag(AgentProviderKind?.some(.openAIResponses))
+                    Text(L10n.Settings.Provider.protocolOpenAIChat).tag(AgentProviderKind?.some(.openAIChat))
+                    Text(L10n.Settings.Provider.protocolAnthropicMessages).tag(AgentProviderKind?.some(.anthropicMessages))
+                    Text(L10n.Settings.Provider.protocolGoogleGemini).tag(AgentProviderKind?.some(.geminiGenerateContent))
+                    Text(L10n.Settings.Provider.protocolOpenAIResponses).tag(AgentProviderKind?.some(.openAIResponses))
                 }
                 .labelsHidden()
                 .onCompatibleChange(of: customKindOverride) { _, _ in commit() }

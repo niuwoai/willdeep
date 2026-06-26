@@ -95,6 +95,13 @@ final class AppState: ObservableObject {
     @Published var agentProviderLibrary: AgentProviderLibrary {
         didSet {
             AgentSettingsStore.saveProviderLibrary(agentProviderLibrary)
+            // A 方案的闭环：library 是 provider 字段的唯一真相源,任何对
+            // library 的写入(onboarding 首次保存 key、设置页编辑 active 条目、
+            // 切换 active 条目)都必须立刻把 active entry 重新灌进运行时的
+            // agentConfiguration,否则 key 只落了磁盘、运行时仍是旧值/空值,
+            // 表现就是「设置了 api-key 却要重启 App 才生效」。apply 只写 cfg、
+            // 不回灌 library,cfg.didSet 也不碰 library,故无死循环。
+            applyActiveProviderLibraryEntry()
         }
     }
     /// Model IDs the user has previously fetched in Settings — surfaced in

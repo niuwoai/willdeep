@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-25 | Current version: v1.108.0-rc25
+> Last updated: 2026-06-26 | Current version: v1.108.0-rc26
 
 ## Positioning
 
@@ -71,6 +71,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **代码块复制状态与横向滚动修复（1.106.0-rc2）** —— TextKit 聊天历史里的 fenced code 复制控件现在会把图标和文字作为同一个可替换范围处理,点击复制后只显示一个 `Done`,3 秒后按按钮实例独立恢复为可复制状态;代码块正文不再自动折行,在代码块区域横向滚动可查看长命令、长路径和长单行输出的完整内容。
 - **CI xcodebuild 收尾 watchdog（1.106.0-rc3）** —— GitHub macOS runner 上如果 Swift 测试已经整轮通过但 `xcodebuild` 收尾不退出,`scripts/xcodebuild_ci.rb` 会在宽限期后清理 stale 进程,保留 `xcodebuild.log` 与 `xcresult` 报告,避免 CI job 被 30 分钟总超时误伤。
 - **composer 纯图片粘贴无反应修复（1.108.0-rc23）** —— `ComposerNSTextView` 是纯文本视图(`isRichText=false`),AppKit 只把文本类型登记为可读,导致剪贴板里**只有图片、没有字符串**时 `paste:` 被禁用、Cmd+V 在到达重写的 `paste(_:)` 前就被吞掉,系统截图 / 浏览器「拷贝图像」无 alt 文本等纯图片粘贴全部失效(带文字时反而正常)。修复:重写 `readablePasteboardTypes` 追加 `.png`/`.tiff`,纯图片时保持 `paste:` 启用 → 进入图片 attach 管线。已实测纯 png 剪贴板缩略图正常出现。
+- **api-key 即存即生效 + 流式卡顿再压 + onboarding/Voice 全本地化（1.108.0-rc26）** —— 三件套。① **api-key 不再要重启**:onboarding 首次保存 / 设置页编辑 provider 后,key 之前只落磁盘 library、运行时 `agentConfiguration` 没同步,要重启才生效;把 `applyActiveProviderLibraryEntry()` 收进 `agentProviderLibrary.didSet`,任何 library 写入都即时闭环到运行时配置。② **流式输出再去两处主线程热点**:流式气泡去掉持续增长 `Text` 上的 `.textSelection`(每帧重建选择几何,流完即切回可选中成品视图),`AgentMarkdownNormalizer` 补 LRU 缓存避免每次 body 求值全量重扫。③ **国际化补全**:onboarding 四步引导与 Voice 设置页此前大片硬编码英文,中文用户首启全是英文——全部抽进 L10n 走 i18n;并把 xcstrings 中缺简体中文的 424 个 key 全部补齐,中文用户处处见中文、不再回落英文。
 - **补丁建议 diff 双向滚动看全（1.108.0-rc22）** —— 待 apply 的补丁建议卡片展开后,diff 框原本只 `.horizontal` 单向滚、纵向被 `maxHeight:180` 卡死又滚不动,几十行的剧本 diff 超过约 15 行就被裁掉看不全。改成 `ScrollView([.horizontal,.vertical])` 双向滚动 + `fixedSize`(长行不换保对齐) + 视口抬到 320,再长也在框内滚动查看全部;底层 diff 从不截断(apply 用整份),此前纯属展示视口问题。
 - **工具卡片本地化 + 命令/控制键展示 + 终端侧栏拖拽不闪（1.108.0-rc21）** —— Agent 工具卡片三处打磨。① 不再裸显英文工具 id：新增 `AgentToolDisplay` 集中维护「工具 id → 中文名」(终端执行命令 / 终端控制键 / 运行命令 …),卡片标题 / 分组标题 / 预览统一用中文名,原始 id 收进 tooltip,未收录工具回退原 id。② 待批准的 `terminal_send_command` 现在和 `run_command` 一样弹可选中、可滚动的命令明细块,默认最多约 3 行,更长在框内滚动看全。③ `control=ctrl_c` 等裸别名展开成「Ctrl-C（中断当前命令 / SIGINT）」等人话,审批前一眼看懂。另修 Agent 右侧面板(含终端)拖拽改宽闪动:宽度对齐整数点 + 拖动时关隐式动画,消除亚像素重栅格化抖动与动画插值重影。
 - **Settings 窗口 16 tab 整合为 6 分组 + 可靠 resize（1.108.0-rc14）** —— 原本 16 个面板平铺成一排 tab(拥挤、标签截断),归并为 6 个顶层分组(Editor / AI Agents / Runtimes / Tools / Integrations / Voice),组内多面板用二级 segmented 切换。保留全部 16 个 `EditorSettingsTab` case(新增 `SettingsGroup` 分组层 + `EditorSettingsTab.group`),现有深链跳转(如 `selectedTab = .mobileGateway`)一律不破坏;子页 View 全部复用未重写。另修 Settings 窗口不能拖拽改大小:`SettingsWindowResizableEnforcer` 原在 `makeNSView` 用一次性 async 读 `view.window`,可能在 view 未挂窗口时 no-op;改用 `viewDidMoveToWindow`(window 必定非 nil)可靠注入 `.resizable` + 解除最大尺寸上限。

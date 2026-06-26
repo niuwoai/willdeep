@@ -159,6 +159,49 @@ enum L10n {
             static let subtitle = String(localized: "onboarding.some-im.subtitle", defaultValue: "Optional. Add your relay key so image, video, and future multimodal skills can route to the right model automatically.")
             static let note = String(localized: "onboarding.some-im.note", defaultValue: "You can skip this and configure it later in Settings -> some.im. The image default is gpt-image-2.")
         }
+        enum Welcome {
+            static let title = String(localized: "onboarding.welcome.title", defaultValue: "Welcome to WillDeep")
+            static let subtitle = String(localized: "onboarding.welcome.subtitle", defaultValue: "An editor that codes, transcribes, and ships alongside you. Let's get you set up in three quick steps.")
+            static let bulletProvider = String(localized: "onboarding.welcome.bullet-provider", defaultValue: "Bring your own AI provider — Claude, OpenAI, DeepSeek and more")
+            static let bulletVoice = String(localized: "onboarding.welcome.bullet-voice", defaultValue: "Push-to-talk voice transcription runs 100% on-device")
+            static let bulletSettings = String(localized: "onboarding.welcome.bullet-settings", defaultValue: "Settings, models and skills you can change anytime")
+        }
+        enum Provider {
+            static let title = String(localized: "onboarding.provider.title", defaultValue: "Connect an AI provider")
+            static let subtitle = String(localized: "onboarding.provider.subtitle", defaultValue: "Pick one to start with — you can add more later in Settings → AI Providers. Skip if you'll only use voice features.")
+            static let labelProvider = String(localized: "onboarding.provider.label-provider", defaultValue: "Provider")
+            static let labelBaseURL = String(localized: "onboarding.provider.label-base-url", defaultValue: "Base URL")
+            static let labelAPIKey = String(localized: "onboarding.provider.label-api-key", defaultValue: "API key")
+            static let labelModel = String(localized: "onboarding.provider.label-model", defaultValue: "Default model")
+            static let errorUnknownPreset = String(localized: "onboarding.provider.error-unknown-preset", defaultValue: "Unknown provider preset.")
+            static let errorBaseURLRequired = String(localized: "onboarding.provider.error-base-url-required", defaultValue: "Base URL is required for this provider.")
+            static let errorModelRequired = String(localized: "onboarding.provider.error-model-required", defaultValue: "Please specify a model id.")
+        }
+        enum Voice {
+            static let title = String(localized: "onboarding.voice.title", defaultValue: "Set up voice transcription")
+            static let subtitle = String(localized: "onboarding.voice.subtitle", defaultValue: "Optional — but if you want to talk to your agent or use push-to-talk in the composer, you'll need the on-device SenseVoice model (~937 MB).")
+            static let installedTitle = String(localized: "onboarding.voice.installed-title", defaultValue: "Model installed")
+            static let notInstalledTitle = String(localized: "onboarding.voice.not-installed-title", defaultValue: "Model not installed")
+            static let installedDetail = String(localized: "onboarding.voice.installed-detail", defaultValue: "Push-to-talk is ready. Press and hold the mic button in the composer, or hold the Fn key anywhere in the app.")
+            static let notInstalledDetail = String(localized: "onboarding.voice.not-installed-detail", defaultValue: "Click Download for the full file, or import a copy you already have from fastv (no bytes transferred).")
+            static let downloadButton = String(localized: "onboarding.voice.download-button", defaultValue: "Download (~937 MB)")
+            static let importButton = String(localized: "onboarding.voice.import-button", defaultValue: "Import from fastv")
+            static let importing = String(localized: "onboarding.voice.importing", defaultValue: "Importing from fastv…")
+            static let cancel = String(localized: "onboarding.voice.cancel", defaultValue: "Cancel")
+        }
+        enum Done {
+            static let title = String(localized: "onboarding.done.title", defaultValue: "You're all set")
+            static let tipAgent = String(localized: "onboarding.done.tip-agent", defaultValue: "Open the Agent panel from the toolbar, ask anything in plain language.")
+            static let tipVoice = String(localized: "onboarding.done.tip-voice", defaultValue: "Hold the mic button in the composer, or hold Fn anywhere, to talk instead of type.")
+            static let tipSettings = String(localized: "onboarding.done.tip-settings", defaultValue: "Need to tweak providers, voice, memory, or skills? Cmd-, opens Settings.")
+        }
+        enum Footer {
+            static let back = String(localized: "onboarding.footer.back", defaultValue: "Back")
+            static let skip = String(localized: "onboarding.footer.skip", defaultValue: "Skip")
+            static let `continue` = String(localized: "onboarding.footer.continue", defaultValue: "Continue")
+            static let saveContinue = String(localized: "onboarding.footer.save-continue", defaultValue: "Save & Continue")
+            static let getStarted = String(localized: "onboarding.footer.get-started", defaultValue: "Get started")
+        }
     }
 
     enum PluginPicker {
@@ -1173,6 +1216,28 @@ enum L10n {
             static let overlayColorDarkGrayRed = String(localized: "settings.voice.overlay.color.dark-gray-red", defaultValue: "Dark gray + red")
             static let overlayColorDarkGrayYellow = String(localized: "settings.voice.overlay.color.dark-gray-yellow", defaultValue: "Dark gray + yellow")
             static let overlayColorDarkGrayCyan = String(localized: "settings.voice.overlay.color.dark-gray-cyan", defaultValue: "Dark gray + cyan")
+
+            static let headerTitle = String(localized: "settings.voice.header-title", defaultValue: "On-device Voice (SenseVoice)")
+            static let headerDescription = String(localized: "settings.voice.header-description", defaultValue: "Push-to-talk in the composer transcribes 100% on-device. Nothing leaves your Mac.")
+            static let statusInstalledTitle = String(localized: "settings.voice.status-installed-title", defaultValue: "SenseVoice model installed")
+            static let statusNotInstalledTitle = String(localized: "settings.voice.status-not-installed-title", defaultValue: "Model not installed yet")
+            static let statusInstalledDetail = String(localized: "settings.voice.status-installed-detail", defaultValue: "Mic button in composer is enabled. Press and hold to record, release to transcribe. Tip: hold the Fn key anywhere in the app for the same push-to-talk.")
+            static let statusNotInstalledDetail = String(localized: "settings.voice.status-not-installed-detail", defaultValue: "Click Download below (~937 MB). After install the mic button in composer goes live and the Fn-key push-to-talk shortcut starts working.")
+            static let downloadButton = String(localized: "settings.voice.download-button", defaultValue: "Download model (~937 MB)")
+            static let importButton = String(localized: "settings.voice.import-button", defaultValue: "Import from fastv (0 MB)")
+            static let importHelp = String(localized: "settings.voice.import-help", defaultValue: "Symlink an existing fastv model copy — no download.")
+            static let revealInFinder = String(localized: "settings.voice.reveal-in-finder", defaultValue: "Reveal in Finder")
+            static let importing = String(localized: "settings.voice.importing", defaultValue: "Importing from fastv…")
+            static let cancel = String(localized: "settings.voice.cancel", defaultValue: "Cancel")
+            static let memorySection = String(localized: "settings.voice.memory-section", defaultValue: "Memory")
+            static let preloadToggle = String(localized: "settings.voice.preload-toggle", defaultValue: "Preload on launch")
+            static let preloadDescription = String(localized: "settings.voice.preload-description", defaultValue: "After your first transcription, warm the ~937 MB model on each app start so push-to-talk responds instantly. Disable to save memory at the cost of a 1-5 s cold start.")
+            static let loadedInMemory = String(localized: "settings.voice.loaded-in-memory", defaultValue: "Loaded in memory")
+            static let notInMemory = String(localized: "settings.voice.not-in-memory", defaultValue: "Not in memory")
+            static let unloadNow = String(localized: "settings.voice.unload-now", defaultValue: "Unload now")
+            static let refreshStatusHelp = String(localized: "settings.voice.refresh-status-help", defaultValue: "Refresh status")
+            static let autoUnloadNote = String(localized: "settings.voice.auto-unload-note", defaultValue: "The model also auto-unloads after 5 minutes of foreground idle, 10 minutes of background, or when the app's resident memory exceeds 4 GB.")
+            static let modelLocation = String(localized: "settings.voice.model-location", defaultValue: "Model location")
         }
 
         enum Tools {
@@ -1364,6 +1429,10 @@ enum L10n {
             static let presetLabel = String(localized: "settings.provider.preset", defaultValue: "Preset")
             static let protocolLabel = String(localized: "settings.provider.protocol", defaultValue: "Protocol")
             static let openAIChatDefault = String(localized: "settings.provider.openai-chat-default", defaultValue: "OpenAI Chat (default)")
+            static let protocolOpenAIChat = String(localized: "settings.provider.protocol-openai-chat", defaultValue: "OpenAI Chat")
+            static let protocolAnthropicMessages = String(localized: "settings.provider.protocol-anthropic-messages", defaultValue: "Anthropic Messages")
+            static let protocolGoogleGemini = String(localized: "settings.provider.protocol-google-gemini", defaultValue: "Google Gemini")
+            static let protocolOpenAIResponses = String(localized: "settings.provider.protocol-openai-responses", defaultValue: "OpenAI Responses")
             static let baseURLLabel = String(localized: "settings.provider.base-url", defaultValue: "Base URL")
             static let apiKeyLabel = String(localized: "settings.provider.api-key", defaultValue: "API key")
             static let baseURLDefault = String(localized: "settings.provider.base-url-default", defaultValue: "Using preset URL")

@@ -72,17 +72,17 @@ struct OnboardingView: View {
                     colors: [Color.accentColor, Color.accentColor.opacity(0.6)],
                     startPoint: .top, endPoint: .bottom
                 ))
-            Text("Welcome to WillDeep")
+            Text(L10n.Onboarding.Welcome.title)
                 .font(.system(size: 26, weight: .semibold))
-            Text("An editor that codes, transcribes, and ships alongside you. Let's get you set up in three quick steps.")
+            Text(L10n.Onboarding.Welcome.subtitle)
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 440)
             VStack(alignment: .leading, spacing: 10) {
-                bullet("Bring your own AI provider — Claude, OpenAI, DeepSeek and more")
-                bullet("Push-to-talk voice transcription runs 100% on-device")
-                bullet("Settings, models and skills you can change anytime")
+                bullet(L10n.Onboarding.Welcome.bulletProvider)
+                bullet(L10n.Onboarding.Welcome.bulletVoice)
+                bullet(L10n.Onboarding.Welcome.bulletSettings)
             }
             .padding(.top, 8)
             Spacer()
@@ -104,12 +104,12 @@ struct OnboardingView: View {
     private var providerStep: some View {
         VStack(alignment: .leading, spacing: 18) {
             stepHeader(
-                "Connect an AI provider",
-                subtitle: "Pick one to start with — you can add more later in Settings → AI Providers. Skip if you'll only use voice features."
+                L10n.Onboarding.Provider.title,
+                subtitle: L10n.Onboarding.Provider.subtitle
             )
 
             VStack(alignment: .leading, spacing: 12) {
-                LabeledContent("Provider") {
+                LabeledContent(L10n.Onboarding.Provider.labelProvider) {
                     Picker("", selection: $presetID) {
                         ForEach(curatedPresets) { preset in
                             Text(preset.displayName).tag(preset.id)
@@ -122,18 +122,18 @@ struct OnboardingView: View {
                     }
                 }
 
-                LabeledContent("Base URL") {
+                LabeledContent(L10n.Onboarding.Provider.labelBaseURL) {
                     TextField("", text: $baseURL)
                         .textFieldStyle(.roundedBorder)
                         .disableAutocorrection(true)
                 }
 
-                LabeledContent("API key") {
+                LabeledContent(L10n.Onboarding.Provider.labelAPIKey) {
                     SecureField("sk-…", text: $apiKey)
                         .textFieldStyle(.roundedBorder)
                 }
 
-                LabeledContent("Default model") {
+                LabeledContent(L10n.Onboarding.Provider.labelModel) {
                     TextField("", text: $model)
                         .textFieldStyle(.roundedBorder)
                         .disableAutocorrection(true)
@@ -164,15 +164,15 @@ struct OnboardingView: View {
             return nil  // 用户没填 key,直接跳过保存
         }
         guard let preset = curatedPresets.first(where: { $0.id == presetID }) else {
-            return "Unknown provider preset."
+            return L10n.Onboarding.Provider.errorUnknownPreset
         }
         let trimmedURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedURL.isEmpty || preset.id == AgentProviderPreset.customID else {
-            return "Base URL is required for this provider."
+            return L10n.Onboarding.Provider.errorBaseURLRequired
         }
         let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedModel.isEmpty else {
-            return "Please specify a model id."
+            return L10n.Onboarding.Provider.errorModelRequired
         }
         let entry = AgentProviderEntry(
             providerID: preset.id,
@@ -279,8 +279,8 @@ struct OnboardingView: View {
     private var voiceStep: some View {
         VStack(alignment: .leading, spacing: 18) {
             stepHeader(
-                "Set up voice transcription",
-                subtitle: "Optional — but if you want to talk to your agent or use push-to-talk in the composer, you'll need the on-device SenseVoice model (~937 MB)."
+                L10n.Onboarding.Voice.title,
+                subtitle: L10n.Onboarding.Voice.subtitle
             )
 
             HStack(alignment: .top, spacing: 10) {
@@ -289,12 +289,12 @@ struct OnboardingView: View {
                     .foregroundStyle(VoiceModelDownloader.isModelInstalled ? .green : .accentColor)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(VoiceModelDownloader.isModelInstalled
-                         ? "Model installed"
-                         : "Model not installed")
+                         ? L10n.Onboarding.Voice.installedTitle
+                         : L10n.Onboarding.Voice.notInstalledTitle)
                         .font(.system(size: 13, weight: .medium))
                     Text(VoiceModelDownloader.isModelInstalled
-                         ? "Push-to-talk is ready. Press and hold the mic button in the composer, or hold the Fn key anywhere in the app."
-                         : "Click Download for the full file, or import a copy you already have from fastv (no bytes transferred).")
+                         ? L10n.Onboarding.Voice.installedDetail
+                         : L10n.Onboarding.Voice.notInstalledDetail)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -308,7 +308,7 @@ struct OnboardingView: View {
                     Button {
                         Task { await downloader.download() }
                     } label: {
-                        Label("Download (~937 MB)", systemImage: "arrow.down.to.line")
+                        Label(L10n.Onboarding.Voice.downloadButton, systemImage: "arrow.down.to.line")
                             .frame(minWidth: 180)
                     }
                     .buttonStyle(.borderedProminent)
@@ -318,13 +318,13 @@ struct OnboardingView: View {
                         Button {
                             Task { try? await downloader.importFromFastv() }
                         } label: {
-                            Label("Import from fastv", systemImage: "link")
+                            Label(L10n.Onboarding.Voice.importButton, systemImage: "link")
                         }
                         .disabled(isVoiceBusy)
                     }
                 }
                 if isVoiceBusy {
-                    Button("Cancel") { downloader.cancel() }
+                    Button(L10n.Onboarding.Voice.cancel) { downloader.cancel() }
                 }
                 Spacer()
             }
@@ -343,7 +343,7 @@ struct OnboardingView: View {
         case .importing:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text("Importing from fastv…")
+                Text(L10n.Onboarding.Voice.importing)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -382,12 +382,12 @@ struct OnboardingView: View {
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 56))
                 .foregroundStyle(.green)
-            Text("You're all set")
+            Text(L10n.Onboarding.Done.title)
                 .font(.system(size: 24, weight: .semibold))
             VStack(alignment: .leading, spacing: 12) {
-                tip("Open the Agent panel from the toolbar, ask anything in plain language.")
-                tip("Hold the mic button in the composer, or hold Fn anywhere, to talk instead of type.")
-                tip("Need to tweak providers, voice, memory, or skills? Cmd-, opens Settings.")
+                tip(L10n.Onboarding.Done.tipAgent)
+                tip(L10n.Onboarding.Done.tipVoice)
+                tip(L10n.Onboarding.Done.tipSettings)
             }
             .padding(.top, 8)
             .frame(maxWidth: 480, alignment: .leading)
@@ -425,19 +425,19 @@ struct OnboardingView: View {
             stepDots
             Spacer()
             if currentStep > 0 && currentStep < 4 {
-                Button("Back") { currentStep -= 1 }
+                Button(L10n.Onboarding.Footer.back) { currentStep -= 1 }
             }
             if currentStep == 1 {
-                Button("Skip") {
+                Button(L10n.Onboarding.Footer.skip) {
                     providerSaveError = nil
                     currentStep += 1
                 }
             }
             if currentStep == 2 {
-                Button("Skip") { currentStep += 1 }
+                Button(L10n.Onboarding.Footer.skip) { currentStep += 1 }
             }
             if currentStep == 3 {
-                Button("Skip") { currentStep += 1 }
+                Button(L10n.Onboarding.Footer.skip) { currentStep += 1 }
             }
             Button(primaryButtonTitle) {
                 handlePrimary()
@@ -461,11 +461,11 @@ struct OnboardingView: View {
 
     private var primaryButtonTitle: String {
         switch currentStep {
-        case 0: return "Continue"
-        case 1: return apiKey.isEmpty ? "Continue" : "Save & Continue"
-        case 2: return someIMAPIKey.isEmpty ? "Continue" : "Save & Continue"
-        case 3: return "Continue"
-        default: return "Get started"
+        case 0: return L10n.Onboarding.Footer.continue
+        case 1: return apiKey.isEmpty ? L10n.Onboarding.Footer.continue : L10n.Onboarding.Footer.saveContinue
+        case 2: return someIMAPIKey.isEmpty ? L10n.Onboarding.Footer.continue : L10n.Onboarding.Footer.saveContinue
+        case 3: return L10n.Onboarding.Footer.continue
+        default: return L10n.Onboarding.Footer.getStarted
         }
     }
 

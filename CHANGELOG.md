@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.108.0-rc26 - 2026-06-26
+
+### Fixed
+- **设置好 api-key 却要重启 App 才生效（1.108.0-rc26）** —— 在 onboarding 首次填好 api-key（或在设置页编辑非当前激活的 provider）后,key 只被写进了磁盘上的 provider library,运行时的 `agentConfiguration.apiKey` 没同步,下一次发消息仍读到旧值/空值,表现就是"明明设置了却要关掉 App 再开才行"。根因:`OnboardingView.commitProvider` 与个别路径直接给 `appState.agentProviderLibrary` 赋新值,只触发了 `saveProviderLibrary` 存盘,**从不调用** `applyActiveProviderLibraryEntry()` 把 active 条目灌回运行时配置;只有 App 重启时启动流程才会从磁盘 library 重建 config。修复 [AppState](Xedit/AppState.swift):把 `applyActiveProviderLibraryEntry()` 收进 `agentProviderLibrary.didSet`——任何对 library 的写入(onboarding 保存、设置页编辑、切换激活条目)都立刻闭环同步到运行时,即存即生效,无需重启。`apply` 只写 cfg、不回灌 library,`cfg.didSet` 也不碰 library,无死循环(符合既有「A 方案:library 为唯一真相源」)。
+- **流式输出仍明显卡顿（1.108.0-rc26）** —— 两处主线程热点。① 流式气泡 [AgentAssistantStreamingBody](Xedit/AgentMessageView.swift) 之前在持续增长的 `Text` 上挂了 `.textSelection(.enabled)`,SwiftUI 每次刷新(每 100ms 一批)都要为整段(越来越长的)文本重建选择几何,是卡顿大头;去掉它——流式中的文本本来就在动、无法有意义地选中,流式一结束 body 即切到带选择的成品视图(富文本 / NSTextView 历史),选择能力不丢。② [AgentMarkdownNormalizer.normalizedForChatRendering](Xedit/AgentMarkdownNormalizer.swift) 之前无缓存,每次 body 求值都全量重扫整段(O(n),跨整个流近 O(n²));补上与 `AgentLongTokenBreaker.inject` 同款的 128 槽 LRU,同一内容的多次布局/measure 求值直接命中缓存,只有真正新增内容才付一次扫描。
+
+### Changed
+- **Onboarding 与 Voice 设置页全面国际化 + 补全全部简体中文翻译（1.108.0-rc26）** —— ① 此前 onboarding 引导(欢迎/连接服务商/语音转写/完成四步,及底部按钮、报错文案)与 Voice 设置页大量文案是**硬编码英文**,中文用户首次启动和进语音设置全是英文。现已全部抽进 [L10n](Xedit/L10n.swift)(`Onboarding.*` 与 `Settings.Voice.*` 新增约 58 个 key)并走 i18n,中文系统下显示中文。② 把 [Localizable.xcstrings](Xedit/Localizable.xcstrings) 中**缺简体中文翻译的 424 个 key 全部补齐**(另 44 个纯符号/格式串无需翻译),中文用户从此处处见中文、不再回落英文。③ 自定义 provider 的协议选择器(OpenAI Chat / Anthropic Messages / Google Gemini / OpenAI Responses)也改走 L10n。配套新增脚本:`scripts/i18n_extract_missing.rb`(抽缺译)、`scripts/i18n_apply_translations.rb`(逐字节复刻 Xcode 排版回写 xcstrings,unchanged 条目零 diff)、`scripts/bump_version.rb`(统一版本号位点)。
+
 ## 1.108.0-rc25 - 2026-06-25
 
 ### Fixed

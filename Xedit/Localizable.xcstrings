@@ -20,10 +20,24 @@
 
     },
     "· Sandbox: no network, no navigation · sendPrompt() available" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "· 沙箱模式:无网络、无导航 · 可用 sendPrompt()"
+          }
+        }
+      }
     },
     "“Follow App Skin” derives the terminal background, foreground, and cursor from your interface skin; ANSI program colors stay standard so output stays readable. Line spacing isn't adjustable with the current terminal engine." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“跟随应用皮肤”会根据界面皮肤推导出终端的背景色、前景色和光标颜色;ANSI 程序色保持标准配色,确保输出清晰可读。当前终端引擎不支持调整行间距。"
+          }
+        }
+      }
     },
     "(%lld)" : {
 
@@ -32,7 +46,14 @@
 
     },
     "/bin/zsh" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "/bin/zsh"
+          }
+        }
+      }
     },
     "%@  %lld" : {
       "localizations" : {
@@ -71,6 +92,12 @@
             "state" : "new",
             "value" : "%1$@ / %2$@ — %3$@/s"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ / %2$@ — %3$@/s"
+          }
         }
       }
     },
@@ -98,13 +125,34 @@
 
     },
     "%lld B" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld B"
+          }
+        }
+      }
     },
     "%lld pt" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld pt"
+          }
+        }
+      }
     },
     "%lld queued" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已排队 %lld 条"
+          }
+        }
+      }
     },
     "%lld 个文件已更改" : {
 
@@ -138,13 +186,34 @@
 
     },
     "After your first transcription, warm the ~937 MB model on each app start so push-to-talk responds instantly. Disable to save memory at the cost of a 1-5 s cold start." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "首次转写后,每次启动应用时预热约 937 MB 的模型,让按住说话即刻响应。关闭可节省内存,但代价是 1-5 秒的冷启动。"
+          }
+        }
+      }
     },
     "Agent" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent"
+          }
+        }
+      }
     },
     "Agent 正在输出" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 正在输出"
+          }
+        }
+      }
     },
     "agent-jobs.collapse-help" : {
       "comment" : "Tooltip on the close button inside the background-jobs drawer",
@@ -617,6 +686,12 @@
             "state" : "new",
             "value" : "Cannot create %@ — it already exists. Use a modify diff instead."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法创建 %@ —— 它已存在。请改用修改型 diff。"
+          }
         }
       }
     },
@@ -662,6 +737,12 @@
             "state" : "new",
             "value" : "Apply All"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部应用"
+          }
         }
       }
     },
@@ -672,6 +753,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%d applied"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已应用 %d 个"
           }
         }
       }
@@ -684,6 +771,12 @@
             "state" : "new",
             "value" : "%d failed"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "失败 %d 个"
+          }
         }
       }
     },
@@ -694,6 +787,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%d pending"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待处理 %d 个"
           }
         }
       }
@@ -706,6 +805,12 @@
             "state" : "new",
             "value" : "%d rejected"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已拒绝 %d 个"
+          }
         }
       }
     },
@@ -717,6 +822,12 @@
             "state" : "new",
             "value" : "%d patch proposals this turn"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本轮 %d 个补丁提议"
+          }
         }
       }
     },
@@ -727,6 +838,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Collapse"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收起"
           }
         }
       }
@@ -773,6 +890,12 @@
             "state" : "new",
             "value" : "Reject All"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部拒绝"
+          }
         }
       }
     },
@@ -783,6 +906,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Show All"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部展开"
           }
         }
       }
@@ -920,6 +1049,12 @@
             "state" : "new",
             "value" : "Background tasks"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "后台任务"
+          }
         }
       }
     },
@@ -930,6 +1065,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Close Panel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭面板"
           }
         }
       }
@@ -942,6 +1083,12 @@
             "state" : "new",
             "value" : "Coming soon"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "敬请期待"
+          }
         }
       }
     },
@@ -951,6 +1098,12 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "Diff"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "Diff"
           }
         }
@@ -964,6 +1117,12 @@
             "state" : "new",
             "value" : "No uncommitted changes."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有未提交的改动。"
+          }
         }
       }
     },
@@ -974,6 +1133,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Computing diff…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在计算 diff…"
           }
         }
       }
@@ -986,6 +1151,12 @@
             "state" : "new",
             "value" : "Not a git repository."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不是 Git 仓库。"
+          }
         }
       }
     },
@@ -996,6 +1167,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Diff against HEAD · %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对比 HEAD · %@"
           }
         }
       }
@@ -1008,6 +1185,12 @@
             "state" : "new",
             "value" : "Files"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件"
+          }
         }
       }
     },
@@ -1018,6 +1201,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "No workspace selected for this session."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本会话未选择工作区。"
           }
         }
       }
@@ -1030,6 +1219,12 @@
             "state" : "new",
             "value" : "Plan"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "计划"
+          }
         }
       }
     },
@@ -1040,6 +1235,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "No active plan."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有进行中的计划。"
           }
         }
       }
@@ -1052,6 +1253,12 @@
             "state" : "new",
             "value" : "Preview"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预览"
+          }
         }
       }
     },
@@ -1062,6 +1269,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Choose File…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择文件…"
           }
         }
       }
@@ -1074,6 +1287,12 @@
             "state" : "new",
             "value" : "Pick a markdown or HTML file to preview."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择一个 Markdown 或 HTML 文件进行预览。"
+          }
         }
       }
     },
@@ -1085,6 +1304,12 @@
             "state" : "new",
             "value" : "Only Markdown and HTML can be previewed here."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这里只能预览 Markdown 和 HTML。"
+          }
         }
       }
     },
@@ -1095,6 +1320,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Refresh"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新"
           }
         }
       }
@@ -1653,6 +1884,12 @@
             "state" : "new",
             "value" : "WillDeep Agent"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WillDeep Agent"
+          }
         }
       }
     },
@@ -1664,6 +1901,12 @@
             "state" : "new",
             "value" : "Column %lld"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第 %lld 列"
+          }
         }
       }
     },
@@ -1674,6 +1917,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$lld rows · %2$lld columns"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld 行 · %2$lld 列"
           }
         }
       }
@@ -1704,6 +1953,12 @@
             "state" : "new",
             "value" : "Markdown Table"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Markdown 表格"
+          }
         }
       }
     },
@@ -1715,6 +1970,12 @@
             "state" : "new",
             "value" : "Mobile Gateway"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移动网关"
+          }
         }
       }
     },
@@ -1725,6 +1986,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Settings"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置"
           }
         }
       }
@@ -1856,13 +2123,34 @@
       }
     },
     "An editor that codes, transcribes, and ships alongside you. Let's get you set up in three quick steps." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一款能陪你写代码、做转写、一路交付的编辑器。三步即可完成设置。"
+          }
+        }
+      }
     },
     "Anthropic Messages" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anthropic Messages"
+          }
+        }
+      }
     },
     "API key" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API key"
+          }
+        }
+      }
     },
     "app-update.download" : {
       "comment" : "Primary button in the app update alert",
@@ -2086,10 +2374,24 @@
       }
     },
     "Ask about this project" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "询问关于此项目"
+          }
+        }
+      }
     },
     "Attach image" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "附加图片"
+          }
+        }
+      }
     },
     "automation.cancel" : {
       "extractionState" : "manual",
@@ -3027,43 +3329,134 @@
       }
     },
     "Back" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返回"
+          }
+        }
+      }
     },
     "Base URL" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Base URL"
+          }
+        }
+      }
     },
     "Blink cursor" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "光标闪烁"
+          }
+        }
+      }
     },
     "Cancel" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
     },
     "Clear" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除"
+          }
+        }
+      }
     },
     "Clear Chat" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清空对话"
+          }
+        }
+      }
     },
     "Clear Queue" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清空队列"
+          }
+        }
+      }
     },
     "Click Download below (~937 MB). After install the mic button in composer goes live and the Fn-key push-to-talk shortcut starts working." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点击下方的下载(约 937 MB)。安装完成后,输入框中的麦克风按钮即可使用,Fn 键按住说话快捷键也会开始生效。"
+          }
+        }
+      }
     },
     "Click Download for the full file, or import a copy you already have from fastv (no bytes transferred)." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点击下载获取完整文件,或从 fastv 导入你已有的副本(不传输任何数据)。"
+          }
+        }
+      }
     },
     "Close" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
+          }
+        }
+      }
     },
     "Close Agent" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭 Agent"
+          }
+        }
+      }
     },
     "Collapse widget" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收起组件"
+          }
+        }
+      }
     },
     "Color scheme" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配色方案"
+          }
+        }
+      }
     },
     "command-palette.placeholder" : {
       "comment" : "TextField placeholder for command palette input",
@@ -4099,6 +4492,12 @@
             "state" : "new",
             "value" : "No matching skills, files, or shortcuts"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有匹配的技能、文件或快捷指令"
+          }
         }
       }
     },
@@ -4109,6 +4508,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Search skills, files, or workspace..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索技能、文件或工作区…"
           }
         }
       }
@@ -4121,6 +4526,12 @@
             "state" : "new",
             "value" : "Approval"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "审批"
+          }
         }
       }
     },
@@ -4131,6 +4542,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Executor"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "执行器"
           }
         }
       }
@@ -4143,6 +4560,12 @@
             "state" : "new",
             "value" : "More settings: executor, plugins"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更多设置:执行器、插件"
+          }
         }
       }
     },
@@ -4153,6 +4576,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Plugins"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "插件"
           }
         }
       }
@@ -4165,6 +4594,12 @@
             "state" : "new",
             "value" : "More settings"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更多设置"
+          }
         }
       }
     },
@@ -4175,6 +4610,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Workspace"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区"
           }
         }
       }
@@ -4450,10 +4891,24 @@
       }
     },
     "Compress" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "压缩"
+          }
+        }
+      }
     },
     "Compressing…" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在压缩…"
+          }
+        }
+      }
     },
     "Context: ~%@ / %@. %@ remaining (estimate)." : {
       "localizations" : {
@@ -4462,47 +4917,144 @@
             "state" : "new",
             "value" : "Context: ~%1$@ / %2$@. %3$@ remaining (estimate)."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上下文:约 %1$@ / %2$@。剩余 %3$@(预估)。"
+          }
         }
       }
     },
     "Conversation mode — Plan locks writes until you approve; Goal pins an objective to every reply." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对话模式 —— 计划模式会锁定写入,直到你批准;目标模式会把一个目标固定到每次回复中。"
+          }
+        }
+      }
     },
     "Copied" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已复制"
+          }
+        }
+      }
     },
     "Copy" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制"
+          }
+        }
+      }
     },
     "Copy code" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制代码"
+          }
+        }
+      }
     },
     "Copy message" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制消息"
+          }
+        }
+      }
     },
     "Copy Path" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制路径"
+          }
+        }
+      }
     },
     "Copy Relative Path" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制相对路径"
+          }
+        }
+      }
     },
     "Cursor" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "光标"
+          }
+        }
+      }
     },
     "Custom font" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自定义字体"
+          }
+        }
+      }
     },
     "Default model" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认模型"
+          }
+        }
+      }
     },
     "Download (~937 MB)" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载(约 937 MB)"
+          }
+        }
+      }
     },
     "Download model (~937 MB)" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载模型(约 937 MB)"
+          }
+        }
+      }
     },
     "e.g. JetBrainsMono Nerd Font" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "例如 JetBrainsMono Nerd Font"
+          }
+        }
+      }
     },
     "editor-status-bar.cursor-position" : {
       "comment" : "Line and column position indicator",
@@ -5153,13 +5705,34 @@
       }
     },
     "Environment" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "环境"
+          }
+        }
+      }
     },
     "exit %d" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出码 %d"
+          }
+        }
+      }
     },
     "Expand widget" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "展开组件"
+          }
+        }
+      }
     },
     "file-tree.open-in-editor" : {
       "extractionState" : "manual",
@@ -5341,10 +5914,24 @@
       }
     },
     "Follow App Skin" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟随应用皮肤"
+          }
+        }
+      }
     },
     "Font" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "字体"
+          }
+        }
+      }
     },
     "go-to-line.placeholder" : {
       "comment" : "TextField placeholder for go to line panel",
@@ -5563,7 +6150,14 @@
       }
     },
     "Google Gemini" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google Gemini"
+          }
+        }
+      }
     },
     "header.new-chat" : {
       "comment" : "button tooltip",
@@ -5590,6 +6184,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Open Side Panel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开侧边栏"
           }
         }
       }
@@ -5631,7 +6231,14 @@
       }
     },
     "Hot" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "热"
+          }
+        }
+      }
     },
     "image-description.help" : {
       "comment" : "tooltip for image description toggle",
@@ -5724,16 +6331,44 @@
       }
     },
     "Import from fastv" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从 fastv 导入"
+          }
+        }
+      }
     },
     "Import from fastv (0 MB)" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从 fastv 导入(0 MB)"
+          }
+        }
+      }
     },
     "Importing from fastv…" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在从 fastv 导入…"
+          }
+        }
+      }
     },
     "Inspector" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检查器"
+          }
+        }
+      }
     },
     "inspector.hide-button" : {
       "comment" : "Tooltip for button to hide inspector",
@@ -5823,10 +6458,24 @@
       }
     },
     "Loaded in memory" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已载入内存"
+          }
+        }
+      }
     },
     "Memory" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内存"
+          }
+        }
+      }
     },
     "menu.edit.command-palette" : {
       "comment" : "Button label in Edit menu",
@@ -6459,19 +7108,54 @@
       }
     },
     "Mic button in composer is enabled. Press and hold to record, release to transcribe. Tip: hold the Fn key anywhere in the app for the same push-to-talk." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入框中的麦克风按钮已启用。按住录音,松开即转写。提示:在应用内任意位置按住 Fn 键也能实现同样的按住说话。"
+          }
+        }
+      }
     },
     "Model installed" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型已安装"
+          }
+        }
+      }
     },
     "Model location" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型位置"
+          }
+        }
+      }
     },
     "Model not installed" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型未安装"
+          }
+        }
+      }
     },
     "Model not installed yet" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型尚未安装"
+          }
+        }
+      }
     },
     "model-usage.cached" : {
       "comment" : "model usage subtitle cached token count",
@@ -6552,6 +7236,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Delegated CLI calls are tracked separately because their real token usage and provider cache hits are not reported to WillDeep."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "委派的 CLI 调用会单独统计,因为它们真实的 token 用量和服务商缓存命中情况不会上报给 WillDeep。"
           }
         }
       }
@@ -6690,6 +7380,12 @@
             "state" : "new",
             "value" : "%@ stable prefix"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 稳定前缀"
+          }
         }
       }
     },
@@ -6736,6 +7432,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "external"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外部"
           }
         }
       }
@@ -6795,28 +7497,84 @@
       }
     },
     "New" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建"
+          }
+        }
+      }
     },
     "New File" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建文件"
+          }
+        }
+      }
     },
     "New Folder" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建文件夹"
+          }
+        }
+      }
     },
     "No matching commands" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有匹配的命令"
+          }
+        }
+      }
     },
     "No project commands found" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未找到项目命令"
+          }
+        }
+      }
     },
     "No providers configured. Open Settings → Agent." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未配置任何服务商。请打开 设置 → Agent。"
+          }
+        }
+      }
     },
     "Not in memory" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不在记忆中"
+          }
+        }
+      }
     },
     "On-device Voice (SenseVoice)" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地语音（SenseVoice）"
+          }
+        }
+      }
     },
     "onboarding.some-im.note" : {
       "extractionState" : "manual",
@@ -6870,22 +7628,64 @@
       }
     },
     "One KEY=value per line. These values are added to commands launched from the editor terminal." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每行一个 KEY=value。这些值会被加入到从编辑器终端启动的命令中。"
+          }
+        }
+      }
     },
     "Open in Terminal" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在终端中打开"
+          }
+        }
+      }
     },
     "OpenAI Chat" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenAI Chat"
+          }
+        }
+      }
     },
     "OpenAI Responses" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenAI Responses"
+          }
+        }
+      }
     },
     "Pick provider + model for this chat. The active provider also drives Auto/Flash/Pro routing." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为本次对话选择服务商和模型。当前激活的服务商同时决定 Auto/Flash/Pro 的路由。"
+          }
+        }
+      }
     },
     "pid %d" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pid %d"
+          }
+        }
+      }
     },
     "plan-auto-execution-banner.confirm" : {
       "extractionState" : "extracted_with_value",
@@ -6894,6 +7694,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Execute"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "执行"
           }
         }
       }
@@ -6906,6 +7712,12 @@
             "state" : "new",
             "value" : "Auto-executing in %ds…"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将在 %d 秒后自动执行…"
+          }
         }
       }
     },
@@ -6916,6 +7728,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Plan mentions destructive actions — confirm manually."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "计划中提到了破坏性操作——请手动确认。"
           }
         }
       }
@@ -6928,6 +7746,12 @@
             "state" : "new",
             "value" : "Destructive-keyword guard is off."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "破坏性关键字防护已关闭。"
+          }
         }
       }
     },
@@ -6938,6 +7762,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Stay in Plan"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "留在 Plan 模式"
           }
         }
       }
@@ -6950,6 +7780,12 @@
             "state" : "new",
             "value" : "Don't ask again in this workspace"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在本工作区不再询问"
+          }
         }
       }
     },
@@ -6960,6 +7796,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Switch to Agent mode and execute now?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换到 Agent 模式并立即执行？"
           }
         }
       }
@@ -6972,6 +7814,12 @@
             "state" : "new",
             "value" : "Plan is ready"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "计划已就绪"
+          }
         }
       }
     },
@@ -6982,6 +7830,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Re-enable Plan prompt for this workspace"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为本工作区重新启用 Plan 确认提示"
           }
         }
       }
@@ -6994,6 +7848,12 @@
             "state" : "new",
             "value" : "No silent-execution preference saved for the current workspace."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前工作区没有保存静默执行的偏好设置。"
+          }
         }
       }
     },
@@ -7004,6 +7864,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "You previously chose to silently auto-execute plans in this workspace. Click to bring back the confirmation banner."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你之前选择了在本工作区静默自动执行计划。点击可恢复确认横幅。"
           }
         }
       }
@@ -7016,6 +7882,12 @@
             "state" : "new",
             "value" : "Scan plan for destructive keywords"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "扫描计划中的破坏性关键字"
+          }
         }
       }
     },
@@ -7026,6 +7898,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "When on, the Execute countdown disables itself if the plan mentions rm -rf, git push --force, dd, reboot, etc. You can still execute manually."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启后，如果计划中提到 rm -rf、git push --force、dd、reboot 等内容，执行倒计时会自动停用。你仍可手动执行。"
           }
         }
       }
@@ -7038,6 +7916,12 @@
             "state" : "new",
             "value" : "Open a workspace to manage its Plan auto-execution preference."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开一个工作区以管理它的 Plan 自动执行偏好。"
+          }
         }
       }
     },
@@ -7048,6 +7932,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Plan auto-execution"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plan 自动执行"
           }
         }
       }
@@ -7624,7 +8514,14 @@
       }
     },
     "Preload on launch" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动时预加载"
+          }
+        }
+      }
     },
     "preview-pane.title" : {
       "comment" : "Title for markdown/HTML preview pane",
@@ -7645,7 +8542,14 @@
       }
     },
     "Provider" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务商"
+          }
+        }
+      }
     },
     "provider-status.help" : {
       "comment" : "tooltip for provider selector menu",
@@ -7666,10 +8570,24 @@
       }
     },
     "Push-to-talk in the composer transcribes 100% on-device. Nothing leaves your Mac." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入框中的按住说话功能 100% 在本地转写，没有任何内容离开你的 Mac。"
+          }
+        }
+      }
     },
     "Push-to-talk is ready. Press and hold the mic button in the composer, or hold the Fn key anywhere in the app." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住说话已就绪。按住输入框中的麦克风按钮，或在应用内任意位置按住 Fn 键。"
+          }
+        }
+      }
     },
     "queued-message.actions-button" : {
       "comment" : "accessibility label for queued message action menu",
@@ -7924,37 +8842,114 @@
       }
     },
     "Recently fetched" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近获取"
+          }
+        }
+      }
     },
     "Recently used" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近使用"
+          }
+        }
+      }
     },
     "Refresh status" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新状态"
+          }
+        }
+      }
     },
     "Remove image" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除图片"
+          }
+        }
+      }
     },
     "Reveal in Finder" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Finder 中显示"
+          }
+        }
+      }
     },
     "Run" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行"
+          }
+        }
+      }
     },
     "Scope" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "作用范围"
+          }
+        }
+      }
     },
     "Search query: %@" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索查询：%@"
+          }
+        }
+      }
     },
     "Send" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送"
+          }
+        }
+      }
     },
     "Sending" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送中"
+          }
+        }
+      }
     },
     "SenseVoice model installed" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SenseVoice 模型已安装"
+          }
+        }
+      }
     },
     "settings.agent-behavior.appearance-description" : {
       "extractionState" : "manual",
@@ -8372,6 +9367,12 @@
             "state" : "new",
             "value" : "Official lark-cli"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "官方 lark-cli"
+          }
         }
       }
     },
@@ -8382,6 +9383,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Use Feishu/Lark's official CLI for local app setup, OAuth login, and active docs/messages/calendar operations."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用飞书/Lark 官方 CLI 来完成本地应用配置、OAuth 登录，以及主动的文档/消息/日历操作。"
           }
         }
       }
@@ -8394,6 +9401,12 @@
             "state" : "new",
             "value" : "Official MCP"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "官方 MCP"
+          }
         }
       }
     },
@@ -8404,6 +9417,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Use the platform's official MCP server as the active tool bridge. Credentials still need explicit user configuration."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用平台官方 MCP 服务器作为主动工具桥接。凭据仍需用户显式配置。"
           }
         }
       }
@@ -9011,6 +10030,12 @@
             "state" : "new",
             "value" : "DingTalk official MCP tools"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "钉钉官方 MCP 工具"
+          }
         }
       }
     },
@@ -9021,6 +10046,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Configure official MCP"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配置官方 MCP"
           }
         }
       }
@@ -9033,6 +10064,12 @@
             "state" : "new",
             "value" : "Opened DingTalk MCP setup draft."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已打开钉钉 MCP 配置草稿。"
+          }
         }
       }
     },
@@ -9043,6 +10080,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "DingTalk does not currently expose a lark-cli-style official CLI. Use the official DingTalk MCP server as the preferred local tool bridge; event intake can still use Stream SDK or relay callbacks."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "钉钉目前没有提供 lark-cli 那样的官方 CLI。建议使用钉钉官方 MCP 服务器作为首选的本地工具桥接；事件接入仍可使用 Stream SDK 或回调中继。"
           }
         }
       }
@@ -9055,6 +10098,12 @@
             "state" : "new",
             "value" : "Uses stdio: npx -y dingtalk-mcp@latest. Fill DINGTALK_Client_ID and DINGTALK_Client_Secret from the DingTalk developer console; keep secrets out of git."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 stdio：npx -y dingtalk-mcp@latest。请在钉钉开发者控制台填写 DINGTALK_Client_ID 和 DINGTALK_Client_Secret；请勿将密钥提交到 git。"
+          }
         }
       }
     },
@@ -9065,6 +10114,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "DingTalk's practical official integration path is MCP for active tool calls, plus Stream SDK or relay callbacks for incoming events."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "钉钉切实可行的官方集成路径是：用 MCP 进行主动工具调用，再用 Stream SDK 或回调中继接收事件。"
           }
         }
       }
@@ -9264,6 +10319,12 @@
             "state" : "new",
             "value" : "lark-cli failed: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lark-cli 执行失败：%@"
+          }
         }
       }
     },
@@ -9274,6 +10335,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "lark-cli app configuration finished."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lark-cli 应用配置已完成。"
           }
         }
       }
@@ -9286,6 +10353,12 @@
             "state" : "new",
             "value" : "Starting lark-cli app configuration..."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在启动 lark-cli 应用配置…"
+          }
         }
       }
     },
@@ -9296,6 +10369,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Configure app"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配置应用"
           }
         }
       }
@@ -9308,6 +10387,12 @@
             "state" : "new",
             "value" : "Official lark-cli is the recommended local bridge for active Feishu operations. It stores credentials in the OS keychain and lets WillDeep call Feishu with structured commands instead of raw shell."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "官方 lark-cli 是进行飞书主动操作的推荐本地桥接。它会把凭据存放在系统钥匙串中，让 WillDeep 通过结构化命令调用飞书，而不必使用原始 shell。"
+          }
         }
       }
     },
@@ -9318,6 +10403,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Install lark-cli"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装 lark-cli"
           }
         }
       }
@@ -9330,6 +10421,12 @@
             "state" : "new",
             "value" : "Official lark-cli installed."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "官方 lark-cli 已安装。"
+          }
         }
       }
     },
@@ -9340,6 +10437,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Installed: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已安装：%@"
           }
         }
       }
@@ -9352,6 +10455,12 @@
             "state" : "new",
             "value" : "Installing official lark-cli..."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在安装官方 lark-cli…"
+          }
         }
       }
     },
@@ -9362,6 +10471,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Login"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录"
           }
         }
       }
@@ -9374,6 +10489,12 @@
             "state" : "new",
             "value" : "lark-cli login command finished."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lark-cli 登录命令已完成。"
+          }
         }
       }
     },
@@ -9384,6 +10505,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Starting lark-cli login..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在启动 lark-cli 登录…"
           }
         }
       }
@@ -9396,6 +10523,12 @@
             "state" : "new",
             "value" : "lark-cli not found"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未找到 lark-cli"
+          }
         }
       }
     },
@@ -9406,6 +10539,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "lark-cli authorization QR code is ready."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lark-cli 授权二维码已就绪。"
           }
         }
       }
@@ -9418,6 +10557,12 @@
             "state" : "new",
             "value" : "lark-cli authorization verified."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lark-cli 授权已验证。"
+          }
         }
       }
     },
@@ -9429,6 +10574,12 @@
             "state" : "new",
             "value" : "Verify status"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "验证状态"
+          }
         }
       }
     },
@@ -9439,6 +10590,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Checking lark-cli authorization..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在检查 lark-cli 授权…"
           }
         }
       }
@@ -9927,6 +11084,12 @@
             "state" : "new",
             "value" : "Choose Global Rules File"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择全局规则文件"
+          }
         }
       }
     },
@@ -9937,6 +11100,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "WillDeep reads this Markdown file before every Agent turn. The default is ~/.willdeep/CLAUDE.md, but you can point it at any personal rules file."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WillDeep 会在每个 Agent 回合之前读取这个 Markdown 文件。默认是 ~/.willdeep/CLAUDE.md，但你可以指向任意个人规则文件。"
           }
         }
       }
@@ -9949,6 +11118,12 @@
             "state" : "new",
             "value" : "Rules Content"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "规则内容"
+          }
         }
       }
     },
@@ -9959,6 +11134,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Enable global rules"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启用全局规则"
           }
         }
       }
@@ -9971,6 +11152,12 @@
             "state" : "new",
             "value" : "File"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件"
+          }
         }
       }
     },
@@ -9981,6 +11168,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Global Rules File"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全局规则文件"
           }
         }
       }
@@ -9993,6 +11186,12 @@
             "state" : "new",
             "value" : "Loaded %@."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已加载 %@。"
+          }
         }
       }
     },
@@ -10003,6 +11202,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "No rules file yet at %@. Save to create it."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 处尚无规则文件。保存即可创建。"
           }
         }
       }
@@ -10015,6 +11220,12 @@
             "state" : "new",
             "value" : "Global rules apply across workspaces. Repository AGENTS.md or CLAUDE.md files are still included as project-specific instructions."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全局规则在所有工作区生效。仓库中的 AGENTS.md 或 CLAUDE.md 文件仍会作为项目专属指令一并包含进来。"
+          }
         }
       }
     },
@@ -10025,6 +11236,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Reload"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新加载"
           }
         }
       }
@@ -10037,6 +11254,12 @@
             "state" : "new",
             "value" : "Save failed: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存失败：%@"
+          }
         }
       }
     },
@@ -10048,6 +11271,12 @@
             "state" : "new",
             "value" : "Saved %@."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存 %@。"
+          }
         }
       }
     },
@@ -10057,6 +11286,12 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "AI Agents"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "AI Agents"
           }
         }
@@ -10070,6 +11305,12 @@
             "state" : "new",
             "value" : "Editor"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑器"
+          }
         }
       }
     },
@@ -10080,6 +11321,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Integrations"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集成"
           }
         }
       }
@@ -10092,6 +11339,12 @@
             "state" : "new",
             "value" : "Runtimes"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行时"
+          }
         }
       }
     },
@@ -10103,6 +11356,12 @@
             "state" : "new",
             "value" : "Terminal"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端"
+          }
         }
       }
     },
@@ -10113,6 +11372,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Voice"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语音"
           }
         }
       }
@@ -10771,6 +12036,12 @@
             "state" : "new",
             "value" : "Clear reviewed"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除已审阅"
+          }
         }
       }
     },
@@ -10781,6 +12052,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Configure MCP suggestion"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配置 MCP 建议"
           }
         }
       }
@@ -10793,6 +12070,12 @@
             "state" : "new",
             "value" : "Copied"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已复制"
+          }
         }
       }
     },
@@ -10803,6 +12086,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Copy details"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制详情"
           }
         }
       }
@@ -10815,6 +12104,12 @@
             "state" : "new",
             "value" : "Create skill from draft"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从草稿创建 skill"
+          }
         }
       }
     },
@@ -10825,6 +12120,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Dismissed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已忽略"
           }
         }
       }
@@ -10837,6 +12138,12 @@
             "state" : "new",
             "value" : "Pending"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待处理"
+          }
         }
       }
     },
@@ -10847,6 +12154,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Reviewed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已审阅"
           }
         }
       }
@@ -10859,6 +12172,12 @@
             "state" : "new",
             "value" : "Memory saves, skill candidates, and MCP suggestions discovered at turn end stay here until reviewed."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在回合结束时发现的记忆保存、skill 候选和 MCP 建议会保留在这里，直到被审阅。"
+          }
         }
       }
     },
@@ -10869,6 +12188,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Dismiss"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "忽略"
           }
         }
       }
@@ -10881,6 +12206,12 @@
             "state" : "new",
             "value" : "Edit skill draft"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑 skill 草稿"
+          }
         }
       }
     },
@@ -10891,6 +12222,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Edit Skill Draft"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑 Skill 草稿"
           }
         }
       }
@@ -10903,6 +12240,12 @@
             "state" : "new",
             "value" : "No pending learning items."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有待处理的学习项。"
+          }
         }
       }
     },
@@ -10913,6 +12256,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Mark reviewed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标记为已审阅"
           }
         }
       }
@@ -10925,6 +12274,12 @@
             "state" : "new",
             "value" : "%@ more pending items hidden"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "另有 %@ 个待处理项已隐藏"
+          }
         }
       }
     },
@@ -10935,6 +12290,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%@ more reviewed items hidden"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "另有 %@ 个已审阅项已隐藏"
           }
         }
       }
@@ -10947,6 +12308,12 @@
             "state" : "new",
             "value" : "%@ pending"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 项待处理"
+          }
         }
       }
     },
@@ -10957,6 +12324,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Reviewed items (%@)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已审阅项（%@）"
           }
         }
       }
@@ -10969,6 +12342,12 @@
             "state" : "new",
             "value" : "Save Draft"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存草稿"
+          }
         }
       }
     },
@@ -10980,6 +12359,12 @@
             "state" : "new",
             "value" : "Learning Review"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学习审阅"
+          }
         }
       }
     },
@@ -10990,6 +12375,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Review automatic learning"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "审阅自动学习内容"
           }
         }
       }
@@ -11580,6 +12971,12 @@
             "state" : "new",
             "value" : "Marked %@ as fully trusted. All its calls now auto-run — writes included."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已将 %@ 标记为完全信任。它的所有调用现在都会自动执行——包括写入操作。"
+          }
         }
       }
     },
@@ -11914,6 +13311,12 @@
             "state" : "new",
             "value" : "Fully trusted — all calls auto-run"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完全信任——所有调用自动执行"
+          }
         }
       }
     },
@@ -11924,6 +13327,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Trust level for this server's tool calls"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对该服务器工具调用的信任级别"
           }
         }
       }
@@ -11936,6 +13345,12 @@
             "state" : "new",
             "value" : "Default — read-style calls auto-run, writes ask"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认——只读类调用自动执行，写入操作会询问"
+          }
         }
       }
     },
@@ -11946,6 +13361,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Untrusted — every call asks"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不信任——每次调用都询问"
           }
         }
       }
@@ -12247,6 +13668,12 @@
             "state" : "new",
             "value" : "%@%% confidence"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@%% 置信度"
+          }
         }
       }
     },
@@ -12530,6 +13957,12 @@
             "state" : "new",
             "value" : "Last retrieved: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次取用：%@"
+          }
         }
       }
     },
@@ -12779,6 +14212,12 @@
             "state" : "new",
             "value" : "Project fingerprint: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目指纹：%@"
+          }
         }
       }
     },
@@ -12790,6 +14229,12 @@
             "state" : "new",
             "value" : "Open a workspace before saving a project-scoped memory."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先打开一个工作区，再保存项目范围的记忆。"
+          }
         }
       }
     },
@@ -12800,6 +14245,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Provenance: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来源：%@"
           }
         }
       }
@@ -12931,6 +14382,12 @@
             "state" : "new",
             "value" : "Scope"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "范围"
+          }
         }
       }
     },
@@ -12975,6 +14432,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Sensitive redacted"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已脱敏敏感信息"
           }
         }
       }
@@ -13157,6 +14620,12 @@
             "state" : "new",
             "value" : "Topics: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主题：%@"
+          }
         }
       }
     },
@@ -13269,6 +14738,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Show advanced info (IP / port / executable)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示高级信息（IP / 端口 / 可执行文件）"
           }
         }
       }
@@ -13502,6 +14977,12 @@
             "state" : "new",
             "value" : "Fallback URLs"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "备用 URL"
+          }
         }
       }
     },
@@ -13580,6 +15061,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Gateway log"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网关日志"
           }
         }
       }
@@ -13880,6 +15367,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Scan this QR code with the WillDeep Android app to pair over your local network."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用 WillDeep 安卓 App 扫描此二维码，在本地网络内完成配对。"
           }
         }
       }
@@ -14538,6 +16031,12 @@
             "state" : "new",
             "value" : "Add SSH Runtime"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加 SSH 运行时"
+          }
         }
       }
     },
@@ -14548,6 +16047,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Add Daemon Runtime"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加 Daemon 运行时"
           }
         }
       }
@@ -14560,6 +16065,12 @@
             "state" : "new",
             "value" : "Capabilities"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "能力"
+          }
         }
       }
     },
@@ -14570,6 +16081,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Collaboration"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "协作"
           }
         }
       }
@@ -14582,6 +16099,12 @@
             "state" : "new",
             "value" : "SSH Connection"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSH 连接"
+          }
         }
       }
     },
@@ -14592,6 +16115,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Connects to willdeep-agent over HTTP/WebSocket. Keep the daemon bound to 127.0.0.1 and reach it through an SSH tunnel; WillDeep stores the token in Keychain."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 HTTP/WebSocket 连接到 willdeep-agent。请将 daemon 绑定在 127.0.0.1 上，并通过 SSH 隧道访问；WillDeep 会把 token 存入 Keychain。"
           }
         }
       }
@@ -14604,6 +16133,12 @@
             "state" : "new",
             "value" : "Daemon Runtime"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Daemon 运行时"
+          }
         }
       }
     },
@@ -14614,6 +16149,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Daemon token (stored in Keychain)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Daemon token（存储于 Keychain）"
           }
         }
       }
@@ -14641,6 +16182,12 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "Daemon URL"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "Daemon URL"
           }
         }
@@ -14671,6 +16218,12 @@
             "state" : "new",
             "value" : "Delete"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除"
+          }
         }
       }
     },
@@ -14682,6 +16235,12 @@
             "state" : "new",
             "value" : "Runtime deleted."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行时已删除。"
+          }
         }
       }
     },
@@ -14692,6 +16251,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Display name"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示名称"
           }
         }
       }
@@ -14721,6 +16286,12 @@
             "state" : "new",
             "value" : "No remote runtimes configured."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未配置任何远程运行时。"
+          }
         }
       }
     },
@@ -14731,6 +16302,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Run gh auth login on the remote host to enable GitHub workflows."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在远程主机上运行 gh auth login 以启用 GitHub 工作流。"
           }
         }
       }
@@ -14743,6 +16320,12 @@
             "state" : "new",
             "value" : "GitHub CLI (gh) not found. Install it on the remote host and run gh auth login for GitHub workflows."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未找到 GitHub CLI（gh）。请在远程主机上安装它，并运行 gh auth login 以使用 GitHub 工作流。"
+          }
         }
       }
     },
@@ -14753,6 +16336,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Host"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机"
           }
         }
       }
@@ -14782,6 +16371,12 @@
             "state" : "new",
             "value" : "SSH identity file path (optional)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSH 身份文件路径（可选）"
+          }
         }
       }
     },
@@ -14810,6 +16405,12 @@
             "state" : "new",
             "value" : "Last probe"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次探测"
+          }
         }
       }
     },
@@ -14820,6 +16421,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Remote Runtimes"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程运行时"
           }
         }
       }
@@ -14832,6 +16439,12 @@
             "state" : "new",
             "value" : "Registries / mirrors"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "镜像源 / 镜像"
+          }
         }
       }
     },
@@ -14842,6 +16455,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "New Daemon Runtime"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建 Daemon 运行时"
           }
         }
       }
@@ -14854,6 +16473,12 @@
             "state" : "new",
             "value" : "New SSH Runtime"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建 SSH 运行时"
+          }
         }
       }
     },
@@ -14865,6 +16490,12 @@
             "state" : "new",
             "value" : "Platform"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "平台"
+          }
         }
       }
     },
@@ -14875,6 +16506,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Port %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "端口 %@"
           }
         }
       }
@@ -14921,6 +16558,12 @@
             "state" : "new",
             "value" : "Test & Probe"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "测试并探测"
+          }
         }
       }
     },
@@ -14931,6 +16574,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Probe failed: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "探测失败：%@"
           }
         }
       }
@@ -14943,6 +16592,12 @@
             "state" : "new",
             "value" : "Probe"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "探测"
+          }
         }
       }
     },
@@ -14953,6 +16608,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Probe succeeded: %1$@ / %2$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "探测成功：%1$@ / %2$@。"
           }
         }
       }
@@ -14965,6 +16626,12 @@
             "state" : "new",
             "value" : "Probing..."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在探测…"
+          }
         }
       }
     },
@@ -14975,6 +16642,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Probing %@..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在探测 %@…"
           }
         }
       }
@@ -14987,6 +16660,12 @@
             "state" : "new",
             "value" : "Proxy settings"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代理设置"
+          }
         }
       }
     },
@@ -14997,6 +16676,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Save"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存"
           }
         }
       }
@@ -15009,6 +16694,12 @@
             "state" : "new",
             "value" : "Runtime saved."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行时已保存。"
+          }
         }
       }
     },
@@ -15019,6 +16710,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Uses the system ssh client with BatchMode authentication. Configure hosts in your normal SSH config or provide an optional identity-file path; WillDeep stores only the path, never private key contents."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用系统的 ssh 客户端以 BatchMode 方式认证。请在常规 SSH 配置中设置主机，或提供一个可选的身份文件路径；WillDeep 只存储该路径，绝不会存储私钥内容。"
           }
         }
       }
@@ -15286,6 +16983,12 @@
             "state" : "new",
             "value" : "Toolchain"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具链"
+          }
         }
       }
     },
@@ -15297,6 +17000,12 @@
             "state" : "new",
             "value" : "Transport"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "传输方式"
+          }
         }
       }
     },
@@ -15306,6 +17015,12 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "Daemon"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "Daemon"
           }
         }
@@ -15319,6 +17034,12 @@
             "state" : "new",
             "value" : "SSH"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSH"
+          }
         }
       }
     },
@@ -15329,6 +17050,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Username"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用户名"
           }
         }
       }
@@ -15357,6 +17084,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Remote workspace path"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程工作区路径"
           }
         }
       }
@@ -15998,6 +17731,12 @@
             "state" : "new",
             "value" : "A user skill named %@ already exists. Rename or remove it before installing this marketplace skill."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已存在一个名为 %@ 的用户技能。请先重命名或移除它，再安装此市场技能。"
+          }
         }
       }
     },
@@ -16008,6 +17747,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Name conflict"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名称冲突"
           }
         }
       }
@@ -16020,6 +17765,12 @@
             "state" : "new",
             "value" : "%@ marketplace skills"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 个市场技能"
+          }
         }
       }
     },
@@ -16030,6 +17781,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Clear"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除"
           }
         }
       }
@@ -16042,6 +17799,12 @@
             "state" : "new",
             "value" : "Cleared %@."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已清除 %@。"
+          }
         }
       }
     },
@@ -16052,6 +17815,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Configured"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已配置"
           }
         }
       }
@@ -16064,6 +17833,12 @@
             "state" : "new",
             "value" : "Required"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "必填"
+          }
         }
       }
     },
@@ -16074,6 +17849,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Install first-party skills from the bundled static catalog. A server-backed marketplace can replace this catalog later."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从内置的静态目录安装第一方技能。日后可由服务器支持的市场替换此目录。"
           }
         }
       }
@@ -16086,6 +17867,12 @@
             "state" : "new",
             "value" : "Install"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装"
+          }
         }
       }
     },
@@ -16096,6 +17883,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Installed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已安装"
           }
         }
       }
@@ -16108,6 +17901,12 @@
             "state" : "new",
             "value" : "Installed %@."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已安装 %@。"
+          }
         }
       }
     },
@@ -16118,6 +17917,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Installed %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已安装 %@"
           }
         }
       }
@@ -16130,6 +17935,12 @@
             "state" : "new",
             "value" : "Marketplace skill name is invalid."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "市场技能名称无效。"
+          }
         }
       }
     },
@@ -16140,6 +17951,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Requires WillDeep %@+"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要 WillDeep %@ 及以上版本"
           }
         }
       }
@@ -16152,6 +17969,12 @@
             "state" : "new",
             "value" : "Marketplace skill %@ is not installed."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "市场技能 %@ 尚未安装。"
+          }
         }
       }
     },
@@ -16162,6 +17985,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "No marketplace skills match the current search."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有与当前搜索匹配的市场技能。"
           }
         }
       }
@@ -16174,6 +18003,12 @@
             "state" : "new",
             "value" : "Skill Marketplace"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "技能市场"
+          }
         }
       }
     },
@@ -16184,6 +18019,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Static catalog"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "静态目录"
           }
         }
       }
@@ -16196,6 +18037,12 @@
             "state" : "new",
             "value" : "Uninstall"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "卸载"
+          }
         }
       }
     },
@@ -16206,6 +18053,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Uninstalled %@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已卸载 %@。"
           }
         }
       }
@@ -16218,6 +18071,12 @@
             "state" : "new",
             "value" : "Update"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新"
+          }
         }
       }
     },
@@ -16228,6 +18087,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Installed %1$@ · Latest %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已安装 %1$@ · 最新 %2$@"
           }
         }
       }
@@ -16240,6 +18105,12 @@
             "state" : "new",
             "value" : "Updated %@."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已更新 %@。"
+          }
         }
       }
     },
@@ -16249,6 +18120,12 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "v%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "v%@"
           }
         }
@@ -16704,6 +18581,12 @@
             "state" : "new",
             "value" : "Region"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "区域"
+          }
         }
       }
     },
@@ -16714,6 +18597,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "China (api.niuwoai.com)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中国（api.niuwoai.com）"
           }
         }
       }
@@ -16726,6 +18615,12 @@
             "state" : "new",
             "value" : "Custom"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自定义"
+          }
         }
       }
     },
@@ -16736,6 +18631,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "International (some.im)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "国际（some.im）"
           }
         }
       }
@@ -16918,6 +18819,12 @@
             "state" : "new",
             "value" : "Runtimes"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行时"
+          }
         }
       }
     },
@@ -16928,6 +18835,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Rules"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "规则"
           }
         }
       }
@@ -16974,6 +18887,12 @@
             "state" : "new",
             "value" : "Terminal"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端"
+          }
         }
       }
     },
@@ -17018,6 +18937,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Voice"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语音"
           }
         }
       }
@@ -17370,6 +19295,12 @@
             "state" : "new",
             "value" : "Color"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "颜色"
+          }
         }
       }
     },
@@ -17380,6 +19311,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Black + white"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "黑 + 白"
           }
         }
       }
@@ -17392,6 +19329,12 @@
             "state" : "new",
             "value" : "Blue"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "蓝色"
+          }
         }
       }
     },
@@ -17402,6 +19345,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Dark blue + cyan"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深蓝 + 青"
           }
         }
       }
@@ -17414,6 +19363,12 @@
             "state" : "new",
             "value" : "Dark gray + blue"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深灰 + 蓝"
+          }
         }
       }
     },
@@ -17424,6 +19379,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Dark gray + cyan"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深灰 + 青"
           }
         }
       }
@@ -17436,6 +19397,12 @@
             "state" : "new",
             "value" : "Dark gray + green"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深灰 + 绿"
+          }
         }
       }
     },
@@ -17446,6 +19413,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Dark gray + orange"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深灰 + 橙"
           }
         }
       }
@@ -17458,6 +19431,12 @@
             "state" : "new",
             "value" : "Dark gray + pink"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深灰 + 粉"
+          }
         }
       }
     },
@@ -17468,6 +19447,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Dark gray + purple"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深灰 + 紫"
           }
         }
       }
@@ -17480,6 +19465,12 @@
             "state" : "new",
             "value" : "Dark gray + red"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深灰 + 红"
+          }
         }
       }
     },
@@ -17490,6 +19481,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Dark gray + white"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深灰 + 白"
           }
         }
       }
@@ -17502,6 +19499,12 @@
             "state" : "new",
             "value" : "Dark gray + yellow"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深灰 + 黄"
+          }
         }
       }
     },
@@ -17512,6 +19515,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Dark green + lime"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深绿 + 青柠"
           }
         }
       }
@@ -17524,6 +19533,12 @@
             "state" : "new",
             "value" : "Dark purple + pink"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深紫 + 粉"
+          }
         }
       }
     },
@@ -17534,6 +19549,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Dark red + coral"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深红 + 珊瑚"
           }
         }
       }
@@ -17546,6 +19567,12 @@
             "state" : "new",
             "value" : "Green"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "绿色"
+          }
         }
       }
     },
@@ -17556,6 +19583,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Orange"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "橙色"
           }
         }
       }
@@ -17568,6 +19601,12 @@
             "state" : "new",
             "value" : "Pink"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粉色"
+          }
         }
       }
     },
@@ -17578,6 +19617,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Purple"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "紫色"
           }
         }
       }
@@ -17590,6 +19635,12 @@
             "state" : "new",
             "value" : "Red"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "红色"
+          }
         }
       }
     },
@@ -17600,6 +19651,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "White + black"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "白 + 黑"
           }
         }
       }
@@ -17612,6 +19669,12 @@
             "state" : "new",
             "value" : "These settings apply to both the Fn push-to-talk shortcut and the composer mic button."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这些设置同时作用于 Fn 按住说话快捷键和输入框的麦克风按钮。"
+          }
         }
       }
     },
@@ -17622,6 +19685,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Position"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "位置"
           }
         }
       }
@@ -17634,6 +19703,12 @@
             "state" : "new",
             "value" : "Bottom center"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "底部居中"
+          }
         }
       }
     },
@@ -17644,6 +19719,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Bottom left"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左下角"
           }
         }
       }
@@ -17656,6 +19737,12 @@
             "state" : "new",
             "value" : "Bottom right"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右下角"
+          }
         }
       }
     },
@@ -17666,6 +19753,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Top left"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左上角"
           }
         }
       }
@@ -17678,6 +19771,12 @@
             "state" : "new",
             "value" : "Top right"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右上角"
+          }
         }
       }
     },
@@ -17688,6 +19787,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Show bar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示条"
           }
         }
       }
@@ -17700,6 +19805,12 @@
             "state" : "new",
             "value" : "Uses the same style presets as fastv's floating transcription toolbar."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "与 fastv 悬浮转写工具栏使用相同的样式预设。"
+          }
         }
       }
     },
@@ -17710,6 +19821,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Preview"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预览"
           }
         }
       }
@@ -17722,6 +19839,12 @@
             "state" : "new",
             "value" : "Floating Transcription Bar"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "悬浮转写条"
+          }
         }
       }
     },
@@ -17732,6 +19855,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Size"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大小"
           }
         }
       }
@@ -17744,6 +19873,12 @@
             "state" : "new",
             "value" : "Compact"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "紧凑"
+          }
         }
       }
     },
@@ -17754,6 +19889,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Large"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大"
           }
         }
       }
@@ -17766,6 +19907,12 @@
             "state" : "new",
             "value" : "Minimal"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "极简"
+          }
         }
       }
     },
@@ -17776,6 +19923,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Normal"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标准"
           }
         }
       }
@@ -17917,7 +20070,14 @@
       }
     },
     "Shell" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell"
+          }
+        }
+      }
     },
     "sidebar.archived-sessions.header" : {
       "comment" : "disclosure button for archived sessions",
@@ -18377,6 +20537,12 @@
             "state" : "new",
             "value" : "Goal progress: %1$@ of %2$@ done. Current: %3$@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目标进度：已完成 %1$@ / %2$@。当前：%3$@"
+          }
         }
       }
     },
@@ -18387,6 +20553,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Plan progress: %1$@ of %2$@ done. Current: %3$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "计划进度：已完成 %1$@ / %2$@。当前：%3$@"
           }
         }
       }
@@ -18500,13 +20672,34 @@
       }
     },
     "Size" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大小"
+          }
+        }
+      }
     },
     "sk-…" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "sk-…"
+          }
+        }
+      }
     },
     "Skip" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳过"
+          }
+        }
+      }
     },
     "split-editor.default-title" : {
       "comment" : "Default title for split editor pane when no file is open",
@@ -18527,7 +20720,14 @@
       }
     },
     "Start Shell" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动 Shell"
+          }
+        }
+      }
     },
     "stat-cell.active-days" : {
       "comment" : "stats grid cell title",
@@ -18800,7 +21000,14 @@
       }
     },
     "Summarize older messages to free context budget" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "汇总较早的消息以释放上下文额度"
+          }
+        }
+      }
     },
     "symbol-jump.no-symbols" : {
       "comment" : "Message when no symbols found",
@@ -18857,19 +21064,54 @@
       }
     },
     "Symlink an existing fastv model copy — no download." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为已有的 fastv 模型副本创建符号链接 —— 无需下载。"
+          }
+        }
+      }
     },
     "Terminal" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端"
+          }
+        }
+      }
     },
     "Terminal Settings" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端设置"
+          }
+        }
+      }
     },
     "The agent can read files, search, list directories, run commands (with approval), and check Git status." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 可以读取文件、搜索、列出目录、运行命令（需批准）以及查看 Git 状态。"
+          }
+        }
+      }
     },
     "The model also auto-unloads after 5 minutes of foreground idle, 10 minutes of background, or when the app's resident memory exceeds 4 GB." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前台空闲 5 分钟、后台 10 分钟，或应用常驻内存超过 4 GB 时，模型还会自动卸载。"
+          }
+        }
+      }
     },
     "tool-card.allow" : {
       "extractionState" : "manual",
@@ -18964,6 +21206,12 @@
             "state" : "new",
             "value" : "You answered"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已回答"
+          }
         }
       }
     },
@@ -19025,6 +21273,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "You skipped this question"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已跳过此问题"
           }
         }
       }
@@ -20786,6 +23040,12 @@
             "state" : "new",
             "value" : "Approval mode"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "批准模式"
+          }
         }
       }
     },
@@ -20796,6 +23056,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@ auto / %2$@ user"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 自动 / %2$@ 用户"
           }
         }
       }
@@ -20808,6 +23074,12 @@
             "state" : "new",
             "value" : "Always allow"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "始终允许"
+          }
         }
       }
     },
@@ -20818,6 +23090,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Escalated"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已升级"
           }
         }
       }
@@ -20830,6 +23108,12 @@
             "state" : "new",
             "value" : "Goal mode"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目标模式"
+          }
         }
       }
     },
@@ -20840,6 +23124,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Judge allow"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Judge 允许"
           }
         }
       }
@@ -20852,6 +23142,12 @@
             "state" : "new",
             "value" : "Static allow"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "静态允许"
+          }
         }
       }
     },
@@ -20862,6 +23158,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Trusted server"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "受信任服务器"
           }
         }
       }
@@ -20874,6 +23176,12 @@
             "state" : "new",
             "value" : "User approved"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用户已批准"
+          }
         }
       }
     },
@@ -20884,6 +23192,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Workspace access"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区访问"
           }
         }
       }
@@ -20896,6 +23210,12 @@
             "state" : "new",
             "value" : "Approvals"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "批准"
+          }
         }
       }
     },
@@ -20906,6 +23226,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Copied"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已复制"
           }
         }
       }
@@ -20918,6 +23244,12 @@
             "state" : "new",
             "value" : "Copy turn report"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制本轮报告"
+          }
         }
       }
     },
@@ -20928,6 +23260,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%@ denied"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 已拒绝"
           }
         }
       }
@@ -20940,6 +23278,12 @@
             "state" : "new",
             "value" : "Elapsed"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "耗时"
+          }
         }
       }
     },
@@ -20950,6 +23294,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%@ escalated"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 已升级"
           }
         }
       }
@@ -20962,6 +23312,12 @@
             "state" : "new",
             "value" : "%@ failed"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 失败"
+          }
         }
       }
     },
@@ -20972,6 +23328,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Learning"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学习"
           }
         }
       }
@@ -20984,6 +23346,12 @@
             "state" : "new",
             "value" : "Learning actions"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学习动作"
+          }
         }
       }
     },
@@ -20994,6 +23362,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模式"
           }
         }
       }
@@ -21006,6 +23380,12 @@
             "state" : "new",
             "value" : "Model"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型"
+          }
         }
       }
     },
@@ -21016,6 +23396,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Provider"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务商"
           }
         }
       }
@@ -21028,6 +23414,12 @@
             "state" : "new",
             "value" : "Recall"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "召回"
+          }
         }
       }
     },
@@ -21038,6 +23430,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Recalled context"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "召回的上下文"
           }
         }
       }
@@ -21050,6 +23448,12 @@
             "state" : "new",
             "value" : "%1$@ memories · %2$@ skills"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 条记忆 · %2$@ 项技能"
+          }
         }
       }
     },
@@ -21060,6 +23464,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Memory"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "记忆"
           }
         }
       }
@@ -21072,6 +23482,12 @@
             "state" : "new",
             "value" : "Score %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "得分 %@"
+          }
         }
       }
     },
@@ -21082,6 +23498,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Skill"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "技能"
           }
         }
       }
@@ -21094,6 +23516,12 @@
             "state" : "new",
             "value" : "Sandbox: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沙箱：%@"
+          }
         }
       }
     },
@@ -21104,6 +23532,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Awaiting answer"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待回答"
           }
         }
       }
@@ -21116,6 +23550,12 @@
             "state" : "new",
             "value" : "Awaiting confirm"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待确认"
+          }
         }
       }
     },
@@ -21126,6 +23566,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Denied"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已拒绝"
           }
         }
       }
@@ -21138,6 +23584,12 @@
             "state" : "new",
             "value" : "Failed"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "失败"
+          }
         }
       }
     },
@@ -21148,6 +23600,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Pending approval"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待批准"
           }
         }
       }
@@ -21160,6 +23618,12 @@
             "state" : "new",
             "value" : "Running"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行中"
+          }
         }
       }
     },
@@ -21170,6 +23634,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Succeeded"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "成功"
           }
         }
       }
@@ -21193,6 +23663,12 @@
             "state" : "new",
             "value" : "%@ succeeded"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 成功"
+          }
         }
       }
     },
@@ -21203,6 +23679,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Agent turn report"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 本轮报告"
           }
         }
       }
@@ -21215,6 +23697,12 @@
             "state" : "new",
             "value" : "Tokens"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Token"
+          }
         }
       }
     },
@@ -21225,6 +23713,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Tools"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具"
           }
         }
       }
@@ -21237,29 +23731,84 @@
             "state" : "new",
             "value" : "%@ tools"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 个工具"
+          }
         }
       }
     },
     "Type the exact name of any installed font to override the picker — use this to apply a Nerd Font that isn't auto-detected so powerline/icon glyphs stop showing as boxes. Leave empty to use the selection above." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入任意已安装字体的准确名称以覆盖选择器 —— 用它来应用未被自动识别的 Nerd Font，让 powerline/图标字形不再显示为方框。留空则使用上面的选择。"
+          }
+        }
+      }
     },
     "Unload now" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即卸载"
+          }
+        }
+      }
     },
     "Use route default: %@" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用路由默认值：%@"
+          }
+        }
+      }
     },
     "v%@" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "v%@"
+          }
+        }
+      }
     },
     "Welcome to WillDeep" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "欢迎使用 WillDeep"
+          }
+        }
+      }
     },
     "Widget" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小组件"
+          }
+        }
+      }
     },
     "willdeep" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "willdeep"
+          }
+        }
+      }
     },
     "workflow-card.agents" : {
       "extractionState" : "extracted_with_value",
@@ -21268,6 +23817,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$d / %2$d agents"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$d / %2$d 个 agent"
           }
         }
       }
@@ -21280,6 +23835,12 @@
             "state" : "new",
             "value" : "Workflow"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作流"
+          }
         }
       }
     },
@@ -21290,6 +23851,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Collapse sub-agent list"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收起子 agent 列表"
           }
         }
       }
@@ -21302,6 +23869,12 @@
             "state" : "new",
             "value" : "Show sub-agent list"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示子 agent 列表"
+          }
         }
       }
     },
@@ -21312,6 +23885,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Cancelled"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已取消"
           }
         }
       }
@@ -21324,6 +23903,12 @@
             "state" : "new",
             "value" : "Done"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已完成"
+          }
         }
       }
     },
@@ -21334,6 +23919,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Failed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "失败"
           }
         }
       }
@@ -21346,6 +23937,12 @@
             "state" : "new",
             "value" : "Planning"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "规划中"
+          }
         }
       }
     },
@@ -21356,6 +23953,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Running"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行中"
           }
         }
       }
@@ -21368,6 +23971,12 @@
             "state" : "new",
             "value" : "%@ tokens"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ Token"
+          }
         }
       }
     },
@@ -21378,6 +23987,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Workflows"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作流"
           }
         }
       }
@@ -21390,11 +24005,24 @@
             "state" : "new",
             "value" : "Workflow started: "
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作流已启动："
+          }
         }
       }
     },
     "working directory" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作目录"
+          }
+        }
+      }
     },
     "workspace.no-workspace" : {
       "comment" : "generic label for sessions or composer state without an attached workspace",
@@ -21415,7 +24043,14 @@
       }
     },
     "You're all set" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部就绪"
+          }
+        }
+      }
     },
     "任务监控" : {
 
@@ -21427,7 +24062,14 @@
 
     },
     "在 Finder 中显示" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Finder 中显示"
+          }
+        }
+      }
     },
     "在新窗口打开" : {
 
@@ -21457,7 +24099,14 @@
 
     },
     "查看当前未提交 diff" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看当前未提交 diff"
+          }
+        }
+      }
     },
     "查看详细错误信息" : {
 
@@ -21478,7 +24127,14 @@
 
     },
     "选择这一轮由 WillDeep 自己执行，还是委托给本机 Claude Code / Codex CLI。" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择这一轮由 WillDeep 自己执行，还是委托给本机 Claude Code / Codex CLI。"
+          }
+        }
+      }
     },
     "重新发送上一条消息" : {
 
@@ -21488,6 +24144,992 @@
     },
     "隐藏详细错误信息" : {
 
+    },
+    "onboarding.welcome.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Welcome to WillDeep"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "欢迎使用 WillDeep"
+          }
+        }
+      }
+    },
+    "onboarding.welcome.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An editor that codes, transcribes, and ships alongside you. Let's get you set up in three quick steps."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一个能陪你写代码、转写语音、一起交付的编辑器。三步搞定设置。"
+          }
+        }
+      }
+    },
+    "onboarding.welcome.bullet-provider" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bring your own AI provider — Claude, OpenAI, DeepSeek and more"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自带 AI 服务商 —— Claude、OpenAI、DeepSeek 等等"
+          }
+        }
+      }
+    },
+    "onboarding.welcome.bullet-voice" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Push-to-talk voice transcription runs 100% on-device"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住说话的语音转写 100% 在本机完成"
+          }
+        }
+      }
+    },
+    "onboarding.welcome.bullet-settings" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings, models and skills you can change anytime"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置、模型和技能随时可改"
+          }
+        }
+      }
+    },
+    "onboarding.provider.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect an AI provider"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接 AI 服务商"
+          }
+        }
+      }
+    },
+    "onboarding.provider.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pick one to start with — you can add more later in Settings → AI Providers. Skip if you'll only use voice features."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先选一个开始 —— 之后可在 设置 → AI 服务商 里添加更多。只用语音功能的话可以跳过。"
+          }
+        }
+      }
+    },
+    "onboarding.provider.label-provider" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Provider"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务商"
+          }
+        }
+      }
+    },
+    "onboarding.provider.label-base-url" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Base URL"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Base URL"
+          }
+        }
+      }
+    },
+    "onboarding.provider.label-api-key" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API key"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API key"
+          }
+        }
+      }
+    },
+    "onboarding.provider.label-model" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default model"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认模型"
+          }
+        }
+      }
+    },
+    "onboarding.provider.error-unknown-preset" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown provider preset."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知的服务商预设。"
+          }
+        }
+      }
+    },
+    "onboarding.provider.error-base-url-required" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Base URL is required for this provider."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该服务商需要填写 Base URL。"
+          }
+        }
+      }
+    },
+    "onboarding.provider.error-model-required" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please specify a model id."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请填写模型 ID。"
+          }
+        }
+      }
+    },
+    "onboarding.voice.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set up voice transcription"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置语音转写"
+          }
+        }
+      }
+    },
+    "onboarding.voice.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optional — but if you want to talk to your agent or use push-to-talk in the composer, you'll need the on-device SenseVoice model (~937 MB)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可选 —— 但若你想对 Agent 说话、或在输入框里按住说话,需要本机 SenseVoice 模型(约 937 MB)。"
+          }
+        }
+      }
+    },
+    "onboarding.voice.installed-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Model installed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型已安装"
+          }
+        }
+      }
+    },
+    "onboarding.voice.not-installed-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Model not installed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型未安装"
+          }
+        }
+      }
+    },
+    "onboarding.voice.installed-detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Push-to-talk is ready. Press and hold the mic button in the composer, or hold the Fn key anywhere in the app."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住说话已就绪。按住输入框里的麦克风按钮,或在应用任意位置按住 Fn 键。"
+          }
+        }
+      }
+    },
+    "onboarding.voice.not-installed-detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Click Download for the full file, or import a copy you already have from fastv (no bytes transferred)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点「下载」获取完整文件,或从已有的 fastv 副本导入(不传输任何数据)。"
+          }
+        }
+      }
+    },
+    "onboarding.voice.download-button" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download (~937 MB)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载(约 937 MB)"
+          }
+        }
+      }
+    },
+    "onboarding.voice.import-button" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import from fastv"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从 fastv 导入"
+          }
+        }
+      }
+    },
+    "onboarding.voice.importing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importing from fastv…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在从 fastv 导入…"
+          }
+        }
+      }
+    },
+    "onboarding.voice.cancel" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
+    "onboarding.done.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You're all set"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部就绪"
+          }
+        }
+      }
+    },
+    "onboarding.done.tip-agent" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open the Agent panel from the toolbar, ask anything in plain language."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从工具栏打开 Agent 面板,用大白话问任何问题。"
+          }
+        }
+      }
+    },
+    "onboarding.done.tip-voice" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hold the mic button in the composer, or hold Fn anywhere, to talk instead of type."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住输入框里的麦克风按钮,或在任意位置按住 Fn,即可说话代替打字。"
+          }
+        }
+      }
+    },
+    "onboarding.done.tip-settings" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Need to tweak providers, voice, memory, or skills? Cmd-, opens Settings."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "想调整服务商、语音、记忆或技能?Cmd-, 打开设置。"
+          }
+        }
+      }
+    },
+    "onboarding.footer.back" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一步"
+          }
+        }
+      }
+    },
+    "onboarding.footer.skip" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skip"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳过"
+          }
+        }
+      }
+    },
+    "onboarding.footer.continue" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续"
+          }
+        }
+      }
+    },
+    "onboarding.footer.save-continue" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save & Continue"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存并继续"
+          }
+        }
+      }
+    },
+    "onboarding.footer.get-started" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Get started"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始使用"
+          }
+        }
+      }
+    },
+    "settings.voice.header-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On-device Voice (SenseVoice)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本机语音(SenseVoice)"
+          }
+        }
+      }
+    },
+    "settings.voice.header-description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Push-to-talk in the composer transcribes 100% on-device. Nothing leaves your Mac."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在输入框里按住说话,转写 100% 在本机完成。任何数据都不会离开你的 Mac。"
+          }
+        }
+      }
+    },
+    "settings.voice.status-installed-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SenseVoice model installed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SenseVoice 模型已安装"
+          }
+        }
+      }
+    },
+    "settings.voice.status-not-installed-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Model not installed yet"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型尚未安装"
+          }
+        }
+      }
+    },
+    "settings.voice.status-installed-detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mic button in composer is enabled. Press and hold to record, release to transcribe. Tip: hold the Fn key anywhere in the app for the same push-to-talk."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入框里的麦克风按钮已启用。按住录音,松开转写。提示:在应用任意位置按住 Fn 键也能按住说话。"
+          }
+        }
+      }
+    },
+    "settings.voice.status-not-installed-detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Click Download below (~937 MB). After install the mic button in composer goes live and the Fn-key push-to-talk shortcut starts working."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点下方「下载」(约 937 MB)。安装后输入框里的麦克风按钮即生效,Fn 键按住说话的快捷方式也会开始工作。"
+          }
+        }
+      }
+    },
+    "settings.voice.download-button" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download model (~937 MB)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载模型(约 937 MB)"
+          }
+        }
+      }
+    },
+    "settings.voice.import-button" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import from fastv (0 MB)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从 fastv 导入(0 MB)"
+          }
+        }
+      }
+    },
+    "settings.voice.import-help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Symlink an existing fastv model copy — no download."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为已有的 fastv 模型副本建立软链 —— 无需下载。"
+          }
+        }
+      }
+    },
+    "settings.voice.reveal-in-finder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reveal in Finder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Finder 中显示"
+          }
+        }
+      }
+    },
+    "settings.voice.importing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importing from fastv…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在从 fastv 导入…"
+          }
+        }
+      }
+    },
+    "settings.voice.cancel" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
+    "settings.voice.memory-section" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Memory"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内存"
+          }
+        }
+      }
+    },
+    "settings.voice.preload-toggle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preload on launch"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动时预加载"
+          }
+        }
+      }
+    },
+    "settings.voice.preload-description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "After your first transcription, warm the ~937 MB model on each app start so push-to-talk responds instantly. Disable to save memory at the cost of a 1-5 s cold start."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "首次转写之后,每次启动应用时预热这个约 937 MB 的模型,让按住说话即刻响应。关闭可节省内存,代价是 1-5 秒的冷启动。"
+          }
+        }
+      }
+    },
+    "settings.voice.loaded-in-memory" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loaded in memory"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已载入内存"
+          }
+        }
+      }
+    },
+    "settings.voice.not-in-memory" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not in memory"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未在内存中"
+          }
+        }
+      }
+    },
+    "settings.voice.unload-now" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unload now"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即卸载"
+          }
+        }
+      }
+    },
+    "settings.voice.refresh-status-help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh status"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新状态"
+          }
+        }
+      }
+    },
+    "settings.voice.auto-unload-note" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The model also auto-unloads after 5 minutes of foreground idle, 10 minutes of background, or when the app's resident memory exceeds 4 GB."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型还会在前台空闲 5 分钟、后台 10 分钟,或应用常驻内存超过 4 GB 时自动卸载。"
+          }
+        }
+      }
+    },
+    "settings.voice.model-location" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Model location"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型位置"
+          }
+        }
+      }
+    },
+    "settings.provider.protocol-openai-chat" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenAI Chat"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenAI Chat"
+          }
+        }
+      }
+    },
+    "settings.provider.protocol-anthropic-messages" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anthropic Messages"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anthropic Messages"
+          }
+        }
+      }
+    },
+    "settings.provider.protocol-google-gemini" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google Gemini"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google Gemini"
+          }
+        }
+      }
+    },
+    "settings.provider.protocol-openai-responses" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenAI Responses"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenAI Responses"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
