@@ -1126,6 +1126,13 @@ struct WillDeepTests {
         #expect(AppState.agentContextWindow(model: "gpt-5.5", providerID: "openai") == 400_000)
         #expect(AppState.agentContextWindow(model: "gpt-4.1", providerID: "openai") == 1_000_000)
         #expect(AppState.agentContextWindow(model: "custom-model", providerID: "custom") == 128_000)
+        // deepseek is version-aware: v4 (pro/flash) is a 1M window, the
+        // current v3.1/v3.2/reasoner/chat line is 128k, legacy stays 64k.
+        #expect(AppState.agentContextWindow(model: "deepseek-v4-pro", providerID: "deepseek") == 1_000_000)
+        #expect(AppState.agentContextWindow(model: "deepseek-v4-flash", providerID: "deepseek") == 1_000_000)
+        #expect(AppState.agentContextWindow(model: "deepseek-chat", providerID: "deepseek") == 128_000)
+        #expect(AppState.agentContextWindow(model: "deepseek-reasoner", providerID: "deepseek") == 128_000)
+        #expect(AppState.agentContextWindow(model: "deepseek-coder", providerID: "deepseek") == 64_000)
     }
 
     @Test("agent configuration routes auto and compression through flash")

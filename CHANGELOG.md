@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.108.0-rc32 - 2026-06-26
+
+### Fixed
+- **deepseek-v4 上下文窗口估值过小导致占用率提前顶到 100%（1.108.0-rc32）** —— 占用率圆环按 `对话已用 token / (窗口 − 固定开销)` 算,「窗口」来自 [AppStateAgentRequestEstimates.agentContextWindow](Xedit/AppStateAgentRequestEstimates.swift) 的启发式估值,而 deepseek 家族被一刀切硬编码成 64k。`deepseek-v4-pro` 实际是 **1M** 窗口,于是一轮 64.5k 输入就把圆环顶到 100%,看着像「context 算错了」。改为版本感知:deepseek 含 `v4`(pro/flash)→ 1,000,000;`v3.1`/`v3.2`/`reasoner`/`deepseek-chat` → 128,000;其余老版本保守兜底 64,000(宁可低估早顶圆环,也不高估冒真实溢出 provider 报错的险);显式 `-128k`/`-64k`/`1m` 后缀仍由上方 substring 分支优先命中。补 [XeditTests](XeditTests/XeditTests.swift) 五例锁定。注:自动压缩(阈值 75%)本就只在两轮之间、`!isResponding` 时跑,绝不打断流式输出 —— 截图里那轮卡在「等待命令审批」turn 未结束,所以压缩还没轮到,属预期;窗口估值修正后 75% 阈值也回到正确口径。
+
 ## 1.108.0-rc31 - 2026-06-26
 
 ### Fixed

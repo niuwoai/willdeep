@@ -253,7 +253,21 @@ extension AppState {
         if model.contains("gpt-4.1") { return 1_000_000 }
         if model.contains("gpt-4o") || model.contains("o1") || model.contains("o3") || model.contains("o4") { return 128_000 }
         if model.contains("claude") { return 200_000 }
-        if model.contains("deepseek") { return 64_000 }
+        if model.contains("deepseek") {
+            // Version-aware: the bare-`deepseek`→64k default was stale. v4
+            // (e.g. deepseek-v4-pro / -flash) ships a 1M window; the current
+            // v3.1/v3.2/reasoner/chat line is 128k; only genuinely legacy
+            // builds stay at the conservative 64k fallback (under-estimating
+            // is merely an early-100% gauge, whereas over-estimating risks a
+            // real provider overflow). Explicit `-128k`/`-64k`/`1m` id
+            // suffixes are already handled by the substring checks above.
+            if model.contains("v4") { return 1_000_000 }
+            if model.contains("v3.1") || model.contains("v3.2")
+                || model.contains("reasoner") || model.contains("deepseek-chat") {
+                return 128_000
+            }
+            return 64_000
+        }
         if model.contains("qwen-long") { return 1_000_000 }
         if model.contains("qwen") || model.contains("dashscope") { return 128_000 }
         if model.contains("kimi") || model.contains("moonshot") { return 128_000 }
