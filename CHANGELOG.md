@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.108.0-rc28 - 2026-06-26
+
+### Fixed
+- **正文里 `GB/T` 等带斜杠的普通词被误染成可点文件链接（1.108.0-rc28）** —— Agent 回复正文里像 `GB/T 45654—2025`、`TCP/IP`、`I/O`、`和/或`、日期 `01/02` 这种**带一个斜杠的普通词**,在落成的历史消息里被染成蓝色可点「文件引用」链接。根因:[AgentChatHistoryFormatter.applyPathChipAttributes](Xedit/AgentChatHistoryFormatter.swift) 的文件识别正则有个「只要含斜杠就算路径」的分支(`(?:[seg]+/)+[seg]+`),`GB/T` 完全命中。修复:收紧为只认两类——① 带路径锚点的(`/`、`./`、`../`、`~/` 开头,如 `/usr/bin/ssh`、`~/.willdeep/skills`);② 以**已知文件后缀**结尾的(可带任意层目录,如 `README.md`、`src/main.ts`、`Xedit/AppState.swift:81`)。`GB/T` 既无锚点又无后缀,不再命中。新规则严格比旧的窄,只会去掉误链接、不会凭空多出。流式气泡本就不走这段识别,只历史视图受影响。补 [AgentChatHistoryRendererTests](XeditTests/AgentChatHistoryRendererTests.swift) 两个测试锁定:`GB/T`/`TCP/IP`/`I/O` 不成 chip、真实路径仍成 chip。
+
 ## 1.108.0-rc27 - 2026-06-26
 
 ### Added

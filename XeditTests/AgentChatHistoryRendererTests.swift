@@ -678,4 +678,52 @@ struct AgentChatHistoryRendererTests {
         #expect(rendered.string.contains("Two"))
         #expect(!rendered.string.contains("One"))
     }
+
+    /// 收集一条 assistant 消息渲染后被「成文件 chip」的所有子串(即带
+    /// `.agentChatHistoryFilePath` 属性、值为 rawPath 的片段)。
+    private func chippedFilePaths(in content: String) -> Set<String> {
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [AgentMessage(role: .assistant, content: content)],
+            isDark: false
+        )
+        var paths: Set<String> = []
+        rendered.enumerateAttribute(
+            .agentChatHistoryFilePath,
+            in: NSRange(location: 0, length: rendered.length)
+        ) { value, _, _ in
+            if let path = value as? String { paths.insert(path) }
+        }
+        return paths
+    }
+
+    /// 带一个斜杠的普通词不应被染成可点文件链接(用户反馈:标准号
+    /// `GB/T 45654—2025` 被误判成文件夹引用)。
+    @Test
+    func bareSlashWordsAreNotMistakenForFilePaths() {
+        let chipped = chippedFilePaths(
+            in: "标准 GB/T 45654—2025 与 TCP/IP、I/O、和/或,以及日期 01/02 都只是普通文本。"
+        )
+        #expect(!chipped.contains("GB/T"))
+        #expect(!chipped.contains("TCP/IP"))
+        #expect(!chipped.contains("I/O"))
+        #expect(chipped.isEmpty)
+    }
+
+    /// 真实文件引用照常成 chip:带已知后缀的(可含目录前缀)、以及带路径
+    /// 锚点(`/`、`~/`)的绝对/家目录路径。
+    @Test
+    func genuineFilePathsStillBecomeChips() {
+        let extPaths = chippedFilePaths(
+            in: "见 README.md 和 src/main.ts 还有 Xedit/AppState.swift:81 这几处。"
+        )
+        #expect(extPaths.contains("README.md"))
+        #expect(extPaths.contains("src/main.ts"))
+        #expect(extPaths.contains("Xedit/AppState.swift:81"))
+
+        let anchored = chippedFilePaths(
+            in: "可执行文件在 /usr/bin/ssh,配置在 ~/.willdeep/skills 里。"
+        )
+        #expect(anchored.contains("/usr/bin/ssh"))
+        #expect(anchored.contains("~/.willdeep/skills"))
+    }
 }
