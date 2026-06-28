@@ -124,6 +124,16 @@ add_check.call(
 
 manual_test_queue = read_file(repo_root, "docs/MANUAL_TEST_QUEUE.md")
 short_drama_manual_versions = manual_test_queue.scan(/^##\s+(#{version_pattern})\s+—\s+短剧/m).flatten
+pending_short_drama_pointer_versions = manual_test_queue
+  .scan(/^- ⏳(?:.*\n(?:  .*\n?)*)/)
+  .select do |block|
+    block.include?("SHORT_DRAMA_AI_MVP_TRYOUT.md") ||
+      block.include?("最新短剧 smoke") ||
+      block.include?("phase 2 之前最后一个短剧") ||
+      block.include?("底部“验收记录”") ||
+      block.include?("都指向")
+  end
+  .flat_map { |block| block.scan(version_pattern).flatten }
 add_check.call(
   "Manual smoke latest short drama section",
   "docs/MANUAL_TEST_QUEUE.md",
@@ -135,6 +145,11 @@ add_check.call(
   "docs/MANUAL_TEST_QUEUE.md",
   short_drama_manual_versions.last,
   expected_count: 1
+)
+add_check.call(
+  "Manual smoke pending short drama pointer versions",
+  "docs/MANUAL_TEST_QUEUE.md",
+  pending_short_drama_pointer_versions
 )
 
 changelog = read_file(repo_root, "CHANGELOG.md")

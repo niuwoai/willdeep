@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.109.0-rc444 - 2026-06-28
+
+### Fixed
+- **短剧过期指针 smoke 纳入版本一致性守门（1.109.0-rc444）** —— `scripts/version_consistency.rb` 现在会检查仍处于 `⏳` 状态的短剧文档指针 smoke，防止人工队列继续要求当前试用文档指向旧版本。
+- 将已被新版覆盖的 rc442/rc443 短剧文档指针检查标为机器守门已覆盖，并新增 `1.109.0-rc444 — 短剧过期指针 smoke 守门` 作为当前人工验收入口。
+- 版本号从 **1.109.0-rc443** 提升为 **1.109.0-rc444**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧试用文档同步。
+
 ## 1.109.0-rc443 - 2026-06-28
 
 ### Fixed

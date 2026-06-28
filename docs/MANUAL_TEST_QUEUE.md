@@ -117,10 +117,8 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 
 - ⏳ 运行 `ruby scripts/version_consistency.rb ...` →
   报告 sources 中包含短剧 cutoff、tryout 和手动 smoke 队列三类检查。
-- ⏳ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
-  顶部基线和底部“验收记录”都指向 `1.109.0-rc442`。
-- ⏳ 打开 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) →
-  最新短剧 smoke 小节是 `1.109.0-rc442 — 短剧收口文档版本守门`。
+- ✅ 该版本的短剧试用文档指针检查已被后续 `version_consistency`
+  机器守门覆盖；当前入口以最新短剧 smoke 小节为准。
 
 ## 1.109.0-rc440 — 短剧 MVP 试用包内置手动 smoke 清单
 
@@ -146,13 +144,21 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 
 ## 1.109.0-rc443 — 短剧人工 smoke 队列顺序守门
 
-- ⏳ 运行 `ruby scripts/version_consistency.rb ...` →
+- ✅ 运行 `ruby scripts/version_consistency.rb ...` →
   报告 sources 中同时包含 `Manual smoke latest short drama section`
   和 `Manual smoke last short drama section`，且二者都指向 `1.109.0-rc443`。
+- ✅ 该版本的短剧试用文档指针检查已被后续 `version_consistency`
+  机器守门覆盖；当前入口以最新短剧 smoke 小节为准。
+
+## 1.109.0-rc444 — 短剧过期指针 smoke 守门
+
+- ⏳ 运行 `ruby scripts/version_consistency.rb ...` →
+  报告 sources 中包含 `Manual smoke pending short drama pointer versions`，
+  且所有待测短剧文档指针都指向 `1.109.0-rc444`。
 - ⏳ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
-  底部“验收记录”指向 `1.109.0-rc443 — 短剧人工 smoke 队列顺序守门`。
+  底部“验收记录”指向 `1.109.0-rc444 — 短剧过期指针 smoke 守门`。
 - ⏳ 打开 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) →
-  `1.109.0-rc443 — 短剧人工 smoke 队列顺序守门` 是 phase 2 之前最后一个短剧 smoke 小节。
+  旧版本短剧文档指针检查不再以 `⏳` 状态要求当前文档指向旧版本。
 
 ---
 
