@@ -185,16 +185,26 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 
 ## 1.109.0-rc447 — 短剧交付验收摘要
 
-- ⏳ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+- ✅ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
   `build/ci/short_drama_mvp_acceptance_report.md/json` 显示 pass，
   evidence 包含版本报告、试用包报告、试用包目录、手动 smoke checklist/results、
   cutoff、tryout 和 manual queue。
-- ⏳ 运行 `ruby scripts/version_consistency.rb ...` →
+- ✅ 运行 `ruby scripts/version_consistency.rb ...` →
   报告 `Delivery Gates` 包含短剧验收摘要本地/远端接线守门，且为 `PASS`。
-- ⏳ 打开 GitHub Actions `Tests` workflow →
+- ✅ 打开 GitHub Actions `Tests` workflow →
   job summary 和 artifact 中包含 `short_drama_mvp_acceptance_report.md/json`。
+- ✅ 该版本的短剧试用文档指针检查已被后续 `version_consistency`
+  机器守门覆盖；当前入口以最新短剧 smoke 小节为准。
+
+## 1.109.0-rc448 — 短剧验收摘要手动状态
+
+- ⏳ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+  Markdown 报告包含 `Manual Smoke Status`，JSON 报告包含
+  `manual_smoke_summary`，能看到 passed / pending / failed 计数和待办项标题。
+- ⏳ 打开 `build/ci/short_drama_mvp_acceptance_report.md` →
+  `Manual Smoke Status` 中至少列出当前 rc448 小节剩余待测项，方便交付时继续人工 smoke。
 - ⏳ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
-  底部“验收记录”指向 `1.109.0-rc447 — 短剧交付验收摘要`。
+  底部“验收记录”指向 `1.109.0-rc448 — 短剧验收摘要手动状态`。
 
 ---
 

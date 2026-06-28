@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.109.0-rc448 - 2026-06-28
+
+### Changed
+- **短剧验收摘要补手动 smoke 状态（1.109.0-rc448）** —— `scripts/short_drama_mvp_acceptance_report.rb` 现在会解析 `MANUAL_TEST_QUEUE.md` 当前短剧小节，输出 `manual_smoke_summary`，在 Markdown/JSON 中展示 ✅/⏳/❌ 计数和待办项标题，交付时能同时看到机器证据和人工剩余项。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc448 — 短剧验收摘要手动状态`。
+- 版本号从 **1.109.0-rc447** 提升为 **1.109.0-rc448**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧 cutoff/tryout 文档同步。
+
 ## 1.109.0-rc447 - 2026-06-28
 
 ### Added

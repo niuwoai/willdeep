@@ -35,6 +35,19 @@ def add_check(checks, name, ok, detail, path = nil)
   }.compact
 end
 
+def extract_manual_section(source, version)
+  return "" if version.empty?
+
+  match = source.match(/^##\s+#{Regexp.escape(version)}\s+—\s+短剧.*?(?=^##\s|\z)/m)
+  match ? match[0] : ""
+end
+
+def manual_item_titles(section, marker)
+  section.scan(/^- #{Regexp.escape(marker)}\s+(.+?)(?:\n\s{2}.+?)*$/).flatten.map do |item|
+    item.gsub(/\s+→.*/, "").strip
+  end
+end
+
 version_report_path = File.join(REPORT_DIR, "version_report.json")
 tryout_report_path = File.join(REPORT_DIR, "short_drama_mvp_tryout_package_report.json")
 version_report = read_json_file(version_report_path)
@@ -46,6 +59,7 @@ manual_queue = read_text("docs/MANUAL_TEST_QUEUE.md")
 canonical_version = version_report["canonical_version"].to_s
 manual_versions = manual_queue.scan(/^##\s+(\d+\.\d+\.\d+(?:-rc\d+)?)\s+—\s+短剧/m).flatten
 latest_manual_version = manual_versions.max_by { |version| semver_sort_key(version) }
+current_manual_section = extract_manual_section(manual_queue, canonical_version)
 delivery_gate_names = Array(version_report["delivery_checks"]).map { |check| check["name"].to_s }
 tryout_checks = Array(tryout_report["checks"])
 manual_result_paths = [
@@ -100,12 +114,20 @@ add_check(
 )
 add_check(
   checks,
-  "manual queue lists current acceptance report handoff",
+  "manual queue lists current short-drama handoff",
   !canonical_version.empty? &&
-    manual_queue.include?("## #{canonical_version} — 短剧交付验收摘要"),
-  "MANUAL_TEST_QUEUE.md should include the current short-drama acceptance report handoff section.",
+    current_manual_section.include?("## #{canonical_version} — 短剧"),
+  "MANUAL_TEST_QUEUE.md should include the current short-drama handoff section.",
   "docs/MANUAL_TEST_QUEUE.md"
 )
+
+manual_smoke_summary = {
+  "section_version" => canonical_version,
+  "passed_count" => manual_item_titles(current_manual_section, "✅").length,
+  "pending_count" => manual_item_titles(current_manual_section, "⏳").length,
+  "failed_count" => manual_item_titles(current_manual_section, "❌").length,
+  "pending_items" => manual_item_titles(current_manual_section, "⏳")
+}
 
 ok = checks.all? { |check| check.fetch("ok") }
 evidence = [
@@ -125,6 +147,7 @@ report = {
   "generated_at" => Time.now.utc.iso8601,
   "version" => canonical_version,
   "checks" => checks,
+  "manual_smoke_summary" => manual_smoke_summary,
   "evidence" => evidence
 }
 
@@ -144,6 +167,14 @@ File.write(
     "## Checks",
     "",
     *checks.map { |check| "- #{check.fetch("ok") ? "[x]" : "[ ]"} #{check.fetch("name")} — #{check.fetch("detail")}" },
+    "",
+    "## Manual Smoke Status",
+    "",
+    "- Passed: #{manual_smoke_summary.fetch("passed_count")}",
+    "- Pending: #{manual_smoke_summary.fetch("pending_count")}",
+    "- Failed: #{manual_smoke_summary.fetch("failed_count")}",
+    "",
+    *manual_smoke_summary.fetch("pending_items").map { |item| "- Pending: #{item}" },
     "",
     "## Evidence",
     "",
