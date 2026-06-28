@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.109.0-rc449 - 2026-06-28
+
+### Changed
+- **短剧验收摘要补交付就绪状态（1.109.0-rc449）** —— `scripts/short_drama_mvp_acceptance_report.rb` 现在输出 `handoff_readiness` 和 `remaining_risks`，Markdown 报告新增 `Handoff Readiness` / `Remaining Risks`，明确区分机器守门通过、人工 smoke 待测和当前剩余风险。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc449 — 短剧交付就绪与剩余风险摘要`。
+- 版本号从 **1.109.0-rc448** 提升为 **1.109.0-rc449**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧 cutoff/tryout 文档同步。
+
 ## 1.109.0-rc448 - 2026-06-28
 
 ### Changed

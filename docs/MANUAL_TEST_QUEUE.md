@@ -198,13 +198,25 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 
 ## 1.109.0-rc448 — 短剧验收摘要手动状态
 
-- ⏳ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+- ✅ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
   Markdown 报告包含 `Manual Smoke Status`，JSON 报告包含
   `manual_smoke_summary`，能看到 passed / pending / failed 计数和待办项标题。
-- ⏳ 打开 `build/ci/short_drama_mvp_acceptance_report.md` →
+- ✅ 打开 `build/ci/short_drama_mvp_acceptance_report.md` →
   `Manual Smoke Status` 中至少列出当前 rc448 小节剩余待测项，方便交付时继续人工 smoke。
-- ⏳ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
   底部“验收记录”指向 `1.109.0-rc448 — 短剧验收摘要手动状态`。
+- ✅ 该版本的短剧验收摘要状态检查已被 rc449 的交付就绪报告覆盖；当前入口以最新短剧 smoke 小节为准。
+
+## 1.109.0-rc449 — 短剧交付就绪与剩余风险摘要
+
+- ⏳ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+  Markdown 报告包含 `Handoff Readiness` 和 `Remaining Risks`，
+  JSON 报告包含 `handoff_readiness` 与 `remaining_risks`。
+- ⏳ 打开 `build/ci/short_drama_mvp_acceptance_report.json` →
+  在机器检查通过且当前小节仍有待测项时，顶层 `status` 保持 `pass`，
+  但 `handoff_readiness.overall` 显示 `manual_pending`。
+- ⏳ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向 `1.109.0-rc449 — 短剧交付就绪与剩余风险摘要`。
 
 ---
 

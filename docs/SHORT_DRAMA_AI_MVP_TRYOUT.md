@@ -1,6 +1,6 @@
 # Short Drama AI MVP Tryout
 
-> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc448
+> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc449
 
 这份文档用于试用当前短剧 AI MVP。它不是完整产品手册，只覆盖“不完美但可用”的主路径。
 
@@ -79,7 +79,7 @@ import_media_manifest(package_directory=build/ci/short_drama_mvp_tryout_package,
 
 7. 预期能看到 3 个本地产物、1 个 pending 远端视频任务、1 个 failed 修复任务；Widget/媒体任务侧栏会给出继续查看任务、按缺口排产和回写 review queue 的入口。
 8. 点击 Widget 里的 `Dry-run import`、`Import manifest` 或 `Review queue`，确认聊天输入框收到的是结构化 `<widget-handoff-action>`，而不是只能靠自然语言 prompt 猜工具。
-9. 运行 `scripts/short_drama_mvp_acceptance_report.rb`，确认生成的 `build/ci/short_drama_mvp_acceptance_report.md/json` 汇总了版本报告、试用包报告、手动 smoke 模板、当前手动 smoke 状态和交付文档入口。
+9. 运行 `scripts/short_drama_mvp_acceptance_report.rb`，确认生成的 `build/ci/short_drama_mvp_acceptance_report.md/json` 汇总了版本报告、试用包报告、手动 smoke 模板、当前手动 smoke 状态、交付就绪状态、剩余风险和交付文档入口。
 
 ## 图片编辑路径
 
@@ -98,4 +98,4 @@ import_media_manifest(package_directory=build/ci/short_drama_mvp_tryout_package,
 
 ## 验收记录
 
-人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.109.0-rc448 — 短剧验收摘要手动状态` 小节。
+人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.109.0-rc449 — 短剧交付就绪与剩余风险摘要` 小节。

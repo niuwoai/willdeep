@@ -48,6 +48,13 @@ def manual_item_titles(section, marker)
   end
 end
 
+def extract_section_bullets(source, heading)
+  section = source.match(/^##\s+#{Regexp.escape(heading)}\n\n(?<body>.*?)(?=^##\s|\z)/m)
+  return [] unless section
+
+  section[:body].scan(/^- (.+)$/).flatten.map(&:strip)
+end
+
 version_report_path = File.join(REPORT_DIR, "version_report.json")
 tryout_report_path = File.join(REPORT_DIR, "short_drama_mvp_tryout_package_report.json")
 version_report = read_json_file(version_report_path)
@@ -130,6 +137,31 @@ manual_smoke_summary = {
 }
 
 ok = checks.all? { |check| check.fetch("ok") }
+manual_status =
+  if manual_smoke_summary.fetch("failed_count").positive?
+    "failed"
+  elsif manual_smoke_summary.fetch("pending_count").positive?
+    "pending"
+  else
+    "pass"
+  end
+handoff_overall =
+  if !ok
+    "blocked"
+  elsif manual_status == "failed"
+    "manual_failed"
+  elsif manual_status == "pending"
+    "manual_pending"
+  else
+    "ready"
+  end
+handoff_readiness = {
+  "machine_status" => ok ? "pass" : "fail",
+  "manual_status" => manual_status,
+  "overall" => handoff_overall,
+  "note" => "CI and local contract gates can pass while manual smoke remains pending; use overall to decide handoff readiness."
+}
+remaining_risks = extract_section_bullets(cutoff, "当前剩余风险")
 evidence = [
   { "label" => "Version report", "path" => File.join(REPORT_DIR, "version_report.md") },
   { "label" => "Tryout package report", "path" => File.join(REPORT_DIR, "short_drama_mvp_tryout_package_report.md") },
@@ -148,6 +180,8 @@ report = {
   "version" => canonical_version,
   "checks" => checks,
   "manual_smoke_summary" => manual_smoke_summary,
+  "handoff_readiness" => handoff_readiness,
+  "remaining_risks" => remaining_risks,
   "evidence" => evidence
 }
 
@@ -164,6 +198,13 @@ File.write(
     "- Generated at: `#{report.fetch("generated_at")}`",
     "- Evidence items: #{evidence.length}",
     "",
+    "## Handoff Readiness",
+    "",
+    "- Machine status: #{handoff_readiness.fetch("machine_status")}",
+    "- Manual status: #{handoff_readiness.fetch("manual_status")}",
+    "- Overall: #{handoff_readiness.fetch("overall")}",
+    "- Note: #{handoff_readiness.fetch("note")}",
+    "",
     "## Checks",
     "",
     *checks.map { |check| "- #{check.fetch("ok") ? "[x]" : "[ ]"} #{check.fetch("name")} — #{check.fetch("detail")}" },
@@ -175,6 +216,10 @@ File.write(
     "- Failed: #{manual_smoke_summary.fetch("failed_count")}",
     "",
     *manual_smoke_summary.fetch("pending_items").map { |item| "- Pending: #{item}" },
+    "",
+    "## Remaining Risks",
+    "",
+    *(remaining_risks.empty? ? ["- No remaining risks found in cutoff document."] : remaining_risks.map { |risk| "- #{risk}" }),
     "",
     "## Evidence",
     "",
