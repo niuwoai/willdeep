@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-28 | Current version: v1.109.0-rc439
+> Last updated: 2026-06-28 | Current version: v1.109.0-rc440
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **短剧 MVP 试用包内置手动 smoke 清单（1.109.0-rc440）** —— `scripts/short_drama_mvp_tryout_package.rb` 生成的本地样例包新增 `manual-smoke-checklist.md`，把 dry-run 导入、正式导入、媒体任务侧栏、`latest-media-import` 和 Widget 结构化动作验收步骤放到包内，并在 JSON/Markdown 报告中暴露清单路径。
 - **短剧 MVP 试用包结构化 Widget 动作（1.109.0-rc439）** —— 本地试用包的 `widget-preview.html` 生成 `sendToolAction` 按钮，直接把 manifest dry-run、正式导入和 review queue dry-run 参数交给聊天窗口，覆盖 Widget 工具动作回传路径。
 - **短剧 MVP 本地试用包生成器（1.109.0-rc438）** —— `scripts/short_drama_mvp_tryout_package.rb` 会生成本地短剧制作包样例，覆盖 completed 产物、pending 远端任务、失败修复项、review queue、gap report 和 Widget handoff；本地一键测试与 GitHub Actions 会产出报告和可下载样例包。
 - **短剧/媒体工具扩容后的上下文压缩保护（1.109.0-rc437）** —— 自动压缩只按可被压缩的会话历史 token 触发，固定工具 schema 开销不再让短聊天在小窗口模型下提前进入压缩；工具 schema 估算测试上限同步到当前工具规模并继续守住膨胀风险。

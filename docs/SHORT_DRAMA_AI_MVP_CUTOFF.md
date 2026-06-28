@@ -1,6 +1,6 @@
 # Short Drama AI MVP Cutoff
 
-> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc439
+> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc440
 
 ## 收敛结论
 
@@ -16,7 +16,7 @@
 - 短剧项目支持集、分镜、人物、场景、参考图、候选图、制作缺口、检查项和制作包导出。
 - 制作包支持 Ruby/第三方 API 脚本导出、manifest 导回、pending 远端任务登记、Widget 预览和审片 CSV 回写。
 - 关键链路已建立 Ruby 合约测试，并接入本地 `scripts/run_tests.sh` 和 GitHub Actions。
-- 本地可试用包生成器 `scripts/short_drama_mvp_tryout_package.rb` 可生成不调用外网 API 的制作包样例，用于 dry-run/import/Widget/review queue 手动 smoke；样例 Widget 使用 `sendToolAction` 回传结构化工具动作。
+- 本地可试用包生成器 `scripts/short_drama_mvp_tryout_package.rb` 可生成不调用外网 API 的制作包样例，用于 dry-run/import/Widget/review queue 手动 smoke；样例 Widget 使用 `sendToolAction` 回传结构化工具动作，包内包含 `manual-smoke-checklist.md` 方便人工验收。
 
 ## MVP 暂缓范围
 
@@ -28,7 +28,7 @@
 
 ## 可用版验收清单
 
-最近一次执行：2026-06-28，基线 `v1.109.0-rc439`，以下命令均通过；Xcode 构建仅保留既有 warning。
+最近一次执行：2026-06-28，基线 `v1.109.0-rc440`，以下命令均通过；Xcode 构建仅保留既有 warning。
 
 - `ruby scripts/version_consistency.rb build/version_report.md build/version_report.json`
 - `ruby scripts/complexity_guard.rb build/ci/complexity_report.md build/ci/complexity_report.json`
@@ -50,7 +50,7 @@
 - 打开图片蒙版编辑器，画选区并发送到聊天，确认包含真实 `mask_path`。
 - 导出制作包并打开 `widget-preview.html`，确认 Widget 侧栏展示来源和可用动作。
 - 使用 `import_media_manifest(import_pending_tasks=true)` 导回 manifest，确认下一轮聊天能看到 `latest-media-import`。
-- 或运行本地试用包生成器，使用 `build/ci/short_drama_mvp_tryout_package` 验证 dry-run 导入、pending 任务登记、Widget handoff 和 review queue 回写入口。
+- 或运行本地试用包生成器，使用 `build/ci/short_drama_mvp_tryout_package/manual-smoke-checklist.md` 验证 dry-run 导入、pending 任务登记、Widget handoff 和 review queue 回写入口。
 
 ## 下一步策略
 

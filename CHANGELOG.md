@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.109.0-rc440 - 2026-06-28
+
+### Added
+- **短剧 MVP 试用包内置手动 smoke 清单（1.109.0-rc440）** —— `scripts/short_drama_mvp_tryout_package.rb` 现在会生成 `manual-smoke-checklist.md`，把 dry-run 导入、正式导入、媒体任务侧栏、`latest-media-import` 和 Widget 结构化动作验收步骤放进试用包本身。
+- 试用包 JSON/Markdown 报告新增 `manual_smoke_checklist_path`，并自检清单必须覆盖 `<widget-handoff-action>` 与 `short_drama_import_review_csv`，避免交付包只适合机器跑、不适合人验收。
+- 版本号从 **1.109.0-rc439** 提升为 **1.109.0-rc440**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧试用文档同步。
+
 ## 1.109.0-rc439 - 2026-06-28
 
 ### Changed

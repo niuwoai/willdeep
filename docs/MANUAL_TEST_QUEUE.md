@@ -113,6 +113,17 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   Widget 侧栏能显示来源路径、制作包目录和 `import_media_manifest` / gap plan /
   review queue 等 handoff 入口。
 
+## 1.109.0-rc440 — 短剧 MVP 试用包内置手动 smoke 清单
+
+- ⏳ 运行 `ruby scripts/short_drama_mvp_tryout_package.rb ...` →
+  样例包包含 `manual-smoke-checklist.md`，报告 Markdown/JSON 中能看到
+  `manual_smoke_checklist_path`。
+- ⏳ 打开 `build/ci/short_drama_mvp_tryout_package/manual-smoke-checklist.md` →
+  清单覆盖 dry-run 导入、正式导入、媒体任务侧栏、`latest-media-import`
+  和 Widget 结构化动作验收步骤。
+- ⏳ 按清单执行到 Widget 动作部分 → `Dry-run import`、`Import manifest`、
+  `Review queue` 均能把结构化 `<widget-handoff-action>` 放入聊天输入框。
+
 ## 1.109.0-rc439 — 短剧 MVP 试用包结构化 Widget 动作
 
 - ⏳ 打开 `build/ci/short_drama_mvp_tryout_package/widget-preview.html` →
