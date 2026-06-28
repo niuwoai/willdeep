@@ -77,6 +77,27 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 - ⏳ Workflow 跑到一半切 session / 切 workspace 窗口 → 卡片仍正确显示
   在原 session，新 session 看不到（runtime 隔离）
 
+## 1.109.0-rc436 — 短剧 AI 制作 MVP 收口
+
+- ⏳ 打开或新建一个短剧项目 → 右侧短剧侧栏能看到集、分镜、人物、
+  场景、参考图状态、制作缺口和媒体任务徽标。
+- ⏳ 在项目或分集的制作缺口区点击「补主图 / 补视频 / 审片」→
+  聊天输入框出现对应 `<short-drama-production-gap-action>`，并包含
+  dry-run 参数、正式提交参数、打开/刷新媒体任务参数。
+- ⏳ 通过 some.im 或 manifest 导入登记一个 pending 图片/视频任务 →
+  媒体任务侧栏显示运行中任务，手动刷新后聊天下一轮能看到
+  `latest-media-task-refresh`。
+- ⏳ 完成或导入一个带多张图片的媒体任务 → 打开候选图 Widget，选择
+  一张图后聊天下一轮能看到所选图片和设主图/蒙版/放大/图生视频动作。
+- ⏳ 打开图片蒙版编辑器，画选区并点「发送到聊天」→ 聊天输入框包含
+  真实 `mask_path`，并给出 `edit_image_with_mask` 的可执行参数。
+- ⏳ 导出短剧制作包 → 自动打开或可手动打开 `widget-preview.html`，
+  Widget 侧栏显示来源、制作包路径和可用动作。
+- ⏳ 调用 `import_media_manifest(import_pending_tasks=true)` 导回制作包 →
+  媒体任务侧栏显示导回任务，聊天下一轮能看到 `latest-media-import`。
+- ⏳ 检查项修复流：从检查项打开蒙版/放大/补拍任务，任务完成后仍保留
+  `review_item_id`，并可关闭对应检查项。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）
