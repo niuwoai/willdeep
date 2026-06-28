@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.109.0-rc439 - 2026-06-28
+
+### Changed
+- **短剧 MVP 试用包 Widget 改为结构化动作（1.109.0-rc439）** —— `widget-preview.html` 现在生成 `sendToolAction` 按钮，直接携带 `import_media_manifest` dry-run / 正式导入和 `short_drama_import_review_csv` review queue dry-run 参数，保留 `sendPrompt` 作为兜底。
+- `scripts/short_drama_mvp_tryout_package.rb` 新增结构化 Widget 动作检查，确保本地试用包覆盖网页 Widget 到聊天窗口的工具动作回传路径。
+- 版本号从 **1.109.0-rc438** 提升为 **1.109.0-rc439**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧试用文档同步。
+
 ## 1.109.0-rc438 - 2026-06-28
 
 ### Added

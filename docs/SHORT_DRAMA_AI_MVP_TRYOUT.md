@@ -1,6 +1,6 @@
 # Short Drama AI MVP Tryout
 
-> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc438
+> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc439
 
 这份文档用于试用当前短剧 AI MVP。它不是完整产品手册，只覆盖“不完美但可用”的主路径。
 
@@ -62,7 +62,7 @@ import_media_manifest(package_directory=<制作包目录>, dry_run=false, import
 ## 本地试用包路径
 
 1. 运行 `scripts/short_drama_mvp_tryout_package.rb`。
-2. 打开 `build/ci/short_drama_mvp_tryout_package/widget-preview.html`，或在聊天里调用 `show_widget` 指向该 HTML。
+2. 打开 `build/ci/short_drama_mvp_tryout_package/widget-preview.html`，或在聊天里调用 `show_widget` 指向该 HTML。Widget 顶部的结构化按钮会通过 `sendToolAction` 把工具名和参数交回聊天窗口。
 3. 先 dry-run：
 
 ```text
@@ -76,6 +76,7 @@ import_media_manifest(package_directory=build/ci/short_drama_mvp_tryout_package,
 ```
 
 5. 预期能看到 3 个本地产物、1 个 pending 远端视频任务、1 个 failed 修复任务；Widget/媒体任务侧栏会给出继续查看任务、按缺口排产和回写 review queue 的入口。
+6. 点击 Widget 里的 `Dry-run import`、`Import manifest` 或 `Review queue`，确认聊天输入框收到的是结构化 `<widget-handoff-action>`，而不是只能靠自然语言 prompt 猜工具。
 
 ## 图片编辑路径
 
@@ -94,4 +95,4 @@ import_media_manifest(package_directory=build/ci/short_drama_mvp_tryout_package,
 
 ## 验收记录
 
-人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.109.0-rc438 — 短剧 MVP 本地试用包` 小节。
+人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.109.0-rc439 — 短剧 MVP 试用包结构化 Widget 动作` 小节。

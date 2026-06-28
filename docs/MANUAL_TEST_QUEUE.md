@@ -113,6 +113,17 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   Widget 侧栏能显示来源路径、制作包目录和 `import_media_manifest` / gap plan /
   review queue 等 handoff 入口。
 
+## 1.109.0-rc439 — 短剧 MVP 试用包结构化 Widget 动作
+
+- ⏳ 打开 `build/ci/short_drama_mvp_tryout_package/widget-preview.html` →
+  顶部能看到 `Dry-run import`、`Import manifest`、`Review queue` 三个结构化动作按钮。
+- ⏳ 点击 `Dry-run import` →
+  聊天输入框出现 `<widget-handoff-action>`，其中 `handoff_tool=import_media_manifest`，
+  `handoff_arguments` 包含 `dry_run=true, import_pending_tasks=true`。
+- ⏳ 点击 `Review queue` →
+  聊天输入框出现 `handoff_tool=short_drama_import_review_csv`，
+  参数指向 `production-review-queue.csv` 且 `dry_run=true`。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）
