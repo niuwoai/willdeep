@@ -152,13 +152,22 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 
 ## 1.109.0-rc444 — 短剧过期指针 smoke 守门
 
-- ⏳ 运行 `ruby scripts/version_consistency.rb ...` →
+- ✅ 运行 `ruby scripts/version_consistency.rb ...` →
   报告 sources 中包含 `Manual smoke pending short drama pointer versions`，
   且所有待测短剧文档指针都指向 `1.109.0-rc444`。
+- ✅ 该版本的短剧试用文档指针检查已被后续 `version_consistency`
+  机器守门覆盖；当前入口以最新短剧 smoke 小节为准。
+
+## 1.109.0-rc445 — 短剧交付验收入口守门
+
+- ⏳ 运行 `ruby scripts/version_consistency.rb ...` →
+  报告 `Delivery Gates` 中包含本地一键验收、远端 Go agent 测试和
+  远端 XeditTests 三类入口，且全部为 `PASS`。
+- ⏳ 打开 [SHORT_DRAMA_AI_MVP_CUTOFF.md](SHORT_DRAMA_AI_MVP_CUTOFF.md) →
+  “可用版验收清单”同时包含 `scripts/run_tests.sh`、GitHub Actions
+  `Tests` workflow 的 `go test ./...` 和 `Run XeditTests`。
 - ⏳ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
-  底部“验收记录”指向 `1.109.0-rc444 — 短剧过期指针 smoke 守门`。
-- ⏳ 打开 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) →
-  旧版本短剧文档指针检查不再以 `⏳` 状态要求当前文档指向旧版本。
+  底部“验收记录”指向 `1.109.0-rc445 — 短剧交付验收入口守门`。
 
 ---
 

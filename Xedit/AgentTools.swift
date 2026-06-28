@@ -431,20 +431,21 @@ enum AgentToolRunner {
             let stdoutCollector = CommandOutputCollector(limit: outputLimit)
             let stderrCollector = CommandOutputCollector(limit: outputLimit)
             let runState = CommandRunState()
-
-            stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                if !data.isEmpty { stdoutCollector.append(data) }
+            let stdoutDrain = Task.detached(priority: .utility) {
+                stdoutCollector.append(stdoutPipe.fileHandleForReading.readDataToEndOfFile())
             }
-            stderrPipe.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                if !data.isEmpty { stderrCollector.append(data) }
+            let stderrDrain = Task.detached(priority: .utility) {
+                stderrCollector.append(stderrPipe.fileHandleForReading.readDataToEndOfFile())
             }
             do {
                 try process.run()
             } catch {
-                stdoutPipe.fileHandleForReading.readabilityHandler = nil
-                stderrPipe.fileHandleForReading.readabilityHandler = nil
+                try? stdoutPipe.fileHandleForReading.close()
+                try? stdoutPipe.fileHandleForWriting.close()
+                try? stderrPipe.fileHandleForReading.close()
+                try? stderrPipe.fileHandleForWriting.close()
+                await stdoutDrain.value
+                await stderrDrain.value
                 return CommandOutcome(exitStatus: -1, stdout: "", stderr: error.localizedDescription, timedOut: false, launchFailed: true)
             }
 
@@ -463,11 +464,8 @@ enum AgentToolRunner {
 
             process.waitUntilExit()
             timeoutWorkItem.cancel()
-
-            stdoutPipe.fileHandleForReading.readabilityHandler = nil
-            stderrPipe.fileHandleForReading.readabilityHandler = nil
-            stdoutCollector.append(stdoutPipe.fileHandleForReading.readDataToEndOfFile())
-            stderrCollector.append(stderrPipe.fileHandleForReading.readDataToEndOfFile())
+            await stdoutDrain.value
+            await stderrDrain.value
 
             return CommandOutcome(
                 exitStatus: process.terminationStatus,

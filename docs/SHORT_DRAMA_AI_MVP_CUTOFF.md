@@ -1,6 +1,6 @@
 # Short Drama AI MVP Cutoff
 
-> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc444
+> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc445
 
 ## 收敛结论
 
@@ -28,8 +28,9 @@
 
 ## 可用版验收清单
 
-最近一次执行：2026-06-28，基线 `v1.109.0-rc444`，以下命令均通过；Xcode 构建仅保留既有 warning。
+最近一次执行：2026-06-28，基线 `v1.109.0-rc445`，以下命令均通过；Xcode 构建仅保留既有 warning。
 
+- `scripts/run_tests.sh`
 - `ruby scripts/version_consistency.rb build/version_report.md build/version_report.json`
 - `ruby scripts/complexity_guard.rb build/ci/complexity_report.md build/ci/complexity_report.json`
 - `ruby scripts/short_drama_media_contract_test.rb build/ci/short_drama_media_report.md build/ci/short_drama_media_report.json`
@@ -40,6 +41,7 @@
 - `ruby scripts/image_edit_contract_test.rb build/ci/image_edit_report.md build/ci/image_edit_report.json`
 - `ruby scripts/short_drama_mvp_tryout_package.rb build/ci/short_drama_mvp_tryout_package build/ci/short_drama_mvp_tryout_package_report.md build/ci/short_drama_mvp_tryout_package_report.json`
 - `xcodebuild -quiet -project Xedit.xcodeproj -scheme Xedit -configuration Debug -destination 'platform=macOS' -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO build`
+- GitHub Actions `Tests` workflow 的 `Run Go agent tests`（`go test ./...`，working directory: `willdeep-agent`）和 `Run XeditTests` 均通过。
 
 ## 手动 smoke 场景
 

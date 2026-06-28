@@ -36,6 +36,7 @@ def semver_sort_key(version)
 end
 
 checks = []
+delivery_checks = []
 
 add_check = lambda do |name, path, versions, expected_count: nil|
   versions = Array(versions).compact
@@ -45,6 +46,15 @@ add_check = lambda do |name, path, versions, expected_count: nil|
     path: path,
     versions: versions,
     expected_count: expected_count
+  }
+end
+
+add_delivery_check = lambda do |name, path, ok, detail|
+  delivery_checks << {
+    name: name,
+    path: path,
+    ok: ok,
+    detail: detail
   }
 end
 
@@ -152,6 +162,42 @@ add_check.call(
   pending_short_drama_pointer_versions
 )
 
+run_tests = read_file(repo_root, "scripts/run_tests.sh")
+workflow = read_file(repo_root, ".github/workflows/test.yml")
+add_delivery_check.call(
+  "Short drama cutoff documents one-shot local acceptance",
+  "docs/SHORT_DRAMA_AI_MVP_CUTOFF.md",
+  short_drama_cutoff.include?("`scripts/run_tests.sh`"),
+  "Cutoff should name the local one-shot acceptance command."
+)
+add_delivery_check.call(
+  "Short drama cutoff documents remote Go acceptance",
+  "docs/SHORT_DRAMA_AI_MVP_CUTOFF.md",
+  short_drama_cutoff.include?("`go test ./...`") && short_drama_cutoff.include?("willdeep-agent"),
+  "Cutoff should name the remote Go agent test command and working directory."
+)
+add_delivery_check.call(
+  "Short drama cutoff documents remote Xedit acceptance",
+  "docs/SHORT_DRAMA_AI_MVP_CUTOFF.md",
+  short_drama_cutoff.include?("GitHub Actions `Tests`") && short_drama_cutoff.include?("Run XeditTests"),
+  "Cutoff should name the GitHub Actions Tests workflow and Xedit test gate."
+)
+add_delivery_check.call(
+  "Local acceptance still runs short-drama tryout package",
+  "scripts/run_tests.sh",
+  run_tests.include?("scripts/short_drama_mvp_tryout_package.rb") &&
+    run_tests.include?("short_drama_mvp_tryout_package_report.md"),
+  "scripts/run_tests.sh should generate the local short-drama MVP tryout package report."
+)
+add_delivery_check.call(
+  "Remote acceptance still runs Go and Xedit gates",
+  ".github/workflows/test.yml",
+  workflow.include?("Run Go agent tests") &&
+    workflow.include?("go test ./...") &&
+    workflow.include?("Run XeditTests"),
+  "GitHub Actions should run Go agent tests and XeditTests."
+)
+
 changelog = read_file(repo_root, "CHANGELOG.md")
 add_check.call(
   "CHANGELOG top entry",
@@ -187,6 +233,9 @@ end
 if all_versions.uniq.length > 1
   failures << "Version sources disagree: #{all_versions.uniq.sort.join(", ")}"
 end
+delivery_checks.each do |check|
+  failures << "#{check[:name]} missing: #{check[:detail]}" unless check[:ok]
+end
 
 ok = failures.empty?
 report = {
@@ -194,6 +243,7 @@ report = {
   generated_at: Time.now.utc.iso8601,
   canonical_version: canonical_version,
   checks: checks,
+  delivery_checks: delivery_checks,
   failures: failures
 }
 
@@ -209,6 +259,7 @@ md = +"# Version Consistency Report\n\n"
 md << "**Status:** #{status}\n\n"
 md << "- Canonical version: #{canonical_version || "unknown"}\n"
 md << "- Checked sources: #{checks.length}\n"
+md << "- Delivery gates: #{delivery_checks.length}\n"
 md << "- Failures: #{failures.length}\n\n"
 
 if failures.empty?
@@ -225,6 +276,13 @@ md << "| --- | --- | --- |\n"
 checks.each do |check|
   versions = check[:versions].empty? ? "_missing_" : check[:versions].uniq.join(", ")
   md << "| #{check[:name]} | `#{check[:path]}` | `#{versions}` |\n"
+end
+
+md << "\n## Delivery Gates\n\n"
+md << "| Gate | Path | Status | Detail |\n"
+md << "| --- | --- | --- | --- |\n"
+delivery_checks.each do |check|
+  md << "| #{check[:name]} | `#{check[:path]}` | #{check[:ok] ? "PASS" : "FAIL"} | #{check[:detail]} |\n"
 end
 
 File.write(File.expand_path(markdown_path, repo_root), md)

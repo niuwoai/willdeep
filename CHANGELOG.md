@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.109.0-rc445 - 2026-06-28
+
+### Fixed
+- **短剧交付验收入口纳入版本一致性守门（1.109.0-rc445）** —— `scripts/version_consistency.rb` 现在会检查 cutoff 是否明确写出本地一键 `scripts/run_tests.sh`、远端 `go test ./...` 和 GitHub Actions `Run XeditTests` 门槛，防止交付说明漏跑关键路径。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md` 的可用版验收清单补充本地一键入口和远端 CI Go/Xedit 验收入口；试用文档与人工 smoke 队列同步指向 `1.109.0-rc445 — 短剧交付验收入口守门`。
+- 前台 `run_command` 改为同步 drain stdout/stderr pipe，避免短命令在进程退出时偶发丢掉最后一段 stdout，稳定本轮交付验收。
+- 版本号从 **1.109.0-rc444** 提升为 **1.109.0-rc445**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧 cutoff/tryout 文档同步。
+
 ## 1.109.0-rc444 - 2026-06-28
 
 ### Fixed
