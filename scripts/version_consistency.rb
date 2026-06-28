@@ -164,6 +164,7 @@ add_check.call(
 
 run_tests = read_file(repo_root, "scripts/run_tests.sh")
 workflow = read_file(repo_root, ".github/workflows/test.yml")
+short_drama_tryout_package = read_file(repo_root, "scripts/short_drama_mvp_tryout_package.rb")
 add_delivery_check.call(
   "Short drama cutoff documents one-shot local acceptance",
   "docs/SHORT_DRAMA_AI_MVP_CUTOFF.md",
@@ -196,6 +197,15 @@ add_delivery_check.call(
     workflow.include?("go test ./...") &&
     workflow.include?("Run XeditTests"),
   "GitHub Actions should run Go agent tests and XeditTests."
+)
+add_delivery_check.call(
+  "Tryout package preserves manual smoke result templates",
+  "scripts/short_drama_mvp_tryout_package.rb",
+  short_drama_tryout_package.include?("manual-smoke-results-template.md") &&
+    short_drama_tryout_package.include?("manual-smoke-results-template.json") &&
+    short_drama_tryout_package.include?("manual_smoke_results_md_path") &&
+    short_drama_tryout_package.include?("manual_smoke_results_json_path"),
+  "Tryout package report should expose Markdown and JSON manual smoke result templates."
 )
 
 changelog = read_file(repo_root, "CHANGELOG.md")

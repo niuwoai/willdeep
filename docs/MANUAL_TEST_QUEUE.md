@@ -160,14 +160,28 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 
 ## 1.109.0-rc445 — 短剧交付验收入口守门
 
-- ⏳ 运行 `ruby scripts/version_consistency.rb ...` →
+- ✅ 运行 `ruby scripts/version_consistency.rb ...` →
   报告 `Delivery Gates` 中包含本地一键验收、远端 Go agent 测试和
   远端 XeditTests 三类入口，且全部为 `PASS`。
-- ⏳ 打开 [SHORT_DRAMA_AI_MVP_CUTOFF.md](SHORT_DRAMA_AI_MVP_CUTOFF.md) →
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_CUTOFF.md](SHORT_DRAMA_AI_MVP_CUTOFF.md) →
   “可用版验收清单”同时包含 `scripts/run_tests.sh`、GitHub Actions
   `Tests` workflow 的 `go test ./...` 和 `Run XeditTests`。
+- ✅ 该版本的短剧试用文档指针检查已被后续 `version_consistency`
+  机器守门覆盖；当前入口以最新短剧 smoke 小节为准。
+
+## 1.109.0-rc446 — 短剧人工 smoke 结果模板
+
+- ⏳ 运行 `ruby scripts/short_drama_mvp_tryout_package.rb ...` →
+  样例包包含 `manual-smoke-results-template.md` 和
+  `manual-smoke-results-template.json`，报告 Markdown/JSON 中能看到
+  两个结果模板路径。
+- ⏳ 打开 `build/ci/short_drama_mvp_tryout_package/manual-smoke-results-template.md` →
+  表格覆盖 dry-run 导入、正式导入、`latest-media-import`、Widget
+  结构化 handoff 和 review queue dry-run；所有状态初始为 `untested`。
+- ⏳ 运行 `ruby scripts/version_consistency.rb ...` →
+  报告 `Delivery Gates` 包含试用包人工 smoke 结果模板守门，且为 `PASS`。
 - ⏳ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
-  底部“验收记录”指向 `1.109.0-rc445 — 短剧交付验收入口守门`。
+  底部“验收记录”指向 `1.109.0-rc446 — 短剧人工 smoke 结果模板`。
 
 ---
 

@@ -281,6 +281,8 @@ review_queue_import_arguments = "file_path=#{review_queue_preview_path}, dry_run
 gap_plan_prompt = "请读取 production-gap-report.json，按缺口报告给出补图、补视频和检查项修复顺序。package_directory=#{PACKAGE_DIR}"
 dry_run_prompt = "请 dry-run 导入这个短剧 MVP 试用包：import_media_manifest(#{dry_run_import_arguments})"
 manual_smoke_checklist_path = File.join(PACKAGE_DIR, "manual-smoke-checklist.md")
+manual_smoke_results_md_path = File.join(PACKAGE_DIR, "manual-smoke-results-template.md")
+manual_smoke_results_json_path = File.join(PACKAGE_DIR, "manual-smoke-results-template.json")
 
 widget_html = [
   "<!doctype html>",
@@ -309,8 +311,42 @@ widget_html = [
   "<li>Timeline: <code>#{timeline_preview_path}</code></li>",
   "<li>Gap report: <code>#{gap_report_preview_path}</code></li>",
   "<li>Manual smoke checklist: <code>#{manual_smoke_checklist_path}</code></li>",
+  "<li>Manual smoke results: <code>#{manual_smoke_results_md_path}</code></li>",
   "</ul>"
 ].join("\n")
+
+manual_smoke_steps = [
+  {
+    "id" => "dry_run_import",
+    "title" => "Dry-run import",
+    "command" => "import_media_manifest(#{dry_run_import_arguments})",
+    "expected" => "Summary shows 3 completed artifacts, 1 pending remote task, and 1 failed repair task."
+  },
+  {
+    "id" => "submit_import",
+    "title" => "Real local import",
+    "command" => "import_media_manifest(#{submit_import_arguments})",
+    "expected" => "Media task side panel shows completed, pending, and failed short-drama media tasks."
+  },
+  {
+    "id" => "latest_media_import_context",
+    "title" => "Chat import context",
+    "command" => "Send the next chat turn after import.",
+    "expected" => "Chat context includes latest-media-import with package and task counts."
+  },
+  {
+    "id" => "widget_tool_actions",
+    "title" => "Widget structured handoff",
+    "command" => "Open widget-preview.html and click Dry-run import, Import manifest, and Review queue.",
+    "expected" => "Each click puts a structured `<widget-handoff-action>` into the chat composer."
+  },
+  {
+    "id" => "review_queue_dry_run",
+    "title" => "Review queue dry-run",
+    "command" => "short_drama_import_review_csv(#{review_queue_import_arguments})",
+    "expected" => "Review queue targets production-review-queue.csv with dry_run=true and preserves review_item_id."
+  }
+]
 
 manual_smoke_checklist = [
   "# Short Drama MVP Tryout Manual Smoke Checklist",
@@ -324,6 +360,8 @@ manual_smoke_checklist = [
   "- Manifest: `#{manifest_preview_path}`",
   "- Widget preview: `#{File.join(PACKAGE_DIR, "widget-preview.html")}`",
   "- Review queue: `#{review_queue_preview_path}`",
+  "- Results Markdown template: `#{manual_smoke_results_md_path}`",
+  "- Results JSON template: `#{manual_smoke_results_json_path}`",
   "",
   "## Expected Import Shape",
   "",
@@ -351,11 +389,53 @@ manual_smoke_checklist = [
   "6. Open `widget-preview.html` through the Widget side panel or `show_widget`.",
   "7. Click `Dry-run import`, `Import manifest`, and `Review queue`; each click should put a structured `<widget-handoff-action>` into the chat composer.",
   "8. Confirm `Review queue` targets `short_drama_import_review_csv` and points at `production-review-queue.csv` with `dry_run=true`.",
+  "9. Record the run in `manual-smoke-results-template.md` or `manual-smoke-results-template.json` before marking the manual queue item done.",
   "",
   "## Notes",
   "",
   "- Do not put real provider tokens in this package.",
   "- Real API smoke still depends on external accounts, quota, network, and provider behavior.",
+  ""
+].join("\n")
+
+manual_smoke_results_template = {
+  "schema" => "willdeep.short_drama.manual_smoke_results.v1",
+  "generated_at" => exported_at,
+  "package_directory" => PACKAGE_DIR,
+  "overall_status" => "untested",
+  "tester" => "",
+  "tested_at" => "",
+  "app_version" => "",
+  "notes" => "",
+  "steps" => manual_smoke_steps.map do |step|
+    step.merge(
+      "status" => "untested",
+      "actual" => "",
+      "evidence" => ""
+    )
+  end
+}
+
+manual_smoke_results_md = [
+  "# Short Drama MVP Tryout Manual Smoke Results",
+  "",
+  "- Package directory: `#{PACKAGE_DIR}`",
+  "- Generated at: `#{exported_at}`",
+  "- Overall status: `untested`",
+  "- Tester:",
+  "- Tested at:",
+  "- App version:",
+  "",
+  "## Results",
+  "",
+  "| Step | Status | Expected | Evidence |",
+  "| --- | --- | --- | --- |",
+  *manual_smoke_steps.map { |step| "| #{step.fetch("title")} | untested | #{step.fetch("expected")} |  |" },
+  "",
+  "## Notes",
+  "",
+  "- Keep provider tokens out of this file.",
+  "- Attach screenshots, task IDs, or copied chat context snippets in the Evidence column when marking a step pass/fail.",
   ""
 ].join("\n")
 
@@ -379,6 +459,8 @@ write_text(File.join(PACKAGE_DIR, "production-review-template.csv"), csv_string(
 write_text(File.join(PACKAGE_DIR, "production-review-queue.csv"), csv_string([review_header, review_row]))
 write_text(File.join(PACKAGE_DIR, "widget-preview.html"), widget_html)
 write_text(File.join(PACKAGE_DIR, "manual-smoke-checklist.md"), manual_smoke_checklist)
+write_text(File.join(PACKAGE_DIR, "manual-smoke-results-template.md"), manual_smoke_results_md)
+write_json(File.join(PACKAGE_DIR, "manual-smoke-results-template.json"), manual_smoke_results_template)
 write_text(
   File.join(PACKAGE_DIR, "media-api.env.example"),
   "# Local tryout package: do not put real tokens in this file.\nWILLDEEP_MEDIA_PROVIDER=skill\n"
@@ -396,6 +478,8 @@ checks = []
   media-import-manifest-template.json
   widget-preview.html
   manual-smoke-checklist.md
+  manual-smoke-results-template.md
+  manual-smoke-results-template.json
   media-api.env.example
 ].each do |name|
   require_file(File.join(PACKAGE_DIR, name), checks)
@@ -441,7 +525,21 @@ checks << {
   name: "manual smoke checklist covers import and widget handoff",
   ok: manual_smoke_source.include?("latest-media-import") &&
       manual_smoke_source.include?("<widget-handoff-action>") &&
-      manual_smoke_source.include?("short_drama_import_review_csv")
+      manual_smoke_source.include?("short_drama_import_review_csv") &&
+      manual_smoke_source.include?("manual-smoke-results-template")
+}
+manual_smoke_results_source = File.read(manual_smoke_results_md_path)
+manual_smoke_results_data = JSON.parse(File.read(manual_smoke_results_json_path))
+checks << {
+  name: "manual smoke results templates cover critical steps",
+  ok: manual_smoke_results_source.include?("Dry-run import") &&
+      manual_smoke_results_source.include?("Widget structured handoff") &&
+      manual_smoke_results_data.fetch("steps").map { |step| step.fetch("id") }.sort == manual_smoke_steps.map { |step| step.fetch("id") }.sort
+}
+checks << {
+  name: "manual smoke results template starts untested",
+  ok: manual_smoke_results_data.fetch("overall_status") == "untested" &&
+      manual_smoke_results_data.fetch("steps").all? { |step| step.fetch("status") == "untested" }
 }
 
 ok = checks.all? { |check| check.fetch(:ok) }
@@ -451,6 +549,8 @@ report = {
   manifest_path: manifest_path,
   widget_preview_path: File.join(PACKAGE_DIR, "widget-preview.html"),
   manual_smoke_checklist_path: manual_smoke_checklist_path,
+  manual_smoke_results_md_path: manual_smoke_results_md_path,
+  manual_smoke_results_json_path: manual_smoke_results_json_path,
   manifest_item_count: manifest_item_count(manifest_path),
   checks: checks
 }
@@ -467,6 +567,8 @@ write_text(
     "- Manifest: `#{manifest_path}`",
     "- Widget preview: `#{File.join(PACKAGE_DIR, "widget-preview.html")}`",
     "- Manual smoke checklist: `#{manual_smoke_checklist_path}`",
+    "- Manual smoke results Markdown: `#{manual_smoke_results_md_path}`",
+    "- Manual smoke results JSON: `#{manual_smoke_results_json_path}`",
     "- Manifest items: #{report[:manifest_item_count]}",
     "",
     "## Checks",

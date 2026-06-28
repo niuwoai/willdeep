@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.109.0-rc446 - 2026-06-28
+
+### Added
+- **短剧人工 smoke 结果模板（1.109.0-rc446）** —— `scripts/short_drama_mvp_tryout_package.rb` 生成的本地试用包新增 `manual-smoke-results-template.md` 和 `manual-smoke-results-template.json`，用于记录 dry-run 导入、正式导入、`latest-media-import`、Widget 结构化动作和 review queue dry-run 的人工验收 evidence。
+- 试用包 JSON/Markdown 报告新增结果模板路径，并自检结果模板覆盖关键步骤且初始状态为 `untested`；`scripts/version_consistency.rb` 新增交付守门，防止试用包以后漏掉人工 smoke 结果模板。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc446 — 短剧人工 smoke 结果模板`。
+- 版本号从 **1.109.0-rc445** 提升为 **1.109.0-rc446**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧 cutoff/tryout 文档同步。
+
 ## 1.109.0-rc445 - 2026-06-28
 
 ### Fixed
