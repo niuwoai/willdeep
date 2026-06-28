@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.109.0-rc451 - 2026-06-28
+
+### Changed
+- **短剧显式剩余风险纳入交付守门（1.109.0-rc451）** —— `scripts/short_drama_mvp_acceptance_report.rb` 现在会检查 cutoff 中至少保留一条真实剩余风险，避免交付摘要在风险被误删时兜底成“无剩余风险”。
+- `scripts/version_consistency.rb` 新增 `Short drama cutoff preserves explicit remaining risks` delivery gate，并要求验收报告保留 `cutoff keeps explicit remaining risks` 检查。
+- `AgentBackgroundJobsTests` 的运行任务计数用例改用 Debug/test-only job snapshot 注入，避免完整 Swift Testing 并发套件里真实 `Process` 退出时序导致偶发红灯。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc451 — 短剧显式剩余风险守门`。
+- 版本号从 **1.109.0-rc450** 提升为 **1.109.0-rc451**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧 cutoff/tryout 文档同步。
+
 ## 1.109.0-rc450 - 2026-06-28
 
 ### Changed

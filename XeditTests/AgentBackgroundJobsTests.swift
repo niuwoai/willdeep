@@ -626,25 +626,20 @@ struct AgentBackgroundJobsTests {
         #expect(appState.agentRunningTaskCount == 0)
         #expect(appState.agentRunningTaskSummary == nil)
 
-        // Alive background job: counts with no live turn at all.
-        let job = try appState.agentJobRegistry.start(
-            command: "sleep 1",
-            workingDirectory: nil,
-            runtimeID: session.id,
-            timeoutSeconds: nil
-        )
+        // Alive background job: counts with no live turn at all. Use a
+        // synthetic registry snapshot here; process launch/termination is
+        // covered by dedicated AgentJobRegistry tests, while this test locks
+        // AppState's derived-count contract.
+        let job = makeStubJob(command: "sleep 1", status: .running, runtimeID: session.id)
+        appState.agentJobRegistry.replaceJobsForTesting([job])
         #expect(appState.agentRunningTaskCount == 1)
         #expect(appState.agentRunningTaskSummary?.contains(job.displayHandle) == true)
 
-        // This test is about AppState's derived count, not process-tree
-        // signalling. Let the short background job finish naturally, then poll
-        // the asserted quantity itself; a genuine "never drains" regression
-        // still fails via timeout. Explicit kill semantics stay covered by
-        // `longRunningCommandCanBeKilled`.
-        let drained = await waitUntilTrue(timeoutMs: 15000) {
-            appState.agentRunningTaskCount == 0
-        }
-        #expect(drained)
+        var finishedJob = job
+        finishedJob.status = .completed
+        finishedJob.exitCode = 0
+        finishedJob.finishedAt = Date()
+        appState.agentJobRegistry.replaceJobsForTesting([finishedJob])
         #expect(appState.agentRunningTaskCount == 0)
     }
 
@@ -670,22 +665,6 @@ struct AgentBackgroundJobsTests {
         return false
     }
 
-    /// Poll until `condition` holds or the budget runs out. Same cadence
-    /// and rationale as `waitUntilFinished`, but for any main-actor state —
-    /// used to wait on eventually-consistent derived values (e.g.
-    /// `agentRunningTaskCount`) rather than a single job's `isAlive`.
-    private func waitUntilTrue(
-        timeoutMs: Int = 15000,
-        _ condition: () -> Bool
-    ) async -> Bool {
-        let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
-        while Date() < deadline {
-            if condition() { return true }
-            try? await Task.sleep(nanoseconds: 20_000_000)
-        }
-        return condition()
-    }
-
     /// Synthetic job for pure-formatting tests. Bypasses the
     /// registry so we can assemble unusual states (e.g. .completed
     /// with zero output) without a Process roundtrip. Builds a
@@ -696,7 +675,8 @@ struct AgentBackgroundJobsTests {
         status: AgentBackgroundJob.Status = .running,
         exitCode: Int32? = nil,
         finishedAfter seconds: TimeInterval? = nil,
-        outputByteCount: Int = 0
+        outputByteCount: Int = 0,
+        runtimeID: UUID = UUID()
     ) -> AgentBackgroundJob {
         let id = UUID()
         let started = Date(timeIntervalSinceReferenceDate: 0)
@@ -705,7 +685,7 @@ struct AgentBackgroundJobsTests {
             shortID: String(id.uuidString.prefix(6)).lowercased(),
             command: command,
             workingDirectoryPath: nil,
-            runtimeID: UUID(),
+            runtimeID: runtimeID,
             startedAt: started,
             pid: 12345,
             status: status,

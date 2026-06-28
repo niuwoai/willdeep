@@ -73,6 +73,7 @@ manual_result_paths = [
   tryout_report["manual_smoke_results_md_path"],
   tryout_report["manual_smoke_results_json_path"]
 ].compact
+remaining_risks = extract_section_bullets(cutoff, "当前剩余风险")
 
 checks = []
 add_check(
@@ -115,6 +116,13 @@ add_check(
   "cutoff documents manual smoke evidence path",
   cutoff.include?("manual-smoke-results-template.md/json"),
   "SHORT_DRAMA_AI_MVP_CUTOFF.md should tell handoff users where to record manual smoke evidence.",
+  "docs/SHORT_DRAMA_AI_MVP_CUTOFF.md"
+)
+add_check(
+  checks,
+  "cutoff keeps explicit remaining risks",
+  !remaining_risks.empty?,
+  "SHORT_DRAMA_AI_MVP_CUTOFF.md should keep at least one explicit remaining-risk bullet so handoff cannot silently imply zero risk.",
   "docs/SHORT_DRAMA_AI_MVP_CUTOFF.md"
 )
 add_check(
@@ -168,7 +176,6 @@ handoff_readiness = {
   "overall" => handoff_overall,
   "note" => "CI and local contract gates can pass while manual smoke remains pending; use overall to decide handoff readiness."
 }
-remaining_risks = extract_section_bullets(cutoff, "当前剩余风险")
 evidence = [
   { "label" => "Version report", "path" => File.join(REPORT_DIR, "version_report.md") },
   { "label" => "Tryout package report", "path" => File.join(REPORT_DIR, "short_drama_mvp_tryout_package_report.md") },

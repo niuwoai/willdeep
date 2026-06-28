@@ -222,13 +222,27 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 
 ## 1.109.0-rc450 — 短剧交付就绪摘要守门
 
-- ⏳ 运行 `ruby scripts/version_consistency.rb ...` →
+- ✅ 运行 `ruby scripts/version_consistency.rb ...` →
   报告 `Delivery Gates` 包含
   `Short drama acceptance report preserves handoff readiness summary`，且为 `PASS`。
-- ⏳ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+- ✅ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
   报告 checks 包含 `delivery gates include handoff readiness summary`，且为通过。
-- ⏳ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
   底部“验收记录”指向 `1.109.0-rc450 — 短剧交付就绪摘要守门`。
+- ✅ 该版本的交付就绪摘要守门已被 rc451 的显式剩余风险守门覆盖；当前入口以最新短剧 smoke 小节为准。
+
+## 1.109.0-rc451 — 短剧显式剩余风险守门
+
+- ⏳ 运行 `ruby scripts/version_consistency.rb ...` →
+  报告 `Delivery Gates` 包含
+  `Short drama cutoff preserves explicit remaining risks`，且为 `PASS`。
+- ⏳ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+  报告 checks 包含 `cutoff keeps explicit remaining risks`，且为通过。
+- ⏳ 打开 `build/ci/short_drama_mvp_acceptance_report.json` →
+  顶层 `remaining_risks` 至少包含一条来自 cutoff 的真实剩余风险，不出现
+  “No remaining risks found” 兜底文案。
+- ⏳ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向 `1.109.0-rc451 — 短剧显式剩余风险守门`。
 
 ---
 

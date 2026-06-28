@@ -166,6 +166,12 @@ run_tests = read_file(repo_root, "scripts/run_tests.sh")
 workflow = read_file(repo_root, ".github/workflows/test.yml")
 short_drama_tryout_package = read_file(repo_root, "scripts/short_drama_mvp_tryout_package.rb")
 short_drama_acceptance_report = read_file(repo_root, "scripts/short_drama_mvp_acceptance_report.rb")
+short_drama_remaining_risks = short_drama_cutoff
+  .match(/^##\s+当前剩余风险\n\n(?<body>.*?)(?=^##\s|\z)/m)
+  &.[](:body)
+  .to_s
+  .scan(/^- (.+)$/)
+  .flatten
 add_delivery_check.call(
   "Short drama cutoff documents one-shot local acceptance",
   "docs/SHORT_DRAMA_AI_MVP_CUTOFF.md",
@@ -224,9 +230,16 @@ add_delivery_check.call(
     short_drama_acceptance_report.include?('"remaining_risks"') &&
     short_drama_acceptance_report.include?("## Handoff Readiness") &&
     short_drama_acceptance_report.include?("## Remaining Risks") &&
+    short_drama_acceptance_report.include?("cutoff keeps explicit remaining risks") &&
     short_drama_cutoff.include?("交付就绪状态") &&
     short_drama_cutoff.include?("剩余风险"),
   "Acceptance report should keep machine/manual readiness and remaining-risk evidence visible."
+)
+add_delivery_check.call(
+  "Short drama cutoff preserves explicit remaining risks",
+  "docs/SHORT_DRAMA_AI_MVP_CUTOFF.md",
+  short_drama_remaining_risks.any?,
+  "Cutoff should keep at least one remaining-risk bullet instead of implying the MVP has no external or manual smoke risk."
 )
 
 changelog = read_file(repo_root, "CHANGELOG.md")

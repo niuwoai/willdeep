@@ -286,6 +286,12 @@ final class AgentJobRegistry: ObservableObject {
         jobs.first(where: { $0.id == id })
     }
 
+    #if DEBUG
+    func replaceJobsForTesting(_ jobs: [AgentBackgroundJob]) {
+        self.jobs = jobs
+    }
+    #endif
+
     /// Resolve a model-supplied id — either the full UUID or a
     /// 6-char short id — to a job. Returns nil on miss.
     func job(matchingHandle handle: String, runtimeID: UUID) -> AgentBackgroundJob? {
