@@ -17,13 +17,18 @@ import Combine
 final class AgentWidgetRegistry: ObservableObject {
     static let shared = AgentWidgetRegistry()
 
+    @Published private var latestByRuntime: [UUID: AgentWidget] = [:]
+    @Published private var historyByRuntime: [UUID: [AgentWidget]] = [:]
     private var pending: [UUID: [AgentWidget]] = [:]
+    private let historyLimit = 20
 
     private init() {}
 
     /// 工具 handler 调用。runtimeID 取自 AgentToolContext。
     func add(_ widget: AgentWidget, forRuntime runtimeID: UUID) {
         pending[runtimeID, default: []].append(widget)
+        latestByRuntime[runtimeID] = widget
+        remember(widget, forRuntime: runtimeID)
     }
 
     /// AppStateAgentLoop turn 顶部调用，跟 spawn_agent / background-job
@@ -33,5 +38,26 @@ final class AgentWidgetRegistry: ObservableObject {
             return []
         }
         return queued
+    }
+
+    func latestWidget(forRuntime runtimeID: UUID?) -> AgentWidget? {
+        guard let runtimeID else { return nil }
+        return latestByRuntime[runtimeID]
+    }
+
+    func widgets(forRuntime runtimeID: UUID?) -> [AgentWidget] {
+        guard let runtimeID else { return [] }
+        return historyByRuntime[runtimeID] ?? []
+    }
+
+    func remember(_ widget: AgentWidget, forRuntime runtimeID: UUID) {
+        var widgets = historyByRuntime[runtimeID] ?? []
+        widgets.removeAll { $0.id == widget.id }
+        widgets.insert(widget, at: 0)
+        if widgets.count > historyLimit {
+            widgets = Array(widgets.prefix(historyLimit))
+        }
+        historyByRuntime[runtimeID] = widgets
+        latestByRuntime[runtimeID] = widgets.first
     }
 }

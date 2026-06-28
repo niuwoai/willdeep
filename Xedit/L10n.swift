@@ -946,6 +946,7 @@ enum L10n {
         static let tabWorkspace = String(localized: "settings.tab.workspace", defaultValue: "Workspace")
         static let tabAgent = String(localized: "settings.tab.agent", defaultValue: "AI Providers")
         static let tabSomeIM = String(localized: "settings.tab.some-im", defaultValue: "some.im")
+        static let tabReplicate = String(localized: "settings.tab.replicate", defaultValue: "Replicate")
         static let tabMemory = String(localized: "settings.tab.memory", defaultValue: "Memory")
         static let tabRules = String(localized: "settings.tab.rules", defaultValue: "Rules")
         static let tabSkills = String(localized: "settings.tab.skills", defaultValue: "Skills")
@@ -1131,7 +1132,7 @@ enum L10n {
             static let videoModelLabel = String(localized: "settings.some-im.video-model", defaultValue: "Video Model")
             static let priorityPlaceholder = String(localized: "settings.some-im.priority-placeholder", defaultValue: "Priority models, comma-separated")
             static let imageHelp = String(localized: "settings.some-im.image-help", defaultValue: "Image generation tools prefer this list. Default is gpt-image-2 when some.im is configured.")
-            static let videoHelp = String(localized: "settings.some-im.video-help", defaultValue: "Video generation is still in development. Model selection is shown for future use and is disabled for now.")
+            static let videoHelp = String(localized: "settings.some-im.video-help", defaultValue: "Choose the preferred some.im video model for async video-generation tasks.")
             static func fetchedModels(_ a1: String) -> String {
                 let template = String(localized: "settings.some-im.fetched-models", defaultValue: "Fetched %@ models.")
                 return String(format: template, a1)

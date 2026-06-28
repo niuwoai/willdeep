@@ -53,6 +53,24 @@ jobs:
       - name: Run version consistency
         run: ruby scripts/version_consistency.rb build/ci/version_report.md build/ci/version_report.json
 
+      - name: Run short-drama media contract guard
+        run: ruby scripts/short_drama_media_contract_test.rb build/ci/short_drama_media_report.md build/ci/short_drama_media_report.json
+
+      - name: Run widget side-panel contract guard
+        run: ruby scripts/widget_side_panel_contract_test.rb build/ci/widget_side_panel_report.md build/ci/widget_side_panel_report.json
+
+      - name: Run image edit contract guard
+        run: ruby scripts/image_edit_contract_test.rb build/ci/image_edit_report.md build/ci/image_edit_report.json
+
+      - name: Run media task refresh contract guard
+        run: ruby scripts/media_task_refresh_contract_test.rb build/ci/media_task_refresh_report.md build/ci/media_task_refresh_report.json
+
+      - name: Run media import context contract guard
+        run: ruby scripts/media_import_context_contract_test.rb build/ci/media_import_context_report.md build/ci/media_import_context_report.json
+
+      - name: Run production gap actions contract guard
+        run: ruby scripts/production_gap_actions_contract_test.rb build/ci/production_gap_actions_report.md build/ci/production_gap_actions_report.json
+
       # 守住简体中文翻译覆盖率:可翻译文案缺 zh-Hans 即报红,防止新增 key
       # 漏翻让中文用户回落英文。纯符号/格式串自动豁免。
       - name: Run i18n coverage guard
@@ -99,6 +117,18 @@ jobs:
           printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat build/ci/version_report.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat build/ci/short_drama_media_report.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat build/ci/widget_side_panel_report.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat build/ci/image_edit_report.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat build/ci/media_task_refresh_report.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat build/ci/media_import_context_report.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat build/ci/production_gap_actions_report.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat build/ci/report.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload test artifacts
@@ -114,5 +144,17 @@ jobs:
             build/ci/complexity_report.json
             build/ci/version_report.md
             build/ci/version_report.json
+            build/ci/short_drama_media_report.md
+            build/ci/short_drama_media_report.json
+            build/ci/widget_side_panel_report.md
+            build/ci/widget_side_panel_report.json
+            build/ci/image_edit_report.md
+            build/ci/image_edit_report.json
+            build/ci/media_task_refresh_report.md
+            build/ci/media_task_refresh_report.json
+            build/ci/media_import_context_report.md
+            build/ci/media_import_context_report.json
+            build/ci/production_gap_actions_report.md
+            build/ci/production_gap_actions_report.json
             build/ci/xcodebuild.log
           retention-days: 14

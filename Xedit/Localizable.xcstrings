@@ -19,12 +19,12 @@
     "· %@" : {
 
     },
-    "· Sandbox: no network, no navigation · sendPrompt() available" : {
+    "· Sandbox: no network, no navigation · sendPrompt()/sendToolAction() available" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "· 沙箱模式:无网络、无导航 · 可用 sendPrompt()"
+            "value" : "· 沙箱模式:无网络、无导航 · 可用 sendPrompt()/sendToolAction()"
           }
         }
       }
@@ -18647,13 +18647,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Video generation tools will use this priority list once video workflows are connected."
+            "value" : "Async video-generation tasks use this preferred model list."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "后续视频生成 workflow 接入后，会使用这个优先列表。"
+            "value" : "异步视频生成任务会使用这个首选模型列表。"
           }
         }
       }

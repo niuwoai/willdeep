@@ -1,5 +1,3285 @@
 # Changelog
 
+## 1.109.0-rc436 - 2026-06-28
+
+### Changed
+- **manifest 导回写入聊天运行时上下文（1.109.0-rc436）** —— `import_media_manifest` 正式导入本地产物、登记 pending 远端任务或记录失败任务后，会写入 `<latest-media-import>`，下一轮聊天可直接看到 package、manifest、pending/completed/failed 任务和继续动作。
+- 新增 `AgentMediaImportContext.swift` 与 `scripts/media_import_context_contract_test.rb`，并接入本地测试和 GitHub Actions，守住 Ruby/Skill/第三方 API 制作包导回后的聊天接力。
+- 新增 `docs/SHORT_DRAMA_AI_MVP_CUTOFF.md`，冻结本轮短剧 AI 能力为可用 MVP，记录验收命令、暂缓范围、手动 smoke 场景和剩余风险。
+- 版本号从 **1.109.0-rc435** 提升为 **1.109.0-rc436**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc435 - 2026-06-28
+
+### Changed
+- **短剧制作缺口精确接力（1.109.0-rc435）** —— 项目和分集的“补主图 / 补视频 / 审片”按钮会分别写入 `<short-drama-production-gap-action>`，直接携带 dry-run、正式提交、打开/刷新媒体任务和检查项处理参数。
+- 新增 `scripts/production_gap_actions_contract_test.rb` 并接入本地测试与 GitHub Actions，守住制作缺口动作条到聊天窗口的结构化接力。
+- 版本号从 **1.109.0-rc434** 提升为 **1.109.0-rc435**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc434 - 2026-06-28
+
+### Changed
+- **媒体任务刷新写入聊天运行时上下文（1.109.0-rc434）** —— “媒体任务”侧栏手动刷新运行中/卡住任务后，会记录 `latest-media-task-refresh`，下一轮聊天可读取刷新原因、范围、任务句柄和刷新后的运行/失败/完成统计。
+- 新增 `AgentMediaTaskRefreshContext.swift` 与 `scripts/media_task_refresh_contract_test.rb`，并接入本地测试和 GitHub Actions，守住手动刷新与聊天协作的接力契约。
+- 版本号从 **1.109.0-rc433** 提升为 **1.109.0-rc434**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc433 - 2026-06-28
+
+### Changed
+- **短剧侧栏制作缺口动作条（1.109.0-rc433）** —— 项目卡里的“制作缺口”从单个文本入口升级为动作条，缺主图、缺视频、未解决检查项和缺人物/场景参考图会分别给出可点击动作。
+- 新增 `AgentShortDramaProductionGapActions.swift` 承载制作缺口 UI；主短剧侧栏文件减少到 2588 行，继续向拆分热点文件推进。
+- 短剧媒体合约更新为检查新的缺口动作条和参考图直提闭包；版本号从 **1.109.0-rc432** 提升为 **1.109.0-rc433**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc432 - 2026-06-28
+
+### Changed
+- **图片蒙版上下文携带真实 mask_path（1.109.0-rc432）** —— 图片蒙版侧栏的“发送到聊天”对通用图片也可见；当用户已经画选区但尚未手动导出时，会先导出当前蒙版并把真实 `current_mask_path` 写入聊天上下文。
+- `edit_image_with_mask` 的 `submit_with_existing_mask_arguments` / `submit_inpaint_arguments` / `submit_erase_arguments` 会优先使用真实 `mask_path`，方便聊天、Skill 或 Ruby 脚本直接继续提交 Replicate / some.im 编辑任务。
+- 新增 `scripts/image_edit_contract_test.rb` 并接入本地测试与 GitHub Actions，发布 `image_edit_report.md/json`，守住图片蒙版编辑到聊天接力的关键契约。
+- 版本号从 **1.109.0-rc431** 提升为 **1.109.0-rc432**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc431 - 2026-06-28
+
+### Changed
+- **Widget 侧栏协作合约测试（1.109.0-rc431）** —— 新增 `scripts/widget_side_panel_contract_test.rb`，用独立 Ruby 合约守住右侧网页组件面板的推荐动作/可用动作必须写入 `latest-widget-tool-action`。
+- 本地 `scripts/run_tests.sh` 与 GitHub Actions 会运行并发布 `widget_side_panel_report.md/json`，避免 Skill/Ruby 生成网页工作台与聊天窗口的结构化接力后续回退。
+- 版本号从 **1.109.0-rc430** 提升为 **1.109.0-rc431**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc430 - 2026-06-28
+
+### Changed
+- **侧边栏 Widget 动作写入聊天上下文（1.109.0-rc430）** —— 右侧网页组件面板里的推荐动作和可用动作点击后，会同步记录 `latest-widget-tool-action`，聊天窗口下一轮可读取明确工具名、参数、来源和侧边栏动作标签。
+- 侧边栏仍保留原有安全直达预览：打开媒体任务、刷新远端任务、打开蒙版、候选图、短剧分镜板或 Skill/Ruby 生成的本地 HTML 时，不会直接提交付费生成或修改检查项。
+- 版本号从 **1.109.0-rc429** 提升为 **1.109.0-rc430**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc429 - 2026-06-28
+
+### Changed
+- **远端媒体任务动作本地定位（1.109.0-rc429）** —— `sendToolAction` 的本地预览支持 `replicate_poll_prediction` / `some_im_poll_media_task` / `replicate_cancel_prediction` / `some_im_cancel_media_task`。
+- 远端 poll 动作会按 `task_id`、远端 id、status URL 或 cancel URL 匹配本地媒体任务，打开对应任务范围并立即刷新；远端 cancel 动作只打开匹配任务范围供核对，避免本地暗中取消。
+- 版本号从 **1.109.0-rc428** 提升为 **1.109.0-rc429**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc428 - 2026-06-28
+
+### Changed
+- **结构化网页动作本地预览（1.109.0-rc428）** —— 新增 `AgentWidgetLocalActionPreview`，`sendToolAction` 会先对安全本地动作做预处理，再把结构化动作发送到聊天。
+- 本地预处理覆盖打开/刷新媒体任务侧栏、打开图片蒙版编辑器、生成短剧分镜/候选图 Widget、生成通用候选图 Widget、加载本地 `show_widget` HTML；不会直接提交生成、放大、删除或关闭检查项等有成本/改状态动作。
+- 版本号从 **1.109.0-rc427** 提升为 **1.109.0-rc428**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc427 - 2026-06-28
+
+### Changed
+- **候选图按钮结构化接力（1.109.0-rc427）** —— 媒体任务候选图和通用候选图 Widget 的选图、打开蒙版、擦除、放大、图生视频按钮接入 `sendToolAction`。
+- `sendToolAction` 携带 `<image-choice>` / `<media-task-image-choice>` 时也会记录 `latest-image-choice`，带短剧分镜或人物/场景资产锚点的选择动作仍能在下一轮聊天里直接回填主图、参考图或继续编辑。
+- 版本号从 **1.109.0-rc426** 提升为 **1.109.0-rc427**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc426 - 2026-06-28
+
+### Changed
+- **短剧分镜板按钮结构化接力（1.109.0-rc426）** —— 短剧分镜板里的全剧/单集批量图片视频、查看/刷新任务、导出制作包、候选图选择、蒙版重绘/擦除和主图放大按钮改用 `sendToolAction`。
+- 新增 `toolActionButton` 统一把工具名、参数、备注和 action key 编码为 Widget 结构化动作，避免 HTML 按钮继续依赖自然语言 prompt 反推工具调用。
+- 版本号从 **1.109.0-rc425** 提升为 **1.109.0-rc426**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc425 - 2026-06-28
+
+### Changed
+- **网页组件结构化工具动作回传（1.109.0-rc425）** —— 新增 `AgentWidgetToolAction`，Widget 可通过 `sendToolAction({tool, arguments, note, action_key})` 把明确工具动作交回聊天，而不是只能发送自然语言提示。
+- Widget WebView 桥会校验工具名、参数和备注长度，记录 `latest-widget-tool-action`，并把 `<widget-tool-action>` 注入聊天；下一轮模型请求也会携带 `latest-widget-tool-action`，方便 Skill/Ruby 短剧网页、审片页和候选图页稳定接力到工具调用。
+- `show_widget` 工具描述补充 `sendToolAction` 用法；版本号从 **1.109.0-rc424** 提升为 **1.109.0-rc425**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc424 - 2026-06-28
+
+### Changed
+- **媒体任务完成写入聊天运行时上下文（1.109.0-rc424）** —— 新增 `AgentMediaTaskCompletionContext`，在异步媒体任务完成队列 drain 时记录最近完成任务的 provider、状态、产物路径、短剧锚点和后续动作。
+- 下一轮模型请求会携带 `latest-media-task-completion`，可直接继续候选图选择、设为分镜主图、图生视频、蒙版编辑、擦除、放大、打开分镜板或关闭检查项；图片编辑任务完成时也会刷新 `latest-image-edit-submission`。
+- 版本号从 **1.109.0-rc423** 提升为 **1.109.0-rc424**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc423 - 2026-06-28
+
+### Changed
+- **蒙版编辑提交写入聊天运行时上下文（1.109.0-rc423）** —— 新增 `AgentImageEditSubmission`，记录最近一次 Replicate / some.im 蒙版重绘或擦除任务的 source image、mask、任务句柄、provider、状态、远端轮询地址和短剧锚点。
+- 图片蒙版面板和 `edit_image_with_mask` 工具提交任务后都会更新当前 runtime 的 `latest-image-edit-submission`；下一轮模型请求会直接携带该结构化块，便于继续刷新任务、重开带旧蒙版的编辑器、选择完成产物、图生视频或关闭短剧检查项。
+- 版本号从 **1.109.0-rc422** 提升为 **1.109.0-rc423**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc422 - 2026-06-28
+
+### Changed
+- **候选图选择写入聊天运行时上下文（1.109.0-rc422）** —— Widget 内的图片候选按钮发送聊天提示前，会先解析 `<image-choice>` / `<media-task-image-choice>` / `<short-drama-image-choice>` 并记录为当前会话的 `latest-image-choice`。
+- 下一轮模型请求会携带结构化 `latest-image-choice`，包含 `image_path`、短剧分镜/资产锚点、推荐工具和 post-select 动作键，后续图生视频、蒙版编辑、擦除、放大或短剧主图选择不必从长聊天里反查用户点了哪张图。
+- 带短剧分镜锚点的“选择”动作会同步调用本地短剧 store 更新分镜主图；带人物/场景资产锚点的选择会把图片加入资产参考图，侧栏与聊天协作更贴近真实制作流。
+- 版本号从 **1.109.0-rc421** 提升为 **1.109.0-rc422**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc421 - 2026-06-28
+
+### Changed
+- **网页组件支持重载源 HTML（1.109.0-rc421）** —— Widget 来源区在 `source_path` / `html_path` 指向 `.html`、`.htm` 或 `.svg` 文件时显示刷新按钮。
+- 刷新会重新读取最新源 HTML，创建新的 `AgentWidget` 并放回当前 runtime 的 Widget 历史，同时保留原 `contextLines`，追加 `reloaded_from_widget_id`、`reloaded_at` 和最新 `html_path`，方便 Skill/Ruby 脚本重跑后直接在侧栏查看新预览。
+- 版本号从 **1.109.0-rc420** 提升为 **1.109.0-rc421**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc420 - 2026-06-28
+
+### Changed
+- **网页组件路径边界共享（1.109.0-rc420）** —— 新增 `AgentWidgetPathResolver.swift`，统一 Widget HTML、源文件和制作包目录的本地安全路径解析。
+- `show_widget` 工具、右侧网页组件面板和 Widget 来源区现在共用 workspace / 系统临时目录 / WillDeep 短剧导出目录边界，减少 Skill/Ruby 网页嵌入、制作包预览和 Finder 定位规则漂移。
+- 版本号从 **1.109.0-rc419** 提升为 **1.109.0-rc420**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc419 - 2026-06-28
+
+### Changed
+- **网页组件来源区拆分（1.109.0-rc419）** —— 将 Widget 来源摘要、源 HTML/制作包路径展示和 Finder 定位动作从 `AgentSidePanel.swift` 拆到独立 `AgentWidgetSourceRows.swift`。
+- `AgentSidePanel.swift` 从 1952 行降到 1854 行，继续低于 2000 行软线；后续拆整个 `AgentSidePanelWidgetView` 或继续扩展 Skill/Ruby 网页接力时边界更清楚。
+- 版本号从 **1.109.0-rc418** 提升为 **1.109.0-rc419**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc418 - 2026-06-28
+
+### Changed
+- **网页组件来源可定位（1.109.0-rc418）** —— 右侧网页组件详情里的源 HTML 路径和制作包目录现在提供 Finder 定位按钮。
+- 定位动作复用 Widget 面板已有路径安全边界，仅允许 workspace、系统临时目录或 WillDeep 短剧导出目录内的源文件/制作包，方便从 Skill/Ruby 嵌入网页回到脚本产物继续排查或导回。
+- 版本号从 **1.109.0-rc417** 提升为 **1.109.0-rc418**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc417 - 2026-06-28
+
+### Changed
+- **网页组件显示 Skill/Ruby 来源（1.109.0-rc417）** —— `AgentWidget` 现在会从 `source_label`、`source_path`、`package_directory` 和 `widget_context` 提取来源摘要。
+- 右侧网页组件面板的最近列表和详情头部会显示来源、HTML 路径、制作包目录和上下文说明，方便用户识别 Skill/Ruby 脚本生成的短剧预览、候选图网页或制作包仪表盘，并继续把动作接力到聊天。
+- 版本号从 **1.109.0-rc416** 提升为 **1.109.0-rc417**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc416 - 2026-06-28
+
+### Changed
+- **媒体产物缩略图交互拆分（1.109.0-rc416）** —— 将 `AgentMediaArtifactThumbnail` 从 `AgentMediaArtifactViews.swift` 拆到独立 `AgentMediaArtifactThumbnail.swift`。
+- 候选图网页组件继续留在 `AgentMediaArtifactViews.swift`；本地缩略图的设分镜主图、设人物/场景参考图、加入聊天附件、Replicate 放大和打开蒙版编辑入口独立维护，后续接图片编辑工具时边界更清楚。
+- 版本号从 **1.109.0-rc415** 提升为 **1.109.0-rc416**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc415 - 2026-06-28
+
+### Changed
+- **任务监控快照拆分（1.109.0-rc415）** —— 将 `AgentTaskMonitorSnapshot` 从 `AgentTaskMonitorRail.swift` 拆到独立 `AgentTaskMonitorSnapshot.swift`。
+- 任务监控 rail 主文件继续回落，侧栏自动展开、媒体任务摘要和聊天窗口协作状态的快照契约可以独立维护，后续扩展异步短剧任务状态不会继续挤在 UI 文件里。
+- 版本号从 **1.109.0-rc414** 提升为 **1.109.0-rc415**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc414 - 2026-06-28
+
+### Changed
+- **媒体任务行拆分（1.109.0-rc414）** —— 将 `AgentMediaTaskRow` 从 `AgentMediaTasks.swift` 拆到独立 `AgentMediaTaskRow.swift`。
+- 单条任务的刷新/取消、短剧锚点、候选图、完成图片转视频和检查项关闭等行级逻辑独立维护；任务中心主文件继续回落，避免后续扩展异步媒体制作时逼近 2000 行软阈值。
+- 版本号从 **1.109.0-rc413** 提升为 **1.109.0-rc414**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc413 - 2026-06-28
+
+### Changed
+- **媒体任务侧栏支撑组件拆分（1.109.0-rc413）** —— 将媒体任务状态筛选和侧栏通用 UI 行拆到 `AgentMediaTaskPanelSupport.swift`。
+- `AgentMediaTasks.swift` 从 1907 行降到安全线内，后续继续扩展 some.im / Replicate / Skill/Ruby 异步任务、候选图、蒙版和短剧制作侧栏时，不必继续把主任务注册/轮询文件越堆越高。
+- 版本号从 **1.109.0-rc412** 提升为 **1.109.0-rc413**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc412 - 2026-06-28
+
+### Changed
+- **媒体任务侧栏支持只刷新卡住任务（1.109.0-rc412）** —— “媒体任务”侧栏在当前范围存在可刷新且超过 30 分钟未更新的运行中任务时，会显示“刷新卡住”按钮。
+- “刷新卡住”只轮询这批长时间未更新的 some.im、Replicate 或带 HTTPS status URL 的 Skill/Ruby 任务，不再必须刷新全部运行中任务，适合整剧批量生成时先处理最可疑的远端任务。
+- 版本号从 **1.109.0-rc411** 提升为 **1.109.0-rc412**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc411 - 2026-06-28
+
+### Changed
+- **媒体任务卡住状态外层可见（1.109.0-rc411）** —— 聊天头部侧栏按钮和任务监控 rail 会优先显示超过 30 分钟未更新的运行中媒体任务。
+- 任务监控 rail 会把卡住任务作为失败之后的第二优先级聚焦对象，行内显示“未更新 Nm”；从 rail 发送状态到聊天时也会带出 `stale_active_count` / `stale_active_tasks` 和刷新参数。
+- 版本号从 **1.109.0-rc410** 提升为 **1.109.0-rc411**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc410 - 2026-06-28
+
+### Changed
+- **媒体任务识别长时间未更新（1.109.0-rc410）** —— “媒体任务”侧栏会统计并筛选超过 30 分钟未更新的运行中任务，任务行显示“超过 N 分钟未更新”的提示。
+- “发送状态到聊天”会额外写入 `stale_active_count` 和 `stale_active_tasks`，并携带刷新/轮询参数，让 Agent 先刷新 some.im、Replicate 或 Skill/Ruby 异步任务，再决定等待、取消或重试。
+- 版本号从 **1.109.0-rc409** 提升为 **1.109.0-rc410**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc409 - 2026-06-28
+
+### Changed
+- **媒体任务聊天接力携带时间线（1.109.0-rc409）** —— 媒体任务自动完成通知、单任务上下文和侧栏范围状态接力都会写入创建时间、更新时间和完成时间。
+- 聊天窗口接手 some.im、Replicate 或 Skill/Ruby 异步任务时，能根据 `created_at` / `updated_at` / `finished_at` 判断是继续等待、立即刷新、重试失败任务，还是从完成产物进入候选图、蒙版、放大或图生视频。
+- 版本号从 **1.109.0-rc408** 提升为 **1.109.0-rc409**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc408 - 2026-06-28
+
+### Changed
+- **媒体任务行显示创建/更新/完成时间（1.109.0-rc408）** —— “媒体任务”侧栏每条任务现在会显示创建时间和更新时间；已完成任务会额外显示完成时间。
+- 用户查看 some.im、Replicate 或 Skill/Ruby 异步图片/视频任务时，可以直接判断任务多久没更新、是否刚完成，不必只靠状态文案猜远端是否还在推进。
+- 版本号从 **1.109.0-rc407** 提升为 **1.109.0-rc408**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc407 - 2026-06-28
+
+### Changed
+- **媒体任务筛选空态区分无任务和无匹配（1.109.0-rc407）** —— “媒体任务”侧栏在当前范围有任务、但状态筛选结果为空时，会显示“当前筛选暂无任务”，并提供“查看全部任务”入口。
+- 真正没有任何媒体任务时仍保留原空态说明；用户切到运行中、需处理或已完成筛选后，不会再误以为 some.im、Replicate 或 Skill/Ruby 任务都消失了。
+- 版本号从 **1.109.0-rc406** 提升为 **1.109.0-rc407**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc406 - 2026-06-28
+
+### Changed
+- **媒体任务摘要支持快捷筛选（1.109.0-rc406）** —— “媒体任务”侧栏摘要区新增运行中、需处理、已完成和全部快捷按钮。
+- 用户看到异步任务统计后，可以直接从摘要区切换到对应状态列表，不必再回到上方分段控件查找，适合整集/全剧批量生成后快速聚焦运行中任务、失败任务或已完成产物。
+- 版本号从 **1.109.0-rc405** 提升为 **1.109.0-rc406**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc405 - 2026-06-28
+
+### Changed
+- **媒体任务侧栏摘要补完成态统计（1.109.0-rc405）** —— “媒体任务”侧栏摘要区除了运行中和需要处理外，现在会展示已完成任务数、完成图片任务数和完成视频任务数。
+- some.im、Replicate、Skill/Ruby 异步任务批量跑完后，用户不必切到“已完成”筛选才能先判断本轮图片/视频产物是否已经回到 App；聊天的状态接力仍保留完整完成图片/视频后续动作。
+- 版本号从 **1.109.0-rc404** 提升为 **1.109.0-rc405**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc404 - 2026-06-28
+
+### Changed
+- **推荐-only Widget 也可发送动作清单（1.109.0-rc404）** —— 当网页组件只有 `recommended_tool`、没有额外 handoff actions 时，组件标题行会显示“动作清单”按钮。
+- 推荐型 Skill/Ruby widget 现在也能把推荐工具、参数、直达语义和 widget 上下文写回聊天，不再依赖“可用动作”区域出现后才有完整动作清单出口。
+- 版本号从 **1.109.0-rc403** 提升为 **1.109.0-rc404**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc403 - 2026-06-28
+
+### Changed
+- **Widget 动作清单补直达语义（1.109.0-rc403）** —— “发送清单”写入聊天的 `<widget-action-list>` 现在会为推荐动作和每个 handoff 动作附带用户可读标题、`local_direct` 标记和 help 说明。
+- 聊天窗口接手 Skill/Ruby 制作包、审片页或候选图页面时，能区分“先本地打开侧栏/网页/蒙版”的动作和“需要 dry-run 或确认后调用工具”的动作，减少下一步执行时的歧义。
+- 版本号从 **1.109.0-rc402** 提升为 **1.109.0-rc403**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc402 - 2026-06-28
+
+### Changed
+- **Widget 动作清单可一键发送到聊天（1.109.0-rc402）** —— 右侧“网页组件”侧栏的“可用动作”标题行新增“发送清单”，会把推荐工具、全部 handoff 动作、工具参数和 widget 上下文写入聊天输入框。
+- Skill/Ruby 制作包、审片页、候选图或媒体任务状态页动作很多时，聊天窗口可以一次性看到完整可接力工具清单，再决定先 dry-run、刷新异步任务、打开候选图、蒙版编辑、放大、导入 manifest 或回写审片 CSV。
+- 版本号从 **1.109.0-rc401** 提升为 **1.109.0-rc402**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc401 - 2026-06-28
+
+### Changed
+- **Widget 可用动作列表支持展开全部（1.109.0-rc401）** —— 右侧“网页组件”侧栏的“可用动作”默认仍显示前 6 个，但当 Skill/Ruby 制作包、审片页或候选图页面提供更多 handoff 时，会显示动作总数和“展开全部/收起”切换。
+- 展开状态只保存在当前侧栏视图本地，不写入 AppState 或项目数据；长制作包页面的导入、审片、任务刷新、候选图、蒙版、放大等动作不再因为数量超过 6 个而被藏起来。
+- 版本号从 **1.109.0-rc400** 提升为 **1.109.0-rc401**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc400 - 2026-06-28
+
+### Changed
+- **Widget 远端取消动作先定位媒体任务（1.109.0-rc400）** —— 右侧“网页组件”侧栏点击 `replicate_cancel_prediction` 或 `some_im_cancel_media_task` 推荐/可用动作时，会先按本地任务句柄、远端 ID、状态 URL 或取消 URL 匹配媒体任务并打开对应侧栏范围。
+- 本地侧栏只做核对和定位，不直接调用取消；完整取消动作仍写回聊天，由 Agent 在上下文里确认后再执行，避免网页组件按钮产生隐藏的远端取消副作用。
+- 版本号从 **1.109.0-rc399** 提升为 **1.109.0-rc400**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc399 - 2026-06-28
+
+### Changed
+- **Widget 远端任务刷新动作本地直达（1.109.0-rc399）** —— 右侧“网页组件”侧栏点击 `replicate_poll_prediction` 或 `some_im_poll_media_task` 推荐/可用动作时，会先按 `task_id`、`prediction_id`、`remote_task_id`、`status_url` 或 `cancel_url` 匹配本地媒体任务。
+- 找到任务后会打开对应媒体任务侧栏范围并立即调用现有 poller 刷新状态；找不到本地任务时仍会打开全量媒体任务侧栏，并把完整远端刷新动作写回聊天继续执行。取消动作仍只交给聊天确认，不做本地暗取消。
+- 版本号从 **1.109.0-rc398** 提升为 **1.109.0-rc399**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc398 - 2026-06-28
+
+### Changed
+- **Widget 制作包导入/审片动作增加本地辅助入口（1.109.0-rc398）** —— 右侧“网页组件”侧栏点击 `import_media_manifest` 推荐或 handoff 动作时，会先尝试从 `widget_preview_path`、`package_directory` 或 `manifest_path` 同目录打开 `widget-preview.html` 制作包预览。
+- `short_drama_import_review_csv` 推荐或 handoff 动作会先打开短剧侧栏查看审片上下文；两类动作仍会把完整参数写回聊天，由 Agent 按 dry-run 或确认再执行真正导入/回写，避免侧栏点击产生隐藏写入。
+- 版本号从 **1.109.0-rc397** 提升为 **1.109.0-rc398**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc397 - 2026-06-28
+
+### Changed
+- **Widget 推荐动作复用本地直达（1.109.0-rc397）** —— 右侧“网页组件”侧栏顶部的 `recommended_tool` 现在会转换为内部 handoff，并复用同一套本地直达处理。
+- 推荐动作如果是 `show_widget`、`show_image_choice_widget`、`list_media_tasks`、`open_image_editor` 或短剧分镜/候选图入口，会先打开对应侧栏或组件，再把完整 `<widget-recommended-action>` 写回聊天，避免推荐入口和“可用动作”入口行为不一致。
+- 版本号从 **1.109.0-rc396** 提升为 **1.109.0-rc397**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc396 - 2026-06-28
+
+### Changed
+- **Widget 媒体任务查看动作本地直达（1.109.0-rc396）** —— 右侧“网页组件”侧栏点击 `list_media_tasks` handoff 动作时，会直接打开媒体任务侧栏。
+- `list_media_tasks` 参数带 project / episode / shot / asset / review_item / scope 锚点时会复用对应筛选范围；没有锚点时打开全量媒体任务。点击后仍会把完整 handoff 写回聊天，方便模型继续刷新、处理失败或导回产物。
+- 版本号从 **1.109.0-rc395** 提升为 **1.109.0-rc396**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc395 - 2026-06-28
+
+### Fixed
+- **Widget handoff 嵌套参数保真（1.109.0-rc395）** —— 右侧“网页组件”侧栏解析 handoff 参数时，会把 `recommended_arguments`、`widget_arguments` 等 `*_arguments` 中的嵌套逗号参数完整保留。
+- Skill/Ruby 制作包常见的 `recommended_arguments=package_directory=..., dry_run=true, import_pending_tasks=true` 不再被截成只有 `package_directory`；本地打开网页组件或候选图后，Widget context 仍能把完整后续导入参数交给聊天窗口。
+- 版本号从 **1.109.0-rc394** 提升为 **1.109.0-rc395**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc394 - 2026-06-28
+
+### Changed
+- **Widget show_widget 网页动作本地直达（1.109.0-rc394）** —— 右侧“网页组件”侧栏点击 `show_widget` handoff 动作时，如果参数携带 `html_path`，会直接本地读取并打开对应 Skill/Ruby 生成的 HTML/SVG 网页组件。
+- 本地直达沿用工具层的安全边界：仅允许当前工作区、系统临时目录和 WillDeep 短剧导出目录内的 `.html` / `.htm` / `.svg`，文件需为非空 UTF-8 且不超过 1MB；完整 handoff 仍会写回聊天，便于继续导入 manifest、回写审片 CSV 或刷新媒体任务。
+- `show_widget` handoff 在“可用动作”中显示为“打开网页组件”并带“直达”标记，让 Ruby 制作包预览、短剧 Skill 看板和外部 API 结果页能从侧栏直接打开。
+- 版本号从 **1.109.0-rc393** 提升为 **1.109.0-rc394**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc393 - 2026-06-28
+
+### Changed
+- **Widget 通用候选图动作本地直达（1.109.0-rc393）** —— 右侧“网页组件”侧栏点击 `show_image_choice_widget` handoff 动作时，如果参数携带 `image_paths` / `candidate_image_paths` / `image_path`，会本地生成通用候选图选择器并打开 Widget 侧栏。
+- 通用候选图直达复用现有 `AgentImageChoiceWidgetBuilder`，保留 project/episode/shot/asset/review 锚点和源动作上下文；点击后仍会把完整 handoff 写回聊天，方便模型继续选主图、蒙版编辑、擦除、放大或图生视频。
+- Widget “可用动作”补充更多用户可读标题，包括“关闭检查项”“批量生成”“生成分镜媒体”“生成资产参考”“图生视频”“放大图片”“导入制作包”“回写审片 CSV”“刷新/取消远端任务”等。
+- 版本号从 **1.109.0-rc392** 提升为 **1.109.0-rc393**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc392 - 2026-06-28
+
+### Changed
+- **Widget 可用动作展示直达语义（1.109.0-rc392）** —— 右侧“网页组件”侧栏会把常见 handoff 工具显示为更清晰的标题和图标，例如“打开媒体任务”“刷新媒体任务”“打开蒙版”“打开分镜看板”“打开候选图”。
+- 对可本地直达的动作增加“直达”标记；底层工具名和参数仍保留显示，点击后继续写回聊天，兼顾用户可读性和模型接力上下文。
+- 版本号从 **1.109.0-rc391** 提升为 **1.109.0-rc392**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc391 - 2026-06-28
+
+### Changed
+- **Widget 短剧网页组件动作本地直达（1.109.0-rc391）** —— 右侧“网页组件”侧栏点击 `short_drama_show_storyboard_widget` 或 `short_drama_show_image_choice_widget` handoff 动作时，会本地生成对应短剧分镜看板或候选图选择器并打开 Widget 侧栏。
+- 直达逻辑复用现有 `AgentShortDramaStoryboardWidgetBuilder` 和当前媒体任务摘要，不调用外部 API、不修改短剧数据；聊天 handoff 仍完整保留，方便模型继续排产、审片或发起 some.im / Replicate 任务。
+- 短剧媒体合约测试同步覆盖 Widget 查看类动作本地直达；版本号从 **1.109.0-rc390** 提升为 **1.109.0-rc391**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc390 - 2026-06-28
+
+### Changed
+- **Widget 图片编辑动作直达蒙版面板（1.109.0-rc390）** —— 右侧“网页组件”侧栏点击 `open_image_editor` 或 `short_drama_open_image_editor` handoff 动作时，会先本地打开图片蒙版编辑面板。
+- 本地直达会保留 `image_path` / `artifact_path`、可选 `mask_path`、`operation=erase|inpaint` 以及 project/episode/shot/asset/review 锚点；聊天接力仍保留完整 handoff，方便提交 some.im / Replicate 编辑任务后继续回填短剧分镜或检查项。
+- 短剧媒体合约测试同步覆盖 Widget 图片编辑动作本地直达；版本号从 **1.109.0-rc389** 提升为 **1.109.0-rc390**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc389 - 2026-06-28
+
+### Changed
+- **Widget 刷新任务动作触发本地轮询（1.109.0-rc389）** —— 右侧“网页组件”侧栏点击 `short_drama_refresh_media_tasks` handoff 动作时，会在打开对应媒体任务筛选范围后，立即刷新该范围内运行中的 some.im、Replicate 和可 HTTPS 轮询的通用媒体任务。
+- `short_drama_open_media_tasks` 仍只做本地打开；刷新动作仍会把完整 handoff 写回聊天，方便模型继续处理失败任务、补齐缺失分镜或关闭检查项。
+- 短剧媒体合约测试同步覆盖 Widget 刷新动作本地轮询；版本号从 **1.109.0-rc388** 提升为 **1.109.0-rc389**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc388 - 2026-06-28
+
+### Changed
+- **Widget 动作直达媒体任务侧栏（1.109.0-rc388）** —— 右侧“网页组件”侧栏点击 `short_drama_open_media_tasks` / `short_drama_refresh_media_tasks` handoff 动作时，会先解析 `project_id`、`episode_id`、`shot_id`、`asset_kind`、`asset_id`、`review_item_id` 和 `scope`，本地打开对应媒体任务侧栏过滤范围。
+- 动作仍会写回聊天，保留模型继续刷新、处理失败、生成补图/补视频或关闭检查项的能力；用户不必等模型执行工具才看到当前异步任务状态。
+- 短剧媒体合约测试同步覆盖 Widget 任务动作本地直达；版本号从 **1.109.0-rc387** 提升为 **1.109.0-rc388**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc387 - 2026-06-28
+
+### Changed
+- **候选图 Widget 补 post-select 动作摘要（1.109.0-rc387）** —— `show_image_choice_widget` 的网页组件 contextLines 现在会写入 `post_select_action_keys`，提前说明选中候选图后可用的视频、编辑、擦除、放大、任务状态和检查项动作。
+- 工具返回说明同步提示模型优先读取 `post_select_action_keys` 与结构化 `post_select_*` 字段，减少选图后继续调用 some.im、Replicate 或短剧任务工具时的参数猜测。
+- 短剧媒体合约测试同步覆盖通用候选图 Widget 的 post-select 摘要；版本号从 **1.109.0-rc386** 提升为 **1.109.0-rc387**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc386 - 2026-06-28
+
+### Changed
+- **网页组件动作解析兼容紧凑 handoff（1.109.0-rc386）** —— `AgentWidget.handoffActions` 现在兼容冒号、等号两种键值行，并能识别单行 `action=..., tool=..., arguments=...`。
+- Skill/Ruby、短剧制作包或媒体任务上下文把工具动作压成一行时，右侧“网页组件”侧栏也能显示为可点击动作，并把完整参数尾部送回聊天，避免逗号参数被截断。
+- 短剧媒体合约测试同步覆盖 Widget 紧凑 handoff 解析；版本号从 **1.109.0-rc385** 提升为 **1.109.0-rc386**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc385 - 2026-06-28
+
+### Changed
+- **网页组件侧栏显式展示多动作接力（1.109.0-rc385）** —— `AgentWidget` 现在会从 contextLines 中解析 `*_tool` / `*_arguments` 动作，保留原有 `recommended_tool` 的同时，把 Widget 派生动作作为独立 handoff actions。
+- 右侧“网页组件”侧栏新增“可用动作”按钮组，可把 `open_widget_tasks_tool`、`refresh_widget_tasks_tool`、`resolve_widget_review_tool` 等动作连同完整 Widget 上下文写回聊天，方便 Skill/Ruby 看板直接接续短剧异步任务状态。
+- 短剧媒体合约测试同步覆盖 Widget 多动作解析和侧栏聊天接力；版本号从 **1.109.0-rc384** 提升为 **1.109.0-rc385**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc384 - 2026-06-28
+
+### Changed
+- **show_widget 补项目/分集任务范围接力（1.109.0-rc384）** —— `show_widget` 只携带 `project_id` 或 `project_id + episode_id` 时，也会自动派生 `short_drama_open_media_tasks` / `short_drama_refresh_media_tasks` 参数。
+- 整剧网页组件会生成 `scope=project`，单集网页组件会生成 `scope=episode`；Skill/Ruby 生成的整剧或分集看板回到聊天后，可直接打开对应异步媒体任务状态。
+- 短剧媒体合约测试同步覆盖 `show_widget` 的项目/分集范围派生 handoff；版本号从 **1.109.0-rc383** 提升为 **1.109.0-rc384**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc383 - 2026-06-28
+
+### Changed
+- **show_widget 自动派生短剧任务范围接力（1.109.0-rc383）** —— `show_widget` 携带短剧分镜、检查项或资产锚点时，会自动在 Widget contextLines 中补 `short_drama_open_media_tasks` / `short_drama_refresh_media_tasks` 参数。
+- 当网页组件带 `review_item_id` 时，contextLines 还会补 `short_drama_resolve_review_item` 参数；Skill/Ruby 审片网页回到聊天后，可以直接打开检查项任务范围、刷新异步任务或关闭检查项。
+- 短剧媒体合约测试同步覆盖 `show_widget` 的短剧任务范围派生 handoff；版本号从 **1.109.0-rc382** 提升为 **1.109.0-rc383**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc382 - 2026-06-28
+
+### Changed
+- **show_widget 补审片检查项锚点（1.109.0-rc382）** —— `show_widget` 现在支持可选 `review_item_id` 参数，并会把它写入 Widget contextLines。
+- Skill/Ruby 生成的审片、修复队列或蒙版返工网页可以直接锚定到短剧检查项，聊天窗口从网页组件接手后能继续打开检查项任务范围、刷新相关异步任务或关闭检查项。
+- 短剧媒体合约测试同步覆盖 `show_widget` 的 `review_item_id` 参数与上下文保留；版本号从 **1.109.0-rc381** 提升为 **1.109.0-rc382**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc381 - 2026-06-28
+
+### Changed
+- **show_widget 自动保留 html_path 上下文（1.109.0-rc381）** —— Skill/Ruby 脚本调用 `show_widget(html_path=...)` 嵌入本地 HTML/SVG 网页时，Widget contextLines 现在会自动写入 `html_path`。
+- 聊天窗口从网页组件接手时无需调用方额外重复传 `source_path`，也能定位原始网页文件，继续读取、复查或重新生成 Skill/Ruby 产物。
+- 短剧媒体合约测试同步覆盖 `show_widget` 的 `html_path` 上下文保留；版本号从 **1.109.0-rc380** 提升为 **1.109.0-rc381**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc380 - 2026-06-28
+
+### Changed
+- **图片蒙版编辑提交补通用任务状态交接（1.109.0-rc380）** —— 图片蒙版编辑面板提交 Replicate / some.im 任务后，`<image-edit-task-submitted>` 现在会携带 `list_media_tasks` 的 active/all 查询参数和 `target_task_id`。
+- 非短剧锚定的通用图片编辑任务也能从聊天窗口继续跟踪异步状态；短剧分镜、检查项和资产范围的打开/刷新参数继续保留。
+- 短剧媒体合约测试同步覆盖图片编辑提交后的通用媒体任务状态交接；版本号从 **1.109.0-rc379** 提升为 **1.109.0-rc380**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc379 - 2026-06-28
+
+### Changed
+- **通用候选图 Widget 补候选动作上下文（1.109.0-rc379）** —— `show_image_choice_widget` 和短剧候选图选择器现在会在调用方传入的 contextLines 之外追加 `<image-choice-widget>`，列出锚点、候选图路径和前 12 张候选图的选择/蒙版编辑/擦除/放大/图生视频参数。
+- 由 Skill、聊天工具或短剧流程生成的候选图网页组件，不再只依赖按钮点击返回 `<image-choice>`，聊天窗口可直接读取 Widget 上下文继续接手图片编辑与短剧制作。
+- 短剧媒体合约测试同步覆盖通用候选图 Widget 的候选动作上下文；版本号从 **1.109.0-rc378** 提升为 **1.109.0-rc379**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc378 - 2026-06-28
+
+### Changed
+- **媒体任务候选图 Widget 补聊天上下文（1.109.0-rc378）** —— 从媒体任务侧栏打开的“候选图”网页组件现在会携带 `<media-task-image-choice-widget>` contextLines，列出任务锚点、候选图路径和前 12 张候选图的选择/编辑/擦除/放大/图生视频参数。
+- 这样聊天窗口在接手侧栏候选图 Widget 时，不必只依赖 HTML 按钮发送的 `<media-task-image-choice>`，也能直接理解每张候选图可执行的推荐工具参数。
+- 短剧媒体合约测试同步覆盖候选图 Widget contextLines；版本号从 **1.109.0-rc377** 提升为 **1.109.0-rc378**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc377 - 2026-06-28
+
+### Changed
+- **manifest 导回工具结果补项目任务刷新交接（1.109.0-rc377）** —— `import_media_manifest` 返回的 `<media-import-follow-up>` 现在会在本批任务归并到同一个短剧项目 UUID 时，直接写入项目级 `short_drama_open_media_tasks` 和 `short_drama_refresh_media_tasks` 参数。
+- Widget context 里的项目级任务交接也同步补上刷新入口；聊天窗口即使只拿到工具结果、不打开网页组件，也能打开或刷新当前短剧项目的异步媒体任务侧栏。
+- 短剧媒体合约测试同步覆盖 manifest follow-up 的项目级打开/刷新任务交接；版本号从 **1.109.0-rc376** 提升为 **1.109.0-rc377**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc376 - 2026-06-28
+
+### Changed
+- **manifest Widget 补项目媒体任务打开交接（1.109.0-rc376）** —— `import_media_manifest` 自动排入制作包 Widget 时，如果本批任务能归并到同一个短剧项目 UUID，会在 `<media-import-widget-handoff>` 中写入 `short_drama_open_media_tasks` 工具和 `project_id=..., scope=project` 参数。
+- 这让网页组件回到聊天窗口后，可以直接打开对应项目的媒体任务侧栏，而不是只依赖任务 ID 和 `list_media_tasks` 状态查询；非 UUID 项目路径不会输出该调用参数，避免误把路径当 `project_id`。
+- 短剧媒体合约测试同步覆盖 manifest Widget 的项目级媒体任务打开交接；版本号从 **1.109.0-rc375** 提升为 **1.109.0-rc376**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc375 - 2026-06-28
+
+### Changed
+- **manifest 导回媒体任务侧栏按同项目自动过滤（1.109.0-rc375）** —— `import_media_manifest` 导回 pending/failed 任务并优先打开“媒体任务”侧栏时，如果本次导回任务都锚定到同一个短剧项目，会自动使用项目级 `AgentMediaTaskScope` 过滤。
+- 跨项目或无短剧锚点导回仍打开全局媒体任务侧栏，避免误筛；同项目制作包导回则直接看到该短剧项目的异步任务状态。
+- 短剧媒体合约测试同步覆盖 manifest 导回后的项目级媒体任务过滤；版本号从 **1.109.0-rc374** 提升为 **1.109.0-rc375**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc374 - 2026-06-28
+
+### Changed
+- **manifest 导回 pending/failed 时优先打开媒体任务侧栏（1.109.0-rc374）** —— `import_media_manifest` 仍会把制作包 `widget-preview.html` 排入网页组件，但当本次导回存在 pending 或 failed 任务时，右侧侧栏会优先打开“媒体任务”。
+- 无待处理任务时仍直接打开网页组件；这样 Ruby/第三方 API 导回异步任务后，用户第一眼看到的是任务状态，完成态导回则继续优先看制作包预览。
+- 短剧媒体合约测试同步覆盖 pending/failed 导回的媒体任务侧栏优先级；版本号从 **1.109.0-rc373** 提升为 **1.109.0-rc374**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc373 - 2026-06-28
+
+### Changed
+- **manifest 自动网页组件补媒体任务计数摘要（1.109.0-rc373）** —— `import_media_manifest` 自动排入的制作包 Widget handoff 现在会写入 `task_count`、`pending_task_count`、`failed_task_count` 和 `completed_task_count`。
+- 聊天窗口从网页组件接手时，可以先按计数判断是刷新 pending、处理失败，还是继续候选图选择、视频生成和审片回写流程。
+- 短剧媒体合约测试同步覆盖自动 Widget 的任务计数摘要；版本号从 **1.109.0-rc372** 提升为 **1.109.0-rc373**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc372 - 2026-06-28
+
+### Changed
+- **manifest 自动网页组件补媒体任务状态索引（1.109.0-rc372）** —— `import_media_manifest` 自动排入的制作包 Widget 现在会把本次导回创建或更新的 `task_ids`、`pending_task_ids` 和 `failed_task_ids` 写入 `<media-import-widget-handoff>`。
+- Widget handoff 同步附带 `list_media_tasks` 的 active/all 状态查询参数；用户从网页组件回到聊天时，模型能直接定位异步任务侧栏状态，而不是只知道制作包文件路径。
+- 短剧媒体合约测试同步覆盖自动 Widget 的任务索引和状态查询字段；版本号从 **1.109.0-rc371** 提升为 **1.109.0-rc372**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc371 - 2026-06-28
+
+### Changed
+- **manifest 自动网页组件补完整制作包上下文（1.109.0-rc371）** —— `import_media_manifest` 自动排入的制作包 Widget 现在会携带 `widget_preview_path`、`timeline_path`、`gap_report_path`、`shot_list_path`、`review_template_path` 和 `review_queue_path`。
+- Widget handoff 同步包含 dry-run/正式 `import_media_manifest` 参数，以及 `short_drama_import_review_csv` 修复队列回写参数；Ruby/第三方 API 产物导回后，右侧网页组件和聊天窗口可直接继续排产、审片和回写检查项。
+- 短剧媒体合约测试同步覆盖 manifest 自动 Widget 的完整制作包上下文；版本号从 **1.109.0-rc370** 提升为 **1.109.0-rc371**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc370 - 2026-06-28
+
+### Changed
+- **manifest 导回后自动打开制作包网页组件（1.109.0-rc370）** —— `import_media_manifest` 正式导回制作包产物或 pending 远端任务后，如果同目录存在 `widget-preview.html`，会自动排入右侧“网页组件”并打开侧栏。
+- 自动排入的 Widget 会携带 `<media-import-widget-handoff>`，包括 package、manifest、source、`recommended_tool=import_media_manifest` 和 `dry_run=true, import_pending_tasks=true` 参数；导回后的网页组件可继续预检、登记异步任务和复查制作包。
+- 短剧媒体合约测试同步覆盖 manifest 导回自动排队 Widget；版本号从 **1.109.0-rc369** 提升为 **1.109.0-rc370**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc369 - 2026-06-28
+
+### Changed
+- **manifest 导回后的网页预览提示携带 Widget 上下文（1.109.0-rc369）** —— `import_media_manifest` 导回制作包后，返回的 `show_widget` 示例现在包含 `source_label`、`source_path`、`package_directory`、`recommended_tool` 和 `recommended_arguments`。
+- Ruby/第三方 API 脚本把产物导回后，聊天窗口打开 `widget-preview.html` 时可继续保留 dry-run 预检、pending 远端任务登记和正式导入参数，不再只是打开一个孤立 HTML。
+- 短剧媒体合约测试同步覆盖 manifest 导回后的 Widget 上下文字段；版本号从 **1.109.0-rc368** 提升为 **1.109.0-rc369**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc368 - 2026-06-28
+
+### Changed
+- **制作包预览时间线/缺口/CSV 按钮补完整 handoff（1.109.0-rc368）** —— 初始制作包预览和 Ruby 脚本重写后的 `widget-preview.html` 中，时间线、缺口报告和 CSV 审片按钮都会把对应 `<production-package-handoff>` 或 `<ruby-media-script-handoff>` 一并送回聊天。
+- 这些按钮现在保留 timeline、gap report、CSV、`import_media_manifest` dry-run/正式导入和 `short_drama_import_review_csv` 回写参数，聊天窗口接手时不再只拿到自然语言计划。
+- 短剧媒体合约测试同步覆盖 timeline/gap/CSV 按钮 handoff；版本号从 **1.109.0-rc367** 提升为 **1.109.0-rc368**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc367 - 2026-06-28
+
+### Changed
+- **Ruby 预览失败处理按钮带完整 handoff（1.109.0-rc367）** —— Ruby 媒体脚本生成的 `widget-preview.html` 中，“分析失败”和“重跑失败”按钮现在通过 `JSON.dump` 写入完整 prompt，并把 `<ruby-media-script-handoff>` 一并带回聊天。
+- 失败分析和失败重跑提示现在可直接复用 `dry_run_import_arguments` / `submit_import_arguments`，聊天窗口不再需要猜制作包、manifest、pending 远端任务和回写路径。
+- 短剧媒体合约测试同步覆盖失败按钮 handoff；版本号从 **1.109.0-rc366** 提升为 **1.109.0-rc367**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc366 - 2026-06-28
+
+### Changed
+- **Ruby 媒体脚本运行接力补结构化参数（1.109.0-rc366）** —— 短剧侧栏“运行脚本”写入聊天的提示现在包含 `<ruby-media-script-run-handoff>`，列出 package、Ruby 脚本、私有 env 示例、timeline、gap report、CSV、manifest、outputs 和 widget 路径。
+- 结构块还带出建议命令、`import_media_manifest` dry-run/正式导入、pending 远端任务登记、修复队列回写、网页预览参数和安全提示，方便聊天窗口直接接手 Ruby/Skill 调第三方 API 后的回流。
+- 短剧媒体合约测试同步覆盖 Ruby 脚本运行 handoff；版本号从 **1.109.0-rc365** 提升为 **1.109.0-rc366**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc365 - 2026-06-28
+
+### Changed
+- **侧栏导出制作包后自动打开网页组件（1.109.0-rc365）** —— 从短剧侧栏导出整剧或单集制作包后，会自动读取 `widget-preview.html` 排入右侧“网页组件”，并在状态消息里标注打开结果。
+- 手动“预览网页”也复用同一套 `<production-package-handoff>` contextLines，包含 manifest、timeline、gap report、CSV、导入、审片回写和修复队列回写参数；侧栏导出和聊天工具导出的网页组件上下文保持一致。
+- 短剧媒体合约测试同步覆盖侧栏导出自动预览和完整 handoff；版本号从 **1.109.0-rc364** 提升为 **1.109.0-rc365**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc364 - 2026-06-28
+
+### Changed
+- **自动制作包预览上下文包入 production-package-handoff（1.109.0-rc364）** —— `short_drama_export_production_package` 自动排入右侧网页组件的 `AgentWidget.contextLines` 现在用 `<production-package-handoff>` 包住完整制作包上下文，并标注 `action: short_drama_export_production_package_widget`。
+- 网页组件按钮或侧栏推荐动作回到聊天时，模型能按同一结构块识别制作包路径、manifest、timeline、gap report、CSV、导入、审片回写和修复队列回写参数。
+- 短剧媒体合约测试同步覆盖自动预览 widget 的 handoff 边界；版本号从 **1.109.0-rc363** 提升为 **1.109.0-rc364**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc363 - 2026-06-28
+
+### Changed
+- **自动制作包预览携带完整 handoff 上下文（1.109.0-rc363）** —— `short_drama_export_production_package` 自动排入右侧网页组件的 `AgentWidget` 现在携带完整制作包上下文，包括 manifest、widget、timeline、gap report、shot list、审片模板、修复队列路径。
+- 该 widget 的 contextLines 同步携带 `import_media_manifest` dry-run/正式导入、审片 CSV 回写、修复队列回写和 `show_widget` 参数；用户从网页组件按钮回到聊天时，聊天窗口能继续拿到全套制作包 handoff。
+- 短剧媒体合约测试同步覆盖自动预览 widget 的 contextLines；版本号从 **1.109.0-rc362** 提升为 **1.109.0-rc363**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc362 - 2026-06-28
+
+### Changed
+- **制作包导出后自动打开网页预览（1.109.0-rc362）** —— 在对话 runtime 中调用 `short_drama_export_production_package` 后，工具会读取刚生成的 `widget-preview.html`，排入 `AgentWidgetRegistry`，并请求打开右侧“网页组件”面板。
+- 工具返回新增 `Widget panel` 状态；如果不是对话 runtime 或预览文件不可读，会明确说明未排队，但不会影响制作包导出。
+- 短剧媒体合约测试同步覆盖导出工具自动排队制作包预览组件；版本号从 **1.109.0-rc361** 提升为 **1.109.0-rc362**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc361 - 2026-06-28
+
+### Changed
+- **制作包导出工具返回结构化接力参数（1.109.0-rc361）** —— `short_drama_export_production_package` 的工具返回现在直接包含 `<production-package-handoff>`，列出制作包目录、manifest、widget、timeline、gap report、CSV 路径，以及 `import_media_manifest` dry-run/正式导入、审片 CSV、修复队列和 `show_widget` 参数。
+- 聊天窗口从短剧制作包导出结果接手时，可以直接按结构化参数预检导入、正式导入、回写审片、回写修复队列或打开网页组件，不必再从路径列表里猜下一步。
+- 短剧媒体合约测试同步覆盖工具返回的 handoff 字段；版本号从 **1.109.0-rc360** 提升为 **1.109.0-rc361**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc360 - 2026-06-28
+
+### Changed
+- **制作包修复队列推荐动作可一键交回聊天（1.109.0-rc360）** —— 初始导出的 `widget-preview.html` 和 Ruby 重写版都会在“修复队列推荐动作”里为每条未解决检查项提供“交给聊天处理”按钮。
+- 按钮会发送 `<short-drama-review-queue-action>`，包含 `fix_production_review_queue_item`、`recommended_tool`、`recommended_arguments`、同检查项任务流水入口和关闭检查项参数；聊天窗口可直接接手执行重绘、擦除、放大、补拍、查看任务或关闭检查项。
+- 短剧媒体合约测试同步覆盖初始预览与 Ruby 预览的一键聊天接力；版本号从 **1.109.0-rc359** 提升为 **1.109.0-rc360**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc359 - 2026-06-28
+
+### Changed
+- **初始制作包预览展示修复队列推荐动作（1.109.0-rc359）** —— 初始导出的 `widget-preview.html` 现在和 Ruby 重写版一样，会展示前 20 条未解决检查项的 `recommended_tool`、`recommended_arguments`、任务流水参数和关闭检查项参数。
+- 用户刚导出制作包、不运行 Ruby 媒体脚本时，也能从网页组件直接接力处理 `production-review-queue.csv` 的修复动作，不必再打开 CSV 手动查每行参数。
+- 短剧媒体合约测试同步覆盖初始预览的修复队列推荐动作区；版本号从 **1.109.0-rc358** 提升为 **1.109.0-rc359**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc358 - 2026-06-28
+
+### Changed
+- **Ruby 制作预览展示修复队列推荐动作（1.109.0-rc358）** —— Ruby 媒体脚本重写的 `widget-preview.html` 现在会读取 `production-review-queue.csv`，展示前 20 条未解决检查项的 `recommended_tool`、`recommended_arguments`、任务流水参数和关闭检查项参数。
+- 外部脚本跑完后，用户从网页组件回到聊天窗口时，可以直接看到修复队列每行推荐的执行动作，不必再打开 CSV 手动查工具参数。
+- 短剧媒体合约测试同步覆盖 Ruby 预览的修复队列推荐动作区；版本号从 **1.109.0-rc357** 提升为 **1.109.0-rc358**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc357 - 2026-06-28
+
+### Changed
+- **检查项修复队列 CSV 补可执行接力字段（1.109.0-rc357）** —— `production-review-queue.csv` 现在新增 `recommended_tool`、`recommended_arguments`、`secondary_tool`、`secondary_arguments`、`open_review_tasks_arguments`、`refresh_review_tasks_arguments` 和 `resolve_review_arguments`。
+- Ruby Skill、第三方修复脚本或聊天窗口读取修复队列后，可直接按检查项类型执行蒙版重绘、擦除、放大、补拍、查看同一检查项任务流水或关闭检查项，不必重新推断工具参数。
+- 拆出 `AgentShortDramaProductionReviewQueue.swift` 承载修复队列导出逻辑，保持导出器主文件低于 3000 行；版本号从 **1.109.0-rc356** 提升为 **1.109.0-rc357**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc356 - 2026-06-28
+
+### Changed
+- **制作包资产关联分镜补可执行批量参数（1.109.0-rc356）** —— `production-gap-report.json` 的 `assets[]` 现在新增 `linked_shot_image_dry_run_arguments` / `linked_shot_image_submit_arguments` / `linked_shot_video_dry_run_arguments` / `linked_shot_video_submit_arguments`。
+- Ruby Skill 或第三方排产脚本补完人物/场景参考图后，可直接调用这些 `short_drama_generate_batch_media(shot_ids=...)` 参数推进关联分镜的补主图或补视频，不必自行拼接 `shot_ids`。
+- 制作包 Markdown、网页预览提示和短剧媒体合约测试同步覆盖关联分镜可执行参数；版本号从 **1.109.0-rc355** 提升为 **1.109.0-rc356**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc355 - 2026-06-28
+
+### Changed
+- **制作包资产缺口报告补关联分镜索引（1.109.0-rc355）** —— `production-gap-report.json` 的 `assets[]` 现在新增 `linked_shot_count` 和 `linked_shot_ids`，按分集/分镜顺序列出人物或场景资产关联到的分镜。
+- Ruby Skill 或第三方排产脚本补完人物/场景参考图后，可直接用这些分镜 ID 优先推进相关镜头的补主图、补视频或检查项修复，避免资产制作和分镜排产脱节。
+- 制作包 Markdown、网页预览提示和短剧媒体合约测试同步覆盖关联分镜索引；版本号从 **1.109.0-rc354** 提升为 **1.109.0-rc355**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc354 - 2026-06-28
+
+### Fixed
+- **单集制作包只导出本集引用资产（1.109.0-rc354）** —— 当 `short_drama_export_production_package` 传入 `episode_id` 时，导出器现在会按该集分镜引用过滤人物和场景。
+- 单集制作包的 `production-package.json`、`media-import-manifest-template.json`、`production-gap-report.json` 和网页预览不再携带无关集的人物/场景参考图缺口，避免 Ruby Skill 或第三方脚本误给整部剧资产排产。
+- 短剧媒体合约测试同步覆盖单集导出的角色/场景裁剪；版本号从 **1.109.0-rc353** 提升为 **1.109.0-rc354**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc353 - 2026-06-28
+
+### Fixed
+- **单集制作包缺口批量动作保留 episode 范围（1.109.0-rc353）** —— 当 `short_drama_export_production_package` 只导出某一集时，`production-gap-report.json` 的 `batch_actions` 现在会带上 `episode_id`。
+- Ruby Skill 或第三方排产脚本读取单集制作包后，批量补主图/补视频会限制在当前集内，不会因为只有 `project_id` 而误排整部短剧的缺口。
+- 短剧媒体合约测试同步覆盖 episode scope 的 batch action 前缀和制作包说明；版本号从 **1.109.0-rc352** 提升为 **1.109.0-rc353**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc352 - 2026-06-28
+
+### Changed
+- **制作包缺口报告补单镜正式提交参数（1.109.0-rc352）** —— `production-gap-report.json` 的缺主图/缺视频分镜现在除了 `image_dry_run_arguments` / `video_dry_run_arguments`，还会输出 `image_submit_arguments` / `video_submit_arguments`。
+- Ruby Skill 或第三方排产脚本读取缺口报告后，可先调用单镜 dry-run 预检，再直接使用同一分镜的 submit 参数正式提交 `short_drama_generate_shot_media`，不必自行拼接 `dry_run=false`。
+- 短剧媒体合约测试同步覆盖单镜 submit 字段和制作包说明；版本号从 **1.109.0-rc351** 提升为 **1.109.0-rc352**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc351 - 2026-06-28
+
+### Changed
+- **单分镜媒体生成支持 dry-run 预检（1.109.0-rc351）** —— `short_drama_generate_shot_media` 新增 `dry_run` 参数，可先校验分镜、prompt、model、endpoint、图片尺寸和视频参考图，不提交 some.im 任务。
+- 制作包预览和 Ruby 模板重写版的单镜“补主图 / 补视频”按钮改为先 `dry_run=true`，确认后再 `dry_run=false`；短剧侧栏分镜上下文也输出单镜图片/视频 dry-run 与正式提交两套参数。
+- 短剧媒体合约测试同步覆盖单分镜 dry-run schema、工具返回、侧栏上下文和制作包按钮；版本号从 **1.109.0-rc350** 提升为 **1.109.0-rc351**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc350 - 2026-06-28
+
+### Changed
+- **资产参考图生成支持 dry-run 预检（1.109.0-rc350）** —— `short_drama_generate_asset_media` 新增 `dry_run` 参数，可先校验人物/场景资产、prompt、model、size 和 endpoint，而不提交 some.im 任务。
+- 制作包缺口报告、短剧聊天上下文和网页预览的资产参考图动作同步输出 `generate_reference_dry_run_arguments` / `generate_asset_reference_dry_run_arguments`，正式提交参数显式带 `dry_run=false`，方便 Skill/Ruby 自动排产先预检再花额度。
+- 短剧媒体合约测试同步覆盖资产参考图 dry-run schema、工具返回和制作包接力；版本号从 **1.109.0-rc349** 提升为 **1.109.0-rc350**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc349 - 2026-06-28
+
+### Changed
+- **制作包缺口报告纳入人物/场景参考图（1.109.0-rc349）** —— `production-gap-report.json` 现在新增 `missing_asset_reference_count` 和 `assets[]`，逐个人物/场景列出参考图数量、是否缺参考图、打开/刷新资产任务参数，以及缺图时的 `short_drama_generate_asset_media` 参数。
+- 制作包 Markdown 和网页预览的“按缺口报告排产”提示同步要求优先读取资产参考图缺口，再安排补主图、补视频和检查项处理；短剧 Skill 或 Ruby 脚本可用同一 gap report 先补齐角色定妆与场景板。
+- 短剧媒体合约测试同步覆盖资产参考图 gap 字段；版本号从 **1.109.0-rc348** 提升为 **1.109.0-rc349**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc348 - 2026-06-28
+
+### Changed
+- **制作包网页任务入口补刷新接力（1.109.0-rc348）** —— 制作包预览和 Ruby 模板重写后的网页预览中，分镜、分集、检查项和人物/场景资产的任务入口现在会同时提示 `short_drama_open_media_tasks` 与 `short_drama_refresh_media_tasks`。
+- 人物/场景资产网页动作新增 `short_drama_generate_asset_media` 再生成参考图参数；用户从 Skill/Ruby 生成的网页组件回到聊天时，可直接刷新异步任务状态、继续补参考图或处理检查项。
+- 短剧媒体合约测试同步覆盖网页预览刷新与资产再生成接力；版本号从 **1.109.0-rc347** 提升为 **1.109.0-rc348**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc347 - 2026-06-28
+
+### Changed
+- **资产完成图聊天接力补任务刷新与再生成入口（1.109.0-rc347）** —— 带人物/场景资产锚点的图片任务完成后，自动通知、完整任务上下文和范围摘要都会输出资产任务打开/刷新参数，以及 `short_drama_generate_asset_media` 再生成参考图参数。
+- 用户从侧栏或聊天看到资产参考图后，可直接刷新同一人物/场景的任务流水、继续生成更多参考图，或沿用已有绑定、蒙版编辑、擦除和放大动作继续短剧资产制作。
+- 短剧媒体合约测试同步覆盖资产任务刷新与再生成接力；版本号从 **1.109.0-rc346** 提升为 **1.109.0-rc347**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc346 - 2026-06-28
+
+### Changed
+- **show_widget 支持 Skill 临时网页文件（1.109.0-rc346）** —— `show_widget(html_path:)` 现在允许读取系统临时目录中的 `.html` / `.htm` / `.svg` 文件，方便 Ruby Skill 或第三方脚本先写临时网页，再嵌入右侧「网页组件」侧栏。
+- 安全边界仍保留：只允许 workspace、系统临时目录或 WillDeep 短剧导出目录，继续校验扩展名、1MB 上限，并由 WKWebView CSP 禁网络和禁导航。
+- 短剧媒体合约测试同步覆盖临时目录白名单；版本号从 **1.109.0-rc345** 提升为 **1.109.0-rc346**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc345 - 2026-06-28
+
+### Changed
+- **媒体任务缩略图可一键绑定人物/场景参考图（1.109.0-rc345）** —— 带 `project_id + asset_kind + asset_id` 锚点的图片产物，现在可在媒体任务侧栏缩略图上直接设为短剧人物/场景参考图。
+- 点击后会更新短剧 store、打开短剧侧栏，并向聊天输入 `<short-drama-asset-reference-attached>`，携带查看资产任务、继续生成资产参考图、蒙版编辑、擦除和放大参数。
+- 短剧媒体合约测试同步覆盖缩略图资产参考图入口；版本号从 **1.109.0-rc344** 提升为 **1.109.0-rc345**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc344 - 2026-06-28
+
+### Changed
+- **通用第三方异步任务识别更多产物字段（1.109.0-rc344）** —— `AgentGenericMediaStatusClient` 的 provider-neutral 轮询现在会把 `media_url`、`download_url`、`artifact_url`、`file_url` 等常见字段纳入完成判断和产物下载。
+- 轮询响应里的 `media` / `images` / `videos` / `artifacts` / `files` 数组也会被收集，短剧 Skill、Ruby 制作包或第三方 API 返回常规媒体 URL 后，侧栏任务可自动下载产物并继续回流聊天。
+- 短剧媒体合约测试同步覆盖这些输出键；版本号从 **1.109.0-rc343** 提升为 **1.109.0-rc344**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc343 - 2026-06-28
+
+### Changed
+- **制作包 Ruby 模板补 Replicate Predictions 请求体（1.109.0-rc343）** —— Ruby 模板新增 `WILLDEEP_MEDIA_REQUEST_PRESET=replicate_predictions`，会把通用媒体任务 JSON 转为 Replicate `/v1/predictions` 需要的 `{version,input}`。
+- `source_image_data_url` / `mask_data_url` 会映射到 Replicate `input.image` / `input.mask`，并支持 `WILLDEEP_REPLICATE_EXTRA_INPUT_JSON` 注入模型参数，方便短剧制作包调用 Replicate 放大、擦除和蒙版重绘类工作流。
+- `.env` 示例、制作包 Markdown 说明和短剧媒体合约测试同步覆盖该 preset；版本号从 **1.109.0-rc342** 提升为 **1.109.0-rc343**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc342 - 2026-06-28
+
+### Changed
+- **任务监控范围摘要补完成视频接力（1.109.0-rc342）** —— 完整媒体任务侧栏和右侧任务监控 rail 发送范围状态到聊天时，现在会统计并输出 `completed_video_tasks`。
+- 完成视频摘要包含 `video_path`、打开/刷新分镜任务、回到分镜板、审片和关联检查项处理参数；用户从侧边栏中间看到异步视频完成后，可直接让聊天继续短剧审片或修复。
+- 版本号从 **1.109.0-rc341** 提升为 **1.109.0-rc342**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc341 - 2026-06-28
+
+### Changed
+- **制作包预览支持视频审片接力（1.109.0-rc341）** —— 初始导出的 `widget-preview.html` 和 Ruby 模板运行后重写的制作包预览，在分镜已有视频产物时都会显示「审片视频」按钮。
+- 按钮输出 `<short-drama-production-video-action>`，携带 `video_path`、项目/分集/分镜锚点、打开/刷新分镜任务和回到分镜板参数，让交给 Skill/Ruby/第三方 API 的制作包也能直接回到聊天审片和问题回写流程。
+- 版本号从 **1.109.0-rc340** 提升为 **1.109.0-rc341**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc340 - 2026-06-28
+
+### Changed
+- **网页分镜板支持视频审片接力（1.109.0-rc340）** —— 短剧网页分镜板的分镜卡片在已有视频产物时会显示「审片视频」按钮。
+- 按钮会输出 `<short-drama-widget-video-action>`，携带 `video_path`、项目/分集/分镜锚点、打开/刷新分镜任务和回到分镜板参数，让嵌入网页组件也能直接进入视频审片、连续性检查和问题回写流程。
+- 版本号从 **1.109.0-rc339** 提升为 **1.109.0-rc340**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc339 - 2026-06-28
+
+### Changed
+- **媒体任务侧栏视频产物可一键接力聊天（1.109.0-rc339）** —— 短剧分镜视频产物缩略图现在会显示聊天接力按钮，输出 `<media-task-video-artifact-selected>`。
+- 结构块包含 `video_path`、任务句柄、分镜锚点、打开/刷新分镜任务、回到分镜板以及关联检查项处理动作；用户从侧栏看到视频产物后可直接进入审片、连续性检查或检查项关闭流程。
+- 版本号从 **1.109.0-rc338** 提升为 **1.109.0-rc339**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc338 - 2026-06-28
+
+### Changed
+- **视频完成通知按产物类型接力（1.109.0-rc338）** —— 自动注入聊天的 `<media-task-notification>` 现在只会把图片产物用于 `short_drama_select_shot_artifact`、候选图、修图、放大和图生视频动作。
+- 分镜视频任务完成时会输出 `completed_video_path`、`completed_video_action`、打开/刷新分镜任务和回到分镜板的结构化动作，避免把视频文件误当成分镜主图。
+- 版本号从 **1.109.0-rc337** 提升为 **1.109.0-rc338**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc337 - 2026-06-28
+
+### Changed
+- **短剧视频完成任务补结构化接力（1.109.0-rc337）** —— 媒体任务完成后如果产物是视频，聊天上下文现在输出 `<media-task-completed-video-actions>`，包含 `video_path`、任务锚点、打开/刷新分镜任务、回到分镜板以及关联检查项处理动作。
+- 这让 some.im / Skill / 第三方脚本生成的视频不只停留在裸路径展示，而能从任务侧栏回流到短剧分镜、检查项和聊天窗口继续制作。
+- 版本号从 **1.109.0-rc336** 提升为 **1.109.0-rc337**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc336 - 2026-06-28
+
+### Changed
+- **短剧图片工具 schema 暴露 image_path 别名（1.109.0-rc336）** —— `short_drama_open_image_editor` 与 `short_drama_upscale_shot_artifact` 的工具 schema 现在也声明可选 `image_path`。
+- `image_path` 被标注为 `artifact_path` 的向后兼容别名；新的结构化接力仍推荐 `artifact_path`，但旧 Skill、旧聊天块或用户手写参数也能被模型和工具说明正确识别。
+- 版本号从 **1.109.0-rc335** 提升为 **1.109.0-rc336**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc335 - 2026-06-28
+
+### Changed
+- **短剧图片工具兼容 image_path 旧参数（1.109.0-rc335）** —— `short_drama_open_image_editor` 与 `short_drama_upscale_shot_artifact` 的内部图片路径解析现在仍优先读取 `artifact_path`，但也会兼容 `image_path`。
+- 这样旧的聊天接力块、用户手写参数或历史 Skill 输出即使还传 `image_path`，也能打开或放大指定图片，不会直接回退到分镜默认主图；新的结构化推荐仍继续使用 `artifact_path`。
+- 版本号从 **1.109.0-rc334** 提升为 **1.109.0-rc335**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc334 - 2026-06-28
+
+### Changed
+- **检查项侧栏修图参数统一 artifact_path（1.109.0-rc334）** —— 从短剧检查项侧栏发送检查项上下文到聊天时，`redraw_arguments` 与 `erase_arguments` 现在使用 `artifact_path`。
+- 这与 `short_drama_open_image_editor` 的工具 schema 保持一致，并继续保留 `review_item_id`，避免检查项重绘/擦除照抄 `image_path` 后回退到默认主图或丢失明确修复产物路径。
+- 版本号从 **1.109.0-rc333** 提升为 **1.109.0-rc334**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc333 - 2026-06-28
+
+### Changed
+- **分镜侧栏主图编辑参数统一 artifact_path（1.109.0-rc333）** —— 从短剧分镜侧栏发送分镜结构到聊天时，`edit_selected_image_arguments` 与 `erase_selected_image_arguments` 现在使用 `artifact_path`。
+- 这与 `short_drama_open_image_editor` 的工具 schema、候选图组件、媒体任务和 manifest 导回接力保持一致，避免聊天照抄 `image_path` 后短剧专用编辑器回退到默认主图或丢失明确产物路径。
+- 版本号从 **1.109.0-rc332** 提升为 **1.109.0-rc333**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc332 - 2026-06-28
+
+### Changed
+- **Manifest 导回修图结果可重开蒙版（1.109.0-rc332）** —— `import_media_manifest` 的 `<media-import-follow-up>` 在完成图片来自 `image_edit` / `image_inpaint` / `image_erase` 且带有 `source_image_path` + `mask_path` 时，会输出 `reopen_editor_tool` / `reopen_editor_arguments`。
+- 短剧分镜修图结果会推荐 `short_drama_open_image_editor`，普通或资产参考图会推荐 `open_image_editor`，让 Ruby Skill、第三方 API 或制作包脚本导回修图结果后，也能直接用原图和原 mask 继续微调。
+- 版本号从 **1.109.0-rc331** 提升为 **1.109.0-rc332**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc331 - 2026-06-28
+
+### Changed
+- **图片编辑提交后可带蒙版重开（1.109.0-rc331）** —— 图片蒙版编辑面板提交 Replicate 或 some.im 任务后，`<image-edit-task-submitted>` 会额外输出 `<image-edit-reopen-action>`。
+- 该结构块携带源图、mask、operation、短剧分镜/资产/检查项锚点，并给出 `reopen_editor_tool` / `reopen_editor_arguments`；短剧分镜场景使用 `short_drama_open_image_editor`，普通或资产参考图使用 `open_image_editor`，方便用户发现蒙版需要调整时直接重开同一图和同一 mask。
+- 版本号从 **1.109.0-rc330** 提升为 **1.109.0-rc331**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc330 - 2026-06-28
+
+### Changed
+- **任务监控范围摘要直达候选图选择（1.109.0-rc330）** —— 媒体任务范围摘要现在会在完成图片任务包含多张图片时输出 `image_choice_tool` / `image_choice_arguments`。
+- 短剧分镜任务会推荐 `short_drama_show_image_choice_widget`，普通或资产图片任务会推荐 `show_image_choice_widget` 并带上全部图片路径；任务监控 rail 和完整媒体任务侧栏共享同一摘要 helper，因此都可直接从范围状态进入候选图选择、再继续蒙版、擦除、放大或图生视频。
+- 版本号从 **1.109.0-rc329** 提升为 **1.109.0-rc330**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc329 - 2026-06-28
+
+### Changed
+- **候选图工具返回说明补推荐字段（1.109.0-rc329）** —— `show_image_choice_widget` 的工具返回现在明确说明用户点击候选图后，`<image-choice>` 会在可用时带回 `recommended_tool` / `recommended_arguments`。
+- 模型下一轮接手候选图时会被引导优先读取这些结构化字段，再继续图片编辑、放大、图生视频或短剧分镜选主图，减少只看 `image_path` 后重新猜工具参数的情况。
+- 版本号从 **1.109.0-rc328** 提升为 **1.109.0-rc329**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc328 - 2026-06-28
+
+### Changed
+- **候选图快捷按钮提示对齐推荐工具（1.109.0-rc328）** —— 通用候选图组件的“打开蒙版 / 擦除区域 / 放大图片”按钮文案现在明确要求优先使用 `recommended_tool` / `recommended_arguments`。
+- 当候选图带短剧分镜锚点时，按钮提示不再要求通用 `open_image_editor` 或 `upscale_image`，而是配合结构块推荐短剧专用图片编辑和放大工具，减少聊天窗口误走通用路径导致分镜或检查项锚点丢失。
+- 版本号从 **1.109.0-rc327** 提升为 **1.109.0-rc328**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc327 - 2026-06-28
+
+### Changed
+- **候选图短剧专用编辑接力（1.109.0-rc327）** —— 通用候选图组件在带分镜锚点时，打开蒙版/擦除会推荐 `short_drama_open_image_editor`，放大会推荐 `short_drama_upscale_shot_artifact`。
+- 这些快捷动作的 `recommended_arguments` 会使用 `artifact_path` 并继续携带 project / episode / shot / review anchors，让聊天窗口从多图选择进入蒙版、擦除或 Replicate 放大时仍回到同一短剧分镜和检查项流水。
+- 版本号从 **1.109.0-rc326** 提升为 **1.109.0-rc327**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc326 - 2026-06-28
+
+### Changed
+- **资产上下文驱动关联分镜生成（1.109.0-rc326）** —— `short_drama_generate_batch_media` 新增 `shot_ids` 过滤，支持只对显式分镜列表执行批量图片或视频生成。
+- 人物/场景资产上下文会输出 `linked_shot_ids`，并给出只针对这些关联分镜的缺主图、缺视频 dry-run 和正式提交参数，让聊天窗口从角色定妆或场景参考图接手时不会误排全剧无关镜头。
+- 版本号从 **1.109.0-rc325** 提升为 **1.109.0-rc326**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc325 - 2026-06-28
+
+### Changed
+- **侧栏上下文补齐缺口批量参数（1.109.0-rc325）** —— 从短剧侧栏发送项目或分集结构到聊天时，现在会直接给出缺主图、缺视频的 `short_drama_generate_batch_media(target_filter=missing)` dry-run 和正式提交参数。
+- 制作缺口队列里的补图/补视频参数也同步带上 `target_filter=missing`，让聊天窗口接手整集或全剧制作缺口时可直接预检或提交批量任务。
+- 版本号从 **1.109.0-rc324** 提升为 **1.109.0-rc325**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc324 - 2026-06-28
+
+### Changed
+- **短剧批量生成结构化接力（1.109.0-rc324）** —— `short_drama_generate_batch_media` 的 dry-run 和正式提交结果现在会输出 `<short-drama-batch-media-handoff>`。
+- 结构块包含项目/分集任务范围、目标分镜列表、打开/刷新媒体任务、重新 dry-run、正式提交和失败重试参数，让聊天窗口接手整集或全剧补主图/补视频时不用再从自然语言摘要里猜工具参数。
+- 版本号从 **1.109.0-rc323** 提升为 **1.109.0-rc324**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc323 - 2026-06-28
+
+### Changed
+- **第三方 pending 任务聊天轮询提示（1.109.0-rc323）** —— Ruby/Skill/外部 API 通过 manifest 导回的 pending 任务若携带 HTTPS `status_url`，媒体任务聊天上下文和范围摘要会明确给出 `generic_poll_tool=short_drama_refresh_media_tasks` 与同范围参数。
+- 若同类任务携带 HTTPS `cancel_url`，上下文会提示从媒体任务侧栏取消，既让聊天窗口知道可以终止任务，又避免把第三方取消地址暴露成可误调用的聊天动作。
+- 版本号从 **1.109.0-rc322** 提升为 **1.109.0-rc323**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc322 - 2026-06-28
+
+### Changed
+- **多候选图完成通知直达选择组件（1.109.0-rc322）** —— 短剧分镜图片任务一次产出多张候选图时，`<media-task-notification>` 现在会写出本次任务的 `candidate_image_paths`。
+- 同一通知还会给出通用 `show_image_choice_widget` 的 `candidate_preview_arguments`，聊天窗口可直接展示这些图片让用户选择，再继续设主图、蒙版、擦除、放大或图生视频。
+- 版本号从 **1.109.0-rc321** 提升为 **1.109.0-rc322**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc321 - 2026-06-28
+
+### Changed
+- **媒体任务成功通知补全图片编辑参数（1.109.0-rc321）** —— 短剧分镜图片任务成功后的 `<media-task-notification>` 结构化动作现在会直接带出 `edit_arguments`、`erase_arguments` 和 `upscale_arguments`。
+- 这些参数会复用同一 `artifact_path`，并保留 `review_item_id`；聊天窗口收到 some.im、Replicate 或 Skill 图片产物后，可直接继续蒙版重绘、擦除、放大或图生视频。
+- 版本号从 **1.109.0-rc320** 提升为 **1.109.0-rc321**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc320 - 2026-06-28
+
+### Changed
+- **媒体任务通知范围刷新接力（1.109.0-rc320）** —— 自动注入聊天的 `<media-task-notification>` 结构块现在会统一带出 `open_scope_tasks_tool=short_drama_open_media_tasks` 和 `refresh_scope_tasks_tool=short_drama_refresh_media_tasks`。
+- 通知会按检查项、分镜、资产、分集或项目生成同一范围参数，让聊天窗口在收到 some.im、Replicate 或 Skill 异步任务完成/失败更新后，可直接打开或刷新对应侧栏任务流水继续处理。
+- 版本号从 **1.109.0-rc319** 提升为 **1.109.0-rc320**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc319 - 2026-06-28
+
+### Changed
+- **图片编辑上下文保留短剧锚点（1.109.0-rc319）** —— 图片编辑侧栏把当前蒙版上下文发送到聊天时，现在会给出当前操作、强制局部重绘和强制擦除三组 `edit_image_with_mask` 参数，并在提交参数中保留分镜、资产和检查项锚点。
+- 同一 `<image-editor-context>` 结构块会额外给出分镜任务、检查项任务、检查项关闭、资产任务和资产参考图绑定入口，让聊天窗口接手蒙版/擦除/修补后还能继续回到短剧侧栏流水。
+- 版本号从 **1.109.0-rc318** 提升为 **1.109.0-rc319**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc318 - 2026-06-28
+
+### Changed
+- **单图媒体 follow-up 补擦除与检查项任务入口（1.109.0-rc318）** —— `mediaTaskToolFollowUp` 针对短剧单张完成图现在会给出 `erase_tool=short_drama_open_image_editor` 与 `operation=erase` 参数。
+- 当完成图带 `review_item_id` 时，follow-up 也会给出 `open_review_tasks_tool=short_drama_open_media_tasks` 与检查项范围参数，让蒙版编辑、擦除、放大或导回后的单图结果能直接打开同一检查项任务流水再决定是否关闭。
+- 版本号从 **1.109.0-rc317** 提升为 **1.109.0-rc318**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc317 - 2026-06-28
+
+### Changed
+- **侧栏制作包草稿结构化接力（1.109.0-rc317）** —— 短剧侧栏导出制作包后写入聊天输入框的接力提示，现在会附带 `<production-package-handoff>` 结构块。
+- 导出后和导回后两类草稿都会携带制作包目录、manifest、widget、timeline、gap report、CSV、Ruby 脚本和 env 示例路径，以及 `import_media_manifest`、`short_drama_import_review_csv`、`show_widget` 的 dry-run/回写参数，让最常用的侧栏入口也和网页/Markdown 接力语义一致。
+- 版本号从 **1.109.0-rc316** 提升为 **1.109.0-rc317**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc316 - 2026-06-28
+
+### Changed
+- **制作包 Markdown 结构化接力（1.109.0-rc316）** —— `production-package.md` 的 Script Handoff 现在会包含可复制的 `<production-package-handoff>` 结构块。
+- 该结构块写出制作包目录、manifest、widget、gap report、timeline、shot list、review template、review queue 路径，以及 `import_media_manifest`、`short_drama_import_review_csv` 和 `show_widget` 的 dry-run/回写参数；用户只看 Markdown 文档时，也能把块直接贴回聊天窗口继续导入、排产或审片回写。
+- 版本号从 **1.109.0-rc315** 提升为 **1.109.0-rc316**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc315 - 2026-06-28
+
+### Changed
+- **初始制作包预览结构化接力（1.109.0-rc315）** —— 刚导出的 `widget-preview.html` 现在会在“交给 Agent 导回 / 按缺口报告排产 / 按 CSV 审片”按钮里附带 `<production-package-handoff>` 结构块。
+- 结构块包含 package、manifest、widget、gap report、timeline、shot list、review template 和 review queue 路径，以及 `import_media_manifest`、`short_drama_generate_batch_media` 与 `short_drama_import_review_csv` 的 dry-run/回写参数，让制作包尚未跑 Ruby 脚本时也能从网页组件精确回到聊天工具调用。
+- 版本号从 **1.109.0-rc314** 提升为 **1.109.0-rc315**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc314 - 2026-06-28
+
+### Changed
+- **Ruby 网页预览结构化导回参数（1.109.0-rc314）** —— `ruby-media-script-template.rb` 生成的 `widget-preview.html` 现在会在导回、异步任务导回和修复队列回写按钮里附带 `<ruby-media-script-handoff>` 结构块。
+- 结构块包含制作包目录、manifest、widget、review queue、gap report 路径，以及 `import_media_manifest` dry-run/正式导入、`short_drama_import_review_csv` 和 `show_widget` 的可直接调用参数，减少外部 API 脚本跑完后聊天窗口猜参数的情况。
+- 版本号从 **1.109.0-rc313** 提升为 **1.109.0-rc314**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc313 - 2026-06-28
+
+### Changed
+- **Manifest 单图导回任务流水入口（1.109.0-rc313）** —— `import_media_manifest` / Ruby / Skill 导回单张完成分镜图时，`completed_image_follow_up_actions` 现在会给出 `open_shot_tasks_tool=short_drama_open_media_tasks` 与 `scope=shot` 参数。
+- 如果导回图关联 `review_item_id`，follow-up 也会给出 `open_review_tasks_tool` 与 `scope=review_item` 参数，方便聊天窗口先打开同一检查项任务流水，再继续关闭检查项、蒙版编辑、擦除、放大或图生视频。
+- 版本号从 **1.109.0-rc312** 提升为 **1.109.0-rc313**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc312 - 2026-06-28
+
+### Changed
+- **媒体任务候选图选中后任务接力（1.109.0-rc312）** —— 媒体任务候选图卡的“选这张继续”现在会写出 `post_select_open_shot_tasks_tool`、视频、蒙版重绘、擦除、放大等后续动作参数。
+- 当候选图关联短剧检查项或人物/场景资产时，结构块也会带出 `scope=review_item` 或 `scope=asset` 的 `short_drama_open_media_tasks` 参数，让聊天窗口和侧栏能从同一张选中图继续协作。
+- 版本号从 **1.109.0-rc311** 提升为 **1.109.0-rc312**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc311 - 2026-06-28
+
+### Changed
+- **候选图选中后打开任务流水（1.109.0-rc311）** —— 通用候选图组件在分镜候选图“选这张继续”后，现在会额外给出 `post_select_open_shot_tasks_tool=short_drama_open_media_tasks` 与分镜范围参数。
+- 如果候选图带 `review_item_id`，选中后也会给出 `post_select_open_review_tasks_tool=short_drama_open_media_tasks` 与检查项范围参数，方便聊天窗口直接打开同一检查项的任务流水再继续修图、放大、图生视频或关闭检查项。
+- 版本号从 **1.109.0-rc310** 提升为 **1.109.0-rc311**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc310 - 2026-06-28
+
+### Changed
+- **资产参考图完成后任务范围接力（1.109.0-rc310）** —— 资产参考图任务完成后，单任务详情和 manifest 导回 follow-up 都会给出 `open_asset_tasks_tool=short_drama_open_media_tasks` 与资产范围参数。
+- 用户可以先打开人物/场景资产任务范围确认产物流水，再继续绑定参考图、蒙版编辑、擦除或放大。
+- 版本号从 **1.109.0-rc309** 提升为 **1.109.0-rc310**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc309 - 2026-06-28
+
+### Changed
+- **完成图片范围摘要检查项续传（1.109.0-rc309）** —— 媒体任务侧栏和任务 rail 的完成图片范围摘要现在也会在设主图、图生视频、蒙版重绘、擦除和放大参数中携带 `review_item_id`。
+- 这让范围级批量接力和单任务详情保持一致，短剧检查项修复流程不会在摘要层丢失锚点。
+- 版本号从 **1.109.0-rc308** 提升为 **1.109.0-rc309**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc308 - 2026-06-28
+
+### Changed
+- **完成媒体任务检查项锚点续传（1.109.0-rc308）** —— 媒体任务完成后的候选图选择、设主图、图生视频、蒙版重绘、擦除和放大参数会继续携带 `review_item_id`。
+- 这让短剧检查项修复任务在选图或二次编辑后仍能关联原检查项，方便后续继续打开检查项任务或标记解决。
+- 版本号从 **1.109.0-rc307** 提升为 **1.109.0-rc308**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc307 - 2026-06-28
+
+### Changed
+- **媒体任务短剧锚点聊天接力（1.109.0-rc307）** —— 媒体任务行的短剧锚点条新增聊天按钮。
+- 新按钮会输出 `<media-task-short-drama-anchor>`、短剧范围和 `short_drama_open_media_tasks` 参数，让聊天窗口直接围绕对应项目、分集、分镜、资产或检查项继续排产。
+- 版本号从 **1.109.0-rc306** 提升为 **1.109.0-rc307**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc306 - 2026-06-28
+
+### Changed
+- **短剧项目固定任务入口（1.109.0-rc306）** —— 项目卡现在有固定“查看全剧媒体任务”按钮。
+- 项目、分集、分镜三级都具备稳定媒体任务入口，可直接按范围查看 some.im / Replicate / Skill 异步任务流水。
+- 版本号从 **1.109.0-rc305** 提升为 **1.109.0-rc306**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc305 - 2026-06-28
+
+### Changed
+- **短剧分集固定任务入口（1.109.0-rc305）** —— 每个分集行现在都有固定“查看本集媒体任务”按钮。
+- 用户可以直接打开 project/episode 范围的媒体任务侧栏，按集查看 some.im / Replicate / Skill 异步任务状态，不必等任务徽标出现。
+- 版本号从 **1.109.0-rc304** 提升为 **1.109.0-rc305**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc304 - 2026-06-28
+
+### Changed
+- **短剧分镜固定任务入口（1.109.0-rc304）** —— 每个分镜行现在都有固定“查看本分镜媒体任务”按钮。
+- 即使该分镜暂时没有任务徽标，也能直接打开 project/episode/shot 范围的媒体任务侧栏，方便排查 some.im / Replicate / Skill 产物流水。
+- 版本号从 **1.109.0-rc303** 提升为 **1.109.0-rc304**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc303 - 2026-06-28
+
+### Changed
+- **图片蒙版面板制作锚点接力（1.109.0-rc303）** —— 图片蒙版编辑面板现在会显示短剧项目、分集、分镜、人物/场景资产和检查项锚点。
+- 新增“发送到聊天”上下文入口，会输出 `<image-editor-context>`、现有 mask 提交工具参数、分镜/检查项媒体任务入口，让聊天窗口能继续协作 Replicate / some.im 蒙版编辑。
+- 版本号从 **1.109.0-rc302** 提升为 **1.109.0-rc303**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc302 - 2026-06-28
+
+### Changed
+- **网页组件推荐工具接力（1.109.0-rc302）** —— 右侧网页组件面板现在会读取 `recommended_tool` / `recommended_arguments` 并展示“建议工具”动作条。
+- 点击建议动作会把 `<widget-recommended-action>` 结构化上下文送到聊天，便于 Skill/Ruby 生成的短剧制作预览继续导回 manifest、打开媒体任务或进入图片编辑流程。
+- 版本号从 **1.109.0-rc301** 提升为 **1.109.0-rc302**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc301 - 2026-06-28
+
+### Changed
+- **短剧侧栏制作缺口摘要（1.109.0-rc301）** —— 项目卡和分集行现在直接展示缺主图、缺视频、未解决检查项和缺参考图等制作缺口。
+- 点击缺口摘要会发送项目/分集上下文到聊天，沿用 `production_next_action_*` 建议，让侧栏本身更像制作推进台。
+- 版本号从 **1.109.0-rc300** 提升为 **1.109.0-rc301**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc300 - 2026-06-28
+
+### Changed
+- **短剧制作优先级聊天接力（1.109.0-rc300）** —— 项目和分集上下文现在输出 `production_next_action_*` 机器可读建议。
+- 优先级会按失败媒体任务、未解决检查项、缺主图、缺视频、缺资产参考和导出/分镜板复核排序，并携带对应工具与 dry-run 参数，方便聊天窗口直接推进制作。
+- 版本号从 **1.109.0-rc299** 提升为 **1.109.0-rc300**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc299 - 2026-06-28
+
+### Changed
+- **任务监控 rail 媒体任务快捷操作（1.109.0-rc299）** —— 活跃媒体任务现在可直接在任务监控 rail 行内刷新或取消。
+- Rail 媒体任务行继续保留打开侧栏和发送任务上下文到聊天的入口，让 some.im / Replicate / 外部回导任务可在侧栏中间就地处理。
+- 版本号从 **1.109.0-rc298** 提升为 **1.109.0-rc299**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc298 - 2026-06-28
+
+### Changed
+- **Ruby 媒体脚本 provider 预设接力（1.109.0-rc298）** —— 制作包说明和 `media-api.env.example` 新增 Replicate Predictions、some.im gateway、source-image/mask 任务配置提示。
+- `ruby-media-script-template.rb` 的 JSON 输出中，`widget_arguments` 现在会附带 `source_label`、`source_path`、`package_directory`、`recommended_tool=import_media_manifest` 和 dry-run 导入参数，让脚本预览页能继续带来源和下一步工具建议回到聊天。
+- 版本号从 **1.109.0-rc297** 提升为 **1.109.0-rc298**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc297 - 2026-06-28
+
+### Changed
+- **通用候选图组件来源上下文（1.109.0-rc297）** —— `show_image_choice_widget` 现在也可保存 Skill/Ruby 候选图来源、包目录、推荐工具参数和短剧锚点。
+- 候选图组件会把 `image_count` 与 metadata 写入 `AgentWidget.contextBlock`，用户点选候选图或从侧栏发送组件到聊天时，仍能保留外部脚本/制作包来源和后续工具建议。
+- 版本号从 **1.109.0-rc296** 提升为 **1.109.0-rc297**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc296 - 2026-06-28
+
+### Changed
+- **Skill 网页组件回调上下文（1.109.0-rc296）** —— `show_widget` 现在可保存 Skill/Ruby 生成网页的来源、包目录、推荐工具参数和短剧锚点。
+- 网页组件通过 `sendPrompt()` 或侧栏“发送到聊天”回传时，会把 `widget.contextBlock` 一起注入聊天上下文，便于继续调用短剧管理、媒体任务、图片编辑或导入工具。
+- 版本号从 **1.109.0-rc295** 提升为 **1.109.0-rc296**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc295 - 2026-06-28
+
+### Changed
+- **Manifest dry-run 失败恢复提示（1.109.0-rc295）** —— `import_media_manifest(dry_run=true)` 现在会在发现 `last_error` 失败产物时输出 `<failed-manifest-dry-run-recovery>`。
+- dry-run 输出新增导入失败任务到侧栏、`WILLDEEP_MEDIA_ONLY_FAILED=1` 重跑 Ruby/Skill 脚本、再次 dry-run 预检的结构化参数，方便聊天窗口提前接手失败恢复。
+- 版本号从 **1.109.0-rc294** 提升为 **1.109.0-rc295**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc294 - 2026-06-28
+
+### Changed
+- **Manifest 导入失败任务恢复摘要（1.109.0-rc294）** —— `import_media_manifest` 的 `<media-import-follow-up>` 现在会输出 `failed_task_ids` 和 `failed_task_recovery_actions`。
+- 失败任务摘要会包含打开任务范围、可重试任务参数，或 manifest/Ruby/Skill 外部脚本失败项的 `WILLDEEP_MEDIA_ONLY_FAILED=1` 重跑提示，让导入结果本身就能指导下一步恢复。
+- 版本号从 **1.109.0-rc293** 提升为 **1.109.0-rc294**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc293 - 2026-06-28
+
+### Changed
+- **制作包网页失败项重跑入口（1.109.0-rc293）** —— `widget-preview.html` 新增“重跑失败”按钮。
+- 按钮会把 `WILLDEEP_MEDIA_ONLY_FAILED=1`、复用 `media-api.env.example`、运行 `ruby-media-script-template.rb`、dry-run 导入 pending/outputs 和确认 `last_error` 已被成功项清理的步骤交回聊天窗口。
+- 版本号从 **1.109.0-rc292** 提升为 **1.109.0-rc293**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc292 - 2026-06-28
+
+### Changed
+- **Ruby 媒体脚本失败项定向重跑（1.109.0-rc292）** —— `ruby-media-script-template.rb` 新增 `WILLDEEP_MEDIA_ONLY_FAILED=1`。
+- 开启后脚本只处理 manifest 中仍带 `last_error` 的失败项；当失败项成功生成本地产物或登记为 pending 远端任务时，会清理对应 item 的 `last_error`，避免后续导入继续把它视为失败。
+- 版本号从 **1.109.0-rc291** 提升为 **1.109.0-rc292**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc291 - 2026-06-28
+
+### Changed
+- **制作包网页失败分析入口（1.109.0-rc291）** —— `widget-preview.html` 的下一步区域新增“分析失败”按钮。
+- 按钮会让聊天窗口读取 Ruby 脚本输出的 `failed` / `failed_paths`、manifest item 的 `last_error`，先 dry-run `import_media_manifest(package_directory, dry_run=true)` 登记失败任务，再决定重跑 Ruby 脚本、修正 API 参数或读取 `production-gap-report.json` 重新排产。
+- 版本号从 **1.109.0-rc290** 提升为 **1.109.0-rc291**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc290 - 2026-06-28
+
+### Changed
+- **失败媒体任务聊天恢复动作（1.109.0-rc290）** —— 失败或取消的媒体任务发送到聊天时会附带 `<media-task-failure-actions>`。
+- 可直接重试的 some.im / Replicate 短剧任务会给出 `short_drama_retry_media_task` 和范围 dry-run 重试参数；制作包 manifest/Ruby/Skill 外部脚本失败项会提示查看 `status_message`、重跑 `ruby-media-script-template.rb` 或读取 `production-gap-report.json` 继续按缺口排产。
+- 版本号从 **1.109.0-rc289** 提升为 **1.109.0-rc290**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc289 - 2026-06-28
+
+### Changed
+- **Manifest 失败项导入媒体任务（1.109.0-rc289）** —— `import_media_manifest` 现在会读取 manifest item 的 `last_error`。
+- 当 Ruby/Skill 外部脚本记录了 `last_error` 且产物文件缺失、没有 pending 远端任务时，导入工具会创建或更新为 `.failed` 媒体任务，状态消息保留外部脚本错误、缺失占位文件数量和短剧锚点。
+- 版本号从 **1.109.0-rc288** 提升为 **1.109.0-rc289**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc288 - 2026-06-28
+
+### Changed
+- **Ruby 媒体脚本失败项接力（1.109.0-rc288）** —— `ruby-media-script-template.rb` 现在会捕获第三方媒体 API 异常，并输出结构化 `failed` / `failed_paths` / `failed_count`。
+- 失败项会保留 file_path、kind、project/episode/shot、asset、review_item_id、error_class 和 error_message，并写入 `widget-preview.html` 的 Failed jobs 区域，方便聊天窗口或 Skill 先诊断再重试。
+- 版本号从 **1.109.0-rc287** 提升为 **1.109.0-rc288**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc287 - 2026-06-28
+
+### Changed
+- **Manifest 预检缺口报告接力（1.109.0-rc287）** —— `import_media_manifest(dry_run=true)` 和暂无可导入产物的制作包 manifest 结果，现在也会在同目录存在 `production-gap-report.json` 时输出 `<media-import-follow-up>`。
+- 缺口报告接力不再依赖已创建媒体任务；预检阶段会给出 `production_gap_report_path`，聊天窗口可直接按缺主图、缺视频和未解决检查项继续排产。
+- 版本号从 **1.109.0-rc286** 提升为 **1.109.0-rc287**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc286 - 2026-06-28
+
+### Changed
+- **Manifest 导入缺口报告接力（1.109.0-rc286）** —— `import_media_manifest` 现在会在导入制作包 manifest 后自动检测同目录 `production-gap-report.json`。
+- `<media-import-follow-up>` 新增 `production_gap_report_path`、`production_gap_report_tool` 和补缺提示，要求先读取缺口报告，再用 `short_drama_generate_batch_media(target_filter=missing, dry_run=true)` 或报告里的 `batch_actions` 预检。
+- 版本号从 **1.109.0-rc285** 提升为 **1.109.0-rc286**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc285 - 2026-06-28
+
+### Changed
+- **Ruby 脚本缺口报告交接（1.109.0-rc285）** —— 制作包内置的 `ruby-media-script-template.rb` 现在会定义 `GAP_REPORT_PATH` 并在运行结果 JSON 中输出 `gap_report_path`。
+- 脚本 `next_step` 会提示先读取缺口报告再批量补缺，方便 Skill、聊天窗口和网页组件围绕 `production-gap-report.json` 协同排产。
+- 版本号从 **1.109.0-rc284** 提升为 **1.109.0-rc285**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc284 - 2026-06-28
+
+### Added
+- **制作包缺口报告（1.109.0-rc284）** —— `short_drama_export_production_package` 现在会导出 `production-gap-report.json`。
+- 缺口报告按项目、分集和分镜列出 `missing_image_count`、`missing_video_count`、`open_review_item_count`，并为补主图/补视频提供 `short_drama_generate_batch_media(target_filter=missing)` 的 dry-run / submit 参数。
+- 制作包 Markdown、网页预览、短剧侧栏接力提示和工具返回都会显示缺口报告路径，方便 Skill、Ruby 脚本或聊天窗口直接用结构化 JSON 排产。
+- 版本号从 **1.109.0-rc283** 提升为 **1.109.0-rc284**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc283 - 2026-06-28
+
+### Changed
+- **资产候选图选择后续动作（1.109.0-rc283）** —— 通用候选图组件在人物/场景资产上下文中选图后，现在会显式输出 `post_select_attach_reference_tool` 和绑定参数。
+- 资产候选图选择块还会提供打开资产任务、按资产 dry-run 生成相关分镜、继续蒙版编辑、擦除和放大的 post-select 参数，减少聊天窗口从 recommended_tool 反推下一步的歧义。
+- 版本号从 **1.109.0-rc282** 提升为 **1.109.0-rc283**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc282 - 2026-06-28
+
+### Changed
+- **批量补缺分镜 target_filter（1.109.0-rc282）** —— `short_drama_generate_batch_media` 新增 `target_filter=missing`。
+- 制作包 `widget-preview.html` 和 Ruby 模板里的“批量补主图 / 批量补视频”按钮会把 dry-run 与正式提交都限定到缺口分镜：图片生成只处理缺主图分镜，视频生成只处理缺视频分镜。
+- 批量工具输出新增 `Target filter`，dry-run 时可以清楚看到补缺过滤后的目标镜头，避免补缺流程误提交全范围分镜。
+- 版本号从 **1.109.0-rc281** 提升为 **1.109.0-rc282**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc281 - 2026-06-28
+
+### Changed
+- **图片蒙版编辑提交后 active task 接力（1.109.0-rc281）** —— 右侧图片蒙版面板提交 Replicate / some.im 重绘或擦除后，`<image-edit-task-submitted>` 现在会附带 `active_task_actions`。
+- 提交上下文会复用媒体任务侧栏的 provider 轮询/取消参数，并补充分镜、检查项和资产范围的 `short_drama_refresh_media_tasks` 参数；完成后仍保留检查项关闭和资产参考图绑定动作。
+- 版本号从 **1.109.0-rc280** 提升为 **1.109.0-rc281**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc280 - 2026-06-28
+
+### Changed
+- **manifest pending 导入 provider 动作接力（1.109.0-rc280）** —— `import_media_manifest(import_pending_tasks: true)` 的 `<media-import-follow-up>` 现在会输出 `pending_active_task_actions`。
+- pending 导入结果复用媒体任务侧栏同款 `AgentMediaTaskChatHandoff.activeTaskScopeSummaryLine`，为 Replicate / some.im 任务直接带出 poll / cancel 工具参数，同时保留短剧 scope 的 open / refresh 动作。
+- 版本号从 **1.109.0-rc279** 提升为 **1.109.0-rc280**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc279 - 2026-06-28
+
+### Changed
+- **Ruby 制作包 pending 远端任务预览（1.109.0-rc279）** —— `ruby-media-script-template.rb` 现在把 pending remote jobs 记录为结构化对象，包含本地目标路径、provider/kind/model、远端任务 id、轮询/取消 URL、endpoint suffix 与短剧项目/分集/分镜/资产/检查项锚点。
+- `widget-preview.html` 的 pending remote jobs 区域会展示远端轮询/取消元数据，并新增“导回异步任务”按钮，引导聊天窗口先 dry-run `import_media_manifest(package_directory, import_pending_tasks: true)`，确认任务进入媒体任务侧栏且可刷新/取消后再正式导入。
+- Ruby 脚本 JSON 输出保留结构化 `pending`，并新增 `pending_paths` 兼容只需要路径列表的外部脚本。
+- 版本号从 **1.109.0-rc278** 提升为 **1.109.0-rc279**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc278 - 2026-06-28
+
+### Added
+- **短剧分镜板运行中任务动作按钮（1.109.0-rc278）** —— 短剧 storyboard widget 在项目、分集和分镜范围存在运行中媒体任务时，会显示“处理任务”按钮。
+- 按钮发送回聊天的 `<short-drama-widget-action>` 会包含 `active_task_actions`，复用媒体任务侧栏的 provider 级 poll / cancel 参数，让网页组件里的异步任务状态也能直接接续到聊天窗口。
+- 版本号从 **1.109.0-rc277** 提升为 **1.109.0-rc278**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc277 - 2026-06-28
+
+### Added
+- **范围级运行中媒体任务动作摘要（1.109.0-rc277）** —— 媒体任务侧栏和顶部任务 rail 发送范围状态到聊天时，`active_tasks` 之外会新增 `active_task_actions`。
+- `active_task_actions` 会列出每个运行中任务的 provider、状态、远端 ID/状态 URL，并为 Replicate / some.im 任务附带可直接调用的 poll / cancel 参数。
+- 聊天窗口现在既能从单个任务上下文接手运行中异步任务，也能从一整个项目/分集/分镜/资产范围批量接手运行中任务。
+- 版本号从 **1.109.0-rc276** 提升为 **1.109.0-rc277**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc276 - 2026-06-28
+
+### Added
+- **运行中媒体任务聊天动作块（1.109.0-rc276）** —— 单个媒体任务发送到聊天时，若任务仍在 queued / submitted / starting / processing，会附带 `<media-task-active-actions>`。
+- 运行中任务上下文会提供 scoped `short_drama_refresh_media_tasks` 参数；Replicate 任务额外提供 `replicate_poll_prediction` / `replicate_cancel_prediction` 参数，some.im 任务额外提供 `some_im_poll_media_task` / `some_im_cancel_media_task` 参数。
+- 这样聊天窗口不只看到异步任务状态，也能直接接手刷新、轮询、取消或回到对应短剧媒体任务范围继续处理。
+- 版本号从 **1.109.0-rc275** 提升为 **1.109.0-rc276**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc275 - 2026-06-28
+
+### Changed
+- **短剧聊天上下文拆分（1.109.0-rc275）** —— 新增 `AgentShortDramaChatContext.swift`，把项目、分集、分镜、人物/场景资产发送到聊天窗口的上下文构造从短剧主侧栏文件中拆出。
+- 短剧契约测试改为读取主侧栏文件与聊天上下文扩展的组合源，继续校验侧栏到聊天、媒体任务、分镜板、批量生成和资产接力参数没有断链。
+- `AgentShortDrama.swift` 从 2999 行降到约 2526 行，为后续继续添加短剧制作台功能留出文件行数空间。
+- 版本号从 **1.109.0-rc274** 提升为 **1.109.0-rc275**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc274 - 2026-06-28
+
+### Added
+- **短剧资产到分镜的反向链接接力（1.109.0-rc274）** —— 人物/场景资产侧栏上下文现在会给聊天窗口提供 `short_drama_update_shot_links` 参数，可把当前资产应用到一批分镜或从已关联分镜中解绑。
+- 场景资产会生成 `scene_id` / `clear_scene` 的 dry-run 参数；人物资产会生成追加人物和移除人物的 dry-run 参数，方便围绕角色出场和场景连续性整理镜头。
+- 版本号从 **1.109.0-rc273** 提升为 **1.109.0-rc274**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc273 - 2026-06-28
+
+### Added
+- **短剧分镜批量人物/场景链接工具（1.109.0-rc273）** —— 新增 `short_drama_update_shot_links`，用于按项目、分集或显式 `shot_ids` 批量绑定、清空或调整分镜的场景和人物引用。
+- 工具支持 `dry_run` 预览匹配分镜，支持替换或追加人物、移除指定人物，并会校验人物/场景必须存在于当前项目，避免连续性信息写成无效引用。
+- 项目、分集和单分镜侧栏上下文新增批量链接预检参数，聊天窗口可以从侧栏接手“同一场景连续镜头”“角色出场镜头整理”等操作。
+- 版本号从 **1.109.0-rc272** 提升为 **1.109.0-rc273**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc272 - 2026-06-28
+
+### Added
+- **短剧分镜批量状态工具（1.109.0-rc272）** —— 新增 `short_drama_update_shot_statuses`，用于按项目、分集或显式 `shot_ids` 批量更新分镜状态。
+- 工具支持 `dry_run` 预览匹配分镜，可批量标记 planned / scripting / generating / ready / needs_review，方便生成前后、审片回写后或导入规划后统一整理状态。
+- 项目和分集侧栏上下文新增批量状态预检参数，聊天窗口可以从全剧或单集视角安全接手状态整理。
+- 版本号从 **1.109.0-rc271** 提升为 **1.109.0-rc272**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc271 - 2026-06-28
+
+### Added
+- **短剧分镜跨集移动工具（1.109.0-rc271）** —— 新增 `short_drama_move_shot`，用于把既有分镜移动到另一集，并保留分镜 id、产物、检查项和提示词结构。
+- 移动分镜时会同步同项目同 `shot_id` 的媒体任务 `episode_id` 锚点，避免任务侧栏、聊天接力和后续刷新仍指向旧集。
+- 分镜侧栏上下文新增移动分镜工具参数，移动结果会返回目标集任务筛选、目标集重排和继续生成图片的后续工具参数。
+- 版本号从 **1.109.0-rc270** 提升为 **1.109.0-rc271**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc270 - 2026-06-28
+
+### Added
+- **短剧分镜复制工具（1.109.0-rc270）** —— 新增 `short_drama_duplicate_shot`，用于基于既有分镜派生反打、特写、补拍或同场景变体。
+- 复制默认保留人物/场景/提示词结构，但不复制产物和检查项；可显式设置 `copy_artifacts` / `copy_review_items`，并支持 title、summary、prompt、order 覆盖。
+- 分镜侧栏上下文新增复制分镜工具参数，复制结果会返回新分镜的图片生成、任务查看和继续编辑参数，方便聊天窗口直接接上制作。
+- 版本号从 **1.109.0-rc269** 提升为 **1.109.0-rc270**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc269 - 2026-06-28
+
+### Added
+- **短剧结构重排工具（1.109.0-rc269）** —— 新增 `short_drama_reorder_structure_items`，用于批量重排项目分集或单集分镜顺序。
+- 工具支持 `dry_run` 预览当前顺序和新顺序，正式执行后把 order 归一化为 `1...N`；未列在 `ordered_ids` 里的既有项会保留在末尾，避免 Skill 漏传 id 时丢失结构。
+- 项目和分集侧栏上下文新增重排预检工具参数，让聊天窗口能安全接手分集/分镜顺序整理。
+- 版本号从 **1.109.0-rc268** 提升为 **1.109.0-rc269**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc268 - 2026-06-28
+
+### Added
+- **短剧结构删除工具（1.109.0-rc268）** —— 新增 `short_drama_delete_structure_item`，用于清理误导入或废弃的分集、分镜、人物和场景。
+- 删除工具支持 `dry_run` 预检，会报告受影响分镜数量和关联媒体任务句柄；删除人物/场景时会从分镜引用中解绑，但不会删除历史媒体任务。
+- 侧栏发送到聊天的项目、分集、分镜、人物/场景上下文新增删除预检工具参数，方便聊天窗口安全接手结构管理。
+- 版本号从 **1.109.0-rc267** 提升为 **1.109.0-rc268**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc267 - 2026-06-28
+
+### Fixed
+- **短剧侧栏全局媒体任务摘要（1.109.0-rc267）** —— 短剧侧栏顶部新增“全部任务”健康摘要，汇总当前短剧项目集合内的运行中、失败、已完成媒体任务数量和最近任务句柄。
+- 摘要可点击打开媒体任务总览，让用户无需逐个项目展开，也能在侧栏中间看到 some.im / Replicate / Skill 异步任务状态。
+- 版本号从 **1.109.0-rc266** 提升为 **1.109.0-rc267**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc266 - 2026-06-28
+
+### Fixed
+- **短剧媒体任务完成徽标（1.109.0-rc266）** —— 短剧侧栏的媒体任务徽标现在在没有运行中/失败任务时，也会显示已完成任务数量。
+- 分集、分镜和人物/场景资产行可直接看到完成产物状态，点击徽标仍会打开对应范围的媒体任务侧栏。
+- 版本号从 **1.109.0-rc265** 提升为 **1.109.0-rc266**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc265 - 2026-06-28
+
+### Fixed
+- **短剧项目卡媒体任务健康摘要（1.109.0-rc265）** —— 短剧项目卡新增媒体任务健康摘要行，直接显示运行中、失败、已完成任务数量和最近任务句柄。
+- 摘要行可点击打开该项目范围的媒体任务侧栏，让用户不用进入聊天上下文也能在侧栏中间扫到 some.im / Replicate / Skill 异步任务状态。
+- 版本号从 **1.109.0-rc264** 提升为 **1.109.0-rc265**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc264 - 2026-06-28
+
+### Fixed
+- **短剧项目上下文携带资产参考图缺口队列（1.109.0-rc264）** —— `<short-drama-project-context>` 现在会列出 `missing_asset_reference_item`，包含人物/场景资产类型、ID、名称和生成参考图参数。
+- 项目上下文新增 `missing_asset_reference_queue_tool`，让聊天窗口能直接按缺口补齐角色定妆或场景参考图，不再只看到缺失数量。
+- 版本号从 **1.109.0-rc263** 提升为 **1.109.0-rc264**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc263 - 2026-06-28
+
+### Fixed
+- **短剧项目/分集上下文携带媒体任务队列（1.109.0-rc263）** —— `<short-drama-project-context>` 和 `<short-drama-episode-context>` 现在会列出运行中或失败的 `media_task_queue_item`，包含任务句柄、provider、kind、status、标题和短剧锚点。
+- 项目与分集上下文新增打开任务、刷新任务和失败任务重试 dry-run 参数，让聊天窗口能直接协作处理 some.im / Replicate / Skill 的异步任务状态。
+- 版本号从 **1.109.0-rc262** 提升为 **1.109.0-rc263**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc262 - 2026-06-28
+
+### Fixed
+- **短剧项目/分集上下文携带媒体缺口队列（1.109.0-rc262）** —— `<short-drama-project-context>` 和 `<short-drama-episode-context>` 现在会列出 `missing_image_shot` / `missing_video_shot`，包含 `episode_id`、`shot_id`、分镜标题和状态。
+- 项目与分集上下文新增 `media_gap_queue_tool` 及图片/视频批量生成 dry-run 参数，让聊天窗口能从缺口队列直接安排补主图或补视频，不再只依赖缺口数量。
+- 版本号从 **1.109.0-rc261** 提升为 **1.109.0-rc262**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc261 - 2026-06-28
+
+### Fixed
+- **短剧项目/分集上下文携带修复队列（1.109.0-rc261）** —— `<short-drama-project-context>` 和 `<short-drama-episode-context>` 现在会列出未解决检查项队列，包含 `episode_id`、`shot_id`、`review_item_id`、类型、严重度和标题。
+- 项目与分集上下文新增 `review_queue_tool` / `review_queue_arguments`，让聊天窗口能从全剧或单集视角直接安排检查项修复，而不是只看到未解决数量。
+- 版本号从 **1.109.0-rc260** 提升为 **1.109.0-rc261**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc260 - 2026-06-28
+
+### Fixed
+- **短剧检查项结构化侧栏接力（1.109.0-rc260）** —— 短剧侧栏的检查项聊天接力从普通文本升级为 `<short-drama-review-item-context>`，包含 `review_item_id`、类型、严重度、状态、建议动作、关联产物和当前检查项媒体任务状态。
+- 检查项上下文会给出查看检查项任务、重绘、擦除、放大、补拍和关闭检查项的推荐工具参数，并要求后续媒体任务保留 `review_item_id`，避免修复流水断链。
+- 版本号从 **1.109.0-rc259** 提升为 **1.109.0-rc260**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc259 - 2026-06-28
+
+### Fixed
+- **短剧人物/场景资产侧栏接力（1.109.0-rc259）** —— 人物和场景资产卡新增“发送资产结构到聊天”，可把 `project_id`、`asset_kind`、`asset_id`、参考图数量、关联分镜、媒体任务状态和资产描述写入 `<short-drama-asset-context>`。
+- 资产上下文会给出查看资产任务、生成参考图、参考图蒙版重绘、擦除和放大的推荐工具参数，让聊天窗口能围绕角色定妆、场景参考和分镜连续性继续推进。
+- 版本号从 **1.109.0-rc258** 提升为 **1.109.0-rc259**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc258 - 2026-06-28
+
+### Fixed
+- **短剧分镜结构侧栏接力（1.109.0-rc258）** —— 短剧分镜行新增“发送分镜结构到聊天”，可把 `project_id`、`episode_id`、`shot_id`、分镜状态、主图/视频产物、关联人物/场景、媒体任务状态和未解决检查项写入 `<short-drama-shot-context>`。
+- 分镜上下文会给出查看分镜任务、生成图片、生成视频、候选图选择、基于主图图生视频、蒙版重绘、擦除和放大的推荐工具参数，让聊天窗口能围绕单镜完成选图、修图、补视频和检查项修复。
+- 版本号从 **1.109.0-rc257** 提升为 **1.109.0-rc258**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc257 - 2026-06-28
+
+### Fixed
+- **短剧本集结构侧栏接力（1.109.0-rc257）** —— 短剧分集行新增“发送本集结构到聊天”，可把 `project_id`、`episode_id`、本集分镜数、缺主图/缺视频、未解决检查项、媒体任务状态和逐镜摘要写入 `<short-drama-episode-context>`。
+- 本集上下文会直接给出本集网页分镜板、分集媒体任务、批量补图/补视频 dry-run 和本集制作包导出的推荐工具参数，让聊天窗口能围绕单集推进短剧制作，而不是每次都读取全项目。
+- 版本号从 **1.109.0-rc256** 提升为 **1.109.0-rc257**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc256 - 2026-06-28
+
+### Fixed
+- **短剧项目结构侧栏接力（1.109.0-rc256）** —— 短剧项目卡新增“发送项目结构到聊天”，可把 `project_id`、集数、分镜数、人物/场景数、缺主图/缺视频、未解决检查项和媒体任务状态写入 `<short-drama-project-context>`。
+- 上下文同时给出网页分镜板、项目媒体任务、批量补图/补视频 dry-run 和制作包导出的推荐工具参数，让聊天窗口能从项目级视角继续调度短剧制作。
+- 版本号从 **1.109.0-rc255** 提升为 **1.109.0-rc256**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc255 - 2026-06-28
+
+### Fixed
+- **网页组件侧栏上下文接力（1.109.0-rc255）** —— 右侧「网页组件」面板新增“发送到聊天”，可把当前 widget 的 `widget_id`、`widget_title`、大小、创建时间和来源写入 `<widget-panel-context>`。
+- 这让用户不用等 widget 内部按钮，也能主动把当前 Skill 网页组件交给聊天窗口继续分析、调度媒体任务或调用后续工具。
+- 版本号从 **1.109.0-rc254** 提升为 **1.109.0-rc255**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc254 - 2026-06-28
+
+### Fixed
+- **网页组件 sendPrompt 来源上下文（1.109.0-rc254）** —— Skill / Agent 生成的 HTML widget 通过 `sendPrompt()` 回到聊天时，会自动包裹 `<widget-action>`，携带 `widget_id`、`widget_title` 和 `source=sendPrompt`。
+- 这让短剧分镜板、制作包预览、候选图选择器等网页组件触发聊天续作时，Agent 能知道动作来自哪个 widget，便于和侧栏状态、媒体任务和后续工具参数协作。
+- 版本号从 **1.109.0-rc253** 提升为 **1.109.0-rc254**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc253 - 2026-06-28
+
+### Fixed
+- **Ruby 制作脚本导回指令结构化（1.109.0-rc253）** —— `ruby-media-script-template.rb` 运行完成输出 JSON 时，现在会附带 `dry_run_import_tool` / `submit_import_tool` / `review_queue_import_tool` / `widget_tool` 及对应 arguments。
+- Ruby 输出新增 `follow_up_note`，明确导入后读取 `<media-import-follow-up>`，继续使用 `completed_image_choice_actions` 和 `completed_image_follow_up_actions` 承接候选图、主图选择、图生视频、蒙版、擦除、放大、资产参考图绑定和检查项关闭。
+- 版本号从 **1.109.0-rc252** 提升为 **1.109.0-rc253**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc252 - 2026-06-28
+
+### Fixed
+- **媒体任务范围完成图片可执行接力（1.109.0-rc252）** —— `completed_image_tasks` 现在由共享 handoff helper 生成，每一行都会直接携带选主图、图生视频、蒙版重绘、擦除、放大、资产参考图绑定或检查项关闭的工具名与参数。
+- 媒体任务侧栏和任务监控 rail 复用同一套 `AgentMediaTaskChatHandoff.completedImageScopeSummaryLine`，避免范围摘要、单任务上下文和网页候选图之间的后续动作参数漂移。
+- 版本号从 **1.109.0-rc251** 提升为 **1.109.0-rc252**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc251 - 2026-06-28
+
+### Fixed
+- **媒体任务范围完成图片接力（1.109.0-rc251）** —— 媒体任务侧栏和任务监控 rail 发送范围状态到聊天时，会统计 `completed_image_task_count` 并列出 `completed_image_tasks`，让整集/全剧批量生成后的已完成图片不会淹没在普通 finished 列表里。
+- 范围摘要新增 `completed_image_follow_up` 提示，明确单个任务继续发送到聊天会展开 `<media-task-completed-artifact-actions>`，承接选主图、图生视频、蒙版、擦除、放大、参考图绑定和检查项关闭。
+- 版本号从 **1.109.0-rc250** 提升为 **1.109.0-rc251**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc250 - 2026-06-28
+
+### Fixed
+- **完成媒体任务聊天接力（1.109.0-rc250）** —— 单个已完成图片媒体任务发送到聊天时，现在会输出 `<media-task-completed-artifact-actions>`，把分镜主图选择、图生视频、蒙版重绘、擦除、放大、资产参考图绑定和检查项关闭参数一并交给聊天窗口。
+- 任务上下文会按分镜锚点和人物/场景资产锚点分别推荐 `short_drama_*` 或通用图片工具，避免 some.im / Replicate / Skill 产物完成后只剩文件路径、后续动作断在聊天里。
+- 版本号从 **1.109.0-rc249** 提升为 **1.109.0-rc250**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc249 - 2026-06-28
+
+### Fixed
+- **分镜板与制作包选主图后续处理（1.109.0-rc249）** —— 短剧分镜候选图组件和制作包预览里的“选主图”按钮现在会输出结构化 post-select 工具链，覆盖图生视频、蒙版重绘、擦除、放大和检查项关闭。
+- 制作包 Ruby 预览模板同步写入 `<short-drama-production-image-choice>` 推荐块，让 skill 生成网页、侧栏和聊天窗口对同一分镜产物使用一致的后续动作参数。
+- 版本号从 **1.109.0-rc248** 提升为 **1.109.0-rc249**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc248 - 2026-06-28
+
+### Fixed
+- **分镜候选图选择后续处理（1.109.0-rc248）** —— 分镜候选图在通用候选图组件里被选中时，会在 `<image-choice>` 中附带生成视频、蒙版重绘、擦除、放大和关闭检查项参数。
+- 选主图后的推荐参数会继续携带 `project_id` / `episode_id` / `shot_id` / `review_item_id`，让聊天窗口能直接推进视频生成或检查项修复。
+- 版本号从 **1.109.0-rc247** 提升为 **1.109.0-rc248**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc247 - 2026-06-28
+
+### Fixed
+- **资产候选图选择后续处理（1.109.0-rc247）** —— 人物/场景资产候选图在通用候选图组件里被选中时，会在 `<image-choice>` 中附带绑定参考图后的蒙版重绘、擦除和放大参数。
+- 媒体任务完成的资产参考图摘要也同步给出 `open_image_editor` / `upscale_image` 后续动作，让参考图选定后可以直接继续修图或放大。
+- 版本号从 **1.109.0-rc246** 提升为 **1.109.0-rc247**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc246 - 2026-06-28
+
+### Fixed
+- **媒体任务重试判断共享化（1.109.0-rc246）** —— 媒体任务侧栏、任务监控 rail 和共享聊天 handoff 现在复用 `AgentMediaTaskChatHandoff.isRetryableShortDramaTask`。
+- 单任务重试聊天块改为复用 `AgentMediaTaskChatHandoff.appendRetryContext`，避免 some.im / Replicate / 资产参考图 / 检查项修复任务在不同入口出现重试参数漂移。
+- 版本号从 **1.109.0-rc245** 提升为 **1.109.0-rc246**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc245 - 2026-06-28
+
+### Fixed
+- **导入完成图片完整接力动作（1.109.0-rc245）** —— `import_media_manifest` / `import_media_directory` 导入完成图片后，会把设主图、图生视频、蒙版重绘、擦除、放大、资产参考图绑定和检查项关闭参数一并写入 `<media-import-follow-up>`。
+- 短剧媒体契约测试新增导入后编辑、擦除、放大和关闭检查项动作覆盖，保护 Ruby Skill / 第三方 API 产物回导后的聊天协作链路。
+- 版本号从 **1.109.0-rc244** 提升为 **1.109.0-rc245**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc244 - 2026-06-28
+
+### Fixed
+- **制作包媒体脚本交接提示补齐（1.109.0-rc244）** —— 短剧制作包写入聊天的接力提示现在会明确说明 `WILLDEEP_MEDIA_API_METHOD` / `WILLDEEP_MEDIA_EXTRA_HEADERS_JSON`、`WILLDEEP_MEDIA_REQUEST_FORMAT=multipart`、`source_image_path` / `mask_path` 上传字段和多候选 `*-candidate-N` 回导流程。
+- 短剧媒体契约测试新增制作包接力提示覆盖，防止 Ruby 模板能力和聊天交接说明再次漂移。
+- 版本号从 **1.109.0-rc243** 提升为 **1.109.0-rc244**。pbxproj×6 / Go agent / Help Info.plist / README badge / product-overview / docs ×2 同步。
+
+## 1.109.0-rc243 - 2026-06-28
+
+### Fixed
+- **Ruby 媒体脚本多候选产物回导（1.109.0-rc243）** —— 制作包 Ruby 模板在第三方一次返回多张图片或多个视频 URL 时，会把第一份写入原 `file_path`，其余保存为 `*-candidate-N` sibling 文件。
+- 额外候选产物会追加同锚点 manifest item，保留分镜、人物/场景资产和 `review_item_id` 上下文；导回 App 后可自然进入候选图选择或后续编辑流程。
+- 短剧媒体契约测试新增多产物候选文件与 manifest 追加覆盖。
+- 版本号从 **1.109.0-rc242** 提升为 **1.109.0-rc243**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc242 - 2026-06-28
+
+### Fixed
+- **Ruby 媒体脚本宽容产物 URL 解析（1.109.0-rc242）** —— 制作包 Ruby 模板会递归识别第三方响应里的 `media_url`、`result_url`、`output_url`、`image_url`、`video_url`、`download_url`、`artifact_url`、`file_url` 等常见字段。
+- 轮询响应中的 `outputs` / `artifacts` / `files` / `results` 数组也会被扫描，异步任务完成后更容易自动下载图片或视频产物。
+- 短剧媒体契约测试新增宽容产物 URL 解析覆盖。
+- 版本号从 **1.109.0-rc241** 提升为 **1.109.0-rc242**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc241 - 2026-06-28
+
+### Fixed
+- **Ruby 媒体脚本 multipart 上传（1.109.0-rc241）** —— 制作包 Ruby 模板支持 `WILLDEEP_MEDIA_REQUEST_FORMAT=multipart`，可把 `source_image_path` / `mask_path` 作为文件字段上传到第三方图片擦除、重绘或放大 API。
+- 文件字段名可通过 `WILLDEEP_MEDIA_SOURCE_IMAGE_FIELD` / `WILLDEEP_MEDIA_MASK_FIELD` 配置；默认仍为 JSON 提交，兼容既有 API 网关。
+- 短剧媒体契约测试新增 multipart 请求格式和字段名配置覆盖。
+- 版本号从 **1.109.0-rc240** 提升为 **1.109.0-rc241**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc240 - 2026-06-28
+
+### Fixed
+- **Ruby 媒体脚本自定义请求头（1.109.0-rc240）** —— 制作包 `ruby-media-script-template.rb` / `media-api.env.example` 支持 `WILLDEEP_MEDIA_API_METHOD` 与 `WILLDEEP_MEDIA_EXTRA_HEADERS_JSON`。
+- 第三方网关可用 POST/PUT/PATCH 和 `X-API-Key` 等自定义请求头提交媒体任务；提交、轮询和下载请求都会复用额外 headers，密钥仍只从私有环境变量读取，不写入导出包。
+- 短剧媒体契约测试新增 Ruby 模板方法/请求头配置覆盖。
+- 版本号从 **1.109.0-rc239** 提升为 **1.109.0-rc240**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc239 - 2026-06-27
+
+### Fixed
+- **图片编辑器旧蒙版续修（1.109.0-rc239）** —— `open_image_editor` / `short_drama_open_image_editor` 支持可选 `mask_path`，打开图片蒙版侧栏时可把旧 PNG 蒙版作为半透明底稿载入。
+- 导出蒙版时会先保留旧蒙版，再叠加新增矩形、画笔和橡皮修整；失败/取消的蒙版编辑任务通知与共享 handoff 会给出重新打开编辑器并带 seed mask 的结构化参数。
+- 短剧媒体契约测试新增旧蒙版 seed layer、工具参数和聊天恢复动作覆盖。
+- 版本号从 **1.109.0-rc238** 提升为 **1.109.0-rc239**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc238 - 2026-06-27
+
+### Fixed
+- **资产参考图编辑重试补齐（1.109.0-rc238）** —— `short_drama_retry_media_task` 现在支持带 `asset_kind` / `asset_id` 的 Replicate 放大、Replicate 蒙版编辑和 some.im 蒙版编辑任务。
+- 媒体任务侧栏、任务监控 rail 和共享聊天 handoff 的可重试判断同步识别人物/场景参考图修复任务，资产参考图失败后可从聊天继续单任务或范围重试。
+- 短剧媒体契约测试新增资产锚点媒体重试覆盖。
+- 版本号从 **1.109.0-rc237** 提升为 **1.109.0-rc238**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc237 - 2026-06-27
+
+### Fixed
+- **共享媒体任务上下文重试接力（1.109.0-rc237）** —— `AgentMediaTaskChatHandoff` 会在失败/取消且可重试的短剧媒体任务上下文中输出 `<short-drama-media-task-retry>`。
+- 共享结构块包含 `short_drama_retry_media_task` 与 `task_id` 参数，媒体任务侧栏和任务监控 rail 单行气泡都能把单任务重试稳定交给聊天窗口。
+- 短剧媒体契约测试新增共享 handoff 重试结构覆盖。
+- 版本号从 **1.109.0-rc236** 提升为 **1.109.0-rc237**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc236 - 2026-06-27
+
+### Fixed
+- **任务监控 rail 范围重试接力（1.109.0-rc236）** —— rail 顶部聊天接力在当前聚焦范围存在可重试失败/取消媒体任务时，会输出 `short_drama_retry_failed_media_tasks` 的 dry-run 和正式提交参数。
+- `<media-task-scope-status>` 现在会额外列出 `retryable_failed_tasks`，让聊天窗口能按检查项、分镜、人物/场景资产或项目范围先预检再批量重试。
+- 短剧媒体契约测试新增 rail 范围重试接力覆盖。
+- 版本号从 **1.109.0-rc235** 提升为 **1.109.0-rc236**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc235 - 2026-06-27
+
+### Fixed
+- **任务监控 rail 范围状态接力（1.109.0-rc235）** —— 右侧任务监控 rail 顶部新增聊天接力入口，可把当前聚焦媒体任务范围写入聊天。
+- 输出沿用 `<media-task-scope-status>`，包含 active/failed/finished 任务计数和列表，以及 `short_drama_open_media_tasks` / `short_drama_refresh_media_tasks` 参数。
+- 短剧媒体契约测试新增 rail 范围状态聊天接力覆盖。
+- 版本号从 **1.109.0-rc234** 提升为 **1.109.0-rc235**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc234 - 2026-06-27
+
+### Fixed
+- **任务监控 rail 顶部智能聚焦（1.109.0-rc234）** —— 右侧任务监控 rail 顶部「媒体任务」按钮现在会优先打开失败媒体任务范围，其次进行中任务，最后最近完成任务。
+- 无媒体任务可聚焦时仍打开全部媒体任务总览；单任务行点击继续按检查项、分镜、资产或项目范围聚焦。
+- 短剧媒体契约测试新增 rail 顶部媒体任务智能聚焦覆盖。
+- 版本号从 **1.109.0-rc233** 提升为 **1.109.0-rc234**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc233 - 2026-06-27
+
+### Fixed
+- **任务监控 rail 媒体任务聚焦（1.109.0-rc233）** —— 右侧任务监控 rail 中点击单个媒体任务时，现在会按最具体锚点打开「媒体任务」侧栏。
+- 聚焦顺序为检查项 > 分镜 > 人物/场景资产 > 项目；无短剧锚点的任务仍打开全部媒体任务列表。
+- 短剧媒体契约测试新增 rail 媒体任务 scope 聚焦覆盖。
+- 版本号从 **1.109.0-rc232** 提升为 **1.109.0-rc233**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc232 - 2026-06-27
+
+### Fixed
+- **资产媒体完成通知三件套（1.109.0-rc232）** —— 带人物/场景资产锚点的媒体任务完成后，`<media-task-action>` 现在会在绑定参考图之外继续给出蒙版编辑、擦除区域和放大参考图参数。
+- 新增的 `edit_arguments`、`erase_arguments`、`upscale_arguments` 会保留 `project_id`、`asset_kind`、`asset_id`，确保完成产物继续回填到同一资产。
+- 短剧媒体契约测试新增资产媒体完成通知三件套覆盖。
+- 版本号从 **1.109.0-rc231** 提升为 **1.109.0-rc232**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc231 - 2026-06-27
+
+### Fixed
+- **原生侧栏参考图三件套（1.109.0-rc231）** —— 「短剧」侧栏的人物/场景参考图缩略图现在提供蒙版编辑、擦除区域和 Replicate 放大入口。
+- 擦除入口会预设图片编辑器 `operation=erase`；放大入口会创建 `imageUpscale` 媒体任务，并携带 `project_id`、`asset_kind`、`asset_id`，完成产物继续回填为同一人物或场景资产参考图。
+- 短剧媒体契约测试新增原生资产参考图擦除/放大入口覆盖。
+- 版本号从 **1.109.0-rc230** 提升为 **1.109.0-rc231**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc230 - 2026-06-27
+
+### Fixed
+- **制作包资产参考图快捷处理（1.109.0-rc230）** —— 制作包网页预览的「参考资产」卡片在已有人物/场景参考图时，新增编辑参考图、擦除区域和放大参考图按钮。
+- 这些按钮会通过 `<short-drama-asset-widget-action>` 把 `project_id`、`asset_kind`、`asset_id` 和 `image_path` 带回聊天窗口，并推荐 `open_image_editor` / `upscale_image`，完成产物继续回填到同一人物或场景资产。
+- Ruby 媒体脚本重写后的 `widget-preview.html` 也同步生成相同参考图快捷处理按钮，避免外部脚本跑完后网页能力降级。
+- 短剧媒体契约测试新增制作包资产参考图快捷处理覆盖。
+- 版本号从 **1.109.0-rc229** 提升为 **1.109.0-rc230**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc229 - 2026-06-27
+
+### Fixed
+- **导入完成图片接力动作（1.109.0-rc229）** —— `import_media_manifest` / `import_media_directory` 导入已完成图片后，`<media-import-follow-up>` 会继续输出单图后续动作。
+- 带分镜锚点的导入图片现在会给出 `short_drama_select_shot_artifact` 和 `generate_video_from_image` 参数；带人物/场景资产锚点的导入图片会给出 `short_drama_attach_asset_reference_image` 参数。
+- 短剧媒体契约测试新增导入完成图片接力覆盖，保护 Ruby Skill / 第三方 API 脚本回导后的聊天协作链路。
+- 版本号从 **1.109.0-rc228** 提升为 **1.109.0-rc229**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc228 - 2026-06-27
+
+### Fixed
+- **资产参考图编辑提交接力（1.109.0-rc228）** —— 从人物/场景参考图打开图片蒙版编辑器并提交 Replicate / some.im 重绘或擦除任务后，`<image-edit-task-submitted>` 会继续带出资产上下文。
+- 提交提示现在包含 `open_asset_tasks_tool: short_drama_open_media_tasks` 和 `attach_reference_tool: short_drama_attach_asset_reference_image`，让完成产物能直接回填为同一人物/场景参考图。
+- 短剧媒体契约测试新增资产参考图编辑提交接力覆盖。
+- 版本号从 **1.109.0-rc227** 提升为 **1.109.0-rc228**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc227 - 2026-06-27
+
+### Fixed
+- **资产参考图绑定结构化接力（1.109.0-rc227）** —— `short_drama_attach_asset_reference_image` 现在会输出 `<short-drama-asset-reference-attached>`，让人物/场景参考图绑定后的下一步有结构化上下文。
+- 工具调用成功后会设置当前短剧项目并请求打开「短剧」侧栏，同时给出查看资产任务、`short_drama_generate_batch_media(dry_run=true)`、蒙版编辑、擦除和放大参数。
+- 短剧媒体契约测试新增资产参考图绑定结构化接力覆盖。
+- 版本号从 **1.109.0-rc226** 提升为 **1.109.0-rc227**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc226 - 2026-06-27
+
+### Fixed
+- **选主图工具结构化回焦（1.109.0-rc226）** —— `short_drama_select_shot_artifact` 现在会输出 `<short-drama-primary-artifact-selected>`，与媒体任务缩略图星标设主图的聊天结构块保持一致。
+- 工具调用成功后会设置当前短剧项目，并在可定位运行时时请求打开右侧「短剧」侧栏，让用户马上看到分镜主图已写回项目结构。
+- 短剧媒体契约测试新增选主图工具结构化输出与侧栏回焦覆盖。
+- 版本号从 **1.109.0-rc225** 提升为 **1.109.0-rc226**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc225 - 2026-06-27
+
+### Fixed
+- **选主图后修图/放大接力（1.109.0-rc225）** —— `short_drama_select_shot_artifact` 的返回结果现在不仅给出图生视频参数，也会给出 `short_drama_open_image_editor` 的重绘/擦除参数和 `short_drama_upscale_shot_artifact` 的放大参数。
+- 这些后续动作会继续携带 `project_id`、`episode_id`、`shot_id`、`artifact_path` 和可选 `review_item_id`，让候选图选定后能直接进入蒙版编辑、擦除、放大、视频生成或关闭检查项。
+- 短剧媒体契约测试新增选主图后修图/放大接力覆盖。
+- 版本号从 **1.109.0-rc224** 提升为 **1.109.0-rc225**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc224 - 2026-06-27
+
+### Fixed
+- **媒体任务范围状态接力聊天（1.109.0-rc224）** —— 「媒体任务」侧栏新增“发送状态到聊天”，可把当前筛选范围内的运行中、失败和已完成任务摘要交给聊天窗口继续调度。
+- 状态摘要会输出 `<media-task-scope-status>`，包含 active/failed/finished 计数、任务列表，以及 `short_drama_open_media_tasks`、`short_drama_refresh_media_tasks` 和失败任务批量重试参数。
+- 短剧媒体契约测试新增媒体任务范围状态摘要接力覆盖。
+- 版本号从 **1.109.0-rc223** 提升为 **1.109.0-rc224**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc223 - 2026-06-27
+
+### Fixed
+- **媒体任务完成自动聚焦侧栏（1.109.0-rc223）** —— 后台媒体任务完成、失败或取消并注入 `<media-task-notification>` 时，Agent 模式会自动打开右侧「媒体任务」侧栏。
+- 侧栏会优先聚焦失败/需处理任务，并按最具体锚点过滤：检查项 > 分镜 > 人物/场景资产 > 项目；无短剧锚点时则打开完整媒体任务列表。
+- 短剧媒体契约测试新增媒体完成事件侧栏聚焦覆盖。
+- 版本号从 **1.109.0-rc222** 提升为 **1.109.0-rc223**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc222 - 2026-06-27
+
+### Fixed
+- **媒体完成通知蒙版上下文接力（1.109.0-rc222）** —— `<media-task-notification>` 现在会在人读正文里显示 `Source image` 和 `Mask`。
+- `<media-task-action>` 结构块同步带出 `source_image_path` 与 `mask_path`，让图片擦除、蒙版重绘、外部修复和短剧检查项任务完成后，聊天窗口可以直接继续重试、局部编辑、放大或排查。
+- 短剧媒体契约测试新增媒体完成通知源图/蒙版路径覆盖。
+- 版本号从 **1.109.0-rc221** 提升为 **1.109.0-rc222**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc221 - 2026-06-27
+
+### Fixed
+- **媒体完成通知远端 URL 接力（1.109.0-rc221）** —— `<media-task-notification>` 现在会在人读正文里显示 `Status URL` / `Cancel URL`。
+- `<media-task-action>` 结构块同步带出 `status_url`、`cancel_url`、`status_endpoint_suffix` 和 `cancel_endpoint_suffix`，让聊天窗口后续排查、刷新或取消第三方异步任务时不必回侧栏翻字段。
+- 短剧媒体契约测试新增媒体完成通知远端 URL 覆盖。
+- 版本号从 **1.109.0-rc220** 提升为 **1.109.0-rc221**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc220 - 2026-06-27
+
+### Fixed
+- **Skill 网页组件即时打开（1.109.0-rc220）** —— `show_widget(html_path:)` 成功排队组件后会立即请求打开右侧「网页组件」侧栏，不再只依赖下一轮 turn 顶部注入时才切面板。
+- 工具返回新增 `<widget-follow-up>`，记录 widget id、标题、侧栏目标和来源类型，方便聊天窗口继续围绕 Ruby Skill / 第三方脚本生成的页面协作。
+- 短剧媒体契约测试新增网页组件即时打开和 follow-up 覆盖。
+- 版本号从 **1.109.0-rc219** 提升为 **1.109.0-rc220**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc219 - 2026-06-27
+
+### Fixed
+- **短剧生成提交即时接力（1.109.0-rc219）** —— `short_drama_generate_shot_media` 与 `short_drama_generate_asset_media` 的提交结果现在会输出 `<short-drama-media-submission-follow-up>`。
+- 结构块会给出 `short_drama_open_media_tasks` / `short_drama_refresh_media_tasks` 的作用域参数；如果 some.im 当轮返回完成图片，还会给出候选图、选主图、图生视频或人物/场景参考图绑定参数。
+- 短剧媒体任务描述同步展示 `Cancel URL`，让短剧生成主入口和通用媒体工具具备同样的远端任务可观测性。
+- 短剧媒体契约测试新增短剧生成提交即时接力覆盖。
+- 版本号从 **1.109.0-rc218** 提升为 **1.109.0-rc219**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc218 - 2026-06-27
+
+### Fixed
+- **放大与蒙版编辑提交即时接力（1.109.0-rc218）** —— `upscale_image` 和 `edit_image_with_mask` 的提交摘要现在会追加 `<media-task-tool-follow-up>`。
+- 如果 Replicate / some.im 当轮返回完成图片，聊天窗口可直接拿到候选图、选主图、蒙版、放大或图生视频参数；如果任务仍在运行或失败，则继续给出对应任务侧栏打开/刷新参数。
+- 提交摘要会先取回已更新的任务对象，确保同步下载到的 artifacts 能进入后续动作。
+- 短剧媒体契约测试新增放大与蒙版编辑提交即时接力覆盖。
+- 版本号从 **1.109.0-rc217** 提升为 **1.109.0-rc218**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc217 - 2026-06-27
+
+### Fixed
+- **provider 原生工具即时接力（1.109.0-rc217）** —— `replicate_create_prediction` / `replicate_poll_prediction` / `replicate_cancel_prediction` 与 `some_im_create_media_task` / `some_im_poll_media_task` / `some_im_cancel_media_task` 现在复用 `<media-task-tool-follow-up>`。
+- 当 provider 原生工具当轮拿到完成图片产物时，会直接给出候选图、选主图、蒙版、放大或图生视频参数；当任务仍在运行、失败或被取消时，会给出对应短剧任务范围的打开/刷新参数。
+- 这样聊天窗口不再只依赖后台完成通知，直接使用 Replicate/some.im 原生工具也能稳定接上短剧制作流。
+- 短剧媒体契约测试新增 provider 原生媒体工具即时接力覆盖。
+- 版本号从 **1.109.0-rc216** 提升为 **1.109.0-rc217**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc216 - 2026-06-27
+
+### Fixed
+- **媒体任务提交摘要展示取消 URL（1.109.0-rc216）** —— `upscale_image` 与 `edit_image_with_mask` 的提交结果现在会展示 `Cancel URL`。
+- Replicate 放大、Replicate 蒙版重绘/擦除和 some.im 蒙版重绘/擦除在提交当轮即可看到取消入口，和通用媒体任务描述中的远端 URL 展示保持一致。
+- 短剧媒体契约测试新增提交摘要 cancel URL 覆盖。
+- 版本号从 **1.109.0-rc215** 提升为 **1.109.0-rc216**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc215 - 2026-06-27
+
+### Fixed
+- **媒体任务描述展示远端 URL（1.109.0-rc215）** —— `create_media_task`、`update_media_task`、`list_media_tasks` 以及轮询/取消工具返回的通用媒体任务描述现在会展示完整 `Status URL` 与 `Cancel URL`。
+- 这样 Skill/Ruby/第三方 API 登记的异步任务在聊天工具结果中就能直接看到轮询和取消入口，不必只依赖侧栏按钮或手动查任务对象。
+- 短剧媒体契约测试新增媒体任务描述远端 URL 覆盖。
+- 版本号从 **1.109.0-rc214** 提升为 **1.109.0-rc215**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc214 - 2026-06-27
+
+### Fixed
+- **直接登记 pending 任务后续动作（1.109.0-rc214）** —— `create_media_task` / `update_media_task` 登记远端 pending、失败或需关注媒体任务后，`<media-task-tool-follow-up>` 现在会给出任务范围的打开和刷新参数。
+- 带短剧 project / episode / shot / asset / `review_item_id` 锚点的任务会推荐 `short_drama_open_media_tasks` 与 `short_drama_refresh_media_tasks`；普通 active/failed 任务会给出 `list_media_tasks` 兜底参数。
+- 这样 Skill/Ruby/第三方 API 脚本直接登记异步 job 后，聊天窗口可以立即带用户打开对应分镜、资产或检查项的任务侧栏，而不必等到轮询完成。
+- 短剧媒体契约测试新增直接登记 pending 任务打开/刷新范围覆盖。
+- 版本号从 **1.109.0-rc213** 提升为 **1.109.0-rc214**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc213 - 2026-06-27
+
+### Fixed
+- **直接登记媒体任务后续动作（1.109.0-rc213）** —— `create_media_task` 和 `update_media_task` 在登记或更新已完成图片产物后，现在会在工具结果中输出 `<media-task-tool-follow-up>`。
+- 多图任务会给出 `short_drama_show_image_choice_widget` 或 `show_image_choice_widget` 参数；单图任务会给出选主图、绑定人物/场景参考图、打开蒙版、擦除、放大、图生视频和关闭检查项等后续工具参数。
+- 这样 Skill/Ruby/第三方 API 脚本直接调用媒体任务工具回写产物时，聊天窗口无需等待后台完成通知，也能立即继续选图、修图或推进短剧分镜。
+- 短剧媒体契约测试新增 create/update 媒体任务即时后续动作覆盖。
+- 版本号从 **1.109.0-rc212** 提升为 **1.109.0-rc213**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc212 - 2026-06-27
+
+### Fixed
+- **目录导入候选图接力（1.109.0-rc212）** —— `import_media_directory` 导入本地 outputs 目录后，现在也会在工具结果中输出 `<media-import-follow-up>`。
+- 当目录导入任务包含多张图片时，结构块会输出 `completed_image_choice_actions`，推荐 `short_drama_show_image_choice_widget` 或 `show_image_choice_widget`，并继续携带短剧分镜、资产和 `review_item_id` 上下文。
+- 这样 Ruby/Skill 或第三方 API 脚本即使不写 manifest，只把生成目录交回 App，也能从聊天窗口直接进入候选图选择、蒙版编辑、放大或图生视频流程。
+- 短剧媒体契约测试新增目录导入多图候选接力覆盖。
+- 版本号从 **1.109.0-rc211** 提升为 **1.109.0-rc212**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc211 - 2026-06-27
+
+### Fixed
+- **manifest 完成导入候选图接力（1.109.0-rc211）** —— `import_media_manifest` 导入已完成的多图媒体任务后，现在会在 `<media-import-follow-up>` 中输出 `completed_image_choice_actions`。
+- 带短剧分镜锚点的多图任务会推荐 `short_drama_show_image_choice_widget`；普通多图任务会推荐 `show_image_choice_widget`，并继续携带 project / episode / shot / asset / `review_item_id` 上下文。
+- 这样 Ruby/Skill 或第三方 API 脚本把多张图片产物导回后，聊天窗口可以直接打开候选图选择器，让用户选主图、继续蒙版编辑、Replicate 放大或 some.im 图生视频。
+- 短剧媒体契约测试新增完成 manifest 多图候选接力覆盖。
+- 版本号从 **1.109.0-rc210** 提升为 **1.109.0-rc211**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc210 - 2026-06-27
+
+### Fixed
+- **manifest pending 导入后续动作（1.109.0-rc210）** —— `import_media_manifest(import_pending_tasks: true)` 创建或更新远端 pending 媒体任务后，会在工具结果中输出 `<media-import-follow-up>` 结构块。
+- 该结构块会列出所有导入任务句柄和 pending 任务句柄；带短剧 project / episode / shot / asset / review 锚点的 pending 任务会给出 `short_drama_open_media_tasks` 与 `short_drama_refresh_media_tasks` 参数。
+- 这样 Ruby/Skill 或第三方 API 脚本只提交远端 job 后，聊天窗口可以直接打开对应任务范围或立即刷新，不必从纯文本任务列表里手动拼参数。
+- 短剧媒体契约测试新增 manifest pending 导入后续动作覆盖。
+- 版本号从 **1.109.0-rc209** 提升为 **1.109.0-rc210**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc209 - 2026-06-27
+
+### Fixed
+- **媒体任务聊天接力展示远端 URL（1.109.0-rc209）** —— 媒体任务侧栏和任务监控 rail 发送任务上下文到聊天时，现在会带出远端状态 URL 与取消 URL。
+- 共享 `AgentMediaTaskChatHandoff` 会在已有远端任务 ID、endpoint suffix、源图、蒙版和检查项后续动作之外，补充 `状态 URL：...` 与 `取消 URL：...`，方便聊天窗口分析第三方异步任务轮询/取消入口。
+- 短剧媒体契约测试新增媒体任务聊天接力中的 status/cancel URL 覆盖。
+- 版本号从 **1.109.0-rc208** 提升为 **1.109.0-rc209**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc208 - 2026-06-27
+
+### Fixed
+- **Ruby 制作包模板回写取消 URL（1.109.0-rc208）** —— `ruby-media-script-template.rb` 现在会从第三方提交/轮询响应中提取 `cancel_url`、`cancelUrl`、`urls.cancel`、`links.cancel`、`data.cancel_url` 和 `data.urls.cancel`。
+- 新增 `WILLDEEP_MEDIA_CANCEL_URL_TEMPLATE`，当第三方 API 只返回 job id 时，可用 `{id}` 拼出取消 URL 并写回 manifest item。
+- 制作包 Markdown handoff 与 `media-api.env.example` 同步说明 cancel URL 模板；pending manifest 导入后可配合 rc207 的 generic HTTPS cancel 从媒体任务侧栏取消外部异步任务。
+- 短剧媒体契约测试新增 Ruby 模板 cancel URL 提取和 manifest 回写覆盖，检查项总数提升到 184。
+- 版本号从 **1.109.0-rc207** 提升为 **1.109.0-rc208**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc207 - 2026-06-27
+
+### Fixed
+- **第三方 pending 媒体任务远端取消（1.109.0-rc207）** —— Ruby/Skill 或外部 API 脚本登记的 skill/local/unknown pending 媒体任务，如果带 HTTPS `cancel_url`，现在可以从媒体任务侧栏直接取消。
+- `AgentGenericMediaStatusClient` 新增通用 `canCancel` / `cancel`；取消默认使用 POST，若远端返回 405 会自动回退 DELETE，适配更多第三方异步 API。
+- `AgentMediaTaskPoller` 会把 generic cancel 结果同步回任务状态、进度、远端任务 ID、status URL 和 cancel URL；缺少 HTTPS `cancel_url` 时给出明确状态信息。
+- 短剧媒体契约测试新增 generic HTTPS cancel 与侧栏取消按钮覆盖，确保 Ruby/第三方 pending 任务不是只能刷新不能取消。
+- 版本号从 **1.109.0-rc206** 提升为 **1.109.0-rc207**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc206 - 2026-06-27
+
+### Fixed
+- **媒体任务候选图快捷处理（1.109.0-rc206）** —— 媒体任务多图候选组件新增“打开蒙版 / 擦除区域 / 放大图片 / 生成视频”快捷动作，不再只有“选这张继续”。
+- 这些动作会写入 `<media-task-image-choice>` 结构块，并提供 `recommended_tool` / `recommended_arguments`；短剧分镜锚点优先推荐 `short_drama_open_image_editor` 和 `short_drama_upscale_shot_artifact`。
+- 生成视频动作继续推荐 `generate_video_from_image`，并把 `review_item_id`、project / episode / shot 锚点随参数带回聊天，减少候选图选择后的参数丢失。
+- 短剧媒体契约测试补充媒体任务候选图快捷处理按钮和推荐参数覆盖。
+- 版本号从 **1.109.0-rc205** 提升为 **1.109.0-rc206**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc205 - 2026-06-27
+
+### Fixed
+- **任务监控 rail 媒体任务聊天接力（1.109.0-rc205）** —— 右侧任务监控中间区域的媒体任务条目新增聊天气泡动作，可直接把当前媒体任务上下文写入聊天输入区。
+- 新增 `AgentMediaTaskChatHandoff` 共享 helper，媒体任务侧栏和任务监控 rail 复用同一套上下文结构，包含任务句柄、状态、provider、模型、远端任务、源图、蒙版、产物路径、短剧锚点和检查项后续动作。
+- `<short-drama-media-task-review-actions>` 的打开检查项任务流水与关闭检查项参数继续保留，避免 rail 直达聊天时丢失短剧修复锚点。
+- 短剧媒体契约测试新增任务监控 rail 发送媒体任务上下文到聊天的覆盖，检查项总数提升到 182。
+- 版本号从 **1.109.0-rc204** 提升为 **1.109.0-rc205**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc204 - 2026-06-27
+
+### Fixed
+- **图片蒙版编辑提交接力聊天（1.109.0-rc204）** —— 图片编辑面板提交 Replicate 或 some.im 蒙版重绘/擦除任务后，会把 `<image-edit-task-submitted>` 结构块写入聊天输入区。
+- 结构块包含任务句柄、provider、源图、蒙版、短剧 project / episode / shot / asset 锚点和 `review_item_id`。
+- 如果任务带分镜锚点，会带出 `short_drama_open_media_tasks` 参数；如果任务带检查项锚点，还会带出 `short_drama_resolve_review_item` 参数，便于确认修复后关闭检查项。
+- 短剧媒体契约测试新增图片编辑提交后聊天接力覆盖。
+- 版本号从 **1.109.0-rc203** 提升为 **1.109.0-rc204**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc203 - 2026-06-27
+
+### Fixed
+- **媒体任务上下文检查项后续动作（1.109.0-rc203）** —— 媒体任务侧栏的“发送任务上下文到聊天”现在会在任务带 `review_item_id`、项目和分镜锚点时输出 `<short-drama-media-task-review-actions>`。
+- 该结构块会带出 `short_drama_open_media_tasks(scope=review_item)` 参数，方便先查看同一检查项的修复任务流水。
+- 同一结构块也会带出 `short_drama_resolve_review_item` 参数，用户人工确认修复后，聊天窗口可以直接关闭对应检查项。
+- 短剧媒体契约测试新增任务上下文检查项后续动作覆盖。
+- 版本号从 **1.109.0-rc202** 提升为 **1.109.0-rc203**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc202 - 2026-06-27
+
+### Fixed
+- **媒体任务重试推荐工具参数（1.109.0-rc202）** —— 媒体任务侧栏的单任务重试结构块现在会写入 `retry_tool: short_drama_retry_media_task` 与 `retry_arguments: task_id=...`。
+- 当前筛选范围内的批量重试结构块会写入 `retry_failed_tool: short_drama_retry_failed_media_tasks`，并同时带出 dry-run 预检参数与正式提交参数。
+- 失败的 some.im / Replicate 图片编辑、放大、分镜生成和资产参考图任务，从侧栏回到聊天窗口后可以直接执行结构化重试流程，并继续保留 `review_item_id`。
+- 短剧媒体契约测试新增单任务和批量重试推荐工具参数覆盖。
+- 版本号从 **1.109.0-rc201** 提升为 **1.109.0-rc202**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc201 - 2026-06-27
+
+### Fixed
+- **媒体任务候选图推荐工具参数（1.109.0-rc201）** —— 媒体任务侧栏打开的“候选图”组件现在会在 `<media-task-image-choice>` 中写入 `recommended_tool` 与 `recommended_arguments`。
+- 带 project / episode / shot 的任务会推荐 `short_drama_select_shot_artifact`，带 project / asset kind / asset id 的人物或场景参考图任务会推荐 `short_drama_attach_asset_reference_image`。
+- 推荐参数会继续带出 `review_item_id`，让 some.im / Replicate 异步出图后的候选图选择也能稳定回到同一短剧检查项流水。
+- 短剧媒体契约测试新增媒体任务候选图推荐工具和参数覆盖。
+- 版本号从 **1.109.0-rc200** 提升为 **1.109.0-rc201**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc200 - 2026-06-27
+
+### Fixed
+- **候选图组件推荐工具参数（1.109.0-rc200）** —— 通用图片候选组件的 `<image-choice>` 结构块现在会写入 `recommended_tool` 与 `recommended_arguments`。
+- 选主图会推荐 `short_drama_select_shot_artifact`，人物/场景参考图会推荐 `short_drama_attach_asset_reference_image`，蒙版、擦除、放大和图生视频分别推荐 `open_image_editor`、`upscale_image`、`generate_video_from_image`。
+- 推荐参数会继续带出 project / episode / shot、asset kind / asset id 和 `review_item_id`，让候选图组件回到聊天窗口后不再依赖自然语言推断锚点。
+- 短剧媒体契约测试新增候选图推荐工具和参数覆盖。
+- 版本号从 **1.109.0-rc199** 提升为 **1.109.0-rc200**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc199 - 2026-06-27
+
+### Changed
+- **制作包检查项推荐逻辑拆分（1.109.0-rc199）** —— 新增 `AgentShortDramaProductionReviewRecommendations.swift`，承接制作包网页检查项的 `recommended_tool` / `recommended_arguments` 生成逻辑。
+- `AgentShortDramaProductionExporter.swift` 回到 2000 行软阈值以下，继续专注 production package、widget preview 和 Ruby 模板输出，避免短剧导出器继续膨胀。
+- 短剧媒体契约测试同步读取新 helper 文件，并继续覆盖制作包网页初始导出和 Ruby 重写版的推荐工具参数。
+- 版本号从 **1.109.0-rc198** 提升为 **1.109.0-rc199**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc198 - 2026-06-27
+
+### Fixed
+- **制作包网页检查项推荐工具参数（1.109.0-rc198）** —— `widget-preview.html` 的初始导出版和 Ruby 脚本重写版，现在都会在“处理检查项”按钮的 `<short-drama-review-item-action>` 中写入 `recommended_tool` 与 `recommended_arguments`。
+- 制作包网页回到聊天窗口时会明确推荐 `short_drama_open_image_editor`、`short_drama_upscale_shot_artifact`、`short_drama_generate_shot_media` 或 `short_drama_open_media_tasks`，并统一保留 `review_item_id`。
+- 同一结构块还会带出 `short_drama_open_media_tasks(scope=review_item)` 和 `short_drama_resolve_review_item` 参数，避免短剧导出给 Skill、Ruby 或第三方 API 后检查项修复链路退回旧式提示。
+- 短剧媒体契约测试新增制作包网页初始导出和 Ruby 重写版的推荐工具、推荐参数、任务流水参数和关闭检查项参数覆盖。
+- 版本号从 **1.109.0-rc197** 提升为 **1.109.0-rc198**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc197 - 2026-06-27
+
+### Fixed
+- **网页检查项推荐工具参数（1.109.0-rc197）** —— 网页分镜板里的未解决检查项按钮现在会在 `<short-drama-review-item-action>` 中写入 `recommended_tool` 与 `recommended_arguments`。
+- 重绘/擦除会推荐 `short_drama_open_image_editor`，放大会推荐 `short_drama_upscale_shot_artifact`，补拍或缺主图修复会推荐 `short_drama_generate_shot_media`，并统一保留 `review_item_id`。
+- 同一结构块还会带出 `short_drama_open_media_tasks(scope=review_item)` 和 `short_drama_resolve_review_item` 参数，让网页组件、聊天窗口、媒体任务侧栏和检查项关闭形成更稳定的接力。
+- 短剧媒体契约测试新增网页检查项推荐工具、推荐参数、任务流水参数和关闭检查项参数覆盖。
+- 版本号从 **1.109.0-rc196** 提升为 **1.109.0-rc197**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc196 - 2026-06-27
+
+### Fixed
+- **媒体任务缩略图设主图接力聊天（1.109.0-rc196）** —— 在媒体任务侧栏直接点击缩略图星标设为分镜主图后，App 会把 `<short-drama-primary-artifact-selected>` 结构块写入聊天输入区。
+- 该结构块会带出 `generate_video_from_image` 参数；如果源任务带 `review_item_id`，还会带出 `short_drama_resolve_review_item` 参数，让 UI 直点路径和聊天工具路径一样能继续视频生成或关闭检查项。
+- 短剧媒体契约测试新增缩略图设主图后的聊天接力、图生视频参数、检查项关闭参数和 composer focus 覆盖。
+- 版本号从 **1.109.0-rc195** 提升为 **1.109.0-rc196**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc195 - 2026-06-27
+
+### Fixed
+- **选主图工具输出检查项后续动作（1.109.0-rc195）** —— `short_drama_select_shot_artifact` 现在接收可选 `review_item_id`，并在工具结果中给出保留同一检查项锚点的 `generate_video_from_image` 参数。
+- 当选主图请求带 `review_item_id` 时，工具结果会同时输出 `short_drama_resolve_review_item` 参数，便于确认修复后直接关闭同一检查项。
+- 媒体任务候选图、通用候选图和短剧分镜候选图提示会要求调用 `short_drama_select_shot_artifact` 时一并传入 `review_item_id`。
+- 短剧媒体契约测试新增选主图工具 schema、后续视频参数、检查项关闭参数和候选图提示覆盖。
+- 版本号从 **1.109.0-rc194** 提升为 **1.109.0-rc195**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc194 - 2026-06-27
+
+### Fixed
+- **短剧候选图组件接收检查项锚点（1.109.0-rc194）** —— 媒体任务完成通知中的 `candidate_arguments` 现在会把 `review_item_id` 传给 `short_drama_show_image_choice_widget`。
+- `short_drama_show_image_choice_widget` 新增可选 `review_item_id` 参数，短剧分镜候选图网页组件会把该锚点写入 `<short-drama-image-choice>`，用户选主图后后续媒体任务仍能保持在同一检查项流水。
+- 短剧媒体契约测试新增完成通知参数、工具 schema、工具输出和分镜候选图结构块中的检查项锚点覆盖。
+- 版本号从 **1.109.0-rc193** 提升为 **1.109.0-rc194**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc193 - 2026-06-27
+
+### Fixed
+- **候选图选择后续任务保留检查项（1.109.0-rc193）** —— 媒体任务候选图和通用候选图网页组件的“选这张继续”提示，现在明确要求后续媒体任务继续携带 `review_item_id`。
+- 通用候选图的“生成视频”按钮提示会要求调用 `generate_video_from_image` 时一并传入 `review_item_id`，避免候选图转视频后脱离原检查项流水。
+- 短剧媒体契约测试新增候选图提示中的检查项锚点保留覆盖。
+- 版本号从 **1.109.0-rc192** 提升为 **1.109.0-rc193**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc192 - 2026-06-27
+
+### Fixed
+- **检查项修复图继续生成视频不丢锚点（1.109.0-rc192）** —— 媒体任务侧栏的“基于分镜图片继续生成视频”接力现在会把源任务的 `review_item_id` 写入 `<short-drama-media-follow-up>` 结构块。
+- 接力提示明确要求调用 `generate_video_from_image` 时保留同一 `review_item_id`，避免修图、擦除、放大后的图生视频任务脱离原检查项流水。
+- 短剧媒体契约测试新增媒体任务行图生视频 follow-up 的 `review_item_id` 覆盖。
+- 版本号从 **1.109.0-rc191** 提升为 **1.109.0-rc192**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc191 - 2026-06-27
+
+### Fixed
+- **媒体任务写入入口统一短剧联动（1.109.0-rc191）** —— `AgentMediaTaskRegistry` 的创建、更新和追加产物入口现在统一调用短剧联动 helper，同步分镜、资产和检查项状态。
+- 新建带短剧分镜锚点的媒体任务会立即把分镜状态同步为生成中/待检查/就绪，不再等到后续轮询更新才刷新短剧侧栏。
+- 通过 `appendArtifact` 追加产物的 Skill、Ruby 或第三方脚本接力，也会同步检查项状态与短剧资产/分镜产物。
+- 短剧媒体契约测试新增统一联动入口覆盖，要求创建、更新和追加产物三个写入路径都接入短剧状态同步。
+- 版本号从 **1.109.0-rc190** 提升为 **1.109.0-rc191**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc190 - 2026-06-27
+
+### Changed
+- **检查项状态跟随媒体任务（1.109.0-rc190）** —— 带 `review_item_id` 的媒体任务创建或状态变化时，会自动把短剧检查项同步为 `doing` 或 `open`，让短剧侧栏、网页分镜板、媒体任务侧栏和聊天接力看到同一条处理进度。
+- 任务排队、提交、启动、处理中或成功产出时，关联检查项进入 `doing`；任务失败或取消时回到 `open`，已经 `resolved` 的检查项不会被自动覆盖。
+- 短剧媒体契约测试新增检查项状态同步覆盖，防止后续媒体任务登记、轮询或重试链路丢掉状态联动。
+- 版本号从 **1.109.0-rc189** 提升为 **1.109.0-rc190**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc189 - 2026-06-27
+
+### Fixed
+- **some.im 检查项媒体重试补齐（1.109.0-rc189）** —— `generate_video_from_image` 创建 some.im 图生视频任务时会透传 `review_item_id`，避免从检查项接力到视频生成后脱离同一修复流水。
+- `edit_image_with_mask(provider=some_im)` 现在会把 `review_item_id` 写入 some.im 擦除/局部重绘任务，现成蒙版提交的短剧检查项修复能继续按检查项聚合。
+- `short_drama_retry_media_task` / `short_drama_retry_failed_media_tasks` 现在可从本地 `source_image_path` 与 `mask_path` 重试失败或取消的 some.im 图片擦除、局部重绘和图片编辑任务，并保留原 `review_item_id`。
+- 短剧媒体契约测试新增 some.im 图生视频、蒙版编辑锚点和可重试判断覆盖。
+- 版本号从 **1.109.0-rc188** 提升为 **1.109.0-rc189**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc188 - 2026-06-27
+
+### Changed
+- **Replicate 图片编辑任务可从侧栏重试（1.109.0-rc188）** —— `short_drama_retry_media_task` 现在可重试带短剧分镜锚点且可从本地路径重建的 Replicate 放大、擦除和蒙版重绘任务。
+- 媒体任务侧栏与作用域批量重试会把这些 Replicate 失败/取消任务纳入可重试列表，并在聊天提示中带出 `source_image_path`、`mask_path` 和 `review_item_id`。
+- `edit_image_with_mask(provider=replicate)` 创建的任务现在会保存 `review_item_id`，从现成蒙版直接提交的检查项修复也能进入同一检查项任务流水。
+- 短剧媒体契约测试新增 Replicate 重试、source/mask/review 上下文和侧栏可重试判断覆盖。
+- 版本号从 **1.109.0-rc187** 提升为 **1.109.0-rc188**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc187 - 2026-06-27
+
+### Changed
+- **制作包网页检查项精确接力（1.109.0-rc187）** —— `widget-preview.html` 的初始导出版现在会把“处理检查项”按钮绑定到第一条未解决 `review_item_id`，并带出类型、严重程度、建议动作和主图路径。
+- Ruby 媒体脚本重写 `widget-preview.html` 后也保留同样的检查项精确按钮，脚本跑完后的网页仍能把修复任务锚定回同一检查项。
+- 按钮提示会按检查项类型引导调用带 `review_item_id` 的蒙版编辑、放大、补拍或关闭检查项工具，减少制作包离线接力时“只知道 shot，不知道具体问题”的断点。
+- 短剧媒体契约测试新增制作包预览和 Ruby 预览检查项锚点覆盖。
+- 版本号从 **1.109.0-rc186** 提升为 **1.109.0-rc187**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc186 - 2026-06-27
+
+### Changed
+- **网页分镜板检查项可精确处理（1.109.0-rc186）** —— 分镜板里的每条未解决检查项现在是可点击按钮，会把 `review_item_id`、类型、严重程度、建议动作和主图路径写入聊天上下文。
+- 点击检查项后，提示会按类型引导调用带 `review_item_id` 的 `short_drama_open_image_editor`、`short_drama_upscale_shot_artifact` 或 `short_drama_generate_shot_media`，并在修复确认后调用 `short_drama_resolve_review_item`。
+- `short_drama_upscale_shot_artifact` 新增并保存可选 `review_item_id`，Replicate 放大任务可继续出现在同一检查项任务流水中。
+- 短剧媒体契约测试新增网页检查项按钮、放大工具检查项锚点和 schema 覆盖。
+- 版本号从 **1.109.0-rc185** 提升为 **1.109.0-rc186**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc185 - 2026-06-27
+
+### Changed
+- **short_drama_generate_shot_media 暴露 review_item_id 参数（1.109.0-rc185）** —— 工具 schema 现在正式声明可选 `review_item_id`，聊天窗口、网页组件、Skill 和 Ruby 脚本在补拍分镜图或继续生成视频时可直接把任务锚定到短剧检查项。
+- 短剧媒体契约测试新增 `short_drama_generate_shot_media` 参数注册覆盖，防止实现层支持但工具描述漏报。
+- 版本号从 **1.109.0-rc184** 提升为 **1.109.0-rc185**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc184 - 2026-06-27
+
+### Fixed
+- **检查项补拍与重试保留 review_item_id（1.109.0-rc184）** —— 从短剧检查项触发补拍重新生成分镜图时，some.im 媒体任务现在会写入同一个 `review_item_id`。
+- `short_drama_retry_media_task` / `short_drama_retry_failed_media_tasks` 重试 some.im 分镜图片或视频任务时，会把原任务的 `review_item_id` 传回 `short_drama_generate_shot_media`，避免新任务脱离检查项任务流水。
+- 短剧媒体契约测试新增补拍、工具创建和重试参数保留覆盖。
+- 版本号从 **1.109.0-rc183** 提升为 **1.109.0-rc184**。pbxproj×6 / Go agent / Help Info.plist / product-overview / docs ×2 同步。
+
+## 1.109.0-rc183 - 2026-06-27
+
+### Changed
+- **媒体任务完成通知提供检查项级入口（1.109.0-rc183）** —— 带 `review_item_id` 的短剧媒体任务完成后，结构化 action 现在会输出 `open_review_tasks_tool` 和 `scope=review_item` 参数。
+- follow-up 提示会引导聊天窗口先打开同一检查项的任务流水，再确认是否调用 `short_drama_resolve_review_item` 关闭问题。
+- 短剧媒体契约测试新增检查项级完成通知入口覆盖。
+- 版本号从 **1.109.0-rc182** 提升为 **1.109.0-rc183**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc182 - 2026-06-27
+
+### Changed
+- **短剧检查项行显示关联任务状态（1.109.0-rc182）** —— 每条未解决检查项现在会直接展示关联 `review_item_id` 的媒体任务徽标，运行中或失败任务可在检查项行里一眼看到。
+- 徽标复用媒体任务侧栏作用域，点击后打开同一检查项的任务列表，和“查看媒体任务”按钮保持一致。
+- 短剧媒体契约测试新增检查项行任务徽标和 `reviewMediaTasks` 过滤覆盖。
+- 版本号从 **1.109.0-rc181** 提升为 **1.109.0-rc182**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc181 - 2026-06-27
+
+### Changed
+- **媒体任务支持按短剧检查项聚焦（1.109.0-rc181）** —— `AgentMediaTaskScope` 新增 `reviewItemID` 过滤，媒体任务侧栏可以只显示某个 `review_item_id` 关联的重绘、擦除、放大、图生视频或外部修复任务。
+- `short_drama_open_media_tasks` / `short_drama_refresh_media_tasks` / `short_drama_retry_failed_media_tasks` 新增 `scope=review_item` 与 `review_item_id` 参数；短剧侧栏每条未解决检查项新增“查看媒体任务”按钮，方便从审片问题直接跳到对应任务流水。
+- 短剧媒体契约测试新增检查项级 scope、工具 schema、侧栏按钮和重试 scope 覆盖。
+- 版本号从 **1.109.0-rc180** 提升为 **1.109.0-rc181**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc180 - 2026-06-27
+
+### Changed
+- **图生视频继续保留 review_item_id（1.109.0-rc180）** —— `generate_video_from_image` 工具 schema 新增可选 `review_item_id`，从修复图继续生成视频时，新视频任务会继续锚定同一个短剧检查项。
+- 媒体任务完成通知里的 `video_from_image_arguments` 现在会在任务带检查项锚点时显式追加 `review_item_id`，follow-up 提示也要求复用该锚点。
+- 短剧媒体契约测试新增图生视频 schema、完成通知参数和 follow-up 提示覆盖。
+- 版本号从 **1.109.0-rc179** 提升为 **1.109.0-rc180**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc179 - 2026-06-27
+
+### Changed
+- **候选图与缩略图二次处理保留 review_item_id（1.109.0-rc179）** —— 媒体任务候选图 handoff、通用图片候选选择器、任务缩略图蒙版编辑和任务缩略图 Replicate 放大现在都会继续携带 `review_item_id`。
+- `open_image_editor`、`upscale_image` 和 `show_image_choice_widget` 工具描述补齐可选 `review_item_id` 参数，让聊天窗口、网页组件、Skill 与 Ruby 脚本发起二次处理时不会丢失检查项锚点。
+- 短剧媒体契约测试新增候选图、缩略图、工具 schema 与二次任务上下文传递覆盖。
+- 版本号从 **1.109.0-rc178** 提升为 **1.109.0-rc179**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc178 - 2026-06-27
+
+### Changed
+- **媒体任务侧栏可直接关闭关联检查项（1.109.0-rc178）** —— 已完成且携带 `review_item_id` 的短剧修复媒体任务，现在会在任务卡片上显示“解决检查项”按钮。
+- 点击后会复用 `AgentShortDramaStore.resolveReviewItem` 关闭对应分镜检查项，并打开短剧侧栏回到关联项目；已解决或锚点缺失的任务不会显示该动作，避免误关闭。
+- 短剧媒体契约测试新增按钮、打开条件和 Store resolve 调用覆盖。
+- 版本号从 **1.109.0-rc177** 提升为 **1.109.0-rc178**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc177 - 2026-06-27
+
+### Changed
+- **检查项蒙版编辑任务保留 review_item_id（1.109.0-rc177）** —— 从短剧侧栏 `redraw` / `erase` 检查项打开图片蒙版面板时，`AgentImageEditorContext` 现在会携带对应 `review_item_id`。
+- 图片蒙版面板提交 Replicate 或 some.im 重绘/擦除任务时，会把该 `review_item_id` 写入媒体任务；检查项放大入口也会把同一锚点写入 Replicate 放大任务。
+- `short_drama_open_image_editor` 工具新增可选 `review_item_id` 参数，网页组件或聊天窗口也能打开带检查项锚点的蒙版编辑器，任务完成后继续触发检查项关闭建议。
+- 版本号从 **1.109.0-rc176** 提升为 **1.109.0-rc177**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc176 - 2026-06-27
+
+### Changed
+- **媒体任务持久化短剧检查项锚点（1.109.0-rc176）** —— `AgentMediaTask` 新增 `reviewItemID`，`create_media_task` / `update_media_task` / manifest 导入 / Replicate / some.im 创建任务都可携带 `review_item_id`。
+- 媒体任务完成通知会在 Anchors 和结构化 action 中输出 `review_item_id`；当带 project / episode / shot 锚点且任务成功时，会直接给出 `short_drama_resolve_review_item(item_id=...)` 的后续动作建议。
+- `short_drama_resolve_review_item` 现在除正式 `item_id` 外，也接受 `review_item_id` 作为别名，方便 CSV、manifest、Ruby 脚本和聊天通知复用同一字段名。
+- 版本号从 **1.109.0-rc175** 提升为 **1.109.0-rc176**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc175 - 2026-06-27
+
+### Changed
+- **Ruby 媒体脚本模板提交源图、蒙版和检查项上下文（1.109.0-rc175）** —— `ruby-media-script-template.rb` 调用第三方 API 时，现在会把 `source_image_path`、`mask_path`、`review_item_id`、`suggested_action` 一并写入 JSON 请求体，方便 some.im、Replicate 或自定义服务处理重绘、擦除、放大和补拍任务。
+- 新增 `WILLDEEP_MEDIA_EMBED_LOCAL_FILES=0` 环境变量；保持默认关闭，只传本地路径。需要 JSON 直传文件内容时，可显式设为 `1`，脚本会补充 `source_image_data_url` / `mask_data_url`。
+- 短剧媒体契约测试新增源图/蒙版路径、data URL helper、检查项上下文和环境变量覆盖，并继续验证内嵌 Ruby 模板语法。
+- 版本号从 **1.109.0-rc174** 提升为 **1.109.0-rc175**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc174 - 2026-06-27
+
+### Changed
+- **制作包 manifest 自动生成检查项修复任务（1.109.0-rc174）** —— `media-import-manifest-template.json` 现在会为未解决的 `redraw` / `erase` / `upscale` / `reshoot` 检查项额外生成修复媒体 item，并写入 `review_item_id` 与 `suggested_action`。
+- 修复 item 会把检查项类型映射为 `image_inpaint`、`image_erase`、`image_upscale` 或 `image_generation`，并携带 project / episode / shot 锚点、分镜上下文和建议修复动作，方便 Ruby、Skill 或第三方 API 脚本批量处理。
+- 这让上一版 Ruby 模板的 `production-review-queue.csv` 状态回写真正默认接通：生成成功可按 `review_item_id` 标为 `resolved`，远端异步登记可标为 `doing`，再用 `short_drama_import_review_csv` 写回 App。
+- 版本号从 **1.109.0-rc173** 提升为 **1.109.0-rc174**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc173 - 2026-06-27
+
+### Changed
+- **Ruby 媒体脚本模板支持回写修复队列状态（1.109.0-rc173）** —— `ruby-media-script-template.rb` 现在会读取 `production-review-queue.csv`；当 manifest item 携带 `review_item_id` 时，脚本可在生成产物成功后把对应行标为 `resolved`，在只登记远端异步任务时标为 `doing`。
+- 制作包网页预览新增 `Review queue updates` 统计和「回写修复队列」按钮，引导聊天窗口先 dry-run 再调用 `short_drama_import_review_csv(file_path: production-review-queue.csv)` 把外部修复结果写回短剧分镜检查项。
+- 制作包 Markdown、Ruby 输出摘要和短剧媒体契约测试同步覆盖 `review_queue_path`、`review_queue_updates`、`review_item_id`、`doing/resolved` 回写链路。
+- 版本号从 **1.109.0-rc172** 提升为 **1.109.0-rc173**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc172 - 2026-06-27
+
+### Changed
+- **审片导入入口明确支持修复队列回写（1.109.0-rc172）** —— 短剧侧栏「预检审片 / 导入审片」文件选择说明现在明确接受已填写的 `production-review-template.csv`、`production-review-queue.csv`，以及基于 `production-shot-list.csv` 扩展的审片表。
+- `short_drama_import_review_csv` 工具说明补充 `production-review-queue.csv`、`review_item_id` 和 `status` / `review_status` 回写语义，便于 Ruby、Skill 或外部修复脚本把处理结果更新或关闭到已有 `reviewItems`。
+- 短剧媒体契约测试新增导入入口文案、工具描述和修复队列回写字段覆盖。
+- 版本号从 **1.109.0-rc171** 提升为 **1.109.0-rc172**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc171 - 2026-06-27
+
+### Changed
+- **短剧侧栏可一键定位检查项修复队列（1.109.0-rc171）** —— 制作包动作栏新增「修复队列」按钮，可直接在 Finder 中选中 `production-review-queue.csv`。
+- 修复队列定位提示会说明该 CSV 是一条未解决 `reviewItem` 一行，可交给 Ruby、Skill 或外部脚本按 `kind` / `severity` / `suggested_action` 批量处理重绘、擦除、放大、补拍或提示词修复。
+- 短剧媒体契约测试新增侧栏修复队列按钮、Finder 定位和说明文案覆盖。
+- 版本号从 **1.109.0-rc170** 提升为 **1.109.0-rc171**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc170 - 2026-06-27
+
+### Changed
+- **制作包新增检查项修复队列 CSV（1.109.0-rc170）** —— `short_drama_export_production_package` 现在会导出 `production-review-queue.csv`，把每条未解决 `reviewItem` 展开成一行，包含 project / episode / shot 锚点、`review_item_id`、`kind`、`severity`、`review_status`、`detail`、`suggested_action`、`artifact_paths`、分镜 summary 和 prompt。
+- 制作包 Markdown、Agent 工具返回、短剧侧栏状态、运行脚本提示、制作包接力提示和 `widget-preview.html` 都会展示或引用修复队列，方便 Ruby/Skill/外部脚本按检查项逐条处理重绘、擦除、放大、补拍或提示词修复。
+- 短剧媒体契约测试新增修复队列 CSV 文件、列名、未解决项过滤、网页预览、侧栏 handoff 和工具返回覆盖。
+- 版本号从 **1.109.0-rc169** 提升为 **1.109.0-rc170**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc169 - 2026-06-27
+
+### Changed
+- **审片 CSV 导入支持制作包目录（1.109.0-rc169）** —— `short_drama_import_review_csv` 新增 `package_directory` 参数；当未传 `csv` / `file_path` / `csv_path` 时，会自动读取该目录下的 `production-review-template.csv`。
+- 制作包 Markdown、网页预览和侧栏接力提示改为优先引导 `short_drama_import_review_csv(package_directory: <制作包目录>)`，减少聊天或 Skill 只知道目录时还要拼 CSV 文件路径的步骤。
+- 短剧媒体契约测试新增审片 CSV `package_directory` 参数注册、默认模板读取、错误提示和 handoff 覆盖。
+- 版本号从 **1.109.0-rc168** 提升为 **1.109.0-rc169**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc168 - 2026-06-27
+
+### Changed
+- **审片 CSV 重复导入自动合并检查项（1.109.0-rc168）** —— `short_drama_import_review_csv` 在行内没有 `review_item_id` 时，会在同一 `shot_id` 下按归一化后的 `review_title/title/issue + kind` 查找未解决 `reviewItems` 并更新，避免同一张审片表多次导入后产生重复检查项。
+- 导入摘要会在命中已有检查项时标出 `update <review_item_id>`，便于 dry-run 时确认哪些行会更新而不是新建。
+- 短剧媒体契约测试新增审片 CSV 自动匹配已有未解决检查项、标题归一和导入摘要 update 标记覆盖。
+- 版本号从 **1.109.0-rc167** 提升为 **1.109.0-rc168**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc167 - 2026-06-27
+
+### Changed
+- **短剧侧栏可一键定位审片 CSV 模板（1.109.0-rc167）** —— 制作包动作栏新增「审片模板」按钮，可直接在 Finder 中选中 `production-review-template.csv`，方便交给表格审片、剪辑助理或 Ruby 脚本填写。
+- 审片模板定位提示会说明填写 `review_title/detail/kind/severity/review_status/suggested_action/artifact_paths` 后，可点击「导入审片」回写分镜检查项。
+- 短剧媒体契约测试新增侧栏审片模板按钮、Finder 定位和导入提示覆盖。
+- 版本号从 **1.109.0-rc166** 提升为 **1.109.0-rc167**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc166 - 2026-06-27
+
+### Changed
+- **制作包新增审片回写 CSV 模板（1.109.0-rc166）** —— `short_drama_export_production_package` 现在会随制作包导出 `production-review-template.csv`，在分镜基础列之外预留 `review_title/detail/kind/severity/review_status/suggested_action/artifact_paths/review_item_id`，外部表格审片或 Ruby 脚本可直接填写后回导。
+- 制作包 Markdown、Agent 工具返回、短剧侧栏状态、运行脚本提示、制作包接力提示和 `widget-preview.html` 都会展示或引用审片模板路径，并引导用 `short_drama_import_review_csv` 或侧栏「导入审片」写回分镜 `reviewItems`。
+- 短剧媒体契约测试新增审片模板 CSV 文件、列名、网页预览、侧栏 handoff 和工具返回覆盖。
+- 版本号从 **1.109.0-rc165** 提升为 **1.109.0-rc166**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc165 - 2026-06-27
+
+### Changed
+- **短剧侧栏新增审片 CSV 导入入口（1.109.0-rc165）** —— 制作包动作栏新增「预检审片」和「导入审片」按钮，可直接选择基于 `production-shot-list.csv` 填写的 CSV，复用 `short_drama_import_review_csv` 先 dry-run 校验或正式写回分镜 `reviewItems`。
+- 审片 CSV 正式导入后会自动打开短剧侧栏，并把后续修复提示写入聊天输入框，引导 Agent 按 continuity/prompt/note 与 redraw/erase/upscale/reshoot 类型继续处理，保持 project / episode / shot 锚点回填。
+- 短剧媒体契约测试新增侧栏审片 CSV 按钮、文件选择、工具调用和聊天接力提示覆盖。
+- 版本号从 **1.109.0-rc164** 提升为 **1.109.0-rc165**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc164 - 2026-06-27
+
+### Changed
+- **短剧审片 CSV 可回写分镜检查项（1.109.0-rc164）** —— 新增 `short_drama_import_review_csv` Agent 工具，Skill、Ruby 脚本、表格审片或剪辑环节可基于 `production-shot-list.csv` 填写 `review_title/detail/kind/severity/status/suggested_action/artifact_paths` 后批量写回对应分镜 `reviewItems`，支持 `dry_run` 预检。
+- `widget-preview.html` 的初始导出版和 Ruby 脚本重写版都会在「按 CSV 审片」handoff 中提示：拿到已填写审片 CSV 后调用 `short_drama_import_review_csv(file_path)` 回写到短剧项目。
+- 短剧媒体契约测试新增审片 CSV 回导工具的 descriptor、dispatch、CSV 解析、回写调用和网页预览 handoff 覆盖。
+- 版本号从 **1.109.0-rc163** 提升为 **1.109.0-rc164**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc163 - 2026-06-27
+
+### Changed
+- **制作包网页预览接入分镜 CSV 审片（1.109.0-rc163）** —— `widget-preview.html` 的初始导出版和 Ruby 脚本重写版都会在「剪辑时间线」卡片中展示 `production-shot-list.csv` 说明，并提供「按 CSV 审片」按钮，把一镜一行的主图、视频路径、未解决检查项、summary 和 prompt 检查请求交回聊天窗口。
+- 短剧媒体契约测试新增网页预览 CSV 入口覆盖，确保后续 Skill/Ruby 制作包预览持续暴露表格审片和剪辑准备入口。
+- 版本号从 **1.109.0-rc162** 提升为 **1.109.0-rc163**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc162 - 2026-06-27
+
+### Changed
+- **短剧制作包新增分镜 CSV 清单（1.109.0-rc162）** —— `short_drama_export_production_package` 现在会额外导出 `production-shot-list.csv`，按集和分镜顺序一镜一行列出 project/episode/shot id、序号、状态、主图、视频路径、图片路径、产物数、未解决检查项、summary 和 prompt，方便剪辑软件准备、表格审片、Ruby 脚本和外部工具直接读取。
+- 制作包 Markdown、Agent 工具返回、短剧侧栏导出状态、导回接力提示和运行 Ruby 脚本提示都会带出 CSV 路径；短剧媒体契约测试新增 CSV 文件、列名、转义函数和侧栏 handoff 覆盖。
+- 版本号从 **1.109.0-rc161** 提升为 **1.109.0-rc162**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc161 - 2026-06-27
+
+### Changed
+- **通用现成蒙版直提编辑任务（1.109.0-rc161）** —— 新增 `edit_image_with_mask` Agent 工具，Skill、Ruby 脚本或网页组件已经生成 `image_path + mask_path` 时，可不打开右侧蒙版编辑器，直接提交 Replicate 或 some.im 的局部重绘/擦除任务。
+- `edit_image_with_mask` 支持 `operation=inpaint|erase`、`provider=replicate|some_im`、Replicate version / some.im model / endpoint override，并透传短剧 project / episode / shot / asset 锚点；任务会保存 source image 与 mask 路径并进入统一媒体任务中心。
+- 短剧媒体契约测试新增现成蒙版直提工具的 descriptor、dispatch、Replicate/some.im 提交、mask/source 路径和锚点覆盖。
+- 版本号从 **1.109.0-rc160** 提升为 **1.109.0-rc161**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc160 - 2026-06-27
+
+### Changed
+- **图片蒙版画笔新增橡皮模式（1.109.0-rc160）** —— 「图片蒙版」侧栏的画笔工具现在支持“添加 / 橡皮”切换，用户涂多了可以局部擦掉蒙版边缘，不必撤销整条笔迹后重画；橡皮笔迹会在导出同尺寸 PNG mask 时恢复为背景色，继续兼容 Replicate / some.im 的重绘和擦除任务。
+- 蒙版摘要、撤销、清空、导出状态与短剧媒体契约测试同步覆盖橡皮笔迹。
+- 版本号从 **1.109.0-rc159** 提升为 **1.109.0-rc160**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc159 - 2026-06-27
+
+### Changed
+- **任务监控 rail 展示最近完成媒体任务（1.109.0-rc159）** —— 右侧「任务监控」中间区域现在不只显示运行中/失败的 some.im、Replicate 和 Skill 媒体任务，也会展示最近完成的媒体任务与产物数量，方便用户在不切到「媒体任务」面板的情况下看到图片/视频已经回来。
+- 任务监控 snapshot 的媒体任务 digest 纳入最近完成任务，完成事件会触发 rail 刷新；短剧媒体契约测试同步覆盖「最近完成 / 刚完成」摘要。
+- 版本号从 **1.109.0-rc158** 提升为 **1.109.0-rc159**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc158 - 2026-06-27
+
+### Changed
+- **普通媒体任务完成通知补齐通用图片接力（1.109.0-rc158）** —— 非短剧锚点的图片任务完成后，`<media-task-action>` 现在会为多图产物给出 `show_image_choice_widget`，为单图产物给出 `open_image_editor`（重绘/擦除）、`upscale_image` 和 `generate_video_from_image` 的结构化参数建议。
+- 短剧媒体契约测试增加普通媒体任务完成通知的通用候选图、蒙版、擦除、放大和图生视频工具建议断言。
+- 版本号从 **1.109.0-rc157** 提升为 **1.109.0-rc158**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc157 - 2026-06-27
+
+### Changed
+- **媒体任务完成通知接入新接力工具（1.109.0-rc157）** —— `<media-task-notification>` 的结构化建议现在会在图片产物完成后带出 `generate_video_from_image`；带人物/场景资产锚点的产物会带出 `short_drama_attach_asset_reference_image`，让聊天窗口能直接把完成产物继续接到图生视频或资产参考图落库。
+- 「媒体任务」侧栏的短剧图片继续生成视频接力提示改为优先使用 `generate_video_from_image`，多图时仍先打开候选图选择器，单图时使用 `selected_artifact_path` 作为 `image_path`。
+- 短剧媒体契约测试同步覆盖完成通知与侧栏接力的新工具建议。
+- 版本号从 **1.109.0-rc156** 提升为 **1.109.0-rc157**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc156 - 2026-06-27
+
+### Added
+- **短剧资产参考图追加工具（1.109.0-rc156）** —— 新增 `short_drama_attach_asset_reference_image` Agent 工具，可把一张或多张本地图片追加到既有人物/场景资产的 `referenceImagePaths`，无需重写整个角色或场景档案。
+
+### Changed
+- 通用候选图的“选这张继续”会根据锚点分流：带 `project_id` / `episode_id` / `shot_id` 时引导调用 `short_drama_select_shot_artifact` 写成分镜主图；带 `project_id` / `asset_kind` / `asset_id` 时引导调用 `short_drama_attach_asset_reference_image` 写成人物/场景参考图；无锚点时保持通用后续处理建议。
+- 短剧媒体契约测试增加资产参考图追加工具、候选图锚点感知选择文案和 Store 回填调用断言。
+- 版本号从 **1.109.0-rc155** 提升为 **1.109.0-rc156**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc155 - 2026-06-27
+
+### Changed
+- **通用候选图动作透传短剧锚点（1.109.0-rc155）** —— `show_image_choice_widget` 新增可选 `project_id` / `episode_id` / `shot_id` / `asset_kind` / `asset_id` 参数；候选图的选择、蒙版、擦除、放大和图生视频按钮都会把这些锚点写入 `<image-choice>`，让后续工具任务可回填到对应分镜或人物/场景资产。
+- 短剧媒体契约测试增加通用候选图锚点 schema、HTML 结构块和工具层传参断言。
+- 版本号从 **1.109.0-rc154** 提升为 **1.109.0-rc155**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc154 - 2026-06-27
+
+### Added
+- **通用图生视频直达工具（1.109.0-rc154）** —— 新增 `generate_video_from_image` Agent 工具，输入本地 `image_path` 和可选运动提示词即可提交 some.im `video_generation` 任务，并把 source image、远端任务和可选短剧锚点登记到媒体任务中心。
+
+### Changed
+- `show_image_choice_widget` 的“生成视频”按钮改为引导调用 `generate_video_from_image`，候选关键帧到 some.im 图生视频不再需要模型手动拼 `some_im_create_media_task` 的底层参数。
+- 短剧媒体契约测试增加直达图生视频工具的注册、分发、实现和候选图按钮断言。
+- 版本号从 **1.109.0-rc153** 提升为 **1.109.0-rc154**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc153 - 2026-06-27
+
+### Changed
+- **候选图直达 some.im 视频生成（1.109.0-rc153）** —— `show_image_choice_widget` 的每张候选图新增“生成视频”按钮，点击后会把 `some_im_create_media_task(kind=video_generation)` 与 `reference_image_path` 写回聊天，让候选关键帧可以直接接入 some.im 图生视频流程。
+- **some.im 通用媒体任务支持参考图路径** —— `some_im_create_media_task` 新增 `reference_image_path` / `source_image_path` 参数；工具会把本地图片解析成请求体 `image` 输入，并把 source image 路径保存到媒体任务，方便后续刷新、失败分析和聊天接力。
+- 短剧媒体契约测试增加候选图视频接力、some.im 参考图参数和请求体 `image` 写入断言。
+- 版本号从 **1.109.0-rc152** 提升为 **1.109.0-rc153**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc152 - 2026-06-27
+
+### Changed
+- **候选图直达擦除模式（1.109.0-rc152）** —— `show_image_choice_widget` 的每张候选图新增“擦除区域”按钮，点击后会把 `open_image_editor`、`image_path` 和 `operation: erase` 写回聊天，用户可直接进入擦除蒙版流程。
+- 短剧媒体契约测试增加“擦除区域”和 `operation: erase` 断言，守住候选图到擦除工具的接力入口。
+- 版本号从 **1.109.0-rc151** 提升为 **1.109.0-rc152**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc151 - 2026-06-27
+
+### Changed
+- **通用候选图组件接力动作（1.109.0-rc151）** —— `show_image_choice_widget` 生成的每张候选图现在除了“选这张继续”，还会显示“打开蒙版”和“放大图片”按钮，分别把 `open_image_editor` 与 `upscale_image` 的结构化意图写回聊天，减少候选图进入局部重绘、擦除或 Replicate 放大的中间口令。
+- 短剧媒体契约测试增加通用候选图接力动作断言，防止后续重构漏掉蒙版/放大入口。
+- 版本号从 **1.109.0-rc150** 提升为 **1.109.0-rc151**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc150 - 2026-06-27
+
+### Added
+- **通用候选图选择网页组件（1.109.0-rc150）** —— 新增 `show_image_choice_widget` Agent 工具，可把 Skill、Ruby 脚本或媒体流程产出的本地图片路径数组渲染成聊天内网页候选图选择器，用户点击后会把 `<image-choice>` 结构块和 `image_path` 发回聊天。
+
+### Changed
+- 候选图 widget 支持 workspace 相对路径、绝对路径、标题和说明；渲染后会自动打开右侧「网页组件」面板，供 Agent 接续放大、蒙版编辑、擦除、重绘、加入短剧分镜或作为人物/场景参考图。短剧媒体契约测试新增通用候选图选择覆盖。
+- 版本号从 **1.109.0-rc149** 提升为 **1.109.0-rc150**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc149 - 2026-06-27
+
+### Added
+- **通用 Replicate 图片放大工具（1.109.0-rc149）** —— 新增 `upscale_image` Agent 工具，可对任意本地图片路径提交 Replicate 图片放大任务，自动登记到「媒体任务」侧栏，并保存 source image、远端任务 ID、status URL 与可选短剧锚点。
+
+### Changed
+- `upscale_image` 支持 workspace 相对路径、绝对路径、可选 workflow version 和 prompt；未传 version 时使用 Settings → Integrations → Replicate 的默认图片放大 version。完成产物会沿媒体任务链路回填到分镜或人物/场景资产。短剧媒体契约测试新增通用放大工具覆盖。
+- 版本号从 **1.109.0-rc148** 提升为 **1.109.0-rc149**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc148 - 2026-06-27
+
+### Added
+- **通用图片蒙版编辑工具（1.109.0-rc148）** —— 新增 `open_image_editor` Agent 工具，可把任意本地图片路径打开到右侧「图片蒙版」面板，支持首选 `inpaint` / `erase` 模式，并可携带短剧 project / episode / shot 或 asset kind / asset id 锚点。
+
+### Changed
+- `open_image_editor` 解析相对 workspace 路径与绝对路径，检查图片文件存在和扩展名后再打开面板；提交 Replicate / some.im 编辑任务时会保留可选短剧锚点，让 Skill、Ruby 脚本或聊天窗口不必绕短剧专用工具也能进入蒙版编辑闭环。短剧媒体契约测试新增通用图片编辑工具覆盖。
+- 版本号从 **1.109.0-rc147** 提升为 **1.109.0-rc148**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc147 - 2026-06-27
+
+### Added
+- **人物/场景参考图支持锚定蒙版编辑（1.109.0-rc147）** —— 短剧人物与场景参考图缩略图新增「编辑参考图蒙版」入口，可直接打开右侧图片蒙版面板；提交 Replicate / some.im 重绘或擦除任务时会携带 project / asset kind / asset id。
+
+### Changed
+- `AgentImageEditorContext` 支持资产锚点，媒体任务产物进入图片编辑时也会继承 source task 的 `assetKind` / `assetID`；编辑完成后的产物可沿现有媒体任务回填链路追加到对应人物/场景参考图。短剧媒体契约测试新增资产参考图蒙版编辑覆盖。
+- 版本号从 **1.109.0-rc146** 提升为 **1.109.0-rc147**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc146 - 2026-06-27
+
+### Added
+- **制作包网页新增分集管理卡片（1.109.0-rc146）** —— `widget-preview.html` 新增「分集管理」区域，按集展示分镜数量、缺主图、缺视频和未解决检查项，并提供查看本集媒体任务、本集网页分镜板、连续性检查、批量补主图和批量补视频入口。
+
+### Changed
+- 初始导出版与 Ruby 脚本重写版预览都支持按集 scope 接力，按钮会把 project / episode 上下文交回聊天窗口，引导调用 `short_drama_open_media_tasks(scope=episode)`、`short_drama_show_storyboard_widget` 和 `short_drama_generate_batch_media`；短剧媒体契约测试新增分集管理覆盖。
+- 版本号从 **1.109.0-rc145** 提升为 **1.109.0-rc146**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc145 - 2026-06-27
+
+### Added
+- **任务监控侧栏直接显示媒体任务状态（1.109.0-rc145）** —— `AgentTaskMonitorRail` 的「任务监控」区域新增媒体任务摘要，会列出当前会话进行中或失败待处理的 some.im / Replicate / Skill 媒体任务，展示任务句柄、状态、provider、类型和产物数量，并可一键打开「媒体任务」侧栏。
+
+### Changed
+- 任务监控 snapshot 现在纳入媒体任务 digest，异步图片/视频生成或失败任务会作为可见监控内容参与侧栏状态判断，减少生成队列藏在单独面板里不易发现的问题；短剧媒体契约测试新增 rail 媒体任务摘要覆盖。
+- 版本号从 **1.109.0-rc144** 提升为 **1.109.0-rc145**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc144 - 2026-06-27
+
+### Added
+- **媒体任务完成通知提供结构化接力动作（1.109.0-rc144）** —— `<media-task-notification>` 现在会附带 `<media-task-action>` 块，写明 task id、provider、kind、短剧 project / episode / shot / asset 锚点、产物路径，以及可直接执行的后续工具建议。
+
+### Changed
+- 分镜图片任务完成后，通知会明确给出 `short_drama_open_media_tasks`、候选图选择、设主图、继续视频生成、蒙版编辑和放大入口；人物/场景参考图完成后会给出资产 scope 的任务侧栏入口；失败/取消任务会给出 `short_drama_retry_media_task` 与对应任务筛选入口，让聊天窗口更稳定地接住异步更新。
+- 版本号从 **1.109.0-rc143** 提升为 **1.109.0-rc144**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc143 - 2026-06-27
+
+### Added
+- **制作包网页展示人物/场景参考资产（1.109.0-rc143）** —— `widget-preview.html` 新增「参考资产」卡片，列出人物和场景的参考图状态；缺参考图时提供「生成参考图」入口，已有资产也可一键「查看任务」，把 `short_drama_generate_asset_media` 与 `short_drama_open_media_tasks(scope=asset)` 的 project / asset kind / asset id 上下文写回聊天窗口。
+
+### Changed
+- 初始导出版与 Ruby 脚本重写版预览都支持人物/场景参考资产入口，让制作包网页可以在补分镜图、补视频和连续性检查之前先补齐角色定妆与场景参考；短剧媒体契约测试新增参考资产卡片、缺参考图提示和资产任务接力覆盖。
+- 版本号从 **1.109.0-rc142** 提升为 **1.109.0-rc143**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc142 - 2026-06-27
+
+### Added
+- **制作包网页支持批量连续性检查（1.109.0-rc142）** —— `widget-preview.html` 的「剪辑时间线」卡片新增「批量检查连续性」按钮，会按制作包范围把 project / episode scope 写回聊天窗口，引导 Agent 审查所有分镜的人物设定、服装道具、场景空间、镜头衔接、画风、主图/视频产物和 prompt 一致性，并用 `short_drama_upsert_review_item` 写回具体问题。
+
+### Changed
+- 初始导出版与 Ruby 脚本重写版预览都支持该批量审片入口；短剧媒体契约测试新增批量连续性检查按钮和 review item 写回规则覆盖。
+- 版本号从 **1.109.0-rc141** 提升为 **1.109.0-rc142**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc141 - 2026-06-27
+
+### Added
+- **制作包网页支持批量补齐缺主图/缺视频（1.109.0-rc141）** —— `widget-preview.html` 的「剪辑时间线」卡片会统计当前制作包范围内缺主图、缺视频的分镜数量，并显示「批量补主图 N」「批量补视频 N」按钮，引导 Agent 调用 `short_drama_generate_batch_media` 先 dry-run 预检，再确认正式提交。
+
+### Changed
+- 批量按钮会根据制作包范围自动使用项目或单集 scope，初始导出版与 Ruby 脚本重写版预览都支持该入口；短剧媒体契约测试新增批量补图/补视频、dry-run 和 Ruby 计数逻辑覆盖。
+- 版本号从 **1.109.0-rc140** 提升为 **1.109.0-rc141**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc140 - 2026-06-27
+
+### Added
+- **制作包网页分镜行支持连续性检查接力（1.109.0-rc140）** —— `widget-preview.html` 的每个分镜时间线行新增「检查连续性」按钮，把 project / episode / shot ID 写回聊天窗口，并引导 Agent 检查人物设定、服装道具、场景空间、画风、主图/视频产物和 prompt 是否一致，发现问题时调用 `short_drama_upsert_review_item` 写回分镜。
+
+### Changed
+- 初始导出版与 Ruby 脚本重写版预览都支持从制作包网页发起逐镜审片，补齐“发现缺口 → 检查问题 → 写回检查项 → 修复产物”的网页组件闭环；短剧媒体契约测试新增连续性检查按钮和 review item 工具覆盖。
+- 版本号从 **1.109.0-rc139** 提升为 **1.109.0-rc140**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc139 - 2026-06-27
+
+### Added
+- **制作包网页分镜行支持擦除区域接力（1.109.0-rc139）** —— `widget-preview.html` 的分镜时间线行在已有主图时新增「擦除区域」按钮，把 `short_drama_open_image_editor(operation=erase)` 与 project / episode / shot / artifact_path 上下文写回聊天窗口，直接进入图片蒙版擦除工作流。
+
+### Changed
+- 初始导出版与 Ruby 脚本重写版预览都支持从制作包网页发起擦除区域操作，补齐主图重绘、擦除、放大三件套；短剧媒体契约测试新增 `operation=erase` 接力覆盖。
+- 版本号从 **1.109.0-rc138** 提升为 **1.109.0-rc139**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc138 - 2026-06-27
+
+### Added
+- **制作包网页分镜行支持主图编辑接力（1.109.0-rc138）** —— `widget-preview.html` 的分镜时间线行在已有主图时会显示「蒙版编辑」和「放大主图」按钮，分别把 `short_drama_open_image_editor(operation=inpaint)` 与 `short_drama_upscale_shot_artifact` 的 project / episode / shot / artifact_path 上下文写回聊天窗口。
+
+### Changed
+- 初始导出版与 Ruby 脚本重写版预览都支持从制作包网页直接进入 Replicate / some.im 蒙版重绘或 Replicate 放大任务；短剧媒体契约测试新增主图编辑、放大和 artifact_path 接力覆盖。
+- 版本号从 **1.109.0-rc137** 提升为 **1.109.0-rc138**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc137 - 2026-06-27
+
+### Added
+- **制作包网页分镜行支持多图选主图（1.109.0-rc137）** —— `widget-preview.html` 的分镜时间线行在检测到多个图片产物时会显示「选主图」按钮，把 `short_drama_show_image_choice_widget` 和对应 project / episode / shot ID 写回聊天窗口，方便用户从制作包预览直接打开候选图选择器确定主图。
+
+### Changed
+- 初始导出版与 Ruby 脚本重写版预览都按图片产物数量决定是否显示「选主图」，短剧媒体契约测试同步覆盖 Swift 与 Ruby 两套预览的候选图选择入口。
+- 版本号从 **1.109.0-rc136** 提升为 **1.109.0-rc137**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc136 - 2026-06-27
+
+### Added
+- **制作包网页分镜行支持查看媒体任务（1.109.0-rc136）** —— `widget-preview.html` 的每个分镜时间线行新增「查看任务」按钮，会把 `short_drama_open_media_tasks(scope=shot)` 和对应 project / episode / shot ID 写回聊天窗口，方便从网页组件直接打开该分镜的媒体任务侧栏筛选。
+
+### Changed
+- 初始导出版与 Ruby 脚本重写版预览都包含逐镜「查看任务」接力，短剧媒体契约测试同步覆盖该按钮、工具名和 `scope=shot` 参数。
+- 版本号从 **1.109.0-rc135** 提升为 **1.109.0-rc136**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc135 - 2026-06-27
+
+### Added
+- **制作包网页分镜行支持逐镜修复接力（1.109.0-rc135）** —— `widget-preview.html` 的分镜时间线摘要现在会按缺口显示「补主图」「补视频」「处理检查项」按钮，点击后把对应 project / episode / shot ID 和建议工具动作写回聊天窗口，方便从网页组件直接推进单镜补图、补视频或审片修复。
+
+### Changed
+- 初始导出版与 Ruby 脚本重写版预览都使用安全字符串编码生成 `sendPrompt` 按钮，避免分镜标题或提示文本破坏 HTML；短剧媒体契约测试新增逐镜修复按钮、工具动作和 Ruby 模板输出覆盖。
+- 版本号从 **1.109.0-rc134** 提升为 **1.109.0-rc135**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc134 - 2026-06-27
+
+### Added
+- **制作包网页预览显示分镜时间线状态（1.109.0-rc134）** —— `widget-preview.html` 的初始导出版和 Ruby 脚本运行后重写版都会在「剪辑时间线」卡片中列出前 80 个分镜，按集/分镜顺序显示标题、状态、摘要、主图是否就绪、视频数量和未解决检查项数量。
+
+### Changed
+- 网页预览现在能直接暴露缺主图、缺视频、未解决检查项等制作缺口，用户不必先打开 JSON 才能判断下一步该补图、补视频还是处理连续性问题；短剧媒体契约测试新增 Swift 与 Ruby 两套预览的分镜状态摘要覆盖。
+- 版本号从 **1.109.0-rc133** 提升为 **1.109.0-rc134**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc133 - 2026-06-27
+
+### Added
+- **制作包网页预览支持时间线接力（1.109.0-rc133）** —— `widget-preview.html` 初始导出版和 Ruby 脚本运行后重写版都新增「剪辑时间线」卡片，直接说明 `production-timeline.json` 的用途，并提供「按时间线继续」按钮把时间线检查、缺失镜头、未解决检查项和补图/补视频计划交回聊天窗口。
+
+### Changed
+- 短剧媒体契约测试新增制作包网页预览的 timeline handoff 覆盖，确保后续导出页和 Ruby 脚本预览页都持续暴露剪辑/装配接力入口。
+- 版本号从 **1.109.0-rc132** 提升为 **1.109.0-rc133**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc132 - 2026-06-27
+
+### Added
+- **短剧制作包 Ruby 脚本运行接力（1.109.0-rc132）** —— 短剧侧栏制作包动作新增「运行脚本」入口，会把 `ruby-media-script-template.rb`、`media-api.env.example`、`production-timeline.json`、manifest、outputs 和 widget 预览路径写入聊天输入框，并给出安全运行命令、后台任务建议、workspace 边界提示和导回步骤。
+
+### Changed
+- 脚本接力提示要求先检查环境变量需求，提醒用户把真实 token 放在私有 shell/env 中，不写回制作包、聊天记录或 git；脚本结束后先 dry-run `import_media_manifest`，再根据 outputs 或 pending 远端任务选择正式导回或 `import_pending_tasks: true` 登记到媒体任务侧栏。
+- 短剧媒体契约测试新增「运行脚本」接力入口覆盖，保证 Ruby/API 脚本执行、预检导回和 pending 登记提示不被后续改动打断。
+- 版本号从 **1.109.0-rc131** 提升为 **1.109.0-rc132**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc131 - 2026-06-27
+
+### Changed
+- **短剧制作包接力提示暴露剪辑时间线（1.109.0-rc131）** —— 侧栏导出状态、导回后的聊天接力、制作包接力提示和 `short_drama_export_production_package` 工具结果现在都会带出 `production-timeline.json` 路径，方便短剧 Skill、Ruby 脚本和剪辑/交付脚本直接按时间线接管制作。
+- 接力提示现在明确建议优先读取 `production-timeline.json` 作为剪辑/装配顺序清单，完整项目结构再读取 `production-package.json` / `production-package.md`；短剧媒体契约测试新增 timeline handoff 路径覆盖。
+- 版本号从 **1.109.0-rc130** 提升为 **1.109.0-rc131**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc130 - 2026-06-27
+
+### Added
+- **短剧制作包导出剪辑时间线（1.109.0-rc130）** —— `short_drama_export_production_package` 现在会额外生成 `production-timeline.json`，按集和分镜顺序列出每个镜头的主图、视频产物、图片产物、全部产物、prompt、状态和未解决检查项数量，方便短剧 Skill、Ruby 脚本或剪辑/交付脚本直接按顺序组装成片。
+
+### Changed
+- `production-package.md` 的 Script Handoff 新增 timeline 说明，提示剪辑、装配或交付脚本优先读取 `production-timeline.json`；短剧媒体契约测试新增 timeline 文件、字段、排序和产物分类覆盖。
+- 版本号从 **1.109.0-rc129** 提升为 **1.109.0-rc130**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc129 - 2026-06-27
+
+### Changed
+- **媒体任务产物视图拆分（1.109.0-rc129）** —— 新增 `AgentMediaArtifactViews.swift` 承接媒体任务候选图网页组件和产物缩略图操作（预览、加入聊天、放大、蒙版编辑、设为分镜主图），`AgentMediaTasks.swift` 降到约 1536 行，给后续异步媒体与短剧制作侧栏继续扩展留出空间。
+- 短剧媒体契约测试改为分别校验媒体任务行入口与产物视图实现，保证拆分后候选图选择、缩略图星标和聊天接力契约不漂移。
+- 版本号从 **1.109.0-rc128** 提升为 **1.109.0-rc129**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc128 - 2026-06-27
+
+### Added
+- **媒体任务产物可直接设为分镜主图（1.109.0-rc128）** —— 带短剧分镜锚点的图片媒体产物缩略图现在会显示星标按钮，用户可在「媒体任务」侧栏直接把某张图设为对应分镜主图，选中后缩略图高亮并自动切回「短剧」侧栏。
+
+### Changed
+- 星标选择复用 `AgentShortDramaStore.selectShotArtifact`，会自动把产物路径加入分镜产物列表并更新 `selectedArtifactPath`；短剧媒体契约测试新增该入口覆盖。
+- 版本号从 **1.109.0-rc127** 提升为 **1.109.0-rc128**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc127 - 2026-06-27
+
+### Added
+- **媒体任务图片结果一键接力生成视频（1.109.0-rc127）** —— 带短剧分镜锚点的已完成图片媒体任务，现在会在任务行显示“生成视频”接力按钮；单张图片会把 `short_drama_select_shot_artifact` + `short_drama_generate_shot_media(kind: video_generation)` 的结构化请求写入聊天，多张候选图则先引导打开 `short_drama_show_image_choice_widget` 让用户确认主图。
+
+### Changed
+- 媒体任务聊天接力新增 `<short-drama-media-follow-up>` 块，携带 task handle、project / episode / shot 锚点、候选图数量和首选 `selected_artifact_path`，让聊天窗口能稳定把关键帧推进到短剧视频生成。
+- 短剧媒体契约测试新增媒体任务图片继续生成视频入口覆盖。
+- 版本号从 **1.109.0-rc126** 提升为 **1.109.0-rc127**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc126 - 2026-06-27
+
+### Added
+- **第三方 pending 媒体任务通用轮询（1.109.0-rc126）** —— 新增 `AgentGenericMediaStatusIntegration.swift`，Ruby Skill 或第三方 API 脚本通过 manifest 登记的 `skill` / `unknown` pending 任务，只要提供公开或预签名的 HTTPS `status_url`，媒体任务 poller 就能自动刷新常见 `status/state/output/url/data/error` 响应，成功后下载图片/视频产物并继续触发短剧分镜/资产回填与聊天完成通知。
+
+### Changed
+- 「媒体任务」侧栏的单条刷新、批量“刷新运行中”和 `short_drama_refresh_media_tasks` 现在都会覆盖这类通用 `status_url` 任务；远端取消仍只开放给 Replicate / some.im 专用适配器，避免对未知第三方接口乱发取消请求。
+- 短剧媒体契约测试新增通用 pending 轮询、HTTPS 边界、下载产物和刷新入口覆盖。
+- 版本号从 **1.109.0-rc125** 提升为 **1.109.0-rc126**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc125 - 2026-06-27
+
+### Added
+- **短剧制作包 submit-only 异步登记（1.109.0-rc125）** —— `ruby-media-script-template.rb` 新增 `WILLDEEP_MEDIA_SUBMIT_ONLY` 支持，第三方 API / Skill 脚本可只提交远端异步图片或视频任务，自动把 `remote_task_id` / `status_url` / endpoint suffix 写回 manifest，并在 `widget-preview.html` 中单独展示 pending remote jobs。
+
+### Changed
+- 制作包 Markdown、`media-api.env.example`、网页预览按钮和 Ruby 输出摘要现在都会提示 `import_media_manifest(import_pending_tasks: true)`，让聊天窗口或侧栏能把尚未落地文件的远端任务登记进「媒体任务」面板继续追踪。
+- 短剧媒体契约测试新增 submit-only / pending 远端任务 handoff 覆盖，Ruby 模板语法检查继续随测试运行。
+- 版本号从 **1.109.0-rc124** 提升为 **1.109.0-rc125**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc124 - 2026-06-27
+
+### Added
+- **图片蒙版编辑新增画笔模式（1.109.0-rc124）** —— 「图片蒙版」侧栏新增矩形 / 画笔切换和笔刷大小控制，用户可以自由涂抹不规则区域，导出的同尺寸 PNG mask 会同时包含矩形选区和圆头笔迹，并继续复用 Replicate / some.im 的局部重绘、擦除提交链路。
+
+### Changed
+- 撤销、清空、选区摘要和反选蒙版现在同时覆盖矩形选区与画笔笔迹；短剧媒体契约测试新增对画笔蒙版状态、UI、导出绘制和笔迹摘要的覆盖。
+- 版本号从 **1.109.0-rc123** 提升为 **1.109.0-rc124**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc123 - 2026-06-27
+
+### Fixed
+- **show_widget 可打开短剧导出包预览（1.109.0-rc123）** —— `show_widget(html_path:)` 除当前 workspace 外，现在也允许读取 WillDeep 自己导出的短剧制作包目录（`Application Support/WillDeep/short-drama/exports`）里的 `.html` / `.htm` / `.svg`，修复 `import_media_manifest` 返回的 `widget-preview.html` 示例路径在真实导出目录下会被 workspace 边界拒绝的问题。
+
+### Changed
+- `show_widget` 工具说明和短剧媒体契约测试同步覆盖短剧导出目录白名单；任意其它外部路径仍会被拒绝，网页渲染继续走 WKWebView sandbox。
+- 版本号从 **1.109.0-rc122** 提升为 **1.109.0-rc123**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc122 - 2026-06-27
+
+### Changed
+- **manifest 导入结果提示网页组件预览（1.109.0-rc122）** —— `import_media_manifest` 现在会在制作包目录或 manifest 同目录发现 `widget-preview.html` 时，把预览页路径和 `show_widget(html_path: ...)` 示例写入 dry-run、正式导回和无可导入产物结果，Agent 直接从聊天工具调用导入时也能继续打开右侧「网页组件」。
+- 短剧媒体契约测试新增对导入工具 widget 预览 handoff 的覆盖。
+- 版本号从 **1.109.0-rc121** 提升为 **1.109.0-rc122**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc121 - 2026-06-27
+
+### Added
+- **制作包导回后自动接力聊天（1.109.0-rc121）** —— 短剧侧栏执行「导回产物」或「登记任务」成功后，会自动把制作包目录、manifest、`widget-preview.html`、outputs 和导入摘要写入 Agent composer，引导聊天窗口继续查看媒体任务状态、打开候选图选择器、确认主图、继续视频生成或处理失败任务。
+
+### Changed
+- 短剧媒体契约测试新增对导回后聊天协作提示的覆盖，确保侧栏媒体任务和聊天窗口的交接不断线。
+- 版本号从 **1.109.0-rc120** 提升为 **1.109.0-rc121**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc120 - 2026-06-27
+
+### Added
+- **短剧侧栏一键预览制作包网页（1.109.0-rc120）** —— 短剧制作包导出后，侧栏 handoff 动作新增「预览网页」按钮，可直接读取 `widget-preview.html` 并打开到右侧「网页组件」面板，无需手动复制 `show_widget(html_path: ...)` 调用。
+
+### Changed
+- 制作包接力聊天提示现在包含 `widget-preview.html` 路径，并提示可用 `show_widget` 或侧栏「预览网页」查看 Ruby/Skill 脚本进度；短剧媒体契约测试新增对侧栏按钮、widget 入队和接力提示的覆盖。
+- 版本号从 **1.109.0-rc119** 提升为 **1.109.0-rc120**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc119 - 2026-06-27
+
+### Added
+- **短剧制作包网页组件预览（1.109.0-rc119）** —— `short_drama_export_production_package` 现在会导出 `widget-preview.html`，制作包 Markdown 交接说明同步给出 `show_widget(html_path: ...)` 示例，让短剧 Skill、Ruby 脚本或第三方 API 接力结果可以直接进入聊天 transcript 和右侧「网页组件」面板。
+- `ruby-media-script-template.rb` 运行结束后会重写 `widget-preview.html`，展示 episodes、shots、generated/skipped 统计和产物列表，并通过 `sendPrompt()` 按钮把 dry-run 导回与正式导回交给聊天窗口继续执行。
+
+### Changed
+- 短剧媒体契约测试新增对 `widget-preview.html` 导出项、Markdown handoff、Ruby 模板 widget 生成函数和 `widget_preview_path` JSON 输出的覆盖。
+- 新增 `AgentShortDramaProductionExporter.swift` 承接制作包导出、manifest 模板、Ruby handoff 模板和 widget 预览页生成逻辑，`AgentShortDramaTools.swift` 降回 2000 行预警线以下。
+- 版本号从 **1.109.0-rc118** 提升为 **1.109.0-rc119**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc118 - 2026-06-27
+
+### Added
+- **Skill 生成网页文件直嵌网页组件（1.109.0-rc118）** —— `show_widget` 新增 `html_path` 参数，Ruby Skill 或第三方 API 脚本可以把生成的 `.html` / `.htm` / `.svg` 文件写在当前 workspace 内，再直接交给 App 渲染到聊天 transcript 和右侧「网页组件」面板，不必把整段 HTML 塞进工具参数。
+
+### Changed
+- `show_widget` 文件读取会限制在当前 workspace 内，并继续沿用 WKWebView sandbox、外联资源阻断和 1 MB payload 上限；短剧媒体契约测试新增对 `html_path` schema、路径边界、扩展名限制和 widget 入队链路的覆盖。
+- 版本号从 **1.109.0-rc117** 提升为 **1.109.0-rc118**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc117 - 2026-06-27
+
+### Changed
+- **媒体工具分发拆分（1.109.0-rc117）** —— 新增 `AgentMediaTools.swift` 承接 `create_media_task` / `update_media_task` / `list_media_tasks`、Replicate prediction 工具和 some.im async media 工具，`AgentTools.swift` 只保留主路由，避免媒体/短剧制作能力继续增长时把主工具 runner 推过 2000 行预警线。
+- 短剧媒体契约测试新增对媒体工具拆分、主 runner 路由和源图/蒙版字段迁移后的覆盖。
+- 版本号从 **1.109.0-rc116** 提升为 **1.109.0-rc117**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc116 - 2026-06-27
+
+### Changed
+- **图片编辑任务保留源图与蒙版上下文（1.109.0-rc116）** —— `AgentMediaTask` 新增 `sourceImagePath` / `maskPath`，Replicate 与 some.im 的图片擦除、蒙版重绘、放大任务会保存源图路径；蒙版编辑任务还会保存 mask 路径，发送任务上下文到聊天时会一并带出，方便失败后重新打开图片编辑或重新提交。
+- `create_media_task` / `update_media_task` / `replicate_create_prediction` / `import_media_directory` / `import_media_manifest` 支持 `source_image_path` 和 `mask_path`，外部 Ruby Skill 或第三方 API 脚本导回编辑任务时也能保留恢复线索；制作包 manifest 模板同步暴露这两个字段。
+- 短剧媒体契约测试新增对源图/蒙版任务字段、工具 schema、图片编辑面板写入、聊天上下文输出和 manifest 导入链路的覆盖。
+- 版本号从 **1.109.0-rc115** 提升为 **1.109.0-rc116**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc115 - 2026-06-27
+
+### Changed
+- **短剧资产级失败任务批量重试（1.109.0-rc115）** —— `short_drama_open_media_tasks` / `short_drama_refresh_media_tasks` / `short_drama_retry_failed_media_tasks` 现在支持 `scope=asset`（也兼容 `character` / `scene`），并接收 `asset_kind` / `asset_id`，可按人物或场景资产范围查看、刷新和批量重试失败的参考图生成任务。
+- 「媒体任务」侧栏从人物/场景资产筛选进入时，批量重试聊天接力会明确携带 `scope=asset`、`asset_kind` 和 `asset_id`；工具层会校验资产确实存在于当前短剧项目，避免误把项目级失败任务一并重试。
+- 短剧媒体契约测试新增对资产级 scope schema、资产解析校验和侧栏批量重试 prompt 的覆盖。
+- 版本号从 **1.109.0-rc114** 提升为 **1.109.0-rc115**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc114 - 2026-06-27
+
+### Added
+- **短剧失败媒体任务批量重试（1.109.0-rc114）** —— 新增 `short_drama_retry_failed_media_tasks`，可按项目、分集或分镜作用域批量重试失败/取消的 some.im 短剧媒体任务，支持 `dry_run` 预检和 `max_tasks` 安全上限，避免整剧批量生成失败后逐条手工恢复。
+- 「媒体任务」侧栏在有筛选作用域且存在可重试失败任务时，会提供“重试失败任务”聊天接力入口；网页分镜板的项目、分集和分镜区域也会在有可重试失败任务时显示「重试失败」按钮，并引导先 dry-run 再正式提交。
+- 短剧媒体契约测试新增对作用域批量重试工具、dry-run、安全上限、侧栏入口和网页分镜板入口的覆盖。
+- 版本号从 **1.109.0-rc113** 提升为 **1.109.0-rc114**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc113 - 2026-06-27
+
+### Added
+- **短剧失败媒体任务重试（1.109.0-rc113）** —— 新增 `short_drama_retry_media_task`，可基于已保存的项目/分集/分镜或人物/场景锚点，重试失败或取消的 some.im 短剧图片/视频生成与资产参考图任务，并复用原 prompt、model 和 endpoint suffix。
+- 「媒体任务」侧栏的可重试任务新增重试入口，会把结构化上下文写入聊天窗口，引导 Agent 调用重试工具；网页分镜板在分镜存在可重试失败任务时显示「重试失败」按钮。
+- 短剧媒体契约测试新增对重试工具注册、分发、侧栏入口和网页分镜板入口的覆盖。
+- 版本号从 **1.109.0-rc112** 提升为 **1.109.0-rc113**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc112 - 2026-06-27
+
+### Fixed
+- **媒体产物下载避免重名覆盖（1.109.0-rc112）** —— some.im 与 Replicate 输出下载现在会在目标文件已存在时自动追加 `-2`、`-3` 等后缀，并把最终文件名写回媒体任务产物；短剧批量生成、重复刷新或同标题任务不会再覆盖同目录下的旧图片/视频。
+- 短剧媒体契约测试新增对 provider 下载唯一文件名逻辑的覆盖。
+- 版本号从 **1.109.0-rc111** 提升为 **1.109.0-rc112**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc111 - 2026-06-27
+
+### Fixed
+- **短剧默认主图优先选择图片产物（1.109.0-rc111）** —— 分镜 upsert、媒体任务产物回填和短剧规划导入现在都会优先把第一张图片设为 `selectedArtifactPath`，只有没有图片时才回退到首个产物；避免视频先导回或 manifest 顺序混杂时把 mp4 误设为主图，影响后续视频首帧、蒙版重绘、擦除和放大链路。
+- 短剧媒体契约测试新增对默认主图图片优先规则的覆盖。
+- 版本号从 **1.109.0-rc110** 提升为 **1.109.0-rc111**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc110 - 2026-06-27
+
+### Fixed
+- **manifest 导回合并已有远端媒体任务（1.109.0-rc110）** —— `import_media_manifest` 现在会按 provider、kind、短剧锚点和远端任务 ID / status URL / cancel URL 优先匹配已有媒体任务；外部 Ruby/Skill 先用 `import_pending_tasks` 登记远端异步任务、产物落地后再次导回时，会更新同一条任务为已完成并挂载产物，避免侧栏出现一个 pending 旧任务和一个 succeeded 新任务。
+- 短剧媒体契约测试新增对 manifest 远端任务合并链路的覆盖。
+- 版本号从 **1.109.0-rc109** 提升为 **1.109.0-rc110**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc109 - 2026-06-27
+
+### Fixed
+- **some.im 自定义异步 endpoint 持久化（1.109.0-rc109）** —— 媒体任务现在会保存 `status_endpoint_suffix` / `cancel_endpoint_suffix`，App 重启或手动刷新时可继续用创建任务时的自定义 some.im 路由轮询/取消，避免只保存远端 ID 后回落到默认图片/视频 endpoint。
+- `import_media_directory` / `import_media_manifest` 支持登记 endpoint suffix；制作包 manifest、Ruby 脚本模板和 `media-api.env.example` 也同步提供字段与环境变量，方便短剧 Skill 或第三方 API 脚本把未完成远端任务稳定导回媒体任务中心。
+- 短剧媒体契约测试新增对 endpoint suffix 字段、导入链路、持久化刷新/取消链路和聊天上下文展示的覆盖。
+- 版本号从 **1.109.0-rc108** 提升为 **1.109.0-rc109**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc108 - 2026-06-27
+
+### Changed
+- **媒体任务跨重启持久化（1.109.0-rc108）** —— `AgentMediaTaskRegistry` 会把 some.im / Replicate / Skill 媒体任务快照保存到 `Application Support/WillDeep/media-tasks/tasks.json`，启动时恢复任务列表和远端轮询信息，长耗时图片/视频任务不会因为 App 重启而从任务中心消失。
+- 短剧媒体契约测试新增对媒体任务持久化文件、ISO8601 日期编解码和原子写入的覆盖。
+- 版本号从 **1.109.0-rc107** 提升为 **1.109.0-rc108**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc107 - 2026-06-27
+
+### Changed
+- **短剧工具分发拆分（1.109.0-rc107）** —— 新增 `AgentShortDramaToolDispatcher` 承接所有 `short_drama_*` 工具分发，`AgentTools.swift` 只保留前置路由，避免短剧制作工具继续增长时把主工具 runner 推过 2000 行预警线。
+- 短剧媒体契约测试改为覆盖专用 dispatcher，并确认主 runner 不再直接持有短剧 case 块。
+- 版本号从 **1.109.0-rc106** 提升为 **1.109.0-rc107**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc106 - 2026-06-27
+
+### Added
+- **短剧整集/全剧批量生成工具（1.109.0-rc106）** —— 新增 `short_drama_generate_batch_media`，可按项目或单集顺序批量提交 some.im 图片/视频任务，并复用单镜 `short_drama_generate_shot_media` 的人物/场景 prompt、首帧参考图和媒体任务回填逻辑。
+
+### Changed
+- 网页分镜板的“全剧图片 / 全剧视频 / 批量图片 / 批量视频”按钮改为引导调用 `short_drama_generate_batch_media`，不再依赖模型逐镜循环调用。
+- 短剧媒体契约测试新增对批量工具注册、分发、dry-run、安全上限和分镜板 prompt 的覆盖。
+- 版本号从 **1.109.0-rc105** 提升为 **1.109.0-rc106**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc105 - 2026-06-27
+
+### Changed
+- **图片编辑提示 Replicate 配置缺口（1.109.0-rc105）** —— 图片蒙版编辑面板在提交 Replicate 擦除/重绘前会检查 API Token 与对应 workflow version，缺配置时直接显示原因并提供“打开 Replicate 设置”。
+- 短剧媒体契约测试新增对 Replicate 图片编辑配置提示的覆盖。
+- 版本号从 **1.109.0-rc104** 提升为 **1.109.0-rc105**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc104 - 2026-06-27
+
+### Changed
+- **网页组件侧栏支持最近列表（1.109.0-rc104）** —— `show_widget` / 短剧 Skill 生成的沙箱网页组件会按会话保留最近列表，右侧「网页组件」面板可在多个分镜板、候选图选择器、审片页之间切换预览。
+- 短剧媒体契约测试新增对网页组件历史列表和侧栏选择能力的覆盖。
+- 版本号从 **1.109.0-rc103** 提升为 **1.109.0-rc104**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc103 - 2026-06-27
+
+### Changed
+- **媒体任务菜单显示运行/失败徽标（1.109.0-rc103）** —— Agent 聊天头部的侧栏菜单会在媒体任务运行中时显示数量徽标，失败时优先显示红色需处理数量；菜单里的“媒体任务”项也会显示运行中或需处理摘要。
+- 短剧媒体契约测试新增对媒体任务菜单徽标的覆盖，确保异步任务状态在侧栏入口处保持可见。
+- 版本号从 **1.109.0-rc102** 提升为 **1.109.0-rc103**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc102 - 2026-06-27
+
+### Changed
+- **媒体任务完成通知支持短剧续作引导（1.109.0-rc102）** —— `<media-task-notification>` 现在会附带 project/episode/shot 或人物/场景资产锚点，并提示候选图选择、设为主图、继续生成视频、打开图片编辑和放大等建议工具，帮助聊天窗口在异步任务完成后稳定接手下一步。
+- 短剧媒体契约测试新增对完成通知锚点与建议工具的覆盖，避免聊天协作桥接能力后续被改坏。
+- 版本号从 **1.109.0-rc101** 提升为 **1.109.0-rc102**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc101 - 2026-06-27
+
+### Added
+- **网页分镜板支持全剧连续性检查（1.109.0-rc101）** —— 项目头部新增“全剧检查”按钮，通过聊天审查人物设定、服装道具、场景空间、镜头衔接、画风一致性和主图/视频产物是否符合分镜意图，并引导调用 `short_drama_upsert_review_item` 把问题写回具体分镜。
+- 短剧媒体契约测试同步覆盖 `continuity_review_project` action、全剧检查按钮和检查项写回工具引导。
+
+### Changed
+- 版本号从 **1.109.0-rc100** 提升为 **1.109.0-rc101**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc100 - 2026-06-27
+
+### Added
+- **网页分镜板支持全剧批量生成入口（1.109.0-rc100）** —— 项目头部新增“全剧图片”“全剧视频”按钮，通过聊天按项目内 episode/shot 顺序逐个调用 `short_drama_generate_shot_media`，适合整剧批量排队 some.im 图片或视频任务。
+- 短剧媒体契约测试同步覆盖项目级批量生成 prompt、`generate_project_images` / `generate_project_videos` action 和全剧按钮。
+
+### Changed
+- 版本号从 **1.109.0-rc99** 提升为 **1.109.0-rc100**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc99 - 2026-06-27
+
+### Added
+- **网页分镜板支持导出全剧制作包（1.109.0-rc99）** —— 项目头部新增“导出全剧包”按钮，通过聊天引导调用 `short_drama_export_production_package(project_id)`，导出整剧 production package、manifest、Ruby 脚本、env 示例和 outputs 目录，方便交给短剧 Skill、Ruby 脚本或第三方 API 接力。
+- 短剧媒体契约测试同步覆盖项目级制作包导出 prompt 与 `export_project_package` action。
+
+### Changed
+- 版本号从 **1.109.0-rc98** 提升为 **1.109.0-rc99**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc98 - 2026-06-27
+
+### Added
+- **网页分镜板项目头部新增总控任务入口（1.109.0-rc98）** —— 项目头部新增“查看全部任务”“刷新全部任务”按钮，复用 `short_drama_open_media_tasks` / `short_drama_refresh_media_tasks` 的 project scope，让用户从整剧分镜板顶端直接查看或刷新所有异步媒体任务。
+- 短剧媒体契约测试同步覆盖项目级查看/刷新任务按钮与 project scope prompt。
+
+### Changed
+- 版本号从 **1.109.0-rc97** 提升为 **1.109.0-rc98**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc97 - 2026-06-27
+
+### Fixed
+- **适配网页分镜板媒体任务 action 的共享 helper 契约（1.109.0-rc97）** —— `mediaTaskActionPrompt` 现在统一生成打开/刷新媒体任务 prompt，契约测试改为检查调用处传入的 `open_media_tasks` / `refresh_media_tasks` action，避免误查生成后静态字面量。
+
+### Changed
+- 版本号从 **1.109.0-rc96** 提升为 **1.109.0-rc97**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc96 - 2026-06-27
+
+### Added
+- **网页分镜板支持刷新作用域媒体任务（1.109.0-rc96）** —— 新增 `short_drama_refresh_media_tasks`，可按项目、分集或分镜立即刷新当前范围内运行中的 Replicate 与 some.im 任务，并打开同一作用域「媒体任务」侧栏；网页分镜板每集标题和每个分镜卡片新增“刷新任务”按钮。
+- 新增 `AgentShortDramaMediaTaskTools.swift`，将短剧媒体任务侧栏打开/刷新工具从 `AgentShortDramaTools.swift` 拆出，避免主短剧工具文件继续逼近 2000 行预警线。
+- 短剧媒体契约测试新增作用域刷新工具注册、分发、轮询调用和网页 action 检查。
+
+### Changed
+- 版本号从 **1.109.0-rc95** 提升为 **1.109.0-rc96**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc95 - 2026-06-27
+
+### Fixed
+- **适配本集网页分镜板的新任务摘要参数（1.109.0-rc95）** —— 短剧媒体契约测试不再查找旧的单行 `widget(for:episode:)` 签名，改为检查本集分镜板函数、episode 参数和 `mediaTasks` 默认参数，确保媒体任务摘要注入后的分镜板入口仍受覆盖。
+
+### Changed
+- 版本号从 **1.109.0-rc94** 提升为 **1.109.0-rc95**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc94 - 2026-06-27
+
+### Added
+- **网页分镜板显示媒体任务状态摘要（1.109.0-rc94）** —— 生成网页分镜板时会注入当前 runtime 的媒体任务列表，并在项目、分集、分镜层显示处理中/失败/完成计数；用户无需离开分镜网页，也能快速扫到 some.im、Replicate 或 Skill 异步生成、编辑、放大任务状态。
+- 短剧媒体契约测试新增网页分镜板任务摘要注入、状态 pill 和生成入口传递媒体任务列表的检查。
+
+### Changed
+- 版本号从 **1.109.0-rc93** 提升为 **1.109.0-rc94**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc93 - 2026-06-27
+
+### Fixed
+- **修正短剧媒体任务契约测试的动态 scope 断言（1.109.0-rc93）** —— 网页分镜板媒体任务 prompt 使用 `scope=\(scope)` 动态拼接，本轮将契约测试从固定字面量 `scope=episode|shot` 调整为检查实际 scope 计算和 prompt 输出逻辑，避免误报。
+
+### Changed
+- 版本号从 **1.109.0-rc92** 提升为 **1.109.0-rc93**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc92 - 2026-06-27
+
+### Added
+- **网页分镜板支持查看作用域媒体任务（1.109.0-rc92）** —— 新增 `short_drama_open_media_tasks` 工具，可按项目、分集或分镜打开已筛选的「媒体任务」侧栏，并返回当前匹配任务数；网页分镜板每集标题和每个分镜卡片新增“查看任务”按钮，方便从网页组件直接观察 some.im / Replicate / Skill 异步任务状态。
+- 短剧媒体契约测试新增作用域媒体任务工具注册、分发、侧栏 scope 和网页 action 检查。
+
+### Changed
+- 版本号从 **1.109.0-rc91** 提升为 **1.109.0-rc92**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc91 - 2026-06-27
+
+### Added
+- **网页分镜板支持打开候选图选择器（1.109.0-rc91）** —— 当分镜有多个产物时，网页分镜板新增“选择候选图”按钮，通过聊天引导调用 `short_drama_show_image_choice_widget`，打开缩略图候选网格，让用户在网页组件里选定主图后继续生成视频、重绘、擦除或放大。
+- 短剧媒体契约测试同步覆盖网页分镜板候选图入口、结构化 action 和工具调用引导。
+
+### Changed
+- 版本号从 **1.109.0-rc90** 提升为 **1.109.0-rc91**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc90 - 2026-06-27
+
+### Fixed
+- **修复短剧图片工具拆分后的编译漏点（1.109.0-rc90）** —— `AgentShortDramaTools.swift` 保留非隔离图片路径判断供视频生成参考图继续使用，`AgentShortDramaImageTools.swift` 同步清理 Swift 并发 warning 和非可选 Replicate 任务 ID 的多余空值处理。
+
+### Changed
+- 版本号从 **1.109.0-rc89** 提升为 **1.109.0-rc90**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc89 - 2026-06-27
+
+### Added
+- **网页分镜板支持放大主图（1.109.0-rc89）** —— 有图片主产物的分镜现在显示“重绘主图”“擦除主图”“放大主图”三件套；“放大主图”通过聊天引导调用 `short_drama_upscale_shot_artifact`，按 project / episode / shot / artifact_path 提交 Replicate 图片放大任务，并把任务锚定到同一分镜。
+- 新增 `AgentShortDramaImageTools.swift`，将短剧图片编辑与图片放大工具从 `AgentShortDramaTools.swift` 拆出，避免主短剧工具文件继续逼近 2000 行预警线。
+- 短剧媒体契约测试新增 `short_drama_upscale_shot_artifact` 注册、分发、实现和网页分镜板按钮检查。
+
+### Changed
+- 版本号从 **1.109.0-rc88** 提升为 **1.109.0-rc89**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc88 - 2026-06-27
+
+### Fixed
+- **清理短剧图片编辑工具的 Swift 并发警告（1.109.0-rc88）** —— `short_drama_open_image_editor` 使用的图片路径判断 helper 标记为 `nonisolated`，避免同步筛选分镜图片产物时触发主线程隔离调用 warning。
+
+### Changed
+- 版本号从 **1.109.0-rc87** 提升为 **1.109.0-rc88**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc87 - 2026-06-27
+
+### Added
+- **网页分镜板可直达图片蒙版编辑器（1.109.0-rc87）** —— 短剧网页分镜板在有图片主产物的分镜上新增“重绘主图”“擦除主图”按钮，点击后通过聊天引导调用 `short_drama_open_image_editor`，按 project / episode / shot 和 artifact_path 打开右侧图片蒙版面板；用户框选后提交的 Replicate 或 some.im 编辑任务会继承同一分镜锚点。
+- 新增 `short_drama_open_image_editor` 工具，可从聊天或网页组件按短剧锚点打开分镜主图到图片编辑面板，支持 `operation=inpaint|erase` 和可选 `artifact_path`。
+- 短剧媒体契约测试新增网页分镜板图片编辑入口与工具注册/实现检查。
+
+### Changed
+- 版本号从 **1.109.0-rc86** 提升为 **1.109.0-rc87**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc86 - 2026-06-27
+
+### Added
+- **图片蒙版编辑支持多选区（1.109.0-rc86）** —— 图片编辑面板现在可连续框选多块擦除/重绘区域，撤销当前预览或上一块选区，清空全部选区，并把所有有效选区导出到同一张 PNG 蒙版；反选蒙版继续用于保留主体、重绘背景，提交 Replicate / some.im 时沿用现有 image + mask + prompt 链路。
+
+### Changed
+- 版本号从 **1.109.0-rc85** 提升为 **1.109.0-rc86**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc85 - 2026-06-27
+
+### Added
+- **网页分镜板支持导出本集制作包（1.109.0-rc85）** —— 每集标题行新增“导出本集包”按钮，通过受限 `sendPrompt()` 把 `export_episode_package` 结构化动作发回聊天，引导 Agent 调用 `short_drama_export_production_package(project_id, episode_id)`，并返回 production package、manifest、Ruby 脚本、env 示例和 outputs 路径。
+- 契约测试新增网页分镜板导出本集制作包检查，覆盖按钮、结构化 action 和工具调用引导。
+- 版本号从 **1.109.0-rc84** 提升为 **1.109.0-rc85**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc84 - 2026-06-27
+
+### Added
+- **网页分镜板支持整集批量生成动作（1.109.0-rc84）** —— 每集标题行新增“批量图片”“批量视频”按钮，通过受限 `sendPrompt()` 把 `<short-drama-episode-widget-action>` 结构化块发回聊天，要求 Agent 按分镜顺序逐个调用 `short_drama_generate_shot_media`，并携带 project/episode/shot 锚点；网页组件不直接写状态，仍走现有工具和媒体任务链路。
+- 契约测试新增整集批量生成 prompt 检查，覆盖图片/视频按钮、结构化 action 和工具调用引导。
+- 版本号从 **1.109.0-rc83** 提升为 **1.109.0-rc84**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc83 - 2026-06-27
+
+### Added
+- **短剧支持按集打开网页分镜板（1.109.0-rc83）** —— 每集行新增“生成本集网页分镜板”入口，复用沙箱 HTML Widget 面板但只渲染当前集，方便按集审片、改提示词、继续生成和检查连续性；`short_drama_show_storyboard_widget` 也新增可选 `episode_id` 参数，短剧 skill 或聊天窗口可直接打开某一集的网页分镜板。
+- 契约测试新增按集网页分镜板检查，覆盖 Widget 构建器、侧栏按钮和工具参数。
+- 版本号从 **1.109.0-rc82** 提升为 **1.109.0-rc83**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc82 - 2026-06-27
+
+### Added
+- **短剧侧栏支持按集导出制作包（1.109.0-rc82）** —— 每集行新增“导出本集制作包”入口，复用 production package 导出器的 `episodeID` 作用域，只导出该集分镜、产物、manifest、Ruby 脚本、env 示例和 outputs 目录；导出后同样预填聊天接力提示，适合短剧按集制作、按集提交外部 some.im / Replicate / Ruby skill 批处理。
+- 契约测试新增本集制作包导出检查，覆盖侧栏按钮、episode scope 导出器和制作包 scope 标记。
+- 版本号从 **1.109.0-rc81** 提升为 **1.109.0-rc82**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc81 - 2026-06-27
+
+### Added
+- **短剧制作包侧栏新增“接力聊天”（1.109.0-rc81）** —— 导出制作包后，短剧侧栏操作区新增“接力聊天”按钮，可随时把当前制作包目录、JSON、Markdown、manifest、Ruby 脚本、env 示例和 outputs 路径重新写入 Agent composer，方便用户清空输入或调整脚本后再次让聊天窗口接手制作。
+- 短剧媒体契约测试同步覆盖该入口，确保侧栏与聊天窗口的制作包协作通道不会被误删。
+- 版本号从 **1.109.0-rc80** 提升为 **1.109.0-rc81**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc80 - 2026-06-27
+
+### Added
+- **短剧制作包侧栏新增“配置 API”（1.109.0-rc80）** —— 导出制作包后，短剧侧栏操作区新增“配置 API”按钮，可直接在 Finder 中定位 `media-api.env.example`，并提醒用户复制到私有位置后填写真实 token，避免把密钥写回制作包或提交到 git。
+- 短剧媒体契约测试同步检查 env 示例定位入口，确保 Ruby/API 接力配置不再只停留在路径文本里。
+- 版本号从 **1.109.0-rc79** 提升为 **1.109.0-rc80**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc79 - 2026-06-27
+
+### Added
+- **短剧制作包导出媒体 API 环境变量样例（1.109.0-rc79）** —— 制作包新增 `media-api.env.example`，列出 `WILLDEEP_MEDIA_API_URL`、`WILLDEEP_MEDIA_API_TOKEN`、provider、model、timeout、poll URL template、轮询间隔、最大轮询次数和完成/失败状态集合；文件只包含占位和说明，不写入真实 token，便于 Ruby skill 或第三方 API 脚本配置 some.im、Replicate 或自定义异步媒体 API。
+- 制作包 Markdown、工具返回、短剧侧栏状态和聊天接力提示同步展示 env 示例路径，减少用户找配置入口的摩擦。
+- 版本号从 **1.109.0-rc78** 提升为 **1.109.0-rc79**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc78 - 2026-06-27
+
+### Added
+- **短剧制作包侧栏新增“登记任务”（1.109.0-rc78）** —— 导出制作包后，短剧侧栏除“预检导回”“导回产物”外新增“登记任务”按钮，会调用 `import_media_manifest(package_directory: ..., import_pending_tasks: true)`；外部 Ruby skill 或第三方 API 脚本只写回 `remote_task_id` / `status_url`、产物尚未落地时，也能一键把远端异步任务放进「媒体任务」侧栏继续观察。
+- 导出后的聊天接力提示同步说明 `import_pending_tasks: true` 用法，避免用户必须手写工具参数才能登记远端任务。
+- 版本号从 **1.109.0-rc77** 提升为 **1.109.0-rc78**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc77 - 2026-06-27
+
+### Added
+- **manifest 可导入外部未完成异步媒体任务（1.109.0-rc77）** —— `import_media_manifest` 新增 `import_pending_tasks` 参数；当 manifest 条目缺少本地产物文件、但已经带有 `remote_task_id` 或 `status_url` 时，可把该条目登记为活跃媒体任务，让「媒体任务」侧栏先显示外部 some.im / Replicate / Ruby skill 异步任务状态，等产物落地后再分批导回。默认仍为关闭，避免普通制作包占位模板产生假任务。
+- 制作包 Markdown 的 Script Handoff 同步说明：脚本如果只提交远端任务、暂时没有 outputs 文件，可先写回远端任务元数据并用 `import_pending_tasks: true` 导入侧栏。
+- 版本号从 **1.109.0-rc76** 提升为 **1.109.0-rc77**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc76 - 2026-06-27
+
+### Added
+- **Ruby 媒体脚本模板回写远端任务元数据（1.109.0-rc76）** —— `ruby-media-script-template.rb` 支持 `WILLDEEP_MEDIA_PROVIDER`，并会把 provider/model、远端 job/prediction id 与 status URL 写回 `media-import-manifest-template.json`；外部 Ruby skill 或第三方 API 脚本产物导回后，媒体任务中心仍能看到来源 provider、模型、远端任务 ID 和轮询地址，便于排查异步生成链路。
+- 版本号从 **1.109.0-rc75** 提升为 **1.109.0-rc76**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc75 - 2026-06-27
+
+### Added
+- **Ruby 媒体脚本模板支持异步轮询（1.109.0-rc75）** —— `ruby-media-script-template.rb` 现在可处理先返回 job/prediction 再轮询产物的外部 API：自动识别 `poll_url` / `status_url` / `urls.get`，也可通过 `WILLDEEP_MEDIA_POLL_URL_TEMPLATE` 使用 `{id}` 拼接轮询地址，并支持轮询间隔、最大次数、成功状态和失败状态环境变量；制作包 Markdown 同步列出这些环境变量，便于 some.im、Replicate 或自定义 Ruby skill 接力。
+- 版本号从 **1.109.0-rc74** 提升为 **1.109.0-rc75**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc74 - 2026-06-27
+
+### Added
+- **Ruby 媒体脚本模板内置第三方 API 骨架（1.109.0-rc74）** —— `ruby-media-script-template.rb` 不再只是注释 stub；现在可通过 `WILLDEEP_MEDIA_API_URL` / `WILLDEEP_MEDIA_API_TOKEN` / `WILLDEEP_MEDIA_MODEL` / `WILLDEEP_MEDIA_TIMEOUT_SECONDS` 配置外部图片/视频 API，使用 `Net::HTTP` 提交 prompt/kind/短剧锚点 JSON，并兼容二进制响应、URL 响应下载和 base64 JSON 响应提取，仍然不把任何 token 写进制作包。
+- 版本号从 **1.109.0-rc73** 提升为 **1.109.0-rc74**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc73 - 2026-06-27
+
+### Added
+- **媒体任务支持批量刷新运行中任务（1.109.0-rc73）** —— 「媒体任务」侧栏摘要区新增“刷新运行中”入口，可立即刷新当前短剧锚点/状态筛选范围内所有活跃的 Replicate / some.im 任务，复用同一轮询链路更新状态并下载完成产物，适合整集批量生成后手动拉取最新进度。
+- 版本号从 **1.109.0-rc72** 提升为 **1.109.0-rc73**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc72 - 2026-06-27
+
+### Added
+- **媒体任务多图产物支持候选图选择器（1.109.0-rc72）** —— 当媒体任务包含多张图片产物时，任务行会显示“候选图”入口，打开右侧「网页组件」以缩略图网格展示所有候选；用户选择某张图后会把 `<media-task-image-choice>` 结构化块发回聊天，若任务带短剧分镜锚点则会引导调用 `short_drama_select_shot_artifact` 设为主图。
+- 版本号从 **1.109.0-rc71** 提升为 **1.109.0-rc72**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc71 - 2026-06-27
+
+### Added
+- **图片编辑面板支持反选蒙版（1.109.0-rc71）** —— 「图片编辑」侧栏新增“反选蒙版”开关，导出蒙版时可把选区外部设为白色编辑区域、选区内部设为黑色保护区域，并使用 `mask-inverted` 文件名；适合保留主体、重绘背景或只处理框选区域之外的画面。
+- 版本号从 **1.109.0-rc70** 提升为 **1.109.0-rc71**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc70 - 2026-06-27
+
+### Added
+- **媒体任务支持手动刷新与取消（1.109.0-rc70）** —— 活跃的 Replicate / some.im 媒体任务行新增手动刷新和取消按钮：刷新会立即复用轮询器读取远端状态并下载完成产物，取消会调用 provider cancel 接口并同步更新任务状态；不支持远端控制的 skill/local 任务会给出状态提示，避免用户误以为已经取消。
+- 版本号从 **1.109.0-rc69** 提升为 **1.109.0-rc70**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc69 - 2026-06-27
+
+### Added
+- **媒体任务侧栏支持状态过滤（1.109.0-rc69）** —— 「媒体任务」侧栏新增全部 / 运行中 / 需处理 / 已完成分段筛选，可在短剧锚点范围内继续按状态收窄任务列表；任务多起来时，用户可以快速只看仍在跑的生成队列或失败待处理项。
+- 版本号从 **1.109.0-rc68** 提升为 **1.109.0-rc69**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc68 - 2026-06-27
+
+### Added
+- **媒体任务上下文可发送到聊天（1.109.0-rc68）** —— 「媒体任务」侧栏每条任务新增聊天入口，可把任务标题、句柄、状态、provider、类型、模型、远端任务 ID、短剧锚点、prompt、状态信息和产物路径整理进 Agent composer；失败任务可直接让聊天分析原因，成功任务可继续改提示词、放大、擦除、重绘或接入短剧下一步。
+- 版本号从 **1.109.0-rc67** 提升为 **1.109.0-rc68**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc67 - 2026-06-27
+
+### Added
+- **媒体任务可反向打开短剧项目（1.109.0-rc67）** —— 带短剧锚点的媒体任务行现在会显示项目 / 分集 / 分镜或人物/场景资产标签，并提供“打开对应短剧项目”入口；点击后自动激活关联项目并切到「短剧」侧栏，让用户可以从异步任务结果回到剧集结构继续选图、重绘、放大或处理检查项。
+- 版本号从 **1.109.0-rc66** 提升为 **1.109.0-rc67**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc66 - 2026-06-27
+
+### Added
+- **媒体任务侧栏支持短剧锚点筛选（1.109.0-rc66）** —— 从短剧项目、分集、分镜或人物/场景资产的媒体任务徽标打开「媒体任务」侧栏时，会带入对应 `project_id` / `episode_id` / `shot_id` 或 `asset_kind` / `asset_id` 作用域，只显示该锚点相关的异步任务；面板顶部展示当前筛选并提供一键清除，普通打开媒体任务侧栏仍显示全量列表。
+- 版本号从 **1.109.0-rc65** 提升为 **1.109.0-rc66**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc65 - 2026-06-27
+
+### Added
+- **短剧媒体任务徽标可跳转任务侧栏（1.109.0-rc65）** —— 项目、分集、分镜和人物/场景资产上的处理中/失败媒体任务徽标现在是可点击入口，点击后直接打开右侧「媒体任务」侧栏，方便从短剧结构定位到异步生成、编辑、放大或导回任务的完整上下文。
+- 版本号从 **1.109.0-rc64** 提升为 **1.109.0-rc65**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc64 - 2026-06-27
+
+### Fixed
+- **修复短剧资产卡复用媒体任务徽标的 Swift 访问控制错误（1.109.0-rc64）** —— `AgentShortDramaAssetViews.swift` 需要调用主侧栏扩展里的 `mediaTaskBadge`，该 helper 从 `private` 调整为 extension 内可见，保证资产卡任务状态徽标可编译复用。
+- 版本号从 **1.109.0-rc63** 提升为 **1.109.0-rc64**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc63 - 2026-06-27
+
+### Added
+- **短剧人物/场景资产卡显示媒体任务状态（1.109.0-rc63）** —— 人物和场景资产卡会按 `asset_kind` / `asset_id` 锚点汇总媒体任务，生成参考图、外部导回或后续编辑任务进行中/失败时可直接在资产行看到状态徽标，补齐项目、集、分镜之外的资产层任务可观测性。
+- 版本号从 **1.109.0-rc62** 提升为 **1.109.0-rc63**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc62 - 2026-06-27
+
+### Added
+- **短剧侧栏显示锚点媒体任务状态（1.109.0-rc62）** —— 「短剧」侧栏会按 project / episode / shot 锚点汇总媒体任务中心里的任务状态，在项目、集和分镜行直接显示“处理中 N”或“失败 N”徽标；用户不用切到「媒体任务」侧栏，也能在短剧结构里看到当前异步图片/视频/编辑任务是否还在跑或需要处理。
+- 版本号从 **1.109.0-rc61** 提升为 **1.109.0-rc62**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc61 - 2026-06-27
+
+### Added
+- **短剧规划导入支持 dry-run 预检（1.109.0-rc61）** —— `short_drama_import_plan` 新增 `dry_run` 参数，可解析并汇总规划 JSON 的项目、人物、场景、集和分镜数量，但不创建或更新短剧项目；「短剧」侧栏顶部新增预检按钮，用户可以先检查 Skill/Ruby 生成的规划文件，再决定是否正式导入。
+- 版本号从 **1.109.0-rc60** 提升为 **1.109.0-rc61**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc60 - 2026-06-27
+
+### Changed
+- **短剧规划模板契约测试升级（1.109.0-rc60）** —— `scripts/short_drama_media_contract_test.rb` 现在会从 Swift 源码中抽出 `AgentShortDramaPlanTemplate.jsonString()` 的三引号 JSON，真实执行 `JSON.parse`，并校验模板顶层字段、分镜字段、人物引用和场景引用都能对上，避免短剧 Skill/Ruby 交接样板变成“看起来像 JSON，导入时才爆炸”的纸面契约。
+- 版本号从 **1.109.0-rc59** 提升为 **1.109.0-rc60**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc59 - 2026-06-27
+
+### Changed
+- **短剧网页分镜板构建器拆分（1.109.0-rc59）** —— 将 `AgentShortDramaStoryboardWidgetBuilder` 从 `AgentShortDrama.swift` 拆到 `AgentShortDramaStoryboardWidgetBuilder.swift`，保留网页分镜板和候选图选择器行为不变，同时把短剧主侧栏文件从接近 2000 行的预警线降回约 1600 行，后续继续扩展侧栏时不会顶着文件体积风险硬加。
+- 版本号从 **1.109.0-rc58** 提升为 **1.109.0-rc59**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc58 - 2026-06-27
+
+### Added
+- **短剧规划 JSON 模板导出（1.109.0-rc58）** —— 新增 `AgentShortDramaPlanTemplate` 与 `short_drama_export_plan_template` 工具，可生成可被 `short_drama_import_plan` 直接读取的 snake_case 短剧规划样板，覆盖 project、characters、scenes、episodes、shots、scene/characters 引用、artifact_paths 和 selected_artifact_path。短剧侧栏顶部新增模板按钮，会把 `short-drama-plan-template.json` 写入 Application Support 并在 Finder 中定位，方便交给短剧 Skill 或 Ruby 脚本填写。
+- 版本号从 **1.109.0-rc57** 提升为 **1.109.0-rc58**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc57 - 2026-06-27
+
+### Added
+- **短剧侧栏支持直接导入规划 JSON（1.109.0-rc57）** —— 「短剧」侧栏顶部新增导入按钮，可通过系统文件选择器读取短剧 Skill、Ruby 脚本或 WillDeep 导出的规划 JSON，并复用 `short_drama_import_plan` 的同一套解析逻辑写入项目、人物、场景、集和分镜。这样用户不必只依赖聊天工具调用，也能从侧栏把外部规划文件接回 App 管理。
+- 版本号从 **1.109.0-rc56** 提升为 **1.109.0-rc57**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc56 - 2026-06-27
+
+### Added
+- **短剧规划 JSON 一键导入（1.109.0-rc56）** —— 新增 `short_drama_import_plan` 工具，可把短剧 Skill 或 Ruby 脚本生成的完整规划 JSON 导入「短剧」侧栏；支持 App 自己导出的 `production-package.json`、直接的 `AgentShortDramaProject` JSON，以及更适合脚本书写的 snake_case plan（project/characters/scenes/episodes/shots）。人物和场景引用可用 UUID、slug 或名称，导入时归一到 App 内部 UUID，方便先由 Skill 拆剧本，再由侧栏管理分镜、人物、场景和后续媒体生成。
+- 版本号从 **1.109.0-rc55** 提升为 **1.109.0-rc56**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+---
+
+## 1.109.0-rc55 - 2026-06-27
+
+### Added
+- **短剧侧栏支持制作包产物一键预检/导回（1.109.0-rc55）** —— 从「短剧」侧栏导出制作包后，面板会保留最近一次导出目录并显示「预检导回」「导回产物」按钮；预检复用 `import_media_manifest` 的 `package_directory + dry_run` 路径，只展示可导入文件、缺失文件和分组，不写入任务；正式导回会创建媒体任务并打开「媒体任务」侧栏，让外部 Ruby/API 脚本生成的 outputs 可从侧栏直接接回。
+- 版本号从 **1.109.0-rc54** 提升为 **1.109.0-rc55**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc54 - 2026-06-27
+
+### Added
+- **制作包 Markdown 内置脚本回导步骤（1.109.0-rc54）** —— `production-package.md` 新增 Script Handoff 小节，明确提示如何改 `ruby-media-script-template.rb`、将产物写入 `outputs/`、先用 `import_media_manifest` + `package_directory` + `dry_run` 预检，再正式导回；短剧媒体契约测试同步检查该说明不被误删。
+- 版本号从 **1.109.0-rc53** 提升为 **1.109.0-rc54**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc53 - 2026-06-27
+
+### Added
+- **manifest 导入支持制作包目录入口（1.109.0-rc53）** —— `import_media_manifest` 新增 `package_directory` 参数；当未传 `manifest_path` 时，会自动读取该目录下的 `media-import-manifest-template.json`，让 Agent 或用户只提供短剧制作包目录也能 dry-run 或导回媒体产物，减少手填 manifest 路径出错。短剧媒体契约测试同步覆盖该入口。
+- 版本号从 **1.109.0-rc52** 提升为 **1.109.0-rc53**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc52 - 2026-06-27
+
+### Security
+- **manifest 相对路径限制在 base_directory 内（1.109.0-rc52）** —— `import_media_manifest` 解析相对 `file_path` 时会标准化路径并拒绝 `../` 等逃出 `base_directory` 的清单项，避免脚本回导时误读输出目录之外的文件；短剧媒体契约测试同步新增该约束检查。显式绝对路径仍按用户/脚本提供的本地路径处理。
+- 版本号从 **1.109.0-rc51** 提升为 **1.109.0-rc52**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc51 - 2026-06-27
+
+### Changed
+- **短剧媒体契约测试接入本地测试与 CI（1.109.0-rc51）** —— `scripts/run_tests.sh` 和 `.github/workflows/test.yml` 现在都会运行 `scripts/short_drama_media_contract_test.rb`，并把 `short_drama_media_report.md/json` 写入 CI summary 与 artifact；短剧制作包、manifest 回导和 Ruby 模板契约不再只是手动测试，后续 PR 会自动守住。
+- 版本号从 **1.109.0-rc50** 提升为 **1.109.0-rc51**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc50 - 2026-06-27
+
+### Added
+- **短剧媒体制作包契约自动化测试（1.109.0-rc50）** —— 新增 `scripts/short_drama_media_contract_test.rb`，用 Ruby 静态校验制作包导出文件、manifest 模板字段、`import_media_manifest` 的 `dry_run` / `skip_missing` 参数和 Ruby 脚本模板，并把嵌入 Swift 的 `ruby-media-script-template.rb` 抽出来执行 `ruby -c`；脚本输出 JSON 与 Markdown 报告，便于后续防止短剧脚本接力/回导契约被改坏。
+- 版本号从 **1.109.0-rc49** 提升为 **1.109.0-rc50**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc49 - 2026-06-27
+
+### Added
+- **manifest 媒体导入支持 dry-run 预检（1.109.0-rc49）** —— `import_media_manifest` 新增 `dry_run` 参数，可在不创建媒体任务、不回填短剧项目的情况下解析清单、校验本地文件、统计缺失文件，并按 provider/kind/project/episode/shot/asset 锚点展示即将创建的任务分组，方便 Ruby skill 或第三方脚本导回前先检查清单。
+- 版本号从 **1.109.0-rc48** 提升为 **1.109.0-rc49**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc48 - 2026-06-27
+
+### Changed
+- **短剧导出接力动作拆分（1.109.0-rc48）** —— 将「短剧」侧栏中的制作包导出、Ruby 脚本模板提示和 Agent composer 接力预填逻辑拆到 `AgentShortDramaExportActions.swift`，保持行为不变，同时把 `AgentShortDrama.swift` 从接近 2000 行的预警线拉回安全范围，方便后续继续扩展短剧制作侧栏。
+- 版本号从 **1.109.0-rc47** 提升为 **1.109.0-rc48**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc47 - 2026-06-27
+
+### Added
+- **短剧制作包导出 Ruby 媒体脚本模板（1.109.0-rc47）** —— `short_drama_export_production_package` 导出目录新增 `ruby-media-script-template.rb`，示范如何读取 `production-package.json` 与 `media-import-manifest-template.json`、遍历分镜/资产条目、把生成产物写入 `outputs/` 并保留 `import_media_manifest` 回导契约；模板不内置任何第三方凭据，要求脚本从环境变量读取 token，避免把 API Key 写进制作包。
+- 版本号从 **1.109.0-rc46** 提升为 **1.109.0-rc47**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc46 - 2026-06-27
+
+### Added
+- **短剧制作包导出后自动预填聊天接力提示（1.109.0-rc46）** —— 从「短剧」侧栏导出制作包后，状态区会同时显示 Markdown、`media-import-manifest-template.json` 与 `outputs/` 路径，并自动把一段后续制作指令写入 Agent composer：引导 Agent/短剧 skill 或 Ruby 脚本读取制作包、调用第三方图片/视频 API、把产物写入 `outputs/`、更新 manifest 并调用 `import_media_manifest` 分批导回 App。
+- 版本号从 **1.109.0-rc45** 提升为 **1.109.0-rc46**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc45 - 2026-06-27
+
+### Changed
+- **manifest 媒体导入支持缺失文件跳过（1.109.0-rc45）** —— `import_media_manifest` 新增 `skip_missing` 参数并默认开启；当制作包模板预填了全量分镜/资产条目、外部 Ruby skill 或第三方 API 脚本只生成其中一部分时，导入会跳过尚未存在的占位文件并报告跳过列表，让短剧产物可以分批导回 App。
+- 版本号从 **1.109.0-rc44** 提升为 **1.109.0-rc45**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc44 - 2026-06-27
+
+### Added
+- **短剧制作包导出媒体回填 manifest 模板（1.109.0-rc44）** —— `short_drama_export_production_package` 现在会在导出目录中同时创建 `media-import-manifest-template.json` 和 `outputs/` 目录；模板按人物、场景和每个分镜预填 `file_path`、`kind`、prompt、`project_id` / `episode_id` / `shot_id` 与 `asset_kind` / `asset_id`，外部 Ruby skill 或第三方 API 脚本只需把产物写入 `outputs/` 并保留/更新清单，即可用 `import_media_manifest` 精确导回 App。
+- 版本号从 **1.109.0-rc43** 提升为 **1.109.0-rc44**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc43 - 2026-06-27
+
+### Fixed
+- **清理 manifest 媒体导入工具 actor 隔离警告（1.109.0-rc43）** —— `AgentMediaImportTools` 中 provider/kind/mime 解析等纯 helper 标记为 `nonisolated`，避免 `import_media_manifest` 构建时出现 Swift actor-isolation 警告，并为后续 Swift 6 模式收紧做准备。
+- 版本号从 **1.109.0-rc42** 提升为 **1.109.0-rc43**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc42 - 2026-06-27
+
+### Added
+- **媒体任务支持 manifest 精确导入（1.109.0-rc42）** —— 新增 `import_media_manifest` Agent 工具，Ruby skill 或第三方 API 脚本可输出 JSON 清单，把每个本地图片/视频文件与 `project_id` / `episode_id` / `shot_id`、`asset_kind` / `asset_id`、prompt/model/provider/kind 等元数据一起交回 App；WillDeep 会按相同锚点分组创建已完成媒体任务，并继续复用现有短剧分镜、人物和场景资产回填链路。
+- 版本号从 **1.109.0-rc41** 提升为 **1.109.0-rc42**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc41 - 2026-06-27
+
+### Added
+- **媒体任务支持目录级导入（1.109.0-rc41）** —— 新增 `import_media_directory` Agent 工具，Ruby skill 或第三方 API 脚本把图片/视频下载到本地目录后，可按目录一次性登记为已完成的 local/skill 媒体任务；工具支持 `recursive`、`max_files`、provider/kind 标注、上游任务追踪字段，并沿 `project_id` / `episode_id` / `shot_id` 或 `asset_kind` / `asset_id` 自动回填到短剧分镜、人物或场景资产。
+- 版本号从 **1.109.0-rc40** 提升为 **1.109.0-rc41**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc40 - 2026-06-27
+
+### Added
+- **通用媒体任务可直接登记本地产物（1.109.0-rc40）** —— `create_media_task` 新增 `artifact_paths` 与 `status` 参数，Ruby skill 或第三方 API 脚本下载好图片/视频后，可一次调用把本地产物登记到「媒体任务」中心；传入 `artifact_paths` 时默认标记为 `succeeded`，并沿既有 `project_id` / `episode_id` / `shot_id` 或 `asset_kind` / `asset_id` 锚点自动回填到短剧分镜、人物或场景资产。
+- 版本号从 **1.109.0-rc39** 提升为 **1.109.0-rc40**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc39 - 2026-06-27
+
+### Added
+- **短剧项目可批量补齐人物/场景参考图（1.109.0-rc39）** —— 当项目中存在尚无 `referenceImagePaths` 的人物或场景时，「短剧」项目卡会显示补齐参考图按钮；点击后只为缺失参考图的资产逐个提交 some.im 图片生成任务，并携带 `asset_kind` / `asset_id` 锚点进入媒体任务中心，完成后自动回填到对应人物或场景。
+- 版本号从 **1.109.0-rc38** 提升为 **1.109.0-rc39**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc38 - 2026-06-27
+
+### Changed
+- **短剧分镜产物缩略图组件拆分（1.109.0-rc38）** —— 将 `AgentShortDramaArtifactTile` 从 `AgentShortDrama.swift` 拆到 `AgentShortDramaArtifactTile.swift`，降低短剧主文件行数，避免继续扩展短剧制作侧栏时越过文件体积预警线。
+- 版本号从 **1.109.0-rc37** 提升为 **1.109.0-rc38**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc37 - 2026-06-27
+
+### Added
+- **短剧侧栏人物/场景可一键生成参考图（1.109.0-rc37）** —— 人物和场景资产卡片新增参考图生成按钮，点击后基于资产 visual prompt/description 与项目 logline 提交 some.im 图片生成任务，并携带 `asset_kind` / `asset_id` 锚点进入媒体任务中心；任务完成后会沿 rc35 的回填链路自动追加到对应资产 `referenceImagePaths`。
+- 版本号从 **1.109.0-rc36** 提升为 **1.109.0-rc37**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc36 - 2026-06-27
+
+### Fixed
+- **清理短剧资产生成工具 actor 隔离警告（1.109.0-rc36）** —— `AgentShortDramaTools.optionalPromptSection` 标记为 `nonisolated`，避免 `short_drama_generate_asset_media` 构建时在同步上下文调用纯字符串 helper 触发 MainActor 隔离警告。
+- 版本号从 **1.109.0-rc35** 提升为 **1.109.0-rc36**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc35 - 2026-06-27
+
+### Added
+- **短剧人物/场景参考图可通过媒体任务生成并回填（1.109.0-rc35）** —— `AgentMediaTask` 新增 `assetKind` / `assetID` 可选锚点，some.im、Replicate 和通用媒体任务工具均可携带 `asset_kind` / `asset_id`；任务成功并下载产物后，会自动追加到对应人物或场景的 `referenceImagePaths`。新增 `short_drama_generate_asset_media` Agent 工具，可基于人物/场景的 visual prompt、description 与项目 logline 提交 some.im 图片生成任务，用于角色定妆、服装参考、场景气氛图和地点板。
+
+### Changed
+- **短剧资产侧栏组件拆分（1.109.0-rc35）** —— 将人物/场景资产卡片与参考图缩略图组件拆到 `AgentShortDramaAssetViews.swift`，为后续继续扩展短剧侧栏留出文件体积空间。
+- 版本号从 **1.109.0-rc34** 提升为 **1.109.0-rc35**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc34 - 2026-06-27
+
+### Added
+- **短剧侧栏展示人物/场景设定与参考图（1.109.0-rc34）** —— 「短剧」项目卡在集/分镜列表前新增人物与场景分组，展示名称、visual prompt/description 和参考图缩略图；参考图可直接点击预览图片或在 Finder 中定位非图片文件。这样通过 `short_drama_upsert_character` / `short_drama_upsert_scene` 写入的角色、场景资产不会只停留在数据层，分镜生成前就能在侧栏核对连续性设定。
+- 版本号从 **1.109.0-rc33** 提升为 **1.109.0-rc34**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc33 - 2026-06-27
+
+### Fixed
+- **清理子 Agent structured_output 编译警告（1.109.0-rc33）** —— `AgentSubagents.swift` 中 `AgentJSONValue.decode(from: String)` 已是非 throwing API，移除无效 `try/catch`，避免 Xcode 构建反复提示“no calls to throwing functions”和“catch block is unreachable”。schema 校验逻辑保持不变。
+- 版本号从 **1.109.0-rc32** 提升为 **1.109.0-rc33**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc32 - 2026-06-27
+
+### Added
+- **短剧分镜支持聊天内候选图选择器（1.109.0-rc32）** —— 新增 `short_drama_show_image_choice_widget` Agent 工具，可针对某个短剧分镜生成沙箱 HTML 候选图选择器，展示该分镜的多张产物缩略图，并通过 `sendPrompt()` 把用户选择交回聊天窗口，引导 Agent 调用 `short_drama_select_shot_artifact` 写入主图。短剧侧栏中拥有多张产物的分镜也新增选择器按钮，可一键把候选图选择器打开到右侧「网页组件」面板。
+- 版本号从 **1.109.0-rc31** 提升为 **1.109.0-rc32**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc31 - 2026-06-27
+
+### Added
+- **短剧分镜生成自动带入人物/场景上下文（1.109.0-rc31）** —— 「短剧」侧栏和 `short_drama_generate_shot_media` 工具提交 some.im 图片/视频生成时，现在会把项目 logline、分镜关联场景的 visual prompt/description、分镜关联人物的 visual prompt/description 拼入同一生成 prompt，提升多分镜的人物、服装、场景连续性。为避免泄露本机路径，远端 prompt 只发送文本化设定，不发送本地参考图路径。
+- 版本号从 **1.109.0-rc30** 提升为 **1.109.0-rc31**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc30 - 2026-06-27
+
+### Added
+- **短剧项目支持导出制作包（1.109.0-rc30）** —— 新增 `short_drama_export_production_package` Agent 工具，可把当前短剧项目或指定集导出为本地 `production-package.json` 与 `production-package.md`，包含人物、场景、分镜、主产物路径、全部产物路径和未解决检查项；「短剧」侧栏顶部新增导出按钮，成功后会在 Finder 中定位 Markdown 制作包，方便短剧 skill、聊天窗口和外部脚本继续协作。
+- 版本号从 **1.109.0-rc29** 提升为 **1.109.0-rc30**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc29 - 2026-06-27
+
+### Added
+- **短剧检查项支持一键标记已解决（1.109.0-rc29）** —— 「短剧」侧栏的未解决 review items 新增完成按钮，可直接把连续性、提示词、重绘、擦除、放大、补拍或备注类问题标记为 `resolved`；最后一个待处理项解决后，分镜会从 `needs_review` 自动回到 `ready`（已有产物）或 `planned`（无产物）。新增 `short_drama_resolve_review_item` Agent 工具，聊天或短剧 skill 可以在修复动作完成后只传 `item_id` 闭环问题，不必重写整条检查项。
+- 版本号从 **1.109.0-rc28** 提升为 **1.109.0-rc29**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc28 - 2026-06-27
+
+### Added
+- **短剧视频生成默认使用分镜主图（1.109.0-rc28）** —— 从「短剧」侧栏或 `short_drama_generate_shot_media` 工具提交 `video_generation` 时，如果分镜已有 `selectedArtifactPath`，App 会把该本地图片转为 data URL 并放入 some.im 请求体的 `image` 字段，作为视频参考/首帧图；任务标题会标注“参考主图”。Agent 工具新增 `use_selected_artifact` 和 `reference_image_path` 参数，可关闭默认主图或显式指定另一张参考图。
+- 版本号从 **1.109.0-rc27** 提升为 **1.109.0-rc28**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc27 - 2026-06-27
+
+### Added
+- **短剧分镜支持选择主产物/关键帧（1.109.0-rc27）** —— `AgentShortDramaShot` 新增 `selectedArtifactPath`，旧项目 JSON 缺失时兼容为空；生成或追加产物时会自动选择第一张，用户可在「短剧」侧栏缩略图上点击星标把某张图片设为分镜主图。新增 `short_drama_select_shot_artifact` Agent 工具，聊天或短剧 skill 可在用户从多张候选图中选定后写回主产物。网页分镜板会把主图排在缩略图首位并高亮，同时在 `<short-drama-widget-action>` 中带上 `selected_artifact_path`，方便后续视频生成、连续性检查和重绘流程优先使用选中图。
+- 版本号从 **1.109.0-rc26** 提升为 **1.109.0-rc27**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc26 - 2026-06-27
+
+### Added
+- **短剧 Skill 可主动打开网页分镜板（1.109.0-rc26）** —— 新增 `short_drama_show_storyboard_widget` Agent 工具，可把当前或指定短剧项目生成为沙箱 HTML 分镜板 Widget，排队进入聊天 transcript，并在可定位运行时 AppState 时请求打开右侧「网页组件」面板。这样短剧 skill 在拆集、拆分镜、回填产物或检查连续性后，可以主动把结构化看板展示给用户，不必依赖用户手动点击侧栏按钮。
+- 版本号从 **1.109.0-rc25** 提升为 **1.109.0-rc26**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc25 - 2026-06-27
+
+### Added
+- **图片编辑任务保留短剧分镜锚点（1.109.0-rc25）** —— 「短剧」侧栏和「媒体任务」侧栏把图片送入「图片编辑」时，现在会同步传递 `project_id` / `episode_id` / `shot_id`。从图片编辑面板提交的 Replicate 或 some.im 局部重绘、擦除任务会带着同一短剧锚点进入媒体任务中心；任务完成并下载产物后，可沿现有回填逻辑追加到对应分镜，避免编辑后的图片只停留在任务列表里。
+- 版本号从 **1.109.0-rc24** 提升为 **1.109.0-rc25**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc24 - 2026-06-27
+
+### Added
+- **图片编辑面板支持入口预选重绘/擦除模式（1.109.0-rc24）** —— `AppState` 新增图片编辑首选模式，一次性传递给「图片编辑」面板；短剧 review item 中的重绘项会直接打开局部重绘，擦除项会直接打开擦除模式，媒体任务和短剧产物缩略图的画笔入口默认进入局部重绘，减少从检查项到实际制作动作之间的重复点击。
+- 版本号从 **1.109.0-rc23** 提升为 **1.109.0-rc24**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc23 - 2026-06-27
+
+### Added
+- **短剧检查项可直接执行制作动作（1.109.0-rc23）** —— 「短剧」侧栏的未解决 review items 现在带快捷动作：重绘/擦除项会打开关联图片到「图片编辑」面板做蒙版处理；放大项会读取 Replicate 默认图片放大 workflow version 并创建带短剧锚点的 `image_upscale` 媒体任务；补拍项会重新提交该分镜的 some.im 图片生成任务；连续性、提示词和备注项会把项目、集、分镜、问题说明、建议动作和关联产物路径放入聊天输入框，方便聊天窗口继续协作。
+- 版本号从 **1.109.0-rc22** 提升为 **1.109.0-rc23**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc22 - 2026-06-27
+
+### Added
+- **短剧分镜连续性检查项落库（1.109.0-rc22）** —— `AgentShortDramaShot` 新增 `reviewItems`，用于持久化连续性问题、提示词修复、重绘、擦除、放大、补拍和备注类待处理项；旧短剧项目 JSON 缺少该字段时会兼容解码为空数组。新增 `short_drama_upsert_review_item` Agent 工具，可按 `project_id` / `episode_id` / `shot_id` 把检查结果写回具体分镜，并记录类型、严重度、状态、说明、建议动作和关联产物路径。
+- **短剧侧栏与网页分镜板展示待修复项（1.109.0-rc22）** —— 「短剧」侧栏的分镜行会展示未解决 review items；网页分镜板也会显示待修复标签。“检查连续性”按钮现在明确要求 Agent 调用 `short_drama_upsert_review_item` 写回待重绘、擦除、放大、补拍或提示词修复事项，避免检查结果只停留在聊天文本里。
+- 版本号从 **1.109.0-rc21** 提升为 **1.109.0-rc22**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc21 - 2026-06-27
+
+### Added
+- **短剧分镜一键生成媒体任务工具（1.109.0-rc21）** —— 新增 `short_drama_generate_shot_media` Agent 工具：输入 `project_id`、`episode_id`、`shot_id` 和 `kind`（`image_generation` / `video_generation`），工具会自动读取分镜 prompt/summary/title，选择 Settings → some.im 的默认图片或视频模型，提交媒体任务，并把任务锚定回对应分镜。网页分镜板的“继续生成”按钮现在会优先提示 Agent 调用该工具，减少模型手动拼 `some_im_create_media_task` 参数的出错概率。
+- 版本号从 **1.109.0-rc20** 提升为 **1.109.0-rc21**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc20 - 2026-06-27
+
+### Changed
+- **短剧网页分镜板按钮携带结构化锚点（1.109.0-rc20）** —— 网页分镜板中“优化提示词 / 继续生成 / 检查连续性”按钮通过 `sendPrompt()` 回到聊天时，现在会附带 `<short-drama-widget-action>` 上下文块，包含 `action`、`project_id`、`episode_id`、`shot_id`、分镜标题、状态、摘要、提示词和最多 8 条产物路径。Agent 后续调用 `short_drama_upsert_shot` 或 `some_im_create_media_task` 时可直接复用这些 UUID，把更新或媒体任务稳定挂回对应分镜。
+- 版本号从 **1.109.0-rc19** 提升为 **1.109.0-rc20**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc19 - 2026-06-27
+
+### Added
+- **短剧网页分镜板嵌入右侧组件（1.109.0-rc19）** —— 「短剧」侧栏顶部新增网页分镜板按钮，可把当前短剧项目生成为沙箱 HTML Widget 并打开右侧「网页组件」面板。看板按集展示分镜卡片、状态、摘要和压缩后的本地图片缩略图；每个分镜提供“优化提示词 / 继续生成 / 检查连续性”按钮，通过 Widget 的 `sendPrompt()` 桥回到聊天窗口，让 Agent 后续调用短剧工具或媒体任务继续处理。看板不访问网络、不读取 file URL，图片以小尺寸 data URL 内联，保持 Widget 沙箱边界。
+- 版本号从 **1.109.0-rc18** 提升为 **1.109.0-rc19**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc18 - 2026-06-27
+
+### Added
+- **短剧分镜产物缩略图选择区（1.109.0-rc18）** —— 「短剧」侧栏的分镜行现在会在已有产物时展开横向缩略图区，最多显示最近 6 个产物。图片产物可直接点击预览，也可一键加入聊天附件或送入「图片编辑」面板做蒙版重绘/擦除；视频和其他文件产物可在 Finder 中定位。这样用户在短剧维度就能完成“选哪张关键帧继续加工”的操作，不必回到媒体任务列表里翻找。
+- 版本号从 **1.109.0-rc17** 提升为 **1.109.0-rc18**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc17 - 2026-06-27
+
+### Added
+- **图片编辑面板新增重绘/擦除模式（1.109.0-rc17）** —— 「图片编辑」面板现在可在同一套矩形蒙版工作流中选择“局部重绘”或“擦除”。局部重绘继续走 `image_inpaint` 媒体任务；擦除会登记为 `image_erase` 媒体任务，Replicate 留空 version 时自动使用 Settings → Integrations → Replicate 的“图片擦除” workflow version，提示词可留空并自动补基础背景修复提示。some.im 分支继续按 `image + mask + prompt` 提交到可配置 endpoint，默认 `images/edits`。
+- 版本号从 **1.109.0-rc16** 提升为 **1.109.0-rc17**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc16 - 2026-06-27
+
+### Added
+- **图片编辑面板复用 Replicate 默认蒙版重绘 version（1.109.0-rc16）** —— 「图片编辑」面板提交 Replicate 局部重绘时，version 输入框可留空；App 会自动使用 Settings → Integrations → Replicate 中配置的“蒙版重绘” workflow version。用户仍可在面板里手动填写 version 覆盖默认值，适合临时切换不同 inpaint/erase 模型。
+- 版本号从 **1.109.0-rc15** 提升为 **1.109.0-rc16**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc15 - 2026-06-27
+
+### Added
+- **Replicate 默认 workflow 与图片快捷放大（1.109.0-rc15）** —— Settings → Integrations → Replicate 新增默认 workflow version 配置，先支持图片放大、图片擦除、蒙版重绘三个常用 version 槽位。媒体任务图片缩略图新增 Replicate 放大按钮；配置图片放大 version 后，可直接把任意本地产物图片提交为 Replicate `image_upscale` 媒体任务，任务会携带原短剧 `project_id` / `episode_id` / `shot_id` 锚点并复用自动轮询、产物下载、缩略图展示和分镜回填链路。
+- 版本号从 **1.109.0-rc14** 提升为 **1.109.0-rc15**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc14 - 2026-06-27
+
+### Added
+- **Replicate 设置入口（1.109.0-rc14）** —— Settings → Integrations 新增 Replicate 标签页，可保存或清除 Replicate API Token，Token 写入 Keychain；如果仅通过 `REPLICATE_API_TOKEN` 环境变量配置，设置页会显示环境变量已配置但不会回显密钥。Replicate 图片放大、擦除、蒙版重绘和 Predictions API 工具继续复用同一凭据读取路径，避免用户只能靠环境变量完成配置。
+- 版本号从 **1.109.0-rc13** 提升为 **1.109.0-rc14**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc13 - 2026-06-27
+
+### Added
+- **媒体产物可一键加入聊天附件（1.109.0-rc13）** —— 「媒体任务」侧栏的图片缩略图新增聊天按钮，可把本地产物图片直接加入 Agent composer 的图片附件，并自动填入“请基于这张媒体产物继续处理”的提示语。用户在多张生成图中选定一张后，可立即让聊天窗口继续分析、改写 prompt、发起后续编辑或短剧分镜处理，不再需要手动找文件或拖拽图片。
+- 版本号从 **1.109.0-rc12** 提升为 **1.109.0-rc13**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc12 - 2026-06-27
+
+### Added
+- **短剧单集批量生成队列（1.109.0-rc12）** —— 「短剧」侧栏的集标题行新增批量图片/视频生成按钮，可按分镜顺序把整集分镜逐个提交到 some.im 媒体任务中心。批量提交复用单分镜生成逻辑，任务均携带 `project_id` / `episode_id` / `shot_id`，后续自动轮询、产物下载、缩略图选择和分镜回填仍走统一媒体任务管线；视频批量生成同样要求先配置 some.im 视频模型。
+- 版本号从 **1.109.0-rc11** 提升为 **1.109.0-rc12**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc11 - 2026-06-27
+
+### Added
+- **短剧分镜可直接发起 some.im 图片/视频生成（1.109.0-rc11）** —— 「短剧」侧栏的分镜行新增图片与视频生成按钮：图片走 some.im 默认图片模型与 `images/generations`，视频走已配置的视频模型与 `videos/generations`。提交后会创建带 `project_id` / `episode_id` / `shot_id` 的媒体任务并自动打开「媒体任务」面板；后续轮询下载、缩略图选择、产物回填分镜都沿用现有媒体任务管线。视频生成会在未配置 some.im 视频模型时提示先配置，避免误用图片模型。
+- 版本号从 **1.109.0-rc10** 提升为 **1.109.0-rc11**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc10 - 2026-06-27
+
+### Added
+- **媒体任务产物缩略图选择区（1.109.0-rc10）** —— 「媒体任务」侧栏不再只列出产物路径；每个任务的输出产物会以横向缩略图展示，多张图片可直接并排比较。点击图片缩略图会打开现有图片预览，点击右上角画笔按钮会把该图片送入「图片编辑」面板继续做蒙版/局部重绘；视频和其他文件以文件类型图块展示并可在 Finder 中定位。
+- 版本号从 **1.109.0-rc9** 提升为 **1.109.0-rc10**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc9 - 2026-06-27
+
+### Added
+- **媒体任务产物自动回填短剧分镜（1.109.0-rc9）** —— `AgentMediaTask` 新增 `projectID` 短剧锚点，Replicate / some.im / 通用媒体任务工具均可携带 `project_id`、`episode_id`、`shot_id`。`AgentMediaTaskRegistry` 在任务状态或产物更新时会同步 `AgentShortDramaStore`：进行中分镜标为 `generating`，成功标为 `ready` 并去重追加本地产物路径，失败/取消标为 `needsReview`。短剧侧栏每集下方新增分镜行，展示分镜状态与产物数量，让短剧制作不再只停留在任务列表里。
+- 版本号从 **1.109.0-rc8** 提升为 **1.109.0-rc9**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc8 - 2026-06-27
+
+### Added
+- **媒体任务自动轮询与产物下载（1.109.0-rc8）** —— 新增 `AgentMediaTaskPoller`，App 启动后会按节流间隔自动刷新活跃的 Replicate / some.im 媒体任务：读取远端状态、更新右侧「媒体任务」面板、成功后下载输出产物并挂回任务记录。任务从 active 进入完成/失败/取消仍沿用既有 `<media-task-notification>` 注入机制，让聊天窗口下一轮能继续协作处理结果；Skill/local provider 仍由各自工具显式更新，避免误轮询未知端点。
+- 版本号从 **1.109.0-rc7** 提升为 **1.109.0-rc8**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc7 - 2026-06-27
+
+### Added
+- **图片蒙版编辑可直接提交局部重绘任务（1.109.0-rc7）** —— [AgentImageEditPanel](Xedit/AgentImageEditPanel.swift) 在导出同尺寸 PNG mask 后，可直接选择 Replicate 或 some.im 提交 `image + mask + prompt` 局部重绘任务；Replicate 支持填写模型 version，some.im 支持填写模型和 endpoint suffix。提交成功后会写入统一「媒体任务」中心，立即打开任务面板；若 provider 同步返回产物，会下载到本地并挂到任务产物。
+- 版本号从 **1.109.0-rc6** 提升为 **1.109.0-rc7**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc6 - 2026-06-27
+
+### Added
+- **媒体产物图片选择与矩形蒙版编辑（1.109.0-rc6）** —— 新增 [AgentImageEditPanel](Xedit/AgentImageEditPanel.swift) 和右侧「图片编辑」面板；「媒体任务」里的图片产物现在会显示蒙版编辑按钮，点击后把该本地图片送入侧栏。用户可在图片上拖拽选择区域并导出与原图同尺寸的 PNG mask（黑底白色选区），用于后续 Replicate/some.im inpaint、erase、局部重绘等工作流。面板会显示原图像素尺寸、当前选区像素坐标和导出的 mask 路径。
+- 版本号从 **1.109.0-rc5** 提升为 **1.109.0-rc6**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc5 - 2026-06-26
+
+### Added
+- **Skill/Agent 网页组件侧栏嵌入（1.109.0-rc5）** —— 在现有 `show_widget` / `AgentWidgetCardView`（WKWebView + CSP 沙箱、禁外网/导航/file access）基础上，右侧面板新增「网页组件」入口，显示当前会话最近生成的 HTML/SVG widget；`AgentWidgetRegistry` 记录每个 runtime 的 latest widget，刚生成但尚未沉淀进消息时也能被侧栏读取。`AppStateAgentLoop` 在 drain widget 后会自动打开「网页组件」侧栏，让 Skill 生成的网页既能作为聊天内联卡片，也能在侧边栏常驻协作查看。
+
+### Fixed
+- **清理 Agent 会话审批徽标 Swift actor warning（1.109.0-rc5）** —— `AgentSessionApprovalBadgeLogic.toolCallNeedsUserApproval` 标记为 `nonisolated`，避免纯状态判断在 Swift 默认 MainActor 隔离下产生无意义 warning。
+- 版本号从 **1.109.0-rc4** 提升为 **1.109.0-rc5**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc4 - 2026-06-26
+
+### Added
+- **短剧项目结构管理底座（1.109.0-rc4）** —— 新增 [AgentShortDrama](Xedit/AgentShortDrama.swift)，提供本机持久化的短剧项目模型与 Store，覆盖 project / episode / shot / character / scene / shot status / artifact paths，数据写入 `~/Library/Application Support/WillDeep/short-drama/projects.json`，避免把短剧制作全塞进聊天历史。Agent 右侧面板新增「短剧」入口，可查看项目数、集数、分镜数、人物、场景和每集分镜摘要，并支持点击切换当前项目。
+- **短剧结构 Agent 工具（1.109.0-rc4）** —— 新增 [AgentShortDramaTools](Xedit/AgentShortDramaTools.swift) 和工具面 `short_drama_create_project` / `short_drama_upsert_episode` / `short_drama_upsert_character` / `short_drama_upsert_scene` / `short_drama_upsert_shot` / `short_drama_list_projects`，让短剧 Skill、Ruby 脚本或模型规划结果能结构化写入集、分镜、人物、场景，并把生成产物路径挂到具体分镜上；主 Agent 工具上下文已接入共享 `agentShortDramaStore`。
+- 版本号从 **1.109.0-rc3** 提升为 **1.109.0-rc4**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc3 - 2026-06-26
+
+### Added
+- **some.im 异步媒体任务接入媒体任务中心（1.109.0-rc3）** —— 新增 [SomeIMAsyncMediaIntegration](Xedit/SomeIMAsyncMediaIntegration.swift)，为 some.im-compatible relay 提供宽容型异步媒体任务客户端：提交、轮询、取消均复用 Settings → some.im 的 base URL 与 Keychain API Key，默认图片走 `images/generations`、视频走 `videos/generations`，也允许工具传入 provider-specific endpoint suffix；响应解析兼容 `id/task_id/status/status_url/cancel_url/output/data/url/b64_json` 等常见形态，同步图片返回和异步任务返回都能落到同一媒体任务管线。
+- **some.im Agent 工具与视频模型设置解禁（1.109.0-rc3）** —— Agent 工具面新增 `some_im_create_media_task` / `some_im_poll_media_task` / `some_im_cancel_media_task`，可把 some.im 图片生成、图片编辑、放大、擦除、蒙版重绘与视频生成登记到右侧「媒体任务」面板，成功后下载输出图片/视频到 Downloads 并挂到任务产物。Settings → some.im 的视频模型与优先列表输入恢复可编辑，帮助文案同步更新并补简体中文翻译。
+- 版本号从 **1.109.0-rc2** 提升为 **1.109.0-rc3**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc2 - 2026-06-26
+
+### Added
+- **Replicate 异步预测工具接入媒体任务中心（1.109.0-rc2）** —— 新增 [ReplicateIntegration](Xedit/ReplicateIntegration.swift)，封装 Replicate Predictions API 的提交、轮询、取消与产物下载；凭据优先读取 Keychain，兜底读取 `REPLICATE_API_TOKEN`，不把 token 写入聊天或日志。Agent 工具面新增 `replicate_create_prediction` / `replicate_poll_prediction` / `replicate_cancel_prediction`：图片放大、擦除、蒙版重绘、图片/视频生成等 Replicate 工作流可登记为媒体任务，成功后把输出图片/视频下载到 Downloads 并挂到任务产物，侧边栏与聊天完成通知沿用 rc1 的统一媒体任务管线。
+- 版本号从 **1.109.0-rc1** 提升为 **1.109.0-rc2**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
+## 1.109.0-rc1 - 2026-06-26
+
+### Added
+- **Agent 媒体任务中心（1.109.0-rc1）** —— 为 some.im / Replicate / 短剧 Skill 的异步图片与视频任务先打通宿主侧底座：新增 [AgentMediaTasks](Xedit/AgentMediaTasks.swift) 任务模型与 `AgentMediaTaskRegistry`，统一记录 provider、任务类型、远端 id、轮询/取消 URL、短剧 episode/shot 关联、进度、状态和本地产物；`AppState` 持有并转发 Registry 变化，Agent 右侧面板新增「媒体任务」入口，可查看总数、运行中、失败任务、prompt、产物摘要。
+- **媒体任务聊天协作工具（1.109.0-rc1）** —— Agent 工具面新增 `create_media_task` / `update_media_task` / `list_media_tasks`，让 Skill 或 provider 适配器可以把 some.im/Replicate 异步任务登记进 App、轮询后更新进度并挂载产物；任务从 active 状态变为成功/失败/取消时，Agent loop 会注入 `<media-task-notification>` 系统消息，下一轮模型能直接继续处理产物或失败原因，不用用户手动追问。
+- 版本号从 **1.108.0-rc35** 提升为 **1.109.0-rc1**（媒体任务中心属于新增功能）。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.108.0-rc35 - 2026-06-26
 
 ### Fixed

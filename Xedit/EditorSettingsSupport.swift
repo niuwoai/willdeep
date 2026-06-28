@@ -72,6 +72,7 @@ enum EditorSettingsTab: Hashable {
     case workspace
     case agent
     case someIM
+    case replicate
     case localAgents
     case remoteRuntimes
     case mobileGateway
@@ -97,7 +98,7 @@ extension EditorSettingsTab {
         case .agent, .memory, .rules, .skills, .mcp, .tools: return .ai
         case .localAgents, .remoteRuntimes, .mobileGateway: return .runtimes
         case .terminal: return .terminal
-        case .someIM, .connectors: return .integrations
+        case .someIM, .replicate, .connectors: return .integrations
         case .voice: return .voice
         }
     }
@@ -111,6 +112,7 @@ extension EditorSettingsTab {
         case .workspace: return L10n.Settings.tabWorkspace
         case .agent: return L10n.Settings.tabAgent
         case .someIM: return L10n.Settings.tabSomeIM
+        case .replicate: return L10n.Settings.tabReplicate
         case .localAgents: return L10n.Settings.tabLocalAgents
         case .remoteRuntimes: return L10n.Settings.tabRemoteRuntimes
         case .mobileGateway: return L10n.Settings.tabMobileGateway
@@ -145,7 +147,7 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
         case .editor: return [.typography, .appearance, .workspace]
         case .ai: return [.agent, .memory, .rules, .skills, .mcp, .tools]
         case .runtimes: return [.localAgents, .remoteRuntimes, .mobileGateway]
-        case .integrations: return [.someIM, .connectors]
+        case .integrations: return [.someIM, .replicate, .connectors]
         case .terminal: return [.terminal]
         case .voice: return [.voice]
         }

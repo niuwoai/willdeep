@@ -122,6 +122,26 @@ final class AppState: ObservableObject {
     /// the request, then clears it. Side-panel state itself lives in
     /// AgentModeView's @State.
     @Published var agentSidePanelRequest: AgentSidePanelOpenRequest?
+    /// Optional scope for the media task side panel. Short-drama rows set
+    /// this before opening the panel so the task list can show only the
+    /// project / episode / shot / asset the user clicked.
+    @Published var agentMediaTaskPanelScope: AgentMediaTaskScope?
+    /// Selected local image for the right-side image edit/mask panel.
+    /// Media-task artifact rows set this, then request the image editor
+    /// side panel. The editor can export masks for Replicate/some.im
+    /// inpaint workflows without bloating chat history.
+    @Published var agentImageEditorImageURL: URL?
+    /// Optional seed mask for the image editor. Failed inpaint/erase tasks
+    /// can reopen with the previous mask as an editable base layer.
+    @Published var agentImageEditorMaskURL: URL?
+    /// Optional one-shot mode hint for the image editor. Short-drama
+    /// review items use it so "erase" opens directly in erase mode while
+    /// "redraw" opens in inpaint mode.
+    @Published var agentImageEditorPreferredOperation: AgentImageEditorOperationPreference?
+    /// Optional short-drama anchor for the image editor. When present,
+    /// inpaint/erase tasks created from the editor can flow back into
+    /// the same project episode and shot through the media task registry.
+    @Published var agentImageEditorContext: AgentImageEditorContext?
     /// Command families the user has explicitly allowed Agent mode to run
     /// without prompting again, e.g. `git push`.
     @Published var agentAlwaysAllowedCommands: [AgentAlwaysAllowedCommand] = []
@@ -165,6 +185,18 @@ final class AppState: ObservableObject {
     /// steal each other's jobs or completion notices. See
     /// `AgentBackgroundJobs.swift` for the lifecycle contract.
     let agentJobRegistry = AgentJobRegistry()
+
+    /// Process-wide registry of remote AI media tasks. some.im,
+    /// Replicate, and short-drama skills publish image/video generation
+    /// and editing progress here so the right side panel and future chat
+    /// completion notices have one shared source of truth.
+    let agentMediaTaskRegistry = AgentMediaTaskRegistry()
+    let agentMediaTaskPoller = AgentMediaTaskPoller()
+
+    /// Process-wide short-drama project store. Agent tools and the side
+    /// panel share this so generated episodes, shots, characters, and
+    /// scenes stay visible outside the current chat turn.
+    let agentShortDramaStore = AgentShortDramaStore.shared
 
     /// Composer-delegated Codex / Claude Code background jobs that
     /// have already been written into the visible transcript by the
@@ -286,6 +318,7 @@ final class AppState: ObservableObject {
     /// finishes / streams output. Views that need finer-grained
     /// updates can `@ObservedObject` the registry directly.
     private var jobRegistrySubscription: AnyCancellable?
+    private var mediaTaskRegistrySubscription: AnyCancellable?
     /// Desktop peer for the LAN Mobile Gateway. The Go gateway handles
     /// pairing/device auth; this bridge translates authorized mobile
     /// commands back into normal AppState Agent operations.
@@ -416,6 +449,12 @@ final class AppState: ObservableObject {
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
             }
+        mediaTaskRegistrySubscription = agentMediaTaskRegistry.objectWillChange
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+        agentMediaTaskRegistry.shortDramaStore = agentShortDramaStore
+        agentMediaTaskPoller.start(registry: agentMediaTaskRegistry)
         terminalSessionSubscription = editorTerminalSession.objectWillChange
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
@@ -470,6 +509,10 @@ final class AppState: ObservableObject {
         agentRequestTask?.cancel()
         activeRuntimeSubscription?.cancel()
         jobRegistrySubscription?.cancel()
+        mediaTaskRegistrySubscription?.cancel()
+        Task { @MainActor [poller = agentMediaTaskPoller] in
+            poller.stop()
+        }
         terminalSessionSubscription?.cancel()
         terminalSettingsSyncSubscription?.cancel()
         // rc38 attempted to cancel every background runtime's

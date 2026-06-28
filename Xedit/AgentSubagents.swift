@@ -495,12 +495,7 @@ enum AgentSubagentRunner {
         guard !trimmed.isEmpty else {
             return (false, "structured_output: `data` was empty. Call again with a non-empty JSON string matching the schema.")
         }
-        let value: AgentJSONValue
-        do {
-            value = try AgentJSONValue.decode(from: trimmed)
-        } catch {
-            return (false, "structured_output: `data` is not valid JSON (\(error.localizedDescription)). Wrap your answer in a properly-escaped JSON string and call again.")
-        }
+        let value = AgentJSONValue.decode(from: trimmed)
         let issues = schema.validate(value)
         guard issues.isEmpty else {
             let bulletted = issues.prefix(8).map { "- \($0)" }.joined(separator: "\n")

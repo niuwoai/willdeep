@@ -82,6 +82,30 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var currentGoal: AgentGoal?
     @Published var learningEvents: [AgentLearningEvent] = []
     @Published var latestTurnRecall: AgentTurnRecallSnapshot?
+    /// Last image candidate selected from a widget in this runtime. This is
+    /// runtime-only context: the clicked widget still sends a normal user
+    /// message, while the next turn also receives a compact structured block
+    /// so follow-up tools can use the chosen image without transcript mining.
+    @Published var latestImageChoice: AgentImageChoiceSelection?
+    /// Last Replicate/some.im mask-edit submission for this runtime. Kept
+    /// separate from the registry so the model receives the most recent
+    /// source/mask/task anchors as turn context even before the task finishes.
+    @Published var latestImageEditSubmission: AgentImageEditSubmission?
+    /// Most recent media task completion surfaced to this runtime. This keeps
+    /// async image/video outputs actionable in the same turn that drains the
+    /// completion queue.
+    @Published var latestMediaTaskCompletion: AgentMediaTaskCompletionContext?
+    /// Most recent manual media-task refresh batch from the side panel. The
+    /// next model turn can use this to decide whether to wait, poll again,
+    /// continue from completed artifacts, or recover failed tasks.
+    @Published var latestMediaTaskRefresh: AgentMediaTaskRefreshContext?
+    /// Most recent manifest/package import from Ruby, Skill, or third-party
+    /// API scripts. Keeps pending/completed/failed imported tasks available to
+    /// the next model turn even after the tool output scrolls away.
+    @Published var latestMediaImport: AgentMediaImportContext?
+    /// Last structured tool action emitted by a sandboxed widget. Widgets can
+    /// ask the chat loop to run tools, but never execute them directly.
+    @Published var latestWidgetToolAction: AgentWidgetToolAction?
     @Published var sessionModelOverride: String?
     /// True after the runtime successfully applied at least one patch.
     /// Drives the "正在编辑 / N 个文件已更改" worktree card so empty

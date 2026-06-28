@@ -251,6 +251,705 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "create_media_task",
+            description: "Register a remote AI media task in WillDeep's side-panel task tracker. Use when a skill or provider submits an async some.im/Replicate image/video/short-drama job and the user should see its status. This does not call the provider itself or expose credentials.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "provider", type: .string, description: "Provider: some_im, replicate, skill, local, or unknown.", required: true),
+                AgentToolParameter(name: "kind", type: .string, description: "Kind: image_generation, image_edit, image_upscale, image_erase, image_inpaint, video_generation, short_drama, or unknown.", required: true),
+                AgentToolParameter(name: "title", type: .string, description: "Short user-facing title for the task.", required: true),
+                AgentToolParameter(name: "prompt", type: .string, description: "Optional generation/edit prompt or concise task brief.", required: false),
+                AgentToolParameter(name: "model", type: .string, description: "Optional model or workflow id.", required: false),
+                AgentToolParameter(name: "remote_task_id", type: .string, description: "Optional provider task/prediction id.", required: false),
+                AgentToolParameter(name: "status_url", type: .string, description: "Optional provider polling URL.", required: false),
+                AgentToolParameter(name: "cancel_url", type: .string, description: "Optional provider cancel URL.", required: false),
+                AgentToolParameter(name: "status_endpoint_suffix", type: .string, description: "Optional provider polling endpoint suffix for id-based tasks, e.g. custom/status. Persisted for automatic refresh after restart.", required: false),
+                AgentToolParameter(name: "cancel_endpoint_suffix", type: .string, description: "Optional provider cancel endpoint suffix for id-based tasks. Persisted for automatic cancel/refresh workflows.", required: false),
+                AgentToolParameter(name: "source_image_path", type: .string, description: "Optional local source image path for image edit/upscale tasks. Stored for recovery, retry planning, and chat handoff; do not put secrets here.", required: false),
+                AgentToolParameter(name: "mask_path", type: .string, description: "Optional local mask image path for erase/inpaint tasks. Stored for recovery, retry planning, and chat handoff.", required: false),
+                AgentToolParameter(name: "review_item_id", type: .string, description: "Optional short-drama review/fix item UUID this media task is intended to resolve. Completion handoff can then suggest short_drama_resolve_review_item.", required: false),
+                AgentToolParameter(name: "status", type: .string, description: "Optional initial status: queued, submitted, starting, processing, succeeded, failed, or canceled. Defaults to submitted; defaults to succeeded when artifact_paths are provided.", required: false),
+                AgentToolParameter(name: "artifact_paths", type: .stringArray, description: "Optional local output file paths already produced by a skill, Ruby script, or third-party API. When provided, the task is marked succeeded by default and artifacts are routed to any short-drama anchors.", required: false),
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional short-drama project UUID.", required: false),
+                AgentToolParameter(name: "project_path", type: .string, description: "Optional short-drama project path.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional short-drama episode id.", required: false),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Optional short-drama shot/storyboard id.", required: false),
+                AgentToolParameter(name: "asset_kind", type: .string, description: "Optional short-drama asset kind: character or scene. Completed artifacts append to that asset's reference images.", required: false),
+                AgentToolParameter(name: "asset_id", type: .string, description: "Optional short-drama character/scene UUID to receive completed reference images.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "open_image_editor",
+            description: "Open a local image file in WillDeep's right-side image mask editor so the user can draw a rectangle or brush mask and submit Replicate/some.im inpaint or erase tasks. Optional short-drama shot or asset anchors are preserved on submitted media tasks.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "image_path", type: .string, description: "Local image file path to open. Relative paths resolve from the workspace root when available.", required: true),
+                AgentToolParameter(name: "mask_path", type: .string, description: "Optional existing local PNG mask to load as the editor's base layer. Relative paths resolve from the workspace root when available.", required: false),
+                AgentToolParameter(name: "operation", type: .string, description: "Preferred edit mode: inpaint/redraw or erase. Defaults to inpaint.", required: false),
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional short-drama project UUID for result routing.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional short-drama episode UUID for shot result routing.", required: false),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Optional short-drama shot UUID for result routing.", required: false),
+                AgentToolParameter(name: "asset_kind", type: .string, description: "Optional short-drama asset kind for reference-image routing: character or scene.", required: false),
+                AgentToolParameter(name: "asset_id", type: .string, description: "Optional short-drama character/scene UUID for reference-image routing.", required: false),
+                AgentToolParameter(name: "review_item_id", type: .string, description: "Optional short-drama review/fix item UUID carried into submitted edit tasks.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "edit_image_with_mask",
+            description: "Submit an image edit task directly from a local image_path and mask_path without opening the UI mask editor. Use when a Skill, Ruby script, or widget has already produced a PNG mask and wants Replicate or some.im to inpaint/redraw or erase immediately. Optional short-drama shot or asset anchors are preserved so completed artifacts route back to the storyboard or reference asset.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "image_path", type: .string, description: "Local source image path. Relative paths resolve from the workspace root when available.", required: true),
+                AgentToolParameter(name: "mask_path", type: .string, description: "Local mask image path. White mask areas are edited by the provider. Relative paths resolve from the workspace root when available.", required: true),
+                AgentToolParameter(name: "operation", type: .string, description: "inpaint/redraw or erase. Defaults to inpaint.", required: false),
+                AgentToolParameter(name: "provider", type: .string, description: "replicate or some_im. Defaults to replicate.", required: false),
+                AgentToolParameter(name: "prompt", type: .string, description: "Edit prompt. Required for inpaint; erase uses a default background reconstruction prompt when omitted.", required: false),
+                AgentToolParameter(name: "version", type: .string, description: "Optional Replicate workflow version override. Defaults to Settings -> Integrations -> Replicate inpaint/erase version.", required: false),
+                AgentToolParameter(name: "model", type: .string, description: "Optional some.im model override. Defaults to Settings -> some.im preferred image model.", required: false),
+                AgentToolParameter(name: "endpoint_suffix", type: .string, description: "Optional some.im endpoint suffix. Defaults to images/edits.", required: false),
+                AgentToolParameter(name: "title", type: .string, description: "Optional user-facing task title shown in the media task side panel.", required: false),
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional short-drama project UUID for result routing.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional short-drama episode UUID for shot result routing.", required: false),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Optional short-drama shot UUID for result routing.", required: false),
+                AgentToolParameter(name: "asset_kind", type: .string, description: "Optional short-drama asset kind for reference-image routing: character or scene.", required: false),
+                AgentToolParameter(name: "asset_id", type: .string, description: "Optional short-drama character/scene UUID for reference-image routing.", required: false),
+                AgentToolParameter(name: "review_item_id", type: .string, description: "Optional short-drama review/fix item UUID this edit is intended to resolve.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "upscale_image",
+            description: "Submit a Replicate image upscale task for a local image path and track it in WillDeep's media task side panel. Optional short-drama shot or asset anchors are preserved so completed artifacts route back to the storyboard or reference asset.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "image_path", type: .string, description: "Local image file path to upscale. Relative paths resolve from the workspace root when available.", required: true),
+                AgentToolParameter(name: "version", type: .string, description: "Optional Replicate workflow version override. Defaults to Settings -> Integrations -> Replicate image upscale version.", required: false),
+                AgentToolParameter(name: "prompt", type: .string, description: "Optional note stored on the media task. Defaults to the image filename.", required: false),
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional short-drama project UUID for result routing.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional short-drama episode UUID for shot result routing.", required: false),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Optional short-drama shot UUID for result routing.", required: false),
+                AgentToolParameter(name: "asset_kind", type: .string, description: "Optional short-drama asset kind for reference-image routing: character or scene.", required: false),
+                AgentToolParameter(name: "asset_id", type: .string, description: "Optional short-drama character/scene UUID for reference-image routing.", required: false),
+                AgentToolParameter(name: "review_item_id", type: .string, description: "Optional short-drama review/fix item UUID this upscale is intended to resolve.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "show_image_choice_widget",
+            description: "Show a set of local image paths as an interactive choice widget in chat and the right-side Web Widget panel. Use when a skill, Ruby script, or media workflow produced several candidate images and the user should pick one before continuing.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "image_paths", type: .stringArray, description: "Local image file paths to display. Relative paths resolve from the workspace root when available.", required: true),
+                AgentToolParameter(name: "title", type: .string, description: "Optional widget title. Defaults to 图片候选选择.", required: false),
+                AgentToolParameter(name: "note", type: .string, description: "Optional short note shown under the title.", required: false),
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional short-drama project UUID copied into every choice action for result routing.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional short-drama episode UUID copied into every choice action for shot result routing.", required: false),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Optional short-drama shot UUID copied into every choice action for shot result routing.", required: false),
+                AgentToolParameter(name: "asset_kind", type: .string, description: "Optional short-drama asset kind copied into every choice action: character or scene.", required: false),
+                AgentToolParameter(name: "asset_id", type: .string, description: "Optional short-drama character/scene UUID copied into every choice action for asset reference routing.", required: false),
+                AgentToolParameter(name: "review_item_id", type: .string, description: "Optional short-drama review/fix item UUID copied into every choice action.", required: false),
+                AgentToolParameter(name: "source_label", type: .string, description: "Optional short label for the skill, Ruby script, or media workflow that produced these candidates. Included when the widget is sent back to chat.", required: false),
+                AgentToolParameter(name: "source_path", type: .string, description: "Optional local source file or manifest path for the candidate set.", required: false),
+                AgentToolParameter(name: "package_directory", type: .string, description: "Optional short-drama production package directory associated with the candidates.", required: false),
+                AgentToolParameter(name: "widget_context", type: .string, description: "Optional compact structured context (<=2 KB) that should ride along with candidate widget handoff.", required: false),
+                AgentToolParameter(name: "recommended_tool", type: .string, description: "Optional next tool name the agent should consider after the user chooses a candidate.", required: false),
+                AgentToolParameter(name: "recommended_arguments", type: .string, description: "Optional concise arguments for recommended_tool.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "generate_video_from_image",
+            description: "Submit a some.im image-to-video task from a local image path and track it in WillDeep's media task side panel. Use after the user chooses a keyframe candidate and wants to continue directly into video generation.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "image_path", type: .string, description: "Local image file path to use as the video reference/first frame. Relative paths resolve from the workspace root when available.", required: true),
+                AgentToolParameter(name: "prompt", type: .string, description: "Optional video motion prompt. Defaults to a concise keyframe-to-video instruction.", required: false),
+                AgentToolParameter(name: "model", type: .string, description: "Optional some.im video model override. Defaults to Settings -> some.im preferred video model.", required: false),
+                AgentToolParameter(name: "title", type: .string, description: "Optional user-facing task title shown in the media task side panel.", required: false),
+                AgentToolParameter(name: "endpoint_suffix", type: .string, description: "Optional some.im endpoint suffix. Defaults to videos/generations.", required: false),
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional short-drama project UUID for result routing.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional short-drama episode UUID for shot result routing.", required: false),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Optional short-drama shot UUID for result routing.", required: false),
+                AgentToolParameter(name: "asset_kind", type: .string, description: "Optional short-drama asset kind for reference routing.", required: false),
+                AgentToolParameter(name: "asset_id", type: .string, description: "Optional short-drama character/scene UUID for reference routing.", required: false),
+                AgentToolParameter(name: "review_item_id", type: .string, description: "Optional short-drama review/fix item UUID this video task is intended to resolve.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "import_media_directory",
+            description: "Import local image/video files from a directory into WillDeep's media task tracker as a completed local or skill task. Use after Ruby skills or third-party API scripts download outputs to a folder; supports short-drama project, episode, shot, character, and scene anchors.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "directory_path", type: .string, description: "Local directory containing downloaded image/video outputs.", required: true),
+                AgentToolParameter(name: "recursive", type: .boolean, description: "When true, scan subdirectories too. Defaults to false.", required: false),
+                AgentToolParameter(name: "max_files", type: .integer, description: "Maximum files to import, 1-500. Defaults to 200.", required: false),
+                AgentToolParameter(name: "provider", type: .string, description: "Optional provider label: local, skill, replicate, some_im, or unknown. Defaults to local.", required: false),
+                AgentToolParameter(name: "kind", type: .string, description: "Optional media kind such as image_generation, image_edit, image_upscale, image_erase, image_inpaint, video_generation, short_drama, or unknown. Inferred from file types when omitted.", required: false),
+                AgentToolParameter(name: "title", type: .string, description: "Optional user-facing task title shown in the media task side panel.", required: false),
+                AgentToolParameter(name: "prompt", type: .string, description: "Optional generation/edit prompt or source script brief.", required: false),
+                AgentToolParameter(name: "model", type: .string, description: "Optional model, workflow, or script name.", required: false),
+                AgentToolParameter(name: "remote_task_id", type: .string, description: "Optional upstream provider task id for traceability.", required: false),
+                AgentToolParameter(name: "status_url", type: .string, description: "Optional upstream provider polling URL for traceability.", required: false),
+                AgentToolParameter(name: "cancel_url", type: .string, description: "Optional upstream provider cancel URL for traceability.", required: false),
+                AgentToolParameter(name: "status_endpoint_suffix", type: .string, description: "Optional upstream provider polling endpoint suffix for id-based tasks, persisted for automatic refresh after restart.", required: false),
+                AgentToolParameter(name: "cancel_endpoint_suffix", type: .string, description: "Optional upstream provider cancel endpoint suffix for id-based tasks, persisted for automatic cancel workflows.", required: false),
+                AgentToolParameter(name: "source_image_path", type: .string, description: "Optional local source image path for imported image edit/upscale outputs.", required: false),
+                AgentToolParameter(name: "mask_path", type: .string, description: "Optional local mask image path for imported erase/inpaint outputs.", required: false),
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional short-drama project UUID to receive completed artifacts.", required: false),
+                AgentToolParameter(name: "project_path", type: .string, description: "Optional short-drama project path.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional short-drama episode UUID to receive completed artifacts.", required: false),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Optional short-drama shot UUID to receive completed artifacts.", required: false),
+                AgentToolParameter(name: "asset_kind", type: .string, description: "Optional short-drama asset kind: character or scene. Completed artifacts append to that asset's reference images.", required: false),
+                AgentToolParameter(name: "asset_id", type: .string, description: "Optional short-drama character/scene UUID to receive completed reference images.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "import_media_manifest",
+            description: "Import a JSON manifest produced by Ruby skills or third-party API scripts. Each manifest item points to a local image/video file and may carry short-drama project, episode, shot, character, or scene anchors; WillDeep groups matching anchors into completed media tasks and routes artifacts back to the side panel and short-drama store. When import_pending_tasks is true, missing files that already include remote_task_id or status_url are registered as active media tasks so the side panel can track external async jobs before outputs land.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "manifest_path", type: .string, description: "Local JSON manifest path. Supported top-level arrays: items or artifacts. Each item should include file_path or path. Required unless package_directory is provided.", required: false),
+                AgentToolParameter(name: "package_directory", type: .string, description: "Optional short-drama production package directory. When manifest_path is omitted, WillDeep imports media-import-manifest-template.json from this directory.", required: false),
+                AgentToolParameter(name: "base_directory", type: .string, description: "Optional base directory for relative file_path/path entries. Defaults to manifest base_directory, then the manifest folder.", required: false),
+                AgentToolParameter(name: "max_items", type: .integer, description: "Maximum manifest items to import, 1-1000. Defaults to 500.", required: false),
+                AgentToolParameter(name: "skip_missing", type: .boolean, description: "When true, missing files are skipped and reported instead of failing the whole import. Defaults to true so production-package templates can be imported incrementally.", required: false),
+                AgentToolParameter(name: "import_pending_tasks", type: .boolean, description: "When true, missing manifest files that include remote_task_id or status_url create active media tasks instead of being skipped. Defaults to false to avoid registering untouched template placeholders.", required: false),
+                AgentToolParameter(name: "dry_run", type: .boolean, description: "When true, validate and group the manifest without creating media tasks or writing back to short-drama projects. Defaults to false.", required: false),
+                AgentToolParameter(name: "provider", type: .string, description: "Optional provider override for all items: local, skill, replicate, some_im, or unknown. Defaults to item/provider, manifest/provider, then skill.", required: false),
+                AgentToolParameter(name: "kind", type: .string, description: "Optional media kind override for all items, e.g. image_generation, image_edit, image_upscale, image_erase, image_inpaint, video_generation, short_drama, or unknown.", required: false),
+                AgentToolParameter(name: "prompt", type: .string, description: "Optional prompt override when an item and manifest omit prompt.", required: false),
+                AgentToolParameter(name: "model", type: .string, description: "Optional model/script override when an item and manifest omit model.", required: false),
+                AgentToolParameter(name: "remote_task_id", type: .string, description: "Optional upstream provider task id fallback.", required: false),
+                AgentToolParameter(name: "status_url", type: .string, description: "Optional upstream provider polling URL fallback.", required: false),
+                AgentToolParameter(name: "cancel_url", type: .string, description: "Optional upstream provider cancel URL fallback.", required: false),
+                AgentToolParameter(name: "status_endpoint_suffix", type: .string, description: "Optional upstream provider polling endpoint suffix fallback for id-based tasks. Manifest item value overrides this.", required: false),
+                AgentToolParameter(name: "cancel_endpoint_suffix", type: .string, description: "Optional upstream provider cancel endpoint suffix fallback for id-based tasks. Manifest item value overrides this.", required: false),
+                AgentToolParameter(name: "source_image_path", type: .string, description: "Optional local source image path fallback for image edit/upscale items. Manifest item value overrides this.", required: false),
+                AgentToolParameter(name: "mask_path", type: .string, description: "Optional local mask image path fallback for erase/inpaint items. Manifest item value overrides this.", required: false),
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional fallback short-drama project UUID.", required: false),
+                AgentToolParameter(name: "project_path", type: .string, description: "Optional fallback short-drama project path.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional fallback short-drama episode UUID.", required: false),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Optional fallback short-drama shot UUID.", required: false),
+                AgentToolParameter(name: "asset_kind", type: .string, description: "Optional fallback short-drama asset kind: character or scene.", required: false),
+                AgentToolParameter(name: "asset_id", type: .string, description: "Optional fallback short-drama character/scene UUID.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "update_media_task",
+            description: "Update an existing remote AI media task's status, progress, provider ids, and output artifact paths. Use after polling some.im/Replicate or after a short-drama skill writes generated assets.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "task_id", type: .string, description: "Task handle from create_media_task/list_media_tasks, e.g. media_ab12cd.", required: true),
+                AgentToolParameter(name: "status", type: .string, description: "Optional status: queued, submitted, starting, processing, succeeded, failed, or canceled.", required: false),
+                AgentToolParameter(name: "progress", type: .string, description: "Optional 0..1 progress value, e.g. 0.65.", required: false),
+                AgentToolParameter(name: "status_message", type: .string, description: "Optional user-facing status/error message.", required: false),
+                AgentToolParameter(name: "remote_task_id", type: .string, description: "Optional provider task/prediction id.", required: false),
+                AgentToolParameter(name: "status_url", type: .string, description: "Optional provider polling URL.", required: false),
+                AgentToolParameter(name: "cancel_url", type: .string, description: "Optional provider cancel URL.", required: false),
+                AgentToolParameter(name: "status_endpoint_suffix", type: .string, description: "Optional provider polling endpoint suffix for id-based tasks. Persisted for automatic refresh after restart.", required: false),
+                AgentToolParameter(name: "cancel_endpoint_suffix", type: .string, description: "Optional provider cancel endpoint suffix for id-based tasks.", required: false),
+                AgentToolParameter(name: "source_image_path", type: .string, description: "Optional local source image path for image edit/upscale tasks.", required: false),
+                AgentToolParameter(name: "mask_path", type: .string, description: "Optional local mask image path for erase/inpaint tasks.", required: false),
+                AgentToolParameter(name: "review_item_id", type: .string, description: "Optional short-drama review/fix item UUID this task is intended to resolve.", required: false),
+                AgentToolParameter(name: "artifact_paths", type: .stringArray, description: "Optional local output file paths produced by the task.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "list_media_tasks",
+            description: "List WillDeep remote AI media tasks for the current session, including some.im/Replicate/skill image and video jobs. Read-only.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "only_active", type: .boolean, description: "When true, only return tasks still running or queued. Defaults to false.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "replicate_create_prediction",
+            description: "Submit a Replicate async prediction for image/video editing workflows such as upscaling, erasing, inpainting, or generation. Registers the prediction in WillDeep's media task side panel and stores output artifacts locally when the prediction has already completed. Requires REPLICATE_API_TOKEN or a Replicate token saved in Keychain.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "version", type: .string, description: "Replicate model version hash required by the Predictions API.", required: true),
+                AgentToolParameter(name: "input_json", type: .string, description: "JSON object string for the model input, e.g. {\"image\":\"https://...\",\"prompt\":\"...\"}.", required: true),
+                AgentToolParameter(name: "kind", type: .string, description: "Optional media kind: image_upscale, image_erase, image_inpaint, image_edit, image_generation, video_generation, or unknown. Defaults to image_edit.", required: false),
+                AgentToolParameter(name: "title", type: .string, description: "Optional user-facing task title shown in the media task side panel.", required: false),
+                AgentToolParameter(name: "model", type: .string, description: "Optional display model/workflow name. Defaults to version.", required: false),
+                AgentToolParameter(name: "webhook", type: .string, description: "Optional HTTPS webhook URL for Replicate callbacks.", required: false),
+                AgentToolParameter(name: "source_image_path", type: .string, description: "Optional local source image path for image edit/upscale predictions. Stored on the media task for recovery and chat handoff.", required: false),
+                AgentToolParameter(name: "mask_path", type: .string, description: "Optional local mask image path for erase/inpaint predictions. Stored on the media task for recovery and chat handoff.", required: false),
+                AgentToolParameter(name: "review_item_id", type: .string, description: "Optional short-drama review/fix item UUID this prediction is intended to resolve.", required: false),
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional short-drama project UUID to receive completed artifacts.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional short-drama episode UUID to receive completed artifacts.", required: false),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Optional short-drama shot UUID to receive completed artifacts.", required: false),
+                AgentToolParameter(name: "asset_kind", type: .string, description: "Optional short-drama asset kind: character or scene. Completed artifacts append to that asset's reference images.", required: false),
+                AgentToolParameter(name: "asset_id", type: .string, description: "Optional short-drama character/scene UUID to receive completed reference images.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "replicate_poll_prediction",
+            description: "Poll a Replicate prediction by media task handle or prediction id. Updates the media task status and downloads output images/videos to Downloads when the prediction succeeds.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "task_id", type: .string, description: "Optional media task handle, e.g. media_ab12cd. Preferred when the prediction was created in this session.", required: false),
+                AgentToolParameter(name: "prediction_id", type: .string, description: "Optional Replicate prediction id or full get URL when task_id is not available.", required: false),
+                AgentToolParameter(name: "title", type: .string, description: "Optional output title used for downloaded artifacts when polling by prediction_id only.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "replicate_cancel_prediction",
+            description: "Cancel a running Replicate prediction by media task handle or prediction id, then update the media task tracker.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "task_id", type: .string, description: "Optional media task handle, e.g. media_ab12cd. Preferred when the prediction was created in this session.", required: false),
+                AgentToolParameter(name: "prediction_id", type: .string, description: "Optional Replicate prediction id or full cancel/get URL when task_id is not available.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "some_im_create_media_task",
+            description: "Submit a some.im async media task and register it in WillDeep's media task side panel. Use for some.im image generation/editing/upscale/erase/inpaint/video workflows when the provider exposes an async or synchronous media endpoint. Defaults to images/generations for images and videos/generations for video; pass endpoint_suffix for custom some.im routes.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "kind", type: .string, description: "Optional media kind: image_generation, image_edit, image_upscale, image_erase, image_inpaint, video_generation, short_drama, or unknown. Defaults to image_generation.", required: false),
+                AgentToolParameter(name: "prompt", type: .string, description: "Prompt or edit instruction. Required unless input_json is provided.", required: false),
+                AgentToolParameter(name: "input_json", type: .string, description: "Optional full JSON object string for the some.im endpoint. If omitted, the tool builds {model,prompt,size,response_format}.", required: false),
+                AgentToolParameter(name: "model", type: .string, description: "Optional some.im media model override. Defaults to Settings -> some.im preferred image/video model.", required: false),
+                AgentToolParameter(name: "size", type: .string, description: "Optional image size such as 1024x1024 when not using input_json.", required: false),
+                AgentToolParameter(name: "reference_image_path", type: .string, description: "Optional local image path to send as the `image` input, useful for image-to-video or image edit workflows. Relative paths resolve from the workspace root when available.", required: false),
+                AgentToolParameter(name: "source_image_path", type: .string, description: "Alias for reference_image_path; persisted on the media task for recovery and chat handoff.", required: false),
+                AgentToolParameter(name: "review_item_id", type: .string, description: "Optional short-drama review/fix item UUID this media task is intended to resolve.", required: false),
+                AgentToolParameter(name: "title", type: .string, description: "Optional user-facing task title shown in the media task side panel.", required: false),
+                AgentToolParameter(name: "endpoint_suffix", type: .string, description: "Optional endpoint suffix under the configured some.im base URL, e.g. images/generations, videos/generations, or provider-specific async route.", required: false),
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional short-drama project UUID to receive completed artifacts.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional short-drama episode UUID to receive completed artifacts.", required: false),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Optional short-drama shot UUID to receive completed artifacts.", required: false),
+                AgentToolParameter(name: "asset_kind", type: .string, description: "Optional short-drama asset kind: character or scene. Completed artifacts append to that asset's reference images.", required: false),
+                AgentToolParameter(name: "asset_id", type: .string, description: "Optional short-drama character/scene UUID to receive completed reference images.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "some_im_poll_media_task",
+            description: "Poll a some.im media task by WillDeep media task handle or remote task id/status URL. Updates the media task status and downloads output images/videos to Downloads when the task succeeds. When task_id is used, any persisted status_endpoint_suffix is reused automatically.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "task_id", type: .string, description: "Optional WillDeep media task handle, e.g. media_ab12cd. Preferred when the task was created in this session.", required: false),
+                AgentToolParameter(name: "remote_task_id", type: .string, description: "Optional some.im task id or full status URL when task_id is not available.", required: false),
+                AgentToolParameter(name: "status_endpoint_suffix", type: .string, description: "Optional polling endpoint suffix when remote_task_id is an id rather than a full URL. Overrides the persisted suffix for this refresh.", required: false),
+                AgentToolParameter(name: "title", type: .string, description: "Optional output title used for downloaded artifacts when polling by remote_task_id only.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "some_im_cancel_media_task",
+            description: "Cancel a running some.im media task by WillDeep media task handle or remote task id/cancel URL, then update the media task tracker. When task_id is used, any persisted cancel_endpoint_suffix or status_endpoint_suffix is reused automatically.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "task_id", type: .string, description: "Optional WillDeep media task handle, e.g. media_ab12cd. Preferred when the task was created in this session.", required: false),
+                AgentToolParameter(name: "remote_task_id", type: .string, description: "Optional some.im task id or full cancel URL when task_id is not available.", required: false),
+                AgentToolParameter(name: "cancel_endpoint_suffix", type: .string, description: "Optional cancel endpoint suffix when remote_task_id is an id rather than a full URL. Overrides the persisted suffix for this cancel request.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_create_project",
+            description: "Create a short-drama project in WillDeep's side-panel manager. Use before planning episodes, shots, characters, scenes, or attaching generated media.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "title", type: .string, description: "Project title.", required: true),
+                AgentToolParameter(name: "logline", type: .string, description: "Optional one-sentence premise or production brief.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_import_plan",
+            description: "Import a complete short-drama plan JSON produced by a skill or Ruby script into WillDeep's side-panel manager. Accepts WillDeep production-package.json, a direct AgentShortDramaProject JSON, or a skill-friendly snake_case plan with project_id/title/logline/characters/scenes/episodes/shots.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "json", type: .string, description: "Inline short-drama plan JSON. Use this or file_path.", required: false),
+                AgentToolParameter(name: "file_path", type: .string, description: "Local path to a JSON plan or exported production-package.json. Use this or json.", required: false),
+                AgentToolParameter(name: "dry_run", type: .boolean, description: "When true, parse and summarize the plan without creating or updating any short-drama project. Defaults to false.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_export_plan_template",
+            description: "Export a skill-friendly short-drama planning JSON template that can be filled by a skill or Ruby script, then imported with short_drama_import_plan or the Short Drama side-panel import button.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "output_path", type: .string, description: "Optional local output path. Defaults to WillDeep Application Support short-drama templates.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_upsert_episode",
+            description: "Create or update one episode in a short-drama project. Omit project_id to use the active project.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional episode UUID to update; omit to create.", required: false),
+                AgentToolParameter(name: "title", type: .string, description: "Episode title.", required: true),
+                AgentToolParameter(name: "summary", type: .string, description: "Optional episode synopsis.", required: false),
+                AgentToolParameter(name: "order", type: .integer, description: "Optional 1-based episode order.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_upsert_character",
+            description: "Create or update a reusable character profile for a short-drama project. Omit project_id to use the active project.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "character_id", type: .string, description: "Optional character UUID to update; omit to create.", required: false),
+                AgentToolParameter(name: "name", type: .string, description: "Character name.", required: true),
+                AgentToolParameter(name: "description", type: .string, description: "Optional story/personality description.", required: false),
+                AgentToolParameter(name: "visual_prompt", type: .string, description: "Optional visual consistency prompt for image/video generation.", required: false),
+                AgentToolParameter(name: "reference_image_paths", type: .stringArray, description: "Optional local reference image paths.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_upsert_scene",
+            description: "Create or update a reusable scene/location profile for a short-drama project. Omit project_id to use the active project.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "scene_id", type: .string, description: "Optional scene UUID to update; omit to create.", required: false),
+                AgentToolParameter(name: "name", type: .string, description: "Scene or location name.", required: true),
+                AgentToolParameter(name: "description", type: .string, description: "Optional scene description.", required: false),
+                AgentToolParameter(name: "visual_prompt", type: .string, description: "Optional environment/style prompt for image/video generation.", required: false),
+                AgentToolParameter(name: "reference_image_paths", type: .stringArray, description: "Optional local reference image paths.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_attach_asset_reference_image",
+            description: "Append one or more local images to an existing short-drama character or scene asset's referenceImagePaths without rewriting the full asset profile. Use when the user chooses a candidate image as a character/scene reference.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "asset_kind", type: .string, description: "character or scene.", required: true),
+                AgentToolParameter(name: "asset_id", type: .string, description: "Character or scene UUID to receive the reference image.", required: true),
+                AgentToolParameter(name: "image_path", type: .string, description: "Optional local image path to append. Use this or image_paths.", required: false),
+                AgentToolParameter(name: "image_paths", type: .stringArray, description: "Optional local image paths to append. Use this or image_path.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_upsert_shot",
+            description: "Create or update one storyboard shot under an episode, including prompt, status, character/scene links, and generated artifact paths. Omit project_id to use the active project.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Episode UUID that owns the shot.", required: true),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Optional shot UUID to update; omit to create.", required: false),
+                AgentToolParameter(name: "title", type: .string, description: "Shot title.", required: true),
+                AgentToolParameter(name: "summary", type: .string, description: "Optional narrative beat or action summary.", required: false),
+                AgentToolParameter(name: "prompt", type: .string, description: "Optional generation prompt for image/video tools.", required: false),
+                AgentToolParameter(name: "status", type: .string, description: "Optional status: planned, scripting, generating, ready, needs_review.", required: false),
+                AgentToolParameter(name: "order", type: .integer, description: "Optional 1-based shot order.", required: false),
+                AgentToolParameter(name: "scene_id", type: .string, description: "Optional linked scene UUID.", required: false),
+                AgentToolParameter(name: "character_ids", type: .stringArray, description: "Optional linked character UUIDs.", required: false),
+                AgentToolParameter(name: "artifact_paths", type: .stringArray, description: "Optional local generated image/video paths for this shot.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_duplicate_shot",
+            description: "Duplicate an existing short-drama shot inside the same episode, preserving scene and character anchors while allowing title, summary, prompt, and order overrides. Use this for reaction shots, close-ups, alternate angles, or reshoot variants. Generated artifacts and review items are not copied unless explicitly requested.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Episode UUID that owns the source shot.", required: true),
+                AgentToolParameter(name: "source_shot_id", type: .string, description: "Source shot UUID to duplicate. shot_id is also accepted as an alias.", required: true),
+                AgentToolParameter(name: "title", type: .string, description: "Optional title for the duplicated shot. Defaults to '<source title> 副本'.", required: false),
+                AgentToolParameter(name: "summary", type: .string, description: "Optional summary override. Defaults to the source summary.", required: false),
+                AgentToolParameter(name: "prompt", type: .string, description: "Optional prompt override. Defaults to the source prompt.", required: false),
+                AgentToolParameter(name: "order", type: .integer, description: "Optional 1-based order for the duplicated shot. Defaults to immediately after the source shot.", required: false),
+                AgentToolParameter(name: "copy_artifacts", type: .boolean, description: "When true, copy artifact paths and selected artifact. Defaults to false so the new shot starts clean.", required: false),
+                AgentToolParameter(name: "copy_review_items", type: .boolean, description: "When true, copy review items as new open items with fresh ids. Defaults to false.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_move_shot",
+            description: "Move an existing short-drama shot to another episode while preserving its id, prompt, artifacts, review items, and media task continuity. Use when a skill or editor split a shot into the wrong episode. Linked media tasks for the same project/shot are retargeted to the new episode.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Shot UUID to move.", required: true),
+                AgentToolParameter(name: "target_episode_id", type: .string, description: "Destination episode UUID.", required: true),
+                AgentToolParameter(name: "source_episode_id", type: .string, description: "Optional current/source episode UUID. episode_id is also accepted as an alias.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Alias for source_episode_id when moving from a known episode.", required: false),
+                AgentToolParameter(name: "order", type: .integer, description: "Optional 1-based order in the target episode. Defaults to the end.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_delete_structure_item",
+            description: "Delete one short-drama structure item from the side-panel manager: episode, shot, character, or scene. Use dry_run first when a skill imported the wrong structure. Deleting a character or scene unlinks it from shots; deleting an episode removes its shots. Linked media tasks are reported but not deleted.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "item_type", type: .string, description: "episode, shot, character, or scene.", required: true),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Episode UUID. Required when item_type is episode; optional context when deleting a shot.", required: false),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Shot UUID. Required when item_type is shot.", required: false),
+                AgentToolParameter(name: "asset_id", type: .string, description: "Character or scene UUID. Required when item_type is character or scene.", required: false),
+                AgentToolParameter(name: "character_id", type: .string, description: "Alias for asset_id when deleting a character.", required: false),
+                AgentToolParameter(name: "scene_id", type: .string, description: "Alias for asset_id when deleting a scene.", required: false),
+                AgentToolParameter(name: "dry_run", type: .boolean, description: "When true, preview affected shots and linked media task handles without writing changes. Defaults to false.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_reorder_structure_items",
+            description: "Reorder short-drama episodes in a project or shots inside one episode by passing the desired ordered_ids. Missing existing items are kept after the requested ids and all orders are normalized to 1..N. Use dry_run first when a skill or chat plan wants to reorganize the storyboard.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "item_type", type: .string, description: "episode or shot.", required: true),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Episode UUID. Required when item_type is shot.", required: false),
+                AgentToolParameter(name: "ordered_ids", type: .stringArray, description: "UUIDs in the desired leading order. Existing items omitted here remain after these ids in their current order.", required: true),
+                AgentToolParameter(name: "dry_run", type: .boolean, description: "When true, preview current and new order without writing changes. Defaults to false.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_generate_shot_media",
+            description: "Submit a some.im image or video generation task for an existing short-drama shot and automatically anchor the media task to project_id, episode_id, and shot_id so completed artifacts return to that storyboard shot. For video generation, the selected shot artifact is sent as a reference/first-frame image by default when available.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Episode UUID that owns the shot.", required: true),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Shot UUID to generate media for.", required: true),
+                AgentToolParameter(name: "kind", type: .string, description: "image_generation or video_generation. Defaults to image_generation.", required: false),
+                AgentToolParameter(name: "prompt_override", type: .string, description: "Optional prompt override. Defaults to the shot prompt, then summary, then title.", required: false),
+                AgentToolParameter(name: "model", type: .string, description: "Optional some.im model override. Defaults to Settings -> some.im preferred image/video model.", required: false),
+                AgentToolParameter(name: "size", type: .string, description: "Optional image size such as 1024x1024 for image generation.", required: false),
+                AgentToolParameter(name: "use_selected_artifact", type: .boolean, description: "For video generation, whether to use the shot's selected artifact as reference/first-frame image. Defaults to true.", required: false),
+                AgentToolParameter(name: "reference_image_path", type: .string, description: "Optional local image path to send as reference/first-frame image for video generation. Overrides selected_artifact_path.", required: false),
+                AgentToolParameter(name: "review_item_id", type: .string, description: "Optional short-drama review/fix item UUID this image or video generation task is intended to resolve.", required: false),
+                AgentToolParameter(name: "endpoint_suffix", type: .string, description: "Optional some.im endpoint suffix. Defaults to images/generations or videos/generations.", required: false),
+                AgentToolParameter(name: "dry_run", type: .boolean, description: "When true, validate the shot, prompt, model, endpoint, and optional video reference image without submitting a provider job. Defaults to false.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_generate_batch_media",
+            description: "Submit some.im image or video generation tasks for every shot in a short-drama project or episode, in episode/shot order. This is the stable batch path behind storyboard buttons such as full-project images/videos and episode images/videos; completed artifacts still route back through media tasks to each shot.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional episode UUID. When omitted, all episodes in the project are generated.", required: false),
+                AgentToolParameter(name: "shot_ids", type: .stringArray, description: "Optional explicit shot UUIDs. When provided, only those shots are considered inside the project or episode scope.", required: false),
+                AgentToolParameter(name: "kind", type: .string, description: "image_generation or video_generation. Defaults to image_generation.", required: false),
+                AgentToolParameter(name: "model", type: .string, description: "Optional some.im model override. Defaults to Settings -> some.im preferred image/video model.", required: false),
+                AgentToolParameter(name: "size", type: .string, description: "Optional image size such as 1024x1024 for image generation.", required: false),
+                AgentToolParameter(name: "use_selected_artifact", type: .boolean, description: "For video generation, whether each shot's selected artifact should be used as reference/first-frame image. Defaults to true.", required: false),
+                AgentToolParameter(name: "endpoint_suffix", type: .string, description: "Optional some.im endpoint suffix. Defaults to images/generations or videos/generations.", required: false),
+                AgentToolParameter(name: "target_filter", type: .string, description: "Optional target filter: all or missing. When missing, image_generation only targets shots without a selected main image, and video_generation only targets shots without a video artifact. Defaults to all.", required: false),
+                AgentToolParameter(name: "dry_run", type: .boolean, description: "When true, only list the shots that would be submitted. Defaults to false.", required: false),
+                AgentToolParameter(name: "max_shots", type: .integer, description: "Safety cap for how many shots to submit in one batch. Defaults to 200; maximum 200.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_generate_asset_media",
+            description: "Submit a some.im image generation task for an existing short-drama character or scene asset, then automatically append completed artifacts to that asset's referenceImagePaths. Use this to generate character portraits, costume references, scene plates, or location mood boards before storyboard generation.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "asset_kind", type: .string, description: "character or scene.", required: true),
+                AgentToolParameter(name: "asset_id", type: .string, description: "Character or scene UUID to generate reference media for.", required: true),
+                AgentToolParameter(name: "prompt_override", type: .string, description: "Optional prompt override. Defaults to the asset visual prompt, then description, plus project logline.", required: false),
+                AgentToolParameter(name: "model", type: .string, description: "Optional some.im image model override. Defaults to Settings -> some.im preferred image model.", required: false),
+                AgentToolParameter(name: "size", type: .string, description: "Optional image size such as 1024x1024. Defaults to 1024x1024.", required: false),
+                AgentToolParameter(name: "endpoint_suffix", type: .string, description: "Optional some.im endpoint suffix. Defaults to images/generations.", required: false),
+                AgentToolParameter(name: "dry_run", type: .boolean, description: "When true, validate the character/scene asset and show the prompt/model/endpoint without submitting a provider job. Defaults to false.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_upsert_review_item",
+            description: "Create or update one actionable review/fix item on a short-drama storyboard shot, such as continuity issues, prompt fixes, redraw/erase/upscale/reshoot tasks, or production notes. Use after continuity checks so findings are attached to the exact shot instead of only written in chat.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Episode UUID that owns the shot.", required: true),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Shot UUID to attach the review item to.", required: true),
+                AgentToolParameter(name: "item_id", type: .string, description: "Optional review item UUID to update; omit to create.", required: false),
+                AgentToolParameter(name: "kind", type: .string, description: "continuity, prompt, redraw, erase, upscale, reshoot, or note. Defaults to note.", required: false),
+                AgentToolParameter(name: "severity", type: .string, description: "low, medium, or high. Defaults to medium.", required: false),
+                AgentToolParameter(name: "status", type: .string, description: "open, doing, or resolved. Defaults to open.", required: false),
+                AgentToolParameter(name: "title", type: .string, description: "Short actionable title, e.g. '衣服颜色和上一镜不一致'.", required: true),
+                AgentToolParameter(name: "detail", type: .string, description: "Optional evidence or explanation.", required: false),
+                AgentToolParameter(name: "suggested_action", type: .string, description: "Optional concrete next action, e.g. redraw selected area, erase logo, upscale chosen keyframe, reshoot with prompt X.", required: false),
+                AgentToolParameter(name: "artifact_paths", type: .stringArray, description: "Optional local artifacts this item refers to.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_import_review_csv",
+            description: "Import a CSV review sheet back into short-drama shot reviewItems. Use after a skill, Ruby script, spreadsheet, or editor reviews production-shot-list.csv, fills production-review-template.csv, or writes status back to production-review-queue.csv. Rows can add or update actionable columns such as review_item_id, review_title/title/issue, detail/notes, kind, severity, status/review_status, suggested_action, and artifact_paths.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "file_path", type: .string, description: "Optional local CSV file path. Can point to a filled production-review-template.csv, production-review-queue.csv, or another compatible review CSV. Use this or csv.", required: false),
+                AgentToolParameter(name: "csv_path", type: .string, description: "Optional alias for file_path.", required: false),
+                AgentToolParameter(name: "package_directory", type: .string, description: "Optional short-drama production package directory. When file_path/csv_path/csv is omitted, WillDeep imports production-review-template.csv from this directory; pass file_path when importing the package's production-review-queue.csv after an external repair script updates review_status.", required: false),
+                AgentToolParameter(name: "csv", type: .string, description: "Optional inline CSV text. Must include shot_id and a review_title/title/issue column for rows that should create review items; include review_item_id and status/review_status to update or close existing reviewItems.", required: false),
+                AgentToolParameter(name: "kind", type: .string, description: "Default review kind when a row omits kind: continuity, prompt, redraw, erase, upscale, reshoot, or note. Defaults to note.", required: false),
+                AgentToolParameter(name: "severity", type: .string, description: "Default severity when a row omits severity: low, medium, or high. Defaults to medium.", required: false),
+                AgentToolParameter(name: "status", type: .string, description: "Default status when a row omits status: open, doing, or resolved. Defaults to open.", required: false),
+                AgentToolParameter(name: "dry_run", type: .boolean, description: "When true, parse and validate the CSV without writing reviewItems. Defaults to false.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_resolve_review_item",
+            description: "Mark an existing short-drama review/fix item as resolved after the issue has been handled. Use this instead of rewriting the whole item when closing a continuity, redraw, erase, upscale, reshoot, prompt, or note task.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Episode UUID that owns the shot.", required: true),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Shot UUID that owns the review item.", required: true),
+                AgentToolParameter(name: "item_id", type: .string, description: "Review item UUID to mark as resolved. review_item_id is also accepted as an alias.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_update_shot_statuses",
+            description: "Batch update short-drama shot statuses for a project, one episode, or explicit shot_ids. Use dry_run before broad changes, for example after importing a plan, before generation, after review, or when marking generated shots ready/needs_review.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional episode UUID. When omitted, all project episodes are eligible.", required: false),
+                AgentToolParameter(name: "shot_ids", type: .stringArray, description: "Optional explicit shot UUIDs. When omitted, every shot in the project/episode scope is updated.", required: false),
+                AgentToolParameter(name: "status", type: .string, description: "New status: planned, scripting, generating, ready, or needs_review.", required: true),
+                AgentToolParameter(name: "dry_run", type: .boolean, description: "When true, preview matching shots without writing changes. Defaults to false.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_update_shot_links",
+            description: "Batch assign or adjust short-drama shot scene and character links for a project, one episode, or explicit shot_ids. Use dry_run before broad continuity edits, then apply to keep episode shots aligned with selected scenes and recurring characters.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional episode UUID. When omitted, all project episodes are eligible.", required: false),
+                AgentToolParameter(name: "shot_ids", type: .stringArray, description: "Optional explicit shot UUIDs. When omitted, every shot in the project/episode scope is updated.", required: false),
+                AgentToolParameter(name: "scene_id", type: .string, description: "Optional scene UUID to assign to matched shots. Must refer to an existing scene in the project.", required: false),
+                AgentToolParameter(name: "clear_scene", type: .boolean, description: "When true, clear the scene link for matched shots. Do not combine with scene_id.", required: false),
+                AgentToolParameter(name: "character_ids", type: .stringArray, description: "Optional character UUIDs to replace or append on matched shots. Every UUID must refer to an existing project character.", required: false),
+                AgentToolParameter(name: "append_character_ids", type: .boolean, description: "When true, append character_ids without duplicating existing character links. Defaults to false, which replaces the shot character list.", required: false),
+                AgentToolParameter(name: "remove_character_ids", type: .stringArray, description: "Optional character UUIDs to remove from matched shots after replacement or append logic.", required: false),
+                AgentToolParameter(name: "dry_run", type: .boolean, description: "When true, preview matching shots and requested link changes without writing changes. Defaults to false.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_select_shot_artifact",
+            description: "Select one local generated artifact as the primary/keyframe artifact for an existing short-drama shot. Use when the user chooses one image from several candidates, or before generating video from the preferred keyframe.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Episode UUID that owns the shot.", required: true),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Shot UUID whose primary artifact should be selected.", required: true),
+                AgentToolParameter(name: "artifact_path", type: .string, description: "Local artifact path to mark as the selected keyframe/main output for this shot.", required: true),
+                AgentToolParameter(name: "review_item_id", type: .string, description: "Optional short-drama review/fix item UUID carried through the selection result so the agent can keep follow-up media tasks and resolution on the same check item.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_list_projects",
+            description: "List short-drama projects and their episode/shot/character/scene counts. Read-only.",
+            risk: .read,
+            parameters: []
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_show_storyboard_widget",
+            description: "Generate and queue the current short-drama project or a single episode as a sandboxed HTML storyboard widget, so it appears in the chat transcript and right-side Widget panel. Omit project_id to use the active project.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional episode UUID. When provided, the storyboard widget only includes that episode.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_show_image_choice_widget",
+            description: "Generate and queue a sandboxed HTML image-choice widget for one short-drama shot. Use after a shot has multiple generated image candidates so the user can visually choose the primary/keyframe artifact from chat or the Widget panel; the widget asks the agent to call short_drama_select_shot_artifact with the selected path.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Episode UUID that owns the shot.", required: true),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Shot UUID whose image candidates should be shown.", required: true),
+                AgentToolParameter(name: "review_item_id", type: .string, description: "Optional short-drama review/fix item UUID copied into the image-choice handoff so follow-up media tasks stay on the same check item.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_open_media_tasks",
+            description: "Open the media task side panel scoped to a short-drama project, episode, shot, character, scene, or review item so the user can inspect async some.im / Replicate / skill task status for that storyboard, asset, or fix item.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional episode UUID. Required for scope=episode or scope=shot.", required: false),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Optional shot UUID. Required for scope=shot.", required: false),
+                AgentToolParameter(name: "asset_kind", type: .string, description: "Optional asset kind for scope=asset: character or scene.", required: false),
+                AgentToolParameter(name: "asset_id", type: .string, description: "Optional character or scene UUID for scope=asset.", required: false),
+                AgentToolParameter(name: "review_item_id", type: .string, description: "Optional review item UUID for scope=review_item.", required: false),
+                AgentToolParameter(name: "scope", type: .string, description: "project, episode, shot, asset, character, scene, review_item, or review. Defaults to review_item when review_item_id is present, asset when asset_id is present, shot when shot_id is present, episode when episode_id is present, otherwise project.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_refresh_media_tasks",
+            description: "Immediately refresh active Replicate and some.im media tasks scoped to a short-drama project, episode, shot, character, scene, or review item, then open the media task side panel to that same scope.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional episode UUID. Required for scope=episode or scope=shot.", required: false),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Optional shot UUID. Required for scope=shot.", required: false),
+                AgentToolParameter(name: "asset_kind", type: .string, description: "Optional asset kind for scope=asset: character or scene.", required: false),
+                AgentToolParameter(name: "asset_id", type: .string, description: "Optional character or scene UUID for scope=asset.", required: false),
+                AgentToolParameter(name: "review_item_id", type: .string, description: "Optional review item UUID for scope=review_item.", required: false),
+                AgentToolParameter(name: "scope", type: .string, description: "project, episode, shot, asset, character, scene, review_item, or review. Defaults to review_item when review_item_id is present, asset when asset_id is present, shot when shot_id is present, episode when episode_id is present, otherwise project.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_retry_media_task",
+            description: "Retry a failed or canceled some.im short-drama media task from its stored project/episode/shot or character/scene anchor, preserving the original kind, prompt, model, and endpoint suffix where available. Use for failed storyboard image/video generations or failed character/scene reference image tasks.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "task_id", type: .string, description: "Media task handle from the side panel or list_media_tasks, e.g. media_ab12cd.", required: true),
+                AgentToolParameter(name: "allow_succeeded", type: .boolean, description: "When true, allow submitting another variation even if the original task succeeded. Defaults to false.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_retry_failed_media_tasks",
+            description: "Retry all retryable failed or canceled some.im short-drama media tasks within a project, episode, shot, character, or scene asset scope. Supports dry_run to preview which tasks would be submitted before spending provider calls.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional episode UUID. Required for scope=episode or scope=shot.", required: false),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Optional shot UUID. Required for scope=shot.", required: false),
+                AgentToolParameter(name: "asset_kind", type: .string, description: "Optional asset kind for scope=asset: character or scene.", required: false),
+                AgentToolParameter(name: "asset_id", type: .string, description: "Optional character or scene UUID for scope=asset.", required: false),
+                AgentToolParameter(name: "review_item_id", type: .string, description: "Optional review item UUID for scope=review_item.", required: false),
+                AgentToolParameter(name: "scope", type: .string, description: "project, episode, shot, asset, character, scene, review_item, or review. Defaults to review_item when review_item_id is present, asset when asset_id is present, shot when shot_id is present, episode when episode_id is present, otherwise project.", required: false),
+                AgentToolParameter(name: "dry_run", type: .boolean, description: "When true, only list retryable failed tasks without submitting new provider jobs. Defaults to false.", required: false),
+                AgentToolParameter(name: "max_tasks", type: .integer, description: "Safety cap for retry submissions in one call. Defaults to 20; maximum 50.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_open_image_editor",
+            description: "Open a short-drama shot's selected image artifact in the right-side image mask editor, anchored to the same project, episode, and shot. Use when the user wants to redraw/inpaint or erase part of a storyboard keyframe from chat or a storyboard widget.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Episode UUID that owns the shot.", required: true),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Shot UUID whose image should be edited.", required: true),
+                AgentToolParameter(name: "operation", type: .string, description: "inpaint/redraw or erase. Defaults to inpaint.", required: false),
+                AgentToolParameter(name: "artifact_path", type: .string, description: "Optional local image artifact path. Defaults to the shot's selected artifact, then first image artifact.", required: false),
+                AgentToolParameter(name: "image_path", type: .string, description: "Optional backward-compatible alias for artifact_path. Prefer artifact_path in new handoffs.", required: false),
+                AgentToolParameter(name: "mask_path", type: .string, description: "Optional existing local PNG mask to reopen as the editor's base layer.", required: false),
+                AgentToolParameter(name: "review_item_id", type: .string, description: "Optional short-drama review/fix item UUID this edit is intended to resolve.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_upscale_shot_artifact",
+            description: "Submit a Replicate image upscale task for a short-drama shot's selected image artifact, anchored to the same project, episode, and shot so completed artifacts return to the storyboard.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Episode UUID that owns the shot.", required: true),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Shot UUID whose image should be upscaled.", required: true),
+                AgentToolParameter(name: "artifact_path", type: .string, description: "Optional local image artifact path. Defaults to the shot's selected artifact, then first image artifact.", required: false),
+                AgentToolParameter(name: "image_path", type: .string, description: "Optional backward-compatible alias for artifact_path. Prefer artifact_path in new handoffs.", required: false),
+                AgentToolParameter(name: "version", type: .string, description: "Optional Replicate workflow version override. Defaults to Settings -> Integrations -> Replicate image upscale version.", required: false),
+                AgentToolParameter(name: "prompt", type: .string, description: "Optional task note/prompt stored on the media task.", required: false),
+                AgentToolParameter(name: "review_item_id", type: .string, description: "Optional short-drama review/fix item UUID this upscale is intended to resolve.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "short_drama_export_production_package",
+            description: "Export the current short-drama project, or one episode, as a local production package with production-package.json and production-package.md. Use before handing a storyboard to skills, external scripts, or review workflows that need stable file paths for shots, selected artifacts, assets, and open review items.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional project UUID. Defaults to the active short-drama project.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional episode UUID. Omit to export the full project.", required: false),
+                AgentToolParameter(name: "include_resolved_review_items", type: .boolean, description: "Whether to include resolved review items. Defaults to false so the package focuses on remaining production work.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "generate_image",
             description: "Generate an image through the configured some.im relay. Use this for image creation requests when Settings -> some.im is configured; it defaults to the user's image model preference, normally gpt-image-2. Returns a local file path in Downloads.",
             risk: .write,
@@ -436,11 +1135,24 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "show_widget",
-            description: "Render an interactive HTML/SVG visualization inline in the transcript. Use for dashboards, calculators with sliders/inputs, comparison tables that benefit from a live UI, charts, mockups, or any time a static markdown table or image would lose interactivity. The HTML runs in a strict WKWebView sandbox: NO network requests (connect-src 'none'), NO navigation, NO file access, NO popups. You must inline all styles and scripts — external <script src=...> or <link href=...> are blocked by CSP. CSS variables `--bg`, `--fg`, `--secondary`, `--accent` are pre-set to match the host theme; use `var(--fg)` etc. for colors so light/dark looks right. Returns immediately with a short ack; the rendered card appears in the transcript next turn.",
+            description: "Render an interactive HTML/SVG visualization inline in the transcript and the right-side Widget panel. Use for dashboards, calculators with sliders/inputs, comparison tables that benefit from a live UI, charts, mockups, short-drama storyboards, or HTML pages generated by a skill/Ruby script. Pass either `html` for inline markup or `html_path` for a UTF-8 .html/.htm/.svg file inside the current workspace or WillDeep's short-drama export package directory. The HTML runs in a strict WKWebView sandbox: NO network requests (connect-src 'none'), NO navigation, NO file access, NO popups. You must inline all styles and scripts — external <script src=...> or <link href=...> are blocked by CSP. CSS variables `--bg`, `--fg`, `--secondary`, `--accent` are pre-set to match the host theme; use `var(--fg)` etc. for colors so light/dark looks right. Widget JavaScript may call `sendPrompt(text)` for natural-language chat handoff or `sendToolAction({tool, arguments, note, action_key})` for structured tool handoff; widgets never execute tools directly. Returns immediately with a short ack; the rendered card appears in the transcript next turn.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "title", type: .string, description: "Short title shown on the widget card (1-5 words). Also used as the file name when the user exports the widget.", required: true),
-                AgentToolParameter(name: "html", type: .string, description: "The full HTML/SVG to render. Inline <style> and <script> are allowed; external `src`/`href` are blocked. Keep under ~200 KB for snappy load.", required: true)
+                AgentToolParameter(name: "html", type: .string, description: "Optional full HTML/SVG to render. Inline <style> and <script> are allowed; external `src`/`href` are blocked. Keep under ~200 KB for snappy load. Required when html_path is omitted.", required: false),
+                AgentToolParameter(name: "html_path", type: .string, description: "Optional workspace-relative path, workspace-contained absolute path, or WillDeep short-drama export package path to a UTF-8 .html/.htm/.svg file generated by a skill or script. Required when html is omitted.", required: false),
+                AgentToolParameter(name: "source_label", type: .string, description: "Optional short label for the skill, Ruby script, or workflow that generated the widget. Included when the widget is sent back to chat.", required: false),
+                AgentToolParameter(name: "source_path", type: .string, description: "Optional local source file path for the generated widget or manifest. Included in widget follow-up context.", required: false),
+                AgentToolParameter(name: "package_directory", type: .string, description: "Optional short-drama production package directory associated with this widget.", required: false),
+                AgentToolParameter(name: "widget_context", type: .string, description: "Optional compact structured context (<=2 KB) that should ride along with sendPrompt() and side-panel chat handoff.", required: false),
+                AgentToolParameter(name: "recommended_tool", type: .string, description: "Optional next tool name the agent should consider when the user interacts with the widget.", required: false),
+                AgentToolParameter(name: "recommended_arguments", type: .string, description: "Optional comma-separated or natural-language arguments for recommended_tool. Keep concise.", required: false),
+                AgentToolParameter(name: "project_id", type: .string, description: "Optional short-drama project UUID anchor for this widget.", required: false),
+                AgentToolParameter(name: "episode_id", type: .string, description: "Optional short-drama episode UUID anchor for this widget.", required: false),
+                AgentToolParameter(name: "shot_id", type: .string, description: "Optional short-drama shot UUID anchor for this widget.", required: false),
+                AgentToolParameter(name: "asset_kind", type: .string, description: "Optional short-drama asset kind anchor, such as character or scene.", required: false),
+                AgentToolParameter(name: "asset_id", type: .string, description: "Optional short-drama character or scene UUID anchor for this widget.", required: false),
+                AgentToolParameter(name: "review_item_id", type: .string, description: "Optional short-drama review/fix item UUID anchor for this widget.", required: false)
             ]
         )
     ]

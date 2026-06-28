@@ -27,7 +27,7 @@ enum AgentSessionApprovalBadgeLogic {
         return (planStatus ?? session.currentPlan?.status) == .proposed
     }
 
-    private static func toolCallNeedsUserApproval(_ status: AgentToolCallStatus) -> Bool {
+    nonisolated private static func toolCallNeedsUserApproval(_ status: AgentToolCallStatus) -> Bool {
         switch status {
         case .pendingApproval, .awaitingConfirm, .awaitingUserAnswer:
             return true

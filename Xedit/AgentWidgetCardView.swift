@@ -14,8 +14,9 @@
 //      `.cancel`。
 //   3. **scheme 黑名单**：file:// / ws:// / wss:// 一律拒。
 //   4. **JS 通信**：1.84.0-rc2 通过 `WKScriptMessageHandler` 加了双向
-//      桥，但仅暴露**两个**函数：`window.sendPrompt(text)` 给 widget
-//      反向触发 chat；自动高度 `height` 事件由注入脚本静默上报。
+//      桥，但仅暴露 `window.sendPrompt(text)` 和
+//      `window.sendToolAction(action)` 给 widget 反向触发 chat；自动高度
+//      `height` 事件由注入脚本静默上报。
 //      Widget 拿不到 read 任何 Swift 状态，只能 push 这两类消息。
 //   5. **主题 CSS 变量注入**：跟随 SwiftUI 当前 colorScheme 注入
 //      `--bg --fg --accent --secondary`。
@@ -42,6 +43,9 @@ struct AgentWidgetCardView: View {
             header
             if expanded {
                 AgentWidgetWebView(
+                    widgetID: widget.id,
+                    widgetTitle: widget.title,
+                    widgetContext: widget.contextBlock,
                     html: composedHTML,
                     appState: appState,
                     onHeightChange: { reported in
@@ -104,7 +108,7 @@ struct AgentWidgetCardView: View {
             Text(byteLabel)
                 .font(.system(size: 10).monospacedDigit())
                 .foregroundStyle(.secondary)
-            Text("· Sandbox: no network, no navigation · sendPrompt() available")
+            Text("· Sandbox: no network, no navigation · sendPrompt()/sendToolAction() available")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
             Spacer(minLength: 4)
@@ -151,6 +155,12 @@ struct AgentWidgetCardView: View {
           window.sendPrompt = function(text) {
             if (typeof text !== 'string' || text.length === 0) { return; }
             try { handler.postMessage({type: 'sendPrompt', text: text}); } catch (e) {}
+          };
+          window.sendToolAction = function(action, args, note) {
+            var payload = (action && typeof action === 'object')
+              ? action
+              : {tool: action, arguments: args, note: note};
+            try { handler.postMessage({type: 'sendToolAction', action: payload}); } catch (e) {}
           };
           var lastReportedHeight = 0;
           function reportHeight() {
@@ -210,6 +220,9 @@ struct AgentWidgetCardView: View {
 // MARK: - WKWebView bridge
 
 private struct AgentWidgetWebView: NSViewRepresentable {
+    let widgetID: UUID
+    let widgetTitle: String
+    let widgetContext: String
     let html: String
     let appState: AppState
     let onHeightChange: (CGFloat) -> Void
@@ -235,13 +248,16 @@ private struct AgentWidgetWebView: NSViewRepresentable {
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
+        context.coordinator.widgetID = widgetID
+        context.coordinator.widgetTitle = widgetTitle
+        context.coordinator.widgetContext = widgetContext
         context.coordinator.appState = appState
         context.coordinator.onHeightChange = onHeightChange
         webView.loadHTMLString(html, baseURL: nil)
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(appState: appState, onHeightChange: onHeightChange)
+        Coordinator(widgetID: widgetID, widgetTitle: widgetTitle, widgetContext: widgetContext, appState: appState, onHeightChange: onHeightChange)
     }
 
     static func dismantleNSView(_ nsView: WKWebView, coordinator: Coordinator) {
@@ -251,10 +267,16 @@ private struct AgentWidgetWebView: NSViewRepresentable {
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+        var widgetID: UUID
+        var widgetTitle: String
+        var widgetContext: String
         weak var appState: AppState?
         var onHeightChange: (CGFloat) -> Void
 
-        init(appState: AppState, onHeightChange: @escaping (CGFloat) -> Void) {
+        init(widgetID: UUID, widgetTitle: String, widgetContext: String, appState: AppState, onHeightChange: @escaping (CGFloat) -> Void) {
+            self.widgetID = widgetID
+            self.widgetTitle = widgetTitle
+            self.widgetContext = widgetContext
             self.appState = appState
             self.onHeightChange = onHeightChange
         }
@@ -300,7 +322,26 @@ private struct AgentWidgetWebView: NSViewRepresentable {
                 guard !trimmed.isEmpty, trimmed.count <= 4096 else { return }
                 Task { @MainActor [weak appState] in
                     guard let appState else { return }
-                    appState.agentInput = trimmed
+                    appState.recordAgentImageChoiceFromWidget(
+                        widgetID: self.widgetID,
+                        widgetTitle: self.widgetTitle,
+                        prompt: trimmed
+                    )
+                    appState.agentInput = self.promptWithWidgetContext(trimmed)
+                    appState.sendAgentMessage()
+                }
+            case "sendToolAction":
+                guard let action = widgetToolAction(from: body) else { return }
+                Task { @MainActor [weak appState] in
+                    guard let appState else { return }
+                    appState.recordAgentWidgetToolAction(action)
+                    appState.recordAgentImageChoiceFromWidget(
+                        widgetID: self.widgetID,
+                        widgetTitle: self.widgetTitle,
+                        prompt: action.userPromptBlock
+                    )
+                    appState.previewAgentWidgetToolActionLocally(action)
+                    appState.agentInput = action.userPromptBlock
                     appState.sendAgentMessage()
                 }
             case "height":
@@ -318,6 +359,67 @@ private struct AgentWidgetWebView: NSViewRepresentable {
                 // widget trying to abuse the channel.
                 break
             }
+        }
+
+        private func promptWithWidgetContext(_ prompt: String) -> String {
+            """
+            <widget-action>
+            action: widget_send_prompt
+            widget_id: \(widgetID.uuidString)
+            widget_title: \(widgetTitle)
+            source: sendPrompt
+            \(widgetContext)
+            </widget-action>
+
+            \(prompt)
+            """
+        }
+
+        private func widgetToolAction(from body: [String: Any]) -> AgentWidgetToolAction? {
+            let payload = body["action"] as? [String: Any] ?? body
+            guard let tool = cleanWidgetActionString(payload["tool"] as? String),
+                  tool.count <= 96 else {
+                return nil
+            }
+            let arguments = widgetActionArguments(from: payload["arguments"] ?? payload["args"])
+            let note = cleanWidgetActionString(payload["note"] as? String)
+            let actionKey = cleanWidgetActionString(
+                payload["action_key"] as? String
+                    ?? payload["key"] as? String
+                    ?? payload["action"] as? String
+            )
+            guard (arguments?.count ?? 0) <= 4096,
+                  (note?.count ?? 0) <= 1024,
+                  (actionKey?.count ?? 0) <= 128 else {
+                return nil
+            }
+            return AgentWidgetToolAction(
+                widgetID: widgetID,
+                widgetTitle: widgetTitle,
+                actionKey: actionKey,
+                tool: tool,
+                arguments: arguments,
+                note: note,
+                widgetContext: widgetContext
+            )
+        }
+
+        private func widgetActionArguments(from value: Any?) -> String? {
+            if let stringValue = cleanWidgetActionString(value as? String) {
+                return stringValue
+            }
+            guard let value,
+                  JSONSerialization.isValidJSONObject(value),
+                  let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]),
+                  let json = String(data: data, encoding: .utf8) else {
+                return nil
+            }
+            return cleanWidgetActionString(json)
+        }
+
+        private func cleanWidgetActionString(_ value: String?) -> String? {
+            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? nil : trimmed
         }
     }
 }

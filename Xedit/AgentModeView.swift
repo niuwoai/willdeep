@@ -134,6 +134,9 @@ struct AgentModeView: View {
         .onCompatibleChange(of: appState.agentSidePanelRequest) { _, request in
             guard let request else { return }
             if let url = request.file { sidePanelFile = url }
+            if request.kind == .mediaTasks {
+                appState.agentMediaTaskPanelScope = request.mediaTaskScope
+            }
             sidePanel = request.kind
             // Consume:让下一次同样的请求(同 kind 同 file)也能再触
             // 发,且不会在 sheet dismiss / 视图重绘时被重放。

@@ -320,6 +320,8 @@ extension AppState {
             runtimeDescriptor: remoteRuntimeDescriptor,
             runtimeID: runtime.id,
             jobRegistry: agentJobRegistry,
+            mediaTaskRegistry: agentMediaTaskRegistry,
+            shortDramaStore: agentShortDramaStore,
             sandboxMode: sandboxModeForToolExecution(
                 risk: risk,
                 approvalSource: approvalSource,

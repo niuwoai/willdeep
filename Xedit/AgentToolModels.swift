@@ -73,6 +73,14 @@ struct AgentToolContext {
     /// when nil, `run_command` with `run_in_background: true` falls
     /// back to the foreground path so behavior is still defined.
     let jobRegistry: AgentJobRegistry?
+    /// Shared remote media task registry. some.im / Replicate / skill
+    /// orchestration tools use it to publish async image/video progress
+    /// into the side panel and chat completion-notice pipeline.
+    let mediaTaskRegistry: AgentMediaTaskRegistry?
+    /// Shared short-drama structure store. Script/storyboard skills use
+    /// it to organize projects, episodes, shots, characters, scenes, and
+    /// generated media artifact paths outside the transient chat log.
+    let shortDramaStore: AgentShortDramaStore?
     /// Effective sandbox mode chosen by the AppState approval gateway.
     /// Read-only tools and auto-approved commands get a scrubbed local
     /// environment; user-approved write/network/credential commands run
@@ -96,6 +104,8 @@ struct AgentToolContext {
         runtimeDescriptor: RuntimeDescriptor? = nil,
         runtimeID: UUID? = nil,
         jobRegistry: AgentJobRegistry? = nil,
+        mediaTaskRegistry: AgentMediaTaskRegistry? = nil,
+        shortDramaStore: AgentShortDramaStore? = nil,
         sandboxMode: AgentSandboxMode = .readOnly,
         patchProposalSink: (@MainActor (String?, String, Bool) async throws -> AgentPatchProposal)? = nil,
         patchAutoApplySource: AgentToolApprovalSource? = nil,
@@ -106,6 +116,8 @@ struct AgentToolContext {
         self.runtimeDescriptor = runtimeDescriptor
         self.runtimeID = runtimeID
         self.jobRegistry = jobRegistry
+        self.mediaTaskRegistry = mediaTaskRegistry
+        self.shortDramaStore = shortDramaStore
         self.sandboxMode = sandboxMode
         self.patchProposalSink = patchProposalSink
         self.patchAutoApplySource = patchAutoApplySource

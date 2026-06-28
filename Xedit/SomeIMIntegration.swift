@@ -469,10 +469,8 @@ struct SomeIMIntegrationSettingsView: View {
                     candidates: videoModels,
                     fallbackModels: settings.preferredVideoModels
                 )
-                .disabled(true)
                 TextField(L10n.Settings.SomeIM.priorityPlaceholder, text: priorityVideoModelsBinding)
                     .textFieldStyle(.roundedBorder)
-                    .disabled(true)
                 Text(L10n.Settings.SomeIM.videoHelp)
                     .font(.caption)
                     .foregroundStyle(.secondary)

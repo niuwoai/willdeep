@@ -146,6 +146,7 @@ struct EditorSettingsView: View {
         case .workspace: workspaceSettings
         case .agent: agentSettings
         case .someIM: SomeIMIntegrationSettingsView()
+        case .replicate: ReplicateIntegrationSettingsView()
         case .localAgents: localAgentSettings
         case .remoteRuntimes: AgentRuntimeSettingsView()
         case .mobileGateway: MobileGatewaySettingsView()

@@ -96,7 +96,7 @@ struct AgentChatHeader: View {
                     // 再点同一项就关闭——和 Claude Code 那个菜单一致。
                     sidePanel = (sidePanel == item) ? nil : item
                 } label: {
-                    Label(item.title, systemImage: item.systemImage)
+                    Label(sidePanelTitle(for: item), systemImage: item.systemImage)
                 }
             }
             if sidePanel != nil {
@@ -108,8 +108,22 @@ struct AgentChatHeader: View {
                 }
             }
         } label: {
-            Image(systemName: "sidebar.right")
-                .foregroundStyle(.secondary)
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "sidebar.right")
+                    .foregroundStyle(.secondary)
+                if let badge = mediaTaskMenuBadge {
+                    Text(badge.text)
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .padding(.horizontal, 3)
+                        .frame(minWidth: 12, minHeight: 12)
+                        .background(Capsule().fill(badge.color))
+                        .offset(x: 7, y: -7)
+                        .accessibilityLabel(badge.accessibilityLabel)
+                }
+            }
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -127,6 +141,69 @@ struct AgentChatHeader: View {
             default: return true
             }
         }
+    }
+
+    private var visibleMediaTasks: [AgentMediaTask] {
+        appState.agentMediaTaskRegistry.tasks(forRuntime: appState.activeRuntime?.id)
+    }
+
+    private var mediaTaskCounts: (active: Int, failed: Int) {
+        let tasks = visibleMediaTasks
+        return (
+            active: tasks.filter(\.isActive).count,
+            failed: tasks.filter(\.needsAttention).count
+        )
+    }
+
+    private var staleMediaTaskCount: Int {
+        visibleMediaTasks.filter { $0.isStaleActive() }.count
+    }
+
+    private var mediaTaskMenuBadge: (text: String, color: Color, accessibilityLabel: String)? {
+        let counts = mediaTaskCounts
+        if counts.failed > 0 {
+            return (
+                text: clippedBadgeCount(counts.failed),
+                color: .red,
+                accessibilityLabel: "\(counts.failed) 个媒体任务需要处理"
+            )
+        }
+        let stale = staleMediaTaskCount
+        if stale > 0 {
+            return (
+                text: clippedBadgeCount(stale),
+                color: .orange,
+                accessibilityLabel: "\(stale) 个媒体任务长时间未更新"
+            )
+        }
+        if counts.active > 0 {
+            return (
+                text: clippedBadgeCount(counts.active),
+                color: .accentColor,
+                accessibilityLabel: "\(counts.active) 个媒体任务运行中"
+            )
+        }
+        return nil
+    }
+
+    private func sidePanelTitle(for kind: AgentSidePanelKind) -> String {
+        guard kind == .mediaTasks else { return kind.title }
+        let counts = mediaTaskCounts
+        if counts.failed > 0 {
+            return "\(kind.title) · \(counts.failed) 需处理"
+        }
+        let stale = staleMediaTaskCount
+        if stale > 0 {
+            return "\(kind.title) · \(stale) 卡住"
+        }
+        if counts.active > 0 {
+            return "\(kind.title) · \(counts.active) 运行中"
+        }
+        return kind.title
+    }
+
+    private func clippedBadgeCount(_ count: Int) -> String {
+        count > 99 ? "99+" : "\(count)"
     }
 
     private var title: String {

@@ -11,6 +11,12 @@
 #   - xcodebuild.log        原始日志
 #   - complexity_report.*   复杂度守门报告
 #   - version_report.*      版本一致性报告
+#   - short_drama_media_report.* 短剧媒体制作包/manifest/Ruby 模板契约报告
+#   - widget_side_panel_report.* 网页组件侧栏/聊天接力契约报告
+#   - image_edit_report.* 图片蒙版编辑/聊天接力契约报告
+#   - media_task_refresh_report.* 媒体任务刷新/聊天接力契约报告
+#   - media_import_context_report.* manifest 导回/聊天接力契约报告
+#   - production_gap_actions_report.* 短剧制作缺口动作/聊天接力契约报告
 #   - report.md             markdown 报告（CI 摘要 & 本地 quick look）
 #   - report.json           机读格式（自动化下游用）
 # =============================================================================
@@ -30,6 +36,12 @@ rm -rf "${XCRESULT}"
 
 ruby "${ROOT_DIR}/scripts/complexity_guard.rb" "${OUT_DIR}/complexity_report.md" "${OUT_DIR}/complexity_report.json"
 ruby "${ROOT_DIR}/scripts/version_consistency.rb" "${OUT_DIR}/version_report.md" "${OUT_DIR}/version_report.json"
+ruby "${ROOT_DIR}/scripts/short_drama_media_contract_test.rb" "${OUT_DIR}/short_drama_media_report.md" "${OUT_DIR}/short_drama_media_report.json"
+ruby "${ROOT_DIR}/scripts/widget_side_panel_contract_test.rb" "${OUT_DIR}/widget_side_panel_report.md" "${OUT_DIR}/widget_side_panel_report.json"
+ruby "${ROOT_DIR}/scripts/image_edit_contract_test.rb" "${OUT_DIR}/image_edit_report.md" "${OUT_DIR}/image_edit_report.json"
+ruby "${ROOT_DIR}/scripts/media_task_refresh_contract_test.rb" "${OUT_DIR}/media_task_refresh_report.md" "${OUT_DIR}/media_task_refresh_report.json"
+ruby "${ROOT_DIR}/scripts/media_import_context_contract_test.rb" "${OUT_DIR}/media_import_context_report.md" "${OUT_DIR}/media_import_context_report.json"
+ruby "${ROOT_DIR}/scripts/production_gap_actions_contract_test.rb" "${OUT_DIR}/production_gap_actions_report.md" "${OUT_DIR}/production_gap_actions_report.json"
 
 EXTRA_ARGS=("$@")
 if [ ${#EXTRA_ARGS[@]} -eq 0 ]; then
