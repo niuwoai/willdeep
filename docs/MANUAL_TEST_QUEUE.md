@@ -310,6 +310,31 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   增加，且 `handoff_readiness.overall` 显示 `manual_failed`；测完要还原模板。
 - ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
   底部“验收记录”指向 `1.109.0-rc455 — 短剧 provider smoke 证据守门`。
+- ✅ 该版本的 provider smoke 证据守门已被 rc456 的 standalone smoke 证据自检报告覆盖；当前入口以最新短剧 smoke 小节为准。
+
+## 1.109.0-rc456 — 短剧 smoke 证据自检报告
+
+- ✅ 运行 `ruby scripts/short_drama_mvp_tryout_package.rb ...` →
+  样例包的 checklist、Widget 和 tryout package report 都包含
+  `short_drama_mvp_smoke_evidence_report.rb` 命令。
+- ✅ 运行 `ruby scripts/short_drama_mvp_smoke_evidence_report.rb ...` →
+  生成 `short_drama_mvp_smoke_evidence_report.md/json`，默认模板下
+  `readiness.overall` 为 `manual_pending`，且脚本不调用 some.im / Replicate。
+- ✅ 打开 `build/ci/short_drama_mvp_smoke_evidence_report.json` →
+  报告同时包含 `manual_results_summary`、`provider_api_smoke_summary`
+  和 `readiness`。
+- ✅ 将试用包 `manual-smoke-results-template.json` 中某一步临时标为
+  `pass` 且不填 `evidence` 后重跑自检脚本 →
+  `readiness.missing_evidence_count` 增加，且 `readiness.overall`
+  显示 `manual_pending`；测完要还原模板。
+- ✅ 将试用包 `provider-api-smoke-template.json` 中某一步临时标为
+  `fail` 后重跑自检脚本 → `readiness.failed_count` 增加，且
+  `readiness.overall` 显示 `manual_failed`；测完要还原模板。
+- ✅ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+  Markdown 报告包含 `Smoke Evidence Report`，JSON 报告包含
+  `smoke_evidence_report`，并把该报告路径列入 evidence。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向 `1.109.0-rc456 — 短剧 smoke 证据自检报告`。
 
 ---
 

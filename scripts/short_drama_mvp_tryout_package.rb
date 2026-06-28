@@ -285,6 +285,9 @@ manual_smoke_results_md_path = File.join(PACKAGE_DIR, "manual-smoke-results-temp
 manual_smoke_results_json_path = File.join(PACKAGE_DIR, "manual-smoke-results-template.json")
 provider_api_smoke_md_path = File.join(PACKAGE_DIR, "provider-api-smoke-template.md")
 provider_api_smoke_json_path = File.join(PACKAGE_DIR, "provider-api-smoke-template.json")
+smoke_evidence_report_md_path = File.join(File.dirname(REPORT_MD), "short_drama_mvp_smoke_evidence_report.md")
+smoke_evidence_report_json_path = File.join(File.dirname(REPORT_JSON), "short_drama_mvp_smoke_evidence_report.json")
+smoke_evidence_command = "ruby scripts/short_drama_mvp_smoke_evidence_report.rb #{PACKAGE_DIR} #{smoke_evidence_report_md_path} #{smoke_evidence_report_json_path}"
 
 widget_html = [
   "<!doctype html>",
@@ -315,6 +318,7 @@ widget_html = [
   "<li>Manual smoke checklist: <code>#{manual_smoke_checklist_path}</code></li>",
   "<li>Manual smoke results: <code>#{manual_smoke_results_md_path}</code></li>",
   "<li>Provider API smoke: <code>#{provider_api_smoke_md_path}</code></li>",
+  "<li>Smoke evidence report command: <code>#{smoke_evidence_command}</code></li>",
   "</ul>"
 ].join("\n")
 
@@ -367,6 +371,7 @@ manual_smoke_checklist = [
   "- Results JSON template: `#{manual_smoke_results_json_path}`",
   "- Provider API smoke Markdown template: `#{provider_api_smoke_md_path}`",
   "- Provider API smoke JSON template: `#{provider_api_smoke_json_path}`",
+  "- Smoke evidence report command: `#{smoke_evidence_command}`",
   "",
   "## Expected Import Shape",
   "",
@@ -395,6 +400,11 @@ manual_smoke_checklist = [
   "7. Click `Dry-run import`, `Import manifest`, and `Review queue`; each click should put a structured `<widget-handoff-action>` into the chat composer.",
   "8. Confirm `Review queue` targets `short_drama_import_review_csv` and points at `production-review-queue.csv` with `dry_run=true`.",
   "9. Record the run in `manual-smoke-results-template.md` or `manual-smoke-results-template.json` before marking the manual queue item done.",
+  "10. Run the smoke evidence report command after filling manual or provider JSON so missing evidence and failed steps are visible before handoff:",
+  "",
+  "   ```bash",
+  "   #{smoke_evidence_command}",
+  "   ```",
   "",
   "## Notes",
   "",
@@ -647,6 +657,11 @@ checks << {
   ok: provider_api_smoke_data.fetch("overall_status") == "untested" &&
       provider_api_smoke_data.fetch("steps").all? { |step| step.fetch("status") == "untested" }
 }
+checks << {
+  name: "smoke evidence report command is documented",
+  ok: manual_smoke_source.include?("short_drama_mvp_smoke_evidence_report.rb") &&
+      widget_source.include?("short_drama_mvp_smoke_evidence_report.rb")
+}
 
 ok = checks.all? { |check| check.fetch(:ok) }
 report = {
@@ -659,6 +674,9 @@ report = {
   manual_smoke_results_json_path: manual_smoke_results_json_path,
   provider_api_smoke_md_path: provider_api_smoke_md_path,
   provider_api_smoke_json_path: provider_api_smoke_json_path,
+  smoke_evidence_report_md_path: smoke_evidence_report_md_path,
+  smoke_evidence_report_json_path: smoke_evidence_report_json_path,
+  smoke_evidence_report_command: smoke_evidence_command,
   manifest_item_count: manifest_item_count(manifest_path),
   checks: checks
 }
@@ -679,6 +697,7 @@ write_text(
     "- Manual smoke results JSON: `#{manual_smoke_results_json_path}`",
     "- Provider API smoke Markdown: `#{provider_api_smoke_md_path}`",
     "- Provider API smoke JSON: `#{provider_api_smoke_json_path}`",
+    "- Smoke evidence report command: `#{smoke_evidence_command}`",
     "- Manifest items: #{report[:manifest_item_count]}",
     "",
     "## Checks",

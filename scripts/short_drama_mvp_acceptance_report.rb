@@ -164,6 +164,9 @@ manual_evidence_summary = {
 }
 provider_api_smoke_json_path = tryout_report["provider_api_smoke_json_path"].to_s
 provider_api_smoke = provider_api_smoke_summary(provider_api_smoke_json_path)
+smoke_evidence_report_path = tryout_report["smoke_evidence_report_json_path"].to_s
+smoke_evidence_report = read_json_file(smoke_evidence_report_path)
+smoke_evidence_readiness = smoke_evidence_report.fetch("readiness", {})
 remaining_risks = extract_section_bullets(cutoff, "当前剩余风险")
 
 checks = []
@@ -245,6 +248,14 @@ add_check(
 )
 add_check(
   checks,
+  "smoke evidence report is generated",
+  smoke_evidence_report["status"] == "pass" &&
+    %w[ready manual_pending manual_failed blocked].include?(smoke_evidence_readiness["overall"].to_s),
+  "acceptance report should read the standalone smoke evidence report so handoff users can verify filled manual/provider JSON without external API calls.",
+  smoke_evidence_report_path
+)
+add_check(
+  checks,
   "cutoff documents manual smoke evidence path",
   cutoff.include?("manual-smoke-results-template.md/json"),
   "SHORT_DRAMA_AI_MVP_CUTOFF.md should tell handoff users where to record manual smoke evidence.",
@@ -294,6 +305,7 @@ manual_status =
         manual_result_summary.fetch("pending_count").positive? ||
         manual_evidence_summary.fetch("missing_count").positive? ||
         provider_api_smoke_evidence_missing ||
+        smoke_evidence_readiness["overall"].to_s == "manual_pending" ||
         manual_result_summary.fetch("overall_status") != "pass"
     "pending"
   else
@@ -324,6 +336,8 @@ evidence = [
   { "label" => "Manual smoke results JSON", "path" => tryout_report["manual_smoke_results_json_path"] },
   { "label" => "Provider API smoke Markdown", "path" => tryout_report["provider_api_smoke_md_path"] },
   { "label" => "Provider API smoke JSON", "path" => tryout_report["provider_api_smoke_json_path"] },
+  { "label" => "Smoke evidence report Markdown", "path" => tryout_report["smoke_evidence_report_md_path"] },
+  { "label" => "Smoke evidence report JSON", "path" => smoke_evidence_report_path },
   { "label" => "Cutoff", "path" => File.join(ROOT_DIR, "docs", "SHORT_DRAMA_AI_MVP_CUTOFF.md") },
   { "label" => "Tryout guide", "path" => File.join(ROOT_DIR, "docs", "SHORT_DRAMA_AI_MVP_TRYOUT.md") },
   { "label" => "Manual queue", "path" => File.join(ROOT_DIR, "docs", "MANUAL_TEST_QUEUE.md") }
@@ -338,6 +352,7 @@ report = {
   "manual_results_summary" => manual_result_summary,
   "manual_evidence_summary" => manual_evidence_summary,
   "provider_api_smoke_summary" => provider_api_smoke,
+  "smoke_evidence_report" => smoke_evidence_report,
   "handoff_readiness" => handoff_readiness,
   "remaining_risks" => remaining_risks,
   "evidence" => evidence
@@ -411,6 +426,15 @@ File.write(
     "",
     *provider_api_smoke.fetch("failed_items").map { |item| "- Failed provider smoke: #{item}" },
     *provider_api_smoke.fetch("evidence_missing_items").map { |item| "- Missing provider evidence: #{item}" },
+    "",
+    "## Smoke Evidence Report",
+    "",
+    "- Status: #{smoke_evidence_report["status"]}",
+    "- Overall readiness: #{smoke_evidence_readiness["overall"]}",
+    "- Failed steps: #{smoke_evidence_readiness["failed_count"]}",
+    "- Missing evidence: #{smoke_evidence_readiness["missing_evidence_count"]}",
+    "- Pending or untested steps: #{smoke_evidence_readiness["pending_count"]}",
+    "- Path: `#{smoke_evidence_report_path}`",
     "",
     "## Remaining Risks",
     "",

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.109.0-rc456 - 2026-06-28
+
+### Changed
+- **短剧 smoke 证据自检报告（1.109.0-rc456）** —— 新增 `scripts/short_drama_mvp_smoke_evidence_report.rb`，可读取试用包内 `manual-smoke-results-template.json` 与 `provider-api-smoke-template.json`，输出独立 Markdown/JSON 报告，明确 `ready`、`manual_pending`、`manual_failed` 或 `blocked`。
+- 本地 `scripts/run_tests.sh` 和 GitHub Actions `Tests` workflow 现在都会在生成试用包后生成 `short_drama_mvp_smoke_evidence_report.md/json`，并把报告加入 job summary 与 artifacts。
+- `scripts/short_drama_mvp_acceptance_report.rb` 现在会汇总 standalone smoke evidence report，并在交付验收报告中展示 `Smoke Evidence Report` 小节；`scripts/version_consistency.rb` 新增守门，防止该自检入口从本地/远端验收链路中脱落。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc456 — 短剧 smoke 证据自检报告`。
+- 版本号从 **1.109.0-rc455** 提升为 **1.109.0-rc456**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧 cutoff/tryout 文档同步。
+
 ## 1.109.0-rc455 - 2026-06-28
 
 ### Changed

@@ -168,6 +168,7 @@ run_tests = read_file(repo_root, "scripts/run_tests.sh")
 workflow = read_file(repo_root, ".github/workflows/test.yml")
 short_drama_tryout_package = read_file(repo_root, "scripts/short_drama_mvp_tryout_package.rb")
 short_drama_acceptance_report = read_file(repo_root, "scripts/short_drama_mvp_acceptance_report.rb")
+short_drama_smoke_evidence_report = read_file(repo_root, "scripts/short_drama_mvp_smoke_evidence_report.rb")
 short_drama_remaining_risks = short_drama_cutoff
   .match(/^##\s+当前剩余风险\n\n(?<body>.*?)(?=^##\s|\z)/m)
   &.[](:body)
@@ -225,6 +226,16 @@ add_delivery_check.call(
     short_drama_tryout_package.include?("provider_api_smoke_json_path") &&
     short_drama_tryout_package.include?("willdeep.short_drama.provider_api_smoke.v1"),
   "Tryout package should expose optional real some.im / Replicate smoke templates without embedding secrets."
+)
+add_delivery_check.call(
+  "Short drama smoke evidence report is wired into local and remote acceptance",
+  "scripts/short_drama_mvp_smoke_evidence_report.rb",
+  File.file?(File.join(repo_root, "scripts/short_drama_mvp_smoke_evidence_report.rb")) &&
+    run_tests.include?("scripts/short_drama_mvp_smoke_evidence_report.rb") &&
+    workflow.include?("Generate short-drama MVP smoke evidence report") &&
+    workflow.include?("short_drama_mvp_smoke_evidence_report.md") &&
+    short_drama_tryout_package.include?("smoke_evidence_report_command"),
+  "Local and GitHub acceptance should generate the standalone manual/provider smoke evidence report."
 )
 add_delivery_check.call(
   "Short drama acceptance report is wired into local and remote acceptance",
@@ -288,6 +299,18 @@ add_delivery_check.call(
     short_drama_acceptance_report.include?("willdeep.short_drama.provider_api_smoke.v1") &&
     short_drama_acceptance_report.include?("Provider API Smoke Templates"),
   "Acceptance report should surface optional real provider smoke evidence paths and evidence quality without calling external APIs."
+)
+add_delivery_check.call(
+  "Short drama acceptance report summarizes standalone smoke evidence report",
+  "scripts/short_drama_mvp_acceptance_report.rb",
+  short_drama_acceptance_report.include?("smoke_evidence_report") &&
+    short_drama_acceptance_report.include?("smoke evidence report is generated") &&
+    short_drama_acceptance_report.include?("## Smoke Evidence Report") &&
+    short_drama_smoke_evidence_report.include?("willdeep.short_drama.manual_smoke_results.v1") &&
+    short_drama_smoke_evidence_report.include?("willdeep.short_drama.provider_api_smoke.v1") &&
+    short_drama_smoke_evidence_report.include?("manual_failed") &&
+    short_drama_smoke_evidence_report.include?("manual_pending"),
+  "Acceptance report should include the standalone smoke evidence report and its readiness result."
 )
 
 changelog = read_file(repo_root, "CHANGELOG.md")

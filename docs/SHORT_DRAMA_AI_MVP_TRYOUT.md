@@ -1,6 +1,6 @@
 # Short Drama AI MVP Tryout
 
-> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc455
+> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc456
 
 这份文档用于试用当前短剧 AI MVP。它不是完整产品手册，只覆盖“不完美但可用”的主路径。
 
@@ -65,22 +65,31 @@ import_media_manifest(package_directory=<制作包目录>, dry_run=false, import
 2. 先打开 `build/ci/short_drama_mvp_tryout_package/manual-smoke-checklist.md`，按包内清单记录 dry-run、正式导入、媒体任务侧栏和 Widget 动作结果。
 3. 将人工验收结果填到 `build/ci/short_drama_mvp_tryout_package/manual-smoke-results-template.md` 或 `manual-smoke-results-template.json`；标为 pass/fail 的步骤必须保留截图、任务 ID 或聊天上下文片段作为 evidence。
 4. 如具备真实 some.im / Replicate 账号、额度和网络，再把真实 provider smoke 结果填到 `provider-api-smoke-template.md/json`；不要记录 token、webhook secret 或私有回调 URL。
-5. 打开 `build/ci/short_drama_mvp_tryout_package/widget-preview.html`，或在聊天里调用 `show_widget` 指向该 HTML。Widget 顶部的结构化按钮会通过 `sendToolAction` 把工具名和参数交回聊天窗口。
-6. 先 dry-run：
+5. 填完任一 JSON 后运行 smoke 证据自检报告，确认失败、缺 evidence 和待测项都能在报告中看到：
+
+```bash
+ruby scripts/short_drama_mvp_smoke_evidence_report.rb \
+  build/ci/short_drama_mvp_tryout_package \
+  build/ci/short_drama_mvp_smoke_evidence_report.md \
+  build/ci/short_drama_mvp_smoke_evidence_report.json
+```
+
+6. 打开 `build/ci/short_drama_mvp_tryout_package/widget-preview.html`，或在聊天里调用 `show_widget` 指向该 HTML。Widget 顶部的结构化按钮会通过 `sendToolAction` 把工具名和参数交回聊天窗口。
+7. 先 dry-run：
 
 ```text
 import_media_manifest(package_directory=build/ci/short_drama_mvp_tryout_package, dry_run=true, import_pending_tasks=true)
 ```
 
-7. 再正式导入：
+8. 再正式导入：
 
 ```text
 import_media_manifest(package_directory=build/ci/short_drama_mvp_tryout_package, dry_run=false, import_pending_tasks=true)
 ```
 
-8. 预期能看到 3 个本地产物、1 个 pending 远端视频任务、1 个 failed 修复任务；Widget/媒体任务侧栏会给出继续查看任务、按缺口排产和回写 review queue 的入口。
-9. 点击 Widget 里的 `Dry-run import`、`Import manifest` 或 `Review queue`，确认聊天输入框收到的是结构化 `<widget-handoff-action>`，而不是只能靠自然语言 prompt 猜工具。
-10. 运行 `scripts/short_drama_mvp_acceptance_report.rb`，确认生成的 `build/ci/short_drama_mvp_acceptance_report.md/json` 汇总了版本报告、试用包报告、手动 smoke 模板、包内手测结果文件状态、pass/fail 步骤证据缺口、provider API smoke 模板、当前手动 smoke 队列状态、交付就绪状态、非空剩余风险和交付文档入口。
+9. 预期能看到 3 个本地产物、1 个 pending 远端视频任务、1 个 failed 修复任务；Widget/媒体任务侧栏会给出继续查看任务、按缺口排产和回写 review queue 的入口。
+10. 点击 Widget 里的 `Dry-run import`、`Import manifest` 或 `Review queue`，确认聊天输入框收到的是结构化 `<widget-handoff-action>`，而不是只能靠自然语言 prompt 猜工具。
+11. 运行 `scripts/short_drama_mvp_acceptance_report.rb`，确认生成的 `build/ci/short_drama_mvp_acceptance_report.md/json` 汇总了版本报告、试用包报告、手动 smoke 模板、包内手测结果文件状态、pass/fail 步骤证据缺口、provider API smoke 模板、standalone smoke 证据自检报告、当前手动 smoke 队列状态、交付就绪状态、非空剩余风险和交付文档入口。
 
 ## 图片编辑路径
 
@@ -99,4 +108,4 @@ import_media_manifest(package_directory=build/ci/short_drama_mvp_tryout_package,
 
 ## 验收记录
 
-人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.109.0-rc455 — 短剧 provider smoke 证据守门` 小节。
+人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.109.0-rc456 — 短剧 smoke 证据自检报告` 小节。
