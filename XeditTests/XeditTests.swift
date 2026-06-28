@@ -1176,7 +1176,7 @@ struct WillDeepTests {
         let withTools = AppState.estimateAgentTokens(messages: messages, tools: AgentToolRegistry.all)
 
         #expect(withTools > withoutTools)
-        #expect(withTools < 8_000)
+        #expect(withTools < 30_000)
     }
 
     @Test("MCP and skill tools are registered")

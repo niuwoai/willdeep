@@ -79,7 +79,9 @@ extension AppState {
         )
         let collapsed = Self.collapseOldToolResults(in: history)
         let used = Self.estimateAgentTokens(messages: collapsed, tools: AgentToolRegistry.all)
-        let usedFraction = Double(used) / Double(window)
+        let fixedToolOverhead = Self.estimateAgentTokens(messages: [], tools: AgentToolRegistry.all)
+        let compressibleUsed = max(0, used - fixedToolOverhead)
+        let usedFraction = Double(compressibleUsed) / Double(window)
         return usedFraction > 0.75
     }
 

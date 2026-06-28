@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.109.0-rc437 - 2026-06-28
+
+### Fixed
+- **短剧/媒体工具扩容后不再误触发上下文压缩（1.109.0-rc437）** —— 自动压缩判断改为只按可被压缩的会话历史 token 触发，固定工具 schema 开销不再让短聊天在小窗口模型下提前进入压缩。
+- `agent token estimate includes tool schemas without exploding short chats` 测试上限同步到当前 94 个工具的规模，仍保留工具 schema 估算不能失控的守门。
+- 版本号从 **1.109.0-rc436** 提升为 **1.109.0-rc437**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / docs ×2 同步。
+
 ## 1.109.0-rc436 - 2026-06-28
 
 ### Changed

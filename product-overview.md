@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-28 | Current version: v1.109.0-rc436
+> Last updated: 2026-06-28 | Current version: v1.109.0-rc437
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **短剧/媒体工具扩容后的上下文压缩保护（1.109.0-rc437）** —— 自动压缩只按可被压缩的会话历史 token 触发，固定工具 schema 开销不再让短聊天在小窗口模型下提前进入压缩；工具 schema 估算测试上限同步到当前工具规模并继续守住膨胀风险。
 - **manifest 导回写入聊天运行时上下文（1.109.0-rc436）** —— `import_media_manifest` 导入 Ruby、Skill 或第三方 API 制作包后，会记录 `latest-media-import`，聊天窗口下一轮可直接接住 package、manifest、pending/completed/failed 任务、Widget 预览和缺口报告路径。
 - **短剧制作缺口精确接力（1.109.0-rc435）** —— 短剧项目和分集的“补主图 / 补视频 / 审片”按钮会分别把对应队列、dry-run 参数、正式提交参数和媒体任务侧栏动作写入聊天输入框，避免从大段项目上下文里再猜下一步。
 - **媒体任务刷新写入聊天运行时上下文（1.109.0-rc434）** —— 媒体任务侧栏手动刷新运行中或卡住任务后，会记录 `latest-media-task-refresh`，聊天窗口下一轮可直接看到刷新范围、刷新原因、任务句柄和刷新后的运行/失败/完成统计。
