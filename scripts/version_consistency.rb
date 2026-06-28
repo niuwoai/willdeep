@@ -38,14 +38,15 @@ end
 checks = []
 delivery_checks = []
 
-add_check = lambda do |name, path, versions, expected_count: nil|
+add_check = lambda do |name, path, versions, expected_count: nil, allow_empty: false|
   versions = Array(versions).compact
   versions = versions.map(&:strip).reject(&:empty?)
   checks << {
     name: name,
     path: path,
     versions: versions,
-    expected_count: expected_count
+    expected_count: expected_count,
+    allow_empty: allow_empty
   }
 end
 
@@ -159,7 +160,8 @@ add_check.call(
 add_check.call(
   "Manual smoke pending short drama pointer versions",
   "docs/MANUAL_TEST_QUEUE.md",
-  pending_short_drama_pointer_versions
+  pending_short_drama_pointer_versions,
+  allow_empty: true
 )
 
 run_tests = read_file(repo_root, "scripts/run_tests.sh")
@@ -228,7 +230,9 @@ add_delivery_check.call(
   "scripts/short_drama_mvp_acceptance_report.rb",
   short_drama_acceptance_report.include?('"handoff_readiness"') &&
     short_drama_acceptance_report.include?('"remaining_risks"') &&
+    short_drama_acceptance_report.include?('"manual_results_summary"') &&
     short_drama_acceptance_report.include?("## Handoff Readiness") &&
+    short_drama_acceptance_report.include?("## Manual Results File") &&
     short_drama_acceptance_report.include?("## Remaining Risks") &&
     short_drama_acceptance_report.include?("cutoff keeps explicit remaining risks") &&
     short_drama_cutoff.include?("交付就绪状态") &&
@@ -240,6 +244,15 @@ add_delivery_check.call(
   "docs/SHORT_DRAMA_AI_MVP_CUTOFF.md",
   short_drama_remaining_risks.any?,
   "Cutoff should keep at least one remaining-risk bullet instead of implying the MVP has no external or manual smoke risk."
+)
+add_delivery_check.call(
+  "Short drama acceptance report summarizes manual smoke result file",
+  "scripts/short_drama_mvp_acceptance_report.rb",
+  short_drama_acceptance_report.include?("manual_results_summary") &&
+    short_drama_acceptance_report.include?("manual smoke results JSON is summarized") &&
+    short_drama_acceptance_report.include?("normalize_manual_result_status") &&
+    short_drama_acceptance_report.include?("Manual Results File"),
+  "Acceptance report should parse the tryout package manual smoke results JSON so filled pass/fail evidence is visible."
 )
 
 changelog = read_file(repo_root, "CHANGELOG.md")
@@ -257,7 +270,7 @@ failures = []
 checks.each do |check|
   unique_versions = check[:versions].uniq
   if check[:versions].empty?
-    failures << "#{check[:name]} did not expose a version"
+    failures << "#{check[:name]} did not expose a version" unless check[:allow_empty]
     next
   end
   if check[:expected_count] && check[:versions].length != check[:expected_count]
@@ -318,7 +331,7 @@ md << "## Sources\n\n"
 md << "| Source | Path | Versions |\n"
 md << "| --- | --- | --- |\n"
 checks.each do |check|
-  versions = check[:versions].empty? ? "_missing_" : check[:versions].uniq.join(", ")
+  versions = check[:versions].empty? ? (check[:allow_empty] ? "_none_" : "_missing_") : check[:versions].uniq.join(", ")
   md << "| #{check[:name]} | `#{check[:path]}` | `#{versions}` |\n"
 end
 

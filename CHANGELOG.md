@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.109.0-rc452 - 2026-06-28
+
+### Changed
+- **短剧验收报告读取包内手测结果文件（1.109.0-rc452）** —— `scripts/short_drama_mvp_acceptance_report.rb` 现在会解析试用包 `manual-smoke-results-template.json`，输出 `manual_results_summary` 和 Markdown 的 `Manual Results File` 小节。
+- `handoff_readiness` 会同时考虑 manual queue 与包内手测结果文件；若结果文件出现 failed 步骤，整体交付状态会显示 `manual_failed`。
+- `scripts/version_consistency.rb` 新增守门，确保验收报告持续保留手测结果文件摘要能力。
+- `scripts/version_consistency.rb` 的短剧 pending 指针检查允许当前无待办指针，避免 `MANUAL_TEST_QUEUE.md` 最新短剧小节全 ✅ 后被误判为缺失版本。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc452 — 短剧手测结果文件摘要`。
+- 版本号从 **1.109.0-rc451** 提升为 **1.109.0-rc452**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧 cutoff/tryout 文档同步。
+
 ## 1.109.0-rc451 - 2026-06-28
 
 ### Changed

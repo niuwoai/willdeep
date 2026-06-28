@@ -48,6 +48,37 @@ def manual_item_titles(section, marker)
   end
 end
 
+def normalize_manual_result_status(status)
+  normalized = status.to_s.strip.downcase
+  return "pass" if %w[pass passed ok success].include?(normalized)
+  return "fail" if %w[fail failed error].include?(normalized)
+  return "pending" if %w[pending blocked].include?(normalized)
+
+  "untested"
+end
+
+def manual_results_summary(path)
+  data = read_json_file(path)
+  steps = Array(data["steps"])
+  statuses = steps.map { |step| normalize_manual_result_status(step["status"]) }
+  failed_items = steps.select { |step| normalize_manual_result_status(step["status"]) == "fail" }
+                      .map { |step| step["title"].to_s.empty? ? step["id"].to_s : step["title"].to_s }
+  pending_items = steps.select { |step| %w[pending untested].include?(normalize_manual_result_status(step["status"])) }
+                       .map { |step| step["title"].to_s.empty? ? step["id"].to_s : step["title"].to_s }
+
+  {
+    "path" => path,
+    "schema" => data["schema"].to_s,
+    "overall_status" => normalize_manual_result_status(data["overall_status"]),
+    "step_count" => steps.length,
+    "passed_count" => statuses.count("pass"),
+    "pending_count" => statuses.count("pending") + statuses.count("untested"),
+    "failed_count" => statuses.count("fail"),
+    "pending_items" => pending_items,
+    "failed_items" => failed_items
+  }
+end
+
 def extract_section_bullets(source, heading)
   section = source.match(/^##\s+#{Regexp.escape(heading)}\n\n(?<body>.*?)(?=^##\s|\z)/m)
   return [] unless section
@@ -73,6 +104,8 @@ manual_result_paths = [
   tryout_report["manual_smoke_results_md_path"],
   tryout_report["manual_smoke_results_json_path"]
 ].compact
+manual_results_json_path = tryout_report["manual_smoke_results_json_path"].to_s
+manual_result_summary = manual_results_summary(manual_results_json_path)
 remaining_risks = extract_section_bullets(cutoff, "当前剩余风险")
 
 checks = []
@@ -110,6 +143,14 @@ add_check(
   manual_result_paths.length == 2 && manual_result_paths.all? { |path| File.file?(path) },
   "tryout package should include Markdown and JSON manual smoke result templates.",
   manual_result_paths.join(", ")
+)
+add_check(
+  checks,
+  "manual smoke results JSON is summarized",
+  manual_result_summary.fetch("schema") == "willdeep.short_drama.manual_smoke_results.v1" &&
+    manual_result_summary.fetch("step_count").positive?,
+  "acceptance report should parse the tryout package manual smoke results JSON so filled pass/fail evidence is visible during handoff.",
+  manual_results_json_path
 )
 add_check(
   checks,
@@ -153,9 +194,11 @@ manual_smoke_summary = {
 
 ok = checks.all? { |check| check.fetch("ok") }
 manual_status =
-  if manual_smoke_summary.fetch("failed_count").positive?
+  if manual_smoke_summary.fetch("failed_count").positive? || manual_result_summary.fetch("failed_count").positive?
     "failed"
-  elsif manual_smoke_summary.fetch("pending_count").positive?
+  elsif manual_smoke_summary.fetch("pending_count").positive? ||
+        manual_result_summary.fetch("pending_count").positive? ||
+        manual_result_summary.fetch("overall_status") != "pass"
     "pending"
   else
     "pass"
@@ -194,6 +237,7 @@ report = {
   "version" => canonical_version,
   "checks" => checks,
   "manual_smoke_summary" => manual_smoke_summary,
+  "manual_results_summary" => manual_result_summary,
   "handoff_readiness" => handoff_readiness,
   "remaining_risks" => remaining_risks,
   "evidence" => evidence
@@ -230,6 +274,18 @@ File.write(
     "- Failed: #{manual_smoke_summary.fetch("failed_count")}",
     "",
     *manual_smoke_summary.fetch("pending_items").map { |item| "- Pending: #{item}" },
+    "",
+    "## Manual Results File",
+    "",
+    "- Overall status: #{manual_result_summary.fetch("overall_status")}",
+    "- Steps: #{manual_result_summary.fetch("step_count")}",
+    "- Passed: #{manual_result_summary.fetch("passed_count")}",
+    "- Pending or untested: #{manual_result_summary.fetch("pending_count")}",
+    "- Failed: #{manual_result_summary.fetch("failed_count")}",
+    "- Path: `#{manual_result_summary.fetch("path")}`",
+    "",
+    *manual_result_summary.fetch("failed_items").map { |item| "- Failed: #{item}" },
+    *manual_result_summary.fetch("pending_items").map { |item| "- Pending/untested: #{item}" },
     "",
     "## Remaining Risks",
     "",

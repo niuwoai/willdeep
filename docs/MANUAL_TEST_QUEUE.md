@@ -233,16 +233,32 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 
 ## 1.109.0-rc451 — 短剧显式剩余风险守门
 
-- ⏳ 运行 `ruby scripts/version_consistency.rb ...` →
+- ✅ 运行 `ruby scripts/version_consistency.rb ...` →
   报告 `Delivery Gates` 包含
   `Short drama cutoff preserves explicit remaining risks`，且为 `PASS`。
-- ⏳ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+- ✅ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
   报告 checks 包含 `cutoff keeps explicit remaining risks`，且为通过。
-- ⏳ 打开 `build/ci/short_drama_mvp_acceptance_report.json` →
+- ✅ 打开 `build/ci/short_drama_mvp_acceptance_report.json` →
   顶层 `remaining_risks` 至少包含一条来自 cutoff 的真实剩余风险，不出现
   “No remaining risks found” 兜底文案。
-- ⏳ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
   底部“验收记录”指向 `1.109.0-rc451 — 短剧显式剩余风险守门`。
+- ✅ 该版本的显式剩余风险守门已被 rc452 的手测结果文件摘要覆盖；当前入口以最新短剧 smoke 小节为准。
+
+## 1.109.0-rc452 — 短剧手测结果文件摘要
+
+- ✅ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+  Markdown 报告包含 `Manual Results File`，JSON 报告包含
+  `manual_results_summary`。
+- ✅ 打开 `build/ci/short_drama_mvp_acceptance_report.json` →
+  `manual_results_summary.overall_status` 显示包内
+  `manual-smoke-results-template.json` 的状态，默认模板应为 `untested`，
+  且 `handoff_readiness.overall` 仍显示 `manual_pending`。
+- ✅ 将试用包 `manual-smoke-results-template.json` 中某一步临时标为
+  `fail` 后重跑验收脚本 → `manual_results_summary.failed_count` 增加，
+  且 `handoff_readiness.overall` 显示 `manual_failed`；测完要还原模板。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向 `1.109.0-rc452 — 短剧手测结果文件摘要`。
 
 ---
 
