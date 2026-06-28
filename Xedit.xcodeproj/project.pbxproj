@@ -437,7 +437,7 @@
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
 					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
 				);
-				MARKETING_VERSION = "1.109.0-rc440";
+				MARKETING_VERSION = "1.109.0-rc441";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
@@ -492,7 +492,7 @@
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
 					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
 				);
-				MARKETING_VERSION = "1.109.0-rc440";
+				MARKETING_VERSION = "1.109.0-rc441";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
@@ -640,7 +640,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = "1.109.0-rc440";
+				MARKETING_VERSION = "1.109.0-rc441";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -661,7 +661,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = "1.109.0-rc440";
+				MARKETING_VERSION = "1.109.0-rc441";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -680,7 +680,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.109.0-rc440";
+				MARKETING_VERSION = "1.109.0-rc441";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -699,7 +699,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.109.0-rc440";
+				MARKETING_VERSION = "1.109.0-rc441";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;

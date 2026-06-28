@@ -466,8 +466,8 @@ enum AgentToolRunner {
 
             stdoutPipe.fileHandleForReading.readabilityHandler = nil
             stderrPipe.fileHandleForReading.readabilityHandler = nil
-            stdoutCollector.append(stdoutPipe.fileHandleForReading.availableData)
-            stderrCollector.append(stderrPipe.fileHandleForReading.availableData)
+            stdoutCollector.append(stdoutPipe.fileHandleForReading.readDataToEndOfFile())
+            stderrCollector.append(stderrPipe.fileHandleForReading.readDataToEndOfFile())
 
             return CommandOutcome(
                 exitStatus: process.terminationStatus,

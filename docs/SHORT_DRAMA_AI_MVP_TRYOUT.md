@@ -1,6 +1,6 @@
 # Short Drama AI MVP Tryout
 
-> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc440
+> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc441
 
 这份文档用于试用当前短剧 AI MVP。它不是完整产品手册，只覆盖“不完美但可用”的主路径。
 

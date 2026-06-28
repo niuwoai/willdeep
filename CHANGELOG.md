@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.109.0-rc441 - 2026-06-28
+
+### Fixed
+- **run_command stdout 收尾读取稳定化（1.109.0-rc441）** —— 前台 `run_command` 在进程结束后改为同步 drain stdout/stderr pipe 剩余数据，避免 GitHub macOS runner 偶发出现命令 `exit=0` 但最后一段 stdout 未进入 payload，导致 `runCommandClosesStandardInputForHeadlessCLIs` 间歇失败。
+- 版本号从 **1.109.0-rc440** 提升为 **1.109.0-rc441**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧试用文档同步。
+
 ## 1.109.0-rc440 - 2026-06-28
 
 ### Added
