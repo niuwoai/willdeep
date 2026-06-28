@@ -154,6 +154,10 @@ provider_api_smoke_paths = [
   tryout_report["provider_api_smoke_md_path"],
   tryout_report["provider_api_smoke_json_path"]
 ].compact
+handoff_index_paths = [
+  tryout_report["handoff_index_md_path"],
+  tryout_report["handoff_index_json_path"]
+].compact
 manual_results_json_path = tryout_report["manual_smoke_results_json_path"].to_s
 manual_result_summary = manual_results_summary(manual_results_json_path)
 manual_evidence_summary = {
@@ -168,6 +172,8 @@ smoke_evidence_report_path = tryout_report["smoke_evidence_report_json_path"].to
 smoke_evidence_report = read_json_file(smoke_evidence_report_path)
 smoke_evidence_readiness = smoke_evidence_report.fetch("readiness", {})
 smoke_evidence_next_actions = Array(smoke_evidence_report["next_actions"])
+handoff_index_json_path = tryout_report["handoff_index_json_path"].to_s
+handoff_index = read_json_file(handoff_index_json_path)
 remaining_risks = extract_section_bullets(cutoff, "当前剩余风险")
 
 checks = []
@@ -212,6 +218,16 @@ add_check(
   provider_api_smoke_paths.length == 2 && provider_api_smoke_paths.all? { |path| File.file?(path) },
   "tryout package should include Markdown and JSON templates for optional real some.im / Replicate smoke evidence.",
   provider_api_smoke_paths.join(", ")
+)
+add_check(
+  checks,
+  "tryout package exposes handoff index",
+  handoff_index_paths.length == 2 &&
+    handoff_index_paths.all? { |path| File.file?(path) } &&
+    handoff_index["schema"] == "willdeep.short_drama.tryout_handoff_index.v1" &&
+    Array(handoff_index["start_here"]).length >= 5,
+  "tryout package should include Markdown and JSON handoff index files with ordered start-here steps.",
+  handoff_index_paths.join(", ")
 )
 add_check(
   checks,
@@ -338,6 +354,8 @@ evidence = [
   { "label" => "Manual smoke results JSON", "path" => tryout_report["manual_smoke_results_json_path"] },
   { "label" => "Provider API smoke Markdown", "path" => tryout_report["provider_api_smoke_md_path"] },
   { "label" => "Provider API smoke JSON", "path" => tryout_report["provider_api_smoke_json_path"] },
+  { "label" => "Handoff index Markdown", "path" => tryout_report["handoff_index_md_path"] },
+  { "label" => "Handoff index JSON", "path" => handoff_index_json_path },
   { "label" => "Smoke evidence report Markdown", "path" => tryout_report["smoke_evidence_report_md_path"] },
   { "label" => "Smoke evidence report JSON", "path" => smoke_evidence_report_path },
   { "label" => "Cutoff", "path" => File.join(ROOT_DIR, "docs", "SHORT_DRAMA_AI_MVP_CUTOFF.md") },
@@ -356,6 +374,7 @@ report = {
   "provider_api_smoke_summary" => provider_api_smoke,
   "smoke_evidence_report" => smoke_evidence_report,
   "smoke_evidence_next_actions" => smoke_evidence_next_actions,
+  "handoff_index" => handoff_index,
   "handoff_readiness" => handoff_readiness,
   "remaining_risks" => remaining_risks,
   "evidence" => evidence
@@ -447,6 +466,15 @@ File.write(
         *Array(action["items"]).map { |item| "  - #{item}" }
       ]
     end,
+    "",
+    "## Handoff Index",
+    "",
+    "- Schema: #{handoff_index["schema"]}",
+    "- Start-here steps: #{Array(handoff_index["start_here"]).length}",
+    "- Key files: #{Array(handoff_index["files"]).length}",
+    "- Path: `#{handoff_index_json_path}`",
+    "",
+    *Array(handoff_index["start_here"]).map { |step| "- Step #{step["order"]}: #{step["title"]}" },
     "",
     "## Remaining Risks",
     "",

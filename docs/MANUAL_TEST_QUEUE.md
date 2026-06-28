@@ -356,6 +356,25 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   `smoke_evidence_next_actions`。
 - ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
   底部“验收记录”指向 `1.109.0-rc457 — 短剧 smoke 证据下一步建议`。
+- ✅ 该版本的 smoke evidence next actions 已被 rc458 的试用包 handoff index 覆盖；当前入口以最新短剧 smoke 小节为准。
+
+## 1.109.0-rc458 — 短剧试用包交付索引
+
+- ✅ 运行 `ruby scripts/short_drama_mvp_tryout_package.rb ...` →
+  样例包包含 `handoff-index.md` 和 `handoff-index.json`。
+- ✅ 打开 `build/ci/short_drama_mvp_tryout_package/handoff-index.json` →
+  schema 为 `willdeep.short_drama.tryout_handoff_index.v1`，`start_here`
+  至少包含读索引、dry-run、打开 Widget、记录 smoke evidence、生成 evidence report。
+- ✅ 打开 `build/ci/short_drama_mvp_tryout_package/handoff-index.md` →
+  Markdown 包含 `Start Here`、`Key Files`、`Commands` 和 `Remaining Risks`。
+- ✅ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+  Markdown 报告包含 `Handoff Index`，JSON 报告包含 `handoff_index`，并把
+  handoff index 路径列入 evidence。
+- ✅ 运行 `ruby scripts/version_consistency.rb ...` →
+  delivery checks 包含 `Tryout package preserves handoff index` 且为通过。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  本地试用包路径先指向 `handoff-index.md`，底部“验收记录”指向
+  `1.109.0-rc458 — 短剧试用包交付索引`。
 
 ---
 

@@ -228,6 +228,16 @@ add_delivery_check.call(
   "Tryout package should expose optional real some.im / Replicate smoke templates without embedding secrets."
 )
 add_delivery_check.call(
+  "Tryout package preserves handoff index",
+  "scripts/short_drama_mvp_tryout_package.rb",
+  short_drama_tryout_package.include?("handoff-index.md") &&
+    short_drama_tryout_package.include?("handoff-index.json") &&
+    short_drama_tryout_package.include?("handoff_index_md_path") &&
+    short_drama_tryout_package.include?("handoff_index_json_path") &&
+    short_drama_tryout_package.include?("willdeep.short_drama.tryout_handoff_index.v1"),
+  "Tryout package should expose a package-local handoff index so users have one ordered entrypoint."
+)
+add_delivery_check.call(
   "Short drama smoke evidence report is wired into local and remote acceptance",
   "scripts/short_drama_mvp_smoke_evidence_report.rb",
   File.file?(File.join(repo_root, "scripts/short_drama_mvp_smoke_evidence_report.rb")) &&
@@ -305,9 +315,12 @@ add_delivery_check.call(
   "scripts/short_drama_mvp_acceptance_report.rb",
   short_drama_acceptance_report.include?("smoke_evidence_report") &&
     short_drama_acceptance_report.include?("smoke_evidence_next_actions") &&
+    short_drama_acceptance_report.include?("handoff_index") &&
     short_drama_acceptance_report.include?("smoke evidence report is generated") &&
+    short_drama_acceptance_report.include?("tryout package exposes handoff index") &&
     short_drama_acceptance_report.include?("## Smoke Evidence Report") &&
     short_drama_acceptance_report.include?("## Smoke Evidence Next Actions") &&
+    short_drama_acceptance_report.include?("## Handoff Index") &&
     short_drama_smoke_evidence_report.include?("willdeep.short_drama.manual_smoke_results.v1") &&
     short_drama_smoke_evidence_report.include?("willdeep.short_drama.provider_api_smoke.v1") &&
     short_drama_smoke_evidence_report.include?("next_actions") &&

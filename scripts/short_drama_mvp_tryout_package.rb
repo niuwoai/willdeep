@@ -285,6 +285,8 @@ manual_smoke_results_md_path = File.join(PACKAGE_DIR, "manual-smoke-results-temp
 manual_smoke_results_json_path = File.join(PACKAGE_DIR, "manual-smoke-results-template.json")
 provider_api_smoke_md_path = File.join(PACKAGE_DIR, "provider-api-smoke-template.md")
 provider_api_smoke_json_path = File.join(PACKAGE_DIR, "provider-api-smoke-template.json")
+handoff_index_md_path = File.join(PACKAGE_DIR, "handoff-index.md")
+handoff_index_json_path = File.join(PACKAGE_DIR, "handoff-index.json")
 smoke_evidence_report_md_path = File.join(File.dirname(REPORT_MD), "short_drama_mvp_smoke_evidence_report.md")
 smoke_evidence_report_json_path = File.join(File.dirname(REPORT_JSON), "short_drama_mvp_smoke_evidence_report.json")
 smoke_evidence_command = "ruby scripts/short_drama_mvp_smoke_evidence_report.rb #{PACKAGE_DIR} #{smoke_evidence_report_md_path} #{smoke_evidence_report_json_path}"
@@ -318,6 +320,7 @@ widget_html = [
   "<li>Manual smoke checklist: <code>#{manual_smoke_checklist_path}</code></li>",
   "<li>Manual smoke results: <code>#{manual_smoke_results_md_path}</code></li>",
   "<li>Provider API smoke: <code>#{provider_api_smoke_md_path}</code></li>",
+  "<li>Handoff index: <code>#{handoff_index_md_path}</code></li>",
   "<li>Smoke evidence report command: <code>#{smoke_evidence_command}</code></li>",
   "</ul>"
 ].join("\n")
@@ -371,6 +374,7 @@ manual_smoke_checklist = [
   "- Results JSON template: `#{manual_smoke_results_json_path}`",
   "- Provider API smoke Markdown template: `#{provider_api_smoke_md_path}`",
   "- Provider API smoke JSON template: `#{provider_api_smoke_json_path}`",
+  "- Handoff index: `#{handoff_index_md_path}`",
   "- Smoke evidence report command: `#{smoke_evidence_command}`",
   "",
   "## Expected Import Shape",
@@ -537,6 +541,96 @@ provider_api_smoke_md = [
   ""
 ].join("\n")
 
+handoff_index = {
+  "schema" => "willdeep.short_drama.tryout_handoff_index.v1",
+  "generated_at" => exported_at,
+  "package_directory" => PACKAGE_DIR,
+  "start_here" => [
+    {
+      "order" => 1,
+      "title" => "Read the package shape",
+      "path" => "handoff-index.md",
+      "detail" => "This index is the first handoff entrypoint for local dry-run, import, Widget, review queue, and evidence files."
+    },
+    {
+      "order" => 2,
+      "title" => "Run manifest dry-run",
+      "command" => "import_media_manifest(#{dry_run_import_arguments})",
+      "detail" => "Validate completed local artifacts, pending remote task registration, and failed repair row shape before writing media tasks."
+    },
+    {
+      "order" => 3,
+      "title" => "Open Widget preview",
+      "path" => "widget-preview.html",
+      "detail" => "Click structured action buttons and confirm chat receives <widget-handoff-action> payloads."
+    },
+    {
+      "order" => 4,
+      "title" => "Record smoke evidence",
+      "path" => "manual-smoke-results-template.json",
+      "detail" => "Fill pass/fail rows with screenshots, task IDs, artifact paths, or copied chat context."
+    },
+    {
+      "order" => 5,
+      "title" => "Generate evidence report",
+      "command" => smoke_evidence_command,
+      "detail" => "Summarize readiness and next_actions without calling external providers."
+    }
+  ],
+  "files" => [
+    { "label" => "Manual smoke checklist", "path" => "manual-smoke-checklist.md" },
+    { "label" => "Manual smoke results JSON", "path" => "manual-smoke-results-template.json" },
+    { "label" => "Provider API smoke JSON", "path" => "provider-api-smoke-template.json" },
+    { "label" => "Manifest template", "path" => "media-import-manifest-template.json" },
+    { "label" => "Production gap report", "path" => "production-gap-report.json" },
+    { "label" => "Review queue", "path" => "production-review-queue.csv" },
+    { "label" => "Widget preview", "path" => "widget-preview.html" }
+  ],
+  "commands" => {
+    "dry_run_import" => "import_media_manifest(#{dry_run_import_arguments})",
+    "submit_import" => "import_media_manifest(#{submit_import_arguments})",
+    "review_queue_dry_run" => "short_drama_import_review_csv(#{review_queue_import_arguments})",
+    "smoke_evidence_report" => smoke_evidence_command
+  },
+  "remaining_risks" => [
+    "This package does not call real some.im or Replicate APIs.",
+    "Provider credentials, quota, network, and live API behavior still require separate manual smoke evidence.",
+    "Do not paste provider tokens, webhook secrets, or private callback URLs into package files."
+  ]
+}
+
+handoff_index_md = [
+  "# Short Drama MVP Tryout Handoff Index",
+  "",
+  "- Package directory: `#{PACKAGE_DIR}`",
+  "- Generated at: `#{exported_at}`",
+  "- Scope: local-only dry-run/import/Widget/review queue smoke; no real provider API calls.",
+  "",
+  "## Start Here",
+  "",
+  *handoff_index.fetch("start_here").map do |step|
+    command = step["command"] ? " Command: `#{step["command"]}`." : ""
+    path = step["path"] ? " File: `#{step["path"]}`." : ""
+    "#{step.fetch("order")}. #{step.fetch("title")} — #{step.fetch("detail")}#{path}#{command}"
+  end,
+  "",
+  "## Key Files",
+  "",
+  *handoff_index.fetch("files").map { |file| "- #{file.fetch("label")}: `#{file.fetch("path")}`" },
+  "",
+  "## Commands",
+  "",
+  "- Dry-run import: `#{handoff_index.fetch("commands").fetch("dry_run_import")}`",
+  "- Submit import: `#{handoff_index.fetch("commands").fetch("submit_import")}`",
+  "- Review queue dry-run: `#{handoff_index.fetch("commands").fetch("review_queue_dry_run")}`",
+  "- Smoke evidence report: `#{handoff_index.fetch("commands").fetch("smoke_evidence_report")}`",
+  "",
+  "## Remaining Risks",
+  "",
+  *handoff_index.fetch("remaining_risks").map { |risk| "- #{risk}" },
+  ""
+].join("\n")
+
 write_json(File.join(PACKAGE_DIR, "production-package.json"), package)
 write_json(File.join(PACKAGE_DIR, "production-timeline.json"), timeline)
 write_json(File.join(PACKAGE_DIR, "production-gap-report.json"), gap_report)
@@ -561,6 +655,8 @@ write_text(File.join(PACKAGE_DIR, "manual-smoke-results-template.md"), manual_sm
 write_json(File.join(PACKAGE_DIR, "manual-smoke-results-template.json"), manual_smoke_results_template)
 write_text(File.join(PACKAGE_DIR, "provider-api-smoke-template.md"), provider_api_smoke_md)
 write_json(File.join(PACKAGE_DIR, "provider-api-smoke-template.json"), provider_api_smoke_template)
+write_text(File.join(PACKAGE_DIR, "handoff-index.md"), handoff_index_md)
+write_json(File.join(PACKAGE_DIR, "handoff-index.json"), handoff_index)
 write_text(
   File.join(PACKAGE_DIR, "media-api.env.example"),
   "# Local tryout package: do not put real tokens in this file.\nWILLDEEP_MEDIA_PROVIDER=skill\n"
@@ -582,6 +678,8 @@ checks = []
   manual-smoke-results-template.json
   provider-api-smoke-template.md
   provider-api-smoke-template.json
+  handoff-index.md
+  handoff-index.json
   media-api.env.example
 ].each do |name|
   require_file(File.join(PACKAGE_DIR, name), checks)
@@ -662,6 +760,17 @@ checks << {
   ok: manual_smoke_source.include?("short_drama_mvp_smoke_evidence_report.rb") &&
       widget_source.include?("short_drama_mvp_smoke_evidence_report.rb")
 }
+handoff_index_source = File.read(handoff_index_md_path)
+handoff_index_data = JSON.parse(File.read(handoff_index_json_path))
+checks << {
+  name: "handoff index covers package entrypoints",
+  ok: handoff_index_data.fetch("schema") == "willdeep.short_drama.tryout_handoff_index.v1" &&
+      handoff_index_data.fetch("start_here").length >= 5 &&
+      handoff_index_data.fetch("commands").fetch("dry_run_import").include?("import_media_manifest") &&
+      handoff_index_data.fetch("commands").fetch("smoke_evidence_report").include?("short_drama_mvp_smoke_evidence_report.rb") &&
+      handoff_index_source.include?("Start Here") &&
+      handoff_index_source.include?("Remaining Risks")
+}
 
 ok = checks.all? { |check| check.fetch(:ok) }
 report = {
@@ -674,6 +783,8 @@ report = {
   manual_smoke_results_json_path: manual_smoke_results_json_path,
   provider_api_smoke_md_path: provider_api_smoke_md_path,
   provider_api_smoke_json_path: provider_api_smoke_json_path,
+  handoff_index_md_path: handoff_index_md_path,
+  handoff_index_json_path: handoff_index_json_path,
   smoke_evidence_report_md_path: smoke_evidence_report_md_path,
   smoke_evidence_report_json_path: smoke_evidence_report_json_path,
   smoke_evidence_report_command: smoke_evidence_command,
@@ -697,6 +808,8 @@ write_text(
     "- Manual smoke results JSON: `#{manual_smoke_results_json_path}`",
     "- Provider API smoke Markdown: `#{provider_api_smoke_md_path}`",
     "- Provider API smoke JSON: `#{provider_api_smoke_json_path}`",
+    "- Handoff index Markdown: `#{handoff_index_md_path}`",
+    "- Handoff index JSON: `#{handoff_index_json_path}`",
     "- Smoke evidence report command: `#{smoke_evidence_command}`",
     "- Manifest items: #{report[:manifest_item_count]}",
     "",
