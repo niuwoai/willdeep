@@ -207,6 +207,15 @@ add_delivery_check.call(
     short_drama_tryout_package.include?("manual_smoke_results_json_path"),
   "Tryout package report should expose Markdown and JSON manual smoke result templates."
 )
+add_delivery_check.call(
+  "Short drama acceptance report is wired into local and remote acceptance",
+  "scripts/short_drama_mvp_acceptance_report.rb",
+  File.file?(File.join(repo_root, "scripts/short_drama_mvp_acceptance_report.rb")) &&
+    run_tests.include?("scripts/short_drama_mvp_acceptance_report.rb") &&
+    workflow.include?("Generate short-drama MVP acceptance report") &&
+    workflow.include?("short_drama_mvp_acceptance_report.md"),
+  "Local and GitHub acceptance should generate the short-drama MVP acceptance report."
+)
 
 changelog = read_file(repo_root, "CHANGELOG.md")
 add_check.call(

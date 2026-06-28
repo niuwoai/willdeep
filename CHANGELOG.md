@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.109.0-rc447 - 2026-06-28
+
+### Added
+- **短剧交付验收摘要报告（1.109.0-rc447）** —— 新增 `scripts/short_drama_mvp_acceptance_report.rb`，汇总 `version_report`、本地试用包报告、手动 smoke 结果模板、cutoff/tryout/manual queue 指针，生成 `short_drama_mvp_acceptance_report.md/json`，方便交付时一眼确认短剧 MVP 可用版证据。
+- 本地 `scripts/run_tests.sh` 与 GitHub Actions `Tests` workflow 接入短剧验收摘要报告，并上传/追加到 CI summary；`scripts/version_consistency.rb` 新增 Delivery Gate，防止本地和远端验收漏跑该报告。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc447 — 短剧交付验收摘要`。
+- 版本号从 **1.109.0-rc446** 提升为 **1.109.0-rc447**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧 cutoff/tryout 文档同步。
+
 ## 1.109.0-rc446 - 2026-06-28
 
 ### Added

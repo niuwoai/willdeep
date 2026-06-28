@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-28 | Current version: v1.109.0-rc446
+> Last updated: 2026-06-28 | Current version: v1.109.0-rc447
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **短剧交付验收摘要报告（1.109.0-rc447）** —— 新增 `scripts/short_drama_mvp_acceptance_report.rb`，把版本一致性、试用包生成、手动 smoke 结果模板、cutoff/tryout/manual queue 当前指针汇总成 `short_drama_mvp_acceptance_report.md/json`；本地一键测试和 GitHub Actions 都会生成并上传该摘要，交付前不用再散翻多个报告找证据。
 - **短剧人工 smoke 结果模板（1.109.0-rc446）** —— `scripts/short_drama_mvp_tryout_package.rb` 生成的本地试用包现在包含 `manual-smoke-results-template.md/json`，把 dry-run 导入、正式导入、`latest-media-import`、Widget handoff 和 review queue dry-run 的人工验收结果统一记录为可留证据的步骤；版本一致性守门会检查试用包持续暴露这些模板路径。
 - **短剧交付验收入口守门（1.109.0-rc445）** —— `scripts/version_consistency.rb` 现在检查 cutoff 是否明确写出本地一键验收、远端 Go agent 测试和 GitHub Actions XeditTests 门槛，防止交付说明漏跑关键路径。
 - **前台 run_command 输出读取稳定化（1.109.0-rc445）** —— 前台 shell 工具现在使用同步 pipe drain worker 收集 stdout/stderr，减少短命令退出时输出尚未被 readability handler 捕获导致的偶发测试失败。
