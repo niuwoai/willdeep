@@ -91,6 +91,25 @@ def manual_results_summary(path)
   }
 end
 
+def provider_api_smoke_summary(path)
+  data = read_json_file(path)
+  steps = Array(data["steps"])
+  statuses = steps.map { |step| normalize_manual_result_status(step["status"]) }
+
+  {
+    "path" => path,
+    "schema" => data["schema"].to_s,
+    "overall_status" => normalize_manual_result_status(data["overall_status"]),
+    "step_count" => steps.length,
+    "provider_count" => steps.map { |step| step["provider"].to_s }.reject(&:empty?).uniq.length,
+    "providers" => steps.map { |step| step["provider"].to_s }.reject(&:empty?).uniq.sort,
+    "capabilities" => steps.map { |step| step["capability"].to_s }.reject(&:empty?).uniq.sort,
+    "passed_count" => statuses.count("pass"),
+    "pending_count" => statuses.count("pending") + statuses.count("untested"),
+    "failed_count" => statuses.count("fail")
+  }
+end
+
 def extract_section_bullets(source, heading)
   section = source.match(/^##\s+#{Regexp.escape(heading)}\n\n(?<body>.*?)(?=^##\s|\z)/m)
   return [] unless section
@@ -116,6 +135,10 @@ manual_result_paths = [
   tryout_report["manual_smoke_results_md_path"],
   tryout_report["manual_smoke_results_json_path"]
 ].compact
+provider_api_smoke_paths = [
+  tryout_report["provider_api_smoke_md_path"],
+  tryout_report["provider_api_smoke_json_path"]
+].compact
 manual_results_json_path = tryout_report["manual_smoke_results_json_path"].to_s
 manual_result_summary = manual_results_summary(manual_results_json_path)
 manual_evidence_summary = {
@@ -124,6 +147,8 @@ manual_evidence_summary = {
   "missing_count" => manual_result_summary.fetch("evidence_missing_count"),
   "missing_items" => manual_result_summary.fetch("evidence_missing_items")
 }
+provider_api_smoke_json_path = tryout_report["provider_api_smoke_json_path"].to_s
+provider_api_smoke = provider_api_smoke_summary(provider_api_smoke_json_path)
 remaining_risks = extract_section_bullets(cutoff, "当前剩余风险")
 
 checks = []
@@ -164,6 +189,13 @@ add_check(
 )
 add_check(
   checks,
+  "tryout package exposes provider API smoke templates",
+  provider_api_smoke_paths.length == 2 && provider_api_smoke_paths.all? { |path| File.file?(path) },
+  "tryout package should include Markdown and JSON templates for optional real some.im / Replicate smoke evidence.",
+  provider_api_smoke_paths.join(", ")
+)
+add_check(
+  checks,
   "manual smoke results JSON is summarized",
   manual_result_summary.fetch("schema") == "willdeep.short_drama.manual_smoke_results.v1" &&
     manual_result_summary.fetch("step_count").positive?,
@@ -177,6 +209,16 @@ add_check(
     manual_evidence_summary.fetch("required_count").is_a?(Integer),
   "acceptance report should count pass/fail manual smoke steps that still need evidence.",
   manual_results_json_path
+)
+add_check(
+  checks,
+  "provider API smoke template is summarized",
+  provider_api_smoke.fetch("schema") == "willdeep.short_drama.provider_api_smoke.v1" &&
+    provider_api_smoke.fetch("provider_count") >= 2 &&
+    provider_api_smoke.fetch("capabilities").include?("video_generation") &&
+    provider_api_smoke.fetch("capabilities").include?("image_inpaint"),
+  "acceptance report should keep optional real provider smoke coverage visible without calling external APIs.",
+  provider_api_smoke_json_path
 )
 add_check(
   checks,
@@ -253,6 +295,8 @@ evidence = [
   { "label" => "Manual smoke checklist", "path" => tryout_report["manual_smoke_checklist_path"] },
   { "label" => "Manual smoke results Markdown", "path" => tryout_report["manual_smoke_results_md_path"] },
   { "label" => "Manual smoke results JSON", "path" => tryout_report["manual_smoke_results_json_path"] },
+  { "label" => "Provider API smoke Markdown", "path" => tryout_report["provider_api_smoke_md_path"] },
+  { "label" => "Provider API smoke JSON", "path" => tryout_report["provider_api_smoke_json_path"] },
   { "label" => "Cutoff", "path" => File.join(ROOT_DIR, "docs", "SHORT_DRAMA_AI_MVP_CUTOFF.md") },
   { "label" => "Tryout guide", "path" => File.join(ROOT_DIR, "docs", "SHORT_DRAMA_AI_MVP_TRYOUT.md") },
   { "label" => "Manual queue", "path" => File.join(ROOT_DIR, "docs", "MANUAL_TEST_QUEUE.md") }
@@ -266,6 +310,7 @@ report = {
   "manual_smoke_summary" => manual_smoke_summary,
   "manual_results_summary" => manual_result_summary,
   "manual_evidence_summary" => manual_evidence_summary,
+  "provider_api_smoke_summary" => provider_api_smoke,
   "handoff_readiness" => handoff_readiness,
   "remaining_risks" => remaining_risks,
   "evidence" => evidence
@@ -322,6 +367,17 @@ File.write(
     "- Missing: #{manual_evidence_summary.fetch("missing_count")}",
     "",
     *manual_evidence_summary.fetch("missing_items").map { |item| "- Missing evidence: #{item}" },
+    "",
+    "## Provider API Smoke Templates",
+    "",
+    "- Overall status: #{provider_api_smoke.fetch("overall_status")}",
+    "- Steps: #{provider_api_smoke.fetch("step_count")}",
+    "- Providers: #{provider_api_smoke.fetch("providers").join(", ")}",
+    "- Capabilities: #{provider_api_smoke.fetch("capabilities").join(", ")}",
+    "- Passed: #{provider_api_smoke.fetch("passed_count")}",
+    "- Pending or untested: #{provider_api_smoke.fetch("pending_count")}",
+    "- Failed: #{provider_api_smoke.fetch("failed_count")}",
+    "- Path: `#{provider_api_smoke.fetch("path")}`",
     "",
     "## Remaining Risks",
     "",

@@ -217,6 +217,16 @@ add_delivery_check.call(
   "Tryout package report should expose Markdown and JSON manual smoke result templates."
 )
 add_delivery_check.call(
+  "Tryout package preserves provider API smoke templates",
+  "scripts/short_drama_mvp_tryout_package.rb",
+  short_drama_tryout_package.include?("provider-api-smoke-template.md") &&
+    short_drama_tryout_package.include?("provider-api-smoke-template.json") &&
+    short_drama_tryout_package.include?("provider_api_smoke_md_path") &&
+    short_drama_tryout_package.include?("provider_api_smoke_json_path") &&
+    short_drama_tryout_package.include?("willdeep.short_drama.provider_api_smoke.v1"),
+  "Tryout package should expose optional real some.im / Replicate smoke templates without embedding secrets."
+)
+add_delivery_check.call(
   "Short drama acceptance report is wired into local and remote acceptance",
   "scripts/short_drama_mvp_acceptance_report.rb",
   File.file?(File.join(repo_root, "scripts/short_drama_mvp_acceptance_report.rb")) &&
@@ -232,9 +242,11 @@ add_delivery_check.call(
     short_drama_acceptance_report.include?('"remaining_risks"') &&
     short_drama_acceptance_report.include?('"manual_results_summary"') &&
     short_drama_acceptance_report.include?('"manual_evidence_summary"') &&
+    short_drama_acceptance_report.include?('"provider_api_smoke_summary"') &&
     short_drama_acceptance_report.include?("## Handoff Readiness") &&
     short_drama_acceptance_report.include?("## Manual Results File") &&
     short_drama_acceptance_report.include?("## Manual Evidence") &&
+    short_drama_acceptance_report.include?("## Provider API Smoke Templates") &&
     short_drama_acceptance_report.include?("## Remaining Risks") &&
     short_drama_acceptance_report.include?("cutoff keeps explicit remaining risks") &&
     short_drama_cutoff.include?("交付就绪状态") &&
@@ -264,6 +276,15 @@ add_delivery_check.call(
     short_drama_acceptance_report.include?("evidence_missing_count") &&
     short_drama_acceptance_report.include?("Manual Evidence"),
   "Acceptance report should count pass/fail manual smoke steps whose evidence is still blank."
+)
+add_delivery_check.call(
+  "Short drama acceptance report summarizes provider API smoke templates",
+  "scripts/short_drama_mvp_acceptance_report.rb",
+  short_drama_acceptance_report.include?("provider_api_smoke_summary") &&
+    short_drama_acceptance_report.include?("provider API smoke template is summarized") &&
+    short_drama_acceptance_report.include?("willdeep.short_drama.provider_api_smoke.v1") &&
+    short_drama_acceptance_report.include?("Provider API Smoke Templates"),
+  "Acceptance report should surface optional real provider smoke evidence paths without calling external APIs."
 )
 
 changelog = read_file(repo_root, "CHANGELOG.md")

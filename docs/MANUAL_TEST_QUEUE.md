@@ -274,6 +274,22 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   增加，且 `handoff_readiness.overall` 保持 `manual_pending`；测完要还原模板。
 - ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
   底部“验收记录”指向 `1.109.0-rc453 — 短剧手测证据摘要`。
+- ✅ 该版本的手测证据摘要已被 rc454 的 provider smoke 模板覆盖；当前入口以最新短剧 smoke 小节为准。
+
+## 1.109.0-rc454 — 短剧 provider smoke 模板
+
+- ✅ 运行 `ruby scripts/short_drama_mvp_tryout_package.rb ...` →
+  样例包包含 `provider-api-smoke-template.md` 和
+  `provider-api-smoke-template.json`。
+- ✅ 打开 `build/ci/short_drama_mvp_tryout_package/provider-api-smoke-template.json` →
+  schema 为 `willdeep.short_drama.provider_api_smoke.v1`，步骤覆盖
+  some.im 图片/视频异步任务与 Replicate 放大/蒙版编辑，初始状态均为
+  `untested`。
+- ✅ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+  Markdown 报告包含 `Provider API Smoke Templates`，JSON 报告包含
+  `provider_api_smoke_summary`，且默认模板不会触发外网 API。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向 `1.109.0-rc454 — 短剧 provider smoke 模板`。
 
 ---
 

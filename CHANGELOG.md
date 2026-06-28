@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.109.0-rc454 - 2026-06-28
+
+### Changed
+- **短剧 provider smoke 模板（1.109.0-rc454）** —— `scripts/short_drama_mvp_tryout_package.rb` 现在会生成 `provider-api-smoke-template.md/json`，覆盖 some.im 图片/视频异步任务与 Replicate 放大/蒙版编辑的真实 provider smoke 证据格式。
+- `scripts/short_drama_mvp_acceptance_report.rb` 新增 `provider_api_smoke_summary` 和 Markdown 的 `Provider API Smoke Templates` 小节，让交付报告能看到真实 provider smoke 模板、provider 覆盖和 capability 覆盖；CI 仍不调用外网 API。
+- `scripts/version_consistency.rb` 新增守门，确保试用包持续包含 provider API smoke 模板，并确保验收报告持续汇总这些模板。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc454 — 短剧 provider smoke 模板`。
+- 版本号从 **1.109.0-rc453** 提升为 **1.109.0-rc454**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧 cutoff/tryout 文档同步。
+
 ## 1.109.0-rc453 - 2026-06-28
 
 ### Changed

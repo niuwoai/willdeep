@@ -283,6 +283,8 @@ dry_run_prompt = "请 dry-run 导入这个短剧 MVP 试用包：import_media_ma
 manual_smoke_checklist_path = File.join(PACKAGE_DIR, "manual-smoke-checklist.md")
 manual_smoke_results_md_path = File.join(PACKAGE_DIR, "manual-smoke-results-template.md")
 manual_smoke_results_json_path = File.join(PACKAGE_DIR, "manual-smoke-results-template.json")
+provider_api_smoke_md_path = File.join(PACKAGE_DIR, "provider-api-smoke-template.md")
+provider_api_smoke_json_path = File.join(PACKAGE_DIR, "provider-api-smoke-template.json")
 
 widget_html = [
   "<!doctype html>",
@@ -312,6 +314,7 @@ widget_html = [
   "<li>Gap report: <code>#{gap_report_preview_path}</code></li>",
   "<li>Manual smoke checklist: <code>#{manual_smoke_checklist_path}</code></li>",
   "<li>Manual smoke results: <code>#{manual_smoke_results_md_path}</code></li>",
+  "<li>Provider API smoke: <code>#{provider_api_smoke_md_path}</code></li>",
   "</ul>"
 ].join("\n")
 
@@ -362,6 +365,8 @@ manual_smoke_checklist = [
   "- Review queue: `#{review_queue_preview_path}`",
   "- Results Markdown template: `#{manual_smoke_results_md_path}`",
   "- Results JSON template: `#{manual_smoke_results_json_path}`",
+  "- Provider API smoke Markdown template: `#{provider_api_smoke_md_path}`",
+  "- Provider API smoke JSON template: `#{provider_api_smoke_json_path}`",
   "",
   "## Expected Import Shape",
   "",
@@ -395,6 +400,7 @@ manual_smoke_checklist = [
   "",
   "- Do not put real provider tokens in this package.",
   "- Real API smoke still depends on external accounts, quota, network, and provider behavior.",
+  "- If real some.im or Replicate smoke is available, record it in `provider-api-smoke-template.md/json`.",
   ""
 ].join("\n")
 
@@ -439,6 +445,88 @@ manual_smoke_results_md = [
   ""
 ].join("\n")
 
+provider_api_smoke_steps = [
+  {
+    "id" => "some_im_image_async",
+    "provider" => "some.im",
+    "capability" => "image_generation",
+    "title" => "some.im async image task",
+    "expected" => "Submit one image generation task, poll until completed, and import the image artifact back through the media task/manifest path."
+  },
+  {
+    "id" => "some_im_video_async",
+    "provider" => "some.im",
+    "capability" => "video_generation",
+    "title" => "some.im async video task",
+    "expected" => "Submit one image-to-video or text-to-video task, poll until completed, and confirm the video task appears in the media task sidebar."
+  },
+  {
+    "id" => "replicate_upscale",
+    "provider" => "Replicate",
+    "capability" => "image_upscale",
+    "title" => "Replicate image upscale",
+    "expected" => "Upscale one imported candidate image and confirm the output can be attached to the same short-drama shot or asset."
+  },
+  {
+    "id" => "replicate_mask_edit",
+    "provider" => "Replicate",
+    "capability" => "image_inpaint",
+    "title" => "Replicate mask edit",
+    "expected" => "Use a real mask_path for inpaint/erase, submit the edit task, and keep the review_item_id or shot anchor on the result."
+  }
+]
+
+provider_api_smoke_template = {
+  "schema" => "willdeep.short_drama.provider_api_smoke.v1",
+  "generated_at" => exported_at,
+  "package_directory" => PACKAGE_DIR,
+  "overall_status" => "untested",
+  "tester" => "",
+  "tested_at" => "",
+  "app_version" => "",
+  "notes" => "Do not paste provider tokens or secrets into this file.",
+  "steps" => provider_api_smoke_steps.map do |step|
+    step.merge(
+      "status" => "untested",
+      "request_id" => "",
+      "task_url" => "",
+      "artifact_path" => "",
+      "evidence" => "",
+      "notes" => ""
+    )
+  end
+}
+
+provider_api_smoke_md = [
+  "# Short Drama Provider API Smoke Template",
+  "",
+  "- Package directory: `#{PACKAGE_DIR}`",
+  "- Generated at: `#{exported_at}`",
+  "- Overall status: `untested`",
+  "- Tester:",
+  "- Tested at:",
+  "- App version:",
+  "",
+  "## Safety",
+  "",
+  "- Do not paste provider tokens, webhook secrets, or private callback URLs into this file.",
+  "- Use request IDs, redacted task URLs, output artifact paths, screenshots, or copied chat context as evidence.",
+  "- Leave all rows `untested` when no real provider account, quota, or network is available.",
+  "",
+  "## Results",
+  "",
+  "| Provider | Capability | Step | Status | Request ID | Artifact path | Evidence |",
+  "| --- | --- | --- | --- | --- | --- | --- |",
+  *provider_api_smoke_steps.map do |step|
+    "| #{step.fetch("provider")} | #{step.fetch("capability")} | #{step.fetch("title")} | untested |  |  |  |"
+  end,
+  "",
+  "## Expected Outcomes",
+  "",
+  *provider_api_smoke_steps.map { |step| "- #{step.fetch("title")}: #{step.fetch("expected")}" },
+  ""
+].join("\n")
+
 write_json(File.join(PACKAGE_DIR, "production-package.json"), package)
 write_json(File.join(PACKAGE_DIR, "production-timeline.json"), timeline)
 write_json(File.join(PACKAGE_DIR, "production-gap-report.json"), gap_report)
@@ -461,6 +549,8 @@ write_text(File.join(PACKAGE_DIR, "widget-preview.html"), widget_html)
 write_text(File.join(PACKAGE_DIR, "manual-smoke-checklist.md"), manual_smoke_checklist)
 write_text(File.join(PACKAGE_DIR, "manual-smoke-results-template.md"), manual_smoke_results_md)
 write_json(File.join(PACKAGE_DIR, "manual-smoke-results-template.json"), manual_smoke_results_template)
+write_text(File.join(PACKAGE_DIR, "provider-api-smoke-template.md"), provider_api_smoke_md)
+write_json(File.join(PACKAGE_DIR, "provider-api-smoke-template.json"), provider_api_smoke_template)
 write_text(
   File.join(PACKAGE_DIR, "media-api.env.example"),
   "# Local tryout package: do not put real tokens in this file.\nWILLDEEP_MEDIA_PROVIDER=skill\n"
@@ -480,6 +570,8 @@ checks = []
   manual-smoke-checklist.md
   manual-smoke-results-template.md
   manual-smoke-results-template.json
+  provider-api-smoke-template.md
+  provider-api-smoke-template.json
   media-api.env.example
 ].each do |name|
   require_file(File.join(PACKAGE_DIR, name), checks)
@@ -530,6 +622,8 @@ checks << {
 }
 manual_smoke_results_source = File.read(manual_smoke_results_md_path)
 manual_smoke_results_data = JSON.parse(File.read(manual_smoke_results_json_path))
+provider_api_smoke_source = File.read(provider_api_smoke_md_path)
+provider_api_smoke_data = JSON.parse(File.read(provider_api_smoke_json_path))
 checks << {
   name: "manual smoke results templates cover critical steps",
   ok: manual_smoke_results_source.include?("Dry-run import") &&
@@ -541,6 +635,18 @@ checks << {
   ok: manual_smoke_results_data.fetch("overall_status") == "untested" &&
       manual_smoke_results_data.fetch("steps").all? { |step| step.fetch("status") == "untested" }
 }
+checks << {
+  name: "provider API smoke templates cover real providers",
+  ok: provider_api_smoke_source.include?("some.im async image task") &&
+      provider_api_smoke_source.include?("Replicate mask edit") &&
+      provider_api_smoke_data.fetch("schema") == "willdeep.short_drama.provider_api_smoke.v1" &&
+      provider_api_smoke_data.fetch("steps").map { |step| step.fetch("provider") }.uniq.sort == ["Replicate", "some.im"]
+}
+checks << {
+  name: "provider API smoke template starts untested",
+  ok: provider_api_smoke_data.fetch("overall_status") == "untested" &&
+      provider_api_smoke_data.fetch("steps").all? { |step| step.fetch("status") == "untested" }
+}
 
 ok = checks.all? { |check| check.fetch(:ok) }
 report = {
@@ -551,6 +657,8 @@ report = {
   manual_smoke_checklist_path: manual_smoke_checklist_path,
   manual_smoke_results_md_path: manual_smoke_results_md_path,
   manual_smoke_results_json_path: manual_smoke_results_json_path,
+  provider_api_smoke_md_path: provider_api_smoke_md_path,
+  provider_api_smoke_json_path: provider_api_smoke_json_path,
   manifest_item_count: manifest_item_count(manifest_path),
   checks: checks
 }
@@ -569,6 +677,8 @@ write_text(
     "- Manual smoke checklist: `#{manual_smoke_checklist_path}`",
     "- Manual smoke results Markdown: `#{manual_smoke_results_md_path}`",
     "- Manual smoke results JSON: `#{manual_smoke_results_json_path}`",
+    "- Provider API smoke Markdown: `#{provider_api_smoke_md_path}`",
+    "- Provider API smoke JSON: `#{provider_api_smoke_json_path}`",
     "- Manifest items: #{report[:manifest_item_count]}",
     "",
     "## Checks",
