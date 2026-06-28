@@ -231,8 +231,10 @@ add_delivery_check.call(
   short_drama_acceptance_report.include?('"handoff_readiness"') &&
     short_drama_acceptance_report.include?('"remaining_risks"') &&
     short_drama_acceptance_report.include?('"manual_results_summary"') &&
+    short_drama_acceptance_report.include?('"manual_evidence_summary"') &&
     short_drama_acceptance_report.include?("## Handoff Readiness") &&
     short_drama_acceptance_report.include?("## Manual Results File") &&
+    short_drama_acceptance_report.include?("## Manual Evidence") &&
     short_drama_acceptance_report.include?("## Remaining Risks") &&
     short_drama_acceptance_report.include?("cutoff keeps explicit remaining risks") &&
     short_drama_cutoff.include?("交付就绪状态") &&
@@ -253,6 +255,15 @@ add_delivery_check.call(
     short_drama_acceptance_report.include?("normalize_manual_result_status") &&
     short_drama_acceptance_report.include?("Manual Results File"),
   "Acceptance report should parse the tryout package manual smoke results JSON so filled pass/fail evidence is visible."
+)
+add_delivery_check.call(
+  "Short drama acceptance report summarizes manual smoke evidence",
+  "scripts/short_drama_mvp_acceptance_report.rb",
+  short_drama_acceptance_report.include?("manual_evidence_summary") &&
+    short_drama_acceptance_report.include?("manual smoke evidence is summarized") &&
+    short_drama_acceptance_report.include?("evidence_missing_count") &&
+    short_drama_acceptance_report.include?("Manual Evidence"),
+  "Acceptance report should count pass/fail manual smoke steps whose evidence is still blank."
 )
 
 changelog = read_file(repo_root, "CHANGELOG.md")

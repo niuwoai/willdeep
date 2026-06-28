@@ -61,10 +61,18 @@ def manual_results_summary(path)
   data = read_json_file(path)
   steps = Array(data["steps"])
   statuses = steps.map { |step| normalize_manual_result_status(step["status"]) }
+  evidence_required_steps = steps.select do |step|
+    %w[pass fail].include?(normalize_manual_result_status(step["status"]))
+  end
+  evidence_present_steps = evidence_required_steps.select { |step| !step["evidence"].to_s.strip.empty? }
+  evidence_missing_steps = evidence_required_steps - evidence_present_steps
   failed_items = steps.select { |step| normalize_manual_result_status(step["status"]) == "fail" }
                       .map { |step| step["title"].to_s.empty? ? step["id"].to_s : step["title"].to_s }
   pending_items = steps.select { |step| %w[pending untested].include?(normalize_manual_result_status(step["status"])) }
                        .map { |step| step["title"].to_s.empty? ? step["id"].to_s : step["title"].to_s }
+  evidence_missing_items = evidence_missing_steps.map do |step|
+    step["title"].to_s.empty? ? step["id"].to_s : step["title"].to_s
+  end
 
   {
     "path" => path,
@@ -75,7 +83,11 @@ def manual_results_summary(path)
     "pending_count" => statuses.count("pending") + statuses.count("untested"),
     "failed_count" => statuses.count("fail"),
     "pending_items" => pending_items,
-    "failed_items" => failed_items
+    "failed_items" => failed_items,
+    "evidence_required_count" => evidence_required_steps.length,
+    "evidence_present_count" => evidence_present_steps.length,
+    "evidence_missing_count" => evidence_missing_steps.length,
+    "evidence_missing_items" => evidence_missing_items
   }
 end
 
@@ -106,6 +118,12 @@ manual_result_paths = [
 ].compact
 manual_results_json_path = tryout_report["manual_smoke_results_json_path"].to_s
 manual_result_summary = manual_results_summary(manual_results_json_path)
+manual_evidence_summary = {
+  "required_count" => manual_result_summary.fetch("evidence_required_count"),
+  "present_count" => manual_result_summary.fetch("evidence_present_count"),
+  "missing_count" => manual_result_summary.fetch("evidence_missing_count"),
+  "missing_items" => manual_result_summary.fetch("evidence_missing_items")
+}
 remaining_risks = extract_section_bullets(cutoff, "当前剩余风险")
 
 checks = []
@@ -154,6 +172,14 @@ add_check(
 )
 add_check(
   checks,
+  "manual smoke evidence is summarized",
+  manual_evidence_summary.fetch("missing_count").is_a?(Integer) &&
+    manual_evidence_summary.fetch("required_count").is_a?(Integer),
+  "acceptance report should count pass/fail manual smoke steps that still need evidence.",
+  manual_results_json_path
+)
+add_check(
+  checks,
   "cutoff documents manual smoke evidence path",
   cutoff.include?("manual-smoke-results-template.md/json"),
   "SHORT_DRAMA_AI_MVP_CUTOFF.md should tell handoff users where to record manual smoke evidence.",
@@ -198,6 +224,7 @@ manual_status =
     "failed"
   elsif manual_smoke_summary.fetch("pending_count").positive? ||
         manual_result_summary.fetch("pending_count").positive? ||
+        manual_evidence_summary.fetch("missing_count").positive? ||
         manual_result_summary.fetch("overall_status") != "pass"
     "pending"
   else
@@ -238,6 +265,7 @@ report = {
   "checks" => checks,
   "manual_smoke_summary" => manual_smoke_summary,
   "manual_results_summary" => manual_result_summary,
+  "manual_evidence_summary" => manual_evidence_summary,
   "handoff_readiness" => handoff_readiness,
   "remaining_risks" => remaining_risks,
   "evidence" => evidence
@@ -286,6 +314,14 @@ File.write(
     "",
     *manual_result_summary.fetch("failed_items").map { |item| "- Failed: #{item}" },
     *manual_result_summary.fetch("pending_items").map { |item| "- Pending/untested: #{item}" },
+    "",
+    "## Manual Evidence",
+    "",
+    "- Required for pass/fail steps: #{manual_evidence_summary.fetch("required_count")}",
+    "- Present: #{manual_evidence_summary.fetch("present_count")}",
+    "- Missing: #{manual_evidence_summary.fetch("missing_count")}",
+    "",
+    *manual_evidence_summary.fetch("missing_items").map { |item| "- Missing evidence: #{item}" },
     "",
     "## Remaining Risks",
     "",

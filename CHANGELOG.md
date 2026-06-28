@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.109.0-rc453 - 2026-06-28
+
+### Changed
+- **短剧验收报告补手测证据摘要（1.109.0-rc453）** —— `scripts/short_drama_mvp_acceptance_report.rb` 现在会统计包内 `manual-smoke-results-template.json` 中 pass/fail 步骤的 evidence 填写情况，输出 `manual_evidence_summary` 和 Markdown 的 `Manual Evidence` 小节。
+- `handoff_readiness` 在手测步骤标为 pass/fail 但 evidence 为空时会保持 `manual_pending`，避免“状态已填”被误读成“交付证据已齐”。
+- `scripts/version_consistency.rb` 新增守门，确保验收报告持续保留手测证据摘要能力。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc453 — 短剧手测证据摘要`。
+- 版本号从 **1.109.0-rc452** 提升为 **1.109.0-rc453**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧 cutoff/tryout 文档同步。
+
 ## 1.109.0-rc452 - 2026-06-28
 
 ### Changed

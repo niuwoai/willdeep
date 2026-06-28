@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-28 | Current version: v1.109.0-rc452
+> Last updated: 2026-06-28 | Current version: v1.109.0-rc453
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **短剧手测证据摘要（1.109.0-rc453）** —— `scripts/short_drama_mvp_acceptance_report.rb` 现在输出 `manual_evidence_summary` 和 Markdown 的 `Manual Evidence` 小节，统计 pass/fail 手测步骤是否缺少截图、任务 ID 或聊天上下文等 evidence；证据缺失时交付就绪仍保持 `manual_pending`。
 - **短剧手测结果文件摘要（1.109.0-rc452）** —— `scripts/short_drama_mvp_acceptance_report.rb` 现在读取试用包 `manual-smoke-results-template.json`，输出 `manual_results_summary` 和 Markdown 的 `Manual Results File` 小节；交付状态会同时考虑 manual queue 与结果文件，手测失败不会被机器通过掩盖。
 - **短剧显式剩余风险守门（1.109.0-rc451）** —— `scripts/short_drama_mvp_acceptance_report.rb` 现在要求 cutoff 的“当前剩余风险”至少保留一条真实条目，`scripts/version_consistency.rb` 也会检查该交付守门，避免短剧 MVP 在未做真实外网/人工 smoke 前被误读成零风险交付。
 - **短剧交付就绪摘要守门（1.109.0-rc450）** —— `scripts/version_consistency.rb` 现在检查短剧验收报告持续保留 `handoff_readiness`、`remaining_risks`、`Handoff Readiness` 和 `Remaining Risks`；验收报告也会反向确认该 delivery gate 存在，防止交付就绪与剩余风险说明被后续改动悄悄删掉。本版也稳定了后台任务计数 drain 测试，减少完整 Xcode 套件的异步进程终止偶发红灯。

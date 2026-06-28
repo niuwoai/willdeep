@@ -259,6 +259,21 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   且 `handoff_readiness.overall` 显示 `manual_failed`；测完要还原模板。
 - ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
   底部“验收记录”指向 `1.109.0-rc452 — 短剧手测结果文件摘要`。
+- ✅ 该版本的手测结果文件摘要已被 rc453 的手测证据摘要覆盖；当前入口以最新短剧 smoke 小节为准。
+
+## 1.109.0-rc453 — 短剧手测证据摘要
+
+- ✅ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+  Markdown 报告包含 `Manual Evidence`，JSON 报告包含
+  `manual_evidence_summary`。
+- ✅ 打开 `build/ci/short_drama_mvp_acceptance_report.json` →
+  默认未测模板下 `manual_evidence_summary.required_count` 为 0，
+  `handoff_readiness.overall` 仍显示 `manual_pending`。
+- ✅ 将试用包 `manual-smoke-results-template.json` 中某一步临时标为
+  `pass` 且不填 `evidence` 后重跑验收脚本 → `manual_evidence_summary.missing_count`
+  增加，且 `handoff_readiness.overall` 保持 `manual_pending`；测完要还原模板。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向 `1.109.0-rc453 — 短剧手测证据摘要`。
 
 ---
 
