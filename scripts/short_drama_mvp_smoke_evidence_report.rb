@@ -114,6 +114,83 @@ readiness_overall =
     "ready"
   end
 
+def build_next_actions(manual_summary, provider_summary, parse_errors, schema_errors, failed_items, missing_evidence_items)
+  actions = []
+  unless parse_errors.empty?
+    actions << {
+      "priority" => "high",
+      "kind" => "fix_json",
+      "title" => "Fix malformed smoke result JSON",
+      "detail" => "One or more smoke result files could not be parsed; repair the JSON before judging handoff readiness.",
+      "items" => parse_errors.map { |summary| summary.fetch("path") }
+    }
+  end
+  unless schema_errors.empty?
+    actions << {
+      "priority" => "high",
+      "kind" => "fix_schema",
+      "title" => "Restore expected smoke result schemas",
+      "detail" => "Smoke result files must keep the expected schema values so automated handoff checks can read them.",
+      "items" => schema_errors.map { |summary| "#{summary.fetch("path")} expected #{summary.fetch("expected_schema")}" }
+    }
+  end
+  unless failed_items.empty?
+    actions << {
+      "priority" => "high",
+      "kind" => "resolve_failed_smoke",
+      "title" => "Resolve failed smoke steps before handoff",
+      "detail" => "Failed manual or provider smoke rows make the MVP handoff manual_failed until the issue is fixed or explicitly re-tested.",
+      "items" => failed_items
+    }
+  end
+  unless missing_evidence_items.empty?
+    actions << {
+      "priority" => "medium",
+      "kind" => "add_evidence",
+      "title" => "Add evidence for pass/fail smoke rows",
+      "detail" => "Rows marked pass or fail need screenshots, redacted task IDs, artifact paths, or copied chat context.",
+      "items" => missing_evidence_items
+    }
+  end
+  unless manual_summary.fetch("pending_items").empty?
+    actions << {
+      "priority" => "medium",
+      "kind" => "finish_manual_smoke",
+      "title" => "Finish local manual smoke rows",
+      "detail" => "Complete the local dry-run/import/Widget/review queue smoke rows in manual-smoke-results-template.json.",
+      "items" => manual_summary.fetch("pending_items")
+    }
+  end
+  unless provider_summary.fetch("pending_items").empty?
+    actions << {
+      "priority" => "low",
+      "kind" => "record_provider_smoke_or_keep_risk",
+      "title" => "Record optional provider smoke or keep the external API risk visible",
+      "detail" => "If real some.im/Replicate credentials, quota, and network are available, fill provider-api-smoke-template.json; otherwise keep these rows untested as explicit remaining risk.",
+      "items" => provider_summary.fetch("pending_items")
+    }
+  end
+  if actions.empty?
+    actions << {
+      "priority" => "low",
+      "kind" => "ready_to_handoff",
+      "title" => "Smoke evidence is complete",
+      "detail" => "No failed, pending, or evidence-missing smoke rows were found.",
+      "items" => []
+    }
+  end
+  actions
+end
+
+next_actions = build_next_actions(
+  manual_summary,
+  provider_summary,
+  parse_errors,
+  schema_errors,
+  failed_items,
+  missing_evidence_items
+)
+
 readiness = {
   "overall" => readiness_overall,
   "parse_error_count" => parse_errors.length,
@@ -130,7 +207,8 @@ report = {
   "package_directory" => PACKAGE_DIR,
   "manual_results_summary" => manual_summary,
   "provider_api_smoke_summary" => provider_summary,
-  "readiness" => readiness
+  "readiness" => readiness,
+  "next_actions" => next_actions
 }
 
 FileUtils.mkdir_p(File.dirname(REPORT_MD))
@@ -174,6 +252,15 @@ File.write(
     "",
     *provider_summary.fetch("failed_items").map { |item| "- Failed provider smoke: #{item}" },
     *provider_summary.fetch("evidence_missing_items").map { |item| "- Missing provider evidence: #{item}" },
+    "",
+    "## Next Actions",
+    "",
+    *next_actions.flat_map do |action|
+      [
+        "- [#{action.fetch("priority")}] #{action.fetch("title")} — #{action.fetch("detail")}",
+        *action.fetch("items").map { |item| "  - #{item}" }
+      ]
+    end,
     "",
     "## Readiness",
     "",

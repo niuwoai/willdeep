@@ -335,6 +335,27 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   `smoke_evidence_report`，并把该报告路径列入 evidence。
 - ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
   底部“验收记录”指向 `1.109.0-rc456 — 短剧 smoke 证据自检报告`。
+- ✅ 该版本的 standalone smoke 证据自检报告已被 rc457 的 next actions 覆盖；当前入口以最新短剧 smoke 小节为准。
+
+## 1.109.0-rc457 — 短剧 smoke 证据下一步建议
+
+- ✅ 运行 `ruby scripts/short_drama_mvp_smoke_evidence_report.rb ...` →
+  JSON 报告包含 `next_actions`，Markdown 报告包含 `Next Actions`。
+- ✅ 默认模板全为 `untested` 时 →
+  `next_actions` 包含 `finish_manual_smoke` 和
+  `record_provider_smoke_or_keep_risk`，交付人能看到具体待补项，而不是只看到
+  `manual_pending`。
+- ✅ 将试用包 `manual-smoke-results-template.json` 中某一步临时标为
+  `pass` 且不填 `evidence` 后重跑自检脚本 →
+  `next_actions` 包含 `add_evidence`；测完要还原模板。
+- ✅ 将试用包 `provider-api-smoke-template.json` 中某一步临时标为
+  `fail` 后重跑自检脚本 → `next_actions` 包含
+  `resolve_failed_smoke`，且 `readiness.overall` 显示 `manual_failed`；测完要还原模板。
+- ✅ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+  Markdown 报告包含 `Smoke Evidence Next Actions`，JSON 报告包含
+  `smoke_evidence_next_actions`。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向 `1.109.0-rc457 — 短剧 smoke 证据下一步建议`。
 
 ---
 

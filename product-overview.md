@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-28 | Current version: v1.109.0-rc456
+> Last updated: 2026-06-28 | Current version: v1.109.0-rc457
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **短剧 smoke 证据下一步建议（1.109.0-rc457）** —— `scripts/short_drama_mvp_smoke_evidence_report.rb` 现在会输出 `next_actions`，把 `manual_pending` 拆成可执行建议，例如补 evidence、完成本地手测、记录真实 provider smoke 或保留外网风险；acceptance report 会同步展示 `Smoke Evidence Next Actions`。
 - **短剧 smoke 证据自检报告（1.109.0-rc456）** —— 新增 `scripts/short_drama_mvp_smoke_evidence_report.rb`，交付人填好试用包内 `manual-smoke-results-template.json` 或 `provider-api-smoke-template.json` 后，可本地生成独立 Markdown/JSON 自检报告；报告会明确失败步骤、缺失 evidence、待测项和整体 readiness。本地一键测试与 GitHub Actions 都会生成该报告，acceptance report 也会纳入 `Smoke Evidence Report` 小节。
 - **短剧 provider smoke 证据守门（1.109.0-rc455）** —— `scripts/short_drama_mvp_acceptance_report.rb` 现在会统计 provider smoke 中 pass/fail 行的 evidence 缺失情况；真实 some.im / Replicate smoke 一旦标为 failed 会进入 `manual_failed`，标为 pass/fail 但缺 evidence 会保持 `manual_pending`，默认未测仍只作为剩余风险暴露。
 - **短剧 provider smoke 模板（1.109.0-rc454）** —— `scripts/short_drama_mvp_tryout_package.rb` 现在会生成 `provider-api-smoke-template.md/json`，覆盖 some.im 图片/视频异步任务与 Replicate 放大/蒙版编辑的真实 provider smoke 证据格式；验收报告会输出 `provider_api_smoke_summary` 和 `Provider API Smoke Templates` 小节，但不会在 CI 中调用外网 API。

@@ -167,6 +167,7 @@ provider_api_smoke = provider_api_smoke_summary(provider_api_smoke_json_path)
 smoke_evidence_report_path = tryout_report["smoke_evidence_report_json_path"].to_s
 smoke_evidence_report = read_json_file(smoke_evidence_report_path)
 smoke_evidence_readiness = smoke_evidence_report.fetch("readiness", {})
+smoke_evidence_next_actions = Array(smoke_evidence_report["next_actions"])
 remaining_risks = extract_section_bullets(cutoff, "当前剩余风险")
 
 checks = []
@@ -250,7 +251,8 @@ add_check(
   checks,
   "smoke evidence report is generated",
   smoke_evidence_report["status"] == "pass" &&
-    %w[ready manual_pending manual_failed blocked].include?(smoke_evidence_readiness["overall"].to_s),
+    %w[ready manual_pending manual_failed blocked].include?(smoke_evidence_readiness["overall"].to_s) &&
+    !smoke_evidence_next_actions.empty?,
   "acceptance report should read the standalone smoke evidence report so handoff users can verify filled manual/provider JSON without external API calls.",
   smoke_evidence_report_path
 )
@@ -353,6 +355,7 @@ report = {
   "manual_evidence_summary" => manual_evidence_summary,
   "provider_api_smoke_summary" => provider_api_smoke,
   "smoke_evidence_report" => smoke_evidence_report,
+  "smoke_evidence_next_actions" => smoke_evidence_next_actions,
   "handoff_readiness" => handoff_readiness,
   "remaining_risks" => remaining_risks,
   "evidence" => evidence
@@ -435,6 +438,15 @@ File.write(
     "- Missing evidence: #{smoke_evidence_readiness["missing_evidence_count"]}",
     "- Pending or untested steps: #{smoke_evidence_readiness["pending_count"]}",
     "- Path: `#{smoke_evidence_report_path}`",
+    "",
+    "## Smoke Evidence Next Actions",
+    "",
+    *smoke_evidence_next_actions.flat_map do |action|
+      [
+        "- [#{action["priority"]}] #{action["title"]} — #{action["detail"]}",
+        *Array(action["items"]).map { |item| "  - #{item}" }
+      ]
+    end,
     "",
     "## Remaining Risks",
     "",

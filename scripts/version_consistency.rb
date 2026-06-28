@@ -304,10 +304,14 @@ add_delivery_check.call(
   "Short drama acceptance report summarizes standalone smoke evidence report",
   "scripts/short_drama_mvp_acceptance_report.rb",
   short_drama_acceptance_report.include?("smoke_evidence_report") &&
+    short_drama_acceptance_report.include?("smoke_evidence_next_actions") &&
     short_drama_acceptance_report.include?("smoke evidence report is generated") &&
     short_drama_acceptance_report.include?("## Smoke Evidence Report") &&
+    short_drama_acceptance_report.include?("## Smoke Evidence Next Actions") &&
     short_drama_smoke_evidence_report.include?("willdeep.short_drama.manual_smoke_results.v1") &&
     short_drama_smoke_evidence_report.include?("willdeep.short_drama.provider_api_smoke.v1") &&
+    short_drama_smoke_evidence_report.include?("next_actions") &&
+    short_drama_smoke_evidence_report.include?("## Next Actions") &&
     short_drama_smoke_evidence_report.include?("manual_failed") &&
     short_drama_smoke_evidence_report.include?("manual_pending"),
   "Acceptance report should include the standalone smoke evidence report and its readiness result."

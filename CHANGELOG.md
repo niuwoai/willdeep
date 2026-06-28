@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.109.0-rc457 - 2026-06-28
+
+### Changed
+- **短剧 smoke 证据下一步建议（1.109.0-rc457）** —— `scripts/short_drama_mvp_smoke_evidence_report.rb` 现在会输出 `next_actions`，按 JSON 解析错误、schema 漂移、失败 smoke、缺 evidence、本地手测待完成和 provider smoke 待记录分别给出下一步。
+- `scripts/short_drama_mvp_acceptance_report.rb` 新增 `Smoke Evidence Next Actions` 小节，并把 standalone smoke evidence report 的 `next_actions` 纳入 JSON 报告，交付时不再只看到 `manual_pending` 这个结论。
+- `scripts/version_consistency.rb` 新增守门，确保 standalone smoke evidence report 和 acceptance report 持续保留下一步建议。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc457 — 短剧 smoke 证据下一步建议`。
+- 版本号从 **1.109.0-rc456** 提升为 **1.109.0-rc457**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧 cutoff/tryout 文档同步。
+
 ## 1.109.0-rc456 - 2026-06-28
 
 ### Changed
