@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-28 | Current version: v1.109.0-rc454
+> Last updated: 2026-06-28 | Current version: v1.109.0-rc455
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **短剧 provider smoke 证据守门（1.109.0-rc455）** —— `scripts/short_drama_mvp_acceptance_report.rb` 现在会统计 provider smoke 中 pass/fail 行的 evidence 缺失情况；真实 some.im / Replicate smoke 一旦标为 failed 会进入 `manual_failed`，标为 pass/fail 但缺 evidence 会保持 `manual_pending`，默认未测仍只作为剩余风险暴露。
 - **短剧 provider smoke 模板（1.109.0-rc454）** —— `scripts/short_drama_mvp_tryout_package.rb` 现在会生成 `provider-api-smoke-template.md/json`，覆盖 some.im 图片/视频异步任务与 Replicate 放大/蒙版编辑的真实 provider smoke 证据格式；验收报告会输出 `provider_api_smoke_summary` 和 `Provider API Smoke Templates` 小节，但不会在 CI 中调用外网 API。
 - **短剧手测证据摘要（1.109.0-rc453）** —— `scripts/short_drama_mvp_acceptance_report.rb` 现在输出 `manual_evidence_summary` 和 Markdown 的 `Manual Evidence` 小节，统计 pass/fail 手测步骤是否缺少截图、任务 ID 或聊天上下文等 evidence；证据缺失时交付就绪仍保持 `manual_pending`。
 - **短剧手测结果文件摘要（1.109.0-rc452）** —— `scripts/short_drama_mvp_acceptance_report.rb` 现在读取试用包 `manual-smoke-results-template.json`，输出 `manual_results_summary` 和 Markdown 的 `Manual Results File` 小节；交付状态会同时考虑 manual queue 与结果文件，手测失败不会被机器通过掩盖。

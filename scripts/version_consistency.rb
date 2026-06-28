@@ -282,9 +282,12 @@ add_delivery_check.call(
   "scripts/short_drama_mvp_acceptance_report.rb",
   short_drama_acceptance_report.include?("provider_api_smoke_summary") &&
     short_drama_acceptance_report.include?("provider API smoke template is summarized") &&
+    short_drama_acceptance_report.include?("provider API smoke evidence is summarized") &&
+    short_drama_acceptance_report.include?("provider_api_smoke_evidence_missing") &&
+    short_drama_acceptance_report.include?("evidence_missing_count") &&
     short_drama_acceptance_report.include?("willdeep.short_drama.provider_api_smoke.v1") &&
     short_drama_acceptance_report.include?("Provider API Smoke Templates"),
-  "Acceptance report should surface optional real provider smoke evidence paths without calling external APIs."
+  "Acceptance report should surface optional real provider smoke evidence paths and evidence quality without calling external APIs."
 )
 
 changelog = read_file(repo_root, "CHANGELOG.md")

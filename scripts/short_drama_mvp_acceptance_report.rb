@@ -95,6 +95,16 @@ def provider_api_smoke_summary(path)
   data = read_json_file(path)
   steps = Array(data["steps"])
   statuses = steps.map { |step| normalize_manual_result_status(step["status"]) }
+  evidence_required_steps = steps.select do |step|
+    %w[pass fail].include?(normalize_manual_result_status(step["status"]))
+  end
+  evidence_present_steps = evidence_required_steps.select { |step| !step["evidence"].to_s.strip.empty? }
+  evidence_missing_steps = evidence_required_steps - evidence_present_steps
+  failed_items = steps.select { |step| normalize_manual_result_status(step["status"]) == "fail" }
+                      .map { |step| step["title"].to_s.empty? ? step["id"].to_s : step["title"].to_s }
+  evidence_missing_items = evidence_missing_steps.map do |step|
+    step["title"].to_s.empty? ? step["id"].to_s : step["title"].to_s
+  end
 
   {
     "path" => path,
@@ -106,7 +116,12 @@ def provider_api_smoke_summary(path)
     "capabilities" => steps.map { |step| step["capability"].to_s }.reject(&:empty?).uniq.sort,
     "passed_count" => statuses.count("pass"),
     "pending_count" => statuses.count("pending") + statuses.count("untested"),
-    "failed_count" => statuses.count("fail")
+    "failed_count" => statuses.count("fail"),
+    "failed_items" => failed_items,
+    "evidence_required_count" => evidence_required_steps.length,
+    "evidence_present_count" => evidence_present_steps.length,
+    "evidence_missing_count" => evidence_missing_steps.length,
+    "evidence_missing_items" => evidence_missing_items
   }
 end
 
@@ -222,6 +237,14 @@ add_check(
 )
 add_check(
   checks,
+  "provider API smoke evidence is summarized",
+  provider_api_smoke.fetch("evidence_missing_count").is_a?(Integer) &&
+    provider_api_smoke.fetch("evidence_required_count").is_a?(Integer),
+  "acceptance report should count filled provider smoke pass/fail rows that still need evidence.",
+  provider_api_smoke_json_path
+)
+add_check(
+  checks,
   "cutoff documents manual smoke evidence path",
   cutoff.include?("manual-smoke-results-template.md/json"),
   "SHORT_DRAMA_AI_MVP_CUTOFF.md should tell handoff users where to record manual smoke evidence.",
@@ -260,13 +283,17 @@ manual_smoke_summary = {
   "pending_items" => manual_item_titles(current_manual_section, "⏳")
 }
 
+provider_api_smoke_evidence_missing = provider_api_smoke.fetch("evidence_missing_count").positive?
 ok = checks.all? { |check| check.fetch("ok") }
 manual_status =
-  if manual_smoke_summary.fetch("failed_count").positive? || manual_result_summary.fetch("failed_count").positive?
+  if manual_smoke_summary.fetch("failed_count").positive? ||
+     manual_result_summary.fetch("failed_count").positive? ||
+     provider_api_smoke.fetch("failed_count").positive?
     "failed"
   elsif manual_smoke_summary.fetch("pending_count").positive? ||
         manual_result_summary.fetch("pending_count").positive? ||
         manual_evidence_summary.fetch("missing_count").positive? ||
+        provider_api_smoke_evidence_missing ||
         manual_result_summary.fetch("overall_status") != "pass"
     "pending"
   else
@@ -377,7 +404,13 @@ File.write(
     "- Passed: #{provider_api_smoke.fetch("passed_count")}",
     "- Pending or untested: #{provider_api_smoke.fetch("pending_count")}",
     "- Failed: #{provider_api_smoke.fetch("failed_count")}",
+    "- Evidence required for pass/fail steps: #{provider_api_smoke.fetch("evidence_required_count")}",
+    "- Evidence present: #{provider_api_smoke.fetch("evidence_present_count")}",
+    "- Evidence missing: #{provider_api_smoke.fetch("evidence_missing_count")}",
     "- Path: `#{provider_api_smoke.fetch("path")}`",
+    "",
+    *provider_api_smoke.fetch("failed_items").map { |item| "- Failed provider smoke: #{item}" },
+    *provider_api_smoke.fetch("evidence_missing_items").map { |item| "- Missing provider evidence: #{item}" },
     "",
     "## Remaining Risks",
     "",

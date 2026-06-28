@@ -1,6 +1,6 @@
 # Short Drama AI MVP Cutoff
 
-> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc454
+> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc455
 
 ## 收敛结论
 
@@ -15,7 +15,7 @@
 - Widget 支持 `sendToolAction` 结构化回传，Skill/Ruby 生成的本地 HTML 可以嵌入右侧网页组件。
 - 短剧项目支持集、分镜、人物、场景、参考图、候选图、制作缺口、检查项和制作包导出。
 - 制作包支持 Ruby/第三方 API 脚本导出、manifest 导回、pending 远端任务登记、Widget 预览和审片 CSV 回写。
-- 关键链路已建立 Ruby 合约测试，并接入本地 `scripts/run_tests.sh` 和 GitHub Actions；`short_drama_mvp_acceptance_report` 会汇总版本、试用包、手测模板、包内手测结果文件、手测证据完整性、provider API smoke 模板、当前手动 smoke 状态、交付就绪状态、剩余风险和交付文档证据；`version_consistency` 会守住交付就绪/剩余风险/手测证据/provider smoke 摘要不被删漏，并要求 cutoff 保留显式剩余风险条目。
+- 关键链路已建立 Ruby 合约测试，并接入本地 `scripts/run_tests.sh` 和 GitHub Actions；`short_drama_mvp_acceptance_report` 会汇总版本、试用包、手测模板、包内手测结果文件、手测证据完整性、provider API smoke 模板与证据完整性、当前手动 smoke 状态、交付就绪状态、剩余风险和交付文档证据；`version_consistency` 会守住交付就绪/剩余风险/手测证据/provider smoke 摘要不被删漏，并要求 cutoff 保留显式剩余风险条目。
 - 本地可试用包生成器 `scripts/short_drama_mvp_tryout_package.rb` 可生成不调用外网 API 的制作包样例，用于 dry-run/import/Widget/review queue 手动 smoke；样例 Widget 使用 `sendToolAction` 回传结构化工具动作，包内包含 `manual-smoke-checklist.md`、`manual-smoke-results-template.md/json` 和 `provider-api-smoke-template.md/json` 方便人工验收与真实 provider smoke 留证据。
 
 ## MVP 暂缓范围
@@ -28,7 +28,7 @@
 
 ## 可用版验收清单
 
-最近一次执行：2026-06-28，基线 `v1.109.0-rc454`，以下命令均通过；Xcode 构建仅保留既有 warning。
+最近一次执行：2026-06-28，基线 `v1.109.0-rc455`，以下命令均通过；Xcode 构建仅保留既有 warning。
 
 - `scripts/run_tests.sh`
 - `ruby scripts/version_consistency.rb build/version_report.md build/version_report.json`

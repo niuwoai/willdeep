@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.109.0-rc455 - 2026-06-28
+
+### Changed
+- **短剧 provider smoke 证据守门（1.109.0-rc455）** —— `scripts/short_drama_mvp_acceptance_report.rb` 现在会统计 provider smoke 中 pass/fail 行的 evidence 填写情况，并输出 `evidence_required_count`、`evidence_present_count`、`evidence_missing_count` 与缺失项。
+- `handoff_readiness` 现在会把真实 provider smoke 的 failed 行计入 `manual_failed`；pass/fail 行缺少 evidence 时保持 `manual_pending`。默认 `untested` provider smoke 仍作为剩余风险暴露，不阻断本地 MVP 验收。
+- `scripts/version_consistency.rb` 新增守门，确保 provider smoke 摘要持续包含 evidence 质量判断。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc455 — 短剧 provider smoke 证据守门`。
+- 版本号从 **1.109.0-rc454** 提升为 **1.109.0-rc455**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧 cutoff/tryout 文档同步。
+
 ## 1.109.0-rc454 - 2026-06-28
 
 ### Changed

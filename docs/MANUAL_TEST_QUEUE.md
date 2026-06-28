@@ -290,6 +290,26 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   `provider_api_smoke_summary`，且默认模板不会触发外网 API。
 - ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
   底部“验收记录”指向 `1.109.0-rc454 — 短剧 provider smoke 模板`。
+- ✅ 该版本的 provider smoke 模板已被 rc455 的 provider smoke 证据守门覆盖；当前入口以最新短剧 smoke 小节为准。
+
+## 1.109.0-rc455 — 短剧 provider smoke 证据守门
+
+- ✅ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+  JSON 报告的 `provider_api_smoke_summary` 包含
+  `evidence_required_count`、`evidence_present_count`、
+  `evidence_missing_count` 和 `evidence_missing_items`。
+- ✅ 打开 `build/ci/short_drama_mvp_acceptance_report.json` →
+  默认 provider smoke 模板全为 `untested` 时，`provider_api_smoke_summary.evidence_required_count`
+  为 0，且 `handoff_readiness.overall` 仍由本地手测状态决定。
+- ✅ 将试用包 `provider-api-smoke-template.json` 中某一步临时标为
+  `pass` 且不填 `evidence` 后重跑验收脚本 →
+  `provider_api_smoke_summary.evidence_missing_count` 增加，且
+  `handoff_readiness.overall` 显示 `manual_pending`；测完要还原模板。
+- ✅ 将试用包 `provider-api-smoke-template.json` 中某一步临时标为
+  `fail` 后重跑验收脚本 → `provider_api_smoke_summary.failed_count`
+  增加，且 `handoff_readiness.overall` 显示 `manual_failed`；测完要还原模板。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向 `1.109.0-rc455 — 短剧 provider smoke 证据守门`。
 
 ---
 
