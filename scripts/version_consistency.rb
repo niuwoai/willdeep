@@ -165,6 +165,7 @@ add_check.call(
 run_tests = read_file(repo_root, "scripts/run_tests.sh")
 workflow = read_file(repo_root, ".github/workflows/test.yml")
 short_drama_tryout_package = read_file(repo_root, "scripts/short_drama_mvp_tryout_package.rb")
+short_drama_acceptance_report = read_file(repo_root, "scripts/short_drama_mvp_acceptance_report.rb")
 add_delivery_check.call(
   "Short drama cutoff documents one-shot local acceptance",
   "docs/SHORT_DRAMA_AI_MVP_CUTOFF.md",
@@ -215,6 +216,17 @@ add_delivery_check.call(
     workflow.include?("Generate short-drama MVP acceptance report") &&
     workflow.include?("short_drama_mvp_acceptance_report.md"),
   "Local and GitHub acceptance should generate the short-drama MVP acceptance report."
+)
+add_delivery_check.call(
+  "Short drama acceptance report preserves handoff readiness summary",
+  "scripts/short_drama_mvp_acceptance_report.rb",
+  short_drama_acceptance_report.include?('"handoff_readiness"') &&
+    short_drama_acceptance_report.include?('"remaining_risks"') &&
+    short_drama_acceptance_report.include?("## Handoff Readiness") &&
+    short_drama_acceptance_report.include?("## Remaining Risks") &&
+    short_drama_cutoff.include?("交付就绪状态") &&
+    short_drama_cutoff.include?("剩余风险"),
+  "Acceptance report should keep machine/manual readiness and remaining-risk evidence visible."
 )
 
 changelog = read_file(repo_root, "CHANGELOG.md")

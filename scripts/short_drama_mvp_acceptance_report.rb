@@ -91,6 +91,13 @@ add_check(
 )
 add_check(
   checks,
+  "delivery gates include handoff readiness summary",
+  delivery_gate_names.include?("Short drama acceptance report preserves handoff readiness summary"),
+  "version consistency should guard handoff readiness and remaining-risk summary output.",
+  version_report_path
+)
+add_check(
+  checks,
   "tryout package report passes",
   tryout_report["status"] == "pass" && tryout_checks.all? { |check| check["ok"] },
   "short_drama_mvp_tryout_package_report.json should pass all package checks.",

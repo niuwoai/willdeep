@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.109.0-rc450 - 2026-06-28
+
+### Changed
+- **短剧交付就绪摘要纳入版本一致性守门（1.109.0-rc450）** —— `scripts/version_consistency.rb` 现在会检查短剧验收报告持续输出 `handoff_readiness`、`remaining_risks`、`Handoff Readiness` 和 `Remaining Risks`，防止交付就绪/剩余风险摘要在后续改动中被删漏。
+- `scripts/short_drama_mvp_acceptance_report.rb` 会反向确认版本报告中存在该 delivery gate，确保本地验收摘要和版本一致性守门互相接住。
+- 稳定 `AgentBackgroundJobsTests` 的后台任务计数 drain 用例，改用短暂后台任务自然完成，避免 shell/沙箱子进程信号时序导致完整 Xcode 套件偶发红灯。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc450 — 短剧交付就绪摘要守门`。
+- 版本号从 **1.109.0-rc449** 提升为 **1.109.0-rc450**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧 cutoff/tryout 文档同步。
+
 ## 1.109.0-rc449 - 2026-06-28
 
 ### Changed

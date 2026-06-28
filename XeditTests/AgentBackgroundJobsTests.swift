@@ -628,7 +628,7 @@ struct AgentBackgroundJobsTests {
 
         // Alive background job: counts with no live turn at all.
         let job = try appState.agentJobRegistry.start(
-            command: "trap 'exit 143' TERM; while true; do sleep 1; done",
+            command: "sleep 1",
             workingDirectory: nil,
             runtimeID: session.id,
             timeoutSeconds: nil
@@ -636,16 +636,11 @@ struct AgentBackgroundJobsTests {
         #expect(appState.agentRunningTaskCount == 1)
         #expect(appState.agentRunningTaskSummary?.contains(job.displayHandle) == true)
 
-        _ = appState.agentJobRegistry.kill(id: job.id)
-        // `kill` only sends SIGTERM; the process's terminationHandler marks
-        // the job finished on a *later* main-actor hop (`Task { @MainActor
-        // markFinished }`). So `job.isAlive` and the `agentRunningTaskCount`
-        // we actually assert on are eventually-consistent — waiting on
-        // `isAlive` alone can return inside the window where the job has left
-        // `.running` but the count this test reads hasn't settled yet, which
-        // made this timing-sensitive test flake on faster boxes. Poll the
-        // asserted quantity itself; a genuine "never drains" regression still
-        // fails via timeout.
+        // This test is about AppState's derived count, not process-tree
+        // signalling. Let the short background job finish naturally, then poll
+        // the asserted quantity itself; a genuine "never drains" regression
+        // still fails via timeout. Explicit kill semantics stay covered by
+        // `longRunningCommandCanBeKilled`.
         let drained = await waitUntilTrue(timeoutMs: 15000) {
             appState.agentRunningTaskCount == 0
         }

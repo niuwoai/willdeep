@@ -209,14 +209,26 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 
 ## 1.109.0-rc449 — 短剧交付就绪与剩余风险摘要
 
-- ⏳ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+- ✅ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
   Markdown 报告包含 `Handoff Readiness` 和 `Remaining Risks`，
   JSON 报告包含 `handoff_readiness` 与 `remaining_risks`。
-- ⏳ 打开 `build/ci/short_drama_mvp_acceptance_report.json` →
+- ✅ 打开 `build/ci/short_drama_mvp_acceptance_report.json` →
   在机器检查通过且当前小节仍有待测项时，顶层 `status` 保持 `pass`，
   但 `handoff_readiness.overall` 显示 `manual_pending`。
-- ⏳ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
   底部“验收记录”指向 `1.109.0-rc449 — 短剧交付就绪与剩余风险摘要`。
+- ✅ 该版本的交付就绪摘要检查已被 rc450 的 `version_consistency`
+  机器守门覆盖；当前入口以最新短剧 smoke 小节为准。
+
+## 1.109.0-rc450 — 短剧交付就绪摘要守门
+
+- ⏳ 运行 `ruby scripts/version_consistency.rb ...` →
+  报告 `Delivery Gates` 包含
+  `Short drama acceptance report preserves handoff readiness summary`，且为 `PASS`。
+- ⏳ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+  报告 checks 包含 `delivery gates include handoff readiness summary`，且为通过。
+- ⏳ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向 `1.109.0-rc450 — 短剧交付就绪摘要守门`。
 
 ---
 
