@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-28 | Current version: v1.109.0-rc442
+> Last updated: 2026-06-28 | Current version: v1.109.0-rc443
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **短剧人工 smoke 队列顺序守门（1.109.0-rc443）** —— `scripts/version_consistency.rb` 现在同时检查语义最新版和文档中最后一个短剧 smoke 小节，确保试用文档指向的人工验收入口不会夹在旧小节中间。
 - **短剧收口文档版本守门（1.109.0-rc442）** —— `scripts/version_consistency.rb` 现在检查短剧 cutoff、tryout 和手动 smoke 队列的基线/验收小节版本，防止可用版文档继续指向旧 smoke 小节。
 - **run_command stdout 收尾读取稳定化（1.109.0-rc441）** —— 前台 `run_command` 在进程结束后同步 drain stdout/stderr pipe 剩余数据，避免 macOS CI 偶发丢掉短命令最后一段 stdout 导致测试红灯。
 - **短剧 MVP 试用包内置手动 smoke 清单（1.109.0-rc440）** —— `scripts/short_drama_mvp_tryout_package.rb` 生成的本地样例包新增 `manual-smoke-checklist.md`，把 dry-run 导入、正式导入、媒体任务侧栏、`latest-media-import` 和 Widget 结构化动作验收步骤放到包内，并在 JSON/Markdown 报告中暴露清单路径。

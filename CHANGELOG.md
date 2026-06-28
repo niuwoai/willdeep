@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.109.0-rc443 - 2026-06-28
+
+### Fixed
+- **短剧人工 smoke 队列顺序纳入版本一致性守门（1.109.0-rc443）** —— `scripts/version_consistency.rb` 现在同时检查语义最新版短剧 smoke 小节和文档中最后一个短剧 smoke 小节，防止试用文档指向的新验收入口夹在旧小节中间。
+- 短剧试用文档的人工 smoke 记录入口更新为 `1.109.0-rc443 — 短剧人工 smoke 队列顺序守门`，方便交付前直接定位最新人工验收项。
+- 版本号从 **1.109.0-rc442** 提升为 **1.109.0-rc443**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧试用文档同步。
+
 ## 1.109.0-rc442 - 2026-06-28
 
 ### Fixed

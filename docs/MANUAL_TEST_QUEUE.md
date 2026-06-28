@@ -144,6 +144,16 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   聊天输入框出现 `handoff_tool=short_drama_import_review_csv`，
   参数指向 `production-review-queue.csv` 且 `dry_run=true`。
 
+## 1.109.0-rc443 — 短剧人工 smoke 队列顺序守门
+
+- ⏳ 运行 `ruby scripts/version_consistency.rb ...` →
+  报告 sources 中同时包含 `Manual smoke latest short drama section`
+  和 `Manual smoke last short drama section`，且二者都指向 `1.109.0-rc443`。
+- ⏳ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向 `1.109.0-rc443 — 短剧人工 smoke 队列顺序守门`。
+- ⏳ 打开 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) →
+  `1.109.0-rc443 — 短剧人工 smoke 队列顺序守门` 是 phase 2 之前最后一个短剧 smoke 小节。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）

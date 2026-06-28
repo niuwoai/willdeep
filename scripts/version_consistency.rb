@@ -130,6 +130,12 @@ add_check.call(
   short_drama_manual_versions.max_by { |version| semver_sort_key(version) },
   expected_count: 1
 )
+add_check.call(
+  "Manual smoke last short drama section",
+  "docs/MANUAL_TEST_QUEUE.md",
+  short_drama_manual_versions.last,
+  expected_count: 1
+)
 
 changelog = read_file(repo_root, "CHANGELOG.md")
 add_check.call(
