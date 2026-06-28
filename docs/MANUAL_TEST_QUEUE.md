@@ -113,6 +113,15 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   Widget 侧栏能显示来源路径、制作包目录和 `import_media_manifest` / gap plan /
   review queue 等 handoff 入口。
 
+## 1.109.0-rc442 — 短剧收口文档版本守门
+
+- ⏳ 运行 `ruby scripts/version_consistency.rb ...` →
+  报告 sources 中包含短剧 cutoff、tryout 和手动 smoke 队列三类检查。
+- ⏳ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  顶部基线和底部“验收记录”都指向 `1.109.0-rc442`。
+- ⏳ 打开 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) →
+  最新短剧 smoke 小节是 `1.109.0-rc442 — 短剧收口文档版本守门`。
+
 ## 1.109.0-rc440 — 短剧 MVP 试用包内置手动 smoke 清单
 
 - ⏳ 运行 `ruby scripts/short_drama_mvp_tryout_package.rb ...` →

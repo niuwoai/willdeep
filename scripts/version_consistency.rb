@@ -28,6 +28,13 @@ def badge_to_version(value)
   value.tr("_", "-").gsub("--", "-")
 end
 
+def semver_sort_key(version)
+  core, rc = version.split("-rc", 2)
+  major, minor, patch = core.split(".").map(&:to_i)
+  release_rank = rc ? 0 : 1
+  [major, minor, patch, release_rank, rc.to_i]
+end
+
 checks = []
 
 add_check = lambda do |name, path, versions, expected_count: nil|
@@ -93,6 +100,34 @@ add_check.call(
   "Agent harness priorities current version",
   "docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md",
   harness_priorities[/Current version:\s*v?(#{version_pattern})/, 1],
+  expected_count: 1
+)
+
+short_drama_cutoff = read_file(repo_root, "docs/SHORT_DRAMA_AI_MVP_CUTOFF.md")
+add_check.call(
+  "Short drama cutoff baseline versions",
+  "docs/SHORT_DRAMA_AI_MVP_CUTOFF.md",
+  short_drama_cutoff.scan(/(?:Baseline version:\s*v?|基线 `v?)(#{version_pattern})/).flatten,
+  expected_count: 2
+)
+
+short_drama_tryout = read_file(repo_root, "docs/SHORT_DRAMA_AI_MVP_TRYOUT.md")
+add_check.call(
+  "Short drama tryout baseline/manual queue versions",
+  "docs/SHORT_DRAMA_AI_MVP_TRYOUT.md",
+  [
+    short_drama_tryout[/Baseline version:\s*v?(#{version_pattern})/, 1],
+    short_drama_tryout[/人工 smoke 结果请记录到 .*?`(#{version_pattern})\s+—/m, 1]
+  ],
+  expected_count: 2
+)
+
+manual_test_queue = read_file(repo_root, "docs/MANUAL_TEST_QUEUE.md")
+short_drama_manual_versions = manual_test_queue.scan(/^##\s+(#{version_pattern})\s+—\s+短剧/m).flatten
+add_check.call(
+  "Manual smoke latest short drama section",
+  "docs/MANUAL_TEST_QUEUE.md",
+  short_drama_manual_versions.max_by { |version| semver_sort_key(version) },
   expected_count: 1
 )
 

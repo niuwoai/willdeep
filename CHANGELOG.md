@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.109.0-rc442 - 2026-06-28
+
+### Fixed
+- **短剧收口文档纳入版本一致性守门（1.109.0-rc442）** —— `scripts/version_consistency.rb` 现在会同时检查 `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 的短剧基线/验收小节版本，防止短剧可用版文档指向旧 smoke 小节。
+- 修正短剧试用文档的人工 smoke 记录入口，当前基线、验收记录和手动队列最新短剧小节统一指向 `1.109.0-rc442`。
+- 版本号从 **1.109.0-rc441** 提升为 **1.109.0-rc442**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧试用文档同步。
+
 ## 1.109.0-rc441 - 2026-06-28
 
 ### Fixed
