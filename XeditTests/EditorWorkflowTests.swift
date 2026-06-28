@@ -457,6 +457,10 @@ extension WillDeepTests {
         #expect(second.column == 2)
         #expect(end.line == 3)
         #expect(end.column == 6)
+
+        let trailingNewline = EditorView.Coordinator.lineAndColumn(for: 2, in: "a\n")
+        #expect(trailingNewline.line == 2)
+        #expect(trailingNewline.column == 1)
     }
 
     @Test("editor selected line count maps ranges")
@@ -466,6 +470,21 @@ extension WillDeepTests {
         #expect(EditorView.Coordinator.selectedLineCount(for: NSRange(location: 0, length: 0), in: text) == 0)
         #expect(EditorView.Coordinator.selectedLineCount(for: NSRange(location: 1, length: 3), in: text) == 1)
         #expect(EditorView.Coordinator.selectedLineCount(for: NSRange(location: 1, length: 8), in: text) == 2)
+        #expect(EditorView.Coordinator.selectedLineCount(for: NSRange(location: 4, length: 7), in: text) == 3)
+    }
+
+    @Test("editor selected text can be capped for live selection publishing")
+    func testEditorSelectedTextCapsPublishedPreview() {
+        let text = "alpha\nbeta\ngamma"
+
+        #expect(
+            EditorView.Coordinator.selectedText(
+                for: NSRange(location: 0, length: 16),
+                in: text,
+                maxLength: 5
+            ) == "alpha"
+        )
+        #expect(EditorView.Coordinator.selectedText(for: NSRange(location: 6, length: 4), in: text) == "beta")
     }
 
     @Test("quick open file URLs are sorted and limited")

@@ -266,6 +266,7 @@ struct EditorView: NSViewRepresentable {
         /// AppKit builds have a concrete first viewport even before SwiftUI has
         /// delivered a non-zero visible rect.
         private static let initialLayoutCharacterLimit = 20_000
+        private static let publishedSelectionTextLimit = 6_000
 
         /// Debounced viewport re-highlight on scroll.
         private var viewportHighlightWorkItem: DispatchWorkItem?
@@ -822,9 +823,14 @@ struct EditorView: NSViewRepresentable {
 
         private func publishCursorPosition(for textView: WillDeepTextView) {
             let selectedRange = textView.selectedRange()
-            let position = Self.lineAndColumn(for: selectedRange.location, in: textView.string)
-            let selectedLines = Self.selectedLineCount(for: selectedRange, in: textView.string)
-            let selectedText = Self.selectedText(for: selectedRange, in: textView.string)
+            let content = textView.string
+            let position = Self.lineAndColumn(for: selectedRange.location, in: content)
+            let selectedLines = Self.selectedLineCount(for: selectedRange, in: content)
+            let selectedText = Self.selectedText(
+                for: selectedRange,
+                in: content,
+                maxLength: Self.publishedSelectionTextLimit
+            )
             parent.onSelectionChange?(position.line, position.column, selectedRange.length, selectedLines, selectedText)
         }
 
@@ -932,8 +938,7 @@ struct EditorView: NSViewRepresentable {
                 for: NSRange(location: boundedLocation, length: 0)
             )
 
-            let prefix = nsText.substring(with: NSRange(location: 0, length: lineStart))
-            let line = prefix.components(separatedBy: .newlines).count
+            let line = lineNumber(forLineStart: lineStart, in: nsText)
             return (line, boundedLocation - lineStart + 1)
         }
 
@@ -942,17 +947,63 @@ struct EditorView: NSViewRepresentable {
             let nsText = text as NSString
             let boundedLocation = min(max(0, range.location), nsText.length)
             let boundedEnd = min(max(boundedLocation, NSMaxRange(range)), nsText.length)
-            let selected = nsText.substring(with: NSRange(location: boundedLocation, length: boundedEnd - boundedLocation))
-            return selected.components(separatedBy: .newlines).count
+            guard boundedEnd > boundedLocation else { return 0 }
+            return newlineCount(in: nsText, from: boundedLocation, to: boundedEnd) + 1
         }
 
-        static func selectedText(for range: NSRange, in text: String) -> String {
+        static func selectedText(for range: NSRange, in text: String, maxLength: Int? = nil) -> String {
             guard range.length > 0 else { return "" }
             let nsText = text as NSString
             let boundedLocation = min(max(0, range.location), nsText.length)
             let boundedEnd = min(max(boundedLocation, NSMaxRange(range)), nsText.length)
             guard boundedEnd > boundedLocation else { return "" }
-            return nsText.substring(with: NSRange(location: boundedLocation, length: boundedEnd - boundedLocation))
+            let length = boundedEnd - boundedLocation
+            let cappedLength = maxLength.map { min(length, max(0, $0)) } ?? length
+            guard cappedLength > 0 else { return "" }
+            return nsText.substring(with: NSRange(location: boundedLocation, length: cappedLength))
+        }
+
+        private static func lineNumber(forLineStart lineStart: Int, in text: NSString) -> Int {
+            let boundedLineStart = min(max(0, lineStart), text.length)
+            guard boundedLineStart > 0 else { return 1 }
+
+            var currentLocation = 0
+            var line = 1
+            var currentLineStart = 0
+            var lineEnd = 0
+            var contentsEnd = 0
+
+            while currentLocation < boundedLineStart {
+                text.getLineStart(
+                    &currentLineStart,
+                    end: &lineEnd,
+                    contentsEnd: &contentsEnd,
+                    for: NSRange(location: currentLocation, length: 0)
+                )
+                guard lineEnd > currentLocation else { break }
+                line += 1
+                currentLocation = lineEnd
+            }
+
+            return line
+        }
+
+        private static func newlineCount(in text: NSString, from: Int, to: Int) -> Int {
+            let lower = min(max(0, from), text.length)
+            let upper = min(max(lower, to), text.length)
+            guard lower < upper else { return 0 }
+
+            var count = 0
+            var searchRange = NSRange(location: lower, length: upper - lower)
+            while searchRange.length > 0 {
+                let found = text.rangeOfCharacter(from: .newlines, options: [], range: searchRange)
+                if found.location == NSNotFound { break }
+                count += 1
+                let nextLocation = NSMaxRange(found)
+                guard nextLocation < upper else { break }
+                searchRange = NSRange(location: nextLocation, length: upper - nextLocation)
+            }
+            return count
         }
 
         // MARK: - Debounced Highlighting

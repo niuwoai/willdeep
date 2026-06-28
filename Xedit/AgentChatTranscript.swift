@@ -32,6 +32,49 @@
 import SwiftUI
 import AppKit
 
+struct AgentMessageContentPreview {
+    let content: String
+    let omittedCharacters: Int
+
+    static func make(
+        content: String,
+        maxCharacters: Int,
+        omissionText: (Int) -> String
+    ) -> AgentMessageContentPreview {
+        guard maxCharacters > 0 else {
+            return AgentMessageContentPreview(content: "", omittedCharacters: content.count)
+        }
+        guard content.count > maxCharacters else {
+            return AgentMessageContentPreview(content: content, omittedCharacters: 0)
+        }
+        guard maxCharacters >= 128 else {
+            return AgentMessageContentPreview(
+                content: String(content.prefix(maxCharacters)),
+                omittedCharacters: max(0, content.count - maxCharacters)
+            )
+        }
+
+        var omitted = max(0, content.count - maxCharacters)
+        var marker = ""
+        var headCount = 0
+        var tailCount = 0
+
+        for _ in 0..<4 {
+            marker = "\n\n\(omissionText(omitted))\n\n"
+            let available = max(2, maxCharacters - marker.count)
+            headCount = available / 2
+            tailCount = available - headCount
+            let nextOmitted = max(0, content.count - headCount - tailCount)
+            if nextOmitted == omitted { break }
+            omitted = nextOmitted
+        }
+
+        marker = "\n\n\(omissionText(omitted))\n\n"
+        let preview = String(content.prefix(headCount)) + marker + String(content.suffix(tailCount))
+        return AgentMessageContentPreview(content: preview, omittedCharacters: omitted)
+    }
+}
+
 struct AgentChatTranscript: View {
     @EnvironmentObject var appState: AppState
     private static let bottomScrollID = "agent-chat-transcript-bottom"
@@ -150,7 +193,7 @@ struct AgentChatTranscript: View {
                             if display.truncated {
                                 longMessageTruncationCard(
                                     original: streamingMessage,
-                                    originalLength: display.originalLength
+                                    omittedLength: display.omittedLength
                                 )
                             }
                         }
@@ -417,8 +460,8 @@ struct AgentChatTranscript: View {
     private static let renderedMessageCap = 20
 
     /// Per-message content size cap (in characters). Any message with
-    /// content longer than this gets truncated in the chat bubble and
-    /// the user gets a "view full content" affordance that opens the
+    /// content longer than this gets a start/end preview in the chat
+    /// bubble and the user gets a "view full content" affordance that opens the
     /// message in a standalone NSTextView window. This is the real
     /// freeze culprit: 13 rcs of bisection ruled out structural and
     /// dependency-graph issues; the remaining hot spot was SwiftUI's
@@ -428,17 +471,24 @@ struct AgentChatTranscript: View {
     /// enough for SwiftUI to handle without main-thread freezes.
     private static let messageContentRenderCap = 3_000
 
-    /// Returns the message unchanged when its content fits, or a
-    /// truncated copy when it doesn't.
-    /// `(rendered, wasTruncated, originalLength)`.
-    private func truncatedForBubble(_ message: AgentMessage) -> (rendered: AgentMessage, truncated: Bool, originalLength: Int) {
+    /// Returns the message unchanged when its content fits, or a preview
+    /// copy when it doesn't. Long previews preserve both the beginning
+    /// and the end so the latest conclusion/error is still visible while
+    /// SwiftUI avoids laying out the full streaming body.
+    /// `(rendered, wasTruncated, omittedLength)`.
+    private func truncatedForBubble(_ message: AgentMessage) -> (rendered: AgentMessage, truncated: Bool, omittedLength: Int) {
         let originalLength = message.content.count
         guard originalLength > Self.messageContentRenderCap else {
-            return (message, false, originalLength)
+            return (message, false, 0)
         }
         var copy = message
-        copy.content = String(message.content.prefix(Self.messageContentRenderCap))
-        return (copy, true, originalLength)
+        let preview = AgentMessageContentPreview.make(
+            content: message.content,
+            maxCharacters: Self.messageContentRenderCap,
+            omissionText: { L10n.Transcript.messageMiddleOmittedText(String($0)) }
+        )
+        copy.content = preview.content
+        return (copy, true, preview.omittedCharacters)
     }
 
     /// Subset of `rendered` that should land in the NSTextView
@@ -481,8 +531,7 @@ struct AgentChatTranscript: View {
     /// content in a standalone NSTextView window — same idea as the
     /// session-wide reader, but for one bubble at a time.
     @ViewBuilder
-    private func longMessageTruncationCard(original: AgentMessage, originalLength: Int) -> some View {
-        let omitted = originalLength - AgentChatTranscript.messageContentRenderCap
+    private func longMessageTruncationCard(original: AgentMessage, omittedLength: Int) -> some View {
         Button {
             let sessionTitle = appState.agentSessions
                 .first(where: { $0.id == appState.activeAgentSessionID })?.title ?? ""
@@ -492,7 +541,7 @@ struct AgentChatTranscript: View {
                 Image(systemName: "doc.text.magnifyingglass")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
-                Text(L10n.Transcript.messageTruncatedText(String(AgentChatTranscript.messageContentRenderCap), String(omitted)))
+                Text(L10n.Transcript.messageTruncatedText(String(AgentChatTranscript.messageContentRenderCap), String(omittedLength)))
                     .font(AgentDesign.secondaryFont)
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)

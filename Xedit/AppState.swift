@@ -72,7 +72,10 @@ final class AppState: ObservableObject {
     @Published private(set) var cursorColumn = 1
     @Published private(set) var selectedCharacterCount = 0
     @Published private(set) var selectedLineCount = 0
-    @Published private(set) var selectedText = ""
+    /// Current editor selection text for Agent request context. The UI only
+    /// renders selection counts, so publishing the text itself would invalidate
+    /// the Agent/sidebar view tree on every drag-selection event.
+    private(set) var selectedText = ""
     @Published var hasExternalFileChanges = false
     @Published var gitStatus = GitRepositoryStatus()
     @Published var agentGitWorktrees: [AgentGitWorktree] = []

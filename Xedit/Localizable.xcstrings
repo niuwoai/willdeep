@@ -22883,13 +22883,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Message shows first N characters only"
+            "value" : "Message preview keeps start and end (%@ chars max, %@ omitted)"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "消息仅显示前N个字符"
+            "value" : "消息预览保留前后片段（最多 %@ 字符，省略 %@ 字符）"
+          }
+        }
+      }
+    },
+    "transcript.message-middle-omitted.text" : {
+      "comment" : "inline marker inserted inside a long message preview",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "… %@ characters omitted; showing message start and end …"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "… 已省略 %@ 字符，当前显示消息开头和结尾 …"
           }
         }
       }

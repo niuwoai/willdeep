@@ -14,6 +14,26 @@ import Testing
 @Suite
 struct AgentChatHistoryRendererTests {
     @Test
+    func longMessagePreviewKeepsHeadAndTail() {
+        let content = String(repeating: "A", count: 120)
+            + "MIDDLE_SHOULD_BE_OMITTED"
+            + String(repeating: "Z", count: 120)
+
+        let preview = AgentMessageContentPreview.make(
+            content: content,
+            maxCharacters: 160,
+            omissionText: { "[\($0) omitted]" }
+        )
+
+        #expect(preview.content.hasPrefix(String(repeating: "A", count: 20)))
+        #expect(preview.content.hasSuffix(String(repeating: "Z", count: 20)))
+        #expect(preview.content.contains("omitted"))
+        #expect(!preview.content.contains("MIDDLE_SHOULD_BE_OMITTED"))
+        #expect(preview.omittedCharacters > 0)
+        #expect(preview.content.count <= 160)
+    }
+
+    @Test
     func rendersNonToolMarkdownWithoutRawMarkers() {
         let message = AgentMessage(
             role: .assistant,

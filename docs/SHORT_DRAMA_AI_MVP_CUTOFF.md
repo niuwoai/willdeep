@@ -1,6 +1,6 @@
 # Short Drama AI MVP Cutoff
 
-> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc458
+> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc460
 
 ## 收敛结论
 
@@ -28,7 +28,7 @@
 
 ## 可用版验收清单
 
-最近一次执行：2026-06-28，基线 `v1.109.0-rc458`，以下命令均通过；Xcode 构建仅保留既有 warning。
+当前记录：2026-06-28，基线 `v1.109.0-rc460`。以下命令作为可用版验收 gate；本次编辑器选区内存稳定化会单独验证相关单测、Debug 构建和版本一致性。
 
 - `scripts/run_tests.sh`
 - `ruby scripts/version_consistency.rb build/version_report.md build/version_report.json`

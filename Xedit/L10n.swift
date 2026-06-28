@@ -2193,8 +2193,12 @@ enum L10n {
         static let learningApproveHelp = String(localized: "transcript.learning.approve-help", defaultValue: "Save these memories to your memory store")
         static let messageTruncatedHelp = String(localized: "transcript.message-truncated.help", defaultValue: "Open in standalone window to view full message content")
         static func messageTruncatedText(_ a1: String, _ a2: String) -> String {
-            let template = String(localized: "transcript.message-truncated.text", defaultValue: "Message shows first N characters only")
+            let template = String(localized: "transcript.message-truncated.text", defaultValue: "Message preview keeps start and end (%@ chars max, %@ omitted)")
             return String(format: template, a1, a2)
+        }
+        static func messageMiddleOmittedText(_ a1: String) -> String {
+            let template = String(localized: "transcript.message-middle-omitted.text", defaultValue: "… %@ characters omitted; showing message start and end …")
+            return String(format: template, a1)
         }
         static let olderHistoryHelp = String(localized: "transcript.older-history.help", defaultValue: "Open in standalone window to view full conversation history")
         static func olderHistoryText(_ a1: String) -> String {
