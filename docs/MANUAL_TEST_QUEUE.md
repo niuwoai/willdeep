@@ -1,6 +1,6 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-06-17
+> Last updated: 2026-06-28
 
 CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态机的特性
 都得人坐到机器前面点。这个文件按版本累积着每次发版后我提醒你
@@ -97,6 +97,21 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   媒体任务侧栏显示导回任务，聊天下一轮能看到 `latest-media-import`。
 - ⏳ 检查项修复流：从检查项打开蒙版/放大/补拍任务，任务完成后仍保留
   `review_item_id`，并可关闭对应检查项。
+
+## 1.109.0-rc438 — 短剧 MVP 本地试用包
+
+- ⏳ 运行 `ruby scripts/short_drama_mvp_tryout_package.rb ...` →
+  `build/ci/short_drama_mvp_tryout_package_report.md/json` 显示 pass，
+  样例包包含 `widget-preview.html`、manifest、timeline、gap report、
+  review template/queue 和 outputs。
+- ⏳ 用 `import_media_manifest(package_directory=build/ci/short_drama_mvp_tryout_package, dry_run=true, import_pending_tasks=true)` →
+  dry-run 汇总应显示 3 个可导入产物、1 个 pending 任务、1 个 failed 修复任务。
+- ⏳ 用同一 package 正式导入 →
+  媒体任务侧栏能看到 completed / pending / failed 三类任务，且 `latest-media-import`
+  写入聊天上下文。
+- ⏳ 打开样例 `widget-preview.html` →
+  Widget 侧栏能显示来源路径、制作包目录和 `import_media_manifest` / gap plan /
+  review queue 等 handoff 入口。
 
 ---
 

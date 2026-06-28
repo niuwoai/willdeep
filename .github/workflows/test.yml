@@ -71,6 +71,9 @@ jobs:
       - name: Run production gap actions contract guard
         run: ruby scripts/production_gap_actions_contract_test.rb build/ci/production_gap_actions_report.md build/ci/production_gap_actions_report.json
 
+      - name: Generate short-drama MVP tryout package
+        run: ruby scripts/short_drama_mvp_tryout_package.rb build/ci/short_drama_mvp_tryout_package build/ci/short_drama_mvp_tryout_package_report.md build/ci/short_drama_mvp_tryout_package_report.json
+
       # 守住简体中文翻译覆盖率:可翻译文案缺 zh-Hans 即报红,防止新增 key
       # 漏翻让中文用户回落英文。纯符号/格式串自动豁免。
       - name: Run i18n coverage guard
@@ -129,6 +132,8 @@ jobs:
           printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat build/ci/production_gap_actions_report.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat build/ci/short_drama_mvp_tryout_package_report.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat build/ci/report.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload test artifacts
@@ -156,5 +161,8 @@ jobs:
             build/ci/media_import_context_report.json
             build/ci/production_gap_actions_report.md
             build/ci/production_gap_actions_report.json
+            build/ci/short_drama_mvp_tryout_package
+            build/ci/short_drama_mvp_tryout_package_report.md
+            build/ci/short_drama_mvp_tryout_package_report.json
             build/ci/xcodebuild.log
           retention-days: 14

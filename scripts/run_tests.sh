@@ -17,6 +17,7 @@
 #   - media_task_refresh_report.* 媒体任务刷新/聊天接力契约报告
 #   - media_import_context_report.* manifest 导回/聊天接力契约报告
 #   - production_gap_actions_report.* 短剧制作缺口动作/聊天接力契约报告
+#   - short_drama_mvp_tryout_package_report.* 短剧 MVP 本地试用包生成报告
 #   - report.md             markdown 报告（CI 摘要 & 本地 quick look）
 #   - report.json           机读格式（自动化下游用）
 # =============================================================================
@@ -42,6 +43,7 @@ ruby "${ROOT_DIR}/scripts/image_edit_contract_test.rb" "${OUT_DIR}/image_edit_re
 ruby "${ROOT_DIR}/scripts/media_task_refresh_contract_test.rb" "${OUT_DIR}/media_task_refresh_report.md" "${OUT_DIR}/media_task_refresh_report.json"
 ruby "${ROOT_DIR}/scripts/media_import_context_contract_test.rb" "${OUT_DIR}/media_import_context_report.md" "${OUT_DIR}/media_import_context_report.json"
 ruby "${ROOT_DIR}/scripts/production_gap_actions_contract_test.rb" "${OUT_DIR}/production_gap_actions_report.md" "${OUT_DIR}/production_gap_actions_report.json"
+ruby "${ROOT_DIR}/scripts/short_drama_mvp_tryout_package.rb" "${OUT_DIR}/short_drama_mvp_tryout_package" "${OUT_DIR}/short_drama_mvp_tryout_package_report.md" "${OUT_DIR}/short_drama_mvp_tryout_package_report.json"
 
 EXTRA_ARGS=("$@")
 if [ ${#EXTRA_ARGS[@]} -eq 0 ]; then

@@ -1,6 +1,6 @@
 # Short Drama AI MVP Cutoff
 
-> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc436
+> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc438
 
 ## 收敛结论
 
@@ -16,6 +16,7 @@
 - 短剧项目支持集、分镜、人物、场景、参考图、候选图、制作缺口、检查项和制作包导出。
 - 制作包支持 Ruby/第三方 API 脚本导出、manifest 导回、pending 远端任务登记、Widget 预览和审片 CSV 回写。
 - 关键链路已建立 Ruby 合约测试，并接入本地 `scripts/run_tests.sh` 和 GitHub Actions。
+- 本地可试用包生成器 `scripts/short_drama_mvp_tryout_package.rb` 可生成不调用外网 API 的制作包样例，用于 dry-run/import/Widget/review queue 手动 smoke。
 
 ## MVP 暂缓范围
 
@@ -27,7 +28,7 @@
 
 ## 可用版验收清单
 
-最近一次执行：2026-06-28，基线 `v1.109.0-rc436`，以下命令均通过；Xcode 构建仅保留既有 warning。
+最近一次执行：2026-06-28，基线 `v1.109.0-rc438`，以下命令均通过；Xcode 构建仅保留既有 warning。
 
 - `ruby scripts/version_consistency.rb build/version_report.md build/version_report.json`
 - `ruby scripts/complexity_guard.rb build/ci/complexity_report.md build/ci/complexity_report.json`
@@ -37,6 +38,7 @@
 - `ruby scripts/production_gap_actions_contract_test.rb build/ci/production_gap_actions_report.md build/ci/production_gap_actions_report.json`
 - `ruby scripts/widget_side_panel_contract_test.rb build/ci/widget_side_panel_report.md build/ci/widget_side_panel_report.json`
 - `ruby scripts/image_edit_contract_test.rb build/ci/image_edit_report.md build/ci/image_edit_report.json`
+- `ruby scripts/short_drama_mvp_tryout_package.rb build/ci/short_drama_mvp_tryout_package build/ci/short_drama_mvp_tryout_package_report.md build/ci/short_drama_mvp_tryout_package_report.json`
 - `xcodebuild -quiet -project Xedit.xcodeproj -scheme Xedit -configuration Debug -destination 'platform=macOS' -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO build`
 
 ## 手动 smoke 场景
@@ -48,17 +50,18 @@
 - 打开图片蒙版编辑器，画选区并发送到聊天，确认包含真实 `mask_path`。
 - 导出制作包并打开 `widget-preview.html`，确认 Widget 侧栏展示来源和可用动作。
 - 使用 `import_media_manifest(import_pending_tasks=true)` 导回 manifest，确认下一轮聊天能看到 `latest-media-import`。
+- 或运行本地试用包生成器，使用 `build/ci/short_drama_mvp_tryout_package` 验证 dry-run 导入、pending 任务登记、Widget handoff 和 review queue 回写入口。
 
 ## 下一步策略
 
 1. 只修构建、测试、明显崩溃和验收流程问题。
-2. 保持版本在 `1.109.0-rc436` 基线上，若继续改代码只递增 rc。
-3. 准备一个可试用包和简短使用说明。
+2. 保持 `1.109.0` MVP 基线，若继续改代码只递增 rc。
+3. 使用 `scripts/short_drama_mvp_tryout_package.rb` 生成本地试用包，并继续补齐人工 smoke 记录。
 4. 后续新增能力另起版本，不再塞进本轮 MVP。
 
 ## 当前剩余风险
 
 - 未在本轮收口中调用真实 some.im / Replicate 外网 API，只验证本地工具链、上下文接力、任务登记、构建和合约。
-- 工作树中包含大量此前累积的未跟踪 Swift/Ruby 文件，交付前需要统一纳入提交范围。
+- 本地试用包只验证 manifest/Widget/review queue 形态，不能替代真实 provider 账号、额度、网络和 API 行为验证。
 - `scripts/short_drama_media_contract_test.rb` 接近 3000 行硬线，后续不要继续往里追加检查。
 - `Xedit/AgentShortDramaProductionExporter.swift` 接近 3000 行硬线，后续只修 bug，不继续扩展。

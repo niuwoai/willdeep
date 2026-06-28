@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.109.0-rc438 - 2026-06-28
+
+### Added
+- **短剧 MVP 本地试用包生成器（1.109.0-rc438）** —— 新增 `scripts/short_drama_mvp_tryout_package.rb`，可在 `build/ci/short_drama_mvp_tryout_package` 生成不调用外网 API 的制作包样例，覆盖 completed 本地产物、pending 远端视频任务、失败修复项、review queue、gap report 和 Widget handoff。
+- 本地 `scripts/run_tests.sh` 与 GitHub Actions 新增试用包生成步骤，并产出 `short_drama_mvp_tryout_package_report.md/json` 与可下载样例包，避免“可试用包”只停留在文档里。
+- 版本号从 **1.109.0-rc437** 提升为 **1.109.0-rc438**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / 短剧试用文档 / CI 配置同步。
+
 ## 1.109.0-rc437 - 2026-06-28
 
 ### Fixed

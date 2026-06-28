@@ -1,6 +1,6 @@
 # Short Drama AI MVP Tryout
 
-> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc436
+> Last updated: 2026-06-28 | Baseline version: v1.109.0-rc438
 
 这份文档用于试用当前短剧 AI MVP。它不是完整产品手册，只覆盖“不完美但可用”的主路径。
 
@@ -10,6 +10,14 @@
 - 在 Settings 里配置可用的 Agent 模型。
 - 如需真实提交媒体任务，配置 some.im / Replicate 相关 token 和 workflow version。
 - 如果不想打真实外网 API，可以只走 dry-run、manifest 导入和本地 Widget 验证。
+- 如果还没有真实短剧项目，可先运行本地试用包生成器：
+
+```bash
+ruby scripts/short_drama_mvp_tryout_package.rb \
+  build/ci/short_drama_mvp_tryout_package \
+  build/ci/short_drama_mvp_tryout_package_report.md \
+  build/ci/short_drama_mvp_tryout_package_report.json
+```
 
 ## 主路径
 
@@ -33,7 +41,7 @@
 
 ## 制作包路径
 
-1. 在短剧侧栏导出制作包。
+1. 在短剧侧栏导出制作包；或者使用 `build/ci/short_drama_mvp_tryout_package` 作为本地样例包。
 2. 打开右侧 Widget 预览 `widget-preview.html`。
 3. 如果使用 Ruby 或第三方 API 脚本，先看导出的：
    - `production-timeline.json`
@@ -50,6 +58,24 @@ import_media_manifest(package_directory=<制作包目录>, dry_run=false, import
 ```
 
 6. 导回后检查媒体任务侧栏，并确认聊天下一轮包含 `latest-media-import`。
+
+## 本地试用包路径
+
+1. 运行 `scripts/short_drama_mvp_tryout_package.rb`。
+2. 打开 `build/ci/short_drama_mvp_tryout_package/widget-preview.html`，或在聊天里调用 `show_widget` 指向该 HTML。
+3. 先 dry-run：
+
+```text
+import_media_manifest(package_directory=build/ci/short_drama_mvp_tryout_package, dry_run=true, import_pending_tasks=true)
+```
+
+4. 再正式导入：
+
+```text
+import_media_manifest(package_directory=build/ci/short_drama_mvp_tryout_package, dry_run=false, import_pending_tasks=true)
+```
+
+5. 预期能看到 3 个本地产物、1 个 pending 远端视频任务、1 个 failed 修复任务；Widget/媒体任务侧栏会给出继续查看任务、按缺口排产和回写 review queue 的入口。
 
 ## 图片编辑路径
 
@@ -68,4 +94,4 @@ import_media_manifest(package_directory=<制作包目录>, dry_run=false, import
 
 ## 验收记录
 
-人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.109.0-rc436 — 短剧 AI 制作 MVP 收口` 小节。
+人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.109.0-rc438 — 短剧 MVP 本地试用包` 小节。
