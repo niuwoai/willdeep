@@ -314,6 +314,20 @@ final class AppState: ObservableObject {
     /// inside `AgentSessionRowStatusDot`, so background runtime
     /// changes only repaint that one row.
     private var activeRuntimeSubscription: AnyCancellable?
+    /// rc482 perf: while the user is typing in the composer, the keystroke
+    /// writes `activeRuntime.input` (a `@Published`), whose `objectWillChange`
+    /// is forwarded below into `AppState.objectWillChange`. That forward
+    /// repaints EVERY `appState`-observing view — including the whole
+    /// composer pill row (Model/Workspace/Mode/… pickers), amplified 3× by
+    /// the strip's `ViewThatFits`. `sample` showed ~90% of the main thread
+    /// rebuilding those pill view-lists on each keystroke → typing echo lag +
+    /// startup spike. The composer's NSTextView is its own source of truth
+    /// and the pills don't depend on the draft, so we suppress *only* the
+    /// per-keystroke forward; the buffer (`runtime.input`) still updates so
+    /// send / external readers see live text. Programmatic writers (prefill,
+    /// slash-clear, voice, message-edit) leave this false so their writes
+    /// still repaint the composer.
+    var suppressActiveRuntimeForward: Bool = false
     /// Republishes background job registry changes through AppState so
     /// any view binding `appState.*` repaints when a job starts /
     /// finishes / streams output. Views that need finer-grained
@@ -541,7 +555,8 @@ final class AppState: ObservableObject {
         }
         activeRuntimeSubscription = runtime.objectWillChange
             .sink { [weak self] _ in
-                self?.objectWillChange.send()
+                guard let self, !self.suppressActiveRuntimeForward else { return }
+                self.objectWillChange.send()
             }
     }
 

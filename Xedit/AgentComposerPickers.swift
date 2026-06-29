@@ -399,40 +399,26 @@ struct AgentApprovalModePickerPill: View {
 // MARK: - Adaptive composer controls
 
 enum ComposerOverflowControl: Hashable {
+    case approval
     case executor
     case plugins
     case experts
 }
 
 struct ComposerAdaptiveControlStrip: View {
+    // rc482 perf: 改为固定单套布局，去掉 ViewThatFits。原先用 ViewThatFits
+    // 在三套布局变体间按窗口宽度挑一套显示，代价是**每次重渲染都要把每个
+    // 变体整建一遍来测量**——composer pill 重建因此成为主线程热点（打字、
+    // 窗口切换、焦点变化都中招，采样里占主线程大头）。现在常用的三个
+    // （Workspace / Model / Mode）固定展示，其余（审批 / 执行器 / 插件 /
+    // 专家）固定收进「更多 …」弹层。布局不再随宽度变化，每次重建只建一套。
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 6) {
-                primaryControls
-                AgentExecutionPickerPill()
-                AgentPluginPickerPill()
-                AgentExpertPickerPill()
-            }
-
-            HStack(spacing: 6) {
-                primaryControls
-                AgentExecutionPickerPill()
-                ComposerOverflowPill(controls: [.plugins, .experts])
-            }
-
-            HStack(spacing: 6) {
-                primaryControls
-                ComposerOverflowPill(controls: [.executor, .plugins, .experts])
-            }
+        HStack(spacing: 6) {
+            WorkspacePickerPill()
+            ModelPickerPill()
+            AgentModePickerPill()
+            ComposerOverflowPill(controls: [.approval, .executor, .plugins, .experts])
         }
-    }
-
-    @ViewBuilder
-    private var primaryControls: some View {
-        WorkspacePickerPill()
-        ModelPickerPill()
-        AgentModePickerPill()
-        AgentApprovalModePickerPill()
     }
 }
 
@@ -1164,6 +1150,9 @@ struct ComposerOverflowPill: View {
                 Text(L10n.Composer.overflowTitle)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
+                if controls.contains(.approval) {
+                    overflowRow(L10n.Composer.overflowApproval) { AgentApprovalModePickerPill() }
+                }
                 if controls.contains(.executor) {
                     overflowRow(L10n.Composer.overflowExecutor) { AgentExecutionPickerPill() }
                 }

@@ -60,8 +60,18 @@ struct AgentChatComposer: View {
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
 
-                ComposerCard()
-                    .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                ComposerCard(onUserEdit: { oldValue, newValue in
+                    // 用户在 composer 继续打字（输入框字数变多）→ 视作"我有
+                    // 补充，留在 Plan 模式"，立刻 dismiss banner。**只在 banner
+                    // 还显示时记 fingerprint**，否则任何普通输入都会无意义地写
+                    // state。rc482 起从 `onChange(of: appState.agentInput)` 改走
+                    // 这个回调（打字不再重渲染 appState）。
+                    guard let plan = currentProposedPlanIfBannerVisible() else { return }
+                    if newValue.count > oldValue.count {
+                        dismissedPlanFingerprint = planFingerprint(plan)
+                    }
+                })
+                .frame(maxWidth: AgentDesign.chatMaxContentWidth)
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 28)
@@ -74,16 +84,6 @@ struct AgentChatComposer: View {
             appState.refreshActiveAgentWorktreeChanges()
             // 切 session 后重置 banner 状态：新 session 的 plan 该弹照弹。
             dismissedPlanFingerprint = nil
-        }
-        .onCompatibleChange(of: appState.agentInput) { oldValue, newValue in
-            // 用户在 composer 开始打字（输入框从空变非空，或非空状态下
-            // 字数变多） → 视作"我有补充，留在 Plan 模式"，立刻 dismiss
-            // banner。**只在 banner 还显示时记 fingerprint**，否则
-            // 任何普通输入都会无意义地写 state。
-            guard let plan = currentProposedPlanIfBannerVisible() else { return }
-            if newValue.count > oldValue.count {
-                dismissedPlanFingerprint = planFingerprint(plan)
-            }
         }
         .onCompatibleChange(of: appState.agentCurrentPlan?.status) { _, newStatus in
             // 新 plan 刚解析出来变成 .proposed —— 如果用户之前在本
@@ -328,10 +328,21 @@ struct AgentWorktreeDiffPreviewSheet: View {
 }
 
 private struct ComposerCard: View {
+    /// Called on every composer edit with (oldText, newText). rc482: typing
+    /// no longer repaints `appState`, so the plan-banner "dismiss when the
+    /// user keeps typing" rule — which used to ride `onChange(of:
+    /// appState.agentInput)` up in `AgentChatComposer` — is driven through
+    /// this callback instead.
+    let onUserEdit: (_ oldText: String, _ newText: String) -> Void
+
     @EnvironmentObject var appState: AppState
     @FocusState private var inputFocused: Bool
     @State private var slashMenuVisible: Bool = false
     @State private var slashMenuSelection: Int = 0
+    /// Live buffer mirror that drives the slash palette's filtering. Pushed
+    /// by the text view's coordinator (`onSlashQueryChange`) because typing
+    /// no longer re-evaluates this view through `appState` (rc482).
+    @State private var slashMenuQuery: String = ""
     @State private var atMenuVisible: Bool = false
     @State private var atMenuSelection: Int = 0
     @State private var atMenuQuery: String = ""
@@ -345,7 +356,7 @@ private struct ComposerCard: View {
 
     private var filteredSlashCommands: [SlashCommand] {
         SlashCommand.filter(
-            appState.agentInput,
+            slashMenuQuery,
             allCommands: SlashCommand.builtIn(state: appState)
         )
     }
@@ -452,7 +463,31 @@ private struct ComposerCard: View {
 
             ZStack(alignment: .topLeading) {
                 ComposerTextEditor(
-                    text: $appState.agentInput,
+                    text: Binding(
+                        get: { appState.agentInput },
+                        set: { newValue in
+                            let oldValue = appState.agentInput
+                            // rc482: a keystroke must NOT repaint the composer
+                            // pill row. Setting `agentInput` writes the active
+                            // runtime's `@Published input`, whose change is
+                            // normally forwarded into `appState.objectWillChange`
+                            // (repainting every pill, ×3 via ViewThatFits). We
+                            // gate just this write so the buffer still updates
+                            // for send / external readers, but the pills stay put.
+                            //
+                            // EXCEPT when the buffer crosses empty↔non-empty:
+                            // `SendStopButton.canSend` keys off emptiness, so
+                            // that one transition (≈twice per message) must get
+                            // through to flip the button enabled/disabled. Mid-
+                            // word keystrokes stay suppressed.
+                            let wasEmpty = oldValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            let nowEmpty = newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            appState.suppressActiveRuntimeForward = (wasEmpty == nowEmpty)
+                            defer { appState.suppressActiveRuntimeForward = false }
+                            appState.agentInput = newValue
+                            onUserEdit(oldValue, newValue)
+                        }
+                    ),
                     onSubmit: { appState.sendAgentMessage() },
                     onPasteImage: handlePastedImage,
                     onPasteText: handlePastedText,
@@ -465,6 +500,15 @@ private struct ComposerCard: View {
                     slashMenuSelection: $slashMenuSelection,
                     slashMenuItemCount: { filteredSlashCommands.count },
                     onSlashCommit: { runSelectedSlashCommand() },
+                    onSlashQueryChange: { newValue in
+                        // 只有在斜杠命令上下文（缓冲以 "/" 开头）才更新查询。
+                        // 否则普通打字每键都改这个 @State，会让 ComposerCard
+                        // 重渲染、`ViewThatFits` 重新测量整排 pill —— 正是
+                        // rc482 要消除的逐键重建。普通 prose 下 next 恒为 ""，
+                        // 与现值相等不触发重渲染。
+                        let next = newValue.hasPrefix("/") ? newValue : ""
+                        if slashMenuQuery != next { slashMenuQuery = next }
+                    },
                     atMenuVisible: $atMenuVisible,
                     atMenuSelection: $atMenuSelection,
                     atMenuItemCount: { filteredAtEntries.count },

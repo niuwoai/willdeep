@@ -35,6 +35,13 @@ struct ComposerTextEditor: NSViewRepresentable {
     /// Called when the user presses Enter / Tab with the slash menu
     /// visible. Returning true tells the text view to swallow the key.
     let onSlashCommit: () -> Bool
+    /// Pushes the live buffer to the slash palette so it can re-filter as
+    /// the user types after "/". rc482: typing no longer repaints the
+    /// composer through `appState` (see `suppressActiveRuntimeForward`), so
+    /// the palette can't recompute off `appState.agentInput` anymore — it
+    /// tracks this dedicated query the same way the "@" picker tracks its
+    /// own (`onAtQueryChange`).
+    let onSlashQueryChange: (String) -> Void
     /// Same shape as the slash palette, used for the "@" skill picker.
     @Binding var atMenuVisible: Bool
     @Binding var atMenuSelection: Int
@@ -61,6 +68,7 @@ struct ComposerTextEditor: NSViewRepresentable {
             slashMenuSelection: $slashMenuSelection,
             slashMenuItemCount: slashMenuItemCount,
             onSlashCommit: onSlashCommit,
+            onSlashQueryChange: onSlashQueryChange,
             atMenuVisible: $atMenuVisible,
             atMenuSelection: $atMenuSelection,
             atMenuItemCount: atMenuItemCount,
@@ -164,6 +172,7 @@ struct ComposerTextEditor: NSViewRepresentable {
         var slashMenuSelection: Binding<Int>
         let slashMenuItemCount: () -> Int
         let onSlashCommit: () -> Bool
+        let onSlashQueryChange: (String) -> Void
         var atMenuVisible: Binding<Bool>
         var atMenuSelection: Binding<Int>
         let atMenuItemCount: () -> Int
@@ -201,6 +210,7 @@ struct ComposerTextEditor: NSViewRepresentable {
             slashMenuSelection: Binding<Int>,
             slashMenuItemCount: @escaping () -> Int,
             onSlashCommit: @escaping () -> Bool,
+            onSlashQueryChange: @escaping (String) -> Void,
             atMenuVisible: Binding<Bool>,
             atMenuSelection: Binding<Int>,
             atMenuItemCount: @escaping () -> Int,
@@ -217,6 +227,7 @@ struct ComposerTextEditor: NSViewRepresentable {
             self.slashMenuSelection = slashMenuSelection
             self.slashMenuItemCount = slashMenuItemCount
             self.onSlashCommit = onSlashCommit
+            self.onSlashQueryChange = onSlashQueryChange
             self.atMenuVisible = atMenuVisible
             self.atMenuSelection = atMenuSelection
             self.atMenuItemCount = atMenuItemCount
@@ -251,6 +262,11 @@ struct ComposerTextEditor: NSViewRepresentable {
                 lastHistoryString = nil
             }
             updateSlashMenuVisibility(for: newValue)
+            // Keep the slash palette's filter in sync. rc482: the composer
+            // no longer repaints through `appState` on each keystroke, so the
+            // palette filters off this pushed query instead of reading
+            // `appState.agentInput` in `body`.
+            onSlashQueryChange(newValue)
             updateAtMenuVisibility(for: textView)
         }
 

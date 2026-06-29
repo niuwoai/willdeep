@@ -4684,12 +4684,12 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "More settings: executor, plugins, experts"
+            "value" : "More settings: approval, executor, plugins, experts"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "translated",
+            "state" : "needs_review",
             "value" : "更多设置:执行器、插件、专家"
           }
         }

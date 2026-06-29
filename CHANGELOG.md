@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.109.0-rc482 - 2026-06-30
+
+### Fixed
+- **Composer 打字回显卡顿 / 启动 CPU 跑满（1.109.0-rc482）** —— `sample` 采样定位到 debug 版主线程约 90% 时间在重建 composer 底部 picker pill（Workspace/Model/Mode/Approval/Execution/Overflow）的 SwiftUI view-list。根因：每次击键写入 `activeRuntime.input`（`@Published`），其 `objectWillChange` 经 `subscribeToActiveRuntime` 转发成 `AppState.objectWillChange`，重渲染所有 `appState` 观察者——包括整排 pill，且被 `ComposerAdaptiveControlStrip` 的 `ViewThatFits` 放大 3×。修复：打字路径用 `suppressActiveRuntimeForward` 抑制这条转发（输入缓冲 `runtime.input` 仍实时更新，发送/外部读取无感知；仅在输入空↔非空翻转时放行一次，让 `SendStopButton.canSend` 更新）。配套：slash 命令面板改由 `ComposerTextEditor` 协调器经 `onSlashQueryChange` 推送查询过滤（只在缓冲以 `/` 开头时更新，避免普通打字churn `@State` 又触发重渲染）；Plan banner 的「继续打字即留在 Plan 模式」从 `onChange(of: appState.agentInput)` 改走 `ComposerCard` 的 `onUserEdit` 回调。打字时若 slash 面板未开则几乎零重渲染（采样验证：pill 重建降 5～13×，`_makeViewList` 11000→1637）。
+- **窗口切换 / 焦点变化时 composer 卡顿（1.109.0-rc482）** —— 窗口重新显示时 SwiftUI 必然重建 composer view 树，而 `ComposerAdaptiveControlStrip` 原先用 `ViewThatFits` 在三套布局变体间按窗口宽度挑一套，代价是**每次重建都要把每个变体整建一遍来测量**（采样：窗口切换时 `_makeViewList` 7854 次、占主线程一半多）。改为**固定单套布局**：Workspace / Model / Mode 固定展示，审批 / 执行器 / 插件 / 专家固定收进「更多 …」弹层（`ComposerOverflowControl` 新增 `.approval`，复用既有 `composer.overflow.approval` 文案），彻底去掉 `ViewThatFits` 与宽度自适应。采样验证：窗口切换时 composer 重建 `_makeViewList` 7854→0，主线程回到空闲。
+- 版本号从 **1.109.0-rc481** 提升为 **1.109.0-rc482**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway 同步。
+
 ## 1.109.0-rc481 - 2026-06-29
 
 ### Fixed

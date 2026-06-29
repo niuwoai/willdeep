@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-29 | Current version: v1.109.0-rc481
+> Last updated: 2026-06-30 | Current version: v1.109.0-rc482
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Composer 打字回显卡顿与启动 CPU 跑满（1.109.0-rc482）** —— `sample` 采样显示 debug 版主线程约 90% 耗在重建 composer 底部一排 picker pill 的 SwiftUI view-list：每一次击键都经 `activeRuntime.input`（`@Published`）转发触发 `AppState.objectWillChange`，把全部 pill 连同 `ViewThatFits` 的三套布局变体重渲染一遍。现在打字时抑制这条「runtime → AppState」转发（仅在输入框空↔非空翻转时放行一次以更新发送按钮），输入缓冲仍实时更新供发送/外部读取；slash 命令面板改由文本协调器推送查询过滤，Plan banner「继续打字即留在 Plan 模式」改走编辑回调。打字几乎零重渲染。此外把 composer 那排控件从 `ViewThatFits` 宽度自适应（每次重建都把三套变体整建一遍来测量）改为**固定单套布局**：Workspace / Model / Mode 固定展示，审批 / 执行器 / 插件 / 专家收进「更多 …」弹层——窗口切换 / 焦点变化时 composer 重建从一半多主线程降到归零。
 - **Agent 启动性能与窗口标题修复（1.109.0-rc481）** —— Agent 窗口打开采样显示主线程主要耗在 SwiftUI 布局期间重复构建 composer picker 菜单和侧栏动画重排；workspace/runtime/model picker 现在改用缓存快照，终端状态改由终端面板局部观察、不再通过 `AppState` 广播给全局，终端字体枚举进程级缓存，终端 tab 状态通知合并到下一轮 runloop，左右侧栏显隐不再对整棵 Agent 布局做隐式动画。Agent 窗口也会标记自身 `NSWindow.identifier` 并恢复标题为 `WillDeep Agent`，不再被 editor 当前文件名覆盖。
 - **语音模型启动预热默认关闭（1.109.0-rc481）** —— 用过语音后不再默认在 App 启动时加载约 937 MB ONNX 模型，降低启动窗口的 idle memory；需要按住说话即刻响应的用户仍可在 Settings → Voice 手动打开预热。
 - **右侧侧栏打开延迟修复（1.109.0-rc480）** —— Agent 右侧侧栏打开时只更新窗口最小宽度约束，不再同步强制重绘窗口；终端侧栏首次挂载会先显示面板壳子，再启动默认本地 shell，降低点击后约 1 秒才出现的体感迟滞。
