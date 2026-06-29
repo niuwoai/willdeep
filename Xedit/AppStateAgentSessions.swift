@@ -174,16 +174,13 @@ extension AppState {
         persistActiveAgentSession()
     }
 
-    /// Toggle an optional expert pack for the active session. Experts widen
-    /// the model-facing tool surface and add a small domain contract only
-    /// while enabled.
-    func toggleAgentExpert(_ expert: AgentExpert) {
+    /// Activate an optional expert pack for the active session. Experts widen
+    /// the model-facing tool surface and add a small domain contract once
+    /// enabled; activation is intentionally one-way for the session.
+    func activateAgentExpert(_ expert: AgentExpert) {
         var experts = agentActiveExperts
-        if experts.contains(expert) {
-            experts.remove(expert)
-        } else {
-            experts.insert(expert)
-        }
+        guard !experts.contains(expert) else { return }
+        experts.insert(expert)
         agentActiveExperts = experts
         persistActiveAgentSession()
     }

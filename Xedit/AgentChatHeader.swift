@@ -136,6 +136,7 @@ struct AgentChatHeader: View {
     /// 还展示这个入口是浪费一行 + 误导用户。其它项始终可见。
     private var visibleKinds: [AgentSidePanelKind] {
         AgentSidePanelKind.allCases.filter { kind in
+            guard kind.isAvailable(activeExperts: appState.agentActiveExperts) else { return false }
             switch kind {
             case .plan: return appState.agentCurrentPlan != nil
             default: return true

@@ -19,7 +19,8 @@ struct WillDeepTests {
         let keys = [
             "com.willdeep.recentFiles.v1",
             "com.willdeep.recentFolders.v1",
-            "com.willdeep.session.v1"
+            "com.willdeep.session.v1",
+            "com.willdeep.terminalShortcuts.v1"
         ]
         for key in keys {
             UserDefaults.standard.removeObject(forKey: key)
@@ -140,21 +141,79 @@ struct WillDeepTests {
     }
 
     @MainActor
-    @Test("expert picker keeps short-drama tools inactive until enabled")
-    func testExpertPickerFiltersShortDramaTools() {
+    @Test("expert activation gates short-drama tools and side panel")
+    func testExpertActivationGatesShortDramaToolsAndSidePanel() {
         let defaultTools = AgentToolRegistry.tools(activeExperts: [])
         let shortDramaTools = AgentToolRegistry.tools(activeExperts: [.shortDrama])
 
         #expect(defaultTools.contains { $0.name == "run_command" })
         #expect(!defaultTools.contains { $0.name.hasPrefix("short_drama_") })
         #expect(shortDramaTools.contains { $0.name == "short_drama_create_project" })
+        #expect(!AgentSidePanelKind.shortDrama.isAvailable(activeExperts: []))
+        #expect(AgentSidePanelKind.shortDrama.isAvailable(activeExperts: [.shortDrama]))
 
         let appState = AppState()
         appState.startNewAgentSession()
         #expect(appState.agentActiveExperts.isEmpty)
-        appState.toggleAgentExpert(.shortDrama)
+        appState.activateAgentExpert(.shortDrama)
+        #expect(appState.agentActiveExperts == [.shortDrama])
+        appState.activateAgentExpert(.shortDrama)
         #expect(appState.agentActiveExperts == [.shortDrama])
         #expect(appState.activeRuntime?.session.activeExperts == [.shortDrama])
+    }
+
+    @Test("terminal shortcut recorder protects echo-off input for echo-off replay only")
+    func testTerminalShortcutRecorderProtectsEchoOffInput() throws {
+        let service = AgentCredentialStore._setTestKeychainServiceOverride("terminal-shortcuts-\(UUID().uuidString)")
+        defer {
+            AgentCredentialStore._wipeTestKeychain()
+            AgentCredentialStore._setTestKeychainServiceOverride(nil)
+            UserDefaults.standard.removeObject(forKey: "com.willdeep.terminalShortcuts.v1")
+        }
+        #expect(service.hasPrefix("terminal-shortcuts-"))
+
+        let recorder = TerminalShortcutRecorder(startedAt: Date(timeIntervalSince1970: 0))
+        recorder.record(
+            data: Array("ssh user@example.com\n".utf8),
+            echoEnabled: true,
+            now: Date(timeIntervalSince1970: 1)
+        )
+        recorder.record(
+            data: Array("super-secret-password".utf8),
+            echoEnabled: false,
+            now: Date(timeIntervalSince1970: 2)
+        )
+        recorder.record(
+            data: [13],
+            echoEnabled: true,
+            now: Date(timeIntervalSince1970: 4)
+        )
+
+        let shortcut = try #require(
+            recorder.finish(
+                title: "SSH login",
+                finishedAt: Date(timeIntervalSince1970: 5)
+            )
+        )
+        let visibleEventText = String(decoding: shortcut.events.flatMap(\.bytes), as: UTF8.self)
+        let protectedEvent = try #require(shortcut.events.first { $0.requiresEchoOff })
+
+        #expect(shortcut.hasProtectedInput)
+        #expect(shortcut.events.count == 3)
+        #expect(!visibleEventText.contains("super-secret-password"))
+        #expect(protectedEvent.resolvedBytes() == Array("super-secret-password".utf8))
+        #expect(protectedEvent.delayMilliseconds == 1_000)
+
+        TerminalShortcutStore.save([shortcut])
+        let persistedData = try #require(UserDefaults.standard.data(forKey: "com.willdeep.terminalShortcuts.v1"))
+        let persistedJSON = String(decoding: persistedData, as: UTF8.self)
+        #expect(!persistedJSON.contains("super-secret-password"))
+
+        let loaded = try #require(TerminalShortcutStore.load().first)
+        let loadedProtectedEvent = try #require(loaded.events.first { $0.requiresEchoOff })
+        #expect(loadedProtectedEvent.bytes.isEmpty)
+        #expect(loadedProtectedEvent.protectedBytesReference?.isEmpty == false)
+        #expect(loadedProtectedEvent.resolvedBytes() == Array("super-secret-password".utf8))
     }
 
     @MainActor

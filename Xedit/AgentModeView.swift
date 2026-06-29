@@ -133,6 +133,10 @@ struct AgentModeView: View {
         }
         .onCompatibleChange(of: appState.agentSidePanelRequest) { _, request in
             guard let request else { return }
+            guard request.kind.isAvailable(activeExperts: appState.agentActiveExperts) else {
+                appState.agentSidePanelRequest = nil
+                return
+            }
             if let url = request.file { sidePanelFile = url }
             if request.kind == .mediaTasks {
                 appState.agentMediaTaskPanelScope = request.mediaTaskScope
@@ -141,6 +145,13 @@ struct AgentModeView: View {
             // Consume:让下一次同样的请求(同 kind 同 file)也能再触
             // 发,且不会在 sheet dismiss / 视图重绘时被重放。
             appState.agentSidePanelRequest = nil
+        }
+        .onCompatibleChange(of: appState.agentActiveExperts) { _, activeExperts in
+            guard let current = sidePanel,
+                  !current.isAvailable(activeExperts: activeExperts) else {
+                return
+            }
+            sidePanel = nil
         }
     }
 
@@ -205,13 +216,9 @@ private struct AgentWindowMinWidthSetter: NSViewRepresentable {
             if abs(window.contentMinSize.width - target) > 0.5 {
                 window.contentMinSize.width = target
             }
-            // 面板刚打开、窗口当前比新下限还窄时,主动撑回下限,不必等
-            // 用户手动拖宽(否则打开瞬间内容已经溢出、左栏被挤出去)。
-            if window.frame.width < target {
-                var frame = window.frame
-                frame.size.width = target
-                window.setFrame(frame, display: true, animate: false)
-            }
+            // 只更新最小宽度约束,不在侧栏打开的同一帧同步 setFrame。
+            // setFrame(display: true) 会强制窗口立即布局和重绘,在右侧
+            // 终端 / 媒体面板首次挂载时容易把打开动作拖成可感知卡顿。
         }
     }
 }

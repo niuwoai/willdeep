@@ -48,6 +48,20 @@ enum AgentSidePanelKind: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    var requiredExpert: AgentExpert? {
+        switch self {
+        case .shortDrama:
+            return .shortDrama
+        default:
+            return nil
+        }
+    }
+
+    func isAvailable(activeExperts: Set<AgentExpert>) -> Bool {
+        guard let requiredExpert else { return true }
+        return activeExperts.contains(requiredExpert)
+    }
+
     var title: String {
         switch self {
         case .preview: return L10n.AgentSidePanel.preview

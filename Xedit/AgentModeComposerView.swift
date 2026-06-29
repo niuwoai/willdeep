@@ -500,17 +500,7 @@ private struct ComposerCard: View {
 
             HStack(spacing: 6) {
                 AttachButton(action: attachImageFromPanel)
-                // High-frequency controls stay inline (workspace, model,
-                // mode, approval); the low-frequency ones (executor,
-                // plugins) fold into the ⋯ overflow so the row stops
-                // forcing a huge minimum composer width that overflowed
-                // onto the sessions sidebar on a narrow window.
-                WorkspacePickerPill()
-                ModelPickerPill()
-                AgentModePickerPill()
-                AgentApprovalModePickerPill()
-                ComposerOverflowPill()
-                AgentExpertPickerPill()
+                ComposerAdaptiveControlStrip()
                 Spacer(minLength: 0)
                 if !appState.agentQueuedMessages.isEmpty {
                     QueueBadge()

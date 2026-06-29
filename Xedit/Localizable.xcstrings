@@ -4558,13 +4558,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "More settings: executor, plugins"
+            "value" : "More settings: executor, plugins, experts"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "更多设置:执行器、插件"
+            "value" : "更多设置:执行器、插件、专家"
           }
         }
       }

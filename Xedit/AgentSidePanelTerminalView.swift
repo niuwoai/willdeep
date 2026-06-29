@@ -12,6 +12,8 @@ import SwiftUI
 
 struct AgentSidePanelTerminalView: View {
     @EnvironmentObject var appState: AppState
+    @State private var renameDraft: TerminalShortcutRenameDraft?
+    @State private var bootstrapTask: Task<Void, Never>?
 
     private var controller: AgentInteractiveTerminalController {
         appState.agentTerminalController
@@ -46,19 +48,28 @@ struct AgentSidePanelTerminalView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            shortcutsBar
+            Divider().opacity(0.5)
             tabBar
             Divider().opacity(0.5)
             terminalSurface
         }
         .onAppear {
-            controller.selectRuntimeIfNeeded()
-            controller.ensureAtLeastOneTab(
-                originAgentSessionID: appState.activeAgentSessionID,
-                workingDirectory: workingDirectory,
-                settings: settings,
-                skin: skinColors
+            scheduleTerminalBootstrap()
+        }
+        .onDisappear {
+            bootstrapTask?.cancel()
+            bootstrapTask = nil
+        }
+        .sheet(item: $renameDraft) { draft in
+            TerminalShortcutRenameSheet(
+                initialTitle: draft.title,
+                onCancel: { renameDraft = nil },
+                onSave: { title in
+                    controller.renameShortcut(id: draft.shortcutID, title: title)
+                    renameDraft = nil
+                }
             )
-            controller.applyAppearanceToAll(settings, skin: skinColors)
         }
         .onCompatibleChange(of: appState.editorTerminalSettings) { _, _ in
             // Live-apply font / color / cursor changes (e.g. switching to a
@@ -68,6 +79,79 @@ struct AgentSidePanelTerminalView: View {
     }
 
     // MARK: Tab bar
+
+    private var shortcutsBar: some View {
+        HStack(spacing: 6) {
+            recordButton
+                .layoutPriority(1)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(controller.shortcuts) { shortcut in
+                        shortcutMenu(shortcut)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(height: 34)
+        .padding(.horizontal, 8)
+        .background(terminalBackground.opacity(0.92))
+    }
+
+    private var recordButton: some View {
+        Button {
+            if controller.isRecording {
+                controller.stopRecording()
+            } else {
+                controller.startRecordingActiveTab()
+            }
+        } label: {
+            Image(systemName: controller.isRecording ? "stop.fill" : "record.circle")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(controller.isRecording ? Color.white : Color.red)
+                .frame(width: 24, height: 24)
+                .background(
+                    Circle()
+                        .fill(controller.isRecording ? Color.red : Color.red.opacity(0.12))
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(controller.activeTab?.isRunning != true && !controller.isRecording)
+        .help(controller.isRecording ? "停止录制终端捷径" : "开始录制终端捷径")
+    }
+
+    private func shortcutMenu(_ shortcut: TerminalShortcut) -> some View {
+        Menu {
+            Button {
+                controller.playShortcut(shortcut)
+            } label: {
+                Label("回放", systemImage: "play.fill")
+            }
+            .disabled(controller.isRecording || controller.activeTab?.isRunning != true)
+
+            Button {
+                renameDraft = TerminalShortcutRenameDraft(shortcut: shortcut)
+            } label: {
+                Label("改名…", systemImage: "pencil")
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                controller.deleteShortcut(id: shortcut.id)
+            } label: {
+                Label("删除", systemImage: "trash")
+            }
+        } label: {
+            TerminalShortcutChip(shortcut: shortcut)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(shortcutTooltip(shortcut))
+    }
 
     private var tabBar: some View {
         HStack(spacing: 4) {
@@ -197,6 +281,26 @@ struct AgentSidePanelTerminalView: View {
         return appState.rootDirectory?.standardizedFileURL.path
     }
 
+    private func scheduleTerminalBootstrap() {
+        bootstrapTask?.cancel()
+        let originAgentSessionID = appState.activeAgentSessionID
+        let directory = workingDirectory
+        let terminalSettings = settings
+        let colors = skinColors
+        bootstrapTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 60_000_000)
+            guard !Task.isCancelled else { return }
+            controller.selectRuntimeIfNeeded()
+            controller.ensureAtLeastOneTab(
+                originAgentSessionID: originAgentSessionID,
+                workingDirectory: directory,
+                settings: terminalSettings,
+                skin: colors
+            )
+            controller.applyAppearanceToAll(terminalSettings, skin: colors)
+        }
+    }
+
     private func isOpenedByCurrentSession(_ tab: AgentTerminalTab) -> Bool {
         guard let origin = tab.originAgentSessionID,
               let active = appState.activeAgentSessionID else { return false }
@@ -219,6 +323,95 @@ struct AgentSidePanelTerminalView: View {
             lines.append(L10n.AgentTerminal.openedByThisSession)
         }
         return lines.joined(separator: " · ")
+    }
+
+    private func shortcutTooltip(_ shortcut: TerminalShortcut) -> String {
+        var lines = [
+            shortcut.title,
+            "\(shortcut.eventCount) 段输入 · \(max(1, shortcut.durationMilliseconds / 1000)) 秒"
+        ]
+        if shortcut.hasProtectedInput {
+            lines.append("包含受保护输入，仅在不回显提示下回放")
+        }
+        return lines.joined(separator: " · ")
+    }
+}
+
+private struct TerminalShortcutRenameDraft: Identifiable {
+    let id = UUID()
+    let shortcutID: UUID
+    let title: String
+
+    init(shortcut: TerminalShortcut) {
+        self.shortcutID = shortcut.id
+        self.title = shortcut.title
+    }
+}
+
+private struct TerminalShortcutChip: View {
+    let shortcut: TerminalShortcut
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "play.fill")
+                .font(.system(size: 8, weight: .bold))
+            Text(shortcut.title)
+                .font(.system(size: 11, weight: .medium))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: 150)
+            if shortcut.hasProtectedInput {
+                Image(systemName: "lock.shield")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color.primary.opacity(0.07))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(Color.primary.opacity(0.10), lineWidth: 1)
+        )
+    }
+}
+
+private struct TerminalShortcutRenameSheet: View {
+    @State private var title: String
+    let onCancel: () -> Void
+    let onSave: (String) -> Void
+
+    init(
+        initialTitle: String,
+        onCancel: @escaping () -> Void,
+        onSave: @escaping (String) -> Void
+    ) {
+        self._title = State(initialValue: initialTitle)
+        self.onCancel = onCancel
+        self.onSave = onSave
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("改名终端捷径")
+                .font(.headline)
+            TextField("捷径名称", text: $title)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 280)
+            HStack {
+                Spacer()
+                Button("取消", action: onCancel)
+                Button("保存") {
+                    onSave(title)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(18)
     }
 }
 

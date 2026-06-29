@@ -103,6 +103,223 @@ enum AgentTerminalControl: String, CaseIterable {
     }
 }
 
+struct TerminalShortcutEvent: Codable, Equatable, Identifiable {
+    var id: UUID
+    var delayMilliseconds: Int
+    var bytes: [UInt8]
+    var requiresEchoOff: Bool
+    var protectedBytesReference: String?
+    var transientProtectedBytes: [UInt8]
+
+    init(
+        id: UUID = UUID(),
+        delayMilliseconds: Int,
+        bytes: [UInt8],
+        requiresEchoOff: Bool = false,
+        protectedBytesReference: String? = nil,
+        transientProtectedBytes: [UInt8] = []
+    ) {
+        self.id = id
+        self.delayMilliseconds = max(0, delayMilliseconds)
+        self.requiresEchoOff = requiresEchoOff
+        self.bytes = requiresEchoOff ? [] : bytes
+        self.protectedBytesReference = protectedBytesReference
+        self.transientProtectedBytes = requiresEchoOff ? transientProtectedBytes : []
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, delayMilliseconds, bytes, requiresEchoOff, protectedBytesReference
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        delayMilliseconds = try container.decode(Int.self, forKey: .delayMilliseconds)
+        bytes = try container.decodeIfPresent([UInt8].self, forKey: .bytes) ?? []
+        requiresEchoOff = try container.decodeIfPresent(Bool.self, forKey: .requiresEchoOff) ?? false
+        protectedBytesReference = try container.decodeIfPresent(String.self, forKey: .protectedBytesReference)
+        transientProtectedBytes = []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(delayMilliseconds, forKey: .delayMilliseconds)
+        try container.encode(requiresEchoOff ? [] : bytes, forKey: .bytes)
+        try container.encode(requiresEchoOff, forKey: .requiresEchoOff)
+        try container.encodeIfPresent(protectedBytesReference, forKey: .protectedBytesReference)
+    }
+
+    var isPlayable: Bool {
+        if requiresEchoOff {
+            return !transientProtectedBytes.isEmpty || protectedBytesReference?.isEmpty == false
+        }
+        return !bytes.isEmpty
+    }
+
+    func resolvedBytes() -> [UInt8] {
+        guard requiresEchoOff else { return bytes }
+        if !transientProtectedBytes.isEmpty { return transientProtectedBytes }
+        guard let protectedBytesReference,
+              !protectedBytesReference.isEmpty else { return [] }
+        let encoded = AgentCredentialStore.load(account: protectedBytesReference)
+        guard let data = Data(base64Encoded: encoded) else { return [] }
+        return Array(data)
+    }
+}
+
+struct TerminalShortcut: Codable, Equatable, Identifiable {
+    var id: UUID
+    var title: String
+    var createdAt: Date
+    var updatedAt: Date
+    var durationMilliseconds: Int
+    var events: [TerminalShortcutEvent]
+    var hasProtectedInput: Bool
+
+    var eventCount: Int { events.count }
+    var isPlayable: Bool { !events.isEmpty }
+
+    var normalized: TerminalShortcut {
+        var copy = self
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        copy.title = trimmed.isEmpty ? "Terminal Shortcut" : String(trimmed.prefix(80))
+        copy.durationMilliseconds = max(0, durationMilliseconds)
+        copy.events = events.filter(\.isPlayable)
+        return copy
+    }
+}
+
+final class TerminalShortcutRecorder {
+    private let startedAt: Date
+    private var lastRecordedInputAt: Date
+    private(set) var events: [TerminalShortcutEvent] = []
+    private(set) var hasProtectedInput = false
+    private var totalRecordedBytes = 0
+
+    private let maxEvents = 4_000
+    private let maxRecordedBytes = 64 * 1024
+
+    init(startedAt: Date = Date()) {
+        self.startedAt = startedAt
+        self.lastRecordedInputAt = startedAt
+    }
+
+    func record(data: [UInt8], echoEnabled: Bool, now: Date = Date()) {
+        guard !data.isEmpty else { return }
+        guard events.count < maxEvents, totalRecordedBytes < maxRecordedBytes else { return }
+
+        let remainingBytes = maxRecordedBytes - totalRecordedBytes
+        let safeBytes = Array(data.prefix(remainingBytes))
+        guard !safeBytes.isEmpty else { return }
+
+        let delay = max(0, Int(now.timeIntervalSince(lastRecordedInputAt) * 1000))
+        if !echoEnabled {
+            hasProtectedInput = true
+        }
+        events.append(
+            TerminalShortcutEvent(
+                delayMilliseconds: min(delay, 300_000),
+                bytes: echoEnabled ? safeBytes : [],
+                requiresEchoOff: !echoEnabled,
+                transientProtectedBytes: echoEnabled ? [] : safeBytes
+            )
+        )
+        totalRecordedBytes += safeBytes.count
+        lastRecordedInputAt = now
+    }
+
+    func finish(
+        title: String,
+        id: UUID = UUID(),
+        finishedAt: Date = Date()
+    ) -> TerminalShortcut? {
+        guard !events.isEmpty else { return nil }
+        return TerminalShortcut(
+            id: id,
+            title: title,
+            createdAt: startedAt,
+            updatedAt: finishedAt,
+            durationMilliseconds: max(0, Int(finishedAt.timeIntervalSince(startedAt) * 1000)),
+            events: events,
+            hasProtectedInput: hasProtectedInput
+        ).normalized
+    }
+}
+
+enum TerminalShortcutStore {
+    private static let key = "com.willdeep.terminalShortcuts.v1"
+    private static let maxShortcuts = 24
+
+    private static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+
+    private static let decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
+
+    static func load() -> [TerminalShortcut] {
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let shortcuts = try? decoder.decode([TerminalShortcut].self, from: data) else {
+            return []
+        }
+        return normalized(shortcuts)
+    }
+
+    static func save(_ shortcuts: [TerminalShortcut]) {
+        let prepared = normalized(shortcuts).map { prepareForPersistence($0) }
+        guard let data = try? encoder.encode(prepared) else { return }
+        UserDefaults.standard.set(data, forKey: key)
+    }
+
+    static func deleteProtectedInputs(for shortcut: TerminalShortcut) {
+        for event in shortcut.events {
+            if let account = event.protectedBytesReference, !account.isEmpty {
+                AgentCredentialStore.delete(account: account)
+            } else if event.requiresEchoOff {
+                AgentCredentialStore.delete(account: protectedInputAccount(shortcutID: shortcut.id, eventID: event.id))
+            }
+        }
+    }
+
+    private static func normalized(_ shortcuts: [TerminalShortcut]) -> [TerminalShortcut] {
+        Array(
+            shortcuts
+                .map(\.normalized)
+                .filter(\.isPlayable)
+                .sorted { $0.updatedAt > $1.updatedAt }
+                .prefix(maxShortcuts)
+        )
+    }
+
+    private static func prepareForPersistence(_ shortcut: TerminalShortcut) -> TerminalShortcut {
+        var copy = shortcut.normalized
+        copy.events = copy.events.map { event in
+            guard event.requiresEchoOff else { return event }
+            var prepared = event
+            let account = event.protectedBytesReference ?? protectedInputAccount(shortcutID: shortcut.id, eventID: event.id)
+            let protectedBytes = event.resolvedBytes()
+            if !protectedBytes.isEmpty {
+                AgentCredentialStore.save(Data(protectedBytes).base64EncodedString(), account: account)
+            }
+            prepared.protectedBytesReference = account
+            prepared.transientProtectedBytes = []
+            prepared.bytes = []
+            return prepared
+        }
+        return copy
+    }
+
+    private static func protectedInputAccount(shortcutID: UUID, eventID: UUID) -> String {
+        "terminal-shortcut/\(shortcutID.uuidString)/\(eventID.uuidString)"
+    }
+}
+
 // MARK: - Tab kind
 
 enum AgentTerminalTabKind: Equatable {
@@ -122,10 +339,77 @@ enum AgentTerminalTabKind: Equatable {
 /// the only tab the user can actually be typing into.
 final class AgentLocalProcessTerminalView: LocalProcessTerminalView {
     var onUserActivity: (() -> Void)?
+    var shouldRecordInput: (() -> Bool)?
+    var onSendToProcess: ((_ data: [UInt8], _ echoEnabled: Bool) -> Void)?
+    private var cachedEchoEnabled: Bool?
+    private var cachedEchoCheckedAt: TimeInterval = 0
+    private var pendingEchoBytes: [UInt8] = []
+    private let maxEchoCacheAge: TimeInterval = 1.0
+    private let maxPendingEchoBytes = 2_048
 
     override func paste(_ sender: Any) {
         onUserActivity?()
         super.paste(sender)
+    }
+
+    override func send(source: TerminalView, data: ArraySlice<UInt8>) {
+        onUserActivity?()
+        if shouldRecordInput?() == true {
+            let bytes = Array(data)
+            let echoEnabled = cachedTerminalEchoEnabled()
+            onSendToProcess?(bytes, echoEnabled)
+            if echoEnabled {
+                rememberExpectedEcho(bytes)
+            }
+        }
+        super.send(source: source, data: data)
+    }
+
+    override func dataReceived(slice: ArraySlice<UInt8>) {
+        if shouldRecordInput?() == true, !isExpectedEcho(slice) {
+            invalidateTerminalEchoCache()
+        }
+        super.dataReceived(slice: slice)
+    }
+
+    var terminalEchoEnabled: Bool {
+        guard process.running else { return false }
+        var attributes = termios()
+        guard tcgetattr(process.childfd, &attributes) == 0 else { return false }
+        return (attributes.c_lflag & tcflag_t(ECHO)) != 0
+    }
+
+    func invalidateTerminalEchoCache() {
+        cachedEchoEnabled = nil
+        cachedEchoCheckedAt = 0
+        pendingEchoBytes.removeAll(keepingCapacity: true)
+    }
+
+    private func cachedTerminalEchoEnabled() -> Bool {
+        let now = ProcessInfo.processInfo.systemUptime
+        if let cachedEchoEnabled, now - cachedEchoCheckedAt <= maxEchoCacheAge {
+            return cachedEchoEnabled
+        }
+        let fresh = terminalEchoEnabled
+        cachedEchoEnabled = fresh
+        cachedEchoCheckedAt = now
+        return fresh
+    }
+
+    private func rememberExpectedEcho(_ bytes: [UInt8]) {
+        guard !bytes.isEmpty else { return }
+        pendingEchoBytes.append(contentsOf: bytes)
+        if pendingEchoBytes.count > maxPendingEchoBytes {
+            pendingEchoBytes.removeFirst(pendingEchoBytes.count - maxPendingEchoBytes)
+        }
+    }
+
+    private func isExpectedEcho(_ slice: ArraySlice<UInt8>) -> Bool {
+        guard !slice.isEmpty, !pendingEchoBytes.isEmpty else { return false }
+        let bytes = Array(slice)
+        guard pendingEchoBytes.starts(with: bytes) else { return false }
+        pendingEchoBytes.removeFirst(bytes.count)
+        return true
     }
 }
 
@@ -143,12 +427,15 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
     @Published var title: String
     @Published private(set) var isRunning = false
     @Published private(set) var recentCommands: [String] = []
+    @Published private(set) var activeRecordingStartedAt: Date?
+    @Published private(set) var isPlayingShortcut = false
 
     /// Last moment the tab saw user input or fresh process output. Drives
     /// the idle reaper. Not @Published — sampled by a timer, not the UI.
     private(set) var lastActivity = Date()
     private var lastBufferHash = 0
     private let maxRecentCommands = 20
+    private var recorder: TerminalShortcutRecorder?
 
     init(
         kind: AgentTerminalTabKind,
@@ -165,6 +452,13 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
         terminalView.onUserActivity = { [weak self] in
             self?.lastActivity = Date()
         }
+        terminalView.shouldRecordInput = { [weak self] in
+            guard let self else { return false }
+            return self.recorder != nil && !self.isPlayingShortcut
+        }
+        terminalView.onSendToProcess = { [weak self] data, echoEnabled in
+            self?.recordInputIfNeeded(data: data, echoEnabled: echoEnabled)
+        }
     }
 
     func applyAppearance(_ settings: EditorTerminalSettings, skin: TerminalSkinColors?) {
@@ -179,6 +473,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
         profile: RuntimeTerminalProfile?,
         skin: TerminalSkinColors?
     ) {
+        terminalView.invalidateTerminalEchoCache()
         applyAppearance(settings, skin: skin)
         let env = Self.environmentArray(settings: settings)
         switch kind {
@@ -241,8 +536,62 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
 
     func terminate() {
         guard isRunning else { return }
+        cancelRecording()
         terminalView.terminate()
         isRunning = false
+    }
+
+    var isRecording: Bool { recorder != nil }
+
+    func startRecording() {
+        guard recorder == nil else { return }
+        let now = Date()
+        recorder = TerminalShortcutRecorder(startedAt: now)
+        activeRecordingStartedAt = now
+    }
+
+    func stopRecording(defaultTitle: String? = nil) -> TerminalShortcut? {
+        let finishedAt = Date()
+        defer {
+            recorder = nil
+            activeRecordingStartedAt = nil
+        }
+        let title = defaultTitle ?? "Terminal Shortcut \(Self.shortcutTitleFormatter.string(from: finishedAt))"
+        return recorder?.finish(title: title, finishedAt: finishedAt)
+    }
+
+    func cancelRecording() {
+        recorder = nil
+        activeRecordingStartedAt = nil
+    }
+
+    func playShortcut(_ shortcut: TerminalShortcut) {
+        guard isRunning, shortcut.isPlayable, !isRecording, !isPlayingShortcut else { return }
+        isPlayingShortcut = true
+        Task { [weak self] in
+            for event in shortcut.events {
+                if event.delayMilliseconds > 0 {
+                    try? await Task.sleep(nanoseconds: UInt64(event.delayMilliseconds) * 1_000_000)
+                }
+                let shouldContinue = await MainActor.run {
+                    guard let self, self.isRunning else { return false }
+                    if event.requiresEchoOff, self.terminalView.terminalEchoEnabled {
+                        self.isPlayingShortcut = false
+                        return false
+                    }
+                    let bytes = event.resolvedBytes()
+                    guard !bytes.isEmpty else { return true }
+                    self.terminalView.send(bytes)
+                    return true
+                }
+                if shouldContinue == false {
+                    break
+                }
+            }
+            await MainActor.run {
+                self?.isPlayingShortcut = false
+            }
+        }
     }
 
     // MARK: Agent-tool surface
@@ -296,6 +645,11 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
         if recentCommands.count > maxRecentCommands {
             recentCommands.removeLast(recentCommands.count - maxRecentCommands)
         }
+    }
+
+    private func recordInputIfNeeded(data: [UInt8], echoEnabled: Bool) {
+        guard !isPlayingShortcut else { return }
+        recorder?.record(data: data, echoEnabled: echoEnabled)
     }
 
     // MARK: Idle bookkeeping
@@ -378,6 +732,12 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
         guard trimmed.hasPrefix("~") else { return trimmed }
         return (trimmed as NSString).expandingTildeInPath
     }
+
+    private static let shortcutTitleFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
 }
 
 // MARK: - Controller: owns tabs + idle reaper + agent-tool surface
@@ -388,6 +748,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
     @Published var activeTabID: UUID?
     /// Default runtime for new SSH tabs.
     @Published var selectedRuntimeID: UUID?
+    @Published private(set) var shortcuts: [TerminalShortcut] = TerminalShortcutStore.load()
 
     /// Supplies parameters to open a local shell tab on demand when an
     /// agent tool wants to drive the terminal but the user hasn't opened
@@ -414,6 +775,14 @@ final class AgentInteractiveTerminalController: ObservableObject {
     var activeTab: AgentTerminalTab? {
         guard let activeTabID else { return tabs.first }
         return tabs.first { $0.id == activeTabID } ?? tabs.first
+    }
+
+    var recordingTabID: UUID? {
+        tabs.first(where: \.isRecording)?.id
+    }
+
+    var isRecording: Bool {
+        recordingTabID != nil
     }
 
     var runtimeOptions: [RuntimeDescriptor] {
@@ -490,6 +859,58 @@ final class AgentInteractiveTerminalController: ObservableObject {
         if activeTabID == id {
             activeTabID = tabs.last?.id
         }
+    }
+
+    func startRecordingActiveTab() {
+        guard recordingTabID == nil,
+              let tab = activeTab,
+              tab.isRunning else { return }
+        tab.startRecording()
+    }
+
+    func stopRecording() {
+        guard let tab = tabs.first(where: \.isRecording),
+              let shortcut = tab.stopRecording() else {
+            tabs.first(where: \.isRecording)?.cancelRecording()
+            return
+        }
+        upsertShortcut(shortcut)
+    }
+
+    func playShortcut(_ shortcut: TerminalShortcut) {
+        guard !isRecording else { return }
+        activeTab?.playShortcut(shortcut)
+    }
+
+    func renameShortcut(id: UUID, title: String) {
+        guard let index = shortcuts.firstIndex(where: { $0.id == id }) else { return }
+        var shortcut = shortcuts[index]
+        shortcut.title = title
+        shortcut.updatedAt = Date()
+        shortcuts[index] = shortcut.normalized
+        persistShortcuts()
+    }
+
+    func deleteShortcut(id: UUID) {
+        shortcuts
+            .filter { $0.id == id }
+            .forEach(TerminalShortcutStore.deleteProtectedInputs)
+        shortcuts.removeAll { $0.id == id }
+        persistShortcuts()
+    }
+
+    private func upsertShortcut(_ shortcut: TerminalShortcut) {
+        shortcuts
+            .filter { $0.id == shortcut.id }
+            .forEach(TerminalShortcutStore.deleteProtectedInputs)
+        shortcuts.removeAll { $0.id == shortcut.id }
+        shortcuts.insert(shortcut.normalized, at: 0)
+        persistShortcuts()
+    }
+
+    private func persistShortcuts() {
+        shortcuts = Array(shortcuts.map(\.normalized).filter(\.isPlayable).prefix(24))
+        TerminalShortcutStore.save(shortcuts)
     }
 
     /// Make sure the panel always has at least one live tab to show; opens

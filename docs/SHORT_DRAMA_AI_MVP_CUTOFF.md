@@ -1,6 +1,6 @@
 # Short Drama AI MVP Cutoff
 
-> Last updated: 2026-06-29 | Baseline version: v1.109.0-rc474
+> Last updated: 2026-06-29 | Baseline version: v1.109.0-rc480
 
 ## 收敛结论
 
@@ -28,7 +28,7 @@
 
 ## 可用版验收清单
 
-当前记录：2026-06-29，基线 `v1.109.0-rc474`。以下命令作为可用版验收 gate；本次只把短剧工具改为 composer 专家激活后才暴露，不新增短剧制作能力，短剧 handoff todo summary 仍会单独验证 smoke evidence 合约、acceptance 摘要、交付证据索引、handoff 模式矩阵、交付文件指纹、交接待办清单、待办摘要、待办证据路径、复验命令、Debug 构建和版本一致性。
+当前记录：2026-06-29，基线 `v1.109.0-rc480`。以下命令作为可用版验收 gate；本次优化右侧侧栏打开延迟和终端录制 echo 查询缓存，不新增短剧制作能力，短剧 handoff todo summary 仍会单独验证 smoke evidence 合约、acceptance 摘要、交付证据索引、handoff 模式矩阵、交付文件指纹、交接待办清单、待办摘要、待办证据路径、复验命令、Debug 构建和版本一致性。
 
 - `scripts/run_tests.sh`
 - `ruby scripts/version_consistency.rb build/version_report.md build/version_report.json`

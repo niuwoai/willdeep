@@ -1,5 +1,54 @@
 # Changelog
 
+## 1.109.0-rc480 - 2026-06-29
+
+### Fixed
+- **右侧侧栏打开延迟（1.109.0-rc480）** —— Agent 右侧侧栏打开时不再同步 `setFrame(display: true)` 强制窗口立即重绘；终端侧栏首次挂载时延后启动默认本地 shell，让侧栏壳子先显示，减少点击后约 1 秒才出现的体感延迟。
+- 版本号从 **1.109.0-rc479** 提升为 **1.109.0-rc480**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
+## 1.109.0-rc479 - 2026-06-29
+
+### Fixed
+- **终端录制 echo 查询缓存（1.109.0-rc479）** —— 终端录制期间连续普通键入复用 echo 状态缓存，不再每个按键都查询 PTY；收到非预期回显输出、缓存过期或重新启动终端时才重新读取 echo 状态，继续保证 `Password:` 等不回显输入按受保护片段记录。
+- 版本号从 **1.109.0-rc478** 提升为 **1.109.0-rc479**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
+## 1.109.0-rc478 - 2026-06-29
+
+### Fixed
+- **终端非录制输入延迟（1.109.0-rc478）** —— Agent 右侧终端在普通打字时不再执行录制用的 echo 状态检查和输入字节复制，只有真正开始录制后才检测 echo 并记录受保护输入，降低侧边栏终端键入时的 CPU 与延迟。
+- 版本号从 **1.109.0-rc477** 提升为 **1.109.0-rc478**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
+## 1.109.0-rc477 - 2026-06-29
+
+### Changed
+- **Composer 更多设置专家入口（1.109.0-rc477）** —— “专家”不再固定占用 composer 底部空间，改为进入“更多设置”；专家列表使用开关组件表达单向激活，未激活可打开，已激活保持开启并禁用，避免误关。
+- Composer 底部控制行新增自适应布局：宽度充足时会逐步把执行器、插件、专家从“更多设置”里直接放出来显示，窄屏时仍收进“更多设置”，减少侧栏/输入区挤压。
+- 版本号从 **1.109.0-rc476** 提升为 **1.109.0-rc477**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
+## 1.109.0-rc476 - 2026-06-29
+
+### Added
+- **终端捷径录制（1.109.0-rc476）** —— Agent 右侧终端面板新增录制按钮，可把当前终端输入字节和输入间隔记录为可回放捷径，停止后显示在终端标签上方。
+- 终端捷径支持在当前活动终端回放，并可通过捷径菜单改名或删除；回放期间不会被再次录进新捷径。
+
+### Security
+- 录制入口在写入 PTY 前检查终端 echo 状态；登录/密码等不回显输入保存为受保护片段，持久化时只在捷径 JSON 中留下 Keychain 引用。
+- 回放受保护片段前会再次检查当前终端是否仍处于 echo-off；如果已经回到普通可回显输入，WillDeep 不会把该片段打出来。
+- `WillDeepTests` 新增终端录制回归测试，验证 echo-off 输入不会落入捷径 JSON，且仍可通过受保护事件恢复。
+
+### Changed
+- 版本号从 **1.109.0-rc475** 提升为 **1.109.0-rc476**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
+## 1.109.0-rc475 - 2026-06-29
+
+### Changed
+- **专家单向激活与侧栏门禁（1.109.0-rc475）** —— composer 专家入口从可反复开关改为会话内只允许“未激活 → 已激活”；已激活专家在菜单中保持勾选并禁用，避免误关后让模型工具面突然收窄。
+- 短剧右侧面板现在复用专家可用性判断：未激活短剧专家时，侧栏菜单不再显示“短剧”，外部短剧打开请求也会被消费并拒绝。
+
+### Fixed
+- `WillDeepTests` 扩展专家回归测试，覆盖短剧工具过滤、短剧侧栏门禁和重复激活不回退。
+- 版本号从 **1.109.0-rc474** 提升为 **1.109.0-rc475**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
 ## 1.109.0-rc474 - 2026-06-29
 
 ### Added

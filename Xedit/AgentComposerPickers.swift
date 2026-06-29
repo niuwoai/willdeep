@@ -19,8 +19,11 @@
 //     and pins it to every reply once defined.
 //   - `AgentApprovalModePickerPill`: per-session tool approval posture
 //     selector — request every time, smart approval, or workspace access.
-//   - `AgentExpertPickerPill`: per-session opt-in specialist tool packs.
+//   - `AgentExpertPickerPill`: per-session opt-in specialist tool packs
+//     with one-way activation switches.
 //   - `AgentPluginPickerPill`: installed plugin/MCP capability browser.
+//   - `ComposerAdaptiveControlStrip`: progressively exposes overflow
+//     controls inline when the composer has room.
 //
 //  Previously `private struct` inside the composer file; now internal
 //  so the composer card and any future host can mount them across
@@ -379,31 +382,55 @@ struct AgentApprovalModePickerPill: View {
     }
 }
 
-// MARK: - Plugin picker
+// MARK: - Adaptive composer controls
+
+enum ComposerOverflowControl: Hashable {
+    case executor
+    case plugins
+    case experts
+}
+
+struct ComposerAdaptiveControlStrip: View {
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) {
+                primaryControls
+                AgentExecutionPickerPill()
+                AgentPluginPickerPill()
+                AgentExpertPickerPill()
+            }
+
+            HStack(spacing: 6) {
+                primaryControls
+                AgentExecutionPickerPill()
+                ComposerOverflowPill(controls: [.plugins, .experts])
+            }
+
+            HStack(spacing: 6) {
+                primaryControls
+                ComposerOverflowPill(controls: [.executor, .plugins, .experts])
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var primaryControls: some View {
+        WorkspacePickerPill()
+        ModelPickerPill()
+        AgentModePickerPill()
+        AgentApprovalModePickerPill()
+    }
+}
+
+// MARK: - Expert picker
 
 struct AgentExpertPickerPill: View {
     @EnvironmentObject var appState: AppState
+    @State private var isPresented = false
 
     var body: some View {
-        Menu {
-            ForEach(AgentExpert.allCases) { expert in
-                Button {
-                    appState.toggleAgentExpert(expert)
-                } label: {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Image(systemName: expert.symbol)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(expert.displayName)
-                            Text(expert.summary)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        if appState.agentActiveExperts.contains(expert) {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-            }
+        Button {
+            isPresented.toggle()
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "person.crop.circle.badge.checkmark")
@@ -420,10 +447,15 @@ struct AgentExpertPickerPill: View {
             .background(Capsule(style: .continuous).fill(pillBackground))
             .overlay(Capsule(style: .continuous).stroke(pillBorder, lineWidth: 1))
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .fixedSize()
         .help(L10n.Expert.pickerHelp)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            AgentExpertActivationList()
+                .padding(14)
+                .frame(width: 320, alignment: .leading)
+                .environmentObject(appState)
+        }
     }
 
     private var label: String {
@@ -443,6 +475,73 @@ struct AgentExpertPickerPill: View {
         appState.agentActiveExperts.isEmpty ? Color.secondary.opacity(0.25) : Color.clear
     }
 }
+
+struct AgentExpertActivationList: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(L10n.Expert.pickerLabel)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            ForEach(AgentExpert.allCases) { expert in
+                expertRow(expert)
+            }
+        }
+    }
+
+    private func expertRow(_ expert: AgentExpert) -> some View {
+        let isActive = appState.agentActiveExperts.contains(expert)
+        return HStack(alignment: .center, spacing: 10) {
+            Image(systemName: expert.symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(isActive ? Color.accentColor : Color.secondary)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(expert.displayName)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.primary)
+                Text(expert.summary)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 10)
+
+            Toggle("", isOn: Binding(
+                get: { isActive },
+                set: { newValue in
+                    if newValue {
+                        appState.activateAgentExpert(expert)
+                    }
+                }
+            ))
+            .labelsHidden()
+            .toggleStyle(.switch)
+            .disabled(isActive)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isActive ? Color.accentColor.opacity(0.10) : Color.secondary.opacity(0.07))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isActive ? Color.accentColor.opacity(0.35) : Color.secondary.opacity(0.12), lineWidth: 1)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 8))
+        .onTapGesture {
+            guard !isActive else { return }
+            appState.activateAgentExpert(expert)
+        }
+    }
+}
+
+// MARK: - Plugin picker
 
 struct AgentPluginPickerPill: View {
     @EnvironmentObject var appState: AppState
@@ -938,19 +1037,17 @@ struct AgentModePickerPill: View {
     }
 }
 
-/// Overflow「⋯」for the low-frequency composer controls. The bottom
-/// control row used to lay 7 pills side by side and never shrank, so it
-/// forced a very wide minimum composer width — on a narrow window the
-/// composer overflowed onto the sessions sidebar. We keep the two
-/// high-frequency pills (model + interaction mode) inline and fold the
-/// rest (workspace / executor / approval mode / plugins) behind this
-/// single pill. Each folded control keeps its full picker behaviour — it
-/// just lives inside this popover now. The current workspace name is also
-/// shown in the bottom status bar, so hiding the workspace pill here
-/// doesn't lose at-a-glance info.
+/// Overflow「⋯」for composer controls that do not currently fit inline.
+/// `ComposerAdaptiveControlStrip` progressively moves executor, plugins,
+/// and experts out of this popover as the composer gets wider.
 struct ComposerOverflowPill: View {
     @EnvironmentObject var appState: AppState
+    let controls: [ComposerOverflowControl]
     @State private var isPresented = false
+
+    init(controls: [ComposerOverflowControl] = [.executor, .plugins, .experts]) {
+        self.controls = controls
+    }
 
     var body: some View {
         Button {
@@ -976,11 +1073,18 @@ struct ComposerOverflowPill: View {
                 Text(L10n.Composer.overflowTitle)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
-                overflowRow(L10n.Composer.overflowExecutor) { AgentExecutionPickerPill() }
-                overflowRow(L10n.Composer.overflowPlugins) { AgentPluginPickerPill() }
+                if controls.contains(.executor) {
+                    overflowRow(L10n.Composer.overflowExecutor) { AgentExecutionPickerPill() }
+                }
+                if controls.contains(.plugins) {
+                    overflowRow(L10n.Composer.overflowPlugins) { AgentPluginPickerPill() }
+                }
+                if controls.contains(.experts) {
+                    AgentExpertActivationList()
+                }
             }
             .padding(14)
-            .frame(width: 300, alignment: .leading)
+            .frame(width: controls.contains(.experts) ? 340 : 300, alignment: .leading)
             .environmentObject(appState)
         }
     }
