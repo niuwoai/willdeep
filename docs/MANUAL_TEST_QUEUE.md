@@ -478,6 +478,25 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   底部“验收记录”指向
   `1.109.0-rc465 — 短剧 smoke evidence readiness matrix`。
 
+## 1.109.0-rc466 — 短剧 handoff bundle
+
+- ✅ 本版本没有新增短剧制作能力；本轮只把 acceptance report 收敛成可交接的 handoff bundle。
+- ✅ 运行 `ruby scripts/short_drama_mvp_handoff_bundle.rb ...` →
+  输出 `short_drama_mvp_handoff_bundle.md/json`，包含 `handoff_mode`、
+  `ready_for_release`、readiness、blocking items、next actions、handoff files 和 remaining risks。
+- ✅ 默认试用包 manual/provider smoke 仍未填写时 →
+  `handoff_mode` 应为 `trial_package_with_explicit_pending_reasons`，
+  `ready_for_release` 应为 `false`，不会把试用包误标为 ready。
+- ✅ 运行 `scripts/run_tests.sh` →
+  本地一键验收会在 acceptance report 后生成 handoff bundle。
+- ✅ GitHub Actions `Tests` workflow →
+  远端会运行 `Generate short-drama MVP handoff bundle`，并把 Markdown/JSON 上传为 artifact。
+- ✅ 打开 `build/ci/short_drama_mvp_tryout_package/acceptance-runbook.md` →
+  命令列表包含 `short_drama_mvp_handoff_bundle.rb`，required reports 包含
+  `short_drama_mvp_handoff_bundle.json`。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向 `1.109.0-rc466 — 短剧 handoff bundle`。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）

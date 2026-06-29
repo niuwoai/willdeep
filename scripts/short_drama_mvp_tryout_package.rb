@@ -294,6 +294,7 @@ smoke_evidence_report_md_path = File.join(File.dirname(REPORT_MD), "short_drama_
 smoke_evidence_report_json_path = File.join(File.dirname(REPORT_JSON), "short_drama_mvp_smoke_evidence_report.json")
 smoke_evidence_command = "ruby scripts/short_drama_mvp_smoke_evidence_report.rb #{PACKAGE_DIR} #{smoke_evidence_report_md_path} #{smoke_evidence_report_json_path}"
 acceptance_report_command = "ruby scripts/short_drama_mvp_acceptance_report.rb build/ci/short_drama_mvp_acceptance_report.md build/ci/short_drama_mvp_acceptance_report.json"
+handoff_bundle_command = "ruby scripts/short_drama_mvp_handoff_bundle.rb build/ci/short_drama_mvp_acceptance_report.json build/ci/short_drama_mvp_handoff_bundle.md build/ci/short_drama_mvp_handoff_bundle.json"
 
 widget_html = [
   "<!doctype html>",
@@ -644,6 +645,7 @@ handoff_index = {
     "review_queue_dry_run" => "short_drama_import_review_csv(#{review_queue_import_arguments})",
     "smoke_evidence_report" => smoke_evidence_command,
     "acceptance_report" => acceptance_report_command,
+    "handoff_bundle" => handoff_bundle_command,
     "full_local_gate" => "scripts/run_tests.sh"
   },
   "remaining_risks" => [
@@ -678,6 +680,12 @@ acceptance_runbook = {
     },
     {
       "order" => 4,
+      "title" => "Generate handoff bundle",
+      "command" => handoff_bundle_command,
+      "expected" => "short_drama_mvp_handoff_bundle: pass and handoff_mode explains whether this is ready_release_candidate or trial_package_with_explicit_pending_reasons."
+    },
+    {
+      "order" => 5,
       "title" => "Run full local gate",
       "command" => "scripts/run_tests.sh",
       "expected" => "Full local gate passes before a release candidate is tagged."
@@ -705,7 +713,8 @@ acceptance_runbook = {
     "build/ci/version_report.json",
     "build/ci/short_drama_mvp_tryout_package_report.json",
     "build/ci/short_drama_mvp_smoke_evidence_report.json",
-    "build/ci/short_drama_mvp_acceptance_report.json"
+    "build/ci/short_drama_mvp_acceptance_report.json",
+    "build/ci/short_drama_mvp_handoff_bundle.json"
   ],
   "handoff_decision" => "Do not call the MVP ready when acceptance report overall is manual_pending, manual_failed, or blocked; hand off only as a trial package with explicit pending reasons."
 }
@@ -769,6 +778,7 @@ handoff_index_md = [
   "- Review queue dry-run: `#{handoff_index.fetch("commands").fetch("review_queue_dry_run")}`",
   "- Smoke evidence report: `#{handoff_index.fetch("commands").fetch("smoke_evidence_report")}`",
   "- Acceptance report: `#{handoff_index.fetch("commands").fetch("acceptance_report")}`",
+  "- Handoff bundle: `#{handoff_index.fetch("commands").fetch("handoff_bundle")}`",
   "- Full local gate: `#{handoff_index.fetch("commands").fetch("full_local_gate")}`",
   "",
   "## Remaining Risks",
@@ -931,6 +941,7 @@ checks << {
       handoff_index_data.fetch("commands").fetch("dry_run_import").include?("import_media_manifest") &&
       handoff_index_data.fetch("commands").fetch("smoke_evidence_report").include?("short_drama_mvp_smoke_evidence_report.rb") &&
       handoff_index_data.fetch("commands").fetch("acceptance_report").include?("short_drama_mvp_acceptance_report.rb") &&
+      handoff_index_data.fetch("commands").fetch("handoff_bundle").include?("short_drama_mvp_handoff_bundle.rb") &&
       handoff_index_source.include?("Start Here") &&
       handoff_index_source.include?("Remaining Risks")
 }
@@ -940,6 +951,7 @@ checks << {
   name: "acceptance runbook covers local gates",
   ok: acceptance_runbook_data.fetch("schema") == "willdeep.short_drama.acceptance_runbook.v1" &&
       acceptance_runbook_data.fetch("commands").any? { |item| item.fetch("command").include?("short_drama_mvp_acceptance_report.rb") } &&
+      acceptance_runbook_data.fetch("commands").any? { |item| item.fetch("command").include?("short_drama_mvp_handoff_bundle.rb") } &&
       acceptance_runbook_data.fetch("commands").any? { |item| item.fetch("command").include?("scripts/run_tests.sh") } &&
       acceptance_runbook_source.include?("manual_pending") &&
       acceptance_runbook_source.include?("Handoff Decision")

@@ -170,6 +170,7 @@ short_drama_tryout_package = read_file(repo_root, "scripts/short_drama_mvp_tryou
 short_drama_acceptance_report = read_file(repo_root, "scripts/short_drama_mvp_acceptance_report.rb")
 short_drama_smoke_evidence_report = read_file(repo_root, "scripts/short_drama_mvp_smoke_evidence_report.rb")
 short_drama_smoke_evidence_contract = read_file(repo_root, "scripts/short_drama_mvp_smoke_evidence_contract_test.rb")
+short_drama_handoff_bundle = read_file(repo_root, "scripts/short_drama_mvp_handoff_bundle.rb")
 short_drama_remaining_risks = short_drama_cutoff
   .match(/^##\s+当前剩余风险\n\n(?<body>.*?)(?=^##\s|\z)/m)
   &.[](:body)
@@ -291,6 +292,23 @@ add_delivery_check.call(
     workflow.include?("Generate short-drama MVP acceptance report") &&
     workflow.include?("short_drama_mvp_acceptance_report.md"),
   "Local and GitHub acceptance should generate the short-drama MVP acceptance report."
+)
+add_delivery_check.call(
+  "Short drama handoff bundle is wired into local and remote acceptance",
+  "scripts/short_drama_mvp_handoff_bundle.rb",
+  File.file?(File.join(repo_root, "scripts/short_drama_mvp_handoff_bundle.rb")) &&
+    run_tests.include?("scripts/short_drama_mvp_handoff_bundle.rb") &&
+    workflow.include?("Generate short-drama MVP handoff bundle") &&
+    workflow.include?("short_drama_mvp_handoff_bundle.md") &&
+    workflow.include?("short_drama_mvp_handoff_bundle.json") &&
+    short_drama_handoff_bundle.include?("ready_release_candidate") &&
+    short_drama_handoff_bundle.include?("trial_package_with_explicit_pending_reasons") &&
+    short_drama_handoff_bundle.include?("handoff_files") &&
+    short_drama_handoff_bundle.include?("remaining_risks") &&
+    short_drama_tryout_package.include?("handoff_bundle_command") &&
+    short_drama_cutoff.include?("short_drama_mvp_handoff_bundle.rb") &&
+    short_drama_tryout.include?("short_drama_mvp_handoff_bundle.rb"),
+  "Local and GitHub acceptance should generate the final handoff bundle with readiness, evidence files, next actions, and remaining risks."
 )
 add_delivery_check.call(
   "Short drama acceptance report preserves handoff readiness summary",

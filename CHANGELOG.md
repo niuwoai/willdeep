@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.109.0-rc466 - 2026-06-29
+
+### Changed
+- **短剧 handoff bundle（1.109.0-rc466）** —— 新增 `scripts/short_drama_mvp_handoff_bundle.rb`，读取 acceptance report 后生成最终交接包 Markdown/JSON。
+- handoff bundle 会输出 `handoff_mode`、`ready_for_release`、readiness、blocking items、next actions、handoff files 和 remaining risks；默认未补完 manual/provider smoke 的试用包会明确显示为 `trial_package_with_explicit_pending_reasons`，不会误称 ready。
+- `scripts/run_tests.sh` 和 GitHub Actions `Tests` workflow 接入 handoff bundle，并把 `short_drama_mvp_handoff_bundle.md/json` 写入 job summary 与 artifacts。
+- 试用包 `acceptance-runbook.md/json` 与 `handoff-index.md/json` 增加 handoff bundle 命令和 required report 指针，接手人可从包内直接跑完整交付索引。
+- `scripts/version_consistency.rb` 新增守门，确保本地/远端 acceptance 持续生成 handoff bundle，且脚本保留交付模式、证据文件、下一步动作和剩余风险。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc466 — 短剧 handoff bundle`。
+- 版本号从 **1.109.0-rc465** 提升为 **1.109.0-rc466**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
 ## 1.109.0-rc465 - 2026-06-29
 
 ### Changed
