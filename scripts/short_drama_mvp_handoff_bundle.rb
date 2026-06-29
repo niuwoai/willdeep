@@ -190,6 +190,25 @@ def build_handoff_todos(machine_passed:, ready_for_release:, next_actions:, hand
   todos.each_with_index.map { |todo, index| todo.merge("order" => index + 1) }
 end
 
+def build_handoff_todo_summary(todos)
+  phases = todos.each_with_object(Hash.new(0)) do |todo, result|
+    result[todo["phase"].to_s] += 1
+  end
+  {
+    "total_count" => todos.length,
+    "phase_counts" => phases.sort.to_h,
+    "manual_smoke_count" => phases["manual_smoke"].to_i,
+    "provider_smoke_count" => phases["provider_smoke"].to_i,
+    "verify_count" => phases["verify"].to_i,
+    "release_count" => phases["release"].to_i,
+    "evidence_path_count" => todos.sum { |todo| array_values(todo["evidence_paths"]).length },
+    "verification_command_count" => todos.count { |todo| !todo["verification_command"].to_s.empty? },
+    "missing_evidence_path_todo_count" => todos.count { |todo| array_values(todo["evidence_paths"]).empty? },
+    "machine_replay_required" => todos.any? { |todo| todo["phase"].to_s == "verify" },
+    "release_ready_todo_present" => todos.any? { |todo| todo["phase"].to_s == "release" }
+  }
+end
+
 acceptance = read_json(ACCEPTANCE_JSON)
 handoff_readiness = hash_value(acceptance["handoff_readiness"])
 pending_reasons = array_values(acceptance["handoff_pending_reasons"])
@@ -317,6 +336,7 @@ handoff_todos = build_handoff_todos(
   handoff_files: handoff_files,
   evidence_by_label: evidence_by_label
 )
+handoff_todo_summary = build_handoff_todo_summary(handoff_todos)
 
 checks_for_bundle = [
   {
@@ -372,6 +392,16 @@ checks_for_bundle = [
     "detail" => "Handoff bundle should convert readiness and smoke evidence next actions into ordered operator todos with evidence paths and verification commands."
   },
   {
+    "name" => "handoff todo summary is generated",
+    "ok" => handoff_todo_summary["total_count"] == handoff_todos.length &&
+            handoff_todo_summary["evidence_path_count"].is_a?(Integer) &&
+            handoff_todo_summary["evidence_path_count"].positive? &&
+            handoff_todo_summary["verification_command_count"] == handoff_todos.length &&
+            handoff_todo_summary["missing_evidence_path_todo_count"].zero? &&
+            (ready_for_release || handoff_todo_summary["machine_replay_required"] == true),
+    "detail" => "Handoff bundle should summarize operator todo counts, evidence coverage, and replay requirements."
+  },
+  {
     "name" => "runbook and handoff index are included",
     "ok" => array_values(handoff_index["start_here"]).any? &&
             array_values(acceptance_runbook["commands"]).any?,
@@ -397,6 +427,7 @@ report = {
   "checks" => checks_for_bundle,
   "blocking_items" => blocking_items,
   "next_actions" => next_actions,
+  "handoff_todo_summary" => handoff_todo_summary,
   "handoff_todos" => handoff_todos,
   "handoff_files" => handoff_files,
   "remaining_risks" => remaining_risks
@@ -433,6 +464,13 @@ File.write(
     end),
     "",
     "## Handoff Todos",
+    "",
+    "- Total: #{handoff_todo_summary.fetch("total_count")}",
+    "- Phase counts: #{handoff_todo_summary.fetch("phase_counts").map { |phase, count| "#{phase}=#{count}" }.join(", ")}",
+    "- Evidence paths: #{handoff_todo_summary.fetch("evidence_path_count")}",
+    "- Verification commands: #{handoff_todo_summary.fetch("verification_command_count")}",
+    "- Machine replay required: #{handoff_todo_summary.fetch("machine_replay_required")}",
+    "- Release todo present: #{handoff_todo_summary.fetch("release_ready_todo_present")}",
     "",
     *handoff_todos.flat_map do |todo|
       [

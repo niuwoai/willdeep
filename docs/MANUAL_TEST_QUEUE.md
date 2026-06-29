@@ -577,6 +577,28 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   底部“验收记录”指向
   `1.109.0-rc470 — 短剧 handoff todo evidence`。
 
+## 1.109.0-rc471 — 短剧 handoff todo summary
+
+- ✅ 本版本没有新增短剧制作能力；本轮只把交接包的待办列表再收敛成一屏可读的 `handoff_todo_summary`。
+- ✅ 运行 `ruby scripts/short_drama_mvp_handoff_bundle.rb ...` →
+  JSON 中包含 `handoff_todo_summary`，Markdown `Handoff Todos` 小节顶部显示
+  total、phase counts、evidence paths、verification commands、
+  machine replay required 和 release todo present。
+- ✅ 默认 trial 包的 summary 会显示 `manual_smoke`、`provider_smoke`
+  和 `verify` 阶段，并标记 `machine_replay_required=true`。
+- ✅ ready release 场景的 summary 会显示 `release` 阶段、
+  `release_ready_todo_present=true`，并且不把它误标成 trial replay。
+- ✅ 运行 `ruby scripts/short_drama_mvp_handoff_bundle_contract_test.rb ...` →
+  报告包含 `handoff todo summary covers trial work` 和
+  `handoff todo summary covers ready release`。
+- ✅ 运行 `ruby scripts/version_consistency.rb ...` →
+  delivery checks 会守住 `handoff_todo_summary`、
+  `build_handoff_todo_summary`、`machine_replay_required`、
+  `release_ready_todo_present` 和 contract 中的 summary 检查。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc471 — 短剧 handoff todo summary`。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）

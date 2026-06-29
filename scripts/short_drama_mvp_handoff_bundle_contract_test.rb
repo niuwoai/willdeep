@@ -106,6 +106,10 @@ def handoff_todos(report)
   Array(report["handoff_todos"])
 end
 
+def handoff_todo_summary(report)
+  report["handoff_todo_summary"].is_a?(Hash) ? report["handoff_todo_summary"] : {}
+end
+
 def todo_phases(report)
   handoff_todos(report).map { |todo| todo["phase"].to_s }
 end
@@ -204,6 +208,19 @@ def build_default_trial(base_acceptance_path)
               end,
       "detail" => "Default trial todos should point at the manual/provider evidence JSON files and smoke evidence verification command."
     }
+    summary = handoff_todo_summary(report)
+    result.fetch("checks") << {
+      "name" => "handoff todo summary covers trial work",
+      "ok" => summary["total_count"] == handoff_todos(report).length &&
+              summary.dig("phase_counts", "manual_smoke").to_i.positive? &&
+              summary.dig("phase_counts", "provider_smoke").to_i.positive? &&
+              summary.dig("phase_counts", "verify").to_i.positive? &&
+              summary["evidence_path_count"].to_i.positive? &&
+              summary["verification_command_count"] == handoff_todos(report).length &&
+              summary["missing_evidence_path_todo_count"].to_i.zero? &&
+              summary["machine_replay_required"] == true,
+      "detail" => "Default trial summary should expose manual/provider/verify work, evidence coverage, and replay requirement counts."
+    }
   end
 end
 
@@ -252,6 +269,17 @@ def build_ready_release(base_acceptance_path)
                   Array(todo["evidence_paths"]).any?
               end,
       "detail" => "Ready bundle should expose a release-phase handoff todo."
+    }
+    summary = handoff_todo_summary(report)
+    result.fetch("checks") << {
+      "name" => "handoff todo summary covers ready release",
+      "ok" => summary["total_count"] == handoff_todos(report).length &&
+              summary.dig("phase_counts", "release").to_i.positive? &&
+              summary["release_ready_todo_present"] == true &&
+              summary["machine_replay_required"] == false &&
+              summary["verification_command_count"] == handoff_todos(report).length &&
+              summary["missing_evidence_path_todo_count"].to_i.zero?,
+      "detail" => "Ready release summary should expose the release todo and avoid claiming a replay-only trial state."
     }
   end
 end

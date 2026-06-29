@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.109.0-rc471 - 2026-06-29
+
+### Changed
+- **短剧 handoff todo summary（1.109.0-rc471）** —— `scripts/short_drama_mvp_handoff_bundle.rb` 现在输出 `handoff_todo_summary`，汇总交接待办总数、阶段分布、manual/provider/verify/release 数量、证据路径数、复验命令数、缺证据待办数、是否需要机器重放和是否存在 release 待办。
+- Markdown `Handoff Todos` 小节顶部会直接显示 todo 摘要，接手人不用先读完整 JSON 才知道当前包是“补人工证据/补 provider 证据/重跑机器验收/可 release”哪种状态。
+- `scripts/short_drama_mvp_handoff_bundle_contract_test.rb` 新增 trial 和 ready release 的 todo summary 检查，确保摘要与 `handoff_todos` 数量、阶段、证据路径和复验命令一致。
+- `scripts/version_consistency.rb` 新增守门，确保 handoff bundle 持续保留 `handoff_todo_summary`、`build_handoff_todo_summary`、`machine_replay_required`、`release_ready_todo_present` 和 contract 中的 summary 检查。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc471 — 短剧 handoff todo summary`。
+- 版本号从 **1.109.0-rc470** 提升为 **1.109.0-rc471**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
 ## 1.109.0-rc470 - 2026-06-29
 
 ### Changed

@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-29 | Current version: v1.109.0-rc470
+> Last updated: 2026-06-29 | Current version: v1.109.0-rc471
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **短剧 handoff todo summary（1.109.0-rc471）** —— `scripts/short_drama_mvp_handoff_bundle.rb` 现在输出 `handoff_todo_summary`，把交接待办总数、阶段分布、manual/provider/verify/release 数量、证据路径数、复验命令数、机器重放需求和 release 待办存在性压成一屏摘要；contract 和 version consistency 会守住 trial/ready release 摘要与 `handoff_todos` 一致。
 - **短剧 handoff todo evidence（1.109.0-rc470）** —— `handoff_todos` 每条待办现在带 `evidence_paths` 和 `verification_command`，Markdown 交接包会直接显示 Evidence 与 Verify；default trial 合约会确认 manual/provider 待办指向证据 JSON 和 smoke evidence 复验命令，ready release 合约会确认 release 待办可复验。
 - **短剧 handoff todos（1.109.0-rc469）** —— `scripts/short_drama_mvp_handoff_bundle.rb` 现在输出 `handoff_todos`，把 manual smoke、provider smoke、证据修复、verify 和 ready release 的下一步动作收敛成带 `phase/kind/command/items` 的有序待办；contract 与 version consistency 会守住默认 trial 和 ready release 的待办阶段。
 - **短剧 handoff file fingerprints（1.109.0-rc468）** —— `scripts/short_drama_mvp_handoff_bundle.rb` 的 `handoff_files` 现在会为普通文件输出 `size_bytes` 和 SHA-256，为目录输出 `file_count`；handoff bundle contract 和 version consistency 会守住这些指纹，方便交接时确认 artifact 没被覆盖或拿错。
