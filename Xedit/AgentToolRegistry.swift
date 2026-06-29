@@ -1157,6 +1157,13 @@ enum AgentToolRegistry {
         )
     ]
 
+    static func tools(activeExperts: Set<AgentExpert>) -> [AgentToolDescriptor] {
+        all.filter { descriptor in
+            guard descriptor.name.hasPrefix("short_drama_") else { return true }
+            return activeExperts.contains(.shortDrama)
+        }
+    }
+
     static func descriptor(for name: String) -> AgentToolDescriptor? {
         all.first { $0.name == name }
     }

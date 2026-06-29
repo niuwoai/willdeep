@@ -74,6 +74,17 @@ enum L10n {
         static let workspaceAccessSummary = String(localized: "approval-mode.workspace-access.summary", defaultValue: "Allow current workspace actions; keep hard safety gates.")
     }
 
+    enum Expert {
+        static let pickerHelp = String(localized: "expert.picker-help", defaultValue: "Activate specialist tool packs for this session.")
+        static let pickerLabel = String(localized: "expert.picker-label", defaultValue: "Experts")
+        static func pickerLabelActive(_ a1: String) -> String {
+            let template = String(localized: "expert.picker-label.active", defaultValue: "Experts %@")
+            return String(format: template, a1)
+        }
+        static let shortDrama = String(localized: "expert.short-drama", defaultValue: "Short Drama")
+        static let shortDramaSummary = String(localized: "expert.short-drama.summary", defaultValue: "Enable short-drama planning, storyboard, media task, and production-package tools.")
+    }
+
     enum Automation {
         static let cancel = String(localized: "automation.cancel", defaultValue: "Cancel")
         static let createTitle = String(localized: "automation.create-title", defaultValue: "New Automation")

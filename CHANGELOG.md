@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.109.0-rc474 - 2026-06-29
+
+### Added
+- **Composer 专家激活（1.109.0-rc474）** —— composer 底部新增“专家”入口，按会话激活可选专家包；短剧制作专家默认关闭，开启后才向模型暴露 `short_drama_*` 工具和短剧专家提示。
+- Agent 会话新增 `activeExperts` 持久化字段，切换历史会话后专家激活状态保持不丢。
+
+### Fixed
+- **No workspace 会话迁移（1.109.0-rc474）** —— 没有 workspace 时已经聊过的会话，选择 workspace 后会原地绑定到该 workspace，不再把旧内容留在 “No workspace” 分组并另开一条会话。
+- `WillDeepTests` 新增 no-workspace 历史会话迁移和短剧专家工具过滤回归测试。
+- 版本号从 **1.109.0-rc473** 提升为 **1.109.0-rc474**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
+## 1.109.0-rc473 - 2026-06-29
+
+### Fixed
+- **编辑器软换行行号与当前行高亮（1.109.0-rc473）** —— 行号尺现在只在逻辑行起始 fragment 绘制行号，长行软换行出来的延续视觉行不再重复显示同一个行号。
+- 当前行高亮改为按光标所在 TextKit glyph fragment 对齐正文，不再因为逻辑行号相同而把软换行延续行、下一行行号区或行号与文本之间的小缝一起染上高亮色。
+- `EditorCoreBehaviorTests` 新增 TextKit 软换行布局回归测试，守住“软换行延续 fragment 不产生新行号”的行为。
+- 版本号从 **1.109.0-rc472** 提升为 **1.109.0-rc473**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
+## 1.109.0-rc472 - 2026-06-29
+
+### Fixed
+- **编辑器 Paper 当前行高亮色（1.109.0-rc472）** —— Paper 主题当前行高亮从不透明米灰改为低透明品牌绿洗色，正文区和行号栏继续复用同一主题色，避免当前行在浅色编辑器里呈现灰脏条带感。
+- `EditorCoreBehaviorTests` 新增回归测试，守住 Paper 当前行高亮为低透明、偏品牌绿的轻量提示色。
+- 短剧 MVP 指针文档同步到当前 rc；本版本不新增短剧制作能力，rc471 的 handoff todo summary 验收口径继续保留。
+- 版本号从 **1.109.0-rc471** 提升为 **1.109.0-rc472**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
 ## 1.109.0-rc471 - 2026-06-29
 
 ### Changed

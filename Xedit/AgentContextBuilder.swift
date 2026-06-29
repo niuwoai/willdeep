@@ -67,6 +67,7 @@ enum AgentContextBuilder {
         approvalMode: AgentApprovalMode = .smart,
         currentPlan: AgentPlan? = nil,
         currentGoal: AgentGoal? = nil,
+        activeExperts: Set<AgentExpert> = [],
         globalRules: String? = AgentGlobalRulesStore.loadRules(),
         promptProfile: AgentSystemPromptProfile = .standard
     ) -> String {
@@ -186,6 +187,15 @@ enum AgentContextBuilder {
             sections.append("""
             - Current approval mode: \(approvalMode.displayName). \(approvalMode.conciseSystemPromptDescription)
             """)
+        }
+
+        if !activeExperts.isEmpty {
+            sections.append(
+                activeExperts
+                    .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+                    .map(\.systemPromptBlock)
+                    .joined(separator: "\n\n")
+            )
         }
 
         if let rootDirectory {

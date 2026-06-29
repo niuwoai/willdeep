@@ -4674,6 +4674,96 @@
         }
       }
     },
+    "expert.picker-help" : {
+      "comment" : "Composer expert picker tooltip",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activate specialist tool packs for this session."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为当前会话激活专家工具包。"
+          }
+        }
+      }
+    },
+    "expert.picker-label" : {
+      "comment" : "Composer expert picker label when no experts are active",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Experts"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "专家"
+          }
+        }
+      }
+    },
+    "expert.picker-label.active" : {
+      "comment" : "Composer expert picker label when experts are active; placeholder is the active count",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Experts %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "专家 %@"
+          }
+        }
+      }
+    },
+    "expert.short-drama" : {
+      "comment" : "Short-drama expert display name",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Short Drama"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "短剧制作"
+          }
+        }
+      }
+    },
+    "expert.short-drama.summary" : {
+      "comment" : "Short-drama expert summary shown in the composer expert picker",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enable short-drama planning, storyboard, media task, and production-package tools."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启用短剧规划、分镜、媒体任务和制作包工具。"
+          }
+        }
+      }
+    },
     "composer.workspace.choose-folder" : {
       "comment" : "Composer workspace picker menu item",
       "extractionState" : "manual",

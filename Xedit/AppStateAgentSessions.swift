@@ -174,6 +174,20 @@ extension AppState {
         persistActiveAgentSession()
     }
 
+    /// Toggle an optional expert pack for the active session. Experts widen
+    /// the model-facing tool surface and add a small domain contract only
+    /// while enabled.
+    func toggleAgentExpert(_ expert: AgentExpert) {
+        var experts = agentActiveExperts
+        if experts.contains(expert) {
+            experts.remove(expert)
+        } else {
+            experts.insert(expert)
+        }
+        agentActiveExperts = experts
+        persistActiveAgentSession()
+    }
+
     /// User clicks Approve on the proposed plan — flips it to approved
     /// so the next turn's system prompt unlocks write tools.
     func approveAgentPlan() {
@@ -740,9 +754,12 @@ extension AppState {
     }
 
     /// Bind the current composer/session to a selected workspace. Empty
-    /// placeholder sessions are migrated in place; sessions with real
-    /// history get a fresh chat so old tool context is never silently
-    /// rewritten to a different folder.
+    /// placeholder sessions are migrated in place. A history-bearing
+    /// session is also migrated when it currently lives under "No
+    /// workspace", because the user is anchoring that same conversation
+    /// rather than switching between real project roots. Sessions with
+    /// real history and an existing workspace still get a fresh chat so
+    /// old tool context is never silently rewritten to a different folder.
     @discardableResult
     func moveActiveAgentSessionToWorkspace(at workspacePath: String) -> AgentSession {
         let url = URL(fileURLWithPath: workspacePath).standardizedFileURL
@@ -753,7 +770,7 @@ extension AppState {
             registerRecentFolder(url)
         }
 
-        if let runtime = activeRuntime, runtime.isEmpty, !runtime.isResponding {
+        if let runtime = activeRuntime, canRebindActiveRuntimeInPlace(runtime) {
             pruneEmptyAgentSessions(excluding: runtime.id)
             runtime.rebindWorkspace(to: url.path)
             runtime.worktreeChanges = .init()
@@ -763,6 +780,13 @@ extension AppState {
         }
 
         return startNewAgentSession(inWorkspaceAt: url.path)
+    }
+
+    private func canRebindActiveRuntimeInPlace(_ runtime: AgentRuntime) -> Bool {
+        guard !runtime.isResponding else { return false }
+        if runtime.isEmpty { return true }
+        return runtime.workspaceLocation == nil
+            && (runtime.workspaceRootPath?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
     }
 
     @discardableResult

@@ -463,6 +463,7 @@ extension AppState {
             // session is running, and the model just sees it as
             // "what's on screen right now".
             let promptProfile = AgentSystemPromptProfile.automatic(for: configuration)
+            let activeExperts = runtime.activeExperts
             var systemPrompt = AgentContextBuilder.systemPrompt(
                 rootDirectory: workspaceURL,
                 openedFileURL: openedFileURL,
@@ -474,6 +475,7 @@ extension AppState {
                 approvalMode: runtime.approvalMode,
                 currentPlan: runtime.currentPlan,
                 currentGoal: runtime.currentGoal,
+                activeExperts: activeExperts,
                 promptProfile: promptProfile
             )
             if let remoteRuntimeDescriptor,
@@ -501,7 +503,7 @@ extension AppState {
                 Tell the user when an action is local vs remote if it matters.
                 """
             }
-            if let latestImageChoice = runtime.latestImageChoice {
+            if activeExperts.contains(.shortDrama), let latestImageChoice = runtime.latestImageChoice {
                 systemPrompt += "\n\n\(latestImageChoice.systemPromptBlock)"
             }
             if let latestImageEditSubmission = runtime.latestImageEditSubmission {
@@ -554,7 +556,7 @@ extension AppState {
                     do {
                         try await client.streamChat(
                             messages: requestMessages,
-                            tools: AgentToolRegistry.all
+                            tools: AgentToolRegistry.tools(activeExperts: activeExperts)
                         ) { event in
                             await MainActor.run { [weak runtime] in
                                 guard let runtime,

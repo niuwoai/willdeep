@@ -19,6 +19,7 @@
 //     and pins it to every reply once defined.
 //   - `AgentApprovalModePickerPill`: per-session tool approval posture
 //     selector — request every time, smart approval, or workspace access.
+//   - `AgentExpertPickerPill`: per-session opt-in specialist tool packs.
 //   - `AgentPluginPickerPill`: installed plugin/MCP capability browser.
 //
 //  Previously `private struct` inside the composer file; now internal
@@ -379,6 +380,69 @@ struct AgentApprovalModePickerPill: View {
 }
 
 // MARK: - Plugin picker
+
+struct AgentExpertPickerPill: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        Menu {
+            ForEach(AgentExpert.allCases) { expert in
+                Button {
+                    appState.toggleAgentExpert(expert)
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Image(systemName: expert.symbol)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(expert.displayName)
+                            Text(expert.summary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        if appState.agentActiveExperts.contains(expert) {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "person.crop.circle.badge.checkmark")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(label)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .foregroundStyle(pillForeground)
+            .background(Capsule(style: .continuous).fill(pillBackground))
+            .overlay(Capsule(style: .continuous).stroke(pillBorder, lineWidth: 1))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(L10n.Expert.pickerHelp)
+    }
+
+    private var label: String {
+        let count = appState.agentActiveExperts.count
+        return count == 0 ? L10n.Expert.pickerLabel : L10n.Expert.pickerLabelActive("\(count)")
+    }
+
+    private var pillForeground: Color {
+        appState.agentActiveExperts.isEmpty ? Color.secondary : Color.white
+    }
+
+    private var pillBackground: Color {
+        appState.agentActiveExperts.isEmpty ? Color.secondary.opacity(0.10) : Color.accentColor
+    }
+
+    private var pillBorder: Color {
+        appState.agentActiveExperts.isEmpty ? Color.secondary.opacity(0.25) : Color.clear
+    }
+}
 
 struct AgentPluginPickerPill: View {
     @EnvironmentObject var appState: AppState

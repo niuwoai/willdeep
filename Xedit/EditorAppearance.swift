@@ -572,7 +572,7 @@ struct EditorTheme: Identifiable, Equatable {
         foregroundColor: NSColor(hex: 0x242424),
         gutterBackgroundColor: NSColor(hex: 0xF0EEE8),
         gutterTextColor: NSColor(hex: 0x8A877F),
-        currentLineBackgroundColor: NSColor(hex: 0xECE8DC),
+        currentLineBackgroundColor: NSColor(hex: 0x2F7D70).withAlphaComponent(0.10),
         keywordColor: NSColor(hex: 0x0E5CAD),
         stringColor: NSColor(hex: 0xA13D2D),
         commentColor: NSColor(hex: 0x5F7A3D),

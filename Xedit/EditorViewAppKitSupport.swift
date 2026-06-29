@@ -730,10 +730,14 @@ final class LineNumberRulerView: NSRulerView {
             return
         }
 
-        let selectedLine = lineNumber(at: textView.selectedRange().location)
         let foldableGuides = (textView as? WillDeepTextView)?.foldableGuides() ?? []
         let glyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: textContainer)
         var glyphIndex = glyphRange.location
+        let selectedLineGlyphRange = currentLineGlyphRange(
+            layoutManager: layoutManager,
+            selectedLocation: textView.selectedRange().location,
+            textLength: textView.string.utf16.count
+        )
 
         // The line number for the first visible character is computed once via a
         // full scan; every line after that is derived incrementally by counting
@@ -752,6 +756,7 @@ final class LineNumberRulerView: NSRulerView {
                 withoutAdditionalLayout: true
             )
             let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+            let startsLogicalLine = Self.startsLogicalLine(characterIndex: characterIndex, in: nsString)
             if let previousCharacterIndex {
                 lineNumber += Self.newlineCount(in: nsString, from: previousCharacterIndex, to: characterIndex)
             } else {
@@ -759,15 +764,17 @@ final class LineNumberRulerView: NSRulerView {
             }
             previousCharacterIndex = characterIndex
             let y = relativePoint.y + textView.textContainerOrigin.y + lineRect.minY
-            let foldGuide = foldableGuides.first(where: { $0.startLine == lineNumber })
+            let foldGuide = startsLogicalLine ? foldableGuides.first(where: { $0.startLine == lineNumber }) : nil
+            let isCurrentFragment = selectedLineGlyphRange.map { NSEqualRanges($0, lineGlyphRange) } ?? false
 
             drawLineNumber(
                 lineNumber,
                 y: y,
                 lineHeight: lineRect.height,
                 attributes: attributes,
-                isCurrentLine: settings.highlightsCurrentLine && lineNumber == selectedLine,
-                isChanged: changedLineNumbers.contains(lineNumber),
+                drawsNumber: startsLogicalLine,
+                isCurrentLine: settings.highlightsCurrentLine && isCurrentFragment,
+                isChanged: startsLogicalLine && changedLineNumbers.contains(lineNumber),
                 foldGuide: foldGuide,
                 isFolded: foldGuide.map { (textView as? WillDeepTextView)?.isFolded($0) ?? false } ?? false
             )
@@ -796,6 +803,7 @@ final class LineNumberRulerView: NSRulerView {
         y: CGFloat,
         lineHeight: CGFloat,
         attributes: [NSAttributedString.Key: Any],
+        drawsNumber: Bool = true,
         isCurrentLine: Bool,
         isChanged: Bool = false,
         foldGuide: ScopeGuide? = nil,
@@ -805,6 +813,8 @@ final class LineNumberRulerView: NSRulerView {
             theme.currentLineBackgroundColor.setFill()
             NSRect(x: 0, y: y, width: bounds.width, height: lineHeight).fill()
         }
+
+        guard drawsNumber else { return }
 
         if isChanged {
             NSColor.systemBlue.withAlphaComponent(0.82).setFill()
@@ -823,6 +833,23 @@ final class LineNumberRulerView: NSRulerView {
             height: lineHeight
         )
         text.draw(in: drawRect, withAttributes: attributes)
+    }
+
+    private func currentLineGlyphRange(
+        layoutManager: NSLayoutManager,
+        selectedLocation: Int,
+        textLength: Int
+    ) -> NSRange? {
+        guard textLength > 0 else { return nil }
+        let selectedCharacterIndex = min(max(0, selectedLocation), max(0, textLength - 1))
+        let selectedGlyphIndex = layoutManager.glyphIndexForCharacter(at: selectedCharacterIndex)
+        var selectedLineGlyphRange = NSRange(location: 0, length: 0)
+        _ = layoutManager.lineFragmentRect(
+            forGlyphAt: selectedGlyphIndex,
+            effectiveRange: &selectedLineGlyphRange,
+            withoutAdditionalLayout: true
+        )
+        return selectedLineGlyphRange.length > 0 ? selectedLineGlyphRange : nil
     }
 
     private func drawFoldToggle(y: CGFloat, lineHeight: CGFloat, isFolded: Bool) {
@@ -893,6 +920,11 @@ final class LineNumberRulerView: NSRulerView {
         return count
     }
 
+    static func startsLogicalLine(characterIndex: Int, in text: NSString) -> Bool {
+        let boundedIndex = min(max(0, characterIndex), text.length)
+        return boundedIndex == 0 || text.character(at: boundedIndex - 1) == 10
+    }
+
     private func lineNumber(atRulerY y: CGFloat) -> Int? {
         guard let textView = textView,
               let layoutManager = textView.layoutManager,
@@ -907,6 +939,9 @@ final class LineNumberRulerView: NSRulerView {
         )
         let glyphIndex = layoutManager.glyphIndex(for: textPoint, in: textContainer)
         let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+        guard Self.startsLogicalLine(characterIndex: characterIndex, in: textView.string as NSString) else {
+            return nil
+        }
         return lineNumber(at: characterIndex)
     }
 }

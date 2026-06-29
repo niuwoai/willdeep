@@ -108,6 +108,56 @@ struct WillDeepTests {
     }
 
     @MainActor
+    @Test("composer workspace pick migrates a no-workspace conversation in place")
+    func testComposerWorkspacePickMigratesNoWorkspaceConversation() throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_workspace_pick_history_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState(rootDirectory: nil)
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        let session = appState.startNewAgentSession()
+        defer {
+            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
+                AgentSessionStore.delete(id: id)
+            }
+        }
+        appState.agentMessages = [
+            AgentMessage(role: .user, content: "先聊一个没有工作区的问题"),
+            AgentMessage(role: .assistant, content: "可以，等你选工作区后我继续。")
+        ]
+        appState.persistActiveAgentSession()
+        let initialCount = appState.agentSessions.count
+
+        let rebound = appState.moveActiveAgentSessionToWorkspace(at: workspace.path)
+
+        #expect(rebound.id == session.id)
+        #expect(appState.agentSessions.count == initialCount)
+        #expect(appState.activeRuntime?.messages.count == 2)
+        #expect(appState.activeRuntime?.workspaceRootPath == workspace.standardizedFileURL.path)
+        #expect(appState.agentSessions.first(where: { $0.id == session.id })?.workspaceRootPath == workspace.standardizedFileURL.path)
+    }
+
+    @MainActor
+    @Test("expert picker keeps short-drama tools inactive until enabled")
+    func testExpertPickerFiltersShortDramaTools() {
+        let defaultTools = AgentToolRegistry.tools(activeExperts: [])
+        let shortDramaTools = AgentToolRegistry.tools(activeExperts: [.shortDrama])
+
+        #expect(defaultTools.contains { $0.name == "run_command" })
+        #expect(!defaultTools.contains { $0.name.hasPrefix("short_drama_") })
+        #expect(shortDramaTools.contains { $0.name == "short_drama_create_project" })
+
+        let appState = AppState()
+        appState.startNewAgentSession()
+        #expect(appState.agentActiveExperts.isEmpty)
+        appState.toggleAgentExpert(.shortDrama)
+        #expect(appState.agentActiveExperts == [.shortDrama])
+        #expect(appState.activeRuntime?.session.activeExperts == [.shortDrama])
+    }
+
+    @MainActor
     @Test("live thinking preview tracks streaming reasoning and dies with the indicator")
     func testAgentLiveThinkingPreview() {
         let appState = AppState()

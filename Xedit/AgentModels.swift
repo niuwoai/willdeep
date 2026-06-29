@@ -54,6 +54,10 @@ struct AgentSession: Identifiable, Codable, Equatable {
     /// Which execution backend the composer should use for the next
     /// user turn. Defaults to WillDeep's native agent loop.
     var executionAgent: AgentExecutionAgent
+    /// Per-session opt-in specialist packs. Default empty keeps broad,
+    /// domain-specific tools out of ordinary chats until the user turns
+    /// an expert on.
+    var activeExperts: Set<AgentExpert>
     /// Plan-mode state (proposed → approved → done). Nil outside Plan
     /// mode, or when Plan mode is on but no plan has been drafted yet.
     var currentPlan: AgentPlan?
@@ -109,6 +113,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         interactionMode: AgentInteractionMode = .normal,
         approvalMode: AgentApprovalMode = .smart,
         executionAgent: AgentExecutionAgent = .willDeep,
+        activeExperts: Set<AgentExpert> = [],
         currentPlan: AgentPlan? = nil,
         currentGoal: AgentGoal? = nil,
         learningEvents: [AgentLearningEvent] = [],
@@ -134,6 +139,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.interactionMode = interactionMode
         self.approvalMode = approvalMode
         self.executionAgent = executionAgent
+        self.activeExperts = activeExperts
         self.currentPlan = currentPlan
         self.currentGoal = currentGoal
         self.learningEvents = learningEvents
@@ -198,7 +204,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         case id, title, workspaceRootPath, workspaceLocation, modelID
         case providerID, providerDisplayName
         case createdAt, updatedAt, messages, contextSummary, contextSummaryThroughMessageID
-        case didEditFiles, agentEditedPaths, interactionMode, approvalMode, executionAgent, currentPlan, currentGoal, learningEvents, latestTurnRecall
+        case didEditFiles, agentEditedPaths, interactionMode, approvalMode, executionAgent, activeExperts, currentPlan, currentGoal, learningEvents, latestTurnRecall
         case pinnedAt, archivedAt, titleIsUserSet
     }
 
@@ -222,6 +228,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
         self.interactionMode = try c.decodeIfPresent(AgentInteractionMode.self, forKey: .interactionMode) ?? .normal
         self.approvalMode = try c.decodeIfPresent(AgentApprovalMode.self, forKey: .approvalMode) ?? .smart
         self.executionAgent = try c.decodeIfPresent(AgentExecutionAgent.self, forKey: .executionAgent) ?? .willDeep
+        self.activeExperts = try c.decodeIfPresent(Set<AgentExpert>.self, forKey: .activeExperts) ?? []
         self.currentPlan = try c.decodeIfPresent(AgentPlan.self, forKey: .currentPlan)
         self.currentGoal = try c.decodeIfPresent(AgentGoal.self, forKey: .currentGoal)
         self.learningEvents = try c.decodeIfPresent([AgentLearningEvent].self, forKey: .learningEvents) ?? []
@@ -315,6 +322,43 @@ enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable {
         case .requestEveryTime: return "hand.raised"
         case .smart: return "checkmark.shield"
         case .workspaceAccess: return "shield.lefthalf.filled"
+        }
+    }
+}
+
+/// Optional specialist packs that expand the model-facing tool surface and
+/// domain prompt only when the user explicitly enables them for a session.
+enum AgentExpert: String, Codable, CaseIterable, Identifiable, Hashable {
+    case shortDrama
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .shortDrama: return L10n.Expert.shortDrama
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .shortDrama: return L10n.Expert.shortDramaSummary
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .shortDrama: return "film.stack"
+        }
+    }
+
+    var systemPromptBlock: String {
+        switch self {
+        case .shortDrama:
+            return """
+            === SHORT DRAMA EXPERT — ACTIVE ===
+            The user enabled the short-drama production expert for this session. You may use the `short_drama_*` tools to plan projects, maintain episode/shot/asset structure, generate or refresh media tasks, review storyboards, and export production packages.
+            Keep short-drama actions anchored by project/episode/shot/asset IDs. Prefer dry-run options for broad structure changes or batch generation before spending provider calls or mutating many records.
+            """
         }
     }
 }

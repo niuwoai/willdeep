@@ -78,6 +78,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var interactionMode: AgentInteractionMode = .normal
     @Published var approvalMode: AgentApprovalMode = .smart
     @Published var executionAgent: AgentExecutionAgent = .willDeep
+    @Published var activeExperts: Set<AgentExpert> = []
     @Published var currentPlan: AgentPlan?
     @Published var currentGoal: AgentGoal?
     @Published var learningEvents: [AgentLearningEvent] = []
@@ -172,6 +173,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.interactionMode = session.interactionMode
         self.approvalMode = session.approvalMode
         self.executionAgent = session.executionAgent
+        self.activeExperts = session.activeExperts
         self.currentPlan = session.currentPlan
         self.currentGoal = session.currentGoal
         self.learningEvents = session.learningEvents
@@ -213,6 +215,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.interactionMode = interactionMode
         session.approvalMode = approvalMode
         session.executionAgent = executionAgent
+        session.activeExperts = activeExperts
         session.currentPlan = currentPlan
         session.currentGoal = currentGoal
         session.learningEvents = learningEvents

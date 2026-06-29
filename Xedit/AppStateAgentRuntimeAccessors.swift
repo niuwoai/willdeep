@@ -131,6 +131,12 @@ extension AppState {
         set { activeRuntime?.executionAgent = newValue }
     }
 
+    /// Per-session specialist packs enabled from the composer.
+    var agentActiveExperts: Set<AgentExpert> {
+        get { activeRuntime?.activeExperts ?? [] }
+        set { activeRuntime?.activeExperts = newValue }
+    }
+
     /// Current proposed/approved plan for Plan mode.
     var agentCurrentPlan: AgentPlan? {
         get { activeRuntime?.currentPlan }

@@ -1,6 +1,6 @@
 # Short Drama AI MVP Tryout
 
-> Last updated: 2026-06-29 | Baseline version: v1.109.0-rc471
+> Last updated: 2026-06-29 | Baseline version: v1.109.0-rc474
 
 这份文档用于试用当前短剧 AI MVP。它不是完整产品手册，只覆盖“不完美但可用”的主路径。
 
@@ -21,7 +21,7 @@ ruby scripts/short_drama_mvp_tryout_package.rb \
 
 ## 主路径
 
-1. 切到 Agent 模式，创建或打开一个短剧项目。
+1. 切到 Agent 模式，在 composer 底部“专家”里激活“短剧制作”，然后创建或打开一个短剧项目。
 2. 在短剧侧栏确认能看到集、分镜、人物、场景和制作缺口。
 3. 点击制作缺口里的「补主图」「补视频」或「审片」。
 4. 检查聊天输入框里的结构化上下文：
@@ -112,4 +112,4 @@ import_media_manifest(package_directory=build/ci/short_drama_mvp_tryout_package,
 
 ## 验收记录
 
-人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.109.0-rc471 — 短剧 handoff todo summary` 小节。
+人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.109.0-rc474 — 短剧专家激活 / no-workspace 会话迁移` 小节。

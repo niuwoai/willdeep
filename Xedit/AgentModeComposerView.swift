@@ -510,6 +510,7 @@ private struct ComposerCard: View {
                 AgentModePickerPill()
                 AgentApprovalModePickerPill()
                 ComposerOverflowPill()
+                AgentExpertPickerPill()
                 Spacer(minLength: 0)
                 if !appState.agentQueuedMessages.isEmpty {
                     QueueBadge()

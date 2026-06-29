@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-29 | Current version: v1.109.0-rc471
+> Last updated: 2026-06-29 | Current version: v1.109.0-rc474
 
 ## Positioning
 
@@ -14,6 +14,9 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Composer 专家激活与 no-workspace 会话迁移（1.109.0-rc474）** —— composer 底部新增“专家”入口，短剧制作专家默认关闭，开启后才暴露 `short_drama_*` 工具和短剧专家提示；没有 workspace 的已有聊天在选择 workspace 后会原地绑定到该 workspace，不再留在 “No workspace” 分组。
+- **编辑器软换行行号与当前行高亮（1.109.0-rc473）** —— 行号尺只在逻辑行起始 fragment 绘制行号，长行软换行延续视觉行不再重复显示行号；当前行高亮按光标所在 TextKit glyph fragment 对齐正文，避免延续行、下一行行号区或 gutter 缝隙被误染色。
+- **编辑器 Paper 当前行高亮色（1.109.0-rc472）** —— Paper 主题当前行高亮改为低透明品牌绿洗色，正文区与行号栏继续复用同一主题色，让浅色 editor 的当前行提示更干净、不再像不透明米灰条带。
 - **短剧 handoff todo summary（1.109.0-rc471）** —— `scripts/short_drama_mvp_handoff_bundle.rb` 现在输出 `handoff_todo_summary`，把交接待办总数、阶段分布、manual/provider/verify/release 数量、证据路径数、复验命令数、机器重放需求和 release 待办存在性压成一屏摘要；contract 和 version consistency 会守住 trial/ready release 摘要与 `handoff_todos` 一致。
 - **短剧 handoff todo evidence（1.109.0-rc470）** —— `handoff_todos` 每条待办现在带 `evidence_paths` 和 `verification_command`，Markdown 交接包会直接显示 Evidence 与 Verify；default trial 合约会确认 manual/provider 待办指向证据 JSON 和 smoke evidence 复验命令，ready release 合约会确认 release 待办可复验。
 - **短剧 handoff todos（1.109.0-rc469）** —— `scripts/short_drama_mvp_handoff_bundle.rb` 现在输出 `handoff_todos`，把 manual smoke、provider smoke、证据修复、verify 和 ready release 的下一步动作收敛成带 `phase/kind/command/items` 的有序待办；contract 与 version consistency 会守住默认 trial 和 ready release 的待办阶段。

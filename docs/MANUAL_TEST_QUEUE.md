@@ -599,6 +599,40 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   底部“验收记录”指向
   `1.109.0-rc471 — 短剧 handoff todo summary`。
 
+## 1.109.0-rc472 — 短剧指针同步 / 编辑器 Paper 当前行高亮修正
+
+- ✅ 本版本没有新增短剧制作能力；短剧 MVP 验收口径延续
+  `1.109.0-rc471 — 短剧 handoff todo summary`。
+- ✅ 编辑器 Paper 主题当前行高亮从不透明米灰改为低透明品牌绿洗色，
+  正文区和行号栏继续复用同一主题色。
+- ✅ `EditorCoreBehaviorTests` 新增回归测试，守住 Paper 当前行高亮为低透明、
+  偏品牌绿的轻量提示色。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc472 — 短剧指针同步 / 编辑器 Paper 当前行高亮修正`。
+
+## 1.109.0-rc473 — 短剧指针同步 / 编辑器软换行行号修正
+
+- ✅ 本版本没有新增短剧制作能力；短剧 MVP 验收口径延续
+  `1.109.0-rc471 — 短剧 handoff todo summary`。
+- ✅ 编辑器行号尺只在逻辑行起始 fragment 绘制行号，长行软换行延续视觉行
+  不再重复显示同一个行号。
+- ✅ 当前行高亮按光标所在 TextKit glyph fragment 对齐正文，不再把软换行延续行、
+  下一行行号区或行号与文本之间的小缝误染色。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc473 — 短剧指针同步 / 编辑器软换行行号修正`。
+
+## 1.109.0-rc474 — 短剧专家激活 / no-workspace 会话迁移
+
+- ✅ Composer 底部显示“专家”入口；默认不激活短剧制作专家。
+- ✅ 未激活短剧制作专家时，普通 Agent 请求不暴露 `short_drama_*` 工具。
+- ✅ 激活短剧制作专家后，短剧项目创建、分镜、媒体任务和制作包相关工具恢复可用。
+- ✅ 在 “No workspace” 会话里先发送一条消息，再通过 composer 选择 workspace；同一会话应移动到所选 workspace 分组，消息历史不丢失。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  主路径第 1 步提示先激活“短剧制作”专家，底部“验收记录”指向
+  `1.109.0-rc474 — 短剧专家激活 / no-workspace 会话迁移`。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）

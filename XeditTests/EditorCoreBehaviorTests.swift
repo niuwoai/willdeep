@@ -165,6 +165,42 @@ struct EditorCoreBehaviorTests {
         #expect(EditorInterfaceSkin.byID(settings.interfaceSkinID) != nil)
     }
 
+    @Test("paper theme current line highlight uses a subtle brand tint")
+    func testPaperCurrentLineHighlightUsesSubtleBrandTint() throws {
+        let color = try #require(EditorTheme.paper.currentLineBackgroundColor.usingColorSpace(.sRGB))
+
+        #expect(color.alphaComponent <= 0.12)
+        #expect(color.greenComponent > color.redComponent)
+        #expect(color.blueComponent > color.redComponent)
+    }
+
+    @Test("line number ruler does not label soft-wrapped continuation fragments")
+    func testLineNumberRulerSkipsSoftWrappedContinuationFragments() {
+        let text = "short\n" + String(repeating: "wrapped text segment ", count: 8)
+        let nsText = text as NSString
+        let storage = NSTextStorage(
+            string: text,
+            attributes: [.font: NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)]
+        )
+        let layoutManager = NSLayoutManager()
+        let textContainer = NSTextContainer(size: NSSize(width: 96, height: CGFloat.greatestFiniteMagnitude))
+        textContainer.lineFragmentPadding = 0
+        layoutManager.addTextContainer(textContainer)
+        storage.addLayoutManager(layoutManager)
+        layoutManager.ensureLayout(for: textContainer)
+
+        let glyphRange = layoutManager.glyphRange(for: textContainer)
+        var logicalLineStarts: [Bool] = []
+        layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { _, _, _, lineGlyphRange, _ in
+            let characterIndex = layoutManager.characterIndexForGlyph(at: lineGlyphRange.location)
+            logicalLineStarts.append(LineNumberRulerView.startsLogicalLine(characterIndex: characterIndex, in: nsText))
+        }
+
+        #expect(logicalLineStarts.count > 2)
+        #expect(logicalLineStarts.filter { $0 }.count == 2)
+        #expect(logicalLineStarts.contains(false))
+    }
+
     @Test("editor settings normalize invalid persisted values")
     func testEditorSettingsNormalization() {
         let settings = EditorSettings(
