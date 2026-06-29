@@ -77,6 +77,9 @@ jobs:
       - name: Generate short-drama MVP smoke evidence report
         run: ruby scripts/short_drama_mvp_smoke_evidence_report.rb build/ci/short_drama_mvp_tryout_package build/ci/short_drama_mvp_smoke_evidence_report.md build/ci/short_drama_mvp_smoke_evidence_report.json
 
+      - name: Run short-drama MVP smoke evidence contract guard
+        run: ruby scripts/short_drama_mvp_smoke_evidence_contract_test.rb build/ci/short_drama_mvp_smoke_evidence_contract_report.md build/ci/short_drama_mvp_smoke_evidence_contract_report.json
+
       - name: Generate short-drama MVP acceptance report
         run: ruby scripts/short_drama_mvp_acceptance_report.rb build/ci/short_drama_mvp_acceptance_report.md build/ci/short_drama_mvp_acceptance_report.json
 
@@ -142,6 +145,8 @@ jobs:
           printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat build/ci/short_drama_mvp_smoke_evidence_report.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat build/ci/short_drama_mvp_smoke_evidence_contract_report.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat build/ci/short_drama_mvp_acceptance_report.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat build/ci/report.md >> "$GITHUB_STEP_SUMMARY"
@@ -176,6 +181,9 @@ jobs:
             build/ci/short_drama_mvp_tryout_package_report.json
             build/ci/short_drama_mvp_smoke_evidence_report.md
             build/ci/short_drama_mvp_smoke_evidence_report.json
+            build/ci/short_drama_mvp_smoke_evidence_contract_report.md
+            build/ci/short_drama_mvp_smoke_evidence_contract_report.json
+            build/ci/short_drama_mvp_smoke_evidence_contract
             build/ci/short_drama_mvp_acceptance_report.md
             build/ci/short_drama_mvp_acceptance_report.json
             build/ci/xcodebuild.log

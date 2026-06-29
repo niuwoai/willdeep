@@ -169,6 +169,7 @@ workflow = read_file(repo_root, ".github/workflows/test.yml")
 short_drama_tryout_package = read_file(repo_root, "scripts/short_drama_mvp_tryout_package.rb")
 short_drama_acceptance_report = read_file(repo_root, "scripts/short_drama_mvp_acceptance_report.rb")
 short_drama_smoke_evidence_report = read_file(repo_root, "scripts/short_drama_mvp_smoke_evidence_report.rb")
+short_drama_smoke_evidence_contract = read_file(repo_root, "scripts/short_drama_mvp_smoke_evidence_contract_test.rb")
 short_drama_remaining_risks = short_drama_cutoff
   .match(/^##\s+当前剩余风险\n\n(?<body>.*?)(?=^##\s|\z)/m)
   &.[](:body)
@@ -269,6 +270,20 @@ add_delivery_check.call(
   "Local and GitHub acceptance should generate the standalone manual/provider smoke evidence report."
 )
 add_delivery_check.call(
+  "Short drama smoke evidence readiness matrix is guarded",
+  "scripts/short_drama_mvp_smoke_evidence_contract_test.rb",
+  File.file?(File.join(repo_root, "scripts/short_drama_mvp_smoke_evidence_contract_test.rb")) &&
+    run_tests.include?("scripts/short_drama_mvp_smoke_evidence_contract_test.rb") &&
+    workflow.include?("Run short-drama MVP smoke evidence contract guard") &&
+    workflow.include?("short_drama_mvp_smoke_evidence_contract_report.md") &&
+    short_drama_smoke_evidence_contract.include?("default_pending") &&
+    short_drama_smoke_evidence_contract.include?("ready_to_handoff") &&
+    short_drama_smoke_evidence_contract.include?("manual_failed") &&
+    short_drama_smoke_evidence_contract.include?("sensitive_blocked") &&
+    short_drama_smoke_evidence_contract.include?("raw sensitive value is not emitted"),
+  "Local and GitHub acceptance should guard smoke evidence readiness transitions and redaction output."
+)
+add_delivery_check.call(
   "Short drama acceptance report is wired into local and remote acceptance",
   "scripts/short_drama_mvp_acceptance_report.rb",
   File.file?(File.join(repo_root, "scripts/short_drama_mvp_acceptance_report.rb")) &&
@@ -287,10 +302,12 @@ add_delivery_check.call(
     short_drama_acceptance_report.include?('"provider_api_smoke_summary"') &&
     short_drama_acceptance_report.include?('"handoff_pending_reasons"') &&
     short_drama_acceptance_report.include?('"acceptance_runbook"') &&
+    short_drama_acceptance_report.include?('"smoke_evidence_contract_report"') &&
     short_drama_acceptance_report.include?("smoke_evidence_redaction_guide_path") &&
     short_drama_acceptance_report.include?("## Handoff Readiness") &&
     short_drama_acceptance_report.include?("## Handoff Pending Reasons") &&
     short_drama_acceptance_report.include?("## Acceptance Runbook") &&
+    short_drama_acceptance_report.include?("## Smoke Evidence Readiness Matrix") &&
     short_drama_acceptance_report.include?("## Manual Results File") &&
     short_drama_acceptance_report.include?("## Manual Evidence") &&
     short_drama_acceptance_report.include?("## Provider API Smoke Templates") &&
@@ -350,7 +367,9 @@ add_delivery_check.call(
     short_drama_acceptance_report.include?("tryout package exposes smoke evidence redaction guide") &&
     short_drama_acceptance_report.include?("tryout package exposes handoff index") &&
     short_drama_acceptance_report.include?("tryout package exposes acceptance runbook") &&
+    short_drama_acceptance_report.include?("smoke evidence readiness matrix is generated") &&
     short_drama_acceptance_report.include?("## Smoke Evidence Report") &&
+    short_drama_acceptance_report.include?("## Smoke Evidence Readiness Matrix") &&
     short_drama_acceptance_report.include?("## Smoke Evidence Redaction Guide") &&
     short_drama_acceptance_report.include?("## Smoke Evidence Sensitive Guard") &&
     short_drama_acceptance_report.include?("## Smoke Evidence Next Actions") &&

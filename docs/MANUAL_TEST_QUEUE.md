@@ -457,6 +457,27 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   底部“验收记录”指向
   `1.109.0-rc464 — 短剧 acceptance runbook`。
 
+## 1.109.0-rc465 — 短剧 smoke evidence readiness matrix
+
+- ✅ 本版本没有新增短剧制作能力；本轮只把 smoke evidence report 的关键 readiness 分支纳入本地和远端合约测试。
+- ✅ 运行 `ruby scripts/short_drama_mvp_smoke_evidence_contract_test.rb ...` →
+  报告包含 5 个场景：`default_pending`、`ready`、`missing_evidence`、
+  `manual_failed` 和 `sensitive_blocked`。
+- ✅ `default_pending` 场景保持 `manual_pending`，并输出
+  `finish_manual_smoke` 与 `record_provider_smoke_or_keep_risk`。
+- ✅ `ready` 场景输出 `ready` 和 `ready_to_handoff`。
+- ✅ `missing_evidence` 场景保持 `manual_pending`，并输出 `add_evidence`。
+- ✅ `manual_failed` 场景输出 `manual_failed` 和 `resolve_failed_smoke`。
+- ✅ `sensitive_blocked` 场景输出 `blocked` 和 `redact_sensitive_evidence`，
+  命令非 0，但 Markdown/JSON 不回显 fake bearer value。
+- ✅ 运行 `scripts/run_tests.sh` →
+  本地一键验收会生成 `short_drama_mvp_smoke_evidence_contract_report.md/json`。
+- ✅ GitHub Actions `Tests` workflow →
+  远端会运行 `Run short-drama MVP smoke evidence contract guard`，并上传矩阵报告与场景目录。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc465 — 短剧 smoke evidence readiness matrix`。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）

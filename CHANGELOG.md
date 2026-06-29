@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.109.0-rc465 - 2026-06-29
+
+### Changed
+- **短剧 smoke evidence readiness matrix（1.109.0-rc465）** —— 新增 `scripts/short_drama_mvp_smoke_evidence_contract_test.rb`，用本地试用包构造默认未测、ready、缺 evidence、manual_failed 和 sensitive blocked 五种 smoke evidence 场景。
+- 新合约会验证 readiness、`next_actions` 和 sensitive evidence 脱敏输出，确保 raw fake bearer value 不进入 Markdown/JSON 报告。
+- `scripts/run_tests.sh` 和 GitHub Actions `Tests` workflow 接入该合约，并把 `short_drama_mvp_smoke_evidence_contract_report.md/json` 与场景目录上传为 artifacts。
+- `scripts/short_drama_mvp_acceptance_report.rb` 新增 `Smoke Evidence Readiness Matrix` 小节和 JSON `smoke_evidence_contract_report` 证据，总验收报告会显示矩阵场景结果。
+- `scripts/version_consistency.rb` 新增守门，确保本地/远端 acceptance 持续运行 smoke evidence readiness matrix，并确保 acceptance report 持续展示该矩阵。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc465 — 短剧 smoke evidence readiness matrix`。
+- 版本号从 **1.109.0-rc464** 提升为 **1.109.0-rc465**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
 ## 1.109.0-rc464 - 2026-06-29
 
 ### Changed

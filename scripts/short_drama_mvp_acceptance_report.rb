@@ -175,6 +175,9 @@ smoke_evidence_report = read_json_file(smoke_evidence_report_path)
 smoke_evidence_readiness = smoke_evidence_report.fetch("readiness", {})
 smoke_evidence_next_actions = Array(smoke_evidence_report["next_actions"])
 smoke_evidence_sensitive_findings = Array(smoke_evidence_report["sensitive_findings"])
+smoke_evidence_contract_path = File.join(REPORT_DIR, "short_drama_mvp_smoke_evidence_contract_report.json")
+smoke_evidence_contract = read_json_file(smoke_evidence_contract_path)
+smoke_evidence_contract_scenarios = Array(smoke_evidence_contract["scenarios"])
 handoff_index_json_path = tryout_report["handoff_index_json_path"].to_s
 handoff_index = read_json_file(handoff_index_json_path)
 acceptance_runbook_paths = [
@@ -310,6 +313,18 @@ add_check(
     smoke_evidence_sensitive_findings.length == smoke_evidence_readiness["sensitive_evidence_count"].to_i,
   "acceptance report should expose whether manual/provider smoke evidence contains API keys, bearer tokens, webhook secrets, signed URLs, or private callback URLs.",
   smoke_evidence_report_path
+)
+add_check(
+  checks,
+  "smoke evidence readiness matrix is generated",
+  smoke_evidence_contract["status"] == "pass" &&
+    smoke_evidence_contract_scenarios.length >= 5 &&
+    smoke_evidence_contract_scenarios.any? { |scenario| scenario["readiness"].to_s == "ready" } &&
+    smoke_evidence_contract_scenarios.any? { |scenario| scenario["readiness"].to_s == "manual_pending" } &&
+    smoke_evidence_contract_scenarios.any? { |scenario| scenario["readiness"].to_s == "manual_failed" } &&
+    smoke_evidence_contract_scenarios.any? { |scenario| scenario["readiness"].to_s == "blocked" },
+  "acceptance report should include the local matrix that proves smoke evidence readiness transitions and redaction behavior.",
+  smoke_evidence_contract_path
 )
 add_check(
   checks,
@@ -480,6 +495,8 @@ evidence = [
   { "label" => "Acceptance runbook JSON", "path" => acceptance_runbook_json_path },
   { "label" => "Smoke evidence report Markdown", "path" => tryout_report["smoke_evidence_report_md_path"] },
   { "label" => "Smoke evidence report JSON", "path" => smoke_evidence_report_path },
+  { "label" => "Smoke evidence contract Markdown", "path" => File.join(REPORT_DIR, "short_drama_mvp_smoke_evidence_contract_report.md") },
+  { "label" => "Smoke evidence contract JSON", "path" => smoke_evidence_contract_path },
   { "label" => "Cutoff", "path" => File.join(ROOT_DIR, "docs", "SHORT_DRAMA_AI_MVP_CUTOFF.md") },
   { "label" => "Tryout guide", "path" => File.join(ROOT_DIR, "docs", "SHORT_DRAMA_AI_MVP_TRYOUT.md") },
   { "label" => "Manual queue", "path" => File.join(ROOT_DIR, "docs", "MANUAL_TEST_QUEUE.md") }
@@ -495,6 +512,7 @@ report = {
   "manual_evidence_summary" => manual_evidence_summary,
   "provider_api_smoke_summary" => provider_api_smoke,
   "smoke_evidence_report" => smoke_evidence_report,
+  "smoke_evidence_contract_report" => smoke_evidence_contract,
   "smoke_evidence_next_actions" => smoke_evidence_next_actions,
   "smoke_evidence_sensitive_findings" => smoke_evidence_sensitive_findings,
   "handoff_index" => handoff_index,
@@ -613,6 +631,17 @@ File.write(
         "- [#{action["priority"]}] #{action["title"]} — #{action["detail"]}",
         *Array(action["items"]).map { |item| "  - #{item}" }
       ]
+    end,
+    "",
+    "## Smoke Evidence Readiness Matrix",
+    "",
+    "- Status: #{smoke_evidence_contract["status"]}",
+    "- Scenarios: #{smoke_evidence_contract_scenarios.length}",
+    "- Checks: #{Array(smoke_evidence_contract["checks"]).length}",
+    "- Path: `#{smoke_evidence_contract_path}`",
+    "",
+    *smoke_evidence_contract_scenarios.map do |scenario|
+      "- #{scenario["name"]}: #{scenario["readiness"]} / #{scenario["status"]} / exit #{scenario["exit_status"]}"
     end,
     "",
     "## Handoff Index",
