@@ -113,8 +113,6 @@ struct AgentModeView: View {
         .frame(minWidth: contentMinWidth, maxWidth: .infinity, maxHeight: .infinity)
         .background(skin.windowBackground)
         .background(AgentWindowMinWidthSetter(minWidth: contentMinWidth))
-        .animation(.easeInOut(duration: 0.18), value: sidePanel)
-        .animation(.easeInOut(duration: 0.18), value: sessionsSidebarVisible)
         .sheet(isPresented: $isSessionSearchPresented) {
             AgentSessionSearchView()
                 .environmentObject(appState)

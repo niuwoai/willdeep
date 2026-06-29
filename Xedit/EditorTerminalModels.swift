@@ -172,7 +172,13 @@ struct EditorTerminalFont: Identifiable, Equatable {
         ("sourcecodepro-nf", "SauceCodePro Nerd Font", "SauceCodePro Nerd Font")
     ]
 
+    private static let installedNerdFontCache: [EditorTerminalFont] = discoverInstalledNerdFonts()
+
     static func installedNerdFonts() -> [EditorTerminalFont] {
+        installedNerdFontCache
+    }
+
+    private static func discoverInstalledNerdFonts() -> [EditorTerminalFont] {
         var result: [EditorTerminalFont] = []
         var seenFamilies = Set<String>()
         // Known candidates first so they keep their stable ids — previously

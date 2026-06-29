@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 @testable import WillDeep
 
 struct VoiceRuntimeResourcePolicyTests {
@@ -9,5 +10,16 @@ struct VoiceRuntimeResourcePolicyTests {
         #expect(ONNXRuntimeWrapper.balancedThreadCount(activeProcessorCount: 4) == 2)
         #expect(ONNXRuntimeWrapper.balancedThreadCount(activeProcessorCount: 8) == 4)
         #expect(ONNXRuntimeWrapper.balancedThreadCount(activeProcessorCount: 16) == 4)
+    }
+
+    @Test("voice model preload is opt-in to keep launch memory low")
+    func voicePreloadDefaultsOff() {
+        UserDefaults.standard.removeObject(forKey: "willdeep.voice.preloadOnLaunch")
+        #expect(VoiceLifecyclePrefs.preloadOnLaunch == false)
+
+        VoiceLifecyclePrefs.preloadOnLaunch = true
+        #expect(VoiceLifecyclePrefs.preloadOnLaunch == true)
+
+        UserDefaults.standard.removeObject(forKey: "willdeep.voice.preloadOnLaunch")
     }
 }

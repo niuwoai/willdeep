@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.109.0-rc481 - 2026-06-29
+
+### Fixed
+- **Agent 窗口打开迟疑与标题串名（1.109.0-rc481）** —— Agent singleton 窗口现在会标记自己的 `NSWindow.identifier` 并持续恢复标题为 `WillDeep Agent`，编辑器文件名更新不会再误写到 Agent 窗口标题。
+- Composer 的 workspace/runtime/model picker 改为维护菜单快照缓存；SwiftUI 布局 Agent 窗口时不再反复读取远端 runtime descriptor、排序 workspace 列表或重算 ad-hoc 模型分组，减少点击 Agent 模式后的主线程布局抖动。
+- **终端输入与侧栏切换卡顿（1.109.0-rc481）** —— 左侧会话列表和右侧面板显隐不再对整棵 Agent 布局做隐式动画；终端 session/controller 改由终端面板局部观察，不再经 `AppState` 把每次字符/标题/tab 状态变化广播给全局；终端字体/Nerd Font 枚举改为进程级缓存，终端 tab 状态通知合并到下一轮 runloop，降低终端字符显示和侧栏切换时的 SwiftUI 重排压力。
+- **启动内存占用（1.109.0-rc481）** —— 语音 ONNX 模型启动预热改为默认关闭；用过语音后仍可在 Settings → Voice 手动打开预热，以更高 idle memory 换取 push-to-talk 即刻响应。
+- 版本号从 **1.109.0-rc480** 提升为 **1.109.0-rc481**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
 ## 1.109.0-rc480 - 2026-06-29
 
 ### Fixed

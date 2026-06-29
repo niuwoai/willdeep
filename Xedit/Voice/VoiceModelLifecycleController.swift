@@ -11,7 +11,7 @@
 //   │ 触发                         │ 行为                         │
 //   ├─────────────────────────────┼─────────────────────────────┤
 //   │ App 启动 + 用户用过语音 +    │ Task.detached(.utility) 后台 │
-//   │ preloadOnLaunch == true     │ preload(),不阻塞 UI         │
+//   │ 用户主动打开预热开关         │ preload(),不阻塞 UI         │
 //   │ VoiceRecorder 转录成功一次   │ markUsed() 写 UserDefaults  │
 //   │ App 进后台 10 分钟           │ unloadModel(),让出 937MB   │
 //   │ App 回前台                   │ 取消未触发的 10 分钟 timer   │

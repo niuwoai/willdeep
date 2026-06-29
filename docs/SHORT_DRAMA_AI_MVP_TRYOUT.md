@@ -1,6 +1,6 @@
 # Short Drama AI MVP Tryout
 
-> Last updated: 2026-06-29 | Baseline version: v1.109.0-rc480
+> Last updated: 2026-06-29 | Baseline version: v1.109.0-rc481
 
 这份文档用于试用当前短剧 AI MVP。它不是完整产品手册，只覆盖“不完美但可用”的主路径。
 
@@ -112,4 +112,4 @@ import_media_manifest(package_directory=build/ci/short_drama_mvp_tryout_package,
 
 ## 验收记录
 
-人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.109.0-rc480 — 短剧指针同步 / 侧栏打开延迟修复` 小节。
+人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.109.0-rc481 — 短剧指针同步 / Agent 启动性能修复` 小节。

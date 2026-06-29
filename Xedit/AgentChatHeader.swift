@@ -60,7 +60,6 @@ struct AgentChatHeader: View {
         .padding(.leading, 18 + leadingTrafficLightInset)
         .padding(.trailing, 18)
         .frame(height: AgentDesign.headerHeight)
-        .animation(.easeInOut(duration: 0.18), value: sessionsSidebarVisible)
     }
 
     private var sidebarToggle: some View {

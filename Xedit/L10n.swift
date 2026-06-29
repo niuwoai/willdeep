@@ -1243,7 +1243,7 @@ enum L10n {
             static let cancel = String(localized: "settings.voice.cancel", defaultValue: "Cancel")
             static let memorySection = String(localized: "settings.voice.memory-section", defaultValue: "Memory")
             static let preloadToggle = String(localized: "settings.voice.preload-toggle", defaultValue: "Preload on launch")
-            static let preloadDescription = String(localized: "settings.voice.preload-description", defaultValue: "After your first transcription, warm the ~937 MB model on each app start so push-to-talk responds instantly. Disable to save memory at the cost of a 1-5 s cold start.")
+            static let preloadDescription = String(localized: "settings.voice.preload-description", defaultValue: "Keep the ~937 MB voice model out of memory at launch by default. Enable this after your first transcription if you prefer instant push-to-talk over lower idle memory.")
             static let loadedInMemory = String(localized: "settings.voice.loaded-in-memory", defaultValue: "Loaded in memory")
             static let notInMemory = String(localized: "settings.voice.not-in-memory", defaultValue: "Not in memory")
             static let unloadNow = String(localized: "settings.voice.unload-now", defaultValue: "Unload now")

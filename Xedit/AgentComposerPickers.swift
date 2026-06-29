@@ -50,6 +50,8 @@ import SwiftUI
 ///      Copy path / Copy branch name.
 struct WorkspacePickerPill: View {
     @EnvironmentObject var appState: AppState
+    @State private var knownWorkspaceCache: [URL] = []
+    @State private var remoteRuntimeCache: [RuntimeDescriptor] = []
 
     var body: some View {
         Menu {
@@ -77,7 +79,14 @@ struct WorkspacePickerPill: View {
         .fixedSize()
         .help(helpText)
         .onAppear {
+            refreshMenuCaches()
             appState.refreshAgentGitWorktrees()
+        }
+        .onReceive(appState.$agentSessions) { _ in
+            refreshMenuCaches()
+        }
+        .onReceive(appState.$recentFolders) { _ in
+            refreshMenuCaches()
         }
         .onCompatibleChange(of: appState.rootDirectory) { _, _ in
             appState.refreshAgentGitWorktrees()
@@ -184,7 +193,7 @@ struct WorkspacePickerPill: View {
 
         // Section 2 — Switch to a known workspace. Dedupes against
         // the current root so the active folder doesn't double up.
-        let knownRoots = sortedKnownWorkspaces()
+        let knownRoots = knownWorkspaceCache
         if !knownRoots.isEmpty {
             Section(L10n.ComposerWorkspace.switchWorkspace) {
                 ForEach(knownRoots, id: \.self) { url in
@@ -203,8 +212,7 @@ struct WorkspacePickerPill: View {
             Divider()
         }
 
-        let remoteRuntimes = AgentRuntimeStore.loadDescriptors()
-            .filter { $0.transport == .ssh && !$0.defaultWorkspacePath.isEmpty }
+        let remoteRuntimes = remoteRuntimeCache
         if !remoteRuntimes.isEmpty {
             Section(L10n.ComposerWorkspace.remoteRuntimes) {
                 ForEach(remoteRuntimes) { runtime in
@@ -273,7 +281,7 @@ struct WorkspacePickerPill: View {
         guard case .remote(let runtimeID, let path) = appState.activeRuntime?.workspaceLocation else {
             return nil
         }
-        return (AgentRuntimeStore.descriptor(id: runtimeID), path)
+        return (remoteRuntimeCache.first { $0.id == runtimeID }, path)
     }
 
     private var workspaceIconName: String {
@@ -288,6 +296,12 @@ struct WorkspacePickerPill: View {
             return WorkspacePresentation.remoteTint(for: remote.runtime)
         }
         return Color.secondary
+    }
+
+    private func refreshMenuCaches() {
+        knownWorkspaceCache = sortedKnownWorkspaces()
+        remoteRuntimeCache = AgentRuntimeStore.loadDescriptors()
+            .filter { $0.transport == .ssh && !$0.defaultWorkspacePath.isEmpty }
     }
 
     /// Union of (a) folder paths that appear as workspaceRootPath on
@@ -668,20 +682,20 @@ struct AgentPluginPickerPill: View {
 
 struct ModelPickerPill: View {
     @EnvironmentObject var appState: AppState
+    @State private var menuSnapshot = ModelPickerMenuSnapshot.empty
 
     var body: some View {
         Menu {
             // First entry: keep the "use the route's natural pick"
             // shortcut so the user can drop a session override.
-            let configured = appState.agentConfiguration.normalized.model(for: .interactive)
-            if !configured.isEmpty {
+            if !menuSnapshot.configuredModel.isEmpty {
                 Button {
-                    appState.recordRecentlyUsedAgentModel(configured)
+                    appState.recordRecentlyUsedAgentModel(menuSnapshot.configuredModel)
                     appState.setAgentSessionModel(nil)
                 } label: {
                     HStack {
-                        Text("Use route default: \(configured)")
-                        if appState.agentSessionModelOverride == nil {
+                        Text("Use route default: \(menuSnapshot.configuredModel)")
+                        if menuSnapshot.sessionOverride == nil {
                             Image(systemName: "checkmark")
                         }
                     }
@@ -697,11 +711,16 @@ struct ModelPickerPill: View {
             // brief flash. Sectioned flat layout sidesteps that
             // entirely; the provider name renders as a non-clickable
             // header above its model rows.
-            ForEach(appState.agentProviderLibrary.entries) { entry in
-                providerSection(entry: entry)
+            ForEach(menuSnapshot.providerEntries) { entry in
+                providerSection(
+                    entry: entry,
+                    activeProviderID: menuSnapshot.activeProviderID,
+                    override: menuSnapshot.sessionOverride,
+                    routed: menuSnapshot.configuredModel
+                )
             }
 
-            if appState.agentProviderLibrary.entries.isEmpty {
+            if menuSnapshot.providerEntries.isEmpty {
                 Text("No providers configured. Open Settings → Agent.")
             }
 
@@ -709,45 +728,43 @@ struct ModelPickerPill: View {
             // entry's primary/alternates list. Recently used comes
             // first, then provider-supplied catalog highlights, then
             // older fetched-only ids.
-            let libraryModels = libraryModelSet
-            let used = adHocModels(from: appState.agentRecentlyUsedModelIDs, excluding: libraryModels)
-            let hot = adHocModels(from: catalogModelIDs(where: \.isHot), excluding: libraryModels.union(used))
-            let newModels = adHocModels(from: catalogModelIDs(where: \.isNew), excluding: libraryModels.union(used).union(hot))
-            let fetched = adHocModels(from: appState.agentKnownModelIDs, excluding: libraryModels.union(used).union(hot).union(newModels))
-            if !used.isEmpty || !hot.isEmpty || !newModels.isEmpty || !fetched.isEmpty {
+            if !menuSnapshot.recentlyUsedModels.isEmpty ||
+                !menuSnapshot.hotModels.isEmpty ||
+                !menuSnapshot.newModels.isEmpty ||
+                !menuSnapshot.fetchedModels.isEmpty {
                 Divider()
             }
-            if !used.isEmpty {
+            if !menuSnapshot.recentlyUsedModels.isEmpty {
                 Menu("Recently used") {
-                    ForEach(used, id: \.self) { model in
+                    ForEach(menuSnapshot.recentlyUsedModels, id: \.self) { model in
                         adHocModelButton(model)
                     }
                 }
             }
-            if !hot.isEmpty {
+            if !menuSnapshot.hotModels.isEmpty {
                 Menu("Hot") {
-                    ForEach(hot, id: \.self) { model in
+                    ForEach(menuSnapshot.hotModels, id: \.self) { model in
                         adHocModelButton(model)
                     }
                 }
             }
-            if !newModels.isEmpty {
+            if !menuSnapshot.newModels.isEmpty {
                 Menu("New") {
-                    ForEach(newModels, id: \.self) { model in
+                    ForEach(menuSnapshot.newModels, id: \.self) { model in
                         adHocModelButton(model)
                     }
                 }
             }
-            if !fetched.isEmpty {
+            if !menuSnapshot.fetchedModels.isEmpty {
                 Menu("Recently fetched") {
-                    ForEach(fetched, id: \.self) { model in
+                    ForEach(menuSnapshot.fetchedModels, id: \.self) { model in
                         adHocModelButton(model)
                     }
                 }
             }
         } label: {
             HStack(spacing: 3) {
-                Text(currentModelLabel.isEmpty ? "Select model" : currentModelLabel)
+                Text(menuSnapshot.currentModelLabel.isEmpty ? "Select model" : menuSnapshot.currentModelLabel)
                     .font(AgentDesign.secondaryFont)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -764,6 +781,28 @@ struct ModelPickerPill: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Pick provider + model for this chat. The active provider also drives Auto/Flash/Pro routing.")
+        .onAppear(perform: refreshMenuSnapshot)
+        .onReceive(appState.$agentProviderLibrary) { _ in
+            refreshMenuSnapshot()
+        }
+        .onReceive(appState.$agentConfiguration) { _ in
+            refreshMenuSnapshot()
+        }
+        .onReceive(appState.$agentRecentlyUsedModelIDs) { _ in
+            refreshMenuSnapshot()
+        }
+        .onReceive(appState.$agentKnownModelIDs) { _ in
+            refreshMenuSnapshot()
+        }
+        .onReceive(appState.$agentDiscoveredModelMetadata) { _ in
+            refreshMenuSnapshot()
+        }
+        .onReceive(appState.$activeAgentSessionID) { _ in
+            refreshMenuSnapshot()
+        }
+        .onCompatibleChange(of: appState.agentSessionModelOverride ?? "") { _, _ in
+            refreshMenuSnapshot()
+        }
     }
 
     /// Flat-section layout for one library entry. The provider name
@@ -774,33 +813,37 @@ struct ModelPickerPill: View {
     /// and sets the session model in one shot. No nested Menus, so
     /// none of the SwiftUI hover-loses-focus weirdness.
     @ViewBuilder
-    private func providerSection(entry: AgentProviderEntry) -> some View {
-        let isActive = appState.agentProviderLibrary.activeID == entry.id
-        let override = appState.agentSessionModelOverride
+    private func providerSection(
+        entry: AgentProviderEntry,
+        activeProviderID: UUID?,
+        override: String?,
+        routed: String
+    ) -> some View {
+        let isActive = activeProviderID == entry.id
 
         Section(sectionHeader(for: entry, isActive: isActive)) {
             if !entry.flashPrimary.isEmpty {
                 Button { pick(entry: entry, model: entry.flashPrimary) } label: {
                     modelRow(label: "Flash · \(entry.flashPrimary)",
-                             checked: isCurrent(entry: entry, model: entry.flashPrimary, override: override, isActive: isActive))
+                             checked: isCurrent(model: entry.flashPrimary, override: override, isActive: isActive, routed: routed))
                 }
             }
             ForEach(entry.flashAlternates, id: \.self) { m in
                 Button { pick(entry: entry, model: m) } label: {
                     modelRow(label: "Flash · \(m)",
-                             checked: isCurrent(entry: entry, model: m, override: override, isActive: isActive))
+                             checked: isCurrent(model: m, override: override, isActive: isActive, routed: routed))
                 }
             }
             if !entry.proPrimary.isEmpty {
                 Button { pick(entry: entry, model: entry.proPrimary) } label: {
                     modelRow(label: "Pro · \(entry.proPrimary)",
-                             checked: isCurrent(entry: entry, model: entry.proPrimary, override: override, isActive: isActive))
+                             checked: isCurrent(model: entry.proPrimary, override: override, isActive: isActive, routed: routed))
                 }
             }
             ForEach(entry.proAlternates, id: \.self) { m in
                 Button { pick(entry: entry, model: m) } label: {
                     modelRow(label: "Pro · \(m)",
-                             checked: isCurrent(entry: entry, model: m, override: override, isActive: isActive))
+                             checked: isCurrent(model: m, override: override, isActive: isActive, routed: routed))
                 }
             }
         }
@@ -825,24 +868,24 @@ struct ModelPickerPill: View {
     /// Effective (entry, model) for the current chat is:
     ///   - the active library entry, AND
     ///   - the session override if set, otherwise the route's natural pick.
-    private func isCurrent(entry: AgentProviderEntry, model: String, override: String?, isActive: Bool) -> Bool {
+    private func isCurrent(model: String, override: String?, isActive: Bool, routed: String) -> Bool {
         guard isActive else { return false }
         if let override, !override.isEmpty {
             return override == model
         }
-        // No override → matches whichever primary the route would pick.
-        let routed = appState.agentConfiguration.normalized.model(for: .interactive)
         return model == routed
     }
 
     private func pick(entry: AgentProviderEntry, model: String) {
         appState.selectAgentEntryAndModel(entryID: entry.id, model: model)
+        refreshMenuSnapshot()
     }
 
     @ViewBuilder
     private func adHocModelButton(_ model: String) -> some View {
         Button {
             appState.setAgentSessionModel(model)
+            refreshMenuSnapshot()
         } label: {
             HStack {
                 Text(model)
@@ -899,6 +942,30 @@ struct ModelPickerPill: View {
         return preset.recognizesModelID(trimmed)
     }
 
+    private func refreshMenuSnapshot() {
+        let library = appState.agentProviderLibrary
+        let configured = appState.agentConfiguration.normalized.model(for: .interactive)
+        let libraryModels = libraryModelSet
+        let used = adHocModels(from: appState.agentRecentlyUsedModelIDs, excluding: libraryModels)
+        let hot = adHocModels(from: catalogModelIDs(where: \.isHot), excluding: libraryModels.union(used))
+        let newModels = adHocModels(from: catalogModelIDs(where: \.isNew), excluding: libraryModels.union(used).union(hot))
+        let fetched = adHocModels(
+            from: appState.agentKnownModelIDs,
+            excluding: libraryModels.union(used).union(hot).union(newModels)
+        )
+        menuSnapshot = ModelPickerMenuSnapshot(
+            configuredModel: configured,
+            providerEntries: library.entries,
+            activeProviderID: library.activeID,
+            sessionOverride: appState.agentSessionModelOverride,
+            recentlyUsedModels: used,
+            hotModels: hot,
+            newModels: newModels,
+            fetchedModels: fetched,
+            currentModelLabel: currentModelLabel
+        )
+    }
+
     /// Pill label — prefer the explicit session override, else fall
     /// back to the route's natural pick (prefixed with provider name
     /// when there's more than one library entry, so the user always
@@ -912,6 +979,30 @@ struct ModelPickerPill: View {
             return model
         }
         return "\(active.displayName) · \(model)"
+    }
+
+    private struct ModelPickerMenuSnapshot: Equatable {
+        let configuredModel: String
+        let providerEntries: [AgentProviderEntry]
+        let activeProviderID: UUID?
+        let sessionOverride: String?
+        let recentlyUsedModels: [String]
+        let hotModels: [String]
+        let newModels: [String]
+        let fetchedModels: [String]
+        let currentModelLabel: String
+
+        static let empty = ModelPickerMenuSnapshot(
+            configuredModel: "",
+            providerEntries: [],
+            activeProviderID: nil,
+            sessionOverride: nil,
+            recentlyUsedModels: [],
+            hotModels: [],
+            newModels: [],
+            fetchedModels: [],
+            currentModelLabel: ""
+        )
     }
 }
 

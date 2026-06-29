@@ -12,12 +12,17 @@ import SwiftUI
 
 struct AgentSidePanelTerminalView: View {
     @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        AgentSidePanelTerminalContentView(controller: appState.agentTerminalController)
+    }
+}
+
+private struct AgentSidePanelTerminalContentView: View {
+    @EnvironmentObject var appState: AppState
+    @ObservedObject var controller: AgentInteractiveTerminalController
     @State private var renameDraft: TerminalShortcutRenameDraft?
     @State private var bootstrapTask: Task<Void, Never>?
-
-    private var controller: AgentInteractiveTerminalController {
-        appState.agentTerminalController
-    }
 
     private var settings: EditorTerminalSettings {
         appState.editorTerminalSettings.normalized()

@@ -11,6 +11,15 @@ import AppKit
 struct EditorTerminalPane: View {
     @EnvironmentObject var appState: AppState
 
+    var body: some View {
+        EditorTerminalPaneContent(session: appState.editorTerminalSession)
+    }
+}
+
+private struct EditorTerminalPaneContent: View {
+    @EnvironmentObject var appState: AppState
+    @ObservedObject var session: EditorTerminalSession
+
     private var settings: EditorTerminalSettings {
         appState.editorTerminalSettings.normalized()
     }
@@ -37,28 +46,28 @@ struct EditorTerminalPane: View {
         .frame(minHeight: 160, idealHeight: 230, maxHeight: 320)
         .onAppear {
             if let root = appState.rootDirectory {
-                appState.editorTerminalSession.setWorkingDirectory(root)
+                session.setWorkingDirectory(root)
             }
-            appState.editorTerminalSession.startShellIfNeeded(settings: settings, skin: skinColors)
+            session.startShellIfNeeded(settings: settings, skin: skinColors)
         }
         .onCompatibleChange(of: appState.editorTerminalSettings) { _, _ in
             // Live-apply font / color / cursor changes to the running terminal.
-            appState.editorTerminalSession.applyAppearance(settings: settings, skin: skinColors)
+            session.applyAppearance(settings: settings, skin: skinColors)
         }
     }
 
     private var header: some View {
         HStack(spacing: 8) {
-            Image(systemName: appState.editorTerminalSession.isRunning ? "terminal.fill" : "terminal")
+            Image(systemName: session.isRunning ? "terminal.fill" : "terminal")
                 .foregroundStyle(Color(nsColor: settings.colorScheme.accent))
             Text("Terminal")
                 .font(.caption.weight(.semibold))
 
-            TextField("working directory", text: $appState.editorTerminalSession.workingDirectoryPath)
+            TextField("working directory", text: $session.workingDirectoryPath)
                 .textFieldStyle(.plain)
                 .font(.caption2.monospaced())
                 .foregroundStyle(Color(nsColor: settings.colorScheme.muted))
-                .disabled(appState.editorTerminalSession.isRunning)
+                .disabled(session.isRunning)
 
             Spacer(minLength: 0)
 
@@ -78,12 +87,12 @@ struct EditorTerminalPane: View {
             .menuStyle(.button)
 
             Button {
-                appState.editorTerminalSession.startShellIfNeeded(settings: settings, skin: skinColors)
+                session.startShellIfNeeded(settings: settings, skin: skinColors)
             } label: {
                 Image(systemName: "power")
             }
             .buttonStyle(.borderless)
-            .disabled(appState.editorTerminalSession.isRunning)
+            .disabled(session.isRunning)
             .help("Start Shell")
 
             Button {
@@ -95,7 +104,7 @@ struct EditorTerminalPane: View {
             .help("Terminal Settings")
 
             Button {
-                appState.editorTerminalSession.clear()
+                session.clear()
             } label: {
                 Image(systemName: "trash")
             }
@@ -115,12 +124,12 @@ struct EditorTerminalPane: View {
     }
 
     private var terminalSurface: some View {
-        EditorTerminalSurfaceView(terminalView: appState.editorTerminalSession.terminalView)
+        EditorTerminalSurfaceView(terminalView: session.terminalView)
     }
 
     private func run(_ projectCommand: EditorProjectCommand) {
-        appState.editorTerminalSession.setWorkingDirectory(projectCommand.workingDirectory)
-        appState.editorTerminalSession.run(projectCommand.command, settings: settings, skin: skinColors)
+        session.setWorkingDirectory(projectCommand.workingDirectory)
+        session.run(projectCommand.command, settings: settings, skin: skinColors)
     }
 }
 

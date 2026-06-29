@@ -53,6 +53,7 @@ struct AgentWindowRootView: View {
         // 标记「agent 窗口在前台」，供全局 ⌘N 命令分流到「新聊天」。
         // 常量值，不随 transcript 流式刷新 republish。
         .focusedSceneValue(\.agentWindowActive, true)
+        .background(AgentWindowConfigurator())
         .onAppear {
             // 冷启动只开 agent 窗口、还没任何 editor 注册时,惰性建一个
             // headless AppState 顶上,保证「editor 没开 / 没选 workspace
@@ -63,6 +64,33 @@ struct AgentWindowRootView: View {
         // where the Agent window is open but no editor window is).
         .onReceive(NotificationCenter.default.publisher(for: .willDeepRevealAgentSession)) { _ in
             openWindow(id: AgentWindowID.value)
+        }
+    }
+}
+
+private struct AgentWindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { [weak view] in
+            Self.configure(view?.window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { [weak nsView] in
+            Self.configure(nsView?.window)
+        }
+    }
+
+    private static func configure(_ window: NSWindow?) {
+        guard let window else { return }
+        window.identifier = NSUserInterfaceItemIdentifier(AgentWindowID.value)
+        if window.title != L10n.AgentWindow.title {
+            window.title = L10n.AgentWindow.title
+        }
+        if window.isDocumentEdited {
+            window.isDocumentEdited = false
         }
     }
 }

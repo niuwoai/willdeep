@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-29 | Current version: v1.109.0-rc480
+> Last updated: 2026-06-29 | Current version: v1.109.0-rc481
 
 ## Positioning
 
@@ -14,6 +14,8 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Agent 启动性能与窗口标题修复（1.109.0-rc481）** —— Agent 窗口打开采样显示主线程主要耗在 SwiftUI 布局期间重复构建 composer picker 菜单和侧栏动画重排；workspace/runtime/model picker 现在改用缓存快照，终端状态改由终端面板局部观察、不再通过 `AppState` 广播给全局，终端字体枚举进程级缓存，终端 tab 状态通知合并到下一轮 runloop，左右侧栏显隐不再对整棵 Agent 布局做隐式动画。Agent 窗口也会标记自身 `NSWindow.identifier` 并恢复标题为 `WillDeep Agent`，不再被 editor 当前文件名覆盖。
+- **语音模型启动预热默认关闭（1.109.0-rc481）** —— 用过语音后不再默认在 App 启动时加载约 937 MB ONNX 模型，降低启动窗口的 idle memory；需要按住说话即刻响应的用户仍可在 Settings → Voice 手动打开预热。
 - **右侧侧栏打开延迟修复（1.109.0-rc480）** —— Agent 右侧侧栏打开时只更新窗口最小宽度约束，不再同步强制重绘窗口；终端侧栏首次挂载会先显示面板壳子，再启动默认本地 shell，降低点击后约 1 秒才出现的体感迟滞。
 - **终端录制 echo 查询缓存（1.109.0-rc479）** —— 录制期间连续普通键入会复用 echo 状态缓存；终端收到非预期回显输出、缓存过期或进程重启后才重新查询 PTY echo，继续把登录/密码等不回显输入记录为受保护片段。
 - **终端非录制输入延迟修复（1.109.0-rc478）** —— Agent 右侧终端普通输入不再触发录制路径的 echo 状态查询；只有开始录制后才检查 echo 并保存输入片段，减少右侧终端打开时的键入延迟和 CPU 占用。

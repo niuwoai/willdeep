@@ -75,6 +75,16 @@
         }
       }
     },
+    "%@ · %@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@ · %3$@"
+          }
+        }
+      }
+    },
     "%@ / %@" : {
       "localizations" : {
         "en" : {
@@ -124,12 +134,44 @@
     "%lld" : {
 
     },
+    "%lld × %lld px" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld × %2$lld px"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld × %2$lld px"
+          }
+        }
+      }
+    },
     "%lld B" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld B"
+          }
+        }
+      }
+    },
+    "%lld KB · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld KB · %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld KB · %2$@"
           }
         }
       }
@@ -154,14 +196,42 @@
         }
       }
     },
+    "%lld 个产物" : {
+
+    },
+    "%lld 个已解决项" : {
+
+    },
     "%lld 个文件已更改" : {
+
+    },
+    "%lld 个项目" : {
+
+    },
+    "%lld 产物" : {
+
+    },
+    "%lld 参考图" : {
 
     },
     "%lld 条" : {
 
     },
+    "%lld 镜" : {
+
+    },
     "%lld." : {
 
+    },
+    "%lld. %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld. %2$@"
+          }
+        }
+      }
     },
     "%lld/%lld" : {
       "localizations" : {
@@ -186,6 +256,7 @@
 
     },
     "After your first transcription, warm the ~937 MB model on each app start so push-to-talk responds instantly. Disable to save memory at the cost of a 1-5 s cold start." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -201,6 +272,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Agent"
+          }
+        }
+      }
+    },
+    "Agent 或 Skill 创建项目后，集数、分镜、人物和场景会显示在这里。" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 或 Skill 创建项目后，集数、分镜、人物和场景会显示在这里。"
+          }
+        }
+      }
+    },
+    "Agent 或 Skill 调用 show_widget 后，最近生成的 HTML/SVG 组件会显示在这里。" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 或 Skill 调用 show_widget 后，最近生成的 HTML/SVG 组件会显示在这里。"
           }
         }
       }
@@ -708,6 +799,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "暂不支持这种 diff 格式，请使用现有文件的 unified diff。"
+          }
+        }
+      }
+    },
+    "agent-patch.all-pending-title" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%d changes awaiting review"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d 个变更等待审查"
           }
         }
       }
@@ -2123,6 +2231,7 @@
       }
     },
     "An editor that codes, transcribes, and ships alongside you. Let's get you set up in three quick steps." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -2133,6 +2242,7 @@
       }
     },
     "Anthropic Messages" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -2143,11 +2253,22 @@
       }
     },
     "API key" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "API key"
+          }
+        }
+      }
+    },
+    "API Token" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API Token"
           }
         }
       }
@@ -3329,6 +3450,7 @@
       }
     },
     "Back" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3339,6 +3461,7 @@
       }
     },
     "Base URL" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3359,6 +3482,7 @@
       }
     },
     "Cancel" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3399,6 +3523,7 @@
       }
     },
     "Click Download below (~937 MB). After install the mic button in composer goes live and the Fn-key push-to-talk shortcut starts working." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3409,6 +3534,7 @@
       }
     },
     "Click Download for the full file, or import a copy you already have from fastv (no bytes transferred)." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4674,96 +4800,6 @@
         }
       }
     },
-    "expert.picker-help" : {
-      "comment" : "Composer expert picker tooltip",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Activate specialist tool packs for this session."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "为当前会话激活专家工具包。"
-          }
-        }
-      }
-    },
-    "expert.picker-label" : {
-      "comment" : "Composer expert picker label when no experts are active",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Experts"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "专家"
-          }
-        }
-      }
-    },
-    "expert.picker-label.active" : {
-      "comment" : "Composer expert picker label when experts are active; placeholder is the active count",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Experts %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "专家 %@"
-          }
-        }
-      }
-    },
-    "expert.short-drama" : {
-      "comment" : "Short-drama expert display name",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Short Drama"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "短剧制作"
-          }
-        }
-      }
-    },
-    "expert.short-drama.summary" : {
-      "comment" : "Short-drama expert summary shown in the composer expert picker",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enable short-drama planning, storyboard, media task, and production-package tools."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "启用短剧规划、分镜、媒体任务和制作包工具。"
-          }
-        }
-      }
-    },
     "composer.workspace.choose-folder" : {
       "comment" : "Composer workspace picker menu item",
       "extractionState" : "manual",
@@ -5000,7 +5036,25 @@
         }
       }
     },
+    "context-ring.tooltip" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Conversation: ~%1$@ / %2$@ usable · %3$@ reserved for system + tools · %4$@ total remaining (estimate)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对话：约 %1$@ / 可用 %2$@ · 系统 + 工具保留 %3$@ · 总剩余 %4$@（估算）。"
+          }
+        }
+      }
+    },
     "Context: ~%@ / %@. %@ remaining (estimate)." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5107,6 +5161,7 @@
       }
     },
     "Default model" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -5117,6 +5172,7 @@
       }
     },
     "Download (~937 MB)" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -5127,6 +5183,7 @@
       }
     },
     "Download model (~937 MB)" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -5824,6 +5881,96 @@
         }
       }
     },
+    "expert.picker-help" : {
+      "comment" : "Composer expert picker tooltip",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activate specialist tool packs for this session."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为当前会话激活专家工具包。"
+          }
+        }
+      }
+    },
+    "expert.picker-label" : {
+      "comment" : "Composer expert picker label when no experts are active",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Experts"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "专家"
+          }
+        }
+      }
+    },
+    "expert.picker-label.active" : {
+      "comment" : "Composer expert picker label when experts are active; placeholder is the active count",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Experts %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "专家 %@"
+          }
+        }
+      }
+    },
+    "expert.short-drama" : {
+      "comment" : "Short-drama expert display name",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Short Drama"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "短剧制作"
+          }
+        }
+      }
+    },
+    "expert.short-drama.summary" : {
+      "comment" : "Short-drama expert summary shown in the composer expert picker",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enable short-drama planning, storyboard, media task, and production-package tools."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启用短剧规划、分镜、媒体任务和制作包工具。"
+          }
+        }
+      }
+    },
     "file-tree.open-in-editor" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6240,11 +6387,29 @@
       }
     },
     "Google Gemini" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Google Gemini"
+          }
+        }
+      }
+    },
+    "header.hide-sidebar" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Hide Sidebar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏侧栏"
           }
         }
       }
@@ -6280,6 +6445,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开侧边栏"
+          }
+        }
+      }
+    },
+    "header.search-sessions" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Search Chats"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索会话"
+          }
+        }
+      }
+    },
+    "header.show-sidebar" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Show Sidebar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示侧栏"
           }
         }
       }
@@ -6421,6 +6620,7 @@
       }
     },
     "Import from fastv" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6431,6 +6631,7 @@
       }
     },
     "Import from fastv (0 MB)" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6441,6 +6642,7 @@
       }
     },
     "Importing from fastv…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6548,6 +6750,7 @@
       }
     },
     "Loaded in memory" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6558,6 +6761,7 @@
       }
     },
     "Memory" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7198,6 +7402,7 @@
       }
     },
     "Mic button in composer is enabled. Press and hold to record, release to transcribe. Tip: hold the Fn key anywhere in the app for the same push-to-talk." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7208,6 +7413,7 @@
       }
     },
     "Model installed" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7218,6 +7424,7 @@
       }
     },
     "Model location" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7228,6 +7435,7 @@
       }
     },
     "Model not installed" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7238,6 +7446,7 @@
       }
     },
     "Model not installed yet" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7647,6 +7856,7 @@
       }
     },
     "Not in memory" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7657,11 +7867,318 @@
       }
     },
     "On-device Voice (SenseVoice)" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "本地语音（SenseVoice）"
+          }
+        }
+      }
+    },
+    "onboarding.done.tip-agent" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open the Agent panel from the toolbar, ask anything in plain language."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从工具栏打开 Agent 面板,用大白话问任何问题。"
+          }
+        }
+      }
+    },
+    "onboarding.done.tip-settings" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Need to tweak providers, voice, memory, or skills? Cmd-, opens Settings."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "想调整服务商、语音、记忆或技能?Cmd-, 打开设置。"
+          }
+        }
+      }
+    },
+    "onboarding.done.tip-voice" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hold the mic button in the composer, or hold Fn anywhere, to talk instead of type."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住输入框里的麦克风按钮,或在任意位置按住 Fn,即可说话代替打字。"
+          }
+        }
+      }
+    },
+    "onboarding.done.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You're all set"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部就绪"
+          }
+        }
+      }
+    },
+    "onboarding.footer.back" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一步"
+          }
+        }
+      }
+    },
+    "onboarding.footer.continue" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续"
+          }
+        }
+      }
+    },
+    "onboarding.footer.get-started" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Get started"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始使用"
+          }
+        }
+      }
+    },
+    "onboarding.footer.save-continue" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save & Continue"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存并继续"
+          }
+        }
+      }
+    },
+    "onboarding.footer.skip" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skip"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳过"
+          }
+        }
+      }
+    },
+    "onboarding.provider.error-base-url-required" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Base URL is required for this provider."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该服务商需要填写 Base URL。"
+          }
+        }
+      }
+    },
+    "onboarding.provider.error-model-required" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please specify a model id."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请填写模型 ID。"
+          }
+        }
+      }
+    },
+    "onboarding.provider.error-unknown-preset" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown provider preset."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知的服务商预设。"
+          }
+        }
+      }
+    },
+    "onboarding.provider.label-api-key" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API key"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API key"
+          }
+        }
+      }
+    },
+    "onboarding.provider.label-base-url" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Base URL"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Base URL"
+          }
+        }
+      }
+    },
+    "onboarding.provider.label-model" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default model"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认模型"
+          }
+        }
+      }
+    },
+    "onboarding.provider.label-provider" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Provider"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务商"
+          }
+        }
+      }
+    },
+    "onboarding.provider.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pick one to start with — you can add more later in Settings → AI Providers. Skip if you'll only use voice features."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先选一个开始 —— 之后可在 设置 → AI 服务商 里添加更多。只用语音功能的话可以跳过。"
+          }
+        }
+      }
+    },
+    "onboarding.provider.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect an AI provider"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接 AI 服务商"
           }
         }
       }
@@ -7717,6 +8234,261 @@
         }
       }
     },
+    "onboarding.voice.cancel" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
+    "onboarding.voice.download-button" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download (~937 MB)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载(约 937 MB)"
+          }
+        }
+      }
+    },
+    "onboarding.voice.import-button" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import from fastv"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从 fastv 导入"
+          }
+        }
+      }
+    },
+    "onboarding.voice.importing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importing from fastv…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在从 fastv 导入…"
+          }
+        }
+      }
+    },
+    "onboarding.voice.installed-detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Push-to-talk is ready. Press and hold the mic button in the composer, or hold the Fn key anywhere in the app."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住说话已就绪。按住输入框里的麦克风按钮,或在应用任意位置按住 Fn 键。"
+          }
+        }
+      }
+    },
+    "onboarding.voice.installed-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Model installed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型已安装"
+          }
+        }
+      }
+    },
+    "onboarding.voice.not-installed-detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Click Download for the full file, or import a copy you already have from fastv (no bytes transferred)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点「下载」获取完整文件,或从已有的 fastv 副本导入(不传输任何数据)。"
+          }
+        }
+      }
+    },
+    "onboarding.voice.not-installed-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Model not installed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型未安装"
+          }
+        }
+      }
+    },
+    "onboarding.voice.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optional — but if you want to talk to your agent or use push-to-talk in the composer, you'll need the on-device SenseVoice model (~937 MB)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可选 —— 但若你想对 Agent 说话、或在输入框里按住说话,需要本机 SenseVoice 模型(约 937 MB)。"
+          }
+        }
+      }
+    },
+    "onboarding.voice.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set up voice transcription"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置语音转写"
+          }
+        }
+      }
+    },
+    "onboarding.welcome.bullet-provider" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bring your own AI provider — Claude, OpenAI, DeepSeek and more"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自带 AI 服务商 —— Claude、OpenAI、DeepSeek 等等"
+          }
+        }
+      }
+    },
+    "onboarding.welcome.bullet-settings" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings, models and skills you can change anytime"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置、模型和技能随时可改"
+          }
+        }
+      }
+    },
+    "onboarding.welcome.bullet-voice" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Push-to-talk voice transcription runs 100% on-device"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住说话的语音转写 100% 在本机完成"
+          }
+        }
+      }
+    },
+    "onboarding.welcome.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An editor that codes, transcribes, and ships alongside you. Let's get you set up in three quick steps."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一个能陪你写代码、转写语音、一起交付的编辑器。三步搞定设置。"
+          }
+        }
+      }
+    },
+    "onboarding.welcome.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Welcome to WillDeep"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "欢迎使用 WillDeep"
+          }
+        }
+      }
+    },
     "One KEY=value per line. These values are added to commands launched from the editor terminal." : {
       "localizations" : {
         "zh-Hans" : {
@@ -7738,6 +8510,7 @@
       }
     },
     "OpenAI Chat" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7748,6 +8521,7 @@
       }
     },
     "OpenAI Responses" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -8604,6 +9378,7 @@
       }
     },
     "Preload on launch" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -8632,6 +9407,7 @@
       }
     },
     "Provider" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -8660,6 +9436,7 @@
       }
     },
     "Push-to-talk in the composer transcribes 100% on-device. Nothing leaves your Mac." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -8670,6 +9447,7 @@
       }
     },
     "Push-to-talk is ready. Press and hold the mic button in the composer, or hold the Fn key anywhere in the app." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -8952,6 +9730,7 @@
       }
     },
     "Refresh status" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -8967,6 +9746,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移除图片"
+          }
+        }
+      }
+    },
+    "Replicate" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replicate"
+          }
+        }
+      }
+    },
+    "Replicate version hash" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replicate version hash"
+          }
+        }
+      }
+    },
+    "Replicate 已配置" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replicate 已配置"
+          }
+        }
+      }
+    },
+    "Replicate 未配置" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replicate 未配置"
           }
         }
       }
@@ -9032,11 +9851,97 @@
       }
     },
     "SenseVoice model installed" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "SenseVoice 模型已安装"
+          }
+        }
+      }
+    },
+    "session-search.close" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Close"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
+          }
+        }
+      }
+    },
+    "session-search.empty" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No matching chats"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有匹配的会话"
+          }
+        }
+      }
+    },
+    "session-search.placeholder" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Search chats by title…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按标题搜索会话…"
+          }
+        }
+      }
+    },
+    "session-search.prompt" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Type to search your chats"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入内容搜索会话"
+          }
+        }
+      }
+    },
+    "session-search.result-count" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@ results"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 个结果"
           }
         }
       }
@@ -16045,6 +16950,40 @@
         }
       }
     },
+    "settings.provider.protocol-anthropic-messages" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anthropic Messages"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anthropic Messages"
+          }
+        }
+      }
+    },
+    "settings.provider.protocol-google-gemini" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google Gemini"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google Gemini"
+          }
+        }
+      }
+    },
     "settings.provider.protocol-line" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -16058,6 +16997,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "协议：%@"
+          }
+        }
+      }
+    },
+    "settings.provider.protocol-openai-chat" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenAI Chat"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenAI Chat"
+          }
+        }
+      }
+    },
+    "settings.provider.protocol-openai-responses" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenAI Responses"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenAI Responses"
           }
         }
       }
@@ -18918,6 +19891,23 @@
         }
       }
     },
+    "settings.tab.replicate" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Replicate"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replicate"
+          }
+        }
+      }
+    },
     "settings.tab.rules" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
@@ -19373,6 +20363,210 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移除"
+          }
+        }
+      }
+    },
+    "settings.voice.auto-unload-note" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The model also auto-unloads after 5 minutes of foreground idle, 10 minutes of background, or when the app's resident memory exceeds 4 GB."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型还会在前台空闲 5 分钟、后台 10 分钟,或应用常驻内存超过 4 GB 时自动卸载。"
+          }
+        }
+      }
+    },
+    "settings.voice.cancel" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
+    "settings.voice.download-button" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download model (~937 MB)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载模型(约 937 MB)"
+          }
+        }
+      }
+    },
+    "settings.voice.header-description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Push-to-talk in the composer transcribes 100% on-device. Nothing leaves your Mac."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在输入框里按住说话,转写 100% 在本机完成。任何数据都不会离开你的 Mac。"
+          }
+        }
+      }
+    },
+    "settings.voice.header-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On-device Voice (SenseVoice)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本机语音(SenseVoice)"
+          }
+        }
+      }
+    },
+    "settings.voice.import-button" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import from fastv (0 MB)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从 fastv 导入(0 MB)"
+          }
+        }
+      }
+    },
+    "settings.voice.import-help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Symlink an existing fastv model copy — no download."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为已有的 fastv 模型副本建立软链 —— 无需下载。"
+          }
+        }
+      }
+    },
+    "settings.voice.importing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importing from fastv…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在从 fastv 导入…"
+          }
+        }
+      }
+    },
+    "settings.voice.loaded-in-memory" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loaded in memory"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已载入内存"
+          }
+        }
+      }
+    },
+    "settings.voice.memory-section" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Memory"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内存"
+          }
+        }
+      }
+    },
+    "settings.voice.model-location" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Model location"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型位置"
+          }
+        }
+      }
+    },
+    "settings.voice.not-in-memory" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not in memory"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未在内存中"
           }
         }
       }
@@ -20019,6 +21213,159 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "标准"
+          }
+        }
+      }
+    },
+    "settings.voice.preload-description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep the ~937 MB voice model out of memory at launch by default. Enable this after your first transcription if you prefer instant push-to-talk over lower idle memory."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认启动时不把约 937 MB 的语音模型放进内存。首次转写后,如果你更想要按住说话即刻响应,可打开此项。"
+          }
+        }
+      }
+    },
+    "settings.voice.preload-toggle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preload on launch"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动时预加载"
+          }
+        }
+      }
+    },
+    "settings.voice.refresh-status-help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh status"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新状态"
+          }
+        }
+      }
+    },
+    "settings.voice.reveal-in-finder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reveal in Finder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Finder 中显示"
+          }
+        }
+      }
+    },
+    "settings.voice.status-installed-detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mic button in composer is enabled. Press and hold to record, release to transcribe. Tip: hold the Fn key anywhere in the app for the same push-to-talk."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入框里的麦克风按钮已启用。按住录音,松开转写。提示:在应用任意位置按住 Fn 键也能按住说话。"
+          }
+        }
+      }
+    },
+    "settings.voice.status-installed-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SenseVoice model installed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SenseVoice 模型已安装"
+          }
+        }
+      }
+    },
+    "settings.voice.status-not-installed-detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Click Download below (~937 MB). After install the mic button in composer goes live and the Fn-key push-to-talk shortcut starts working."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点下方「下载」(约 937 MB)。安装后输入框里的麦克风按钮即生效,Fn 键按住说话的快捷方式也会开始工作。"
+          }
+        }
+      }
+    },
+    "settings.voice.status-not-installed-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Model not installed yet"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型尚未安装"
+          }
+        }
+      }
+    },
+    "settings.voice.unload-now" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unload now"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即卸载"
           }
         }
       }
@@ -20782,11 +22129,32 @@
       }
     },
     "Skip" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "跳过"
+          }
+        }
+      }
+    },
+    "some.im endpoint，例如 images/edits" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im endpoint，例如 images/edits"
+          }
+        }
+      }
+    },
+    "some.im、Replicate 和短剧 Skill 的异步图片/视频任务会显示在这里。" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im、Replicate 和短剧 Skill 的异步图片/视频任务会显示在这里。"
           }
         }
       }
@@ -21154,6 +22522,7 @@
       }
     },
     "Symlink an existing fastv model copy — no download." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -21194,6 +22563,7 @@
       }
     },
     "The model also auto-unloads after 5 minutes of foreground idle, 10 minutes of background, or when the app's resident memory exceeds 4 GB." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -22948,6 +24318,24 @@
         }
       }
     },
+    "transcript.message-middle-omitted.text" : {
+      "comment" : "inline marker inserted inside a long message preview",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "… %@ characters omitted; showing message start and end …"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "… 已省略 %@ 字符，当前显示消息开头和结尾 …"
+          }
+        }
+      }
+    },
     "transcript.message-truncated.help" : {
       "comment" : "tooltip for message truncation card",
       "extractionState" : "manual",
@@ -22980,24 +24368,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "消息预览保留前后片段（最多 %@ 字符，省略 %@ 字符）"
-          }
-        }
-      }
-    },
-    "transcript.message-middle-omitted.text" : {
-      "comment" : "inline marker inserted inside a long message preview",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "… %@ characters omitted; showing message start and end …"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "… 已省略 %@ 字符，当前显示消息开头和结尾 …"
           }
         }
       }
@@ -23859,6 +25229,7 @@
       }
     },
     "Unload now" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -23889,6 +25260,7 @@
       }
     },
     "Welcome to WillDeep" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -24151,6 +25523,7 @@
       }
     },
     "You're all set" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -24160,13 +25533,124 @@
         }
       }
     },
+    "产物" : {
+
+    },
+    "任务状态" : {
+
+    },
     "任务监控" : {
+
+    },
+    "保存" : {
+
+    },
+    "修复队列" : {
+
+    },
+    "候选图" : {
+
+    },
+    "停止录制终端捷径" : {
 
     },
     "关闭" : {
 
     },
     "再显示 %lld 个文件" : {
+
+    },
+    "最近完成" : {
+
+    },
+    "最近网页组件" : {
+
+    },
+    "删除" : {
+
+    },
+    "制作缺口" : {
+
+    },
+    "制作锚点" : {
+
+    },
+    "刷新中" : {
+
+    },
+    "刷新卡住" : {
+
+    },
+    "刷新运行中" : {
+
+    },
+    "加入聊天附件" : {
+
+    },
+    "动作清单" : {
+
+    },
+    "反选蒙版" : {
+
+    },
+    "发送任务上下文到聊天" : {
+
+    },
+    "发送分镜结构到聊天" : {
+
+    },
+    "发送到聊天" : {
+
+    },
+    "发送媒体任务范围到聊天" : {
+
+    },
+    "发送本集制作缺口和下一步建议到聊天" : {
+
+    },
+    "发送本集结构到聊天" : {
+
+    },
+    "发送清单" : {
+
+    },
+    "发送状态到聊天" : {
+
+    },
+    "发送短剧锚点上下文到聊天" : {
+
+    },
+    "发送资产结构到聊天" : {
+
+    },
+    "发送项目结构到聊天" : {
+
+    },
+    "取消" : {
+
+    },
+    "取消这个媒体任务" : {
+
+    },
+    "取消远端任务" : {
+
+    },
+    "只看%@媒体任务" : {
+
+    },
+    "可用动作" : {
+
+    },
+    "回放" : {
+
+    },
+    "图片擦除" : {
+
+    },
+    "图片放大" : {
+
+    },
+    "图片蒙版" : {
 
     },
     "在 Finder 中显示" : {
@@ -24179,31 +25663,245 @@
         }
       }
     },
+    "在「媒体任务」里点击图片产物的蒙版按钮，即可把图片送到这里编辑。" : {
+
+    },
     "在新窗口打开" : {
 
     },
+    "在聊天中选择主图" : {
+
+    },
+    "基于分镜图片继续生成视频" : {
+
+    },
+    "填写常用 Replicate model version hash 后，媒体任务图片缩略图可直接发起放大；图片编辑面板也可复用蒙版重绘默认 version。" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "填写常用 Replicate model version hash 后，媒体任务图片缩略图可直接发起放大；图片编辑面板也可复用蒙版重绘默认 version。"
+          }
+        }
+      }
+    },
     "复制" : {
+
+    },
+    "失败 %lld" : {
+
+    },
+    "媒体任务" : {
+
+    },
+    "媒体任务状态" : {
+
+    },
+    "完成 %lld" : {
 
     },
     "审查" : {
 
     },
+    "审片模板" : {
+
+    },
+    "导入审片" : {
+
+    },
+    "导入短剧规划 JSON" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导入短剧规划 JSON"
+          }
+        }
+      }
+    },
+    "导出本集制作包" : {
+
+    },
+    "导出短剧制作包" : {
+
+    },
+    "导出蒙版" : {
+
+    },
+    "导回产物" : {
+
+    },
+    "展开全部" : {
+
+    },
     "已复制" : {
+
+    },
+    "已是资产参考图" : {
 
     },
     "已编辑" : {
 
     },
+    "已载入旧蒙版作为底稿，导出时会保留并叠加新的选区/笔迹。" : {
+
+    },
+    "已通过 REPLICATE_API_TOKEN 环境变量配置" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已通过 REPLICATE_API_TOKEN 环境变量配置"
+          }
+        }
+      }
+    },
+    "开启后白色编辑区域会变成选区外部，适合保留主体、重绘背景。" : {
+
+    },
+    "开始录制终端捷径" : {
+
+    },
+    "当前分镜主图" : {
+
+    },
+    "当前筛选暂无任务" : {
+
+    },
     "思考内容实时预览" : {
+
+    },
+    "打开 Replicate 设置" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开 Replicate 设置"
+          }
+        }
+      }
+    },
+    "打开产物" : {
+
+    },
+    "打开候选图选择器" : {
+
+    },
+    "打开参考图：%@" : {
+
+    },
+    "打开媒体任务侧栏" : {
+
+    },
+    "打开媒体任务侧栏，或用气泡按钮发送任务上下文到聊天" : {
+
+    },
+    "打开对应短剧项目" : {
 
     },
     "打开方式" : {
 
     },
+    "打开蒙版编辑" : {
+
+    },
+    "打开这个项目的媒体任务" : {
+
+    },
+    "打开这个项目的媒体任务侧栏" : {
+
+    },
+    "批量生成本集分镜图片" : {
+
+    },
+    "批量生成本集分镜视频" : {
+
+    },
+    "把关联短剧检查项标记为已解决" : {
+
+    },
+    "把当前图片和蒙版路径发送到聊天" : {
+
+    },
+    "把当前筛选范围内失败任务的批量重试请求发送到聊天" : {
+
+    },
+    "把当前筛选范围内的媒体任务状态摘要发送到聊天" : {
+
+    },
+    "把当前网页组件上下文发送到聊天" : {
+
+    },
+    "把当前网页组件的推荐动作发送到聊天" : {
+
+    },
+    "把视频产物上下文发送到聊天" : {
+
+    },
+    "把这个网页组件的推荐动作和全部可用动作发送到聊天" : {
+
+    },
+    "把重试请求发送到聊天" : {
+
+    },
+    "按任务状态筛选" : {
+
+    },
+    "捷径名称" : {
+
+    },
+    "接力聊天" : {
+
+    },
+    "提交蒙版编辑" : {
+
+    },
+    "撤销当前或上一个选区/笔迹" : {
+
+    },
+    "擦除参考图区域" : {
+
+    },
+    "收起" : {
+
+    },
     "收起文件" : {
 
     },
+    "收起网页组件动作列表" : {
+
+    },
     "收起详情" : {
+
+    },
+    "改名…" : {
+
+    },
+    "改名终端捷径" : {
+
+    },
+    "放大参考图" : {
+
+    },
+    "新建短剧项目" : {
+
+    },
+    "显示这个网页组件的全部可用动作" : {
+
+    },
+    "暂无媒体任务" : {
+
+    },
+    "服务" : {
+
+    },
+    "未更新 %lldm" : {
+
+    },
+    "查看全剧媒体任务" : {
+
+    },
+    "查看全部任务" : {
 
     },
     "查看当前未提交 diff" : {
@@ -24216,22 +25914,212 @@
         }
       }
     },
+    "查看本分镜媒体任务" : {
+
+    },
+    "查看本集媒体任务" : {
+
+    },
+    "查看网页组件：%@" : {
+
+    },
     "查看详细错误信息" : {
+
+    },
+    "查看这个检查项的媒体任务" : {
+
+    },
+    "标记为已解决" : {
+
+    },
+    "模式" : {
 
     },
     "正在编辑" : {
 
     },
+    "清空所有选区和笔迹" : {
+
+    },
+    "清除" : {
+
+    },
+    "清除任务状态筛选" : {
+
+    },
+    "清除媒体任务筛选" : {
+
+    },
+    "点击缩略图预览；图片可进入蒙版编辑" : {
+
+    },
+    "生成参考图" : {
+
+    },
+    "生成本集网页分镜板" : {
+
+    },
+    "生成短剧规划 JSON 模板" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "生成短剧规划 JSON 模板"
+          }
+        }
+      }
+    },
+    "生成网页分镜板" : {
+
+    },
+    "用 Replicate 放大" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用 Replicate 放大"
+          }
+        }
+      }
+    },
+    "用 some.im 生成分镜图片" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用 some.im 生成分镜图片"
+          }
+        }
+      }
+    },
+    "用 some.im 生成分镜视频" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用 some.im 生成分镜视频"
+          }
+        }
+      }
+    },
+    "用于 Replicate 图片放大、擦除、蒙版重绘和视频/图片预测任务。Token 存入 Keychain；不会写入聊天、日志或提交内容。" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于 Replicate 图片放大、擦除、蒙版重绘和视频/图片预测任务。Token 存入 Keychain；不会写入聊天、日志或提交内容。"
+          }
+        }
+      }
+    },
     "用默认应用打开" : {
+
+    },
+    "画笔模式" : {
+
+    },
+    "登记任务" : {
+
+    },
+    "直接提交缺失的人物/场景参考图任务" : {
+
+    },
+    "直达" : {
+
+    },
+    "短剧项目" : {
+
+    },
+    "立即刷新任务状态" : {
+
+    },
+    "立即刷新当前筛选范围内的运行中任务" : {
+
+    },
+    "立即刷新当前筛选范围内长时间未更新的运行中任务" : {
+
+    },
+    "立即刷新这个媒体任务" : {
+
+    },
+    "编辑参考图蒙版" : {
+
+    },
+    "编辑接力" : {
+
+    },
+    "蒙版工具" : {
+
+    },
+    "蒙版重绘" : {
+
+    },
+    "补参考 %lld" : {
+
+    },
+    "补齐缺失的人物/场景参考图" : {
+
+    },
+    "设为人物/场景参考图" : {
+
+    },
+    "设为分镜主图" : {
 
     },
     "详情" : {
 
     },
+    "请先创建 Agent 会话" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先创建 Agent 会话"
+          }
+        }
+      }
+    },
+    "请先在 Settings → Integrations → Replicate 配置图片放大 version" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先在 Settings → Integrations → Replicate 配置图片放大 version"
+          }
+        }
+      }
+    },
+    "请选择一张图片" : {
+
+    },
+    "超过 %lld 分钟未更新，建议刷新或核对远端状态" : {
+
+    },
+    "运行 %lld" : {
+
+    },
+    "运行脚本" : {
+
+    },
+    "还有 %lld 个动作，点击“展开全部”查看。" : {
+
+    },
     "还有 %lld 个后台任务" : {
 
     },
+    "还有 %lld 个媒体任务" : {
+
+    },
     "还有 %lld 个文件" : {
+
+    },
+    "还没有短剧项目" : {
+
+    },
+    "还没有网页组件" : {
+
+    },
+    "这个范围里有媒体任务，但没有符合当前状态筛选的条目。" : {
 
     },
     "选择这一轮由 WillDeep 自己执行，还是委托给本机 Claude Code / Codex CLI。" : {
@@ -24244,997 +26132,69 @@
         }
       }
     },
+    "通用图片编辑；发送到聊天会在已有选区时先导出蒙版，并附带 edit_image_with_mask 参数。" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通用图片编辑；发送到聊天会在已有选区时先导出蒙版，并附带 edit_image_with_mask 参数。"
+          }
+        }
+      }
+    },
+    "配置 API" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配置 API"
+          }
+        }
+      }
+    },
     "重新发送上一条消息" : {
+
+    },
+    "重新载入网页组件源文件" : {
 
     },
     "重试" : {
 
     },
+    "重试失败任务" : {
+
+    },
     "隐藏详细错误信息" : {
 
     },
-    "onboarding.welcome.title" : {
-      "extractionState" : "manual",
+    "预检审片" : {
+
+    },
+    "预检导回" : {
+
+    },
+    "预检短剧规划 JSON" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Welcome to WillDeep"
-          }
-        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "欢迎使用 WillDeep"
+            "value" : "预检短剧规划 JSON"
           }
         }
       }
     },
-    "onboarding.welcome.subtitle" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "An editor that codes, transcribes, and ships alongside you. Let's get you set up in three quick steps."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "一个能陪你写代码、转写语音、一起交付的编辑器。三步搞定设置。"
-          }
-        }
-      }
+    "预览图片" : {
+
     },
-    "onboarding.welcome.bullet-provider" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bring your own AI provider — Claude, OpenAI, DeepSeek and more"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自带 AI 服务商 —— Claude、OpenAI、DeepSeek 等等"
-          }
-        }
-      }
+    "预览网页" : {
+
     },
-    "onboarding.welcome.bullet-voice" : {
-      "extractionState" : "manual",
+    "默认 Workflow Versions" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Push-to-talk voice transcription runs 100% on-device"
-          }
-        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "按住说话的语音转写 100% 在本机完成"
-          }
-        }
-      }
-    },
-    "onboarding.welcome.bullet-settings" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Settings, models and skills you can change anytime"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "设置、模型和技能随时可改"
-          }
-        }
-      }
-    },
-    "onboarding.provider.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Connect an AI provider"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "连接 AI 服务商"
-          }
-        }
-      }
-    },
-    "onboarding.provider.subtitle" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pick one to start with — you can add more later in Settings → AI Providers. Skip if you'll only use voice features."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "先选一个开始 —— 之后可在 设置 → AI 服务商 里添加更多。只用语音功能的话可以跳过。"
-          }
-        }
-      }
-    },
-    "onboarding.provider.label-provider" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Provider"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "服务商"
-          }
-        }
-      }
-    },
-    "onboarding.provider.label-base-url" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Base URL"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Base URL"
-          }
-        }
-      }
-    },
-    "onboarding.provider.label-api-key" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "API key"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "API key"
-          }
-        }
-      }
-    },
-    "onboarding.provider.label-model" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Default model"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "默认模型"
-          }
-        }
-      }
-    },
-    "onboarding.provider.error-unknown-preset" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unknown provider preset."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未知的服务商预设。"
-          }
-        }
-      }
-    },
-    "onboarding.provider.error-base-url-required" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Base URL is required for this provider."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "该服务商需要填写 Base URL。"
-          }
-        }
-      }
-    },
-    "onboarding.provider.error-model-required" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Please specify a model id."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请填写模型 ID。"
-          }
-        }
-      }
-    },
-    "onboarding.voice.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Set up voice transcription"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "设置语音转写"
-          }
-        }
-      }
-    },
-    "onboarding.voice.subtitle" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Optional — but if you want to talk to your agent or use push-to-talk in the composer, you'll need the on-device SenseVoice model (~937 MB)."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "可选 —— 但若你想对 Agent 说话、或在输入框里按住说话,需要本机 SenseVoice 模型(约 937 MB)。"
-          }
-        }
-      }
-    },
-    "onboarding.voice.installed-title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Model installed"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "模型已安装"
-          }
-        }
-      }
-    },
-    "onboarding.voice.not-installed-title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Model not installed"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "模型未安装"
-          }
-        }
-      }
-    },
-    "onboarding.voice.installed-detail" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Push-to-talk is ready. Press and hold the mic button in the composer, or hold the Fn key anywhere in the app."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "按住说话已就绪。按住输入框里的麦克风按钮,或在应用任意位置按住 Fn 键。"
-          }
-        }
-      }
-    },
-    "onboarding.voice.not-installed-detail" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Click Download for the full file, or import a copy you already have from fastv (no bytes transferred)."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "点「下载」获取完整文件,或从已有的 fastv 副本导入(不传输任何数据)。"
-          }
-        }
-      }
-    },
-    "onboarding.voice.download-button" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Download (~937 MB)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "下载(约 937 MB)"
-          }
-        }
-      }
-    },
-    "onboarding.voice.import-button" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Import from fastv"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从 fastv 导入"
-          }
-        }
-      }
-    },
-    "onboarding.voice.importing" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Importing from fastv…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在从 fastv 导入…"
-          }
-        }
-      }
-    },
-    "onboarding.voice.cancel" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cancel"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "取消"
-          }
-        }
-      }
-    },
-    "onboarding.done.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You're all set"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全部就绪"
-          }
-        }
-      }
-    },
-    "onboarding.done.tip-agent" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open the Agent panel from the toolbar, ask anything in plain language."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从工具栏打开 Agent 面板,用大白话问任何问题。"
-          }
-        }
-      }
-    },
-    "onboarding.done.tip-voice" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hold the mic button in the composer, or hold Fn anywhere, to talk instead of type."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "按住输入框里的麦克风按钮,或在任意位置按住 Fn,即可说话代替打字。"
-          }
-        }
-      }
-    },
-    "onboarding.done.tip-settings" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Need to tweak providers, voice, memory, or skills? Cmd-, opens Settings."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "想调整服务商、语音、记忆或技能?Cmd-, 打开设置。"
-          }
-        }
-      }
-    },
-    "onboarding.footer.back" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Back"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "上一步"
-          }
-        }
-      }
-    },
-    "onboarding.footer.skip" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Skip"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "跳过"
-          }
-        }
-      }
-    },
-    "onboarding.footer.continue" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Continue"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "继续"
-          }
-        }
-      }
-    },
-    "onboarding.footer.save-continue" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Save & Continue"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存并继续"
-          }
-        }
-      }
-    },
-    "onboarding.footer.get-started" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Get started"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "开始使用"
-          }
-        }
-      }
-    },
-    "settings.voice.header-title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "On-device Voice (SenseVoice)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "本机语音(SenseVoice)"
-          }
-        }
-      }
-    },
-    "settings.voice.header-description" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Push-to-talk in the composer transcribes 100% on-device. Nothing leaves your Mac."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在输入框里按住说话,转写 100% 在本机完成。任何数据都不会离开你的 Mac。"
-          }
-        }
-      }
-    },
-    "settings.voice.status-installed-title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "SenseVoice model installed"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "SenseVoice 模型已安装"
-          }
-        }
-      }
-    },
-    "settings.voice.status-not-installed-title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Model not installed yet"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "模型尚未安装"
-          }
-        }
-      }
-    },
-    "settings.voice.status-installed-detail" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mic button in composer is enabled. Press and hold to record, release to transcribe. Tip: hold the Fn key anywhere in the app for the same push-to-talk."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "输入框里的麦克风按钮已启用。按住录音,松开转写。提示:在应用任意位置按住 Fn 键也能按住说话。"
-          }
-        }
-      }
-    },
-    "settings.voice.status-not-installed-detail" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Click Download below (~937 MB). After install the mic button in composer goes live and the Fn-key push-to-talk shortcut starts working."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "点下方「下载」(约 937 MB)。安装后输入框里的麦克风按钮即生效,Fn 键按住说话的快捷方式也会开始工作。"
-          }
-        }
-      }
-    },
-    "settings.voice.download-button" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Download model (~937 MB)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "下载模型(约 937 MB)"
-          }
-        }
-      }
-    },
-    "settings.voice.import-button" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Import from fastv (0 MB)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从 fastv 导入(0 MB)"
-          }
-        }
-      }
-    },
-    "settings.voice.import-help" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Symlink an existing fastv model copy — no download."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "为已有的 fastv 模型副本建立软链 —— 无需下载。"
-          }
-        }
-      }
-    },
-    "settings.voice.reveal-in-finder" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reveal in Finder"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在 Finder 中显示"
-          }
-        }
-      }
-    },
-    "settings.voice.importing" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Importing from fastv…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在从 fastv 导入…"
-          }
-        }
-      }
-    },
-    "settings.voice.cancel" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cancel"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "取消"
-          }
-        }
-      }
-    },
-    "settings.voice.memory-section" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Memory"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "内存"
-          }
-        }
-      }
-    },
-    "settings.voice.preload-toggle" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Preload on launch"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "启动时预加载"
-          }
-        }
-      }
-    },
-    "settings.voice.preload-description" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "After your first transcription, warm the ~937 MB model on each app start so push-to-talk responds instantly. Disable to save memory at the cost of a 1-5 s cold start."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "首次转写之后,每次启动应用时预热这个约 937 MB 的模型,让按住说话即刻响应。关闭可节省内存,代价是 1-5 秒的冷启动。"
-          }
-        }
-      }
-    },
-    "settings.voice.loaded-in-memory" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Loaded in memory"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已载入内存"
-          }
-        }
-      }
-    },
-    "settings.voice.not-in-memory" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Not in memory"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未在内存中"
-          }
-        }
-      }
-    },
-    "settings.voice.unload-now" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unload now"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "立即卸载"
-          }
-        }
-      }
-    },
-    "settings.voice.refresh-status-help" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Refresh status"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "刷新状态"
-          }
-        }
-      }
-    },
-    "settings.voice.auto-unload-note" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The model also auto-unloads after 5 minutes of foreground idle, 10 minutes of background, or when the app's resident memory exceeds 4 GB."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "模型还会在前台空闲 5 分钟、后台 10 分钟,或应用常驻内存超过 4 GB 时自动卸载。"
-          }
-        }
-      }
-    },
-    "settings.voice.model-location" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Model location"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "模型位置"
-          }
-        }
-      }
-    },
-    "settings.provider.protocol-openai-chat" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "OpenAI Chat"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "OpenAI Chat"
-          }
-        }
-      }
-    },
-    "settings.provider.protocol-anthropic-messages" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Anthropic Messages"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Anthropic Messages"
-          }
-        }
-      }
-    },
-    "settings.provider.protocol-google-gemini" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Google Gemini"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Google Gemini"
-          }
-        }
-      }
-    },
-    "settings.provider.protocol-openai-responses" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "OpenAI Responses"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "OpenAI Responses"
+            "value" : "默认 Workflow Versions"
           }
         }
       }

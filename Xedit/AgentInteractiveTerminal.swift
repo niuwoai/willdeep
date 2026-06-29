@@ -763,6 +763,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
     private let idleTimeout: TimeInterval = 300
     private var idleTimer: Timer?
     private var localShellCounter = 0
+    private var tabChangePublishScheduled = false
 
     init() {
         startIdleReaper()
@@ -843,11 +844,21 @@ final class AgentInteractiveTerminalController: ObservableObject {
     private func register(_ tab: AgentTerminalTab) {
         // Re-publish each tab's changes so the side panel updates live.
         let cancellable = tab.objectWillChange.sink { [weak self] _ in
-            self?.objectWillChange.send()
+            self?.scheduleTabChangePublish()
         }
         tabSubscriptions[tab.id] = cancellable
         tabs.append(tab)
         activeTabID = tab.id
+    }
+
+    private func scheduleTabChangePublish() {
+        guard !tabChangePublishScheduled else { return }
+        tabChangePublishScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.tabChangePublishScheduled = false
+            self.objectWillChange.send()
+        }
     }
 
     func closeTab(id: UUID) {

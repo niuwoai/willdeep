@@ -314,8 +314,6 @@ final class AppState: ObservableObject {
     /// inside `AgentSessionRowStatusDot`, so background runtime
     /// changes only repaint that one row.
     private var activeRuntimeSubscription: AnyCancellable?
-    private var terminalSessionSubscription: AnyCancellable?
-    private var agentTerminalSubscription: AnyCancellable?
     /// Republishes background job registry changes through AppState so
     /// any view binding `appState.*` repaints when a job starts /
     /// finishes / streams output. Views that need finer-grained
@@ -458,14 +456,10 @@ final class AppState: ObservableObject {
             }
         agentMediaTaskRegistry.shortDramaStore = agentShortDramaStore
         agentMediaTaskPoller.start(registry: agentMediaTaskRegistry)
-        terminalSessionSubscription = editorTerminalSession.objectWillChange
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-        agentTerminalSubscription = agentTerminalController.objectWillChange
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
+        // Terminals are high-frequency UI surfaces: user typing, title
+        // changes, and prompt updates must repaint only the terminal panes.
+        // The panes observe their terminal objects directly, so AppState does
+        // not republish terminal changes globally.
         // Let the terminal tools open a local shell on demand (rooted at
         // the active session's workspace) when the agent wants to drive
         // the terminal but the user hasn't opened a tab yet.
@@ -516,7 +510,6 @@ final class AppState: ObservableObject {
         Task { @MainActor [poller = agentMediaTaskPoller] in
             poller.stop()
         }
-        terminalSessionSubscription?.cancel()
         terminalSettingsSyncSubscription?.cancel()
         // rc38 attempted to cancel every background runtime's
         // requestTask here via `MainActor.assumeIsolated { … }`, which
@@ -1504,6 +1497,13 @@ final class AppState: ObservableObject {
         // 这里。窗口标题只是 UI 装饰，主线程之外的调用 async hop 就行。
         let applyTitle: () -> Void = { [weak self] in
             guard let window = NSApplication.shared.keyWindow else { return }
+            if window.identifier?.rawValue == AgentWindowID.value {
+                if window.title != L10n.AgentWindow.title {
+                    window.title = L10n.AgentWindow.title
+                }
+                window.isDocumentEdited = false
+                return
+            }
             window.title = self?.activeTab?.title ?? url?.lastPathComponent ?? ""
             window.isDocumentEdited = isEdited
         }
