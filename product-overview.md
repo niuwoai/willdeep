@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-29 | Current version: v1.109.0-rc466
+> Last updated: 2026-06-29 | Current version: v1.109.0-rc467
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **短剧 handoff bundle contract（1.109.0-rc467）** —— 新增 `scripts/short_drama_mvp_handoff_bundle_contract_test.rb`，覆盖默认 trial、ready release、manual_failed、machine_failed 和 missing evidence 五种交接包状态，守住 `handoff_mode`、`ready_for_release`、blocking items 和命令退出码；本地一键测试与 GitHub Actions 都会运行该矩阵。
 - **短剧 handoff bundle（1.109.0-rc466）** —— 新增 `scripts/short_drama_mvp_handoff_bundle.rb`，读取 acceptance report 后生成最终交接包 Markdown/JSON，集中显示 `handoff_mode`、`ready_for_release`、blocking items、next actions、handoff files 和 remaining risks；本地一键测试与 GitHub Actions 都会生成并上传该交接索引。
 - **短剧 smoke evidence readiness matrix（1.109.0-rc465）** —— 新增 `scripts/short_drama_mvp_smoke_evidence_contract_test.rb`，用本地试用包构造默认未测、ready、缺 evidence、manual_failed 和 sensitive blocked 五种 smoke evidence 场景，验证 readiness、next_actions 和敏感信息脱敏输出；本地一键测试与 GitHub Actions 都会运行该合约，acceptance report 也会展示 `Smoke Evidence Readiness Matrix`。
 - **短剧 acceptance runbook（1.109.0-rc464）** —— `scripts/short_drama_mvp_tryout_package.rb` 现在会在试用包内生成 `acceptance-runbook.md/json`，集中列出重新生成试用包、smoke evidence、MVP acceptance report 和完整本地 gate 的命令；acceptance report 会把 runbook 纳入证据和 `Acceptance Runbook` 小节。

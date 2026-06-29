@@ -171,6 +171,7 @@ short_drama_acceptance_report = read_file(repo_root, "scripts/short_drama_mvp_ac
 short_drama_smoke_evidence_report = read_file(repo_root, "scripts/short_drama_mvp_smoke_evidence_report.rb")
 short_drama_smoke_evidence_contract = read_file(repo_root, "scripts/short_drama_mvp_smoke_evidence_contract_test.rb")
 short_drama_handoff_bundle = read_file(repo_root, "scripts/short_drama_mvp_handoff_bundle.rb")
+short_drama_handoff_bundle_contract = read_file(repo_root, "scripts/short_drama_mvp_handoff_bundle_contract_test.rb")
 short_drama_remaining_risks = short_drama_cutoff
   .match(/^##\s+当前剩余风险\n\n(?<body>.*?)(?=^##\s|\z)/m)
   &.[](:body)
@@ -309,6 +310,22 @@ add_delivery_check.call(
     short_drama_cutoff.include?("short_drama_mvp_handoff_bundle.rb") &&
     short_drama_tryout.include?("short_drama_mvp_handoff_bundle.rb"),
   "Local and GitHub acceptance should generate the final handoff bundle with readiness, evidence files, next actions, and remaining risks."
+)
+add_delivery_check.call(
+  "Short drama handoff bundle contract matrix is guarded",
+  "scripts/short_drama_mvp_handoff_bundle_contract_test.rb",
+  File.file?(File.join(repo_root, "scripts/short_drama_mvp_handoff_bundle_contract_test.rb")) &&
+    run_tests.include?("scripts/short_drama_mvp_handoff_bundle_contract_test.rb") &&
+    workflow.include?("Run short-drama MVP handoff bundle contract guard") &&
+    workflow.include?("short_drama_mvp_handoff_bundle_contract_report.md") &&
+    short_drama_handoff_bundle_contract.include?("default_trial") &&
+    short_drama_handoff_bundle_contract.include?("ready_release") &&
+    short_drama_handoff_bundle_contract.include?("manual_failed") &&
+    short_drama_handoff_bundle_contract.include?("machine_failed") &&
+    short_drama_handoff_bundle_contract.include?("missing_handoff_evidence") &&
+    short_drama_handoff_bundle_contract.include?("ready_release_candidate") &&
+    short_drama_handoff_bundle_contract.include?("blocked_machine_handoff"),
+  "Local and GitHub acceptance should guard handoff bundle mode transitions for trial, ready, failed, machine-blocked, and missing-evidence states."
 )
 add_delivery_check.call(
   "Short drama acceptance report preserves handoff readiness summary",

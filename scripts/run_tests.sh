@@ -22,6 +22,7 @@
 #   - short_drama_mvp_smoke_evidence_contract_report.* 短剧 MVP smoke 证据 readiness 矩阵报告
 #   - short_drama_mvp_acceptance_report.* 短剧 MVP 交付验收摘要报告
 #   - short_drama_mvp_handoff_bundle.* 短剧 MVP 可交接证据包索引
+#   - short_drama_mvp_handoff_bundle_contract_report.* 短剧 MVP handoff bundle 状态矩阵报告
 #   - report.md             markdown 报告（CI 摘要 & 本地 quick look）
 #   - report.json           机读格式（自动化下游用）
 # =============================================================================
@@ -52,6 +53,7 @@ ruby "${ROOT_DIR}/scripts/short_drama_mvp_smoke_evidence_report.rb" "${OUT_DIR}/
 ruby "${ROOT_DIR}/scripts/short_drama_mvp_smoke_evidence_contract_test.rb" "${OUT_DIR}/short_drama_mvp_smoke_evidence_contract_report.md" "${OUT_DIR}/short_drama_mvp_smoke_evidence_contract_report.json"
 ruby "${ROOT_DIR}/scripts/short_drama_mvp_acceptance_report.rb" "${OUT_DIR}/short_drama_mvp_acceptance_report.md" "${OUT_DIR}/short_drama_mvp_acceptance_report.json"
 ruby "${ROOT_DIR}/scripts/short_drama_mvp_handoff_bundle.rb" "${OUT_DIR}/short_drama_mvp_acceptance_report.json" "${OUT_DIR}/short_drama_mvp_handoff_bundle.md" "${OUT_DIR}/short_drama_mvp_handoff_bundle.json"
+ruby "${ROOT_DIR}/scripts/short_drama_mvp_handoff_bundle_contract_test.rb" "${OUT_DIR}/short_drama_mvp_handoff_bundle_contract_report.md" "${OUT_DIR}/short_drama_mvp_handoff_bundle_contract_report.json"
 
 EXTRA_ARGS=("$@")
 if [ ${#EXTRA_ARGS[@]} -eq 0 ]; then

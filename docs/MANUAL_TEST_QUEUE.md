@@ -497,6 +497,28 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 - ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
   底部“验收记录”指向 `1.109.0-rc466 — 短剧 handoff bundle`。
 
+## 1.109.0-rc467 — 短剧 handoff bundle contract
+
+- ✅ 本版本没有新增短剧制作能力；本轮只把 handoff bundle 的关键状态转换纳入本地和远端合约测试。
+- ✅ 运行 `ruby scripts/short_drama_mvp_handoff_bundle_contract_test.rb ...` →
+  报告包含 5 个场景：`default_trial`、`ready_release`、
+  `manual_failed`、`machine_failed` 和 `missing_handoff_evidence`。
+- ✅ `default_trial` 场景保持 `trial_package_with_explicit_pending_reasons`，
+  且 `ready_for_release=false`。
+- ✅ `ready_release` 场景输出 `ready_release_candidate` 和
+  `ready_for_release=true`。
+- ✅ `manual_failed` 场景保持 trial package，但 `blocking_items` 包含
+  `handoff_not_release_ready`。
+- ✅ `machine_failed` 场景输出 `blocked_machine_handoff`，命令非 0，
+  且 `blocking_items` 包含 `machine_checks_failed`。
+- ✅ `missing_handoff_evidence` 场景命令非 0，且 `blocking_items` 包含
+  `handoff_evidence_missing`。
+- ✅ `scripts/run_tests.sh` 和 GitHub Actions `Tests` workflow →
+  都会运行 handoff bundle contract，并上传报告与场景目录。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc467 — 短剧 handoff bundle contract`。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）

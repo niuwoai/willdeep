@@ -86,6 +86,9 @@ jobs:
       - name: Generate short-drama MVP handoff bundle
         run: ruby scripts/short_drama_mvp_handoff_bundle.rb build/ci/short_drama_mvp_acceptance_report.json build/ci/short_drama_mvp_handoff_bundle.md build/ci/short_drama_mvp_handoff_bundle.json
 
+      - name: Run short-drama MVP handoff bundle contract guard
+        run: ruby scripts/short_drama_mvp_handoff_bundle_contract_test.rb build/ci/short_drama_mvp_handoff_bundle_contract_report.md build/ci/short_drama_mvp_handoff_bundle_contract_report.json
+
       # 守住简体中文翻译覆盖率:可翻译文案缺 zh-Hans 即报红,防止新增 key
       # 漏翻让中文用户回落英文。纯符号/格式串自动豁免。
       - name: Run i18n coverage guard
@@ -154,6 +157,8 @@ jobs:
           printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat build/ci/short_drama_mvp_handoff_bundle.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat build/ci/short_drama_mvp_handoff_bundle_contract_report.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat build/ci/report.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload test artifacts
@@ -193,5 +198,8 @@ jobs:
             build/ci/short_drama_mvp_acceptance_report.json
             build/ci/short_drama_mvp_handoff_bundle.md
             build/ci/short_drama_mvp_handoff_bundle.json
+            build/ci/short_drama_mvp_handoff_bundle_contract_report.md
+            build/ci/short_drama_mvp_handoff_bundle_contract_report.json
+            build/ci/short_drama_mvp_handoff_bundle_contract
             build/ci/xcodebuild.log
           retention-days: 14

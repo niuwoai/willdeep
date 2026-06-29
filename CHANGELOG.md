@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.109.0-rc467 - 2026-06-29
+
+### Changed
+- **短剧 handoff bundle contract（1.109.0-rc467）** —— 新增 `scripts/short_drama_mvp_handoff_bundle_contract_test.rb`，用本地 acceptance JSON 构造默认 trial、ready release、manual_failed、machine_failed 和 missing evidence 五种交接包状态。
+- 新合约会验证 `handoff_mode`、`ready_for_release`、blocking items、next actions 和命令退出码，防止后续把机器失败、人工失败、缺交付证据和 ready 状态混成同一种结论。
+- `scripts/run_tests.sh` 和 GitHub Actions `Tests` workflow 接入该合约，并把 `short_drama_mvp_handoff_bundle_contract_report.md/json` 与场景目录上传为 artifacts。
+- `scripts/version_consistency.rb` 新增守门，确保本地/远端 acceptance 持续运行 handoff bundle 状态矩阵。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc467 — 短剧 handoff bundle contract`。
+- 版本号从 **1.109.0-rc466** 提升为 **1.109.0-rc467**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
 ## 1.109.0-rc466 - 2026-06-29
 
 ### Changed
