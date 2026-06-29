@@ -36,6 +36,59 @@ def label_for(step)
   id.empty? ? "(untitled step)" : id
 end
 
+SENSITIVE_VALUE_PATTERNS = [
+  [
+    "openai_style_secret",
+    /\bsk-[A-Za-z0-9][A-Za-z0-9_-]{10,}\b/
+  ],
+  [
+    "bearer_token",
+    /\bBearer\s+[A-Za-z0-9._~+\-\/]{12,}=*/i
+  ],
+  [
+    "credential_assignment",
+    /\b(?:api[_-]?key|secret|token|authorization|webhook[_-]?secret)\s*[:=]\s*["']?[A-Za-z0-9._~+\-\/]{8,}/i
+  ],
+  [
+    "signed_or_tokenized_url",
+    %r{https?://[^\s"'<>]*(?:[?&](?:api[_-]?key|token|secret|signature|sig|key|auth)=|/(?:callback|webhook)[^\s"'<>]*(?:token|secret|signature|sig|key|auth))[^\s"'<>]*}i
+  ]
+].freeze
+
+def collect_string_values(value, path = "$")
+  case value
+  when Hash
+    value.flat_map do |key, child|
+      collect_string_values(child, "#{path}.#{key}")
+    end
+  when Array
+    value.each_with_index.flat_map do |child, index|
+      collect_string_values(child, "#{path}[#{index}]")
+    end
+  when String
+    [[path, value]]
+  else
+    []
+  end
+end
+
+def sensitive_findings_for_step(file_path, step, index)
+  label = label_for(step)
+  collect_string_values(step, "steps[#{index}]").flat_map do |field, value|
+    SENSITIVE_VALUE_PATTERNS.filter_map do |kind, pattern|
+      next unless value.match?(pattern)
+
+      {
+        "path" => file_path,
+        "step" => label,
+        "field" => field,
+        "kind" => kind,
+        "preview" => "#{kind} detected in #{field}; value redacted"
+      }
+    end
+  end
+end
+
 def summarize_step_file(path, expected_schema)
   data, error = read_json(path)
   unless data
@@ -51,9 +104,11 @@ def summarize_step_file(path, expected_schema)
       "evidence_required_count" => 0,
       "evidence_present_count" => 0,
       "evidence_missing_count" => 0,
+      "sensitive_evidence_count" => 0,
       "pending_items" => [],
       "failed_items" => [],
-      "evidence_missing_items" => []
+      "evidence_missing_items" => [],
+      "sensitive_findings" => []
     }
   end
 
@@ -62,6 +117,9 @@ def summarize_step_file(path, expected_schema)
   evidence_required_steps = steps.select { |step| %w[pass fail].include?(normalize_status(step["status"])) }
   evidence_present_steps = evidence_required_steps.select { |step| !step["evidence"].to_s.strip.empty? }
   evidence_missing_steps = evidence_required_steps - evidence_present_steps
+  sensitive_findings = steps.each_with_index.flat_map do |step, index|
+    sensitive_findings_for_step(path, step, index)
+  end
 
   {
     "path" => path,
@@ -76,11 +134,13 @@ def summarize_step_file(path, expected_schema)
     "evidence_required_count" => evidence_required_steps.length,
     "evidence_present_count" => evidence_present_steps.length,
     "evidence_missing_count" => evidence_missing_steps.length,
+    "sensitive_evidence_count" => sensitive_findings.length,
     "pending_items" => steps.select { |step| %w[pending untested].include?(normalize_status(step["status"])) }
                             .map { |step| label_for(step) },
     "failed_items" => steps.select { |step| normalize_status(step["status"]) == "fail" }
                            .map { |step| label_for(step) },
-    "evidence_missing_items" => evidence_missing_steps.map { |step| label_for(step) }
+    "evidence_missing_items" => evidence_missing_steps.map { |step| label_for(step) },
+    "sensitive_findings" => sensitive_findings
   }
 end
 
@@ -101,9 +161,12 @@ parse_errors = summaries.reject { |summary| summary.fetch("parse_error").empty? 
 failed_items = summaries.flat_map { |summary| summary.fetch("failed_items") }
 missing_evidence_items = summaries.flat_map { |summary| summary.fetch("evidence_missing_items") }
 pending_items = summaries.flat_map { |summary| summary.fetch("pending_items") }
+sensitive_findings = summaries.flat_map { |summary| summary.fetch("sensitive_findings") }
 
 readiness_overall =
   if parse_errors.any? || schema_errors.any?
+    "blocked"
+  elsif sensitive_findings.any?
     "blocked"
   elsif failed_items.any?
     "manual_failed"
@@ -114,7 +177,7 @@ readiness_overall =
     "ready"
   end
 
-def build_next_actions(manual_summary, provider_summary, parse_errors, schema_errors, failed_items, missing_evidence_items)
+def build_next_actions(manual_summary, provider_summary, parse_errors, schema_errors, failed_items, missing_evidence_items, sensitive_findings)
   actions = []
   unless parse_errors.empty?
     actions << {
@@ -132,6 +195,17 @@ def build_next_actions(manual_summary, provider_summary, parse_errors, schema_er
       "title" => "Restore expected smoke result schemas",
       "detail" => "Smoke result files must keep the expected schema values so automated handoff checks can read them.",
       "items" => schema_errors.map { |summary| "#{summary.fetch("path")} expected #{summary.fetch("expected_schema")}" }
+    }
+  end
+  unless sensitive_findings.empty?
+    actions << {
+      "priority" => "high",
+      "kind" => "redact_sensitive_evidence",
+      "title" => "Redact sensitive smoke evidence",
+      "detail" => "Smoke result evidence must not contain API keys, bearer tokens, webhook secrets, signed URLs, or private callback URLs; replace them with redacted task IDs, artifact paths, screenshots, or sanitized request IDs.",
+      "items" => sensitive_findings.map do |finding|
+        "#{finding.fetch("step")} #{finding.fetch("field")} #{finding.fetch("kind")}"
+      end
     }
   end
   unless failed_items.empty?
@@ -188,7 +262,8 @@ next_actions = build_next_actions(
   parse_errors,
   schema_errors,
   failed_items,
-  missing_evidence_items
+  missing_evidence_items,
+  sensitive_findings
 )
 
 readiness = {
@@ -197,16 +272,18 @@ readiness = {
   "schema_error_count" => schema_errors.length,
   "failed_count" => failed_items.length,
   "missing_evidence_count" => missing_evidence_items.length,
+  "sensitive_evidence_count" => sensitive_findings.length,
   "pending_count" => pending_items.length,
   "note" => "This report validates filled smoke result files only; it does not call some.im, Replicate, or any external provider."
 }
 
 report = {
-  "status" => parse_errors.empty? && schema_errors.empty? ? "pass" : "fail",
+  "status" => parse_errors.empty? && schema_errors.empty? && sensitive_findings.empty? ? "pass" : "fail",
   "generated_at" => Time.now.utc.iso8601,
   "package_directory" => PACKAGE_DIR,
   "manual_results_summary" => manual_summary,
   "provider_api_smoke_summary" => provider_summary,
+  "sensitive_findings" => sensitive_findings,
   "readiness" => readiness,
   "next_actions" => next_actions
 }
@@ -253,6 +330,15 @@ File.write(
     *provider_summary.fetch("failed_items").map { |item| "- Failed provider smoke: #{item}" },
     *provider_summary.fetch("evidence_missing_items").map { |item| "- Missing provider evidence: #{item}" },
     "",
+    "## Sensitive Evidence Guard",
+    "",
+    "- Sensitive findings: #{sensitive_findings.length}",
+    "- Guarded patterns: API key assignments, bearer tokens, `sk-` style secrets, webhook secrets, signed URLs, and tokenized callback URLs",
+    "",
+    *sensitive_findings.map do |finding|
+      "- Sensitive evidence: #{finding.fetch("step")} `#{finding.fetch("field")}` #{finding.fetch("kind")} (redacted)"
+    end,
+    "",
     "## Next Actions",
     "",
     *next_actions.flat_map do |action|
@@ -268,6 +354,7 @@ File.write(
     "- Schema errors: #{readiness.fetch("schema_error_count")}",
     "- Failed steps: #{readiness.fetch("failed_count")}",
     "- Missing evidence: #{readiness.fetch("missing_evidence_count")}",
+    "- Sensitive evidence findings: #{readiness.fetch("sensitive_evidence_count")}",
     "- Pending or untested steps: #{readiness.fetch("pending_count")}",
     ""
   ].join("\n")

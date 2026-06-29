@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-28 | Current version: v1.109.0-rc460
+> Last updated: 2026-06-29 | Current version: v1.109.0-rc461
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **短剧 smoke 证据敏感信息守门（1.109.0-rc461）** —— `scripts/short_drama_mvp_smoke_evidence_report.rb` 会扫描手测/provider smoke JSON 中的 API key、Bearer token、webhook secret、`sk-` 风格密钥、带签名或 token 的 URL，并只输出脱敏定位信息；acceptance report 会把 sensitive findings 纳入 `handoff_readiness`，发现疑似密钥或私有回调 URL 时交付状态直接 `blocked`。
 - **长消息预览与编辑器选区稳定化（1.109.0-rc460）** —— Agent 超长流式消息现在在 3000 字符预算内保留开头和结尾，中间插入本地化省略提示；Editor 模式实时选区状态只发布行列与计数，选中文本保留为非发布状态并按 6000 字符预算提供给 Agent 上下文，拖选小说或长文件时不再把 Agent/sidebar 视图树反复拉进刷新。
 - **短剧试用包交付索引（1.109.0-rc458）** —— `scripts/short_drama_mvp_tryout_package.rb` 现在会在样例包内生成 `handoff-index.md/json`，把 start-here 执行顺序、关键文件、dry-run/import/review queue/smoke evidence 命令和剩余风险集中成一个入口；acceptance report 会展示 `Handoff Index` 小节。
 - **短剧 smoke 证据下一步建议（1.109.0-rc457）** —— `scripts/short_drama_mvp_smoke_evidence_report.rb` 现在会输出 `next_actions`，把 `manual_pending` 拆成可执行建议，例如补 evidence、完成本地手测、记录真实 provider smoke 或保留外网风险；acceptance report 会同步展示 `Smoke Evidence Next Actions`。

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.109.0-rc461 - 2026-06-29
+
+### Security
+- **短剧 smoke 证据敏感信息守门（1.109.0-rc461）** —— `scripts/short_drama_mvp_smoke_evidence_report.rb` 现在会扫描手测/provider smoke JSON 中的 API key、Bearer token、webhook secret、`sk-` 风格密钥、带签名或 token 的 URL，并在报告中只输出脱敏定位信息。
+- `scripts/short_drama_mvp_acceptance_report.rb` 会把 sensitive findings 纳入 `handoff_readiness`；一旦 evidence 中出现疑似密钥或私有回调 URL，交付状态直接变为 `blocked`。
+- `scripts/version_consistency.rb` 新增守门，确保 standalone smoke evidence report 与 acceptance report 持续保留敏感信息扫描、脱敏输出和 `Smoke Evidence Sensitive Guard` 小节。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc461 — 短剧 smoke 证据敏感信息守门`。
+- 版本号从 **1.109.0-rc460** 提升为 **1.109.0-rc461**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
 ## 1.109.0-rc460 - 2026-06-28
 
 ### Fixed

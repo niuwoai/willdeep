@@ -172,6 +172,7 @@ smoke_evidence_report_path = tryout_report["smoke_evidence_report_json_path"].to
 smoke_evidence_report = read_json_file(smoke_evidence_report_path)
 smoke_evidence_readiness = smoke_evidence_report.fetch("readiness", {})
 smoke_evidence_next_actions = Array(smoke_evidence_report["next_actions"])
+smoke_evidence_sensitive_findings = Array(smoke_evidence_report["sensitive_findings"])
 handoff_index_json_path = tryout_report["handoff_index_json_path"].to_s
 handoff_index = read_json_file(handoff_index_json_path)
 remaining_risks = extract_section_bullets(cutoff, "当前剩余风险")
@@ -274,6 +275,15 @@ add_check(
 )
 add_check(
   checks,
+  "smoke evidence sensitive guard is summarized",
+  smoke_evidence_report.key?("sensitive_findings") &&
+    smoke_evidence_readiness.key?("sensitive_evidence_count") &&
+    smoke_evidence_sensitive_findings.length == smoke_evidence_readiness["sensitive_evidence_count"].to_i,
+  "acceptance report should expose whether manual/provider smoke evidence contains API keys, bearer tokens, webhook secrets, signed URLs, or private callback URLs.",
+  smoke_evidence_report_path
+)
+add_check(
+  checks,
   "cutoff documents manual smoke evidence path",
   cutoff.include?("manual-smoke-results-template.md/json"),
   "SHORT_DRAMA_AI_MVP_CUTOFF.md should tell handoff users where to record manual smoke evidence.",
@@ -313,9 +323,13 @@ manual_smoke_summary = {
 }
 
 provider_api_smoke_evidence_missing = provider_api_smoke.fetch("evidence_missing_count").positive?
+smoke_evidence_blocked = smoke_evidence_readiness["overall"].to_s == "blocked" ||
+                         smoke_evidence_readiness["sensitive_evidence_count"].to_i.positive?
 ok = checks.all? { |check| check.fetch("ok") }
 manual_status =
-  if manual_smoke_summary.fetch("failed_count").positive? ||
+  if smoke_evidence_blocked
+    "blocked"
+  elsif manual_smoke_summary.fetch("failed_count").positive? ||
      manual_result_summary.fetch("failed_count").positive? ||
      provider_api_smoke.fetch("failed_count").positive?
     "failed"
@@ -331,6 +345,8 @@ manual_status =
   end
 handoff_overall =
   if !ok
+    "blocked"
+  elsif manual_status == "blocked"
     "blocked"
   elsif manual_status == "failed"
     "manual_failed"
@@ -374,6 +390,7 @@ report = {
   "provider_api_smoke_summary" => provider_api_smoke,
   "smoke_evidence_report" => smoke_evidence_report,
   "smoke_evidence_next_actions" => smoke_evidence_next_actions,
+  "smoke_evidence_sensitive_findings" => smoke_evidence_sensitive_findings,
   "handoff_index" => handoff_index,
   "handoff_readiness" => handoff_readiness,
   "remaining_risks" => remaining_risks,
@@ -455,8 +472,17 @@ File.write(
     "- Overall readiness: #{smoke_evidence_readiness["overall"]}",
     "- Failed steps: #{smoke_evidence_readiness["failed_count"]}",
     "- Missing evidence: #{smoke_evidence_readiness["missing_evidence_count"]}",
+    "- Sensitive evidence findings: #{smoke_evidence_readiness["sensitive_evidence_count"]}",
     "- Pending or untested steps: #{smoke_evidence_readiness["pending_count"]}",
     "- Path: `#{smoke_evidence_report_path}`",
+    "",
+    "## Smoke Evidence Sensitive Guard",
+    "",
+    "- Sensitive findings: #{smoke_evidence_sensitive_findings.length}",
+    "",
+    *smoke_evidence_sensitive_findings.map do |finding|
+      "- Sensitive evidence: #{finding["step"]} `#{finding["field"]}` #{finding["kind"]} (redacted)"
+    end,
     "",
     "## Smoke Evidence Next Actions",
     "",

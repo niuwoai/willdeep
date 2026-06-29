@@ -388,6 +388,25 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 - ⏳ 在 Editor 模式打开 `~/Sites/mylinux/novel/` 下任一章节并反复拖选文本 →
   进程内存应保持稳定，不应因选区变化持续暴涨。
 
+## 1.109.0-rc461 — 短剧 smoke 证据敏感信息守门
+
+- ✅ 本版本没有新增短剧制作能力；本轮只收敛 smoke evidence 留证据时的敏感信息守门。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc461 — 短剧 smoke 证据敏感信息守门`。
+- ✅ 运行 `ruby scripts/short_drama_mvp_smoke_evidence_report.rb ...` →
+  Markdown 报告包含 `Sensitive Evidence Guard`，JSON 报告包含
+  `sensitive_findings` 和 `sensitive_evidence_count`。
+- ✅ 在 provider smoke JSON 的 evidence 中放入脱敏测试用 Bearer/token URL 样例 →
+  smoke evidence report 应返回 fail，readiness 为 `blocked`，并且报告只输出
+  字段位置和 pattern kind，不回显原始密钥或 URL。
+- ✅ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+  报告包含 `Smoke Evidence Sensitive Guard`，并把 sensitive findings 纳入
+  `handoff_readiness`。
+- ⏳ 用真实 some.im / Replicate smoke 留证据时，只记录脱敏 task id、截图、
+  本地产物路径或 sanitized request id，不要粘贴 provider token、webhook secret
+  或私有 callback URL。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）
