@@ -556,6 +556,27 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   底部“验收记录”指向
   `1.109.0-rc469 — 短剧 handoff todos`。
 
+## 1.109.0-rc470 — 短剧 handoff todo evidence
+
+- ✅ 本版本没有新增短剧制作能力；本轮只把 handoff todo 继续补成“点开就知道改哪个文件、跑哪条复验命令”的交接清单。
+- ✅ 运行 `ruby scripts/short_drama_mvp_handoff_bundle.rb ...` →
+  `handoff_todos` 每条待办包含 `evidence_paths` 和 `verification_command`，
+  Markdown `Handoff Todos` 小节会显示 Evidence 与 Verify 行。
+- ✅ 默认 trial 包的 manual/provider 待办会指向 `manual-smoke-results-template.json`、
+  `provider-api-smoke-template.json` 和 `short_drama_mvp_smoke_evidence_report.rb`
+  复验命令。
+- ✅ ready release 场景的 release todo 会带证据路径，并用
+  `short_drama_mvp_handoff_bundle_contract_test.rb` 作为复验命令。
+- ✅ 运行 `ruby scripts/short_drama_mvp_handoff_bundle_contract_test.rb ...` →
+  报告包含 `handoff todos point at evidence files`，并继续覆盖
+  `release todo is present`。
+- ✅ 运行 `ruby scripts/version_consistency.rb ...` →
+  delivery checks 会守住 `todo_evidence_paths`、`verification_command`、
+  `evidence_paths` 和 contract 中的 todo evidence 检查。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc470 — 短剧 handoff todo evidence`。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）

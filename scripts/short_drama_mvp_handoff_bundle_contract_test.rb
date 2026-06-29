@@ -110,6 +110,12 @@ def todo_phases(report)
   handoff_todos(report).map { |todo| todo["phase"].to_s }
 end
 
+def todo_evidence_labels(report)
+  handoff_todos(report).flat_map do |todo|
+    Array(todo["evidence_paths"]).map { |item| item["label"].to_s }
+  end
+end
+
 def scenario(name, description, base_acceptance_path)
   scenario_dir = File.join(WORK_DIR, name)
   FileUtils.rm_rf(scenario_dir)
@@ -179,12 +185,24 @@ def build_default_trial(base_acceptance_path)
                 todo["order"].is_a?(Integer) &&
                   !todo["kind"].to_s.empty? &&
                   !todo["title"].to_s.empty? &&
-                  !todo["command"].to_s.empty?
+                  !todo["command"].to_s.empty? &&
+                  !todo["verification_command"].to_s.empty? &&
+                  Array(todo["evidence_paths"]).any?
               end &&
               todo_phases(report).include?("manual_smoke") &&
               todo_phases(report).include?("provider_smoke") &&
               todo_phases(report).include?("verify"),
       "detail" => "Default trial bundle should give operators ordered manual smoke, provider smoke, and regeneration todos."
+    }
+    result.fetch("checks") << {
+      "name" => "handoff todos point at evidence files",
+      "ok" => todo_evidence_labels(report).include?("Manual smoke results JSON") &&
+              todo_evidence_labels(report).include?("Provider API smoke JSON") &&
+              todo_evidence_labels(report).include?("Smoke evidence report JSON") &&
+              handoff_todos(report).any? do |todo|
+                todo["verification_command"].to_s.include?("short_drama_mvp_smoke_evidence_report.rb")
+              end,
+      "detail" => "Default trial todos should point at the manual/provider evidence JSON files and smoke evidence verification command."
     }
   end
 end
@@ -228,7 +246,11 @@ def build_ready_release(base_acceptance_path)
     result.fetch("checks") << {
       "name" => "release todo is present",
       "ok" => todo_phases(report).include?("release") &&
-              handoff_todos(report).any? { |todo| todo["kind"].to_s == "release_candidate_handoff" },
+              handoff_todos(report).any? do |todo|
+                todo["kind"].to_s == "release_candidate_handoff" &&
+                  todo["verification_command"].to_s.include?("short_drama_mvp_handoff_bundle_contract_test.rb") &&
+                  Array(todo["evidence_paths"]).any?
+              end,
       "detail" => "Ready bundle should expose a release-phase handoff todo."
     }
   end

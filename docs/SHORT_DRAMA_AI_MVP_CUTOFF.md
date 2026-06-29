@@ -1,6 +1,6 @@
 # Short Drama AI MVP Cutoff
 
-> Last updated: 2026-06-29 | Baseline version: v1.109.0-rc469
+> Last updated: 2026-06-29 | Baseline version: v1.109.0-rc470
 
 ## 收敛结论
 
@@ -15,7 +15,7 @@
 - Widget 支持 `sendToolAction` 结构化回传，Skill/Ruby 生成的本地 HTML 可以嵌入右侧网页组件。
 - 短剧项目支持集、分镜、人物、场景、参考图、候选图、制作缺口、检查项和制作包导出。
 - 制作包支持 Ruby/第三方 API 脚本导出、manifest 导回、pending 远端任务登记、Widget 预览和审片 CSV 回写。
-- 关键链路已建立 Ruby 合约测试，并接入本地 `scripts/run_tests.sh` 和 GitHub Actions；`short_drama_mvp_smoke_evidence_report` 可独立核验包内手测/provider smoke JSON 的失败、缺证据、待测项、下一步建议和疑似敏感证据，并只输出脱敏定位信息；`short_drama_mvp_smoke_evidence_contract_test` 会覆盖默认未测、ready、缺 evidence、manual_failed 和 sensitive blocked 五种 readiness 分支；`short_drama_mvp_acceptance_report` 会汇总版本、试用包、handoff index、手测模板、包内手测结果文件、手测证据完整性、provider API smoke 模板与证据完整性、standalone smoke 证据自检报告、smoke evidence readiness matrix、smoke evidence sensitive guard、smoke evidence next actions、handoff pending reasons、当前手动 smoke 状态、交付就绪状态、剩余风险和交付文档证据；`short_drama_mvp_handoff_bundle` 会把验收摘要收敛成交接模式、ready 标记、交付证据文件、阻塞项、下一步动作、handoff todos、文件大小、SHA-256 和目录文件数；`short_drama_mvp_handoff_bundle_contract_test` 会覆盖默认 trial、ready release、manual_failed、machine_failed、missing evidence、handoff file fingerprints 和 handoff todos；`version_consistency` 会守住交付就绪/剩余风险/手测证据/provider smoke/standalone 自检摘要、敏感信息守门、handoff pending reasons、handoff index、handoff bundle、handoff bundle contract、handoff todos 和 next actions 不被删漏，并要求 cutoff 保留显式剩余风险条目。
+- 关键链路已建立 Ruby 合约测试，并接入本地 `scripts/run_tests.sh` 和 GitHub Actions；`short_drama_mvp_smoke_evidence_report` 可独立核验包内手测/provider smoke JSON 的失败、缺证据、待测项、下一步建议和疑似敏感证据，并只输出脱敏定位信息；`short_drama_mvp_smoke_evidence_contract_test` 会覆盖默认未测、ready、缺 evidence、manual_failed 和 sensitive blocked 五种 readiness 分支；`short_drama_mvp_acceptance_report` 会汇总版本、试用包、handoff index、手测模板、包内手测结果文件、手测证据完整性、provider API smoke 模板与证据完整性、standalone smoke 证据自检报告、smoke evidence readiness matrix、smoke evidence sensitive guard、smoke evidence next actions、handoff pending reasons、当前手动 smoke 状态、交付就绪状态、剩余风险和交付文档证据；`short_drama_mvp_handoff_bundle` 会把验收摘要收敛成交接模式、ready 标记、交付证据文件、阻塞项、下一步动作、handoff todos、todo evidence paths、verification command、文件大小、SHA-256 和目录文件数；`short_drama_mvp_handoff_bundle_contract_test` 会覆盖默认 trial、ready release、manual_failed、machine_failed、missing evidence、handoff file fingerprints、handoff todos 和 todo evidence paths；`version_consistency` 会守住交付就绪/剩余风险/手测证据/provider smoke/standalone 自检摘要、敏感信息守门、handoff pending reasons、handoff index、handoff bundle、handoff bundle contract、handoff todos、todo evidence paths 和 next actions 不被删漏，并要求 cutoff 保留显式剩余风险条目。
 - 本地可试用包生成器 `scripts/short_drama_mvp_tryout_package.rb` 可生成不调用外网 API 的制作包样例，用于 dry-run/import/Widget/review queue 手动 smoke；样例 Widget 使用 `sendToolAction` 回传结构化工具动作，包内包含 `handoff-index.md/json`、`acceptance-runbook.md/json`、`manual-smoke-checklist.md`、`manual-smoke-results-template.md/json`、`provider-api-smoke-template.md/json` 和 `smoke-evidence-redaction-guide.md`，方便人工验收、验收命令交接、真实 provider smoke 留脱敏证据和 blocked handoff 修复。
 
 ## MVP 暂缓范围
@@ -28,7 +28,7 @@
 
 ## 可用版验收清单
 
-当前记录：2026-06-29，基线 `v1.109.0-rc469`。以下命令作为可用版验收 gate；本次短剧 handoff todos 会单独验证 smoke evidence 合约、acceptance 摘要、交付证据索引、handoff 模式矩阵、交付文件指纹、交接待办清单、Debug 构建和版本一致性。
+当前记录：2026-06-29，基线 `v1.109.0-rc470`。以下命令作为可用版验收 gate；本次短剧 handoff todo evidence 会单独验证 smoke evidence 合约、acceptance 摘要、交付证据索引、handoff 模式矩阵、交付文件指纹、交接待办清单、待办证据路径、复验命令、Debug 构建和版本一致性。
 
 - `scripts/run_tests.sh`
 - `ruby scripts/version_consistency.rb build/version_report.md build/version_report.json`
