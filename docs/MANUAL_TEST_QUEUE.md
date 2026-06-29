@@ -535,6 +535,27 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   底部“验收记录”指向
   `1.109.0-rc468 — 短剧 handoff file fingerprints`。
 
+## 1.109.0-rc469 — 短剧 handoff todos
+
+- ✅ 本版本没有新增短剧制作能力；本轮只把最终 handoff bundle 的下一步动作收敛成机器可读、可展示的 `handoff_todos`。
+- ✅ 运行 `ruby scripts/short_drama_mvp_handoff_bundle.rb ...` →
+  JSON 中包含 `handoff_todos`，每条待办都有 `order`、`phase`、`kind`、
+  `title`、`detail`、`command` 和 `items`。
+- ✅ 默认未补完人工/provider smoke 的 trial 包会包含 `manual_smoke`、
+  `provider_smoke` 和 `verify` 阶段，交接人可以按顺序补证据并重新生成
+  acceptance / handoff bundle。
+- ✅ ready release 场景会包含 `release` 阶段的 `release_candidate_handoff`
+  待办，不再只靠 `ready_for_release=true` 让人猜下一步。
+- ✅ 运行 `ruby scripts/short_drama_mvp_handoff_bundle_contract_test.rb ...` →
+  `default_trial` 场景包含 `handoff todos include manual provider and verify phases`，
+  `ready_release` 场景包含 `release todo is present`。
+- ✅ 运行 `ruby scripts/version_consistency.rb ...` →
+  delivery checks 会守住 `handoff_todos`、`build_handoff_todos`、
+  `## Handoff Todos`、`regenerate_acceptance_and_handoff` 和 contract 中的 todo 检查。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc469 — 短剧 handoff todos`。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）

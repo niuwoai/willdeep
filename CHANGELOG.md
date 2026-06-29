@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.109.0-rc469 - 2026-06-29
+
+### Changed
+- **短剧 handoff todos（1.109.0-rc469）** —— `scripts/short_drama_mvp_handoff_bundle.rb` 现在会把 readiness、pending reasons 和 smoke evidence next actions 收敛成 `handoff_todos`，每条待办包含 `order`、`phase`、`kind`、`title`、`detail`、`command` 和 `items`。
+- 默认 trial handoff 会产出 `manual_smoke`、`provider_smoke` 和 `verify` 阶段，ready release 会产出 `release_candidate_handoff` 待办，交接人不用在多个报告小节中手动拼行动顺序。
+- `scripts/short_drama_mvp_handoff_bundle_contract_test.rb` 新增 handoff todo 合约检查，守住 default trial 的 manual/provider/verify 阶段和 ready release 的 release 待办。
+- `scripts/version_consistency.rb` 新增守门，确保 handoff bundle 持续保留 `handoff_todos`、`build_handoff_todos`、`## Handoff Todos`、`regenerate_acceptance_and_handoff` 和 contract 中的 todo 检查。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc469 — 短剧 handoff todos`。
+- 版本号从 **1.109.0-rc468** 提升为 **1.109.0-rc469**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
 ## 1.109.0-rc468 - 2026-06-29
 
 ### Changed

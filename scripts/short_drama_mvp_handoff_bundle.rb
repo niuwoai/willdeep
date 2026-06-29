@@ -59,6 +59,86 @@ def handoff_file_metadata(label, path)
   end
 end
 
+def todo_phase(kind)
+  case kind.to_s
+  when /machine|rerun_acceptance/
+    "machine_gate"
+  when /provider/
+    "provider_smoke"
+  when /manual|package_manual/
+    "manual_smoke"
+  when /sensitive|redact|evidence/
+    "evidence"
+  when /release/
+    "release"
+  else
+    "handoff"
+  end
+end
+
+def todo_command(kind)
+  case kind.to_s
+  when /provider/
+    "Fill provider-api-smoke-template.json with redacted evidence, then run short_drama_mvp_smoke_evidence_report.rb."
+  when /manual|package_manual/
+    "Fill manual-smoke-results-template.json with pass/fail evidence, then run short_drama_mvp_smoke_evidence_report.rb."
+  when /sensitive|redact|evidence/
+    "Redact blocked evidence values, then rerun short_drama_mvp_smoke_evidence_report.rb."
+  when /release/
+    "Review short_drama_mvp_handoff_bundle.md and release from the tagged commit only after CI is green."
+  else
+    "Run scripts/run_tests.sh, then regenerate short_drama_mvp_acceptance_report.rb and short_drama_mvp_handoff_bundle.rb."
+  end
+end
+
+def build_handoff_todos(machine_passed:, ready_for_release:, next_actions:, handoff_files:)
+  todos = []
+  if ready_for_release
+    todos << {
+      "phase" => "release",
+      "kind" => "release_candidate_handoff",
+      "title" => "Hand off release candidate",
+      "detail" => "Machine gates passed and smoke evidence is complete; verify CI and tagged commit before release.",
+      "command" => todo_command("release"),
+      "items" => handoff_files.map { |item| item["relative_path"].to_s }.reject(&:empty?)
+    }
+  elsif machine_passed
+    next_actions.each do |action|
+      kind = action["kind"].to_s
+      todos << {
+        "phase" => todo_phase(kind),
+        "kind" => kind,
+        "title" => action["title"].to_s,
+        "detail" => action["detail"].to_s,
+        "command" => todo_command(kind),
+        "items" => array_values(action["items"])
+      }
+    end
+  else
+    todos << {
+      "phase" => "machine_gate",
+      "kind" => "fix_machine_acceptance",
+      "title" => "Fix machine acceptance before handoff",
+      "detail" => "The acceptance report did not pass; fix failing checks before using this as a trial package.",
+      "command" => todo_command("machine"),
+      "items" => [ACCEPTANCE_JSON]
+    }
+  end
+
+  unless ready_for_release
+    todos << {
+      "phase" => "verify",
+      "kind" => "regenerate_acceptance_and_handoff",
+      "title" => "Regenerate acceptance and handoff bundle",
+      "detail" => "After evidence changes, regenerate the acceptance report and handoff bundle so the JSON/Markdown artifacts match the current package.",
+      "command" => "ruby scripts/short_drama_mvp_acceptance_report.rb build/ci/short_drama_mvp_acceptance_report.md build/ci/short_drama_mvp_acceptance_report.json && ruby scripts/short_drama_mvp_handoff_bundle.rb build/ci/short_drama_mvp_acceptance_report.json build/ci/short_drama_mvp_handoff_bundle.md build/ci/short_drama_mvp_handoff_bundle.json",
+      "items" => ["build/ci/short_drama_mvp_acceptance_report.json", "build/ci/short_drama_mvp_handoff_bundle.json"]
+    }
+  end
+
+  todos.each_with_index.map { |todo, index| todo.merge("order" => index + 1) }
+end
+
 acceptance = read_json(ACCEPTANCE_JSON)
 handoff_readiness = hash_value(acceptance["handoff_readiness"])
 pending_reasons = array_values(acceptance["handoff_pending_reasons"])
@@ -179,6 +259,13 @@ next_actions.concat(
   end
 )
 
+handoff_todos = build_handoff_todos(
+  machine_passed: machine_passed,
+  ready_for_release: ready_for_release,
+  next_actions: next_actions,
+  handoff_files: handoff_files
+)
+
 checks_for_bundle = [
   {
     "name" => "acceptance report is readable",
@@ -218,6 +305,19 @@ checks_for_bundle = [
     "detail" => "Handoff files should include file sizes, SHA-256 hashes, or directory file counts for artifact traceability."
   },
   {
+    "name" => "handoff todos are generated",
+    "ok" => handoff_todos.any? &&
+            handoff_todos.all? do |todo|
+              todo["order"].is_a?(Integer) &&
+                !todo["phase"].to_s.empty? &&
+                !todo["kind"].to_s.empty? &&
+                !todo["title"].to_s.empty? &&
+                !todo["command"].to_s.empty?
+            end &&
+            (ready_for_release || handoff_todos.any? { |todo| todo["phase"] == "verify" }),
+    "detail" => "Handoff bundle should convert readiness and smoke evidence next actions into ordered operator todos."
+  },
+  {
     "name" => "runbook and handoff index are included",
     "ok" => array_values(handoff_index["start_here"]).any? &&
             array_values(acceptance_runbook["commands"]).any?,
@@ -243,6 +343,7 @@ report = {
   "checks" => checks_for_bundle,
   "blocking_items" => blocking_items,
   "next_actions" => next_actions,
+  "handoff_todos" => handoff_todos,
   "handoff_files" => handoff_files,
   "remaining_risks" => remaining_risks
 }
@@ -276,6 +377,16 @@ File.write(
         *array_values(item["items"]).map { |entry| "  - #{entry}" }
       ]
     end),
+    "",
+    "## Handoff Todos",
+    "",
+    *handoff_todos.flat_map do |todo|
+      [
+        "- #{todo.fetch("order")}. [#{todo.fetch("phase")}] #{todo.fetch("title")} (#{todo.fetch("kind")}) — #{todo.fetch("detail")}",
+        "  - Command: `#{todo.fetch("command")}`",
+        *array_values(todo["items"]).map { |item| "  - #{item}" }
+      ]
+    end,
     "",
     "## Next Actions",
     "",

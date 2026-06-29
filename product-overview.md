@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-29 | Current version: v1.109.0-rc468
+> Last updated: 2026-06-29 | Current version: v1.109.0-rc469
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **短剧 handoff todos（1.109.0-rc469）** —— `scripts/short_drama_mvp_handoff_bundle.rb` 现在输出 `handoff_todos`，把 manual smoke、provider smoke、证据修复、verify 和 ready release 的下一步动作收敛成带 `phase/kind/command/items` 的有序待办；contract 与 version consistency 会守住默认 trial 和 ready release 的待办阶段。
 - **短剧 handoff file fingerprints（1.109.0-rc468）** —— `scripts/short_drama_mvp_handoff_bundle.rb` 的 `handoff_files` 现在会为普通文件输出 `size_bytes` 和 SHA-256，为目录输出 `file_count`；handoff bundle contract 和 version consistency 会守住这些指纹，方便交接时确认 artifact 没被覆盖或拿错。
 - **短剧 handoff bundle contract（1.109.0-rc467）** —— 新增 `scripts/short_drama_mvp_handoff_bundle_contract_test.rb`，覆盖默认 trial、ready release、manual_failed、machine_failed 和 missing evidence 五种交接包状态，守住 `handoff_mode`、`ready_for_release`、blocking items 和命令退出码；本地一键测试与 GitHub Actions 都会运行该矩阵。
 - **短剧 handoff bundle（1.109.0-rc466）** —— 新增 `scripts/short_drama_mvp_handoff_bundle.rb`，读取 acceptance report 后生成最终交接包 Markdown/JSON，集中显示 `handoff_mode`、`ready_for_release`、blocking items、next actions、handoff files 和 remaining risks；本地一键测试与 GitHub Actions 都会生成并上传该交接索引。

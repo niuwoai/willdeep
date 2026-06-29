@@ -102,6 +102,14 @@ def handoff_files(report)
   Array(report["handoff_files"])
 end
 
+def handoff_todos(report)
+  Array(report["handoff_todos"])
+end
+
+def todo_phases(report)
+  handoff_todos(report).map { |todo| todo["phase"].to_s }
+end
+
 def scenario(name, description, base_acceptance_path)
   scenario_dir = File.join(WORK_DIR, name)
   FileUtils.rm_rf(scenario_dir)
@@ -164,6 +172,20 @@ def build_default_trial(base_acceptance_path)
               directory_entries.all? { |item| item["file_count"].is_a?(Integer) && item["file_count"].positive? },
       "detail" => "Bundle should include SHA-256 fingerprints for files and file counts for package directories."
     }
+    result.fetch("checks") << {
+      "name" => "handoff todos include manual provider and verify phases",
+      "ok" => handoff_todos(report).any? &&
+              handoff_todos(report).all? do |todo|
+                todo["order"].is_a?(Integer) &&
+                  !todo["kind"].to_s.empty? &&
+                  !todo["title"].to_s.empty? &&
+                  !todo["command"].to_s.empty?
+              end &&
+              todo_phases(report).include?("manual_smoke") &&
+              todo_phases(report).include?("provider_smoke") &&
+              todo_phases(report).include?("verify"),
+      "detail" => "Default trial bundle should give operators ordered manual smoke, provider smoke, and regeneration todos."
+    }
   end
 end
 
@@ -201,6 +223,13 @@ def build_ready_release(base_acceptance_path)
       "name" => "release action is present",
       "ok" => result.fetch("action_kinds").include?("release_candidate_ready"),
       "detail" => "Ready bundle should tell handoff users it can be released."
+    }
+    report = read_json(result.fetch("report_json_path"))
+    result.fetch("checks") << {
+      "name" => "release todo is present",
+      "ok" => todo_phases(report).include?("release") &&
+              handoff_todos(report).any? { |todo| todo["kind"].to_s == "release_candidate_handoff" },
+      "detail" => "Ready bundle should expose a release-phase handoff todo."
     }
   end
 end

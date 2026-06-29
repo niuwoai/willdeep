@@ -309,6 +309,10 @@ add_delivery_check.call(
     short_drama_handoff_bundle.include?("size_bytes") &&
     short_drama_handoff_bundle.include?("sha256") &&
     short_drama_handoff_bundle.include?("file_count") &&
+    short_drama_handoff_bundle.include?("handoff_todos") &&
+    short_drama_handoff_bundle.include?("build_handoff_todos") &&
+    short_drama_handoff_bundle.include?("## Handoff Todos") &&
+    short_drama_handoff_bundle.include?("regenerate_acceptance_and_handoff") &&
     short_drama_handoff_bundle.include?("remaining_risks") &&
     short_drama_tryout_package.include?("handoff_bundle_command") &&
     short_drama_cutoff.include?("short_drama_mvp_handoff_bundle.rb") &&
@@ -330,7 +334,9 @@ add_delivery_check.call(
     short_drama_handoff_bundle_contract.include?("ready_release_candidate") &&
     short_drama_handoff_bundle_contract.include?("blocked_machine_handoff") &&
     short_drama_handoff_bundle_contract.include?("handoff files include fingerprints") &&
-    short_drama_handoff_bundle_contract.include?("SHA-256"),
+    short_drama_handoff_bundle_contract.include?("SHA-256") &&
+    short_drama_handoff_bundle_contract.include?("handoff todos include manual provider and verify phases") &&
+    short_drama_handoff_bundle_contract.include?("release todo is present"),
   "Local and GitHub acceptance should guard handoff bundle mode transitions for trial, ready, failed, machine-blocked, and missing-evidence states."
 )
 add_delivery_check.call(
