@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-29 | Current version: v1.109.0-rc463
+> Last updated: 2026-06-29 | Current version: v1.109.0-rc464
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **短剧 acceptance runbook（1.109.0-rc464）** —— `scripts/short_drama_mvp_tryout_package.rb` 现在会在试用包内生成 `acceptance-runbook.md/json`，集中列出重新生成试用包、smoke evidence、MVP acceptance report 和完整本地 gate 的命令；acceptance report 会把 runbook 纳入证据和 `Acceptance Runbook` 小节。
 - **短剧 handoff pending reasons（1.109.0-rc463）** —— `scripts/short_drama_mvp_acceptance_report.rb` 现在输出 `handoff_pending_reasons` 和 `Handoff Pending Reasons`，把 `manual_pending` 拆成具体原因，例如包内 manual smoke 仍未测、provider smoke 仍未测、证据缺失或 sensitive guard 阻断；接手人不用在多个小节之间自己推理。
 - **短剧 smoke 证据脱敏指南（1.109.0-rc462）** —— 试用包现在会生成 `smoke-evidence-redaction-guide.md`，并从 Widget、manual checklist、provider smoke 模板、handoff index、tryout package report 和 acceptance report 暴露路径；交接人可以直接看到允许记录的 evidence、禁止粘贴的凭据类型和 sensitive guard 阻断后的修复步骤。
 - **短剧 smoke 证据敏感信息守门（1.109.0-rc461）** —— `scripts/short_drama_mvp_smoke_evidence_report.rb` 会扫描手测/provider smoke JSON 中的 API key、Bearer token、webhook secret、`sk-` 风格密钥、带签名或 token 的 URL，并只输出脱敏定位信息；acceptance report 会把 sensitive findings 纳入 `handoff_readiness`，发现疑似密钥或私有回调 URL 时交付状态直接 `blocked`。

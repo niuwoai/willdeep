@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.109.0-rc464 - 2026-06-29
+
+### Changed
+- **短剧 acceptance runbook（1.109.0-rc464）** —— `scripts/short_drama_mvp_tryout_package.rb` 现在会在试用包内生成 `acceptance-runbook.md/json`，列出重新生成试用包、smoke evidence report、MVP acceptance report 和完整本地 gate 的命令。
+- `handoff-index.md/json` 增加 acceptance report 与 `scripts/run_tests.sh` 入口；接手人不用从多份文档里手动拼验收顺序。
+- `scripts/short_drama_mvp_acceptance_report.rb` 新增 `Acceptance Runbook` 小节和 JSON `acceptance_runbook` 证据，验收报告会检查 runbook schema、关键命令和 `manual_pending` 判定口径。
+- `scripts/version_consistency.rb` 新增守门，确保试用包持续保留 acceptance runbook，且 acceptance report 持续展示该交付入口。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc464 — 短剧 acceptance runbook`。
+- 版本号从 **1.109.0-rc463** 提升为 **1.109.0-rc464**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
 ## 1.109.0-rc463 - 2026-06-29
 
 ### Changed

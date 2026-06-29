@@ -288,9 +288,12 @@ provider_api_smoke_json_path = File.join(PACKAGE_DIR, "provider-api-smoke-templa
 smoke_evidence_redaction_guide_path = File.join(PACKAGE_DIR, "smoke-evidence-redaction-guide.md")
 handoff_index_md_path = File.join(PACKAGE_DIR, "handoff-index.md")
 handoff_index_json_path = File.join(PACKAGE_DIR, "handoff-index.json")
+acceptance_runbook_md_path = File.join(PACKAGE_DIR, "acceptance-runbook.md")
+acceptance_runbook_json_path = File.join(PACKAGE_DIR, "acceptance-runbook.json")
 smoke_evidence_report_md_path = File.join(File.dirname(REPORT_MD), "short_drama_mvp_smoke_evidence_report.md")
 smoke_evidence_report_json_path = File.join(File.dirname(REPORT_JSON), "short_drama_mvp_smoke_evidence_report.json")
 smoke_evidence_command = "ruby scripts/short_drama_mvp_smoke_evidence_report.rb #{PACKAGE_DIR} #{smoke_evidence_report_md_path} #{smoke_evidence_report_json_path}"
+acceptance_report_command = "ruby scripts/short_drama_mvp_acceptance_report.rb build/ci/short_drama_mvp_acceptance_report.md build/ci/short_drama_mvp_acceptance_report.json"
 
 widget_html = [
   "<!doctype html>",
@@ -616,9 +619,16 @@ handoff_index = {
       "title" => "Generate evidence report",
       "command" => smoke_evidence_command,
       "detail" => "Summarize readiness and next_actions without calling external providers."
+    },
+    {
+      "order" => 6,
+      "title" => "Run acceptance runbook",
+      "path" => "acceptance-runbook.md",
+      "detail" => "Use the packaged runbook to regenerate local acceptance reports and interpret ready/manual_pending/blocked handoff states."
     }
   ],
   "files" => [
+    { "label" => "Acceptance runbook", "path" => "acceptance-runbook.md" },
     { "label" => "Manual smoke checklist", "path" => "manual-smoke-checklist.md" },
     { "label" => "Manual smoke results JSON", "path" => "manual-smoke-results-template.json" },
     { "label" => "Provider API smoke JSON", "path" => "provider-api-smoke-template.json" },
@@ -632,7 +642,9 @@ handoff_index = {
     "dry_run_import" => "import_media_manifest(#{dry_run_import_arguments})",
     "submit_import" => "import_media_manifest(#{submit_import_arguments})",
     "review_queue_dry_run" => "short_drama_import_review_csv(#{review_queue_import_arguments})",
-    "smoke_evidence_report" => smoke_evidence_command
+    "smoke_evidence_report" => smoke_evidence_command,
+    "acceptance_report" => acceptance_report_command,
+    "full_local_gate" => "scripts/run_tests.sh"
   },
   "remaining_risks" => [
     "This package does not call real some.im or Replicate APIs.",
@@ -640,6 +652,96 @@ handoff_index = {
     "Do not paste provider tokens, webhook secrets, or private callback URLs into package files."
   ]
 }
+
+acceptance_runbook = {
+  "schema" => "willdeep.short_drama.acceptance_runbook.v1",
+  "generated_at" => exported_at,
+  "package_directory" => PACKAGE_DIR,
+  "commands" => [
+    {
+      "order" => 1,
+      "title" => "Regenerate package",
+      "command" => "ruby scripts/short_drama_mvp_tryout_package.rb #{PACKAGE_DIR} #{REPORT_MD} #{REPORT_JSON}",
+      "expected" => "short_drama_mvp_tryout_package: pass"
+    },
+    {
+      "order" => 2,
+      "title" => "Summarize smoke evidence",
+      "command" => smoke_evidence_command,
+      "expected" => "readiness is manual_pending until manual/provider smoke rows are filled with evidence."
+    },
+    {
+      "order" => 3,
+      "title" => "Generate MVP acceptance report",
+      "command" => acceptance_report_command,
+      "expected" => "short_drama_mvp_acceptance_report: pass and handoff_readiness.overall remains manual_pending for an unfilled package."
+    },
+    {
+      "order" => 4,
+      "title" => "Run full local gate",
+      "command" => "scripts/run_tests.sh",
+      "expected" => "Full local gate passes before a release candidate is tagged."
+    }
+  ],
+  "readiness_statuses" => [
+    {
+      "status" => "ready",
+      "meaning" => "Machine gates passed, manual/provider smoke rows passed, required evidence is present, and no sensitive evidence was detected."
+    },
+    {
+      "status" => "manual_pending",
+      "meaning" => "Machine gates passed, but package manual smoke, optional provider smoke, or required evidence is still pending."
+    },
+    {
+      "status" => "manual_failed",
+      "meaning" => "At least one manual or provider smoke row is marked failed and must be resolved before handoff."
+    },
+    {
+      "status" => "blocked",
+      "meaning" => "Machine checks, malformed JSON/schema, or sensitive evidence findings block handoff."
+    }
+  ],
+  "required_reports" => [
+    "build/ci/version_report.json",
+    "build/ci/short_drama_mvp_tryout_package_report.json",
+    "build/ci/short_drama_mvp_smoke_evidence_report.json",
+    "build/ci/short_drama_mvp_acceptance_report.json"
+  ],
+  "handoff_decision" => "Do not call the MVP ready when acceptance report overall is manual_pending, manual_failed, or blocked; hand off only as a trial package with explicit pending reasons."
+}
+
+acceptance_runbook_md = [
+  "# Short Drama MVP Acceptance Runbook",
+  "",
+  "- Package directory: `#{PACKAGE_DIR}`",
+  "- Generated at: `#{exported_at}`",
+  "- Scope: local acceptance commands and handoff readiness interpretation; no real provider API calls.",
+  "",
+  "## Commands",
+  "",
+  *acceptance_runbook.fetch("commands").flat_map do |item|
+    [
+      "#{item.fetch("order")}. #{item.fetch("title")}",
+      "   - Command: `#{item.fetch("command")}`",
+      "   - Expected: #{item.fetch("expected")}"
+    ]
+  end,
+  "",
+  "## Readiness Statuses",
+  "",
+  *acceptance_runbook.fetch("readiness_statuses").map do |item|
+    "- `#{item.fetch("status")}`: #{item.fetch("meaning")}"
+  end,
+  "",
+  "## Required Reports",
+  "",
+  *acceptance_runbook.fetch("required_reports").map { |path| "- `#{path}`" },
+  "",
+  "## Handoff Decision",
+  "",
+  acceptance_runbook.fetch("handoff_decision"),
+  ""
+].join("\n")
 
 handoff_index_md = [
   "# Short Drama MVP Tryout Handoff Index",
@@ -666,6 +768,8 @@ handoff_index_md = [
   "- Submit import: `#{handoff_index.fetch("commands").fetch("submit_import")}`",
   "- Review queue dry-run: `#{handoff_index.fetch("commands").fetch("review_queue_dry_run")}`",
   "- Smoke evidence report: `#{handoff_index.fetch("commands").fetch("smoke_evidence_report")}`",
+  "- Acceptance report: `#{handoff_index.fetch("commands").fetch("acceptance_report")}`",
+  "- Full local gate: `#{handoff_index.fetch("commands").fetch("full_local_gate")}`",
   "",
   "## Remaining Risks",
   "",
@@ -700,6 +804,8 @@ write_json(File.join(PACKAGE_DIR, "provider-api-smoke-template.json"), provider_
 write_text(File.join(PACKAGE_DIR, "smoke-evidence-redaction-guide.md"), smoke_evidence_redaction_guide)
 write_text(File.join(PACKAGE_DIR, "handoff-index.md"), handoff_index_md)
 write_json(File.join(PACKAGE_DIR, "handoff-index.json"), handoff_index)
+write_text(File.join(PACKAGE_DIR, "acceptance-runbook.md"), acceptance_runbook_md)
+write_json(File.join(PACKAGE_DIR, "acceptance-runbook.json"), acceptance_runbook)
 write_text(
   File.join(PACKAGE_DIR, "media-api.env.example"),
   "# Local tryout package: do not put real tokens in this file.\nWILLDEEP_MEDIA_PROVIDER=skill\n"
@@ -724,6 +830,8 @@ checks = []
   smoke-evidence-redaction-guide.md
   handoff-index.md
   handoff-index.json
+  acceptance-runbook.md
+  acceptance-runbook.json
   media-api.env.example
 ].each do |name|
   require_file(File.join(PACKAGE_DIR, name), checks)
@@ -819,11 +927,22 @@ handoff_index_data = JSON.parse(File.read(handoff_index_json_path))
 checks << {
   name: "handoff index covers package entrypoints",
   ok: handoff_index_data.fetch("schema") == "willdeep.short_drama.tryout_handoff_index.v1" &&
-      handoff_index_data.fetch("start_here").length >= 5 &&
+      handoff_index_data.fetch("start_here").length >= 6 &&
       handoff_index_data.fetch("commands").fetch("dry_run_import").include?("import_media_manifest") &&
       handoff_index_data.fetch("commands").fetch("smoke_evidence_report").include?("short_drama_mvp_smoke_evidence_report.rb") &&
+      handoff_index_data.fetch("commands").fetch("acceptance_report").include?("short_drama_mvp_acceptance_report.rb") &&
       handoff_index_source.include?("Start Here") &&
       handoff_index_source.include?("Remaining Risks")
+}
+acceptance_runbook_source = File.read(acceptance_runbook_md_path)
+acceptance_runbook_data = JSON.parse(File.read(acceptance_runbook_json_path))
+checks << {
+  name: "acceptance runbook covers local gates",
+  ok: acceptance_runbook_data.fetch("schema") == "willdeep.short_drama.acceptance_runbook.v1" &&
+      acceptance_runbook_data.fetch("commands").any? { |item| item.fetch("command").include?("short_drama_mvp_acceptance_report.rb") } &&
+      acceptance_runbook_data.fetch("commands").any? { |item| item.fetch("command").include?("scripts/run_tests.sh") } &&
+      acceptance_runbook_source.include?("manual_pending") &&
+      acceptance_runbook_source.include?("Handoff Decision")
 }
 
 ok = checks.all? { |check| check.fetch(:ok) }
@@ -840,6 +959,8 @@ report = {
   smoke_evidence_redaction_guide_path: smoke_evidence_redaction_guide_path,
   handoff_index_md_path: handoff_index_md_path,
   handoff_index_json_path: handoff_index_json_path,
+  acceptance_runbook_md_path: acceptance_runbook_md_path,
+  acceptance_runbook_json_path: acceptance_runbook_json_path,
   smoke_evidence_report_md_path: smoke_evidence_report_md_path,
   smoke_evidence_report_json_path: smoke_evidence_report_json_path,
   smoke_evidence_report_command: smoke_evidence_command,
@@ -866,6 +987,8 @@ write_text(
     "- Smoke evidence redaction guide: `#{smoke_evidence_redaction_guide_path}`",
     "- Handoff index Markdown: `#{handoff_index_md_path}`",
     "- Handoff index JSON: `#{handoff_index_json_path}`",
+    "- Acceptance runbook Markdown: `#{acceptance_runbook_md_path}`",
+    "- Acceptance runbook JSON: `#{acceptance_runbook_json_path}`",
     "- Smoke evidence report command: `#{smoke_evidence_command}`",
     "- Manifest items: #{report[:manifest_item_count]}",
     "",

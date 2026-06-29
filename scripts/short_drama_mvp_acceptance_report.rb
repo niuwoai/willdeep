@@ -177,6 +177,12 @@ smoke_evidence_next_actions = Array(smoke_evidence_report["next_actions"])
 smoke_evidence_sensitive_findings = Array(smoke_evidence_report["sensitive_findings"])
 handoff_index_json_path = tryout_report["handoff_index_json_path"].to_s
 handoff_index = read_json_file(handoff_index_json_path)
+acceptance_runbook_paths = [
+  tryout_report["acceptance_runbook_md_path"],
+  tryout_report["acceptance_runbook_json_path"]
+].compact
+acceptance_runbook_json_path = tryout_report["acceptance_runbook_json_path"].to_s
+acceptance_runbook = read_json_file(acceptance_runbook_json_path)
 remaining_risks = extract_section_bullets(cutoff, "当前剩余风险")
 
 checks = []
@@ -237,9 +243,21 @@ add_check(
   handoff_index_paths.length == 2 &&
     handoff_index_paths.all? { |path| File.file?(path) } &&
     handoff_index["schema"] == "willdeep.short_drama.tryout_handoff_index.v1" &&
-    Array(handoff_index["start_here"]).length >= 5,
+    Array(handoff_index["start_here"]).length >= 6,
   "tryout package should include Markdown and JSON handoff index files with ordered start-here steps.",
   handoff_index_paths.join(", ")
+)
+add_check(
+  checks,
+  "tryout package exposes acceptance runbook",
+  acceptance_runbook_paths.length == 2 &&
+    acceptance_runbook_paths.all? { |path| File.file?(path) } &&
+    acceptance_runbook["schema"] == "willdeep.short_drama.acceptance_runbook.v1" &&
+    Array(acceptance_runbook["commands"]).any? { |item| item["command"].to_s.include?("short_drama_mvp_acceptance_report.rb") } &&
+    Array(acceptance_runbook["commands"]).any? { |item| item["command"].to_s.include?("scripts/run_tests.sh") } &&
+    Array(acceptance_runbook["readiness_statuses"]).any? { |item| item["status"].to_s == "manual_pending" },
+  "tryout package should include a package-local acceptance runbook with local gates and handoff readiness meanings.",
+  acceptance_runbook_paths.join(", ")
 )
 add_check(
   checks,
@@ -458,6 +476,8 @@ evidence = [
   { "label" => "Smoke evidence redaction guide", "path" => smoke_evidence_redaction_guide_path },
   { "label" => "Handoff index Markdown", "path" => tryout_report["handoff_index_md_path"] },
   { "label" => "Handoff index JSON", "path" => handoff_index_json_path },
+  { "label" => "Acceptance runbook Markdown", "path" => tryout_report["acceptance_runbook_md_path"] },
+  { "label" => "Acceptance runbook JSON", "path" => acceptance_runbook_json_path },
   { "label" => "Smoke evidence report Markdown", "path" => tryout_report["smoke_evidence_report_md_path"] },
   { "label" => "Smoke evidence report JSON", "path" => smoke_evidence_report_path },
   { "label" => "Cutoff", "path" => File.join(ROOT_DIR, "docs", "SHORT_DRAMA_AI_MVP_CUTOFF.md") },
@@ -478,6 +498,7 @@ report = {
   "smoke_evidence_next_actions" => smoke_evidence_next_actions,
   "smoke_evidence_sensitive_findings" => smoke_evidence_sensitive_findings,
   "handoff_index" => handoff_index,
+  "acceptance_runbook" => acceptance_runbook,
   "handoff_readiness" => handoff_readiness,
   "handoff_pending_reasons" => handoff_pending_reasons,
   "remaining_risks" => remaining_risks,
@@ -602,6 +623,15 @@ File.write(
     "- Path: `#{handoff_index_json_path}`",
     "",
     *Array(handoff_index["start_here"]).map { |step| "- Step #{step["order"]}: #{step["title"]}" },
+    "",
+    "## Acceptance Runbook",
+    "",
+    "- Schema: #{acceptance_runbook["schema"]}",
+    "- Commands: #{Array(acceptance_runbook["commands"]).length}",
+    "- Readiness statuses: #{Array(acceptance_runbook["readiness_statuses"]).length}",
+    "- Path: `#{acceptance_runbook_json_path}`",
+    "",
+    *Array(acceptance_runbook["commands"]).map { |item| "- Command #{item["order"]}: #{item["title"]}" },
     "",
     "## Remaining Risks",
     "",

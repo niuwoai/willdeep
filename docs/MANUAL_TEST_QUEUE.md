@@ -439,6 +439,24 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   底部“验收记录”指向
   `1.109.0-rc463 — 短剧 handoff pending reasons`。
 
+## 1.109.0-rc464 — 短剧 acceptance runbook
+
+- ✅ 本版本没有新增短剧制作能力；本轮只把试用包验收命令和 handoff 判定口径收进包内 runbook。
+- ✅ 运行 `ruby scripts/short_drama_mvp_tryout_package.rb ...` →
+  样例包包含 `acceptance-runbook.md` 和 `acceptance-runbook.json`。
+- ✅ 打开 `build/ci/short_drama_mvp_tryout_package/acceptance-runbook.md` →
+  Markdown 包含重新生成试用包、smoke evidence report、MVP acceptance report、
+  `scripts/run_tests.sh` 和 `Handoff Decision`。
+- ✅ 打开 `build/ci/short_drama_mvp_tryout_package/handoff-index.md` →
+  `Commands` 包含 acceptance report 与完整本地 gate 入口。
+- ✅ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+  Markdown 报告包含 `Acceptance Runbook`，JSON 报告包含 `acceptance_runbook`。
+- ✅ 运行 `ruby scripts/version_consistency.rb ...` →
+  delivery checks 会检查试用包和 acceptance report 持续保留 acceptance runbook。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc464 — 短剧 acceptance runbook`。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）

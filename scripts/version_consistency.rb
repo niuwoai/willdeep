@@ -248,6 +248,17 @@ add_delivery_check.call(
   "Tryout package should expose a package-local handoff index so users have one ordered entrypoint."
 )
 add_delivery_check.call(
+  "Tryout package preserves acceptance runbook",
+  "scripts/short_drama_mvp_tryout_package.rb",
+  short_drama_tryout_package.include?("acceptance-runbook.md") &&
+    short_drama_tryout_package.include?("acceptance-runbook.json") &&
+    short_drama_tryout_package.include?("willdeep.short_drama.acceptance_runbook.v1") &&
+    short_drama_tryout_package.include?("acceptance_report_command") &&
+    short_drama_tryout_package.include?("scripts/run_tests.sh") &&
+    short_drama_tryout_package.include?("Handoff Decision"),
+  "Tryout package should include a package-local acceptance runbook with local gates and readiness meanings."
+)
+add_delivery_check.call(
   "Short drama smoke evidence report is wired into local and remote acceptance",
   "scripts/short_drama_mvp_smoke_evidence_report.rb",
   File.file?(File.join(repo_root, "scripts/short_drama_mvp_smoke_evidence_report.rb")) &&
@@ -275,9 +286,11 @@ add_delivery_check.call(
     short_drama_acceptance_report.include?('"manual_evidence_summary"') &&
     short_drama_acceptance_report.include?('"provider_api_smoke_summary"') &&
     short_drama_acceptance_report.include?('"handoff_pending_reasons"') &&
+    short_drama_acceptance_report.include?('"acceptance_runbook"') &&
     short_drama_acceptance_report.include?("smoke_evidence_redaction_guide_path") &&
     short_drama_acceptance_report.include?("## Handoff Readiness") &&
     short_drama_acceptance_report.include?("## Handoff Pending Reasons") &&
+    short_drama_acceptance_report.include?("## Acceptance Runbook") &&
     short_drama_acceptance_report.include?("## Manual Results File") &&
     short_drama_acceptance_report.include?("## Manual Evidence") &&
     short_drama_acceptance_report.include?("## Provider API Smoke Templates") &&
@@ -336,6 +349,7 @@ add_delivery_check.call(
     short_drama_acceptance_report.include?("smoke evidence sensitive guard is summarized") &&
     short_drama_acceptance_report.include?("tryout package exposes smoke evidence redaction guide") &&
     short_drama_acceptance_report.include?("tryout package exposes handoff index") &&
+    short_drama_acceptance_report.include?("tryout package exposes acceptance runbook") &&
     short_drama_acceptance_report.include?("## Smoke Evidence Report") &&
     short_drama_acceptance_report.include?("## Smoke Evidence Redaction Guide") &&
     short_drama_acceptance_report.include?("## Smoke Evidence Sensitive Guard") &&
