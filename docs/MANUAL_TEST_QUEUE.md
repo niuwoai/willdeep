@@ -422,6 +422,23 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   底部“验收记录”指向
   `1.109.0-rc462 — 短剧 smoke 证据脱敏指南`。
 
+## 1.109.0-rc463 — 短剧 handoff pending reasons
+
+- ✅ 本版本没有新增短剧制作能力；本轮只把交付未 ready 的原因从 `manual_pending`
+  拆成可读、可审计的 pending reasons。
+- ✅ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+  JSON 报告包含 `handoff_pending_reasons`，Markdown 报告包含
+  `Handoff Pending Reasons`。
+- ✅ 默认试用包仍未填写 manual/provider smoke JSON 时 →
+  `handoff_pending_reasons` 至少包含 `package_manual_results_untested`
+  和 `provider_smoke_untested`。
+- ✅ 运行 `ruby scripts/version_consistency.rb ...` →
+  delivery checks 仍为通过，并检查 acceptance report 保留
+  `handoff_pending_reasons` 与 `provider_smoke_untested`。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc463 — 短剧 handoff pending reasons`。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.109.0-rc463 - 2026-06-29
+
+### Changed
+- **短剧 handoff pending reasons（1.109.0-rc463）** —— `scripts/short_drama_mvp_acceptance_report.rb` 现在输出 `handoff_pending_reasons` 和 Markdown 的 `Handoff Pending Reasons` 小节，明确列出机器检查失败、手测队列 pending、包内 manual smoke 未测、provider smoke 未测、证据缺失或 sensitive guard 阻断等原因。
+- 交付报告不再只给 `manual_pending` 结论；接手人可以直接看到下一步要填哪几个包内手测步骤、是否只是保留真实 provider 外网风险。
+- `scripts/version_consistency.rb` 新增守门，确保 handoff pending reasons 和 provider smoke untested 原因持续保留。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc463 — 短剧 handoff pending reasons`。
+- 版本号从 **1.109.0-rc462** 提升为 **1.109.0-rc463**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
 ## 1.109.0-rc462 - 2026-06-29
 
 ### Changed

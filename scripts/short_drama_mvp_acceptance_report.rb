@@ -337,6 +337,7 @@ provider_api_smoke_evidence_missing = provider_api_smoke.fetch("evidence_missing
 smoke_evidence_blocked = smoke_evidence_readiness["overall"].to_s == "blocked" ||
                          smoke_evidence_readiness["sensitive_evidence_count"].to_i.positive?
 ok = checks.all? { |check| check.fetch("ok") }
+failed_check_names = checks.reject { |check| check.fetch("ok") }.map { |check| check.fetch("name") }
 manual_status =
   if smoke_evidence_blocked
     "blocked"
@@ -372,6 +373,79 @@ handoff_readiness = {
   "overall" => handoff_overall,
   "note" => "CI and local contract gates can pass while manual smoke remains pending; use overall to decide handoff readiness."
 }
+handoff_pending_reasons = []
+unless failed_check_names.empty?
+  handoff_pending_reasons << {
+    "severity" => "high",
+    "kind" => "machine_check_failed",
+    "title" => "Fix failing acceptance checks",
+    "detail" => "Machine checks must pass before this MVP handoff can be considered ready.",
+    "items" => failed_check_names
+  }
+end
+if smoke_evidence_blocked
+  handoff_pending_reasons << {
+    "severity" => "high",
+    "kind" => "smoke_evidence_blocked",
+    "title" => "Resolve blocked smoke evidence report",
+    "detail" => "The standalone smoke evidence report is blocked; fix parse/schema errors or redact sensitive evidence before handoff.",
+    "items" => smoke_evidence_next_actions.map { |action| action["title"].to_s }.reject(&:empty?)
+  }
+end
+unless manual_smoke_summary.fetch("pending_items").empty?
+  handoff_pending_reasons << {
+    "severity" => "medium",
+    "kind" => "manual_queue_pending",
+    "title" => "Finish current manual queue smoke items",
+    "detail" => "The current MANUAL_TEST_QUEUE.md short-drama section still has pending rows.",
+    "items" => manual_smoke_summary.fetch("pending_items")
+  }
+end
+unless manual_result_summary.fetch("pending_items").empty?
+  handoff_pending_reasons << {
+    "severity" => "medium",
+    "kind" => "package_manual_results_untested",
+    "title" => "Fill package manual smoke result rows",
+    "detail" => "The generated package manual-smoke-results-template.json still contains untested rows.",
+    "items" => manual_result_summary.fetch("pending_items")
+  }
+end
+unless manual_evidence_summary.fetch("missing_items").empty?
+  handoff_pending_reasons << {
+    "severity" => "medium",
+    "kind" => "package_manual_evidence_missing",
+    "title" => "Add evidence for filled manual smoke rows",
+    "detail" => "Manual smoke rows marked pass/fail need screenshots, artifact paths, task IDs, or copied chat context.",
+    "items" => manual_evidence_summary.fetch("missing_items")
+  }
+end
+if provider_api_smoke.fetch("pending_count").positive?
+  handoff_pending_reasons << {
+    "severity" => "low",
+    "kind" => "provider_smoke_untested",
+    "title" => "Record optional provider smoke or keep external API risk visible",
+    "detail" => "Provider rows remain untested unless real some.im/Replicate credentials, quota, and network are available.",
+    "items" => provider_api_smoke.fetch("providers")
+  }
+end
+unless provider_api_smoke.fetch("evidence_missing_items").empty?
+  handoff_pending_reasons << {
+    "severity" => "medium",
+    "kind" => "provider_evidence_missing",
+    "title" => "Add evidence for filled provider smoke rows",
+    "detail" => "Provider rows marked pass/fail need redacted evidence before handoff.",
+    "items" => provider_api_smoke.fetch("evidence_missing_items")
+  }
+end
+if handoff_pending_reasons.empty?
+  handoff_pending_reasons << {
+    "severity" => "low",
+    "kind" => "ready_to_handoff",
+    "title" => "No pending handoff reasons",
+    "detail" => "Machine checks, manual results, provider evidence, and smoke evidence report do not expose pending handoff work.",
+    "items" => []
+  }
+end
 evidence = [
   { "label" => "Version report", "path" => File.join(REPORT_DIR, "version_report.md") },
   { "label" => "Tryout package report", "path" => File.join(REPORT_DIR, "short_drama_mvp_tryout_package_report.md") },
@@ -405,6 +479,7 @@ report = {
   "smoke_evidence_sensitive_findings" => smoke_evidence_sensitive_findings,
   "handoff_index" => handoff_index,
   "handoff_readiness" => handoff_readiness,
+  "handoff_pending_reasons" => handoff_pending_reasons,
   "remaining_risks" => remaining_risks,
   "evidence" => evidence
 }
@@ -428,6 +503,15 @@ File.write(
     "- Manual status: #{handoff_readiness.fetch("manual_status")}",
     "- Overall: #{handoff_readiness.fetch("overall")}",
     "- Note: #{handoff_readiness.fetch("note")}",
+    "",
+    "## Handoff Pending Reasons",
+    "",
+    *handoff_pending_reasons.flat_map do |reason|
+      [
+        "- [#{reason.fetch("severity")}] #{reason.fetch("title")} — #{reason.fetch("detail")}",
+        *Array(reason["items"]).map { |item| "  - #{item}" }
+      ]
+    end,
     "",
     "## Checks",
     "",

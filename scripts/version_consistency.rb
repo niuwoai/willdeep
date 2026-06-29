@@ -274,8 +274,10 @@ add_delivery_check.call(
     short_drama_acceptance_report.include?('"manual_results_summary"') &&
     short_drama_acceptance_report.include?('"manual_evidence_summary"') &&
     short_drama_acceptance_report.include?('"provider_api_smoke_summary"') &&
+    short_drama_acceptance_report.include?('"handoff_pending_reasons"') &&
     short_drama_acceptance_report.include?("smoke_evidence_redaction_guide_path") &&
     short_drama_acceptance_report.include?("## Handoff Readiness") &&
+    short_drama_acceptance_report.include?("## Handoff Pending Reasons") &&
     short_drama_acceptance_report.include?("## Manual Results File") &&
     short_drama_acceptance_report.include?("## Manual Evidence") &&
     short_drama_acceptance_report.include?("## Provider API Smoke Templates") &&
@@ -317,6 +319,7 @@ add_delivery_check.call(
     short_drama_acceptance_report.include?("provider API smoke template is summarized") &&
     short_drama_acceptance_report.include?("provider API smoke evidence is summarized") &&
     short_drama_acceptance_report.include?("provider_api_smoke_evidence_missing") &&
+    short_drama_acceptance_report.include?("provider_smoke_untested") &&
     short_drama_acceptance_report.include?("evidence_missing_count") &&
     short_drama_acceptance_report.include?("willdeep.short_drama.provider_api_smoke.v1") &&
     short_drama_acceptance_report.include?("Provider API Smoke Templates"),
