@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "fileutils"
+require "digest"
 require "json"
 require "time"
 
@@ -30,6 +31,32 @@ end
 
 def relative_path(path)
   path.to_s.sub(%r{\A#{Regexp.escape(ROOT_DIR)}/?}, "")
+end
+
+def handoff_file_metadata(label, path)
+  metadata = {
+    "label" => label,
+    "path" => path,
+    "relative_path" => relative_path(path),
+    "exists" => File.exist?(path)
+  }
+  if File.file?(path)
+    metadata.merge(
+      "kind" => "file",
+      "size_bytes" => File.size(path),
+      "sha256" => Digest::SHA256.file(path).hexdigest
+    )
+  elsif File.directory?(path)
+    file_count = Dir.glob(File.join(path, "**", "*"), File::FNM_DOTMATCH).count do |entry|
+      File.file?(entry)
+    end
+    metadata.merge(
+      "kind" => "directory",
+      "file_count" => file_count
+    )
+  else
+    metadata.merge("kind" => "missing")
+  end
 end
 
 acceptance = read_json(ACCEPTANCE_JSON)
@@ -82,12 +109,7 @@ handoff_files = required_evidence_labels.filter_map do |label|
   path = evidence_by_label[label].to_s
   next if path.empty?
 
-  {
-    "label" => label,
-    "path" => path,
-    "relative_path" => relative_path(path),
-    "exists" => File.exist?(path)
-  }
+  handoff_file_metadata(label, path)
 end
 
 blocking_items = []
@@ -184,6 +206,18 @@ checks_for_bundle = [
     "detail" => "The bundle should keep external API/manual smoke risks visible."
   },
   {
+    "name" => "handoff file fingerprints are generated",
+    "ok" => handoff_files.any? &&
+            handoff_files.select { |item| item["kind"] == "file" }.all? do |item|
+              item["size_bytes"].is_a?(Integer) && item["size_bytes"].positive? &&
+                item["sha256"].to_s.match?(/\A[0-9a-f]{64}\z/)
+            end &&
+            handoff_files.select { |item| item["kind"] == "directory" }.all? do |item|
+              item["file_count"].is_a?(Integer) && item["file_count"].positive?
+            end,
+    "detail" => "Handoff files should include file sizes, SHA-256 hashes, or directory file counts for artifact traceability."
+  },
+  {
     "name" => "runbook and handoff index are included",
     "ok" => array_values(handoff_index["start_here"]).any? &&
             array_values(acceptance_runbook["commands"]).any?,
@@ -254,7 +288,17 @@ File.write(
     "",
     "## Handoff Files",
     "",
-    *handoff_files.map { |item| "- #{item.fetch("label")}: `#{item.fetch("path")}` #{item.fetch("exists") ? "" : "(missing)"}" },
+    *handoff_files.map do |item|
+      suffix =
+        if item["kind"] == "file"
+          "size=#{item["size_bytes"]} sha256=#{item["sha256"].to_s[0, 12]}"
+        elsif item["kind"] == "directory"
+          "files=#{item["file_count"]}"
+        else
+          "missing"
+        end
+      "- #{item.fetch("label")}: `#{item.fetch("path")}` #{suffix}"
+    end,
     "",
     "## Remaining Risks",
     "",

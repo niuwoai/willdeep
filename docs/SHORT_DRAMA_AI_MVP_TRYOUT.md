@@ -1,6 +1,6 @@
 # Short Drama AI MVP Tryout
 
-> Last updated: 2026-06-29 | Baseline version: v1.109.0-rc467
+> Last updated: 2026-06-29 | Baseline version: v1.109.0-rc468
 
 这份文档用于试用当前短剧 AI MVP。它不是完整产品手册，只覆盖“不完美但可用”的主路径。
 
@@ -93,7 +93,7 @@ import_media_manifest(package_directory=build/ci/short_drama_mvp_tryout_package,
 12. 运行 `scripts/short_drama_mvp_smoke_evidence_contract_test.rb`，确认默认未测、ready、缺 evidence、manual_failed 和 sensitive blocked 五种 smoke evidence readiness 分支都通过。
 13. 运行 `scripts/short_drama_mvp_acceptance_report.rb`，确认生成的 `build/ci/short_drama_mvp_acceptance_report.md/json` 汇总了版本报告、试用包报告、Handoff Index、Acceptance Runbook、手动 smoke 模板、包内手测结果文件状态、pass/fail 步骤证据缺口、provider API smoke 模板、standalone smoke 证据自检报告、Smoke Evidence Readiness Matrix、Smoke Evidence Next Actions、当前手动 smoke 队列状态、交付就绪状态、非空剩余风险和交付文档入口。
 14. 运行 `scripts/short_drama_mvp_handoff_bundle.rb`，确认生成的 `build/ci/short_drama_mvp_handoff_bundle.md/json` 显示 `handoff_mode`、`ready_for_release`、交付证据文件、阻塞项和下一步动作；未补完人工 smoke 时应是 trial package，而不是误称 ready。
-15. 运行 `scripts/short_drama_mvp_handoff_bundle_contract_test.rb`，确认默认 trial、ready release、manual_failed、machine_failed 和 missing evidence 五种 handoff bundle 分支都通过，避免交接包把机器失败、人工失败和缺证据混成同一种状态。
+15. 运行 `scripts/short_drama_mvp_handoff_bundle_contract_test.rb`，确认默认 trial、ready release、manual_failed、machine_failed、missing evidence 和 handoff file fingerprints 都通过，避免交接包把机器失败、人工失败、缺证据和文件被覆盖混成同一种状态。
 
 ## 图片编辑路径
 
@@ -112,4 +112,4 @@ import_media_manifest(package_directory=build/ci/short_drama_mvp_tryout_package,
 
 ## 验收记录
 
-人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.109.0-rc467 — 短剧 handoff bundle contract` 小节。
+人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.109.0-rc468 — 短剧 handoff file fingerprints` 小节。

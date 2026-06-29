@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.109.0-rc468 - 2026-06-29
+
+### Changed
+- **短剧 handoff file fingerprints（1.109.0-rc468）** —— `scripts/short_drama_mvp_handoff_bundle.rb` 的 `handoff_files` 现在会为普通文件输出 `size_bytes` 与 SHA-256，为目录输出 `file_count`。
+- `scripts/short_drama_mvp_handoff_bundle_contract_test.rb` 的 default_trial 场景新增 `handoff files include fingerprints` 检查，守住文件指纹和目录计数。
+- `scripts/version_consistency.rb` 新增守门，确保 handoff bundle 持续保留 `Digest::SHA256`、`size_bytes`、`sha256`、`file_count` 和 contract 中的 fingerprint 检查。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc468 — 短剧 handoff file fingerprints`。
+- 版本号从 **1.109.0-rc467** 提升为 **1.109.0-rc468**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
 ## 1.109.0-rc467 - 2026-06-29
 
 ### Changed

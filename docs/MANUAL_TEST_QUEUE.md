@@ -519,6 +519,22 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   底部“验收记录”指向
   `1.109.0-rc467 — 短剧 handoff bundle contract`。
 
+## 1.109.0-rc468 — 短剧 handoff file fingerprints
+
+- ✅ 本版本没有新增短剧制作能力；本轮只给 handoff bundle 的交付证据文件补上可追溯元数据。
+- ✅ 运行 `ruby scripts/short_drama_mvp_handoff_bundle.rb ...` →
+  `handoff_files` 中的普通文件包含 `size_bytes` 和 64 位十六进制 `sha256`，
+  目录包含 `file_count`。
+- ✅ Markdown `Handoff Files` 小节会显示文件 size、SHA-256 前缀或目录文件数，交接时能快速判断 artifact 是否被覆盖或拿错。
+- ✅ 运行 `ruby scripts/short_drama_mvp_handoff_bundle_contract_test.rb ...` →
+  `default_trial` 场景包含 `handoff files include fingerprints` 检查。
+- ✅ 运行 `ruby scripts/version_consistency.rb ...` →
+  delivery checks 会守住 `Digest::SHA256`、`size_bytes`、`sha256`、
+  `file_count` 和 contract 中的 fingerprint 检查。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc468 — 短剧 handoff file fingerprints`。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）

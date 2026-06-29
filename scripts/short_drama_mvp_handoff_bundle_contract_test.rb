@@ -98,6 +98,10 @@ def blocking_kinds(report)
   Array(report["blocking_items"]).map { |item| item["kind"].to_s }
 end
 
+def handoff_files(report)
+  Array(report["handoff_files"])
+end
+
 def scenario(name, description, base_acceptance_path)
   scenario_dir = File.join(WORK_DIR, name)
   FileUtils.rm_rf(scenario_dir)
@@ -145,6 +149,20 @@ def build_default_trial(base_acceptance_path)
       "name" => "ready flag is false",
       "ok" => result.fetch("ready_for_release") == false,
       "detail" => "Unfilled smoke evidence cannot be release-ready."
+    }
+    report = read_json(result.fetch("report_json_path"))
+    file_entries = handoff_files(report).select { |item| item["kind"].to_s == "file" }
+    directory_entries = handoff_files(report).select { |item| item["kind"].to_s == "directory" }
+    result.fetch("checks") << {
+      "name" => "handoff files include fingerprints",
+      "ok" => file_entries.any? &&
+              file_entries.all? do |item|
+                item["size_bytes"].is_a?(Integer) && item["size_bytes"].positive? &&
+                  item["sha256"].to_s.match?(/\A[0-9a-f]{64}\z/)
+              end &&
+              directory_entries.any? &&
+              directory_entries.all? { |item| item["file_count"].is_a?(Integer) && item["file_count"].positive? },
+      "detail" => "Bundle should include SHA-256 fingerprints for files and file counts for package directories."
     }
   end
 end

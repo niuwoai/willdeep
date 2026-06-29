@@ -305,6 +305,10 @@ add_delivery_check.call(
     short_drama_handoff_bundle.include?("ready_release_candidate") &&
     short_drama_handoff_bundle.include?("trial_package_with_explicit_pending_reasons") &&
     short_drama_handoff_bundle.include?("handoff_files") &&
+    short_drama_handoff_bundle.include?("Digest::SHA256") &&
+    short_drama_handoff_bundle.include?("size_bytes") &&
+    short_drama_handoff_bundle.include?("sha256") &&
+    short_drama_handoff_bundle.include?("file_count") &&
     short_drama_handoff_bundle.include?("remaining_risks") &&
     short_drama_tryout_package.include?("handoff_bundle_command") &&
     short_drama_cutoff.include?("short_drama_mvp_handoff_bundle.rb") &&
@@ -324,7 +328,9 @@ add_delivery_check.call(
     short_drama_handoff_bundle_contract.include?("machine_failed") &&
     short_drama_handoff_bundle_contract.include?("missing_handoff_evidence") &&
     short_drama_handoff_bundle_contract.include?("ready_release_candidate") &&
-    short_drama_handoff_bundle_contract.include?("blocked_machine_handoff"),
+    short_drama_handoff_bundle_contract.include?("blocked_machine_handoff") &&
+    short_drama_handoff_bundle_contract.include?("handoff files include fingerprints") &&
+    short_drama_handoff_bundle_contract.include?("SHA-256"),
   "Local and GitHub acceptance should guard handoff bundle mode transitions for trial, ready, failed, machine-blocked, and missing-evidence states."
 )
 add_delivery_check.call(
