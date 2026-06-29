@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.109.0-rc462 - 2026-06-29
+
+### Changed
+- **短剧 smoke 证据脱敏指南（1.109.0-rc462）** —— `scripts/short_drama_mvp_tryout_package.rb` 现在会在试用包内生成 `smoke-evidence-redaction-guide.md`，明确 allowed evidence、Never Paste 和被 sensitive guard 阻断后的修复步骤。
+- Widget 预览、manual smoke checklist、provider API smoke 模板、handoff index、tryout package report 和 acceptance report 都会暴露该指南路径，交接人不用靠口头记忆判断哪些 evidence 能写。
+- `scripts/version_consistency.rb` 新增守门，确保试用包和 acceptance report 持续保留 smoke evidence redaction guide。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc462 — 短剧 smoke 证据脱敏指南`。
+- 版本号从 **1.109.0-rc461** 提升为 **1.109.0-rc462**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
 ## 1.109.0-rc461 - 2026-06-29
 
 ### Security

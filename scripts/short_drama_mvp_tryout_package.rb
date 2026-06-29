@@ -285,6 +285,7 @@ manual_smoke_results_md_path = File.join(PACKAGE_DIR, "manual-smoke-results-temp
 manual_smoke_results_json_path = File.join(PACKAGE_DIR, "manual-smoke-results-template.json")
 provider_api_smoke_md_path = File.join(PACKAGE_DIR, "provider-api-smoke-template.md")
 provider_api_smoke_json_path = File.join(PACKAGE_DIR, "provider-api-smoke-template.json")
+smoke_evidence_redaction_guide_path = File.join(PACKAGE_DIR, "smoke-evidence-redaction-guide.md")
 handoff_index_md_path = File.join(PACKAGE_DIR, "handoff-index.md")
 handoff_index_json_path = File.join(PACKAGE_DIR, "handoff-index.json")
 smoke_evidence_report_md_path = File.join(File.dirname(REPORT_MD), "short_drama_mvp_smoke_evidence_report.md")
@@ -320,6 +321,7 @@ widget_html = [
   "<li>Manual smoke checklist: <code>#{manual_smoke_checklist_path}</code></li>",
   "<li>Manual smoke results: <code>#{manual_smoke_results_md_path}</code></li>",
   "<li>Provider API smoke: <code>#{provider_api_smoke_md_path}</code></li>",
+  "<li>Smoke evidence redaction guide: <code>#{smoke_evidence_redaction_guide_path}</code></li>",
   "<li>Handoff index: <code>#{handoff_index_md_path}</code></li>",
   "<li>Smoke evidence report command: <code>#{smoke_evidence_command}</code></li>",
   "</ul>"
@@ -374,6 +376,7 @@ manual_smoke_checklist = [
   "- Results JSON template: `#{manual_smoke_results_json_path}`",
   "- Provider API smoke Markdown template: `#{provider_api_smoke_md_path}`",
   "- Provider API smoke JSON template: `#{provider_api_smoke_json_path}`",
+  "- Smoke evidence redaction guide: `#{smoke_evidence_redaction_guide_path}`",
   "- Handoff index: `#{handoff_index_md_path}`",
   "- Smoke evidence report command: `#{smoke_evidence_command}`",
   "",
@@ -413,6 +416,7 @@ manual_smoke_checklist = [
   "## Notes",
   "",
   "- Do not put real provider tokens in this package.",
+  "- Read `smoke-evidence-redaction-guide.md` before filling provider evidence.",
   "- Real API smoke still depends on external accounts, quota, network, and provider behavior.",
   "- If real some.im or Replicate smoke is available, record it in `provider-api-smoke-template.md/json`.",
   ""
@@ -525,6 +529,7 @@ provider_api_smoke_md = [
   "",
   "- Do not paste provider tokens, webhook secrets, or private callback URLs into this file.",
   "- Use request IDs, redacted task URLs, output artifact paths, screenshots, or copied chat context as evidence.",
+  "- See `smoke-evidence-redaction-guide.md` for allowed evidence examples and blocked patterns.",
   "- Leave all rows `untested` when no real provider account, quota, or network is available.",
   "",
   "## Results",
@@ -538,6 +543,42 @@ provider_api_smoke_md = [
   "## Expected Outcomes",
   "",
   *provider_api_smoke_steps.map { |step| "- #{step.fetch("title")}: #{step.fetch("expected")}" },
+  ""
+].join("\n")
+
+smoke_evidence_redaction_guide = [
+  "# Short Drama Smoke Evidence Redaction Guide",
+  "",
+  "Use this guide before filling `manual-smoke-results-template.json` or `provider-api-smoke-template.json`.",
+  "The smoke evidence report validates local files only; it does not call some.im, Replicate, or any external provider.",
+  "",
+  "## Allowed Evidence",
+  "",
+  "- Redacted provider task IDs, such as `someim-task-1234-redacted`.",
+  "- Local artifact paths inside the package, such as `outputs/shot-001-main.png`.",
+  "- Screenshot file paths or filenames that do not embed secrets.",
+  "- Sanitized request IDs copied from provider dashboards.",
+  "- Short chat context snippets with tokens, signed URLs, callback URLs, and account identifiers removed.",
+  "",
+  "## Never Paste",
+  "",
+  "- API keys, access tokens, refresh tokens, bearer tokens, or `sk-` style secrets.",
+  "- Webhook secrets, HMAC signatures, signed URLs, or private callback URLs.",
+  "- Full request/response payloads that include authorization headers or provider account data.",
+  "- `.env` contents, shell exports, curl commands with headers, or dashboard pages containing credentials.",
+  "",
+  "## If The Report Blocks Handoff",
+  "",
+  "1. Open the generated smoke evidence report.",
+  "2. Find the step, field, and pattern kind under `Sensitive Evidence Guard`.",
+  "3. Replace the value with a sanitized task ID, artifact path, screenshot path, or copied chat context.",
+  "4. Re-run:",
+  "",
+  "   ```bash",
+  "   #{smoke_evidence_command}",
+  "   ```",
+  "",
+  "5. Handoff can continue only after `Sensitive findings: 0`.",
   ""
 ].join("\n")
 
@@ -581,6 +622,7 @@ handoff_index = {
     { "label" => "Manual smoke checklist", "path" => "manual-smoke-checklist.md" },
     { "label" => "Manual smoke results JSON", "path" => "manual-smoke-results-template.json" },
     { "label" => "Provider API smoke JSON", "path" => "provider-api-smoke-template.json" },
+    { "label" => "Smoke evidence redaction guide", "path" => "smoke-evidence-redaction-guide.md" },
     { "label" => "Manifest template", "path" => "media-import-manifest-template.json" },
     { "label" => "Production gap report", "path" => "production-gap-report.json" },
     { "label" => "Review queue", "path" => "production-review-queue.csv" },
@@ -655,6 +697,7 @@ write_text(File.join(PACKAGE_DIR, "manual-smoke-results-template.md"), manual_sm
 write_json(File.join(PACKAGE_DIR, "manual-smoke-results-template.json"), manual_smoke_results_template)
 write_text(File.join(PACKAGE_DIR, "provider-api-smoke-template.md"), provider_api_smoke_md)
 write_json(File.join(PACKAGE_DIR, "provider-api-smoke-template.json"), provider_api_smoke_template)
+write_text(File.join(PACKAGE_DIR, "smoke-evidence-redaction-guide.md"), smoke_evidence_redaction_guide)
 write_text(File.join(PACKAGE_DIR, "handoff-index.md"), handoff_index_md)
 write_json(File.join(PACKAGE_DIR, "handoff-index.json"), handoff_index)
 write_text(
@@ -678,6 +721,7 @@ checks = []
   manual-smoke-results-template.json
   provider-api-smoke-template.md
   provider-api-smoke-template.json
+  smoke-evidence-redaction-guide.md
   handoff-index.md
   handoff-index.json
   media-api.env.example
@@ -732,6 +776,7 @@ manual_smoke_results_source = File.read(manual_smoke_results_md_path)
 manual_smoke_results_data = JSON.parse(File.read(manual_smoke_results_json_path))
 provider_api_smoke_source = File.read(provider_api_smoke_md_path)
 provider_api_smoke_data = JSON.parse(File.read(provider_api_smoke_json_path))
+smoke_evidence_redaction_guide_source = File.read(smoke_evidence_redaction_guide_path)
 checks << {
   name: "manual smoke results templates cover critical steps",
   ok: manual_smoke_results_source.include?("Dry-run import") &&
@@ -760,6 +805,15 @@ checks << {
   ok: manual_smoke_source.include?("short_drama_mvp_smoke_evidence_report.rb") &&
       widget_source.include?("short_drama_mvp_smoke_evidence_report.rb")
 }
+checks << {
+  name: "smoke evidence redaction guide is packaged",
+  ok: smoke_evidence_redaction_guide_source.include?("Allowed Evidence") &&
+      smoke_evidence_redaction_guide_source.include?("Never Paste") &&
+      smoke_evidence_redaction_guide_source.include?("Sensitive findings: 0") &&
+      manual_smoke_source.include?("smoke-evidence-redaction-guide.md") &&
+      provider_api_smoke_source.include?("smoke-evidence-redaction-guide.md") &&
+      widget_source.include?("smoke-evidence-redaction-guide.md")
+}
 handoff_index_source = File.read(handoff_index_md_path)
 handoff_index_data = JSON.parse(File.read(handoff_index_json_path))
 checks << {
@@ -783,6 +837,7 @@ report = {
   manual_smoke_results_json_path: manual_smoke_results_json_path,
   provider_api_smoke_md_path: provider_api_smoke_md_path,
   provider_api_smoke_json_path: provider_api_smoke_json_path,
+  smoke_evidence_redaction_guide_path: smoke_evidence_redaction_guide_path,
   handoff_index_md_path: handoff_index_md_path,
   handoff_index_json_path: handoff_index_json_path,
   smoke_evidence_report_md_path: smoke_evidence_report_md_path,
@@ -808,6 +863,7 @@ write_text(
     "- Manual smoke results JSON: `#{manual_smoke_results_json_path}`",
     "- Provider API smoke Markdown: `#{provider_api_smoke_md_path}`",
     "- Provider API smoke JSON: `#{provider_api_smoke_json_path}`",
+    "- Smoke evidence redaction guide: `#{smoke_evidence_redaction_guide_path}`",
     "- Handoff index Markdown: `#{handoff_index_md_path}`",
     "- Handoff index JSON: `#{handoff_index_json_path}`",
     "- Smoke evidence report command: `#{smoke_evidence_command}`",

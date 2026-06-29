@@ -154,6 +154,8 @@ provider_api_smoke_paths = [
   tryout_report["provider_api_smoke_md_path"],
   tryout_report["provider_api_smoke_json_path"]
 ].compact
+smoke_evidence_redaction_guide_path = tryout_report["smoke_evidence_redaction_guide_path"].to_s
+smoke_evidence_redaction_guide = File.file?(smoke_evidence_redaction_guide_path) ? File.read(smoke_evidence_redaction_guide_path, encoding: "UTF-8") : ""
 handoff_index_paths = [
   tryout_report["handoff_index_md_path"],
   tryout_report["handoff_index_json_path"]
@@ -219,6 +221,15 @@ add_check(
   provider_api_smoke_paths.length == 2 && provider_api_smoke_paths.all? { |path| File.file?(path) },
   "tryout package should include Markdown and JSON templates for optional real some.im / Replicate smoke evidence.",
   provider_api_smoke_paths.join(", ")
+)
+add_check(
+  checks,
+  "tryout package exposes smoke evidence redaction guide",
+  File.file?(smoke_evidence_redaction_guide_path) &&
+    smoke_evidence_redaction_guide.include?("Never Paste") &&
+    smoke_evidence_redaction_guide.include?("Sensitive findings: 0"),
+  "tryout package should include a package-local guide for allowed evidence, blocked credential patterns, and recovery steps.",
+  smoke_evidence_redaction_guide_path
 )
 add_check(
   checks,
@@ -370,6 +381,7 @@ evidence = [
   { "label" => "Manual smoke results JSON", "path" => tryout_report["manual_smoke_results_json_path"] },
   { "label" => "Provider API smoke Markdown", "path" => tryout_report["provider_api_smoke_md_path"] },
   { "label" => "Provider API smoke JSON", "path" => tryout_report["provider_api_smoke_json_path"] },
+  { "label" => "Smoke evidence redaction guide", "path" => smoke_evidence_redaction_guide_path },
   { "label" => "Handoff index Markdown", "path" => tryout_report["handoff_index_md_path"] },
   { "label" => "Handoff index JSON", "path" => handoff_index_json_path },
   { "label" => "Smoke evidence report Markdown", "path" => tryout_report["smoke_evidence_report_md_path"] },
@@ -465,6 +477,11 @@ File.write(
     "",
     *provider_api_smoke.fetch("failed_items").map { |item| "- Failed provider smoke: #{item}" },
     *provider_api_smoke.fetch("evidence_missing_items").map { |item| "- Missing provider evidence: #{item}" },
+    "",
+    "## Smoke Evidence Redaction Guide",
+    "",
+    "- Path: `#{smoke_evidence_redaction_guide_path}`",
+    "- Purpose: allowed evidence examples, blocked credential patterns, and blocked-handoff recovery steps.",
     "",
     "## Smoke Evidence Report",
     "",

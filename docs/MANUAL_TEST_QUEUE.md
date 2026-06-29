@@ -407,6 +407,21 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   本地产物路径或 sanitized request id，不要粘贴 provider token、webhook secret
   或私有 callback URL。
 
+## 1.109.0-rc462 — 短剧 smoke 证据脱敏指南
+
+- ✅ 本版本没有新增短剧制作能力；本轮只把 provider/manual smoke evidence 的脱敏填写说明放进试用包与验收摘要。
+- ✅ 运行 `ruby scripts/short_drama_mvp_tryout_package.rb ...` →
+  样例包包含 `smoke-evidence-redaction-guide.md`。
+- ✅ 打开 `build/ci/short_drama_mvp_tryout_package/smoke-evidence-redaction-guide.md` →
+  Markdown 包含 `Allowed Evidence`、`Never Paste` 和 `Sensitive findings: 0`。
+- ✅ 打开 `build/ci/short_drama_mvp_tryout_package/handoff-index.md` →
+  `Key Files` 包含 `Smoke evidence redaction guide`。
+- ✅ 运行 `ruby scripts/short_drama_mvp_acceptance_report.rb ...` →
+  Markdown 报告包含 `Smoke Evidence Redaction Guide`，JSON evidence 列表包含 guide 路径。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc462 — 短剧 smoke 证据脱敏指南`。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）

@@ -228,6 +228,16 @@ add_delivery_check.call(
   "Tryout package should expose optional real some.im / Replicate smoke templates without embedding secrets."
 )
 add_delivery_check.call(
+  "Tryout package preserves smoke evidence redaction guide",
+  "scripts/short_drama_mvp_tryout_package.rb",
+  short_drama_tryout_package.include?("smoke-evidence-redaction-guide.md") &&
+    short_drama_tryout_package.include?("smoke_evidence_redaction_guide_path") &&
+    short_drama_tryout_package.include?("Allowed Evidence") &&
+    short_drama_tryout_package.include?("Never Paste") &&
+    short_drama_tryout_package.include?("Sensitive findings: 0"),
+  "Tryout package should carry package-local instructions for allowed evidence and credential redaction."
+)
+add_delivery_check.call(
   "Tryout package preserves handoff index",
   "scripts/short_drama_mvp_tryout_package.rb",
   short_drama_tryout_package.include?("handoff-index.md") &&
@@ -264,10 +274,12 @@ add_delivery_check.call(
     short_drama_acceptance_report.include?('"manual_results_summary"') &&
     short_drama_acceptance_report.include?('"manual_evidence_summary"') &&
     short_drama_acceptance_report.include?('"provider_api_smoke_summary"') &&
+    short_drama_acceptance_report.include?("smoke_evidence_redaction_guide_path") &&
     short_drama_acceptance_report.include?("## Handoff Readiness") &&
     short_drama_acceptance_report.include?("## Manual Results File") &&
     short_drama_acceptance_report.include?("## Manual Evidence") &&
     short_drama_acceptance_report.include?("## Provider API Smoke Templates") &&
+    short_drama_acceptance_report.include?("## Smoke Evidence Redaction Guide") &&
     short_drama_acceptance_report.include?("## Remaining Risks") &&
     short_drama_acceptance_report.include?("cutoff keeps explicit remaining risks") &&
     short_drama_cutoff.include?("交付就绪状态") &&
@@ -319,8 +331,10 @@ add_delivery_check.call(
     short_drama_acceptance_report.include?("handoff_index") &&
     short_drama_acceptance_report.include?("smoke evidence report is generated") &&
     short_drama_acceptance_report.include?("smoke evidence sensitive guard is summarized") &&
+    short_drama_acceptance_report.include?("tryout package exposes smoke evidence redaction guide") &&
     short_drama_acceptance_report.include?("tryout package exposes handoff index") &&
     short_drama_acceptance_report.include?("## Smoke Evidence Report") &&
+    short_drama_acceptance_report.include?("## Smoke Evidence Redaction Guide") &&
     short_drama_acceptance_report.include?("## Smoke Evidence Sensitive Guard") &&
     short_drama_acceptance_report.include?("## Smoke Evidence Next Actions") &&
     short_drama_acceptance_report.include?("## Handoff Index") &&
