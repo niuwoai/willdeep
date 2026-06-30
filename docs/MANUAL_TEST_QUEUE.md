@@ -835,6 +835,11 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 - [ ] 如果本机保存过 `q3` 或其他 SSH runtime，确认它只作为“已配置的 SSH 主机”出现；点击“管理 SSH 主机...”能打开 Settings → Runtimes，可在设置里删除或改名。
 - [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.109.0-rc496`，短剧制作能力无新增。
 
+## 1.109.0-rc497 — 短剧指针同步 / 编译告警清理
+
+- [ ] 本版本为编译告警清理（AVFoundation `duration` 异步迁移、ONNX re-sign 脚本声明 input/output、main-actor 隔离批次加 `nonisolated`），不新增、不改变短剧项目、分镜、制作包、Widget、handoff bundle 和 smoke evidence 合约。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.109.0-rc497`，短剧制作能力无新增。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）
