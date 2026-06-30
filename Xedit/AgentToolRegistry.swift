@@ -1023,6 +1023,51 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "embedded_browser_status",
+            description: "Inspect the visible in-app Embedded Browser side panel state: current URL, title, loading state, navigation availability, last error, and latest screenshot path. Read-only. Requires the Browser Ops expert.",
+            risk: .read,
+            parameters: []
+        ),
+        AgentToolDescriptor(
+            name: "embedded_browser_navigate",
+            description: "Navigate the visible in-app Embedded Browser side panel to a URL or domain. Requires approval because it loads external web content. Requires the Browser Ops expert and an open Embedded Browser side panel.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "url", type: .string, description: "Absolute URL or bare domain to open, e.g. `https://example.com` or `example.com`.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "embedded_browser_read_page",
+            description: "Read the current page in the visible in-app Embedded Browser side panel. Returns title, URL, readable text, link summaries, and basic form element summaries. Read-only. Requires the Browser Ops expert.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "max_chars", type: .integer, description: "Maximum readable text characters to return. Defaults to 20000, capped at 100000.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "embedded_browser_click",
+            description: "Click an element in the visible in-app Embedded Browser side panel using a CSS selector. Requires approval because it changes browser/page state. Requires the Browser Ops expert.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "selector", type: .string, description: "CSS selector for the element to click, e.g. `button[type=submit]`.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "embedded_browser_type",
+            description: "Focus an element in the visible in-app Embedded Browser side panel and replace its text/value using a CSS selector. Requires approval because it can edit web apps. Requires the Browser Ops expert.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "selector", type: .string, description: "CSS selector for the input, textarea, editable element, or text-like target.", required: true),
+                AgentToolParameter(name: "text", type: .string, description: "Text to put into the target element.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "embedded_browser_capture_screenshot",
+            description: "Capture the visible in-app Embedded Browser side panel as a PNG and return the local file path. Requires approval because screenshots may expose private information. Requires the Browser Ops expert.",
+            risk: .write,
+            parameters: []
+        ),
+        AgentToolDescriptor(
             name: "list_mcp_servers",
             description: "List configured MCP servers from Codex config with sensitive environment values redacted. Does not start servers. Read-only.",
             risk: .read,
@@ -1159,8 +1204,13 @@ enum AgentToolRegistry {
 
     static func tools(activeExperts: Set<AgentExpert>) -> [AgentToolDescriptor] {
         all.filter { descriptor in
-            guard descriptor.name.hasPrefix("short_drama_") else { return true }
-            return activeExperts.contains(.shortDrama)
+            if descriptor.name.hasPrefix("short_drama_") {
+                return activeExperts.contains(.shortDrama)
+            }
+            if descriptor.name.hasPrefix("embedded_browser_") || descriptor.name.hasPrefix("chrome_") {
+                return activeExperts.contains(.browserOps)
+            }
+            return true
         }
     }
 

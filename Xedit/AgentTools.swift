@@ -154,6 +154,18 @@ enum AgentToolRunner {
                 result = try await AgentChromeTools.captureTab(arguments: activeArguments)
             case "chrome_debugger_command":
                 result = try await AgentChromeTools.debuggerCommand(arguments: activeArguments)
+            case "embedded_browser_status":
+                result = try await AgentEmbeddedBrowserTools.status(arguments: activeArguments)
+            case "embedded_browser_navigate":
+                result = try await AgentEmbeddedBrowserTools.navigate(arguments: activeArguments)
+            case "embedded_browser_read_page":
+                result = try await AgentEmbeddedBrowserTools.readPage(arguments: activeArguments)
+            case "embedded_browser_click":
+                result = try await AgentEmbeddedBrowserTools.click(arguments: activeArguments)
+            case "embedded_browser_type":
+                result = try await AgentEmbeddedBrowserTools.typeText(arguments: activeArguments)
+            case "embedded_browser_capture_screenshot":
+                result = try await AgentEmbeddedBrowserTools.captureScreenshot(arguments: activeArguments)
             case "list_mcp_servers":
                 result = try AgentMCPBridge.listServers()
             case "list_mcp_tools":
@@ -189,7 +201,8 @@ enum AgentToolRunner {
              "terminal_send_command",
              "lark_cli",
              "call_mcp_tool",
-             "chrome_type":
+             "chrome_type",
+             "embedded_browser_type":
             return true
         default:
             return false

@@ -330,24 +330,28 @@ enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable {
 /// domain prompt only when the user explicitly enables them for a session.
 enum AgentExpert: String, Codable, CaseIterable, Identifiable, Hashable {
     case shortDrama
+    case browserOps
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
         case .shortDrama: return L10n.Expert.shortDrama
+        case .browserOps: return L10n.Expert.browserOps
         }
     }
 
     var summary: String {
         switch self {
         case .shortDrama: return L10n.Expert.shortDramaSummary
+        case .browserOps: return L10n.Expert.browserOpsSummary
         }
     }
 
     var symbol: String {
         switch self {
         case .shortDrama: return "film.stack"
+        case .browserOps: return "globe.badge.chevron.backward"
         }
     }
 
@@ -358,6 +362,12 @@ enum AgentExpert: String, Codable, CaseIterable, Identifiable, Hashable {
             === SHORT DRAMA EXPERT — ACTIVE ===
             The user enabled the short-drama production expert for this session. You may use the `short_drama_*` tools to plan projects, maintain episode/shot/asset structure, generate or refresh media tasks, review storyboards, and export production packages.
             Keep short-drama actions anchored by project/episode/shot/asset IDs. Prefer dry-run options for broad structure changes or batch generation before spending provider calls or mutating many records.
+            """
+        case .browserOps:
+            return """
+            === BROWSER OPERATIONS EXPERT — ACTIVE ===
+            The user enabled the browser operations expert for this session. You may use `embedded_browser_*` tools for the visible in-app side-panel browser, including navigation, page reading, screenshot capture, CSS-selector clicks, and form filling.
+            Use `chrome_*` tools only when the user needs their existing Chrome tabs, cookies, or login session. Screenshots and page mutations may expose or change private web apps, so keep actions scoped, explain selectors when useful, and prefer read/status calls before clicking or typing.
             """
         }
     }

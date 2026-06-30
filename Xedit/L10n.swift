@@ -83,6 +83,8 @@ enum L10n {
         }
         static let shortDrama = String(localized: "expert.short-drama", defaultValue: "Short Drama")
         static let shortDramaSummary = String(localized: "expert.short-drama.summary", defaultValue: "Enable short-drama planning, storyboard, media task, and production-package tools.")
+        static let browserOps = String(localized: "expert.browser-ops", defaultValue: "Browser Ops")
+        static let browserOpsSummary = String(localized: "expert.browser-ops.summary", defaultValue: "Enable the side-panel browser plus screenshot, click, fill, and Chrome tab tools.")
     }
 
     enum Automation {
@@ -546,6 +548,7 @@ enum L10n {
         static let files = String(localized: "agent-side-panel.files", defaultValue: "Files")
         static let terminal = String(localized: "agent-side-panel.terminal", defaultValue: "Terminal")
         static let backgroundTasks = String(localized: "agent-side-panel.background-tasks", defaultValue: "Background tasks")
+        static let embeddedBrowser = String(localized: "agent-side-panel.embedded-browser", defaultValue: "Browser")
         static let plan = String(localized: "agent-side-panel.plan", defaultValue: "Plan")
         static let close = String(localized: "agent-side-panel.close", defaultValue: "Close Panel")
         static let comingSoon = String(localized: "agent-side-panel.coming-soon", defaultValue: "Coming soon")
@@ -562,6 +565,21 @@ enum L10n {
         static let previewEmpty = String(localized: "agent-side-panel.preview-empty", defaultValue: "Pick a markdown or HTML file to preview.")
         static let previewChoose = String(localized: "agent-side-panel.preview-choose", defaultValue: "Choose File…")
         static let previewUnsupported = String(localized: "agent-side-panel.preview-unsupported", defaultValue: "Only Markdown and HTML can be previewed here.")
+    }
+
+    enum AgentEmbeddedBrowser {
+        static let addressPlaceholder = String(localized: "agent-embedded-browser.address-placeholder", defaultValue: "URL or domain")
+        static let back = String(localized: "agent-embedded-browser.back", defaultValue: "Back")
+        static let capture = String(localized: "agent-embedded-browser.capture", defaultValue: "Capture Screenshot")
+        static let forward = String(localized: "agent-embedded-browser.forward", defaultValue: "Forward")
+        static let go = String(localized: "agent-embedded-browser.go", defaultValue: "Go")
+        static func lastScreenshot(_ a1: String) -> String {
+            let template = String(localized: "agent-embedded-browser.last-screenshot", defaultValue: "Last screenshot: %@")
+            return String(format: template, a1)
+        }
+        static let ready = String(localized: "agent-embedded-browser.ready", defaultValue: "Ready")
+        static let reload = String(localized: "agent-embedded-browser.reload", defaultValue: "Reload")
+        static let untitled = String(localized: "agent-embedded-browser.untitled", defaultValue: "Untitled page")
     }
 
     enum AgentTerminal {

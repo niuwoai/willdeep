@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.109.0-rc498 - 2026-06-30
+
+### Added
+- **侧边栏内嵌浏览器与浏览器专家包（1.109.0-rc498）** —— Composer 专家入口新增 Browser Ops，可像短剧专家一样按会话激活；激活后才显示右侧“Browser”面板，并暴露 `embedded_browser_*` 与 `chrome_*` 浏览器操作工具。
+- 右侧 Browser 面板内置 WKWebView、地址栏、前进/后退/刷新和截图按钮；Agent 可对可见内嵌浏览器执行导航、读取页面、CSS selector 点击、填写文本和截图保存。Chrome bridge 工具保留给用户真实 Chrome 会话、登录态和已有标签页。
+- `XeditTests` 增加专家门禁回归测试，锁住默认不暴露浏览器/Chrome 操作工具、激活 Browser Ops 后才开放的边界；版本号从 **1.109.0-rc497** 提升为 **1.109.0-rc498**。
+
 ## 1.109.0-rc497 - 2026-06-30
 
 ### Fixed

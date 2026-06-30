@@ -42,6 +42,7 @@ enum AgentSidePanelKind: String, CaseIterable, Identifiable {
     case backgroundTasks
     case mediaTasks
     case shortDrama
+    case embeddedBrowser
     case widget
     case imageEditor
     case plan
@@ -52,6 +53,8 @@ enum AgentSidePanelKind: String, CaseIterable, Identifiable {
         switch self {
         case .shortDrama:
             return .shortDrama
+        case .embeddedBrowser:
+            return .browserOps
         default:
             return nil
         }
@@ -71,6 +74,7 @@ enum AgentSidePanelKind: String, CaseIterable, Identifiable {
         case .backgroundTasks: return "任务监控"
         case .mediaTasks: return "媒体任务"
         case .shortDrama: return "短剧"
+        case .embeddedBrowser: return L10n.AgentSidePanel.embeddedBrowser
         case .widget: return "网页组件"
         case .imageEditor: return "图片编辑"
         case .plan: return L10n.AgentSidePanel.plan
@@ -88,6 +92,7 @@ enum AgentSidePanelKind: String, CaseIterable, Identifiable {
         case .backgroundTasks: return "list.bullet.rectangle"
         case .mediaTasks: return "photo.stack"
         case .shortDrama: return "rectangle.stack.badge.play"
+        case .embeddedBrowser: return "globe"
         case .widget: return "safari"
         case .imageEditor: return "paintbrush.pointed"
         case .plan: return "checklist"
@@ -161,6 +166,8 @@ struct AgentSidePanelHost: View {
             AgentMediaTasksPanel(width: width)
         case .shortDrama:
             AgentShortDramaPanel(store: appState.agentShortDramaStore, width: width)
+        case .embeddedBrowser:
+            AgentEmbeddedBrowserPanel(width: width)
         case .widget:
             AgentSidePanelWidgetView(width: width)
         case .imageEditor:

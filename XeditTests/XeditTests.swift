@@ -141,16 +141,23 @@ struct WillDeepTests {
     }
 
     @MainActor
-    @Test("expert activation gates short-drama tools and side panel")
-    func testExpertActivationGatesShortDramaToolsAndSidePanel() {
+    @Test("expert activation gates specialist tools and side panels")
+    func testExpertActivationGatesSpecialistToolsAndSidePanels() {
         let defaultTools = AgentToolRegistry.tools(activeExperts: [])
         let shortDramaTools = AgentToolRegistry.tools(activeExperts: [.shortDrama])
+        let browserTools = AgentToolRegistry.tools(activeExperts: [.browserOps])
 
         #expect(defaultTools.contains { $0.name == "run_command" })
         #expect(!defaultTools.contains { $0.name.hasPrefix("short_drama_") })
+        #expect(!defaultTools.contains { $0.name.hasPrefix("embedded_browser_") })
+        #expect(!defaultTools.contains { $0.name.hasPrefix("chrome_") })
         #expect(shortDramaTools.contains { $0.name == "short_drama_create_project" })
+        #expect(browserTools.contains { $0.name == "embedded_browser_capture_screenshot" })
+        #expect(browserTools.contains { $0.name == "chrome_capture_tab" })
         #expect(!AgentSidePanelKind.shortDrama.isAvailable(activeExperts: []))
         #expect(AgentSidePanelKind.shortDrama.isAvailable(activeExperts: [.shortDrama]))
+        #expect(!AgentSidePanelKind.embeddedBrowser.isAvailable(activeExperts: []))
+        #expect(AgentSidePanelKind.embeddedBrowser.isAvailable(activeExperts: [.browserOps]))
 
         let appState = AppState()
         appState.startNewAgentSession()
