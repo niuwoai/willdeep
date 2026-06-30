@@ -835,10 +835,10 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 - [ ] 如果本机保存过 `q3` 或其他 SSH runtime，确认它只作为“已配置的 SSH 主机”出现；点击“管理 SSH 主机...”能打开 Settings → Runtimes，可在设置里删除或改名。
 - [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.109.0-rc496`，短剧制作能力无新增。
 
-## 1.110.0-rc1 — 短剧指针同步 / Browser Ops 诊断
+## 1.111.0-rc1 — 短剧指针同步 / Browser Ops HAR 诊断
 
-- [ ] 本版本新增 Browser Ops 的 DOM snapshot、wait-for、eval、console 和 network timing 诊断工具；不新增、不改变短剧项目、分镜、制作包、Widget、handoff bundle 和 smoke evidence 合约。
-- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.110.0-rc1`，短剧制作能力无新增。
+- [ ] 本版本新增 Browser Ops 的 HAR 导出、AJAX/API 请求响应头、storage/cookie、页面性能和失败资源聚合诊断工具；不新增、不改变短剧项目、分镜、制作包、Widget、handoff bundle 和 smoke evidence 合约。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.111.0-rc1`，短剧制作能力无新增。
 
 ---
 

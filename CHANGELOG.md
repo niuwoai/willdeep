@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.111.0-rc1 - 2026-06-30
+
+### Added
+- **Browser Ops HAR / API / 性能诊断（1.111.0-rc1）** —— 内嵌浏览器新增 `embedded_browser_requests`、`embedded_browser_export_har`、`embedded_browser_storage`、`embedded_browser_performance` 和 `embedded_browser_failed_resources`，覆盖 fetch/XHR AJAX API、脱敏请求/响应头、HAR 文件导出、同源 cookie/storage/IndexedDB 概况、页面导航/绘制/资源性能，以及失败资源聚合。
+- WKWebView 诊断脚本现在会在页面启动时包装 `fetch` 与 `XMLHttpRequest`，捕获 method、URL、status、耗时、MIME、响应大小、请求头和响应头；`authorization`、`cookie`、`set-cookie`、token、secret、API key 等敏感头会在采集层脱敏。
+- Browser Ops 专家提示和门禁测试同步扩展，确保新诊断工具仍只在激活 Browser Ops 后暴露；版本号从 **1.110.0-rc1** 提升为 **1.111.0-rc1**。
+
 ## 1.110.0-rc1 - 2026-06-30
 
 ### Added

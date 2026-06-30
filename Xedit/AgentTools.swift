@@ -174,6 +174,16 @@ enum AgentToolRunner {
                 result = try await AgentEmbeddedBrowserTools.console(arguments: activeArguments)
             case "embedded_browser_network":
                 result = try await AgentEmbeddedBrowserTools.network(arguments: activeArguments)
+            case "embedded_browser_requests":
+                result = try await AgentEmbeddedBrowserTools.requests(arguments: activeArguments)
+            case "embedded_browser_export_har":
+                result = try await AgentEmbeddedBrowserTools.exportHAR(arguments: activeArguments)
+            case "embedded_browser_storage":
+                result = try await AgentEmbeddedBrowserTools.storage(arguments: activeArguments)
+            case "embedded_browser_performance":
+                result = try await AgentEmbeddedBrowserTools.performance(arguments: activeArguments)
+            case "embedded_browser_failed_resources":
+                result = try await AgentEmbeddedBrowserTools.failedResources(arguments: activeArguments)
             case "embedded_browser_capture_screenshot":
                 result = try await AgentEmbeddedBrowserTools.captureScreenshot(arguments: activeArguments)
             case "list_mcp_servers":

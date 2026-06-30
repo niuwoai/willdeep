@@ -1107,6 +1107,51 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "embedded_browser_requests",
+            description: "Read captured fetch/XMLHttpRequest AJAX/API calls from the in-app Embedded Browser side panel, including method, URL, status, timing, redacted request headers, and redacted response headers. Use this for API inspection that Resource Timing cannot expose. Read-only. Requires the Browser Ops expert.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "max_entries", type: .integer, description: "Maximum captured requests to return. Defaults to 100, capped at 500.", required: false),
+                AgentToolParameter(name: "include_headers", type: .boolean, description: "Include redacted request/response header values. Defaults to true; sensitive headers such as cookies, auth, tokens, secrets, and API keys are always redacted.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "embedded_browser_export_har",
+            description: "Export a HAR 1.2 JSON file for the in-app Embedded Browser side panel. Captured fetch/XHR entries include redacted request and response headers; optional Resource Timing entries include timings and sizes but not headers because WebKit does not expose them. Read-only file export. Requires the Browser Ops expert.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "max_entries", type: .integer, description: "Maximum captured request/resource entries per source. Defaults to 500, capped at 1000.", required: false),
+                AgentToolParameter(name: "include_resource_timings", type: .boolean, description: "Include Resource Timing entries in addition to captured fetch/XHR entries. Defaults to true.", required: false),
+                AgentToolParameter(name: "include_har_json", type: .boolean, description: "Also return the HAR JSON inline. Defaults to false because HAR can be large.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "embedded_browser_storage",
+            description: "Inspect same-origin cookies, localStorage, sessionStorage, and IndexedDB database names for the in-app Embedded Browser page. Values are omitted by default; when values are requested, sensitive-looking names are redacted and values are truncated. Read-only. Requires the Browser Ops expert.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "include_values", type: .boolean, description: "Include non-sensitive truncated storage/cookie values. Defaults to false.", required: false),
+                AgentToolParameter(name: "max_entries", type: .integer, description: "Maximum entries per storage type. Defaults to 100, capped at 500.", required: false),
+                AgentToolParameter(name: "max_value_chars", type: .integer, description: "Maximum characters for each included value. Defaults to 500, capped at 2000.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "embedded_browser_performance",
+            description: "Read page performance diagnostics from the in-app Embedded Browser: navigation timing, paint entries, captured Web Vitals where supported, long tasks, memory where available, and resource summaries by initiator, slowest, and largest resources. Read-only. Requires the Browser Ops expert.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "max_entries", type: .integer, description: "Maximum resource entries used for summaries. Defaults to 150, capped at 500.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "embedded_browser_failed_resources",
+            description: "Aggregate failed browser resources for the in-app Embedded Browser: DOM resource load errors, failed or non-2xx/non-3xx fetch/XHR calls, and Resource Timing entries with HTTP status >= 400 when WebKit exposes responseStatus. Read-only. Requires the Browser Ops expert.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "max_entries", type: .integer, description: "Maximum failures per bucket. Defaults to 100, capped at 500.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "embedded_browser_capture_screenshot",
             description: "Capture the visible in-app Embedded Browser side panel as a PNG and return the local file path. Requires approval because screenshots may expose private information. Requires the Browser Ops expert.",
             risk: .write,
