@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-30 | Current version: v1.109.0-rc482
+> Last updated: 2026-06-30 | Current version: v1.109.0-rc487
 
 ## Positioning
 
@@ -14,6 +14,11 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **本轮 Agent 变更归因（1.109.0-rc487）** —— Agent 每轮开始不再把整个 git worktree 的历史脏文件写进会话；工具执行后用前后快照签名归因本轮实际变化路径，右侧“产物”、底部“xx 个文件已更改”和审查 diff 都只展示当前会话/本轮 Agent 造成的文件，避免把用户原有本地改动误当成本轮产物。
+- **变更文件列表默认收起（1.109.0-rc486）** —— Agent composer 上方的“前 3 个已变更文件”列表默认不再显示；吸附的“xx 个文件已更改 +x -y 审查”栏在“审查”后增加展开/收起图标，用户主动展开后才显示文件列表，展开状态按 session/runtime 保存，避免切换会话时串状态。
+- **审查 diff 窗口不抢焦点（1.109.0-rc485）** —— Agent composer 的“审查”按钮和弹出的 worktree diff 预览窗口中，标题、复制/关闭按钮、分隔线、滚动 diff 文本和外层容器都显式 `.focusable(false)`，避免打开审查窗口后焦点环落到窗口组件上，影响 composer / editor 原本的焦点状态。
+- **等待审批不自动打开右侧栏（1.109.0-rc484）** —— Agent 工具调用等待用户审批、危险确认或 `ask_user` 回答时，chat 区已有内联审批卡片可直接操作，右侧任务监控不再因此自动展开；用户手动打开任务监控时仍能看到这些等待状态，后台任务、媒体任务、待办、工作文件和学习事件的自动展开逻辑保持不变。
+- **终端录制捷径落盘持久化（1.109.0-rc483）** —— Agent 右侧终端录制的捷径现在明确写入 `Application Support/WillDeep/terminal-shortcuts/shortcuts.json`，首次读取会从旧 `UserDefaults` 键自动迁移；改名、删除和新增都会写回同一份文件，退出 App 后重新进入仍保留录制内容与新标题。echo-off 阶段的敏感输入继续只在 JSON 中保存 Keychain 引用，不把密码/Token 明文落盘。
 - **Composer 打字回显卡顿与启动 CPU 跑满（1.109.0-rc482）** —— `sample` 采样显示 debug 版主线程约 90% 耗在重建 composer 底部一排 picker pill 的 SwiftUI view-list：每一次击键都经 `activeRuntime.input`（`@Published`）转发触发 `AppState.objectWillChange`，把全部 pill 连同 `ViewThatFits` 的三套布局变体重渲染一遍。现在打字时抑制这条「runtime → AppState」转发（仅在输入框空↔非空翻转时放行一次以更新发送按钮），输入缓冲仍实时更新供发送/外部读取；slash 命令面板改由文本协调器推送查询过滤，Plan banner「继续打字即留在 Plan 模式」改走编辑回调。打字几乎零重渲染。此外把 composer 那排控件从 `ViewThatFits` 宽度自适应（每次重建都把三套变体整建一遍来测量）改为**固定单套布局**：Workspace / Model / Mode 固定展示，审批 / 执行器 / 插件 / 专家收进「更多 …」弹层——窗口切换 / 焦点变化时 composer 重建从一半多主线程降到归零。
 - **Agent 启动性能与窗口标题修复（1.109.0-rc481）** —— Agent 窗口打开采样显示主线程主要耗在 SwiftUI 布局期间重复构建 composer picker 菜单和侧栏动画重排；workspace/runtime/model picker 现在改用缓存快照，终端状态改由终端面板局部观察、不再通过 `AppState` 广播给全局，终端字体枚举进程级缓存，终端 tab 状态通知合并到下一轮 runloop，左右侧栏显隐不再对整棵 Agent 布局做隐式动画。Agent 窗口也会标记自身 `NSWindow.identifier` 并恢复标题为 `WillDeep Agent`，不再被 editor 当前文件名覆盖。
 - **语音模型启动预热默认关闭（1.109.0-rc481）** —— 用过语音后不再默认在 App 启动时加载约 937 MB ONNX 模型，降低启动窗口的 idle memory；需要按住说话即刻响应的用户仍可在 Settings → Voice 手动打开预热。

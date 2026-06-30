@@ -123,6 +123,9 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// refresh task is driven by the same code that drives the global
     /// gitStatus, but writes into this per-runtime field.
     @Published var worktreeChanges: AgentWorktreeChangeSummary = .init()
+    /// Whether the inline changed-file list above the composer is expanded.
+    /// Default collapsed so only the sticky composer summary bar is visible.
+    @Published var isWorktreeChangeCardExpanded: Bool = false
 
     // MARK: - Non-published runtime plumbing
 

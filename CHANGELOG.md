@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.109.0-rc487 - 2026-06-30
+
+### Fixed
+- **本轮 Agent 变更归因（1.109.0-rc487）** —— Agent 每轮开始不再把整个 git worktree 的历史脏文件写入会话；工具执行后改用前后快照签名归因本轮实际变化路径，右侧“产物”和底部“xx 个文件已更改”只展示当前会话/本轮 Agent 引发的文件。
+- 审查 diff 预览也改为按已归因文件路径执行 `git diff`，不再把未归因的用户本地改动一起带进 diff 窗口。
+- `GitWorktreeCoreTests` 新增归因过滤、基线变化路径和 diff 预览限域回归测试。
+- 版本号从 **1.109.0-rc486** 提升为 **1.109.0-rc487**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc486 - 2026-06-30
+
+### Changed
+- **变更文件列表默认收起（1.109.0-rc486）** —— Agent composer 上方不再默认显示“前 3 个已变更文件”卡片；吸附的“xx 个文件已更改 +x -y 审查”栏在“审查”后新增展开/收起图标，用户点展开后才显示文件列表，点收起后隐藏。
+- 展开状态改为按 Agent session/runtime 保存，切换会话不会互相串状态；“审查”仍打开完整 diff 预览。
+- 版本号从 **1.109.0-rc485** 提升为 **1.109.0-rc486**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc485 - 2026-06-30
+
+### Fixed
+- **审查 diff 窗口不抢焦点（1.109.0-rc485）** —— Agent composer 的“审查”入口和弹出的 worktree diff 预览窗口中，标题、复制/关闭按钮、分隔线、滚动 diff 文本和外层容器均显式 `.focusable(false)`，避免窗口打开后把焦点环落到任一组件上。
+- 版本号从 **1.109.0-rc484** 提升为 **1.109.0-rc485**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc484 - 2026-06-30
+
+### Fixed
+- **等待审批不自动打开右侧栏（1.109.0-rc484）** —— tool call 进入 `pendingApproval` / `awaitingConfirm` / `awaitingUserAnswer` 时，审批卡片已经以内联形式显示在 chat 区；任务监控不再因为“仅等待用户审批”自动展开右侧栏。
+- 右侧任务监控仍可在用户手动打开时展示等待审批状态；后台任务、上下文压缩、媒体任务、待办、工作文件和学习事件等仍会按原逻辑自动展开。
+- `AgentBackgroundJobsTests` 新增 snapshot 回归测试，锁住“等待审批是可见监控内容，但不是自动开栏内容”的区别。
+- 版本号从 **1.109.0-rc483** 提升为 **1.109.0-rc484**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc483 - 2026-06-30
+
+### Fixed
+- **终端录制捷径落盘持久化（1.109.0-rc483）** —— 终端录制生成的捷径从 UserDefaults 迁到 `Application Support/WillDeep/terminal-shortcuts/shortcuts.json` 文件存储；首次读取会自动迁移旧版 `com.willdeep.terminalShortcuts.v1` 数据，退出 App 后重新进入仍能恢复录制内容。
+- 终端捷径改名会立即写回同一份 JSON 文件，重新启动后继续显示改名后的标题；受保护输入仍只保存 Keychain 引用，捷径 JSON 不写入密码/Token 明文。
+- `WillDeepTests` 增加终端捷径文件落盘和改名持久化回归测试。
+- 版本号从 **1.109.0-rc482** 提升为 **1.109.0-rc483**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway 同步。
+
 ## 1.109.0-rc482 - 2026-06-30
 
 ### Fixed

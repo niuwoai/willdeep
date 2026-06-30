@@ -191,6 +191,12 @@ extension AppState {
         set { activeRuntime?.worktreeChanges = newValue }
     }
 
+    /// User-controlled expansion for the changed-file list above composer.
+    var isAgentWorktreeChangeCardExpanded: Bool {
+        get { activeRuntime?.isWorktreeChangeCardExpanded ?? false }
+        set { activeRuntime?.isWorktreeChangeCardExpanded = newValue }
+    }
+
     /// Mirrors `AgentRuntime.didEditFiles` for the active session. Used to
     /// gate the worktree-change card so a fresh New Chat never shows it.
     var agentSessionDidEditFiles: Bool {

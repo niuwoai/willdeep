@@ -169,8 +169,24 @@ private struct AgentComposerWorktreeSummaryBar: View {
                     .font(.system(size: 12, weight: .medium))
             }
             .buttonStyle(.plain)
+            .focusable(false)
             .foregroundStyle(.primary)
             .help("查看当前未提交 diff")
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    appState.isAgentWorktreeChangeCardExpanded.toggle()
+                }
+            } label: {
+                Image(systemName: appState.isAgentWorktreeChangeCardExpanded ? "chevron.down" : "chevron.up")
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 18, height: 18)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .foregroundStyle(.secondary)
+            .help(appState.isAgentWorktreeChangeCardExpanded ? "收起已变更文件列表" : "展开已变更文件列表")
         }
         .font(.system(size: 12, weight: .medium, design: .monospaced))
         .monospacedDigit()
@@ -259,6 +275,7 @@ struct AgentWorktreeDiffPreviewSheet: View {
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .focusable(false)
 
                 Spacer(minLength: 0)
 
@@ -268,15 +285,19 @@ struct AgentWorktreeDiffPreviewSheet: View {
                     Label(didCopy ? "已复制" : "复制", systemImage: didCopy ? "checkmark" : "square.on.square")
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
 
                 Button("关闭") {
                     dismiss()
                 }
                 .keyboardShortcut(.cancelAction)
+                .focusable(false)
             }
             .padding(14)
+            .focusable(false)
 
             Divider()
+                .focusable(false)
 
             ScrollView([.vertical, .horizontal]) {
                 Text(coloredDiff)
@@ -284,10 +305,13 @@ struct AgentWorktreeDiffPreviewSheet: View {
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(14)
+                    .focusable(false)
             }
             .background(Color(nsColor: .textBackgroundColor))
+            .focusable(false)
         }
         .frame(minWidth: 760, minHeight: 520)
+        .focusable(false)
     }
 
     /// 给 diff 文本按行上色:新增行绿、删除行红、hunk 头青、文件头次要
@@ -353,6 +377,7 @@ private struct ComposerCard: View {
     /// Strong ref to the coordinator so the @-token replacement helper
     /// can call back into it from SwiftUI callbacks.
     @State private var coordinatorRef = ComposerCoordinatorRef()
+    @State private var isSecretSheetPresented = false
 
     private var filteredSlashCommands: [SlashCommand] {
         SlashCommand.filter(
@@ -544,6 +569,9 @@ private struct ComposerCard: View {
 
             HStack(spacing: 6) {
                 AttachButton(action: attachImageFromPanel)
+                InsertSecretButton {
+                    isSecretSheetPresented = true
+                }
                 ComposerAdaptiveControlStrip()
                 Spacer(minLength: 0)
                 if !appState.agentQueuedMessages.isEmpty {
@@ -570,6 +598,19 @@ private struct ComposerCard: View {
         }
         .onCompatibleChange(of: appState.agentComposerFocusRevision) { _, _ in
             inputFocused = true
+        }
+        .sheet(isPresented: $isSecretSheetPresented) {
+            AgentSecretInsertSheet(
+                onCancel: {
+                    isSecretSheetPresented = false
+                    inputFocused = true
+                },
+                onInsert: { label, secret in
+                    insertSecret(label: label, secret: secret)
+                    isSecretSheetPresented = false
+                    inputFocused = true
+                }
+            )
         }
     }
 
@@ -603,6 +644,18 @@ private struct ComposerCard: View {
             atMenuQuery = ""
             atMenuVisible = false
         }
+    }
+
+    private func insertSecret(label: String, secret: String) {
+        guard let placeholder = AgentSecretStore.saveSecret(secret, label: label) else { return }
+        let current = appState.agentInput
+        let separator: String
+        if current.isEmpty || current.hasSuffix(" ") || current.hasSuffix("\n") {
+            separator = ""
+        } else {
+            separator = " "
+        }
+        appState.agentInput = current + separator + placeholder
     }
 
     private func closeAtMenu() {
@@ -704,6 +757,55 @@ private struct ComposerCard: View {
         guard let tiff = image.tiffRepresentation,
               let rep = NSBitmapImageRep(data: tiff) else { return nil }
         return rep.representation(using: .png, properties: [:])
+    }
+}
+
+private struct AgentSecretInsertSheet: View {
+    @State private var label: String = ""
+    @State private var secret: String = ""
+    @FocusState private var secretFocused: Bool
+
+    let onCancel: () -> Void
+    let onInsert: (_ label: String, _ secret: String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "lock.shield")
+                    .foregroundStyle(.secondary)
+                Text(L10n.Composer.insertSecretTitle)
+                    .font(.headline)
+            }
+
+            Text(L10n.Composer.insertSecretDescription)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 8) {
+                TextField(L10n.Composer.secretLabelPlaceholder, text: $label)
+                    .textFieldStyle(.roundedBorder)
+                SecureField(L10n.Composer.secretValuePlaceholder, text: $secret)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($secretFocused)
+            }
+
+            HStack {
+                Spacer()
+                Button(L10n.Automation.cancel, action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button(L10n.Composer.insertSecretAction) {
+                    onInsert(label, secret)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(18)
+        .frame(width: 380)
+        .onAppear {
+            DispatchQueue.main.async { secretFocused = true }
+        }
     }
 }
 

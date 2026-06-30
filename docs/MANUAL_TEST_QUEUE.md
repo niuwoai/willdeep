@@ -690,6 +690,63 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   底部“验收记录”指向
   `1.109.0-rc481 — 短剧指针同步 / Agent 启动性能修复`。
 
+## 1.109.0-rc483 — 短剧指针同步 / 终端捷径落盘持久化
+
+- ✅ 本版本没有新增短剧制作能力；短剧 MVP 验收口径延续
+  `1.109.0-rc471 — 短剧 handoff todo summary`。
+- ✅ 终端录制生成的捷径写入 `Application Support/WillDeep/terminal-shortcuts/shortcuts.json`，退出 App 后重新进入仍显示。
+- ✅ 旧版 `com.willdeep.terminalShortcuts.v1` 数据首次读取时会迁移到新 JSON 文件。
+- ✅ 终端捷径改名后立即落盘，重启后仍显示新标题。
+- ✅ echo-off 输入仍只落 Keychain 引用，`shortcuts.json` 不包含密码/Token 明文。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc483 — 短剧指针同步 / 终端捷径落盘持久化`。
+
+## 1.109.0-rc484 — 短剧指针同步 / 等待审批不开右栏
+
+- ✅ 本版本没有新增短剧制作能力；短剧 MVP 验收口径延续
+  `1.109.0-rc471 — 短剧 handoff todo summary`。
+- ✅ Agent 工具调用进入等待审批、危险确认或 `ask_user` 等用户输入状态时，chat 区显示内联审批卡片，右侧任务监控不会因此自动展开。
+- ✅ 用户手动打开任务监控时，仍能看到等待审批相关状态。
+- ✅ 后台任务、上下文压缩、媒体任务、待办、工作文件和学习事件仍按原逻辑触发任务监控自动展开。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc484 — 短剧指针同步 / 等待审批不开右栏`。
+
+## 1.109.0-rc485 — 短剧指针同步 / 审查窗口不抢焦点
+
+- ✅ 本版本没有新增短剧制作能力；短剧 MVP 验收口径延续
+  `1.109.0-rc471 — 短剧 handoff todo summary`。
+- ✅ Agent composer 底部“审查”按钮本身不可聚焦。
+- ✅ 审查 diff 预览窗口打开后，标题、复制/关闭按钮、分隔线、滚动 diff 文本和外层容器都不会接收 SwiftUI 焦点。
+- ✅ 复制按钮仍能把完整 diff 写入剪贴板；关闭按钮仍能关闭窗口。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc485 — 短剧指针同步 / 审查窗口不抢焦点`。
+
+## 1.109.0-rc486 — 短剧指针同步 / 变更列表默认收起
+
+- ✅ 本版本没有新增短剧制作能力；短剧 MVP 验收口径延续
+  `1.109.0-rc471 — 短剧 handoff todo summary`。
+- ✅ Agent composer 上方默认只显示“xx 个文件已更改 +x -y 审查”吸附栏，不显示前 3 个文件列表。
+- ✅ 点击“审查”后的展开图标后，文件列表卡片出现，并继续支持“再显示 N 个文件”。
+- ✅ 再次点击收起图标后，文件列表卡片隐藏，“审查”仍可打开完整 diff。
+- ✅ 切换到另一个 Agent session 时，文件列表展开状态不会串到新会话。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc486 — 短剧指针同步 / 变更列表默认收起`。
+
+## 1.109.0-rc487 — 短剧指针同步 / Agent 变更归因
+
+- ✅ 本版本没有新增短剧制作能力；短剧 MVP 验收口径延续
+  `1.109.0-rc471 — 短剧 handoff todo summary`。
+- ✅ 启动一轮 Agent 对话时，右侧“产物”和底部“xx 个文件已更改”不会展示本轮开始前已经存在的本地脏文件。
+- ✅ `run_command` 或补丁工具真正改动文件后，只把相对基线发生变化的路径归因到当前会话。
+- ✅ 审查 diff 预览只包含已归因文件，不混入用户原有未归因改动。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc487 — 短剧指针同步 / Agent 变更归因`。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）

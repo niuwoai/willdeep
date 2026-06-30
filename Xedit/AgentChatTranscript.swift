@@ -280,7 +280,9 @@ struct AgentChatTranscript: View {
                     // brand-new chat opened inside a git repo with unrelated
                     // uncommitted changes would surface a misleading
                     // "正在编辑 / N 个文件已更改" banner.
-                    if appState.agentSessionDidEditFiles && !appState.agentWorktreeChanges.isEmpty {
+                    if appState.agentSessionDidEditFiles,
+                       appState.isAgentWorktreeChangeCardExpanded,
+                       !appState.agentWorktreeChanges.isEmpty {
                         AgentWorktreeChangeCard(onReview: {
                             // Agent 模式:审查 / 点文件 → 拉起右侧 diff 侧栏,
                             // 不再弹独立 sheet 窗口。
