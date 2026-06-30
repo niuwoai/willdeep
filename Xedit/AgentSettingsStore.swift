@@ -703,6 +703,8 @@ enum AgentCredentialStore {
     nonisolated(unsafe) private static var testKeychainServiceOverride: String?
     nonisolated(unsafe) private static var testKeychainStorage: [String: String]?
     nonisolated(unsafe) private static var xctestKeychainStorage: [String: String] = [:]
+    nonisolated(unsafe) private static var testLoadCounts: [String: Int] = [:]
+    nonisolated(unsafe) private static var testSaveCounts: [String: Int] = [:]
 
     nonisolated private static var keychainService: String {
         testKeychainServiceOverride ?? defaultKeychainService
@@ -722,11 +724,13 @@ enum AgentCredentialStore {
     static func _wipeTestKeychain() {
         if testKeychainStorage != nil {
             testKeychainStorage?.removeAll()
+            _resetTestAccessCounts()
             return
         }
 
         if isRunningUnderXCTest {
             xctestKeychainStorage.removeAll()
+            _resetTestAccessCounts()
             return
         }
 
@@ -736,6 +740,19 @@ enum AgentCredentialStore {
             kSecAttrService as String: service
         ]
         SecItemDelete(query as CFDictionary)
+    }
+
+    static func _resetTestAccessCounts() {
+        testLoadCounts.removeAll()
+        testSaveCounts.removeAll()
+    }
+
+    static func _testLoadCount(account: String) -> Int {
+        testLoadCounts[account] ?? 0
+    }
+
+    static func _testSaveCount(account: String) -> Int {
+        testSaveCounts[account] ?? 0
     }
 
     nonisolated static func reference(account: String) -> String {
@@ -751,6 +768,7 @@ enum AgentCredentialStore {
     }
 
     nonisolated static func save(_ secret: String, account: String) {
+        testSaveCounts[account, default: 0] += 1
         let trimmed = secret.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else {
             delete(account: account)
@@ -791,6 +809,7 @@ enum AgentCredentialStore {
     }
 
     nonisolated static func load(account: String) -> String {
+        testLoadCounts[account, default: 0] += 1
         if let testKeychainStorage {
             return testKeychainStorage[account] ?? ""
         }

@@ -20,6 +20,7 @@ struct AgentSidePanelTerminalView: View {
 
 private struct AgentSidePanelTerminalContentView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.openWindow) private var openWindow
     @ObservedObject var controller: AgentInteractiveTerminalController
     @State private var renameDraft: TerminalShortcutRenameDraft?
     @State private var bootstrapTask: Task<Void, Never>?
@@ -137,6 +138,12 @@ private struct AgentSidePanelTerminalContentView: View {
             .disabled(controller.isRecording || controller.activeTab?.isRunning != true)
 
             Button {
+                editShortcut(shortcut)
+            } label: {
+                Label("编辑", systemImage: "square.and.pencil")
+            }
+
+            Button {
                 renameDraft = TerminalShortcutRenameDraft(shortcut: shortcut)
             } label: {
                 Label("改名…", systemImage: "pencil")
@@ -156,6 +163,21 @@ private struct AgentSidePanelTerminalContentView: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help(shortcutTooltip(shortcut))
+    }
+
+    private func editShortcut(_ shortcut: TerminalShortcut) {
+        controller.prepareShortcutsFileForEditing()
+        let url = TerminalShortcutStore.fileURL
+        guard appState.openEditorFile(url, allowLargeFile: true, performsSafetyChecks: false) else {
+            NSSound.beep()
+            return
+        }
+        if let line = TerminalShortcutStore.lineNumber(for: shortcut.id, in: appState.fileContent) {
+            appState.navigateEditor(toLine: line)
+        }
+        if !appState.showEditor() {
+            openWindow(value: url)
+        }
     }
 
     private var tabBar: some View {
@@ -229,8 +251,12 @@ private struct AgentSidePanelTerminalContentView: View {
             } label: {
                 Label(L10n.AgentTerminal.newLocalTab, systemImage: "terminal")
             }
-            if !controller.runtimeOptions.isEmpty {
-                Divider()
+            Divider()
+            Text(L10n.AgentTerminal.sshHostsSection)
+            if controller.runtimeOptions.isEmpty {
+                Text(L10n.AgentTerminal.noSSHHostsConfigured)
+                    .foregroundStyle(.secondary)
+            } else {
                 ForEach(controller.runtimeOptions) { runtime in
                     Button {
                         controller.openSSHTab(
@@ -243,6 +269,11 @@ private struct AgentSidePanelTerminalContentView: View {
                         Label(L10n.AgentTerminal.newSSHTab(runtime.displayName), systemImage: "network")
                     }
                 }
+            }
+            Button {
+                EditorSettingsNavigation.shared.open(.remoteRuntimes, appState: appState)
+            } label: {
+                Label(L10n.AgentTerminal.manageSSHHosts, systemImage: "gearshape")
             }
         } label: {
             Image(systemName: "plus")

@@ -585,6 +585,9 @@ enum L10n {
         static let dockerLogs = String(localized: "agent-terminal.docker.logs", defaultValue: "Docker logs")
         static let newTab = String(localized: "agent-terminal.new-tab", defaultValue: "New Terminal Tab")
         static let newLocalTab = String(localized: "agent-terminal.new-local-tab", defaultValue: "New Local Shell")
+        static let sshHostsSection = String(localized: "agent-terminal.ssh-hosts-section", defaultValue: "Configured SSH Hosts")
+        static let noSSHHostsConfigured = String(localized: "agent-terminal.no-ssh-hosts-configured", defaultValue: "No SSH hosts configured")
+        static let manageSSHHosts = String(localized: "agent-terminal.manage-ssh-hosts", defaultValue: "Manage SSH Hosts...")
         static let localShellTooltip = String(localized: "agent-terminal.local-shell-tooltip", defaultValue: "Local shell")
         static let openedByThisSession = String(localized: "agent-terminal.opened-by-this-session", defaultValue: "Opened by this chat session")
         static func newSSHTab(_ a1: String) -> String {

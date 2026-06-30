@@ -158,13 +158,23 @@ struct TerminalShortcutEvent: Codable, Equatable, Identifiable {
     }
 
     func resolvedBytes() -> [UInt8] {
+        var cache: [String: [UInt8]] = [:]
+        return resolvedBytes(cache: &cache)
+    }
+
+    func resolvedBytes(cache: inout [String: [UInt8]]) -> [UInt8] {
         guard requiresEchoOff else { return bytes }
         if !transientProtectedBytes.isEmpty { return transientProtectedBytes }
         guard let protectedBytesReference,
               !protectedBytesReference.isEmpty else { return [] }
+        if let cached = cache[protectedBytesReference] {
+            return cached
+        }
         let encoded = AgentCredentialStore.load(account: protectedBytesReference)
         guard let data = Data(base64Encoded: encoded) else { return [] }
-        return Array(data)
+        let resolved = Array(data)
+        cache[protectedBytesReference] = resolved
+        return resolved
     }
 }
 
@@ -268,6 +278,7 @@ enum TerminalShortcutStore {
     private static let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted]
         return encoder
     }()
 
@@ -299,6 +310,22 @@ enum TerminalShortcutStore {
         }
     }
 
+    static func loadEditableShortcuts() throws -> [TerminalShortcut] {
+        let data = try Data(contentsOf: fileURL)
+        return normalized(try decoder.decode([TerminalShortcut].self, from: data))
+    }
+
+    static func isStoreFile(_ url: URL) -> Bool {
+        url.standardizedFileURL.path == fileURL.standardizedFileURL.path
+    }
+
+    static func lineNumber(for shortcutID: UUID, in text: String) -> Int? {
+        let needle = shortcutID.uuidString
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        guard let index = lines.firstIndex(where: { $0.contains(needle) }) else { return nil }
+        return index + 1
+    }
+
     static func deleteProtectedInputs(for shortcut: TerminalShortcut) {
         for event in shortcut.events {
             if let account = event.protectedBytesReference, !account.isEmpty {
@@ -325,9 +352,8 @@ enum TerminalShortcutStore {
             guard event.requiresEchoOff else { return event }
             var prepared = event
             let account = event.protectedBytesReference ?? protectedInputAccount(shortcutID: shortcut.id, eventID: event.id)
-            let protectedBytes = event.resolvedBytes()
-            if !protectedBytes.isEmpty {
-                AgentCredentialStore.save(Data(protectedBytes).base64EncodedString(), account: account)
+            if !event.transientProtectedBytes.isEmpty {
+                AgentCredentialStore.save(Data(event.transientProtectedBytes).base64EncodedString(), account: account)
             }
             prepared.protectedBytesReference = account
             prepared.transientProtectedBytes = []
@@ -625,6 +651,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
         guard isRunning, shortcut.isPlayable, !isRecording, !isPlayingShortcut else { return }
         isPlayingShortcut = true
         Task { [weak self] in
+            var protectedBytesCache: [String: [UInt8]] = [:]
             for event in shortcut.events {
                 if event.delayMilliseconds > 0 {
                     try? await Task.sleep(nanoseconds: UInt64(event.delayMilliseconds) * 1_000_000)
@@ -635,13 +662,16 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
                         self.isPlayingShortcut = false
                         return false
                     }
-                    let bytes = event.resolvedBytes()
-                    guard !bytes.isEmpty else { return true }
-                    self.terminalView.send(bytes)
                     return true
                 }
                 if shouldContinue == false {
                     break
+                }
+                let bytes = event.resolvedBytes(cache: &protectedBytesCache)
+                guard !bytes.isEmpty else { continue }
+                await MainActor.run {
+                    guard let self, self.isRunning else { return }
+                    self.terminalView.send(bytes)
                 }
             }
             await MainActor.run {
@@ -947,6 +977,21 @@ final class AgentInteractiveTerminalController: ObservableObject {
     func playShortcut(_ shortcut: TerminalShortcut) {
         guard !isRecording else { return }
         activeTab?.playShortcut(shortcut)
+    }
+
+    func prepareShortcutsFileForEditing() {
+        TerminalShortcutStore.save(shortcuts)
+    }
+
+    @discardableResult
+    func reloadShortcutsFromDisk() -> Bool {
+        do {
+            shortcuts = try TerminalShortcutStore.loadEditableShortcuts()
+            return true
+        } catch {
+            print("AgentInteractiveTerminalController: failed to reload edited shortcuts: \(error)")
+            return false
+        }
     }
 
     func renameShortcut(id: UUID, title: String) {

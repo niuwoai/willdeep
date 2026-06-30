@@ -531,6 +531,7 @@ extension AppState {
             registerRecentFile(url)
             registerRecentFolder(url.deletingLastPathComponent())
             refreshGitStatus()
+            reloadTerminalShortcutsIfNeeded(savedURL: url)
             persistSession()
             return true
         } catch {
@@ -546,6 +547,14 @@ extension AppState {
             alert.runModal()
             return false
         }
+    }
+
+    private func reloadTerminalShortcutsIfNeeded(savedURL: URL) {
+        guard TerminalShortcutStore.isStoreFile(savedURL),
+              !agentTerminalController.reloadShortcutsFromDisk() else {
+            return
+        }
+        showFileOperationError("终端捷径 JSON 已保存，但内容解析失败；捷径列表会继续使用保存前的可用版本。请检查 JSON 格式后再次保存。")
     }
 
     // MARK: - Session Restore

@@ -809,6 +809,32 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   底部“验收记录”指向
   `1.109.0-rc493 — 短剧指针同步 / 请求详情截断`。
 
+## 1.109.0-rc494 — 短剧指针同步 / 终端捷径编辑
+
+- ✅ 本版本没有新增短剧制作能力；短剧 MVP 验收口径延续
+  `1.109.0-rc471 — 短剧 handoff todo summary`。
+- ✅ 终端捷径编辑入口只影响 Agent 右侧终端捷径管理，不改变短剧项目、分镜、制作包、Widget、handoff bundle 和 smoke evidence 合约。
+- ✅ 终端捷径菜单点击“编辑”后会打开 `shortcuts.json` 并定位到当前捷径；保存合法 JSON 后列表自动重载。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc494 — 短剧指针同步 / 终端捷径编辑`。
+
+## 1.109.0-rc495 — 短剧指针同步 / 终端捷径 Keychain
+
+- ✅ 本版本没有新增短剧制作能力；短剧 MVP 验收口径延续
+  `1.109.0-rc471 — 短剧 handoff todo summary`。
+- ✅ 终端捷径 Keychain 授权收敛只影响 Agent 右侧终端捷径管理，不改变短剧项目、分镜、制作包、Widget、handoff bundle 和 smoke evidence 合约。
+- ✅ 改名已有受保护输入的终端捷径时，不再读取或写入对应 Keychain 片段；同一次回放同一 Keychain 引用最多读取一次。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc495 — 短剧指针同步 / 终端捷径 Keychain`。
+
+## 1.109.0-rc496 — 短剧指针同步 / 侧边栏终端 SSH 主机
+
+- [ ] 打开 Agent 侧边栏终端，点击新建终端 `+` 菜单；确认本地 Shell 与 SSH 主机分区清晰，SSH 区域标题为已配置主机，未配置时显示空状态。
+- [ ] 如果本机保存过 `q3` 或其他 SSH runtime，确认它只作为“已配置的 SSH 主机”出现；点击“管理 SSH 主机...”能打开 Settings → Runtimes，可在设置里删除或改名。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.109.0-rc496`，短剧制作能力无新增。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）

@@ -257,6 +257,119 @@ struct WillDeepTests {
         #expect(FileManager.default.fileExists(atPath: TerminalShortcutStore.fileURL.path))
     }
 
+    @Test("terminal shortcut file is editable JSON and reloads edited content")
+    func testTerminalShortcutEditableFileReloadsEditedContent() throws {
+        let shortcutsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("terminal-shortcut-edit-\(UUID().uuidString)", isDirectory: true)
+        TerminalShortcutStore._setTestDirectoryOverride(shortcutsDirectory)
+        defer {
+            TerminalShortcutStore._setTestDirectoryOverride(nil)
+            try? FileManager.default.removeItem(at: shortcutsDirectory)
+        }
+
+        let shortcut = TerminalShortcut(
+            id: UUID(),
+            title: "Before",
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 1),
+            durationMilliseconds: 1_000,
+            events: [
+                TerminalShortcutEvent(
+                    delayMilliseconds: 0,
+                    bytes: Array("pwd\n".utf8)
+                )
+            ],
+            hasProtectedInput: false
+        )
+
+        TerminalShortcutStore.save([shortcut])
+        let json = try String(contentsOf: TerminalShortcutStore.fileURL, encoding: .utf8)
+        #expect(json.contains("\n"))
+        #expect(TerminalShortcutStore.lineNumber(for: shortcut.id, in: json) != nil)
+
+        let editedJSON = json.replacingOccurrences(of: "\"Before\"", with: "\"Edited\"")
+        try editedJSON.write(to: TerminalShortcutStore.fileURL, atomically: true, encoding: .utf8)
+
+        let loaded = try #require(TerminalShortcutStore.loadEditableShortcuts().first)
+        #expect(loaded.title == "Edited")
+        #expect(TerminalShortcutStore.isStoreFile(TerminalShortcutStore.fileURL))
+    }
+
+    @Test("terminal shortcut rename does not touch persisted protected Keychain rows")
+    func testTerminalShortcutRenameSkipsPersistedProtectedKeychainRows() throws {
+        _ = AgentCredentialStore._setTestKeychainServiceOverride("terminal-shortcut-rename-protected-\(UUID().uuidString)")
+        let shortcutsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("terminal-shortcut-rename-protected-\(UUID().uuidString)", isDirectory: true)
+        TerminalShortcutStore._setTestDirectoryOverride(shortcutsDirectory)
+        defer {
+            AgentCredentialStore._wipeTestKeychain()
+            AgentCredentialStore._setTestKeychainServiceOverride(nil)
+            TerminalShortcutStore._setTestDirectoryOverride(nil)
+            try? FileManager.default.removeItem(at: shortcutsDirectory)
+        }
+
+        let account = "terminal-shortcut/existing/event"
+        AgentCredentialStore.save(Data(Array("secret-password".utf8)).base64EncodedString(), account: account)
+        AgentCredentialStore._resetTestAccessCounts()
+
+        let shortcut = TerminalShortcut(
+            id: UUID(),
+            title: "Renamed",
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 1),
+            durationMilliseconds: 1_000,
+            events: [
+                TerminalShortcutEvent(
+                    delayMilliseconds: 0,
+                    bytes: [],
+                    requiresEchoOff: true,
+                    protectedBytesReference: account
+                )
+            ],
+            hasProtectedInput: true
+        )
+
+        TerminalShortcutStore.save([shortcut])
+
+        #expect(AgentCredentialStore._testLoadCount(account: account) == 0)
+        #expect(AgentCredentialStore._testSaveCount(account: account) == 0)
+        let persistedJSON = try String(contentsOf: TerminalShortcutStore.fileURL, encoding: .utf8)
+        #expect(persistedJSON.contains(account))
+        #expect(!persistedJSON.contains("secret-password"))
+    }
+
+    @Test("terminal shortcut protected replay cache reads each Keychain account once")
+    func testTerminalShortcutProtectedReplayCacheReadsEachAccountOnce() {
+        _ = AgentCredentialStore._setTestKeychainServiceOverride("terminal-shortcut-replay-cache-\(UUID().uuidString)")
+        defer {
+            AgentCredentialStore._wipeTestKeychain()
+            AgentCredentialStore._setTestKeychainServiceOverride(nil)
+        }
+
+        let account = "terminal-shortcut/replay/event"
+        let secretBytes = Array("secret-password".utf8)
+        AgentCredentialStore.save(Data(secretBytes).base64EncodedString(), account: account)
+        AgentCredentialStore._resetTestAccessCounts()
+
+        var cache: [String: [UInt8]] = [:]
+        let first = TerminalShortcutEvent(
+            delayMilliseconds: 0,
+            bytes: [],
+            requiresEchoOff: true,
+            protectedBytesReference: account
+        )
+        let second = TerminalShortcutEvent(
+            delayMilliseconds: 1,
+            bytes: [],
+            requiresEchoOff: true,
+            protectedBytesReference: account
+        )
+
+        #expect(first.resolvedBytes(cache: &cache) == secretBytes)
+        #expect(second.resolvedBytes(cache: &cache) == secretBytes)
+        #expect(AgentCredentialStore._testLoadCount(account: account) == 1)
+    }
+
     @MainActor
     @Test("live thinking preview tracks streaming reasoning and dies with the indicator")
     func testAgentLiveThinkingPreview() {

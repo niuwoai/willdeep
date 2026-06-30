@@ -10,6 +10,32 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct AgentRemoteRuntimeTests {
+    @Test("runtime store starts empty without seeding personal SSH hosts")
+    func runtimeStoreStartsEmptyWithoutPersonalHosts() throws {
+        let suiteName = "willdeep-runtime-store-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let previous = AgentRuntimeStore.setTestDefaults(defaults)
+        defer {
+            AgentRuntimeStore.setTestDefaults(previous)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        #expect(AgentRuntimeStore.loadDescriptors().isEmpty)
+
+        let runtime = RuntimeDescriptor(
+            displayName: "Team Build Box",
+            host: "build.example.com",
+            username: "deploy",
+            defaultWorkspacePath: "/srv/app"
+        )
+        AgentRuntimeStore.saveDescriptors([runtime])
+
+        let loaded = AgentRuntimeStore.loadDescriptors()
+        #expect(loaded.map(\.displayName) == ["Team Build Box"])
+        #expect(!loaded.contains { $0.displayName == "q3" || $0.host == "q3.example.com" })
+    }
+
     @Test("old session JSON migrates workspaceRootPath to local WorkspaceLocation")
     func oldSessionJSONMigratesWorkspaceRootPath() throws {
         let json = """

@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-30 | Current version: v1.109.0-rc493
+> Last updated: 2026-06-30 | Current version: v1.109.0-rc496
 
 ## Positioning
 
@@ -14,6 +14,9 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **侧边栏终端 SSH 主机来源透明化（1.109.0-rc496）** —— 新建终端菜单会把 SSH runtime 明确归入“已配置的 SSH 主机”，空配置时显示无主机状态，并提供“管理 SSH 主机...”入口直达 Settings → Runtimes；空 defaults 不会自动种下 `q3` 这类个人环境。
+- **终端捷径改名 Keychain 授权收敛（1.109.0-rc495）** —— 已经落盘的受保护输入片段在改名、排序、pretty JSON 保存时只保留 Keychain 引用，不再读取并重写 Keychain；回放同一个终端捷径时按 account 缓存受保护片段，同一引用一次回放最多读取一次，避免一个录制里多个 protected event 反复要求输入密码。
+- **终端录制捷径可编辑（1.109.0-rc494）** —— Agent 右侧终端录制的捷径菜单新增“编辑”，会用 WillDeep 现有编辑器打开 `Application Support/WillDeep/terminal-shortcuts/shortcuts.json` 并定位到当前捷径；JSON 改为 pretty printed，保存后终端捷径列表自动重载，格式错误时保留保存前可用列表并提示修正。
 - **请求详情面板长文本截断（1.109.0-rc493）** —— Agent 错误卡片的“详情”展开后会对超长 request summary / request body 做展示层中间省略，保留头尾信息，避免 SwiftUI 排版完整大 JSON 或长 tool 输出时卡顿；每个 section 仍可一键复制完整未截断内容。
 - **侧边栏终端快照只读最新一屏（1.109.0-rc492）** —— `terminal_snapshot` 默认只读取 active tab live 底部可见屏幕，不再把最近 400 行 scrollback/history 一起塞进模型上下文；默认返回上限降为 6000 字符，避免旧命令输出把当前终端状态带偏。
 - **SSH 远端只读命令识别（1.109.0-rc491）** —— Agent 的 `run_command` 会跳过 `ssh` 外壳、按远端真实命令判断风险；`ssh host cat /var/log/...`、`ssh host ping ...` 这类只读远端命令不再被本地 workspace 路径检查误判为写操作。交互式 `ssh host` 仍需批准，远端 `rm -rf` 和读取 `~/.ssh/id_rsa` 仍按危险/敏感路径升级。

@@ -466,7 +466,8 @@ enum RemotePathValidator {
 
 enum AgentRuntimeStore {
     private static let defaultsKey = "com.willdeep.agentRuntime.descriptors.v1"
-    private static var defaults: UserDefaults { .standard }
+    private static var defaultsOverride: UserDefaults?
+    private static var defaults: UserDefaults { defaultsOverride ?? .standard }
 
     static func loadDescriptors() -> [RuntimeDescriptor] {
         guard let data = defaults.data(forKey: defaultsKey),
@@ -506,5 +507,12 @@ enum AgentRuntimeStore {
     static func delete(id: UUID) {
         RemoteRuntimeSecretStore.deleteDaemonToken(runtimeID: id)
         saveDescriptors(loadDescriptors().filter { $0.id != id })
+    }
+
+    @discardableResult
+    static func setTestDefaults(_ defaults: UserDefaults?) -> UserDefaults? {
+        let previous = defaultsOverride
+        defaultsOverride = defaults
+        return previous
     }
 }

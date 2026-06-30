@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.109.0-rc496 - 2026-06-30
+
+### Fixed
+- **侧边栏终端 SSH 主机来源透明化（1.109.0-rc496）** —— 新建终端菜单不再让本机保存过的 SSH runtime 像 App 内置环境一样混在本地终端下面；菜单显式标注“已配置的 SSH 主机”，空配置时显示无主机状态，并提供“管理 SSH 主机...”入口直达 Settings → Runtimes。
+- `AgentRuntimeStore` 增加隔离 defaults 的回归测试，确认空配置不会自动种下 `q3` 这类个人主机；保存团队主机后也只读取已保存的配置。
+- 版本号从 **1.109.0-rc495** 提升为 **1.109.0-rc496**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc495 - 2026-06-30
+
+### Fixed
+- **终端捷径改名不再反复触发 Keychain 授权（1.109.0-rc495）** —— 已经落盘的受保护输入片段在改名、排序、pretty JSON 保存时只保留 Keychain 引用，不再逐段读取再写回，避免改一个标题弹多次“允许访问机密信息”。
+- 回放同一个终端捷径时会按 Keychain account 缓存受保护片段，同一次回放里同一引用最多读取一次；`WillDeepTests` 增加“改名不碰 Keychain”和“回放缓存读取”回归测试。
+- 版本号从 **1.109.0-rc494** 提升为 **1.109.0-rc495**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc494 - 2026-06-30
+
+### Added
+- **终端录制捷径可编辑（1.109.0-rc494）** —— 终端捷径菜单新增“编辑”，会用 WillDeep 现有编辑器打开 `Application Support/WillDeep/terminal-shortcuts/shortcuts.json` 并定位到当前捷径，用户可直接修改录制内容。
+- 捷径 JSON 改为 pretty printed，保存该文件后终端捷径列表会自动从磁盘重载；如果 JSON 格式错误，列表继续使用保存前的可用版本并提示用户修正。
+- `WillDeepTests` 增加终端捷径编辑文件格式与重载回归测试；版本号从 **1.109.0-rc493** 提升为 **1.109.0-rc494**。
+
 ## 1.109.0-rc493 - 2026-06-30
 
 ### Fixed
