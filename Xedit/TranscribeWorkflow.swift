@@ -67,11 +67,12 @@ struct TranscribeWorkflow: WorkflowDefinition {
         let elapsed = Date().timeIntervalSince(started)
 
         // Read audio duration (best-effort — works for most formats).
-        let durationSeconds: Double = {
-            let asset = AVURLAsset(url: audioURL)
-            let cmTime = asset.duration
-            return cmTime.isValid ? cmTime.seconds : 0
-        }()
+        let durationSeconds: Double
+        if let cmTime = try? await AVURLAsset(url: audioURL).load(.duration), cmTime.isValid {
+            durationSeconds = cmTime.seconds
+        } else {
+            durationSeconds = 0
+        }
 
         let durationFmt = formatDuration(durationSeconds)
         let elapsedFmt = formatDuration(elapsed)

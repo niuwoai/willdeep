@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-30 | Current version: v1.109.0-rc496
+> Last updated: 2026-06-30 | Current version: v1.109.0-rc497
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **编译告警清理（1.109.0-rc497）** —— 工程开了 `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`，大量纯函数/纯值类型被默认卷进 @MainActor，从 off-main 上下文调用即报跨隔离告警；已给相关纯 helper / 值类型 / C 封装标 `nonisolated`。另把 7 个 workflow 的 `AVURLAsset.duration` 迁到异步 `load(.duration)`，并给 `Re-sign ONNX dylib` 的 run-script phase 补 input/output 路径（不再每次 build 都跑）。编译告警 43 → 17（剩余为 onnxruntime C 互操作与 AppIntents 提示）。
 - **侧边栏终端 SSH 主机来源透明化（1.109.0-rc496）** —— 新建终端菜单会把 SSH runtime 明确归入“已配置的 SSH 主机”，空配置时显示无主机状态，并提供“管理 SSH 主机...”入口直达 Settings → Runtimes；空 defaults 不会自动种下 `q3` 这类个人环境。
 - **终端捷径改名 Keychain 授权收敛（1.109.0-rc495）** —— 已经落盘的受保护输入片段在改名、排序、pretty JSON 保存时只保留 Keychain 引用，不再读取并重写 Keychain；回放同一个终端捷径时按 account 缓存受保护片段，同一引用一次回放最多读取一次，避免一个录制里多个 protected event 反复要求输入密码。
 - **终端录制捷径可编辑（1.109.0-rc494）** —— Agent 右侧终端录制的捷径菜单新增“编辑”，会用 WillDeep 现有编辑器打开 `Application Support/WillDeep/terminal-shortcuts/shortcuts.json` 并定位到当前捷径；JSON 改为 pretty printed，保存后终端捷径列表自动重载，格式错误时保留保存前可用列表并提示修正。

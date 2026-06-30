@@ -69,7 +69,7 @@ struct VideoGifWorkflow: WorkflowDefinition {
             return "Transcription failed: \(error.localizedDescription)"
         }
 
-        let durationSeconds = AVURLAsset(url: videoURL).duration.seconds
+        let durationSeconds = (try? await AVURLAsset(url: videoURL).load(.duration))?.seconds ?? 0
 
         let locatorPrompt = """
         You are picking a short moment to clip from a video to turn into

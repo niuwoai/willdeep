@@ -62,7 +62,7 @@ struct VideoThumbnailWorkflow: WorkflowDefinition {
         let framesDir = downloads.appendingPathComponent("\(stem)-thumbs-\(stamp)")
         try? FileManager.default.createDirectory(at: framesDir, withIntermediateDirectories: true)
 
-        let durationSeconds = AVURLAsset(url: videoURL).duration.seconds
+        let durationSeconds = (try? await AVURLAsset(url: videoURL).load(.duration))?.seconds ?? 0
 
         // 抽帧
         do {

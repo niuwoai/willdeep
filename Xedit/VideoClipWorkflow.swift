@@ -67,7 +67,7 @@ struct VideoClipWorkflow: WorkflowDefinition {
             return "Transcription failed: \(error.localizedDescription)"
         }
 
-        let durationSeconds = AVURLAsset(url: videoURL).duration.seconds
+        let durationSeconds = (try? await AVURLAsset(url: videoURL).load(.duration))?.seconds ?? 0
         let durationLabel = formatHMS(durationSeconds)
 
         // Locator agent — outputs strict JSON line with start/end seconds.

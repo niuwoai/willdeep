@@ -81,7 +81,7 @@ struct MeetingNotesWorkflow: WorkflowDefinition {
             return "Transcription failed: \(error.localizedDescription)"
         }
 
-        let durationSeconds = AVURLAsset(url: audioURL).duration.seconds
+        let durationSeconds = (try? await AVURLAsset(url: audioURL).load(.duration))?.seconds ?? 0
         let durationLabel = formatDuration(durationSeconds.isFinite ? durationSeconds : 0)
 
         // One synthesis agent.

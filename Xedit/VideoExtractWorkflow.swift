@@ -142,7 +142,7 @@ struct VideoExtractWorkflow: WorkflowDefinition {
 
         // -- 5. 综合 report.md：1 个 sub-agent 看 metadata + transcript --
         let techSpecs = summarizeProbe(probeJSON)
-        let durationSeconds = AVURLAsset(url: videoURL).duration.seconds
+        let durationSeconds = (try? await AVURLAsset(url: videoURL).load(.duration))?.seconds ?? 0
         let reportPrompt = """
         You're being given the full extracted contents of a video so you
         can analyze "how this video is put together" — the user wants to

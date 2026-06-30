@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.109.0-rc497 - 2026-06-30
+
+### Fixed
+- **编译告警清理：AVFoundation 弃用 + run-script 每次重跑（1.109.0-rc497）** —— 接续 rc 系列的告警清理。① 7 个 workflow（MeetingNotes / Transcribe / VideoClip / VideoExtract / VideoGif / VideoSummary / VideoThumbnail）里的 `AVURLAsset.duration`（macOS 13 起弃用）改为异步 `try? await asset.load(.duration)`，行为不变；TranscribeWorkflow 的同步 IIFE 顺手重写成 async 取值。② `Re-sign ONNX dylib (Release only)` 这条 run-script build phase 之前没声明 `inputPaths/outputPaths`，被 Xcode 判为「无输出 → 每次 build 都跑」；补上源 dylib 输入与产物 dylib 输出后可做依赖分析、Release 下能跳过。编译告警 25 → 17（累计 43 → 17，剩余为 onnxruntime C 互操作 16 + AppIntents 元数据提示 1，风险高/无害，暂留）。
+- 版本号从 **1.109.0-rc496** 提升为 **1.109.0-rc497**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway 同步。
+
 ## 1.109.0-rc496 - 2026-06-30
 
 ### Fixed

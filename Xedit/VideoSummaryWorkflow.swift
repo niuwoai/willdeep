@@ -83,7 +83,7 @@ struct VideoSummaryWorkflow: WorkflowDefinition {
             return "Local transcription failed: \(error.localizedDescription)"
         }
 
-        let durationSeconds = AVURLAsset(url: videoURL).duration.seconds
+        let durationSeconds = (try? await AVURLAsset(url: videoURL).load(.duration))?.seconds ?? 0
         let durationLabel = formatDuration(durationSeconds.isFinite ? durationSeconds : 0)
 
         // Step 4: one sub-agent writes the markdown notes.
