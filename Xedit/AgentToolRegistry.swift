@@ -1045,6 +1045,14 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "embedded_browser_snapshot",
+            description: "Snapshot visible interactive elements in the in-app Embedded Browser side panel. Returns refs, generated CSS selectors, stable selector guesses, text, roles, editability, clickability, and bounds. Use before clicking or typing so selectors are grounded in the current DOM. Read-only. Requires the Browser Ops expert.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "max_elements", type: .integer, description: "Maximum interactive elements to return. Defaults to 100, capped at 300.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "embedded_browser_click",
             description: "Click an element in the visible in-app Embedded Browser side panel using a CSS selector. Requires approval because it changes browser/page state. Requires the Browser Ops expert.",
             risk: .write,
@@ -1059,6 +1067,43 @@ enum AgentToolRegistry {
             parameters: [
                 AgentToolParameter(name: "selector", type: .string, description: "CSS selector for the input, textarea, editable element, or text-like target.", required: true),
                 AgentToolParameter(name: "text", type: .string, description: "Text to put into the target element.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "embedded_browser_wait_for",
+            description: "Wait until the in-app Embedded Browser side panel matches a condition, polling the current page without blocking the UI. Use after navigation, click, or form submit. Supports condition values: selector, text, url_contains, title_contains. Read-only. Requires the Browser Ops expert.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "condition", type: .string, description: "One of: selector, text, url_contains, title_contains.", required: true),
+                AgentToolParameter(name: "value", type: .string, description: "Selector/text/URL fragment/title fragment to wait for.", required: true),
+                AgentToolParameter(name: "timeout_ms", type: .integer, description: "Timeout in milliseconds. Defaults to 5000, capped at 30000.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "embedded_browser_eval",
+            description: "Run explicit JavaScript in the in-app Embedded Browser page context and return a JSON/stringified result. This can inspect or mutate web apps, so prefer embedded_browser_snapshot/read_page/console/network first. Requires approval and the Browser Ops expert.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "javascript", type: .string, description: "JavaScript body to execute inside an async function. Return a JSON-serializable value when possible.", required: true),
+                AgentToolParameter(name: "max_chars", type: .integer, description: "Maximum result characters to return. Defaults to 20000, capped at 100000.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "embedded_browser_console",
+            description: "Read captured console/debug/info/warn/error messages plus window error and unhandled promise rejection events from the in-app Embedded Browser side panel. Read-only. Requires the Browser Ops expert.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "max_entries", type: .integer, description: "Maximum console events to return. Defaults to 100, capped at 300.", required: false),
+                AgentToolParameter(name: "levels", type: .stringArray, description: "Optional levels to include, such as debug, log, info, warn, error.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "embedded_browser_network",
+            description: "Read Performance Resource Timing data from the in-app Embedded Browser page: resource URLs, initiator types, protocol, transfer/encoded/decoded bytes, duration, DNS/connect/request/download timings, and estimated bytes per second. Read-only. Requires the Browser Ops expert.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "max_entries", type: .integer, description: "Maximum resource timing entries to return. Defaults to 150, capped at 500.", required: false),
+                AgentToolParameter(name: "include_data_urls", type: .boolean, description: "Include data: URLs. Defaults to false.", required: false)
             ]
         ),
         AgentToolDescriptor(

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.110.0-rc1 - 2026-06-30
+
+### Added
+- **Browser Ops 诊断工具（1.110.0-rc1）** —— 内嵌浏览器新增 `embedded_browser_snapshot`、`embedded_browser_wait_for`、`embedded_browser_eval`、`embedded_browser_console` 和 `embedded_browser_network`，补齐 DOM 元素探测、等待页面变化、受控 JS 检查、console/error/rejection 读取，以及 Performance Resource Timing 网络资源耗时、大小和估算速度。
+- Browser 面板 WKWebView 会在页面启动时注入轻量诊断脚本，捕获 `console.debug/log/info/warn/error`、`window.error` 和 `unhandledrejection` 到本地环形缓冲；网络读取基于浏览器原生 performance entries，不额外代理或下载资源。
+- `XeditTests` 扩展 Browser Ops 专家门禁断言，确认 console、network、snapshot 等新工具仍只在激活 Browser Ops 后暴露；这是 Browser Ops 的新增诊断能力，版本号从 **1.109.0-rc498** 提升为 **1.110.0-rc1**。
+
 ## 1.109.0-rc498 - 2026-06-30
 
 ### Added
