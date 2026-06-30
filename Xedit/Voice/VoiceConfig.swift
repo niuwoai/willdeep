@@ -77,7 +77,9 @@ final class UserPreferences: ObservableObject {
 /// Where SenseVoice / tokens / cmvn live on disk after ModelDownloader
 /// has fetched them. Kept here so all Voice code consults the same path.
 /// Resolves to `~/Library/Application Support/WillDeep/Voice/Models/sensevoice-small/`.
-enum VoiceModelLocation {
+// nonisolated：仅是一组纯路径常量，actor SpeechTranscriptionModel（off-main）
+// 需要直接读它们；不标的话会被工程默认 @MainActor 隔离卷进去而报跨隔离告警。
+nonisolated enum VoiceModelLocation {
     static let modelDirectoryName = "sensevoice-small"
 
     static var modelDirectory: URL {

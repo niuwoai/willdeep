@@ -219,7 +219,7 @@ struct DeepResearchWorkflow: WorkflowDefinition {
         let angles: [Angle]
     }
 
-    struct SearchOutput: Decodable {
+    nonisolated struct SearchOutput: Decodable {
         let results: [SearchResult]
     }
 
@@ -231,7 +231,7 @@ struct DeepResearchWorkflow: WorkflowDefinition {
         let relevance: String
     }
 
-    struct ExtractOutput: Decodable, Sendable {
+    nonisolated struct ExtractOutput: Decodable, Sendable {
         struct ExtractedClaim: Decodable, Sendable {
             let claim: String
             let quote: String
@@ -277,7 +277,7 @@ struct DeepResearchWorkflow: WorkflowDefinition {
         let angle: String
     }
 
-    struct VerdictOutput: Decodable, Sendable {
+    nonisolated struct VerdictOutput: Decodable, Sendable {
         let refuted: Bool
         let evidence: String
         /// "high" / "medium" / "low"
@@ -651,7 +651,7 @@ struct DeepResearchWorkflow: WorkflowDefinition {
         var remainingFetchSlots: Int
     }
 
-    private static func normalizedURL(_ url: String) -> String {
+    private nonisolated static func normalizedURL(_ url: String) -> String {
         if let parsed = URL(string: url),
            let host = parsed.host?.replacingOccurrences(of: "www.", with: "") {
             let path = parsed.path.hasSuffix("/") ? String(parsed.path.dropLast()) : parsed.path
@@ -664,7 +664,7 @@ struct DeepResearchWorkflow: WorkflowDefinition {
         URL(string: url)?.host?.replacingOccurrences(of: "www.", with: "") ?? "unknown"
     }
 
-    private static func relevanceRank(_ relevance: String) -> Int {
+    private nonisolated static func relevanceRank(_ relevance: String) -> Int {
         switch relevance.lowercased() {
         case "high": return 0
         case "medium": return 1
@@ -673,7 +673,7 @@ struct DeepResearchWorkflow: WorkflowDefinition {
         }
     }
 
-    private static func importanceRank(_ importance: String) -> Int {
+    private nonisolated static func importanceRank(_ importance: String) -> Int {
         switch importance.lowercased() {
         case "central": return 0
         case "supporting": return 1

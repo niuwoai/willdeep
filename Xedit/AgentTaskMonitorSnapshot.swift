@@ -29,6 +29,19 @@ struct AgentTaskMonitorSnapshot: Equatable {
             || !attentionToolIDs.isEmpty
     }
 
+    var hasAutoOpenMonitorContent: Bool {
+        // 等待审批/确认/回答已经以内联 tool card 展示在 chat 区,不再
+        // 因为这类状态自动打开右侧任务监控；真正后台/产物/待办等
+        // 需要另一个监控面板承载的内容才触发自动展开。
+        isCompressingContext
+            || runningTaskCount > 0
+            || !jobDigest.isEmpty
+            || !mediaTaskDigest.isEmpty
+            || !todoDigest.isEmpty
+            || !workFileDigest.isEmpty
+            || !learningDigest.isEmpty
+    }
+
     var hasVisibleMonitorContent: Bool {
         isAgentActivityActive
             || !jobDigest.isEmpty

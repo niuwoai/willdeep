@@ -747,6 +747,68 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
   底部“验收记录”指向
   `1.109.0-rc487 — 短剧指针同步 / Agent 变更归因`。
 
+## 1.109.0-rc488 — 短剧指针同步 / Agent 受保护机密
+
+- ✅ 本版本没有新增短剧制作能力；短剧 MVP 验收口径延续
+  `1.109.0-rc471 — 短剧 handoff todo summary`。
+- ✅ Agent composer 的受保护机密占位符只影响通用 Agent 工具执行边界，不改变短剧项目、分镜、制作包、Widget、handoff bundle 和 smoke evidence 合约。
+- ✅ 工具结果、后台任务输出和错误消息会脱敏 `${secret:...}` 解析出的真实值；短剧 smoke evidence 仍按既有敏感信息守门处理证据。
+- ✅ XCTest 默认使用内存凭据仓库，避免短剧/Agent 测试宿主触发真实 `com.willdeep.credentials` 钥匙串弹窗。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc488 — 短剧指针同步 / Agent 受保护机密`。
+
+## 1.109.0-rc489 — 短剧指针同步 / 终端总是允许
+
+- ✅ 本版本没有新增短剧制作能力；短剧 MVP 验收口径延续
+  `1.109.0-rc471 — 短剧 handoff todo summary`。
+- ✅ `terminal_send_command` 审批卡片可显示“总是允许”，并按完整命令行记忆。
+- ✅ `terminal_send_control` 审批卡片可显示“总是允许”，并按 `ctrl_c` / `enter` / `escape` 分别记忆。
+- ✅ 允许 `ctrl_c` 不会自动允许 `enter` 或其它终端控制键。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc489 — 短剧指针同步 / 终端总是允许`。
+
+## 1.109.0-rc490 — 短剧指针同步 / Agent secret 加固
+
+- ✅ 本版本没有新增短剧制作能力；短剧 MVP 验收口径延续
+  `1.109.0-rc471 — 短剧 handoff todo summary`。
+- ✅ Agent secret 占位符改为纯随机 ID，不暴露用户填写的 label；委托型 AI 执行器不会解析 `${secret:...}` 明文。
+- ✅ Keychain envelope 会保留 secret 原文，URL/base64 transform 和工具回传脱敏不改变短剧制作包、Widget、handoff bundle 与 smoke evidence 合约。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc490 — 短剧指针同步 / Agent secret 加固`。
+
+## 1.109.0-rc491 — 短剧指针同步 / SSH 远端只读
+
+- ✅ 本版本没有新增短剧制作能力；短剧 MVP 验收口径延续
+  `1.109.0-rc471 — 短剧 handoff todo summary`。
+- ✅ Agent `run_command` 的 SSH 风险识别只影响通用命令授权边界，不改变短剧项目、分镜、制作包、Widget、handoff bundle 和 smoke evidence 合约。
+- ✅ `ssh host cat /var/log/...`、`ssh host ping ...` 会按远端只读命令处理；远端 `rm -rf`、读取 `~/.ssh/id_rsa` 和交互式 `ssh host` 仍需要人工授权或危险确认。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc491 — 短剧指针同步 / SSH 远端只读`。
+
+## 1.109.0-rc492 — 短剧指针同步 / 终端快照一屏
+
+- ✅ 本版本没有新增短剧制作能力；短剧 MVP 验收口径延续
+  `1.109.0-rc471 — 短剧 handoff todo summary`。
+- ✅ Agent `terminal_snapshot` 只影响侧边栏终端上下文读取，不改变短剧项目、分镜、制作包、Widget、handoff bundle 和 smoke evidence 合约。
+- ✅ 侧边栏终端快照默认只读取 live 底部可见屏幕，不再把最近 scrollback/history 一起送进模型上下文。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc492 — 短剧指针同步 / 终端快照一屏`。
+
+## 1.109.0-rc493 — 短剧指针同步 / 请求详情截断
+
+- ✅ 本版本没有新增短剧制作能力；短剧 MVP 验收口径延续
+  `1.109.0-rc471 — 短剧 handoff todo summary`。
+- ✅ Agent 错误详情面板只影响请求排查 UI，不改变短剧项目、分镜、制作包、Widget、handoff bundle 和 smoke evidence 合约。
+- ✅ 超长 request summary / request body 在 UI 中间省略，仍可复制完整详情排查服务商 HTTP 错误。
+- ✅ 打开 [SHORT_DRAMA_AI_MVP_TRYOUT.md](SHORT_DRAMA_AI_MVP_TRYOUT.md) →
+  底部“验收记录”指向
+  `1.109.0-rc493 — 短剧指针同步 / 请求详情截断`。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）

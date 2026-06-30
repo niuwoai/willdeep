@@ -702,9 +702,14 @@ enum AgentCredentialStore {
 
     nonisolated(unsafe) private static var testKeychainServiceOverride: String?
     nonisolated(unsafe) private static var testKeychainStorage: [String: String]?
+    nonisolated(unsafe) private static var xctestKeychainStorage: [String: String] = [:]
 
     nonisolated private static var keychainService: String {
         testKeychainServiceOverride ?? defaultKeychainService
+    }
+
+    nonisolated private static var isRunningUnderXCTest: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
     @discardableResult
@@ -717,6 +722,11 @@ enum AgentCredentialStore {
     static func _wipeTestKeychain() {
         if testKeychainStorage != nil {
             testKeychainStorage?.removeAll()
+            return
+        }
+
+        if isRunningUnderXCTest {
+            xctestKeychainStorage.removeAll()
             return
         }
 
@@ -752,6 +762,11 @@ enum AgentCredentialStore {
             return
         }
 
+        if isRunningUnderXCTest {
+            xctestKeychainStorage[account] = trimmed
+            return
+        }
+
         if load(account: account) == trimmed { return }
 
         let baseQuery: [String: Any] = [
@@ -780,6 +795,10 @@ enum AgentCredentialStore {
             return testKeychainStorage[account] ?? ""
         }
 
+        if isRunningUnderXCTest {
+            return xctestKeychainStorage[account] ?? ""
+        }
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
@@ -800,6 +819,11 @@ enum AgentCredentialStore {
     nonisolated static func delete(account: String) {
         if testKeychainStorage != nil {
             testKeychainStorage?.removeValue(forKey: account)
+            return
+        }
+
+        if isRunningUnderXCTest {
+            xctestKeychainStorage.removeValue(forKey: account)
             return
         }
 

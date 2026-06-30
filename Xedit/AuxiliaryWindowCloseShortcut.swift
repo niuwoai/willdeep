@@ -42,6 +42,6 @@ enum AuxiliaryWindowCloseShortcut {
                 return nil
             }
             return event
-        }
+        } as Any
     }
 }

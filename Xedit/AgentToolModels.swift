@@ -97,6 +97,10 @@ struct AgentToolContext {
     /// When set, apply_patch should ask the host to immediately apply the
     /// queued proposal using the existing patch applier and audit status.
     let patchAutoApplySource: AgentToolApprovalSource?
+    /// Plain secret values resolved for this local execution only. Tool
+    /// implementations must use this solely to redact stdout/stderr/errors
+    /// before anything is persisted or sent back to the model.
+    let secretRedactionValues: [String]
 
     init(
         rootDirectory: URL?,
@@ -109,7 +113,8 @@ struct AgentToolContext {
         sandboxMode: AgentSandboxMode = .readOnly,
         patchProposalSink: (@MainActor (String?, String, Bool) async throws -> AgentPatchProposal)? = nil,
         patchAutoApplySource: AgentToolApprovalSource? = nil,
-        terminalController: AgentInteractiveTerminalController? = nil
+        terminalController: AgentInteractiveTerminalController? = nil,
+        secretRedactionValues: [String] = []
     ) {
         self.rootDirectory = rootDirectory
         self.workspaceLocation = workspaceLocation ?? rootDirectory.map { .local(path: $0.standardizedFileURL.path) }
@@ -122,6 +127,7 @@ struct AgentToolContext {
         self.patchProposalSink = patchProposalSink
         self.patchAutoApplySource = patchAutoApplySource
         self.terminalController = terminalController
+        self.secretRedactionValues = Self.uniqueNonEmpty(secretRedactionValues)
     }
 
     var sshBackend: SSHRuntimeBackend? {
@@ -146,6 +152,33 @@ struct AgentToolContext {
         if let sshBackend { return sshBackend }
         if let daemonBackend { return daemonBackend }
         return nil
+    }
+
+    func withAdditionalSecretRedactionValues(_ values: [String]) -> AgentToolContext {
+        AgentToolContext(
+            rootDirectory: rootDirectory,
+            workspaceLocation: workspaceLocation,
+            runtimeDescriptor: runtimeDescriptor,
+            runtimeID: runtimeID,
+            jobRegistry: jobRegistry,
+            mediaTaskRegistry: mediaTaskRegistry,
+            shortDramaStore: shortDramaStore,
+            sandboxMode: sandboxMode,
+            patchProposalSink: patchProposalSink,
+            patchAutoApplySource: patchAutoApplySource,
+            terminalController: terminalController,
+            secretRedactionValues: secretRedactionValues + values
+        )
+    }
+
+    private static func uniqueNonEmpty(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for value in values where !value.isEmpty && !seen.contains(value) {
+            seen.insert(value)
+            result.append(value)
+        }
+        return result
     }
 }
 
@@ -203,6 +236,38 @@ enum AgentToolError: LocalizedError {
             return "Invalid regular expression: \(detail)"
         case .httpFailed(let status, let detail):
             return "HTTP \(status): \(detail)"
+        }
+    }
+
+    func redacted(secretValues: [String]) -> AgentToolError {
+        guard !secretValues.isEmpty else { return self }
+        switch self {
+        case .missingArgument(let name):
+            return .missingArgument(AgentSecretStore.redact(name, secretValues: secretValues))
+        case .invalidArgument(let detail):
+            return .invalidArgument(AgentSecretStore.redact(detail, secretValues: secretValues))
+        case .noWorkspace:
+            return .noWorkspace
+        case .pathOutsideWorkspace(let path):
+            return .pathOutsideWorkspace(AgentSecretStore.redact(path, secretValues: secretValues))
+        case .notFound(let path):
+            return .notFound(AgentSecretStore.redact(path, secretValues: secretValues))
+        case .notRegular(let path):
+            return .notRegular(AgentSecretStore.redact(path, secretValues: secretValues))
+        case .binaryFile(let path):
+            return .binaryFile(AgentSecretStore.redact(path, secretValues: secretValues))
+        case .fileTooLarge(let path):
+            return .fileTooLarge(AgentSecretStore.redact(path, secretValues: secretValues))
+        case .commandFailed(let code, let stderr):
+            return .commandFailed(code, AgentSecretStore.redact(stderr, secretValues: secretValues))
+        case .commandTimeout:
+            return .commandTimeout
+        case .unknownTool(let name):
+            return .unknownTool(AgentSecretStore.redact(name, secretValues: secretValues))
+        case .invalidRegex(let detail):
+            return .invalidRegex(AgentSecretStore.redact(detail, secretValues: secretValues))
+        case .httpFailed(let status, let detail):
+            return .httpFailed(status, AgentSecretStore.redact(detail, secretValues: secretValues))
         }
     }
 }

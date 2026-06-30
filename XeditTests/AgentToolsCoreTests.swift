@@ -152,6 +152,128 @@ struct AgentToolsCoreTests {
         #expect(result.payload.contains("done:"))
     }
 
+    @Test
+    func agentSecretPlaceholdersResolveLocallyWithTransforms() throws {
+        let service = AgentCredentialStore._setTestKeychainServiceOverride("agent-secret-\(UUID().uuidString)")
+        defer {
+            AgentCredentialStore._wipeTestKeychain()
+            AgentCredentialStore._setTestKeychainServiceOverride(nil)
+        }
+        #expect(service.hasPrefix("agent-secret-"))
+
+        let secret = " p@ss word&role=admin "
+        let placeholder = try #require(AgentSecretStore.saveSecret(secret, label: "Production Password"))
+        #expect(placeholder.hasPrefix("${secret:"))
+        #expect(placeholder.count > 40)
+        #expect(!placeholder.contains("production"))
+        #expect(!placeholder.contains("password"))
+        #expect(!placeholder.contains("p@ss word"))
+
+        let raw = AgentSecretStore.resolvePlaceholders(in: "value=\(placeholder)")
+        #expect(raw.text == "value=\(secret)")
+        #expect(raw.secretValues == [secret])
+
+        let identifier = placeholder
+            .replacingOccurrences(of: AgentSecretStore.placeholderPrefix, with: "")
+            .replacingOccurrences(of: "}", with: "")
+        let encoded = AgentSecretStore.resolvePlaceholders(
+            in: AgentSecretStore.placeholder(identifier: identifier, transform: "base64")
+        )
+        #expect(encoded.text == "IHBAc3Mgd29yZCZyb2xlPWFkbWluIA==")
+
+        let urlEncoded = AgentSecretStore.resolvePlaceholders(
+            in: AgentSecretStore.placeholder(identifier: identifier, transform: "urlencode")
+        )
+        #expect(urlEncoded.text == "%20p%40ss%20word%26role%3Dadmin%20")
+
+        let redactedStrictEncoding = AgentSecretStore.redact(
+            "encoded=%20p%40ss%20word%26role%3Dadmin%20",
+            secretValues: [secret]
+        )
+        #expect(redactedStrictEncoding == "encoded=[secret]")
+    }
+
+    @Test
+    func runCommandResolvesSecretPlaceholderButRedactsOutputs() async throws {
+        _ = AgentCredentialStore._setTestKeychainServiceOverride("agent-secret-run-\(UUID().uuidString)")
+        defer {
+            AgentCredentialStore._wipeTestKeychain()
+            AgentCredentialStore._setTestKeychainServiceOverride(nil)
+        }
+        let placeholder = try #require(AgentSecretStore.saveSecret("super-secret-password", label: "Shell Password"))
+
+        let result = try await AgentToolRunner.run(
+            name: "run_command",
+            arguments: [
+                "command": .string("printf '%s\\n' \(AgentToolRunner.shellQuoted(placeholder))"),
+                "timeout_seconds": .number(3),
+            ],
+            context: AgentToolContext(rootDirectory: nil, sandboxMode: .escalated)
+        )
+
+        #expect(result.payload.contains("[secret]"))
+        #expect(!result.payload.contains("super-secret-password"))
+        #expect(!result.payload.contains(placeholder))
+    }
+
+    @Test
+    func secretPlaceholdersResolveOnlyForLocalExecutionBoundaries() {
+        let localExecutionTools = [
+            "run_command",
+            "terminal_send_command",
+            "lark_cli",
+            "call_mcp_tool",
+            "chrome_type",
+        ]
+        for toolName in localExecutionTools {
+            #expect(AgentToolRunner.resolvesSecretsForTool(toolName))
+        }
+
+        let delegatedAIExecutors = [
+            "claude_code",
+            "codex_cli",
+            "cursor_agent",
+            "cline_cli",
+        ]
+        for toolName in delegatedAIExecutors {
+            #expect(!AgentToolRunner.resolvesSecretsForTool(toolName))
+        }
+    }
+
+    @Test
+    func backgroundRunCommandStoresOnlyRedactedSecretCommand() async throws {
+        _ = AgentCredentialStore._setTestKeychainServiceOverride("agent-secret-bg-\(UUID().uuidString)")
+        defer {
+            AgentCredentialStore._wipeTestKeychain()
+            AgentCredentialStore._setTestKeychainServiceOverride(nil)
+        }
+        let placeholder = try #require(AgentSecretStore.saveSecret("background-secret", label: "Background Password"))
+        let registry = AgentJobRegistry()
+        let runtimeID = UUID()
+
+        let result = try await AgentToolRunner.run(
+            name: "run_command",
+            arguments: [
+                "command": .string("printf '%s\\n' \(AgentToolRunner.shellQuoted(placeholder))"),
+                "run_in_background": .bool(true),
+                "timeout_seconds": .number(3),
+            ],
+            context: AgentToolContext(
+                rootDirectory: nil,
+                runtimeID: runtimeID,
+                jobRegistry: registry,
+                sandboxMode: .escalated
+            )
+        )
+
+        #expect(result.payload.contains("[secret]"))
+        #expect(!result.payload.contains("background-secret"))
+        let job = try #require(registry.jobs(forRuntime: runtimeID).first)
+        #expect(job.command.contains("[secret]"))
+        #expect(!job.command.contains("background-secret"))
+        #expect(!job.command.contains(placeholder))
+    }
+
     // MARK: - AgentJSONValue.decode / wrap
 
     /// `decode(from:)` accepts a JSON fragment (an integer literal) and
@@ -375,6 +497,65 @@ struct AgentToolsCoreTests {
     }
 
     @Test
+    func sandboxPolicyClassifiesSSHRemoteReadOnlyPayloads() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+
+        let remoteCatDecision = AgentSandboxPolicy.commandDecision(
+            command: "ssh deploy@example.com cat /var/log/nginx/access.log",
+            rootDirectory: root
+        )
+        #expect(remoteCatDecision.mode == .readOnly)
+        #expect(remoteCatDecision.requiresUserApproval == false)
+
+        let remotePingDecision = AgentSandboxPolicy.commandDecision(
+            command: #"ssh -p 2222 deploy@example.com "ping -c 1 8.8.8.8""#,
+            rootDirectory: root
+        )
+        #expect(remotePingDecision.mode == .readOnly)
+        #expect(remotePingDecision.requiresUserApproval == false)
+
+        let remoteSecretDecision = AgentSandboxPolicy.commandDecision(
+            command: #"ssh deploy@example.com "cat ~/.ssh/id_rsa""#,
+            rootDirectory: root
+        )
+        #expect(remoteSecretDecision.mode == .escalated)
+        #expect(remoteSecretDecision.requiresTypedConfirmation == true)
+
+        let remoteDeleteDecision = AgentSandboxPolicy.commandDecision(
+            command: #"ssh deploy@example.com "rm -rf /tmp/build""#,
+            rootDirectory: root
+        )
+        #expect(remoteDeleteDecision.mode == .escalated)
+        #expect(remoteDeleteDecision.requiresTypedConfirmation == true)
+
+        let interactiveDecision = AgentSandboxPolicy.commandDecision(
+            command: "ssh deploy@example.com",
+            rootDirectory: root
+        )
+        #expect(interactiveDecision.mode == .escalated)
+        #expect(interactiveDecision.requiresUserApproval == true)
+        #expect(interactiveDecision.requiresTypedConfirmation == false)
+    }
+
+    @Test
+    func commandAuthorizationDerivesSSHRemotePayloadSignature() {
+        let signature = AgentCommandAuthorization.signature(
+            for: #"ssh -p 2222 deploy@example.com "git status --short""#
+        )
+        #expect(signature == "ssh git status")
+
+        let prefixRule = AgentCommandAuthorization.prefixRule(
+            for: #"ssh deploy@example.com "git status --short""#
+        )
+        #expect(prefixRule == ["ssh", "git", "status"])
+
+        let interactiveSignature = AgentCommandAuthorization.signature(
+            for: "ssh deploy@example.com"
+        )
+        #expect(interactiveSignature == nil)
+    }
+
+    @Test
     func externalAgentCLIsRunAfterApprovalWithTheirNativeHomeAndSandbox() {
         for toolName in ["claude_code", "codex_cli", "cursor_agent", "cline_cli"] {
             let decision = AgentSandboxPolicy.decision(
@@ -417,6 +598,28 @@ struct AgentToolsCoreTests {
     }
 
     @Test
+    func agentTerminalToolsHaveAlwaysAllowSignatures() {
+        let commandSignature = AgentToolAuthorization.signature(
+            toolName: "terminal_send_command",
+            arguments: ["command": .string("systemctl status nginx --no-pager")]
+        )
+        #expect(commandSignature == "terminal_command:systemctl status nginx --no-pager")
+
+        let controlSignature = AgentToolAuthorization.signature(
+            toolName: "terminal_send_control",
+            arguments: ["control": .string("ctrl_c")]
+        )
+        #expect(controlSignature == "terminal_control:ctrl_c")
+
+        let enterSignature = AgentToolAuthorization.signature(
+            toolName: "terminal_send_control",
+            arguments: ["control": .string("enter")]
+        )
+        #expect(enterSignature == "terminal_control:enter")
+        #expect(controlSignature != enterSignature)
+    }
+
+    @Test
     func agentTerminalOutputRedactsCommonSecretShapes() {
         let output = """
         export API_TOKEN=abcdef123456
@@ -430,6 +633,19 @@ struct AgentToolsCoreTests {
         #expect(!redacted.contains("hunter2"))
         #expect(!redacted.contains("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature"))
         #expect(redacted.contains("[redacted]"))
+    }
+
+    @Test
+    func agentErrorDetailsPreviewMiddleEllipsizesLongSections() {
+        let longLine = "prefix-" + String(repeating: "x", count: 2_000) + "-suffix"
+        let preview = AgentErrorDetailsPreview.text(longLine, totalLimit: 500, lineLimit: 180)
+
+        #expect(preview.isTruncated)
+        #expect(preview.text.count <= 500)
+        #expect(preview.text.contains("prefix-"))
+        #expect(preview.text.contains("-suffix"))
+        #expect(preview.text.contains("省略"))
+        #expect(!preview.text.contains(String(repeating: "x", count: 1_000)))
     }
 
     @Test

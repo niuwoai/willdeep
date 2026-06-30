@@ -12,7 +12,7 @@ enum AgentTerminalTools {
         guard let controller = context.terminalController else {
             throw AgentToolError.invalidArgument("Agent Terminal is not available in this context.")
         }
-        let maxCharacters = min(max(arguments["max_characters"]?.intValue() ?? 16_000, 1_000), 40_000)
+        let maxCharacters = min(max(arguments["max_characters"]?.intValue() ?? 6_000, 500), 12_000)
         let snapshot = await MainActor.run {
             controller.snapshot(maxCharacters: maxCharacters)
         }
@@ -33,7 +33,7 @@ enum AgentTerminalTools {
         Recent AI/auto commands:
         \(recent)
 
-        --- visible output tail ---
+        --- latest visible screen ---
         \(snapshot.output.isEmpty ? "(no terminal output captured)" : snapshot.output)
         """
         return AgentToolResult(summary: "terminal \(running): \(snapshot.runtimeName)", payload: payload)
@@ -48,7 +48,7 @@ enum AgentTerminalTools {
             throw AgentToolError.missingArgument("command")
         }
         return try await MainActor.run {
-            try controller.sendApprovedCommand(command)
+            try controller.sendApprovedCommand(command, secretRedactionValues: context.secretRedactionValues)
         }
     }
 
@@ -65,4 +65,3 @@ enum AgentTerminalTools {
         }
     }
 }
-

@@ -1135,6 +1135,16 @@ struct AgentWorktreeChangeSummary: Equatable {
     nonisolated func change(for relativePath: String) -> AgentFileChangeSummary? {
         files.first { $0.path == relativePath }
     }
+
+    nonisolated func filtering(paths: Set<String>) -> AgentWorktreeChangeSummary {
+        guard !paths.isEmpty else {
+            return AgentWorktreeChangeSummary(repositoryRoot: repositoryRoot)
+        }
+        return AgentWorktreeChangeSummary(
+            repositoryRoot: repositoryRoot,
+            files: files.filter { paths.contains($0.path) }
+        )
+    }
 }
 
 struct AgentWorktreeDiffPreview: Identifiable, Equatable {

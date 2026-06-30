@@ -120,7 +120,7 @@ struct AgentModeView: View {
         .onAppear {
             let snapshot = currentTaskMonitorSnapshot
             lastTaskMonitorSnapshot = snapshot
-            didObserveAgentTaskMonitorActivity = snapshot.isAgentActivityActive
+            didObserveAgentTaskMonitorActivity = snapshot.hasAutoOpenMonitorContent
         }
         .onCompatibleChange(of: currentTaskMonitorSnapshot) { oldSnapshot, newSnapshot in
             handleTaskMonitorSnapshotChange(from: oldSnapshot, to: newSnapshot)
@@ -163,11 +163,11 @@ struct AgentModeView: View {
     ) {
         if oldSnapshot.sessionID != newSnapshot.sessionID {
             lastTaskMonitorSnapshot = newSnapshot
-            didObserveAgentTaskMonitorActivity = newSnapshot.isAgentActivityActive
+            didObserveAgentTaskMonitorActivity = newSnapshot.hasAutoOpenMonitorContent
             return
         }
 
-        if newSnapshot.isAgentActivityActive {
+        if newSnapshot.hasAutoOpenMonitorContent {
             didObserveAgentTaskMonitorActivity = true
         }
 
@@ -179,7 +179,7 @@ struct AgentModeView: View {
         }
 
         guard didObserveAgentTaskMonitorActivity,
-              newSnapshot.hasVisibleMonitorContent,
+              newSnapshot.hasAutoOpenMonitorContent,
               newSnapshot != baseline,
               sidePanel == nil else {
             return

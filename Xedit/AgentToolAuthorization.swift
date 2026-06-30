@@ -333,7 +333,7 @@ enum AgentSandboxPolicy {
                 reasons.append("Command references a sensitive path or credential-like value.")
             }
 
-            if tokens.dropFirst().contains(where: { token in
+            if localPathCheckTokens(for: tokens, head: head).contains(where: { token in
                 guard looksLikePath(token),
                       let resolved = resolvePath(token, workingDirectory: workingDirectory, rootDirectory: rootDirectory) else {
                     return false
@@ -439,7 +439,7 @@ enum AgentSandboxPolicy {
                 continue
             }
 
-            for token in tokens.dropFirst() {
+            for token in localPathCheckTokens(for: tokens, head: head) {
                 if referencesSensitivePath(token) {
                     return false
                 }
@@ -728,40 +728,10 @@ enum AgentSandboxPolicy {
     }
 
     nonisolated private static func classifySSHRemoteCommand(_ tokens: [String]) -> CommandSafety {
-        guard tokens.first?.lowercased() == "ssh" else { return .needsJudgment }
-        guard let hostIndex = sshHostIndex(tokens) else { return .needsJudgment }
-        let remoteCommandTokens = tokens.dropFirst(hostIndex + 1)
-        guard !remoteCommandTokens.isEmpty else { return .needsJudgment }
-        return SafeCommand.classify(command: remoteCommandTokens.joined(separator: " "))
-    }
-
-    nonisolated private static func sshHostIndex(_ tokens: [String]) -> Int? {
-        var index = 1
-        let optionsWithArgument: Set<String> = [
-            "-b", "-c", "-D", "-E", "-e", "-F", "-i", "-J", "-L", "-l", "-m",
-            "-O", "-o", "-p", "-Q", "-R", "-S", "-W", "-w"
-        ]
-        while index < tokens.count {
-            let token = tokens[index]
-            if token == "--" {
-                index += 1
-                continue
-            }
-            if optionsWithArgument.contains(token) {
-                index += 2
-                continue
-            }
-            if token.hasPrefix("-o") && token.count > 2 {
-                index += 1
-                continue
-            }
-            if token.hasPrefix("-") {
-                index += 1
-                continue
-            }
-            return index
+        guard let remoteCommand = AgentCommandAuthorization.sshRemoteCommand(from: tokens) else {
+            return .needsJudgment
         }
-        return nil
+        return SafeCommand.classify(command: remoteCommand)
     }
 
     nonisolated private static func gitSubcommandIndex(tokens: [String]) -> Int? {
@@ -867,6 +837,15 @@ enum AgentSandboxPolicy {
         guard let root = rootDirectory?.standardizedFileURL.path else { return false }
         let path = url.standardizedFileURL.path
         return path == root || path.hasPrefix(root + "/")
+    }
+
+    nonisolated private static func localPathCheckTokens(for tokens: [String], head: String) -> ArraySlice<String> {
+        guard head == "ssh",
+              let hostIndex = AgentCommandAuthorization.sshHostIndex(tokens),
+              hostIndex + 1 < tokens.count else {
+            return tokens.dropFirst()
+        }
+        return tokens.dropFirst().prefix(hostIndex)
     }
 
     nonisolated private static func looksLikePath(_ token: String) -> Bool {

@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-30 | Current version: v1.109.0-rc487
+> Last updated: 2026-06-30 | Current version: v1.109.0-rc493
 
 ## Positioning
 
@@ -14,6 +14,12 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **请求详情面板长文本截断（1.109.0-rc493）** —— Agent 错误卡片的“详情”展开后会对超长 request summary / request body 做展示层中间省略，保留头尾信息，避免 SwiftUI 排版完整大 JSON 或长 tool 输出时卡顿；每个 section 仍可一键复制完整未截断内容。
+- **侧边栏终端快照只读最新一屏（1.109.0-rc492）** —— `terminal_snapshot` 默认只读取 active tab live 底部可见屏幕，不再把最近 400 行 scrollback/history 一起塞进模型上下文；默认返回上限降为 6000 字符，避免旧命令输出把当前终端状态带偏。
+- **SSH 远端只读命令识别（1.109.0-rc491）** —— Agent 的 `run_command` 会跳过 `ssh` 外壳、按远端真实命令判断风险；`ssh host cat /var/log/...`、`ssh host ping ...` 这类只读远端命令不再被本地 workspace 路径检查误判为写操作。交互式 `ssh host` 仍需批准，远端 `rm -rf` 和读取 `~/.ssh/id_rsa` 仍按危险/敏感路径升级。
+- **Agent secret 占位符加固（1.109.0-rc490）** —— `${secret:...}` 占位符 ID 改为纯随机 32 位 hex，不暴露用户填写的 label；Agent 专用 secret 以 base64 envelope 存入 Keychain，解析时还原原文，避免首尾空格这类密码字符被通用凭据保存链路 trim。URL encode transform 改为 query value 级严格编码，脱敏同时覆盖原文、严格 URL 编码、旧 queryAllowed 编码和 base64；测试锁住本地执行工具会解析、委托型 AI 执行器不会解析的边界。
+- **终端工具支持总是允许（1.109.0-rc489）** —— `terminal_send_command` 与 `terminal_send_control` 会生成 always-allow 签名，审批卡片可显示“总是允许”；终端命令按完整命令行记忆，控制键按 `ctrl_c` / `enter` / `escape` 分别记忆，避免一次允许 Ctrl-C 后误放行 Enter。
+- **Agent 受保护机密占位符（1.109.0-rc488）** —— Agent composer 可把密码/Token 原样封装后保存到本机 Keychain，并把带随机 ID 的 `${secret:...}` 占位符插入对话；模型只看到占位符，本地 `run_command`、终端发送、MCP 调用、Lark CLI 和 Chrome 输入工具执行前才解析真实值，委托型 AI 执行器不会解析明文。工具结果、后台任务命令/输出、终端摘要和错误消息会统一脱敏，XCTest 默认改走内存凭据仓库，避免测试触发真实 `com.willdeep.credentials` 钥匙串弹窗。
 - **本轮 Agent 变更归因（1.109.0-rc487）** —— Agent 每轮开始不再把整个 git worktree 的历史脏文件写进会话；工具执行后用前后快照签名归因本轮实际变化路径，右侧“产物”、底部“xx 个文件已更改”和审查 diff 都只展示当前会话/本轮 Agent 造成的文件，避免把用户原有本地改动误当成本轮产物。
 - **变更文件列表默认收起（1.109.0-rc486）** —— Agent composer 上方的“前 3 个已变更文件”列表默认不再显示；吸附的“xx 个文件已更改 +x -y 审查”栏在“审查”后增加展开/收起图标，用户主动展开后才显示文件列表，展开状态按 session/runtime 保存，避免切换会话时串状态。
 - **审查 diff 窗口不抢焦点（1.109.0-rc485）** —— Agent composer 的“审查”按钮和弹出的 worktree diff 预览窗口中，标题、复制/关闭按钮、分隔线、滚动 diff 文本和外层容器都显式 `.focusable(false)`，避免打开审查窗口后焦点环落到窗口组件上，影响 composer / editor 原本的焦点状态。

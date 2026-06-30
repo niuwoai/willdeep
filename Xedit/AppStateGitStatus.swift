@@ -528,7 +528,7 @@ extension AppState {
     func refreshGitStatusAfterAgentTool(
         for runtime: AgentRuntime,
         workspaceURL: URL?,
-        baselineFingerprint: String
+        baselineSnapshot: AgentWorktreeSnapshot
     ) async {
         guard let workspaceURL else {
             refreshGitStatus()
@@ -536,17 +536,20 @@ extension AppState {
         }
 
         let targetDirectory = workspaceURL.standardizedFileURL
-        let snapshot = await Self.loadAgentWorktreeSnapshot(
-            for: targetDirectory,
-            restrictTo: runtime.agentEditedPaths
+        let snapshot = await Self.loadAgentWorktreeSnapshot(for: targetDirectory)
+        let changedPaths = Self.agentWorktreePathsChangedSinceBaseline(
+            baseline: baselineSnapshot,
+            current: snapshot
         )
+        let attributedPaths = runtime.agentEditedPaths.union(changedPaths)
 
-        runtime.worktreeChanges = snapshot.changes
+        runtime.worktreeChanges = snapshot.changes.filtering(paths: attributedPaths)
         // didEditFiles flips on any real worktree movement (including
-        // run_command side effects), keyed off fingerprint — NOT the
-        // filtered card content, otherwise a run_command that touched
-        // unrelated files would never trip it.
-        if snapshot.fingerprint != baselineFingerprint {
+        // run_command side effects), but only after attributing changed paths
+        // against this turn's baseline. Pre-existing user diffs should not
+        // light up the Agent's worktree card or right-rail artifact list.
+        if snapshot.fingerprint != baselineSnapshot.fingerprint, !attributedPaths.isEmpty {
+            runtime.agentEditedPaths = attributedPaths
             runtime.didEditFiles = true
             persistAgentSession(runtime: runtime)
         }
@@ -554,7 +557,7 @@ extension AppState {
         if rootDirectory?.standardizedFileURL.path == targetDirectory.path {
             gitStatus = snapshot.status
             if activeRuntime === runtime {
-                agentWorktreeChanges = snapshot.changes
+                agentWorktreeChanges = runtime.worktreeChanges
             }
         }
     }
@@ -563,6 +566,7 @@ extension AppState {
         var status: GitRepositoryStatus
         var changes: AgentWorktreeChangeSummary
         var fingerprint: String
+        var fileSignatures: [String: String]
     }
 
     nonisolated static func loadAgentWorktreeSnapshot(
@@ -573,7 +577,8 @@ extension AppState {
             return AgentWorktreeSnapshot(
                 status: GitRepositoryStatus(),
                 changes: AgentWorktreeChangeSummary(),
-                fingerprint: ""
+                fingerprint: "",
+                fileSignatures: [:]
             )
         }
         let targetDirectory = directoryURL.standardizedFileURL
@@ -581,7 +586,13 @@ extension AppState {
             let status = Self.loadGitStatus(for: targetDirectory)
             let changes = Self.loadAgentWorktreeChangeSummary(status: status, restrictTo: restrictTo)
             let fingerprint = Self.agentWorktreeFingerprint(status: status)
-            return AgentWorktreeSnapshot(status: status, changes: changes, fingerprint: fingerprint)
+            let fileSignatures = Self.agentWorktreeFileSignatures(status: status)
+            return AgentWorktreeSnapshot(
+                status: status,
+                changes: changes,
+                fingerprint: fingerprint,
+                fileSignatures: fileSignatures
+            )
         }.value
     }
 
@@ -595,17 +606,61 @@ extension AppState {
         return entries + "\n" + rawDiff
     }
 
+    nonisolated static func agentWorktreeFileSignatures(status: GitRepositoryStatus) -> [String: String] {
+        guard let repositoryRoot = status.repositoryRoot else { return [:] }
+        let numstatOutput = runGit(arguments: ["diff", "--numstat", "HEAD", "--"], in: repositoryRoot)
+        let lineStats = parseGitNumstat(numstatOutput)
+        return status.entries.reduce(into: [String: String]()) { result, item in
+            let path = item.key
+            let kind = item.value
+            let stats = lineStats[path]
+            let fileURL = repositoryRoot.appendingPathComponent(path)
+            let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
+            let size: String
+            if let sizeValue = attributes?[.size] as? NSNumber {
+                size = String(sizeValue.int64Value)
+            } else {
+                size = "missing"
+            }
+            let modified = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? -1
+            let added = stats?.added.map(String.init) ?? "?"
+            let deleted = stats?.deleted.map(String.init) ?? "?"
+            result[path] = [
+                kind.rawValue,
+                "added=\(added)",
+                "deleted=\(deleted)",
+                "size=\(size)",
+                "mtime=\(modified)",
+            ].joined(separator: "|")
+        }
+    }
+
+    nonisolated static func agentWorktreePathsChangedSinceBaseline(
+        baseline: AgentWorktreeSnapshot,
+        current: AgentWorktreeSnapshot
+    ) -> Set<String> {
+        Set(current.changes.files.compactMap { change in
+            let path = change.path
+            return current.fileSignatures[path] != baseline.fileSignatures[path] ? path : nil
+        })
+    }
+
     nonisolated static func loadAgentWorktreeDiffPreview(
         changes: AgentWorktreeChangeSummary,
         repositoryRoot: URL
     ) -> AgentWorktreeDiffPreview {
         var sections: [String] = []
-        let trackedDiff = runGit(
-            arguments: ["diff", "--no-ext-diff", "HEAD", "--"],
-            in: repositoryRoot
-        )
-        if !trackedDiff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            sections.append(trackedDiff)
+        let trackedPaths = changes.files
+            .filter { $0.kind != .untracked }
+            .map(\.path)
+        if !trackedPaths.isEmpty {
+            let trackedDiff = runGit(
+                arguments: ["diff", "--no-ext-diff", "HEAD", "--"] + trackedPaths,
+                in: repositoryRoot
+            )
+            if !trackedDiff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                sections.append(trackedDiff)
+            }
         }
 
         for change in changes.files where change.kind == .untracked {

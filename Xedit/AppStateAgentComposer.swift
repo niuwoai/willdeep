@@ -402,7 +402,12 @@ extension AppState {
         baselineTask: Task<AgentWorktreeSnapshot, Never>?
     ) {
         Task { @MainActor [weak self] in
-            let baselineFingerprint = await baselineTask?.value.fingerprint ?? ""
+            let baselineSnapshot = await baselineTask?.value ?? AgentWorktreeSnapshot(
+                status: GitRepositoryStatus(),
+                changes: AgentWorktreeChangeSummary(),
+                fingerprint: "",
+                fileSignatures: [:]
+            )
             guard let self,
                   let runtime = self.agentRuntimes[runtimeID] else {
                 return
@@ -410,7 +415,7 @@ extension AppState {
             await self.refreshGitStatusAfterAgentTool(
                 for: runtime,
                 workspaceURL: workspaceURL,
-                baselineFingerprint: baselineFingerprint
+                baselineSnapshot: baselineSnapshot
             )
         }
     }

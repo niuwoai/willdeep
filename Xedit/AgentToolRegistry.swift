@@ -77,10 +77,10 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "terminal_snapshot",
-            description: "Read the visible text of the active Agent Terminal side-panel tab (a real terminal the user is watching — local shell by default, or SSH). Read-only; redacts common secrets. Use it to read back what your terminal_send_command produced, or to inspect prompts, banners, and command output.",
+            description: "Read only the latest live visible screen of the active Agent Terminal side-panel tab (a real terminal the user is watching — local shell by default, or SSH). It does not include scrollback/history by default. Read-only; redacts common secrets. Use it to read back what your terminal_send_command produced, or to inspect the current prompt, banner, and newest command output.",
             risk: .read,
             parameters: [
-                AgentToolParameter(name: "max_characters", type: .integer, description: "Maximum output-tail characters to return. Defaults to 16000, capped at 40000.", required: false)
+                AgentToolParameter(name: "max_characters", type: .integer, description: "Maximum characters from the latest visible screen to return. Defaults to 6000, capped at 12000.", required: false)
             ]
         ),
         AgentToolDescriptor(

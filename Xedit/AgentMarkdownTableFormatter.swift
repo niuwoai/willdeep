@@ -140,7 +140,7 @@ enum AgentMarkdownTableFormatter {
     /// (which matter for column alignment) survive and the cell is never
     /// promoted to a block element. Falls back to the raw string when the
     /// parser throws.
-    private static func renderCell(_ raw: String) -> RenderedCell {
+    private nonisolated static func renderCell(_ raw: String) -> RenderedCell {
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace
         )

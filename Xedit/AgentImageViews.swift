@@ -162,7 +162,7 @@ enum AgentImagePasteboardHelper {
         return nil
     }
 
-    private static func isImagePasteboardType(_ type: NSPasteboard.PasteboardType) -> Bool {
+    private nonisolated static func isImagePasteboardType(_ type: NSPasteboard.PasteboardType) -> Bool {
         UTType(type.rawValue)?.conforms(to: .image) == true
     }
 

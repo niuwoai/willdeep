@@ -643,6 +643,32 @@ struct AgentBackgroundJobsTests {
         #expect(appState.agentRunningTaskCount == 0)
     }
 
+    @Test
+    func taskMonitorSnapshotDoesNotAutoOpenForApprovalOnly() {
+        let appState = AppState()
+        appState.startNewAgentSession()
+        appState.isAgentResponding = true
+        appState.agentToolCalls = [
+            AgentToolCall(
+                messageID: UUID(),
+                externalID: "approval",
+                toolName: "run_command",
+                arguments: [:],
+                risk: .write,
+                status: .pendingApproval
+            )
+        ]
+
+        let approvalOnly = AgentTaskMonitorSnapshot.capture(from: appState)
+        #expect(approvalOnly.isAgentActivityActive)
+        #expect(approvalOnly.hasVisibleMonitorContent)
+        #expect(!approvalOnly.hasAutoOpenMonitorContent)
+
+        appState.agentToolCalls[0].status = .running
+        let runningTool = AgentTaskMonitorSnapshot.capture(from: appState)
+        #expect(runningTool.hasAutoOpenMonitorContent)
+    }
+
     // MARK: - Helpers
 
     /// Poll the registry until the job leaves `.running` or the

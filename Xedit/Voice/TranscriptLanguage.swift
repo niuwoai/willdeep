@@ -8,7 +8,9 @@
 import Foundation
 
 /// FunASR/SenseVoice 支持的语言类型
-enum TranscriptLanguage: String, CaseIterable {
+// nonisolated：纯值枚举，被 off-main 的 ONNX 推理（nonisolated ONNXRuntimeWrapper）
+// 读 languageID；不标会被工程默认 @MainActor 隔离卷入而报跨隔离告警。
+nonisolated enum TranscriptLanguage: String, CaseIterable {
     case auto = "auto"
     case zh = "zh"
     case en = "en"

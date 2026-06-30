@@ -250,6 +250,20 @@ final class TerminalShortcutRecorder {
 enum TerminalShortcutStore {
     private static let key = "com.willdeep.terminalShortcuts.v1"
     private static let maxShortcuts = 24
+    private static let fileName = "shortcuts.json"
+    private static var directoryOverride: URL?
+
+    static var directory: URL {
+        if let directoryOverride { return directoryOverride }
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return base.appendingPathComponent("WillDeep", isDirectory: true)
+            .appendingPathComponent("terminal-shortcuts", isDirectory: true)
+    }
+
+    static var fileURL: URL {
+        directory.appendingPathComponent(fileName)
+    }
 
     private static let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
@@ -264,17 +278,25 @@ enum TerminalShortcutStore {
     }()
 
     static func load() -> [TerminalShortcut] {
-        guard let data = UserDefaults.standard.data(forKey: key),
-              let shortcuts = try? decoder.decode([TerminalShortcut].self, from: data) else {
-            return []
+        if let shortcuts = loadFromDisk() {
+            return normalized(shortcuts)
         }
-        return normalized(shortcuts)
+        let legacyShortcuts = loadFromUserDefaults()
+        if !legacyShortcuts.isEmpty {
+            save(legacyShortcuts)
+        }
+        return normalized(legacyShortcuts)
     }
 
     static func save(_ shortcuts: [TerminalShortcut]) {
         let prepared = normalized(shortcuts).map { prepareForPersistence($0) }
-        guard let data = try? encoder.encode(prepared) else { return }
-        UserDefaults.standard.set(data, forKey: key)
+        do {
+            try ensureDirectory()
+            let data = try encoder.encode(prepared)
+            try data.write(to: fileURL, options: .atomic)
+        } catch {
+            print("TerminalShortcutStore: failed to save shortcuts: \(error)")
+        }
     }
 
     static func deleteProtectedInputs(for shortcut: TerminalShortcut) {
@@ -317,6 +339,40 @@ enum TerminalShortcutStore {
 
     private static func protectedInputAccount(shortcutID: UUID, eventID: UUID) -> String {
         "terminal-shortcut/\(shortcutID.uuidString)/\(eventID.uuidString)"
+    }
+
+    private static func loadFromDisk() -> [TerminalShortcut]? {
+        let url = fileURL
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        do {
+            let data = try Data(contentsOf: url)
+            return try decoder.decode([TerminalShortcut].self, from: data)
+        } catch {
+            print("TerminalShortcutStore: failed to load shortcuts at \(url.path): \(error)")
+            return nil
+        }
+    }
+
+    private static func loadFromUserDefaults() -> [TerminalShortcut] {
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let shortcuts = try? decoder.decode([TerminalShortcut].self, from: data) else {
+            return []
+        }
+        return shortcuts
+    }
+
+    private static func ensureDirectory() throws {
+        var isDir: ObjCBool = false
+        if !FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDir) {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+    }
+
+    @discardableResult
+    static func _setTestDirectoryOverride(_ directory: URL?) -> URL? {
+        let previous = directoryOverride
+        directoryOverride = directory
+        return previous
     }
 }
 
@@ -596,20 +652,21 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
 
     // MARK: Agent-tool surface
 
-    func sendApprovedCommand(_ command: String) throws -> AgentToolResult {
+    func sendApprovedCommand(_ command: String, secretRedactionValues: [String] = []) throws -> AgentToolResult {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw AgentToolError.missingArgument("command") }
         guard isRunning else {
             throw AgentToolError.invalidArgument("Open and start an Agent Terminal tab before sending commands.")
         }
-        recordCommand(trimmed)
+        let visibleCommand = AgentSecretStore.redact(trimmed, secretValues: secretRedactionValues)
+        recordCommand(visibleCommand)
         lastActivity = Date()
         terminalView.send(txt: trimmed + "\n")
         let payload = """
         Sent command to Agent Terminal tab \"\(title)\".
-        Command: \(trimmed)
+        Command: \(visibleCommand)
         """
-        return AgentToolResult(summary: "terminal: \(trimmed.prefix(80))", payload: payload)
+        return AgentToolResult(summary: "terminal: \(visibleCommand.prefix(80))", payload: payload)
     }
 
     func sendApprovedControl(_ control: AgentTerminalControl) throws -> AgentToolResult {
@@ -622,15 +679,14 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
         return AgentToolResult(summary: "terminal: \(control.displayName)", payload: payload)
     }
 
-    /// Visible-screen-plus-recent-scrollback text, secrets redacted.
+    /// Latest live viewport text, secrets redacted.
     func snapshotText(maxCharacters: Int) -> String {
         let terminal = terminalView.getTerminal()
         let rows = terminal.rows
         let cols = terminal.cols
         guard rows > 0, cols > 0 else { return "" }
-        let bottom = terminal.buffer.yDisp + rows - 1
-        let wantRows = min(400, bottom + 1)
-        let startRow = max(0, bottom - wantRows + 1)
+        let startRow = terminal.buffer.yDisp
+        let bottom = startRow + rows - 1
         let raw = terminal.getText(
             start: Position(col: 0, row: startRow),
             end: Position(col: cols - 1, row: bottom)
@@ -1002,9 +1058,9 @@ final class AgentInteractiveTerminalController: ObservableObject {
         )
     }
 
-    func sendApprovedCommand(_ command: String) throws -> AgentToolResult {
+    func sendApprovedCommand(_ command: String, secretRedactionValues: [String] = []) throws -> AgentToolResult {
         let tab = try activeTabForToolUse()
-        return try tab.sendApprovedCommand(command)
+        return try tab.sendApprovedCommand(command, secretRedactionValues: secretRedactionValues)
     }
 
     func sendApprovedControl(_ control: AgentTerminalControl) throws -> AgentToolResult {

@@ -1,5 +1,50 @@
 # Changelog
 
+## 1.109.0-rc493 - 2026-06-30
+
+### Fixed
+- **请求详情面板长文本截断（1.109.0-rc493）** —— Agent 错误卡片展开详情时不再直接渲染完整超长 request summary / request body；展示层会对超长单行和超长段落做中间省略，保留头尾关键信息，避免 SwiftUI 文本布局卡顿。
+- 每个详情 section 新增复制完整内容按钮，排查时仍可取到未截断原文；`AgentToolsCoreTests` 增加截断预览回归测试。
+- 版本号从 **1.109.0-rc492** 提升为 **1.109.0-rc493**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc492 - 2026-06-30
+
+### Fixed
+- **侧边栏终端快照只读最新一屏（1.109.0-rc492）** —— `terminal_snapshot` 不再把最近 400 行 scrollback/history 一起塞进模型上下文，默认只读取 active tab live 底部可见屏幕，避免旧命令输出干扰当前判断。
+- 快照 payload 标题改为 `latest visible screen`，默认 `max_characters` 从 16000 降到 6000、上限从 40000 降到 12000；工具描述同步说明默认不包含历史滚动内容。
+- 版本号从 **1.109.0-rc491** 提升为 **1.109.0-rc492**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc491 - 2026-06-30
+
+### Fixed
+- **SSH 远端只读命令识别（1.109.0-rc491）** —— `run_command` 现在会跳过 `ssh` 外壳、按远端真实命令判断风险；`ssh host cat /var/log/...`、`ssh host ping ...` 这类只读远端命令不再被本地 workspace 路径检查误判为写操作。
+- 远端危险命令和敏感路径仍保持拦截：交互式 `ssh host` 继续需要用户批准，`ssh host "rm -rf ..."` 需要危险确认，`ssh host "cat ~/.ssh/id_rsa"` 仍按敏感路径升级。
+- `AgentToolsCoreTests` 新增 SSH 远端命令风险和授权签名回归测试，锁住 `ssh git status` 的窄签名与远端路径判断边界。
+- 版本号从 **1.109.0-rc490** 提升为 **1.109.0-rc491**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc490 - 2026-06-30
+
+### Security
+- **Agent secret 占位符加固（1.109.0-rc490）** —— `${secret:...}` ID 改为纯随机 32 位 hex，不再把用户填写的 label slug 暴露给模型；Agent 专用 secret 以 base64 envelope 存入 Keychain，解析时还原原文，避免通用凭据保存链路 trim 掉首尾空格这类可能属于密码本体的字符。
+- URL encode transform 改为 query value 级严格 percent-encoding，并在结果脱敏时同时覆盖严格编码、旧 queryAllowed 编码、base64 和原文；`AgentToolsCoreTests` 新增本地执行工具解析 / 委托型 AI 执行器不解析的边界测试。
+- 版本号从 **1.109.0-rc489** 提升为 **1.109.0-rc490**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc489 - 2026-06-30
+
+### Added
+- **终端工具支持总是允许（1.109.0-rc489）** —— `terminal_send_command` 和 `terminal_send_control` 现在会生成 always-allow 签名，审批卡片可显示“总是允许”。终端命令按完整命令行记忆，终端控制键按具体控制键记忆，例如 `ctrl_c` 不会顺带允许 `enter`。
+- `AgentToolsCoreTests` 新增终端工具签名回归测试，锁住终端命令和不同控制键的授权边界。
+- 版本号从 **1.109.0-rc488** 提升为 **1.109.0-rc489**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc488 - 2026-06-30
+
+### Added
+- **Agent 受保护机密占位符（1.109.0-rc488）** —— Composer 新增“插入受保护机密”入口，把用户输入的密码/Token 原样封装后保存到本机 Keychain，只把带随机 ID 的 `${secret:...}` 占位符放进对话；`run_command`、终端发送、MCP 调用、Lark CLI 和 Chrome 输入等本地执行工具会在执行前解析占位符，委托给外部 AI 执行器的工具不会解析明文。
+
+### Security
+- 工具结果、后台任务命令/输出、终端工具摘要和 tool error 都会对真实机密、URL 编码值、base64 值和占位符做统一脱敏；XCTest 环境下 `AgentCredentialStore` 默认使用内存凭据仓库，避免测试宿主触发真实 `com.willdeep.credentials` 钥匙串授权弹窗。
+- 版本号从 **1.109.0-rc487** 提升为 **1.109.0-rc488**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
 ## 1.109.0-rc487 - 2026-06-30
 
 ### Fixed

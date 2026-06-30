@@ -30,7 +30,21 @@ struct AttachButton: View {
                 .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
-        .help("Attach image")
+        .help(L10n.Composer.attachImageHelp)
+    }
+}
+
+struct InsertSecretButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "lock.shield")
+                .font(.system(size: 15))
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .help(L10n.Composer.insertSecretHelp)
     }
 }
 

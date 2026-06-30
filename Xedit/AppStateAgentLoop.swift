@@ -331,9 +331,8 @@ extension AppState {
             AgentRuntimeStore.descriptor(id: $0)
         }
         let turnBaselineSnapshot = await Self.loadAgentWorktreeSnapshot(for: workspaceURL)
-        let turnBaselineChanges = turnBaselineSnapshot.changes
         if workspaceURL != nil {
-            runtime.worktreeChanges = turnBaselineChanges
+            runtime.worktreeChanges = turnBaselineSnapshot.changes.filtering(paths: runtime.agentEditedPaths)
         }
         let memoryState = AgentMemoryState()
         defer {
@@ -933,7 +932,7 @@ extension AppState {
                         await refreshGitStatusAfterAgentTool(
                             for: runtime,
                             workspaceURL: workspaceURL,
-                            baselineFingerprint: turnBaselineSnapshot.fingerprint
+                            baselineSnapshot: turnBaselineSnapshot
                         )
                     }
                     appendToolMessage(for: runtime, toolCallID: call.externalID, payload: result.payload)

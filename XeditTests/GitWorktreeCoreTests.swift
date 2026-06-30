@@ -147,6 +147,115 @@ struct GitWorktreeCoreTests {
         #expect(summary.change(for: "B.swift")?.fileName == "B.swift")
     }
 
+    @Test("agent worktree summary filters to attributed paths")
+    func testWorktreeChangeSummaryFiltersToAttributedPaths() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-git-root")
+        let summary = AgentWorktreeChangeSummary(
+            repositoryRoot: root,
+            files: [
+                AgentFileChangeSummary(
+                    path: "Agent.swift",
+                    kind: .modified,
+                    lineStats: AgentLineChangeStats(added: 3, deleted: 1)
+                ),
+                AgentFileChangeSummary(
+                    path: "UserDraft.md",
+                    kind: .untracked,
+                    lineStats: AgentLineChangeStats(added: nil, deleted: nil)
+                )
+            ]
+        )
+
+        let filtered = summary.filtering(paths: ["Agent.swift"])
+        #expect(filtered.repositoryRoot == root)
+        #expect(filtered.files.map(\.path) == ["Agent.swift"])
+        #expect(summary.filtering(paths: []).isEmpty)
+    }
+
+    @Test("agent worktree baseline attribution ignores unchanged dirty files")
+    func testWorktreeBaselineAttributionIgnoresUnchangedDirtyFiles() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-git-root")
+        let baseline = AppState.AgentWorktreeSnapshot(
+            status: GitRepositoryStatus(repositoryRoot: root, branchName: "main", entries: [
+                "preexisting.txt": .modified,
+            ]),
+            changes: AgentWorktreeChangeSummary(repositoryRoot: root),
+            fingerprint: "before",
+            fileSignatures: [
+                "preexisting.txt": "modified|added=1|deleted=0|size=10|mtime=1",
+            ]
+        )
+        let current = AppState.AgentWorktreeSnapshot(
+            status: GitRepositoryStatus(repositoryRoot: root, branchName: "main", entries: [
+                "preexisting.txt": .modified,
+                "agent-output.txt": .untracked,
+            ]),
+            changes: AgentWorktreeChangeSummary(
+                repositoryRoot: root,
+                files: [
+                    AgentFileChangeSummary(
+                        path: "agent-output.txt",
+                        kind: .untracked,
+                        lineStats: AgentLineChangeStats(added: nil, deleted: nil)
+                    ),
+                    AgentFileChangeSummary(
+                        path: "preexisting.txt",
+                        kind: .modified,
+                        lineStats: AgentLineChangeStats(added: 1, deleted: 0)
+                    ),
+                ]
+            ),
+            fingerprint: "after",
+            fileSignatures: [
+                "preexisting.txt": "modified|added=1|deleted=0|size=10|mtime=1",
+                "agent-output.txt": "untracked|added=?|deleted=?|size=22|mtime=2",
+            ]
+        )
+
+        #expect(AppState.agentWorktreePathsChangedSinceBaseline(
+            baseline: baseline,
+            current: current
+        ) == Set(["agent-output.txt"]))
+    }
+
+    @Test("agent worktree diff preview is limited to attributed files")
+    func testWorktreeDiffPreviewLimitsTrackedDiffToAttributedFiles() throws {
+        let repository = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_agent_diff_preview_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: repository, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: repository) }
+
+        try requireGit(["init"], in: repository)
+        try requireGit(["config", "user.email", "tests@example.com"], in: repository)
+        try requireGit(["config", "user.name", "WillDeep Tests"], in: repository)
+        try "one\n".write(to: repository.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        try "two\n".write(to: repository.appendingPathComponent("b.txt"), atomically: true, encoding: .utf8)
+        try requireGit(["add", "a.txt", "b.txt"], in: repository)
+        try requireGit(["commit", "-m", "initial"], in: repository)
+
+        try "one\nagent\n".write(to: repository.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        try "two\nuser\n".write(to: repository.appendingPathComponent("b.txt"), atomically: true, encoding: .utf8)
+
+        let summary = AgentWorktreeChangeSummary(
+            repositoryRoot: repository,
+            files: [
+                AgentFileChangeSummary(
+                    path: "a.txt",
+                    kind: .modified,
+                    lineStats: AgentLineChangeStats(added: 1, deleted: 0)
+                ),
+            ]
+        )
+        let preview = AppState.loadAgentWorktreeDiffPreview(
+            changes: summary,
+            repositoryRoot: repository
+        )
+
+        #expect(preview.diff.contains("diff --git a/a.txt b/a.txt"))
+        #expect(!preview.diff.contains("diff --git a/b.txt b/b.txt"))
+        #expect(!preview.diff.contains("+user"))
+    }
+
     @Test("agent worktree summary skips modified files without real diff")
     func testAgentWorktreeSummarySkipsModifiedFilesWithoutDiff() {
         #expect(AppState.shouldIncludeAgentWorktreeChange(

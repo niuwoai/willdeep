@@ -127,12 +127,16 @@ final class AgentJobRegistry: ObservableObject {
         sandboxMode: AgentSandboxMode = .readOnly,
         runtimeDisplayName: String? = nil,
         runtimeIDForDisplay: UUID? = nil,
-        remotePID: Int32? = nil
+        remotePID: Int32? = nil,
+        displayCommand: String? = nil,
+        secretRedactionValues: [String] = []
     ) throws -> AgentBackgroundJob {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             throw AgentJobError.emptyCommand
         }
+        let visibleCommand = (displayCommand ?? AgentSecretStore.redact(trimmed, secretValues: secretRedactionValues))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
 
         let id = UUID()
         let shortID = String(id.uuidString.prefix(6)).lowercased()
@@ -159,7 +163,7 @@ final class AgentJobRegistry: ObservableObject {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
-        let collector = AgentJobOutputCollector(limit: Self.maxOutputBytes)
+        let collector = AgentJobOutputCollector(limit: Self.maxOutputBytes, secretRedactionValues: secretRedactionValues)
         stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
             if !data.isEmpty { collector.append(data) }
@@ -179,7 +183,7 @@ final class AgentJobRegistry: ObservableObject {
             let job = AgentBackgroundJob(
                 id: id,
                 shortID: shortID,
-                command: trimmed,
+                command: visibleCommand.isEmpty ? "[secret]" : visibleCommand,
                 workingDirectoryPath: workingDirectoryPath,
                 runtimeID: runtimeID,
                 runtimeDisplayName: runtimeDisplayName,
@@ -204,7 +208,7 @@ final class AgentJobRegistry: ObservableObject {
         let initial = AgentBackgroundJob(
             id: id,
             shortID: shortID,
-            command: trimmed,
+            command: visibleCommand.isEmpty ? "[secret]" : visibleCommand,
             workingDirectoryPath: workingDirectoryPath,
             runtimeID: runtimeID,
             runtimeDisplayName: runtimeDisplayName,
@@ -494,16 +498,29 @@ private nonisolated final class AgentJobProcess: @unchecked Sendable {
 /// lifetimes and exposed for tail-reads.
 private nonisolated final class AgentJobOutputCollector: @unchecked Sendable {
     private let limit: Int
+    private let secretRedactionValues: [String]
     private let lock = NSLock()
     private var data = Data()
     private var truncated = false
 
-    init(limit: Int) {
+    init(limit: Int, secretRedactionValues: [String] = []) {
         self.limit = limit
+        self.secretRedactionValues = secretRedactionValues
     }
 
     func append(_ chunk: Data) {
         guard !chunk.isEmpty else { return }
+        if !secretRedactionValues.isEmpty,
+           let text = String(data: chunk, encoding: .utf8) {
+            let redacted = AgentSecretStore.redact(text, secretValues: secretRedactionValues)
+            guard let bytes = redacted.data(using: .utf8) else { return }
+            appendRaw(bytes)
+            return
+        }
+        appendRaw(chunk)
+    }
+
+    private func appendRaw(_ chunk: Data) {
         lock.lock(); defer { lock.unlock() }
         let remaining = max(0, limit - data.count)
         if remaining > 0 {
@@ -531,6 +548,6 @@ private nonisolated final class AgentJobOutputCollector: @unchecked Sendable {
         lock.unlock()
         var text = String(data: snapshot, encoding: .utf8) ?? ""
         if didTruncate { text += "\n...[truncated]" }
-        return text
+        return AgentSecretStore.redact(text, secretValues: secretRedactionValues)
     }
 }

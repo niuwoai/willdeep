@@ -13,7 +13,10 @@ import Foundation
 // 通过桥接头文件 ONNXRuntimeBridge.h 访问 C API
 // C API 类型和函数在桥接头文件中定义
 
-class ONNXRuntimeWrapper {
+// nonisolated：纯 C(ONNX) 互操作封装，被 actor SpeechTranscriptionModel 独占
+// 持有并在其隔离域内调用；推理本就该离开主线程。不标会被工程默认 @MainActor
+// 隔离，导致 actor 调它的 init/loadModel/runInference 全报跨隔离告警。
+nonisolated class ONNXRuntimeWrapper {
     private var session: OpaquePointer? // OrtSession*
     private var env: OpaquePointer? // OrtEnv*
     private var api: UnsafePointer<OrtApi>?
@@ -203,7 +206,7 @@ class ONNXRuntimeWrapper {
         // 获取输入名称
         var inputName: UnsafeMutablePointer<CChar>?
         var allocator: UnsafeMutablePointer<OrtAllocator>?
-        api.pointee.GetAllocatorWithDefaultOptions(&allocator)
+        _ = api.pointee.GetAllocatorWithDefaultOptions(&allocator)
         
         status = api.pointee.SessionGetInputName(session, 0, allocator, &inputName)
         if status != nil {
@@ -235,7 +238,7 @@ class ONNXRuntimeWrapper {
         let outputNameCStrings = outputNames.map { $0.cString(using: .utf8)! }
         
         // 需要构建指针数组
-        var inputTensors = [inputTensor]
+        let inputTensors = [inputTensor]
         
         // 使用 withExtendedLifetime 确保字符串在整个调用期间有效
         let runStatus = withExtendedLifetime((inputNameCStrings, outputNameCStrings)) {

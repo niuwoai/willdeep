@@ -112,7 +112,7 @@ final class VoiceRecorder: ObservableObject {
     private func startMetering() {
         meterTimer?.invalidate()
         let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 guard let self, let r = self.recorder else { return }
                 r.updateMeters()
                 let db = r.averagePower(forChannel: 0)

@@ -165,9 +165,14 @@ struct WillDeepTests {
     @Test("terminal shortcut recorder protects echo-off input for echo-off replay only")
     func testTerminalShortcutRecorderProtectsEchoOffInput() throws {
         let service = AgentCredentialStore._setTestKeychainServiceOverride("terminal-shortcuts-\(UUID().uuidString)")
+        let shortcutsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("terminal-shortcuts-\(UUID().uuidString)", isDirectory: true)
+        TerminalShortcutStore._setTestDirectoryOverride(shortcutsDirectory)
         defer {
             AgentCredentialStore._wipeTestKeychain()
             AgentCredentialStore._setTestKeychainServiceOverride(nil)
+            TerminalShortcutStore._setTestDirectoryOverride(nil)
+            try? FileManager.default.removeItem(at: shortcutsDirectory)
             UserDefaults.standard.removeObject(forKey: "com.willdeep.terminalShortcuts.v1")
         }
         #expect(service.hasPrefix("terminal-shortcuts-"))
@@ -205,7 +210,7 @@ struct WillDeepTests {
         #expect(protectedEvent.delayMilliseconds == 1_000)
 
         TerminalShortcutStore.save([shortcut])
-        let persistedData = try #require(UserDefaults.standard.data(forKey: "com.willdeep.terminalShortcuts.v1"))
+        let persistedData = try Data(contentsOf: TerminalShortcutStore.fileURL)
         let persistedJSON = String(decoding: persistedData, as: UTF8.self)
         #expect(!persistedJSON.contains("super-secret-password"))
 
@@ -214,6 +219,42 @@ struct WillDeepTests {
         #expect(loadedProtectedEvent.bytes.isEmpty)
         #expect(loadedProtectedEvent.protectedBytesReference?.isEmpty == false)
         #expect(loadedProtectedEvent.resolvedBytes() == Array("super-secret-password".utf8))
+    }
+
+    @Test("terminal shortcut rename persists to disk")
+    func testTerminalShortcutRenamePersistsToDisk() throws {
+        let shortcutsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("terminal-shortcut-rename-\(UUID().uuidString)", isDirectory: true)
+        TerminalShortcutStore._setTestDirectoryOverride(shortcutsDirectory)
+        defer {
+            TerminalShortcutStore._setTestDirectoryOverride(nil)
+            try? FileManager.default.removeItem(at: shortcutsDirectory)
+        }
+
+        let shortcut = TerminalShortcut(
+            id: UUID(),
+            title: "Before",
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 1),
+            durationMilliseconds: 1_000,
+            events: [
+                TerminalShortcutEvent(
+                    delayMilliseconds: 0,
+                    bytes: Array("pwd\n".utf8)
+                )
+            ],
+            hasProtectedInput: false
+        )
+
+        var renamed = shortcut
+        renamed.title = "After"
+        renamed.updatedAt = Date(timeIntervalSince1970: 2)
+
+        TerminalShortcutStore.save([renamed])
+
+        let loaded = try #require(TerminalShortcutStore.load().first)
+        #expect(loaded.title == "After")
+        #expect(FileManager.default.fileExists(atPath: TerminalShortcutStore.fileURL.path))
     }
 
     @MainActor

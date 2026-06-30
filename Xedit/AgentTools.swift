@@ -19,140 +19,180 @@ enum AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
-        if AgentShortDramaToolDispatcher.canHandle(name) {
-            return try await AgentShortDramaToolDispatcher.run(
-                name: name,
-                arguments: arguments,
-                context: context
-            )
+        let resolution = resolvesSecretsForTool(name)
+            ? AgentSecretStore.resolve(arguments)
+            : AgentSecretResolution(value: .object(arguments), secretValues: [])
+        let activeArguments: [String: AgentJSONValue]
+        if case .object(let dict) = resolution.value {
+            activeArguments = dict
+        } else {
+            activeArguments = arguments
         }
-        switch name {
-        case "search_files":
-            return try await AgentFileTools.searchFiles(arguments: arguments, context: context)
-        case "grep_files":
-            return try await AgentFileTools.grepFiles(arguments: arguments, context: context)
-        case "read_file":
-            return try await AgentFileTools.readFile(arguments: arguments, context: context)
-        case "list_directory":
-            return try await AgentFileTools.listDirectory(arguments: arguments, context: context)
-        case "glob":
-            // Compatibility alias for the `glob` tool some models hallucinate;
-            // read-only workspace path scan. See AgentFileTools.glob.
-            return try await AgentFileTools.glob(arguments: arguments, context: context)
-        case "git_status":
-            return try await AgentFileTools.gitStatus(context: context)
-        case "run_command":
-            return try await runCommand(arguments: arguments, context: context)
-        case "terminal_snapshot":
-            return try await AgentTerminalTools.snapshot(arguments: arguments, context: context)
-        case "terminal_send_command":
-            return try await AgentTerminalTools.sendCommand(arguments: arguments, context: context)
-        case "terminal_send_control":
-            return try await AgentTerminalTools.sendControl(arguments: arguments, context: context)
-        case "create_file":
-            return try await createFile(arguments: arguments, context: context)
-        case "apply_patch":
-            return try await applyPatch(arguments: arguments, context: context)
-        case "claude_code":
-            return try await claudeCode(arguments: arguments, context: context)
-        case "codex_cli":
-            return try await codexCLI(arguments: arguments, context: context)
-        case "cursor_agent":
-            return try await cursorAgent(arguments: arguments, context: context)
-        case "cline_cli":
-            return try await clineCLI(arguments: arguments, context: context)
-        case "lark_cli":
-            return try await larkCLI(arguments: arguments)
-        case "list_jobs":
-            return try await listJobs(arguments: arguments, context: context)
-        case "get_job_output":
-            return try await getJobOutput(arguments: arguments, context: context)
-        case "kill_job":
-            return try await killJob(arguments: arguments, context: context)
-        case "list_skills":
-            return try AgentSkillCatalog.listSkills(arguments: arguments)
-        case "read_skill":
-            return try AgentSkillCatalog.readSkill(arguments: arguments)
-        case "add_memory":
-            return try AgentSelfLearning.addMemory(arguments: arguments, rootDirectory: context.rootDirectory)
-        case "create_user_skill":
-            return try AgentSelfLearning.createUserSkill(arguments: arguments)
-        case "update_user_skill":
-            return try AgentConfigurationTools.updateUserSkill(arguments: arguments)
-        case "delete_user_skill":
-            return try AgentConfigurationTools.deleteUserSkill(arguments: arguments)
-        case "search_mcp_servers":
-            return try await AgentSelfLearning.searchMCPServers(arguments: arguments)
-        case "suggest_mcp_server":
-            return try AgentSelfLearning.suggestMCPServer(arguments: arguments, rootDirectory: context.rootDirectory)
-        case "configure_mcp_server":
-            return try AgentConfigurationTools.configureMCPServer(arguments: arguments)
-        case "web_search":
-            return try await AgentWebTools.webSearch(arguments: arguments)
-        case "web_fetch":
-            return try await AgentWebTools.webFetch(arguments: arguments)
-        case "create_media_task":
-            return try await AgentMediaTools.createMediaTask(arguments: arguments, context: context)
-        case "open_image_editor":
-            return try await AgentMediaTools.openImageEditor(arguments: arguments, context: context)
-        case "edit_image_with_mask":
-            return try await AgentMediaTools.editImageWithMask(arguments: arguments, context: context)
-        case "upscale_image":
-            return try await AgentMediaTools.upscaleImage(arguments: arguments, context: context)
-        case "generate_video_from_image":
-            return try await AgentMediaTools.generateVideoFromImage(arguments: arguments, context: context)
-        case "show_image_choice_widget":
-            return try await AgentMediaTools.showImageChoiceWidget(arguments: arguments, context: context)
-        case "import_media_directory":
-            return try await AgentMediaImportTools.importDirectory(arguments: arguments, context: context)
-        case "import_media_manifest":
-            return try await AgentMediaImportTools.importManifest(arguments: arguments, context: context)
-        case "update_media_task":
-            return try await AgentMediaTools.updateMediaTask(arguments: arguments, context: context)
-        case "list_media_tasks":
-            return try await AgentMediaTools.listMediaTasks(arguments: arguments, context: context)
-        case "replicate_create_prediction":
-            return try await AgentMediaTools.replicateCreatePrediction(arguments: arguments, context: context)
-        case "replicate_poll_prediction":
-            return try await AgentMediaTools.replicatePollPrediction(arguments: arguments, context: context)
-        case "replicate_cancel_prediction":
-            return try await AgentMediaTools.replicateCancelPrediction(arguments: arguments, context: context)
-        case "some_im_create_media_task":
-            return try await AgentMediaTools.someIMCreateMediaTask(arguments: arguments, context: context)
-        case "some_im_poll_media_task":
-            return try await AgentMediaTools.someIMPollMediaTask(arguments: arguments, context: context)
-        case "some_im_cancel_media_task":
-            return try await AgentMediaTools.someIMCancelMediaTask(arguments: arguments, context: context)
-        case "generate_image":
-            return try await generateImage(arguments: arguments)
-        case "visual_qa_screenshot":
-            return try await AgentVisualQATools.analyzeScreenshot(arguments: arguments, context: context)
-        case "chrome_status":
-            return try await AgentChromeTools.status(arguments: arguments)
-        case "chrome_read_page":
-            return try await AgentChromeTools.readPage(arguments: arguments)
-        case "chrome_read_selection":
-            return try await AgentChromeTools.readSelection(arguments: arguments)
-        case "chrome_click":
-            return try await AgentChromeTools.click(arguments: arguments)
-        case "chrome_type":
-            return try await AgentChromeTools.typeText(arguments: arguments)
-        case "chrome_capture_tab":
-            return try await AgentChromeTools.captureTab(arguments: arguments)
-        case "chrome_debugger_command":
-            return try await AgentChromeTools.debuggerCommand(arguments: arguments)
-        case "list_mcp_servers":
-            return try AgentMCPBridge.listServers()
-        case "list_mcp_tools":
-            return try await AgentMCPBridge.listTools(arguments: arguments)
-        case "call_mcp_tool":
-            return try await AgentMCPBridge.callTool(arguments: arguments)
-        case "show_widget":
-            return try await showWidget(arguments: arguments, context: context)
-        case "run_workflow":
-            return try await runWorkflow(arguments: arguments, context: context)
+        let activeContext = context.withAdditionalSecretRedactionValues(resolution.secretValues)
+        do {
+            let result: AgentToolResult
+            if AgentShortDramaToolDispatcher.canHandle(name) {
+                result = try await AgentShortDramaToolDispatcher.run(
+                    name: name,
+                    arguments: activeArguments,
+                    context: activeContext
+                )
+                return AgentSecretStore.redact(result, secretValues: activeContext.secretRedactionValues)
+            }
+            switch name {
+            case "search_files":
+                result = try await AgentFileTools.searchFiles(arguments: activeArguments, context: activeContext)
+            case "grep_files":
+                result = try await AgentFileTools.grepFiles(arguments: activeArguments, context: activeContext)
+            case "read_file":
+                result = try await AgentFileTools.readFile(arguments: activeArguments, context: activeContext)
+            case "list_directory":
+                result = try await AgentFileTools.listDirectory(arguments: activeArguments, context: activeContext)
+            case "glob":
+                // Compatibility alias for the `glob` tool some models hallucinate;
+                // read-only workspace path scan. See AgentFileTools.glob.
+                result = try await AgentFileTools.glob(arguments: activeArguments, context: activeContext)
+            case "git_status":
+                result = try await AgentFileTools.gitStatus(context: activeContext)
+            case "run_command":
+                result = try await runCommand(arguments: activeArguments, context: activeContext)
+            case "terminal_snapshot":
+                result = try await AgentTerminalTools.snapshot(arguments: activeArguments, context: activeContext)
+            case "terminal_send_command":
+                result = try await AgentTerminalTools.sendCommand(arguments: activeArguments, context: activeContext)
+            case "terminal_send_control":
+                result = try await AgentTerminalTools.sendControl(arguments: activeArguments, context: activeContext)
+            case "create_file":
+                result = try await createFile(arguments: activeArguments, context: activeContext)
+            case "apply_patch":
+                result = try await applyPatch(arguments: activeArguments, context: activeContext)
+            case "claude_code":
+                result = try await claudeCode(arguments: activeArguments, context: activeContext)
+            case "codex_cli":
+                result = try await codexCLI(arguments: activeArguments, context: activeContext)
+            case "cursor_agent":
+                result = try await cursorAgent(arguments: activeArguments, context: activeContext)
+            case "cline_cli":
+                result = try await clineCLI(arguments: activeArguments, context: activeContext)
+            case "lark_cli":
+                result = try await larkCLI(arguments: activeArguments)
+            case "list_jobs":
+                result = try await listJobs(arguments: activeArguments, context: activeContext)
+            case "get_job_output":
+                result = try await getJobOutput(arguments: activeArguments, context: activeContext)
+            case "kill_job":
+                result = try await killJob(arguments: activeArguments, context: activeContext)
+            case "list_skills":
+                result = try AgentSkillCatalog.listSkills(arguments: activeArguments)
+            case "read_skill":
+                result = try AgentSkillCatalog.readSkill(arguments: activeArguments)
+            case "add_memory":
+                result = try AgentSelfLearning.addMemory(arguments: activeArguments, rootDirectory: activeContext.rootDirectory)
+            case "create_user_skill":
+                result = try AgentSelfLearning.createUserSkill(arguments: activeArguments)
+            case "update_user_skill":
+                result = try AgentConfigurationTools.updateUserSkill(arguments: activeArguments)
+            case "delete_user_skill":
+                result = try AgentConfigurationTools.deleteUserSkill(arguments: activeArguments)
+            case "search_mcp_servers":
+                result = try await AgentSelfLearning.searchMCPServers(arguments: activeArguments)
+            case "suggest_mcp_server":
+                result = try AgentSelfLearning.suggestMCPServer(arguments: activeArguments, rootDirectory: activeContext.rootDirectory)
+            case "configure_mcp_server":
+                result = try AgentConfigurationTools.configureMCPServer(arguments: activeArguments)
+            case "web_search":
+                result = try await AgentWebTools.webSearch(arguments: activeArguments)
+            case "web_fetch":
+                result = try await AgentWebTools.webFetch(arguments: activeArguments)
+            case "create_media_task":
+                result = try await AgentMediaTools.createMediaTask(arguments: activeArguments, context: activeContext)
+            case "open_image_editor":
+                result = try await AgentMediaTools.openImageEditor(arguments: activeArguments, context: activeContext)
+            case "edit_image_with_mask":
+                result = try await AgentMediaTools.editImageWithMask(arguments: activeArguments, context: activeContext)
+            case "upscale_image":
+                result = try await AgentMediaTools.upscaleImage(arguments: activeArguments, context: activeContext)
+            case "generate_video_from_image":
+                result = try await AgentMediaTools.generateVideoFromImage(arguments: activeArguments, context: activeContext)
+            case "show_image_choice_widget":
+                result = try await AgentMediaTools.showImageChoiceWidget(arguments: activeArguments, context: activeContext)
+            case "import_media_directory":
+                result = try await AgentMediaImportTools.importDirectory(arguments: activeArguments, context: activeContext)
+            case "import_media_manifest":
+                result = try await AgentMediaImportTools.importManifest(arguments: activeArguments, context: activeContext)
+            case "update_media_task":
+                result = try await AgentMediaTools.updateMediaTask(arguments: activeArguments, context: activeContext)
+            case "list_media_tasks":
+                result = try await AgentMediaTools.listMediaTasks(arguments: activeArguments, context: activeContext)
+            case "replicate_create_prediction":
+                result = try await AgentMediaTools.replicateCreatePrediction(arguments: activeArguments, context: activeContext)
+            case "replicate_poll_prediction":
+                result = try await AgentMediaTools.replicatePollPrediction(arguments: activeArguments, context: activeContext)
+            case "replicate_cancel_prediction":
+                result = try await AgentMediaTools.replicateCancelPrediction(arguments: activeArguments, context: activeContext)
+            case "some_im_create_media_task":
+                result = try await AgentMediaTools.someIMCreateMediaTask(arguments: activeArguments, context: activeContext)
+            case "some_im_poll_media_task":
+                result = try await AgentMediaTools.someIMPollMediaTask(arguments: activeArguments, context: activeContext)
+            case "some_im_cancel_media_task":
+                result = try await AgentMediaTools.someIMCancelMediaTask(arguments: activeArguments, context: activeContext)
+            case "generate_image":
+                result = try await generateImage(arguments: activeArguments)
+            case "visual_qa_screenshot":
+                result = try await AgentVisualQATools.analyzeScreenshot(arguments: activeArguments, context: activeContext)
+            case "chrome_status":
+                result = try await AgentChromeTools.status(arguments: activeArguments)
+            case "chrome_read_page":
+                result = try await AgentChromeTools.readPage(arguments: activeArguments)
+            case "chrome_read_selection":
+                result = try await AgentChromeTools.readSelection(arguments: activeArguments)
+            case "chrome_click":
+                result = try await AgentChromeTools.click(arguments: activeArguments)
+            case "chrome_type":
+                result = try await AgentChromeTools.typeText(arguments: activeArguments)
+            case "chrome_capture_tab":
+                result = try await AgentChromeTools.captureTab(arguments: activeArguments)
+            case "chrome_debugger_command":
+                result = try await AgentChromeTools.debuggerCommand(arguments: activeArguments)
+            case "list_mcp_servers":
+                result = try AgentMCPBridge.listServers()
+            case "list_mcp_tools":
+                result = try await AgentMCPBridge.listTools(arguments: activeArguments)
+            case "call_mcp_tool":
+                result = try await AgentMCPBridge.callTool(arguments: activeArguments)
+            case "show_widget":
+                result = try await showWidget(arguments: activeArguments, context: activeContext)
+            case "run_workflow":
+                result = try await runWorkflow(arguments: activeArguments, context: activeContext)
+            default:
+                throw AgentToolError.unknownTool(name)
+            }
+            return AgentSecretStore.redact(result, secretValues: activeContext.secretRedactionValues)
+        } catch {
+            throw redactedToolError(error, secretValues: activeContext.secretRedactionValues)
+        }
+    }
+
+    private static func redactedToolError(_ error: Error, secretValues: [String]) -> Error {
+        guard !secretValues.isEmpty else { return error }
+        if let toolError = error as? AgentToolError {
+            return toolError.redacted(secretValues: secretValues)
+        }
+        return AgentToolError.invalidArgument(
+            AgentSecretStore.redact(error.localizedDescription, secretValues: secretValues)
+        )
+    }
+
+    nonisolated static func resolvesSecretsForTool(_ toolName: String) -> Bool {
+        switch toolName {
+        case "run_command",
+             "terminal_send_command",
+             "lark_cli",
+             "call_mcp_tool",
+             "chrome_type":
+            return true
         default:
-            throw AgentToolError.unknownTool(name)
+            return false
         }
     }
 
@@ -375,17 +415,22 @@ enum AgentToolRunner {
                         workingDirectory: root,
                         runtimeID: runtimeID,
                         timeoutSeconds: bgTimeout,
-                        sandboxMode: context.sandboxMode
+                        sandboxMode: context.sandboxMode,
+                        displayCommand: AgentSecretStore.redact(command, secretValues: context.secretRedactionValues),
+                        secretRedactionValues: context.secretRedactionValues
                     )
                 }
             } catch {
-                throw AgentToolError.commandFailed(-1, error.localizedDescription)
+                throw AgentToolError.commandFailed(
+                    -1,
+                    AgentSecretStore.redact(error.localizedDescription, secretValues: context.secretRedactionValues)
+                )
             }
             let cwd = job.workingDirectoryPath ?? root.path
             let timeoutLine = bgTimeout.map { "\nTimeout: \(Int($0))s" } ?? ""
             let payload = """
             Started background job \(job.displayHandle).
-            Command: \(command)
+            Command: \(AgentSecretStore.redact(command, secretValues: context.secretRedactionValues))
             PID: \(job.pid)
             cwd: \(cwd)\(timeoutLine)
 
@@ -446,7 +491,13 @@ enum AgentToolRunner {
                 try? stderrPipe.fileHandleForWriting.close()
                 await stdoutDrain.value
                 await stderrDrain.value
-                return CommandOutcome(exitStatus: -1, stdout: "", stderr: error.localizedDescription, timedOut: false, launchFailed: true)
+                return CommandOutcome(
+                    exitStatus: -1,
+                    stdout: "",
+                    stderr: AgentSecretStore.redact(error.localizedDescription, secretValues: context.secretRedactionValues),
+                    timedOut: false,
+                    launchFailed: true
+                )
             }
 
             let timeoutWorkItem = DispatchWorkItem {
@@ -469,8 +520,14 @@ enum AgentToolRunner {
 
             return CommandOutcome(
                 exitStatus: process.terminationStatus,
-                stdout: AgentSandboxPolicy.scrub(stdoutCollector.stringValue),
-                stderr: AgentSandboxPolicy.scrub(stderrCollector.stringValue),
+                stdout: AgentSecretStore.redact(
+                    AgentSandboxPolicy.scrub(stdoutCollector.stringValue),
+                    secretValues: context.secretRedactionValues
+                ),
+                stderr: AgentSecretStore.redact(
+                    AgentSandboxPolicy.scrub(stderrCollector.stringValue),
+                    secretValues: context.secretRedactionValues
+                ),
                 timedOut: runState.didTimeout,
                 launchFailed: false
             )

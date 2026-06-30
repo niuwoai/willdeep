@@ -63,10 +63,28 @@ struct AgentErrorCard: View {
             if isExpanded, let details {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(details.sections) { section in
+                        let preview = AgentErrorDetailsPreview.text(for: section)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(section.title)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                            HStack(spacing: 6) {
+                                Text(section.title)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                if preview.isTruncated {
+                                    Text("已省略过长内容")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                                Button {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(section.text, forType: .string)
+                                } label: {
+                                    Image(systemName: "doc.on.doc")
+                                        .font(.system(size: 10))
+                                }
+                                .buttonStyle(.borderless)
+                                .help("复制完整详情")
+                            }
                             // Vertical-only scrolling on purpose: with a
                             // horizontal axis the Text gets an unbounded
                             // width proposal, and a single 8 KB JSON line
@@ -74,7 +92,7 @@ struct AgentErrorCard: View {
                             // blows the renderer's texture limit. Wrapping
                             // keeps it readable and renderable.
                             ScrollView(.vertical) {
-                                Text(section.text)
+                                Text(preview.text)
                                     .font(.system(size: 11, design: .monospaced))
                                     .textSelection(.enabled)
                                     .padding(7)
@@ -96,5 +114,83 @@ struct AgentErrorCard: View {
             RoundedRectangle(cornerRadius: 6)
                 .stroke(Color.red.opacity(0.18), lineWidth: 1)
         )
+    }
+}
+
+enum AgentErrorDetailsPreview {
+    struct Result: Equatable {
+        let text: String
+        let isTruncated: Bool
+    }
+
+    nonisolated static func text(for section: AgentErrorDetails.Section) -> Result {
+        text(section.text, totalLimit: totalLimit(for: section.title), lineLimit: lineLimit(for: section.title))
+    }
+
+    nonisolated static func text(_ raw: String, totalLimit: Int, lineLimit: Int) -> Result {
+        let normalized = raw.replacingOccurrences(of: "\r\n", with: "\n")
+        var truncated = false
+        let lineLimited = normalized
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { line -> String in
+                let value = String(line)
+                guard value.count > lineLimit else { return value }
+                truncated = true
+                return middleEllipsize(
+                    value,
+                    limit: lineLimit,
+                    omittedLabel: " ... [本行已省略 \(value.count - lineLimit) 个字符] ... "
+                )
+            }
+            .joined(separator: "\n")
+
+        guard lineLimited.count > totalLimit else {
+            return Result(text: lineLimited, isTruncated: truncated)
+        }
+
+        return Result(
+            text: middleEllipsize(
+                lineLimited,
+                limit: totalLimit,
+                omittedLabel: "\n\n... [中间已省略 \(lineLimited.count - totalLimit) 个字符] ...\n\n"
+            ),
+            isTruncated: true
+        )
+    }
+
+    nonisolated private static func totalLimit(for title: String) -> Int {
+        switch title {
+        case "Request Body":
+            return 9_000
+        case "Input Messages":
+            return 7_000
+        case "Response":
+            return 6_000
+        default:
+            return 4_000
+        }
+    }
+
+    nonisolated private static func lineLimit(for title: String) -> Int {
+        switch title {
+        case "Request Body":
+            return 1_200
+        case "Input Messages":
+            return 900
+        default:
+            return 1_000
+        }
+    }
+
+    nonisolated private static func middleEllipsize(_ text: String, limit: Int, omittedLabel: String) -> String {
+        guard text.count > limit else { return text }
+        let labelCount = omittedLabel.count
+        guard limit > labelCount + 20 else {
+            return String(text.prefix(max(1, limit - 3))) + "..."
+        }
+        let remaining = limit - labelCount
+        let prefixCount = max(1, remaining / 2)
+        let suffixCount = max(1, remaining - prefixCount)
+        return String(text.prefix(prefixCount)) + omittedLabel + String(text.suffix(suffixCount))
     }
 }

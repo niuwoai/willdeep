@@ -4746,6 +4746,96 @@
         }
       }
     },
+    "composer.attach-image.help" : {
+      "comment" : "Tooltip for the composer image attachment button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Attach image"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "附加图片"
+          }
+        }
+      }
+    },
+    "composer.insert-secret.action" : {
+      "comment" : "Button label for inserting a protected secret placeholder into the Agent composer",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Insert"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "插入"
+          }
+        }
+      }
+    },
+    "composer.insert-secret.description" : {
+      "comment" : "Description shown in the protected secret insertion sheet",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The secret is saved locally in Keychain. The model only sees a placeholder, and WillDeep resolves it when a local tool runs."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "机密只保存在本机钥匙串里。模型只会看到占位符，WillDeep 会在本地工具实际执行时再解析。"
+          }
+        }
+      }
+    },
+    "composer.insert-secret.help" : {
+      "comment" : "Tooltip for the protected secret insert button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Insert protected secret"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "插入受保护机密"
+          }
+        }
+      }
+    },
+    "composer.insert-secret.title" : {
+      "comment" : "Title for the protected secret insertion sheet",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Insert Protected Secret"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "插入受保护机密"
+          }
+        }
+      }
+    },
     "composer.queue-send.help" : {
       "comment" : "tooltip for queueing the current composer message while Agent is responding",
       "extractionState" : "manual",
@@ -4760,6 +4850,42 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "把这条消息排到当前轮次之后发送"
+          }
+        }
+      }
+    },
+    "composer.secret-label.placeholder" : {
+      "comment" : "Placeholder for the protected secret label field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Label, e.g. Production SSH password"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标签，例如生产 SSH 密码"
+          }
+        }
+      }
+    },
+    "composer.secret-value.placeholder" : {
+      "comment" : "Placeholder for the protected secret value field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Secret value"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "机密内容"
           }
         }
       }

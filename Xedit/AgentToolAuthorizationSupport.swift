@@ -107,6 +107,11 @@ enum AgentCommandAuthorization {
             return nil
         }
 
+        if executable == "ssh", let remoteCommand = sshRemoteCommand(from: tokens),
+           let remoteSignature = signature(for: remoteCommand) {
+            return "ssh \(remoteSignature)"
+        }
+
         if executable == "git", tokens.count >= 2 {
             return "\(executable) \(tokens[1].lowercased())"
         }
@@ -133,6 +138,10 @@ enum AgentCommandAuthorization {
     nonisolated static func prefixRule(for command: String) -> [String]? {
         guard let tokens = shellTokens(from: command), !tokens.isEmpty else { return nil }
         let executable = tokens[0].lowercased()
+        if executable == "ssh", let remoteCommand = sshRemoteCommand(from: tokens),
+           let remoteRule = prefixRule(for: remoteCommand) {
+            return ["ssh"] + remoteRule
+        }
         if executable == "git", tokens.count >= 2 {
             return [executable, tokens[1].lowercased()]
         }
@@ -161,6 +170,49 @@ enum AgentCommandAuthorization {
     nonisolated fileprivate static func cleaned(_ raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    nonisolated static func sshRemoteCommand(from command: String) -> String? {
+        guard let tokens = shellTokens(from: command) else { return nil }
+        return sshRemoteCommand(from: tokens)
+    }
+
+    nonisolated static func sshRemoteCommand(from tokens: [String]) -> String? {
+        guard tokens.first?.lowercased() == "ssh",
+              let hostIndex = sshHostIndex(tokens),
+              hostIndex + 1 < tokens.count else {
+            return nil
+        }
+        return cleaned(tokens.dropFirst(hostIndex + 1).joined(separator: " "))
+    }
+
+    nonisolated static func sshHostIndex(_ tokens: [String]) -> Int? {
+        var index = 1
+        let optionsWithArgument: Set<String> = [
+            "-b", "-c", "-D", "-E", "-e", "-F", "-i", "-J", "-L", "-l", "-m",
+            "-O", "-o", "-p", "-Q", "-R", "-S", "-W", "-w"
+        ]
+        while index < tokens.count {
+            let token = tokens[index]
+            if token == "--" {
+                index += 1
+                continue
+            }
+            if optionsWithArgument.contains(token) {
+                index += 2
+                continue
+            }
+            if token.hasPrefix("-o") && token.count > 2 {
+                index += 1
+                continue
+            }
+            if token.hasPrefix("-") {
+                index += 1
+                continue
+            }
+            return index
+        }
+        return nil
     }
 
     nonisolated static func shellTokens(from command: String) -> [String]? {
@@ -223,6 +275,11 @@ enum AgentCommandAuthorization {
 ///    intentionally not part of the signature: the user pinning a
 ///    specific MCP tool means "I trust this tool, run it again", not
 ///    "exactly this query string".
+///  - `terminal_send_command` -> exact visible-terminal command line,
+///    because typing into the user's watched terminal is side-effectful
+///    and should not be broadened to a whole command family.
+///  - `terminal_send_control` -> exact whitelisted control key, e.g.
+///    `terminal_control:ctrl_c`; Ctrl-C approval must not imply Enter.
 ///  - everything else -> nil (the Always Allow button hides; the user
 ///    still has to click Allow per call). file_write / file_patch /
 ///    file_remove are deliberately not pinnable because their blast
@@ -233,6 +290,17 @@ enum AgentToolAuthorization {
         case "run_command":
             guard let command = arguments["command"]?.stringValue() else { return nil }
             return AgentCommandAuthorization.signature(for: command)
+        case "terminal_send_command":
+            guard let command = AgentCommandAuthorization.cleaned(arguments["command"]?.stringValue() ?? "") else {
+                return nil
+            }
+            return "terminal_command:\(command)"
+        case "terminal_send_control":
+            guard let control = AgentCommandAuthorization.cleaned(arguments["control"]?.stringValue() ?? "")?.lowercased(),
+                  ["ctrl_c", "enter", "escape"].contains(control) else {
+                return nil
+            }
+            return "terminal_control:\(control)"
         case "call_mcp_tool":
             guard let rawServer = arguments["server"]?.stringValue(),
                   let rawTool = arguments["tool"]?.stringValue(),
