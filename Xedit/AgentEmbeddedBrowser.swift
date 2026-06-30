@@ -14,8 +14,9 @@ import SwiftUI
 import WebKit
 
 @MainActor
-final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNavigationDelegate {
+final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNavigationDelegate, WKScriptMessageHandler {
     static let shared = AgentEmbeddedBrowserController()
+    static let diagnosticsMessageHandlerName = "willdeepBrowserDiagnostics"
 
     @Published var address: String = "https://example.com"
     @Published private(set) var currentURL: String = ""
@@ -27,6 +28,8 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     @Published private(set) var canGoForward = false
 
     private weak var webView: WKWebView?
+    private var consoleEvents: [[String: Any]] = []
+    private let consoleEventLimit = 300
 
     private override init() {
         super.init()
@@ -111,6 +114,71 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         return try await evaluateObject(script)
     }
 
+    func snapshot(maxElements: Int) async throws -> [String: Any] {
+        let limit = max(10, min(maxElements, 300))
+        let script = """
+        (() => {
+          const selectorFor = (el) => {
+            if (!el || !el.tagName) return '';
+            if (el.id) return `#${CSS.escape(el.id)}`;
+            const testId = el.getAttribute('data-testid') || el.getAttribute('data-test') || el.getAttribute('aria-label') || el.getAttribute('name');
+            if (testId) {
+              const attr = el.getAttribute('data-testid') ? 'data-testid' : (el.getAttribute('data-test') ? 'data-test' : (el.getAttribute('aria-label') ? 'aria-label' : 'name'));
+              return `${el.tagName.toLowerCase()}[${attr}="${CSS.escape(testId)}"]`;
+            }
+            const parts = [];
+            let node = el;
+            while (node && node.nodeType === 1 && parts.length < 5) {
+              let part = node.tagName.toLowerCase();
+              if (node.id) {
+                part += `#${CSS.escape(node.id)}`;
+                parts.unshift(part);
+                break;
+              }
+              const parent = node.parentElement;
+              if (parent) {
+                const siblings = Array.from(parent.children).filter((child) => child.tagName === node.tagName);
+                if (siblings.length > 1) part += `:nth-of-type(${siblings.indexOf(node) + 1})`;
+              }
+              parts.unshift(part);
+              node = parent;
+            }
+            return parts.join(' > ');
+          };
+          const visible = (el) => {
+            const style = getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+          };
+          const candidates = Array.from(document.querySelectorAll('a[href], button, input, textarea, select, [contenteditable="true"], [role="button"], [role="link"], [onclick], summary'));
+          const elements = candidates.filter(visible).slice(0, \(limit)).map((el, index) => {
+            const ref = `wd${index + 1}`;
+            el.setAttribute('data-wd-browser-ref', ref);
+            const rect = el.getBoundingClientRect();
+            const editable = ['input', 'textarea', 'select'].includes(el.tagName.toLowerCase()) || el.isContentEditable;
+            const clickable = !editable || el.tagName.toLowerCase() === 'select' || el.tagName.toLowerCase() === 'button';
+            return {
+              ref,
+              selector: `[data-wd-browser-ref="${ref}"]`,
+              stable_selector: selectorFor(el),
+              tag: el.tagName.toLowerCase(),
+              role: el.getAttribute('role') || '',
+              type: el.getAttribute('type') || '',
+              name: el.getAttribute('name') || '',
+              id: el.id || '',
+              text: (el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '').trim().slice(0, 160),
+              href: el.href || '',
+              editable,
+              clickable,
+              bounds: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) }
+            };
+          });
+          return { title: document.title || '', url: location.href, count: elements.length, elements };
+        })()
+        """
+        return try await evaluateObject(script)
+    }
+
     func click(selector: String) async throws -> [String: Any] {
         let selectorLiteral = try Self.javaScriptLiteral(selector)
         let script = """
@@ -158,6 +226,132 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
             tag: element.tagName.toLowerCase(),
             id: element.id || '',
             length: text.length
+          };
+        })()
+        """
+        return try await evaluateObject(script)
+    }
+
+    func waitFor(condition: String, value: String, timeoutMS: Int) async throws -> [String: Any] {
+        let deadline = Date().addingTimeInterval(TimeInterval(max(500, min(timeoutMS, 30_000))) / 1_000)
+        var lastPayload: [String: Any] = [:]
+        while Date() < deadline {
+            let payload = try await waitConditionPayload(condition: condition, value: value)
+            lastPayload = payload
+            if payload["matched"] as? Bool == true {
+                return payload
+            }
+            try await Task.sleep(nanoseconds: 250_000_000)
+        }
+        return [
+            "matched": false,
+            "condition": condition,
+            "value": value,
+            "timeout_ms": timeoutMS,
+            "last": lastPayload,
+        ]
+    }
+
+    func evaluate(source: String, maxChars: Int) async throws -> [String: Any] {
+        let sourceLiteral = try Self.javaScriptLiteral(source)
+        let script = """
+        (async () => {
+          const source = \(sourceLiteral);
+          let result = await (new Function(`return (async () => {\\n${source}\\n})()`))();
+          const type = result === null ? 'null' : Array.isArray(result) ? 'array' : typeof result;
+          let value;
+          try {
+            value = type === 'undefined' ? 'undefined' : JSON.stringify(result);
+          } catch (error) {
+            value = String(result);
+          }
+          if (value && value.length > \(maxChars)) value = value.slice(0, \(maxChars)) + '\\n[truncated]';
+          return { ok: true, type, value };
+        })().catch((error) => ({ ok: false, error: String(error && error.stack ? error.stack : error) }))
+        """
+        return try await evaluateObject(script)
+    }
+
+    func consolePayload(maxEntries: Int, levels: [String]) -> [String: Any] {
+        let allowedLevels = Set(levels.map { $0.lowercased() }.filter { !$0.isEmpty })
+        var events = consoleEvents
+        if !allowedLevels.isEmpty {
+            events = events.filter { event in
+                guard let level = (event["level"] as? String)?.lowercased() else { return false }
+                return allowedLevels.contains(level)
+            }
+        }
+        events = Array(events.suffix(max(1, min(maxEntries, consoleEventLimit))))
+        return [
+            "url": currentURL,
+            "title": title,
+            "count": events.count,
+            "events": events,
+        ]
+    }
+
+    func networkPayload(maxEntries: Int, includeDataURLs: Bool) async throws -> [String: Any] {
+        let script = """
+        (() => {
+          const includeDataURLs = \(includeDataURLs ? "true" : "false");
+          const round = (value) => Number.isFinite(value) ? Math.round(value * 100) / 100 : 0;
+          const entries = performance.getEntriesByType('resource')
+            .filter((entry) => includeDataURLs || !String(entry.name || '').startsWith('data:'))
+            .slice(-\(max(1, min(maxEntries, 500))))
+            .map((entry) => {
+              const durationMs = round(entry.duration || 0);
+              const transferBytes = Number(entry.transferSize || 0);
+              const encodedBytes = Number(entry.encodedBodySize || 0);
+              const decodedBytes = Number(entry.decodedBodySize || 0);
+              const bytes = transferBytes || encodedBytes || decodedBytes || 0;
+              const bytesPerSecond = durationMs > 0 && bytes > 0 ? Math.round(bytes / (durationMs / 1000)) : 0;
+              return {
+                name: entry.name || '',
+                initiator_type: entry.initiatorType || '',
+                next_hop_protocol: entry.nextHopProtocol || '',
+                render_blocking_status: entry.renderBlockingStatus || '',
+                response_status: entry.responseStatus || 0,
+                start_time_ms: round(entry.startTime || 0),
+                duration_ms: durationMs,
+                transfer_size_bytes: transferBytes,
+                encoded_body_size_bytes: encodedBytes,
+                decoded_body_size_bytes: decodedBytes,
+                estimated_bytes_per_second: bytesPerSecond,
+                domain_lookup_ms: round((entry.domainLookupEnd || 0) - (entry.domainLookupStart || 0)),
+                connect_ms: round((entry.connectEnd || 0) - (entry.connectStart || 0)),
+                request_to_response_ms: round((entry.responseStart || 0) - (entry.requestStart || 0)),
+                download_ms: round((entry.responseEnd || 0) - (entry.responseStart || 0))
+              };
+            });
+          const totals = entries.reduce((acc, entry) => {
+            acc.transfer_size_bytes += entry.transfer_size_bytes || 0;
+            acc.encoded_body_size_bytes += entry.encoded_body_size_bytes || 0;
+            acc.decoded_body_size_bytes += entry.decoded_body_size_bytes || 0;
+            acc.duration_ms += entry.duration_ms || 0;
+            return acc;
+          }, { transfer_size_bytes: 0, encoded_body_size_bytes: 0, decoded_body_size_bytes: 0, duration_ms: 0 });
+          const navigationEntry = performance.getEntriesByType('navigation').slice(-1)[0];
+          const navigation = navigationEntry ? {
+            type: navigationEntry.type || '',
+            redirect_count: navigationEntry.redirectCount || 0,
+            duration_ms: round(navigationEntry.duration || 0),
+            dom_content_loaded_ms: round((navigationEntry.domContentLoadedEventEnd || 0) - (navigationEntry.startTime || 0)),
+            load_event_ms: round((navigationEntry.loadEventEnd || 0) - (navigationEntry.startTime || 0)),
+            transfer_size_bytes: Number(navigationEntry.transferSize || 0),
+            encoded_body_size_bytes: Number(navigationEntry.encodedBodySize || 0),
+            decoded_body_size_bytes: Number(navigationEntry.decodedBodySize || 0)
+          } : null;
+          const slowest = entries.slice().sort((a, b) => b.duration_ms - a.duration_ms).slice(0, 10);
+          const largest = entries.slice().sort((a, b) => (b.transfer_size_bytes || b.encoded_body_size_bytes || b.decoded_body_size_bytes) - (a.transfer_size_bytes || a.encoded_body_size_bytes || a.decoded_body_size_bytes)).slice(0, 10);
+          return {
+            url: location.href,
+            title: document.title || '',
+            navigation,
+            count: entries.length,
+            totals,
+            slowest,
+            largest,
+            entries
           };
         })()
         """
@@ -212,6 +406,53 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         isLoading = false
         lastError = error.localizedDescription
         updateState(from: webView)
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == Self.diagnosticsMessageHandlerName,
+              let body = message.body as? [String: Any] else {
+            return
+        }
+        var event: [String: Any] = [
+            "received_at": ISO8601DateFormatter().string(from: Date()),
+            "url": currentURL,
+        ]
+        for key in ["kind", "level", "message", "timestamp", "source", "line", "column", "stack"] {
+            if let value = body[key] {
+                event[key] = value
+            }
+        }
+        consoleEvents.append(event)
+        if consoleEvents.count > consoleEventLimit {
+            consoleEvents = Array(consoleEvents.suffix(consoleEventLimit))
+        }
+    }
+
+    private func waitConditionPayload(condition: String, value: String) async throws -> [String: Any] {
+        let conditionLiteral = try Self.javaScriptLiteral(condition)
+        let valueLiteral = try Self.javaScriptLiteral(value)
+        let script = """
+        (() => {
+          const condition = \(conditionLiteral);
+          const value = \(valueLiteral);
+          if (condition === 'selector') {
+            const element = document.querySelector(value);
+            return { matched: !!element, condition, value, text: element ? (element.innerText || element.value || '').trim().slice(0, 160) : '' };
+          }
+          if (condition === 'text') {
+            const text = document.body ? document.body.innerText : document.documentElement.innerText || '';
+            return { matched: text.includes(value), condition, value };
+          }
+          if (condition === 'url_contains') {
+            return { matched: location.href.includes(value), condition, value, url: location.href };
+          }
+          if (condition === 'title_contains') {
+            return { matched: document.title.includes(value), condition, value, title: document.title };
+          }
+          return { matched: false, condition, value, error: 'Unsupported condition. Use selector, text, url_contains, or title_contains.' };
+        })()
+        """
+        return try await evaluateObject(script)
     }
 
     private func evaluateObject(_ script: String) async throws -> [String: Any] {
@@ -277,6 +518,63 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         formatter.dateFormat = "yyyyMMdd-HHmmss-SSS"
         return formatter.string(from: Date())
     }
+
+    static func diagnosticsUserScript() -> WKUserScript {
+        let handler = diagnosticsMessageHandlerName
+        let source = """
+        (() => {
+          if (window.__willdeepBrowserDiagnosticsInstalled) return;
+          window.__willdeepBrowserDiagnosticsInstalled = true;
+          const send = (payload) => {
+            try {
+              window.webkit.messageHandlers.\(handler).postMessage(payload);
+            } catch (_) {}
+          };
+          const stringify = (value) => {
+            try {
+              if (typeof value === 'string') return value;
+              if (value instanceof Error) return value.stack || value.message || String(value);
+              return JSON.stringify(value);
+            } catch (_) {
+              return String(value);
+            }
+          };
+          ['debug', 'log', 'info', 'warn', 'error'].forEach((level) => {
+            const original = console[level] ? console[level].bind(console) : console.log.bind(console);
+            console[level] = (...args) => {
+              send({
+                kind: 'console',
+                level,
+                message: args.map(stringify).join(' '),
+                timestamp: new Date().toISOString()
+              });
+              return original(...args);
+            };
+          });
+          window.addEventListener('error', (event) => {
+            send({
+              kind: 'error',
+              level: 'error',
+              message: event.message || '',
+              source: event.filename || '',
+              line: event.lineno || 0,
+              column: event.colno || 0,
+              stack: event.error && event.error.stack ? event.error.stack : '',
+              timestamp: new Date().toISOString()
+            });
+          });
+          window.addEventListener('unhandledrejection', (event) => {
+            send({
+              kind: 'unhandledrejection',
+              level: 'error',
+              message: stringify(event.reason),
+              timestamp: new Date().toISOString()
+            });
+          });
+        })();
+        """
+        return WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+    }
 }
 
 enum AgentEmbeddedBrowserTools {
@@ -298,6 +596,12 @@ enum AgentEmbeddedBrowserTools {
         return AgentToolResult(summary: "Read embedded browser page", payload: prettyJSONString(payload))
     }
 
+    static func snapshot(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        let maxElements = arguments["max_elements"]?.intValue() ?? 100
+        let payload = try await AgentEmbeddedBrowserController.shared.snapshot(maxElements: maxElements)
+        return AgentToolResult(summary: "Snapshotted embedded browser elements", payload: prettyJSONString(payload))
+    }
+
     static func click(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
         let selector = try requiredString("selector", arguments: arguments)
         let payload = try await AgentEmbeddedBrowserController.shared.click(selector: selector)
@@ -309,6 +613,42 @@ enum AgentEmbeddedBrowserTools {
         let text = try requiredString("text", arguments: arguments)
         let payload = try await AgentEmbeddedBrowserController.shared.typeText(selector: selector, text: text)
         return AgentToolResult(summary: "Typed into embedded browser element", payload: prettyJSONString(payload))
+    }
+
+    static func waitFor(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        let condition = try requiredString("condition", arguments: arguments)
+        let value = try requiredString("value", arguments: arguments)
+        let timeoutMS = arguments["timeout_ms"]?.intValue() ?? 5_000
+        let payload = try await AgentEmbeddedBrowserController.shared.waitFor(
+            condition: condition,
+            value: value,
+            timeoutMS: timeoutMS
+        )
+        return AgentToolResult(summary: "Waited for embedded browser condition", payload: prettyJSONString(payload))
+    }
+
+    static func evaluate(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        let source = try requiredString("javascript", arguments: arguments)
+        let maxChars = arguments["max_chars"]?.intValue().map { max(1_000, min($0, 100_000)) } ?? 20_000
+        let payload = try await AgentEmbeddedBrowserController.shared.evaluate(source: source, maxChars: maxChars)
+        return AgentToolResult(summary: "Evaluated embedded browser JavaScript", payload: prettyJSONString(payload))
+    }
+
+    static func console(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        let maxEntries = arguments["max_entries"]?.intValue() ?? 100
+        let levels = arguments["levels"]?.stringArrayValue() ?? []
+        let payload = AgentEmbeddedBrowserController.shared.consolePayload(maxEntries: maxEntries, levels: levels)
+        return AgentToolResult(summary: "Read embedded browser console", payload: prettyJSONString(payload))
+    }
+
+    static func network(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        let maxEntries = arguments["max_entries"]?.intValue() ?? 150
+        let includeDataURLs = arguments["include_data_urls"]?.boolValue() ?? false
+        let payload = try await AgentEmbeddedBrowserController.shared.networkPayload(
+            maxEntries: maxEntries,
+            includeDataURLs: includeDataURLs
+        )
+        return AgentToolResult(summary: "Read embedded browser network resources", payload: prettyJSONString(payload))
     }
 
     static func captureScreenshot(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
@@ -471,6 +811,11 @@ private struct AgentEmbeddedBrowserWebView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
+        configuration.userContentController.addUserScript(AgentEmbeddedBrowserController.diagnosticsUserScript())
+        configuration.userContentController.add(
+            controller,
+            name: AgentEmbeddedBrowserController.diagnosticsMessageHandlerName
+        )
         let preferences = WKWebpagePreferences()
         preferences.allowsContentJavaScript = true
         configuration.defaultWebpagePreferences = preferences
@@ -484,6 +829,9 @@ private struct AgentEmbeddedBrowserWebView: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ nsView: WKWebView, coordinator: ()) {
+        nsView.configuration.userContentController.removeScriptMessageHandler(
+            forName: AgentEmbeddedBrowserController.diagnosticsMessageHandlerName
+        )
         AgentEmbeddedBrowserController.shared.unbind(nsView)
     }
 }
