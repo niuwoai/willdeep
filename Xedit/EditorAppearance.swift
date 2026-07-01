@@ -241,7 +241,7 @@ struct EditorInterfaceSkin: Identifiable, CaseIterable {
     static let mistForest = EditorInterfaceSkin(
         id: "mist-forest",
         symbolName: "leaf",
-        preferredColorScheme: nil,
+        preferredColorScheme: .light,
         recommendedThemeID: EditorTheme.harbor.id,
         palette: EditorInterfaceSkinPalette(
             windowColors: [
@@ -270,7 +270,7 @@ struct EditorInterfaceSkin: Identifiable, CaseIterable {
     static let ricePaper = EditorInterfaceSkin(
         id: "rice-paper",
         symbolName: "paintbrush.pointed",
-        preferredColorScheme: nil,
+        preferredColorScheme: .light,
         recommendedThemeID: EditorTheme.paper.id,
         palette: EditorInterfaceSkinPalette(
             windowColors: [

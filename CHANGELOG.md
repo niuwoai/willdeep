@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.112.0-rc5 - 2026-07-01
+
+### Fixed
+- **Editor 光标点击定位闪动收敛（1.112.0-rc5）** —— 编辑器插入点竖线现在按字体实际 ascender/descender 高度居中绘制，不再跟随整行 line fragment 撑得偏高；点击不同位置移动光标时，selection change 只重绘旧/新当前行附近，避免把整个 text view 标记为需要刷新导致轻微闪动。
+- 版本号从 **1.112.0-rc4** 提升为 **1.112.0-rc5**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway 文档位点。
+
+## 1.112.0-rc4 - 2026-07-01
+
+### Fixed
+- **智能审批改为 AI 判断正常运维命令（1.112.0-rc4）** —— `run_command` 的非 typed-confirmation 网络/远端命令不再因为 `ssh`、`curl -X POST`、Docker/nginx 运维动作等直接退回人工审批；智能审批会把这类命令送到 safety judge，由 AI 判断是否属于正常开发/部署/运维工作。
+- Safety judge 提示词从“只有只读才 YES”改为“正常工作且非恶意可 YES”：启动 Docker、重启/重载 nginx、添加 nginx 站点等正常运维可以通过；清盘、广泛删除、读私钥/泄露密钥、隐藏持久化、关闭安全控制、无边界 root/远端交互 shell 等仍为 NO。`rm -rf /`、读 `~/.ssh/id_rsa` 等 typed-confirmation 命令继续硬性要求人工确认。
+- UI 文案同步为“AI 批准正常命令”，并增加回归测试锁住 `ssh ... docker run` 可进入 AI judge、破坏性/偷密钥命令不可进入 judge。版本号从 **1.112.0-rc3** 提升为 **1.112.0-rc4**。
+
+## 1.112.0-rc3 - 2026-07-01
+
+### Fixed
+- **Agent 验证中不再自动切到任务监控侧栏（1.112.0-rc3）** —— 前台 `run_command` 的「验证中」状态继续显示在 composer / 状态行，但不再把右侧侧边栏自动切到「任务监控」；真正需要右栏承载的后台 job、媒体任务、待办、工作文件、学习事件和上下文压缩仍保留自动展开能力。
+- `AgentTaskMonitorSnapshot` 增加独立的自动展开摘要，自动展开逻辑只比较这份摘要，避免已有待办时因为前台验证状态变化顺手抢右栏；`AgentBackgroundJobsTests` 增加回归覆盖。版本号从 **1.112.0-rc2** 提升为 **1.112.0-rc3**。
+
+## 1.112.0-rc2 - 2026-07-01
+
+### Fixed
+- **Agent 浅色皮肤在系统 dark mode 下保持可读（1.112.0-rc2）** —— `mist-forest` 和 `rice-paper` 两个浅色自定义皮肤现在显式使用 light color scheme，不再在 macOS dark mode 下继承白色 `.primary/.secondary` 文字，修复 `/goal` / Agent 窗口浅底白字几乎不可读的问题。
+- `EditorCoreBehaviorTests` 增加皮肤 color scheme 回归测试，锁住 system 皮肤继续跟随系统、浅色皮肤固定 light、暗色皮肤固定 dark 的对比度约束；版本号从 **1.112.0-rc1** 提升为 **1.112.0-rc2**。
+
+## 1.112.0-rc1 - 2026-06-30
+
+### Added
+- **受保护机密批量插入（1.112.0-rc1）** —— Agent Composer 的“插入受保护机密”弹窗现在一次最多支持 3 个密码/Token；每行独立填写标签和机密内容，插入后会把多个 `${secret:...}` 占位符按顺序追加到输入框。
+- 弹窗新增用法提示，明确“每行一个密码或 Token，插入后把占位符放到命令、请求头或表单字段需要的位置”；真实值仍只保存在本机 Keychain，本地工具执行前才解析。
+- `AgentToolsCoreTests` 增加批量机密插入回归测试，锁住空行跳过、最多 3 个和第四个不会保存/解析的边界；版本号从 **1.111.0-rc1** 提升为 **1.112.0-rc1**。
+
 ## 1.111.0-rc1 - 2026-06-30
 
 ### Added

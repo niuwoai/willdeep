@@ -2449,13 +2449,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Auto-run low-risk calls; ask for risky actions."
+            "value" : "AI-approve normal work; ask for risky actions."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "低风险自动执行，高风险继续询问。"
+            "value" : "AI 判断为正常工作则自动执行，高风险继续询问。"
           }
         }
       }
@@ -4746,6 +4746,42 @@
         }
       }
     },
+    "composer.add-secret.action" : {
+      "comment" : "Button label for adding another protected secret row",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add another secret"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再添加一个机密"
+          }
+        }
+      }
+    },
+    "composer.add-secret.help" : {
+      "comment" : "Tooltip for adding another protected secret row",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add another protected secret, up to three total"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续添加受保护机密，最多三个"
+          }
+        }
+      }
+    },
     "composer.attach-image.help" : {
       "comment" : "Tooltip for the composer image attachment button",
       "extractionState" : "manual",
@@ -4789,13 +4825,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The secret is saved locally in Keychain. The model only sees a placeholder, and WillDeep resolves it when a local tool runs."
+            "value" : "Add up to three secrets. Each secret is saved locally in Keychain; the model only sees placeholders, and WillDeep resolves them when a local tool runs."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "机密只保存在本机钥匙串里。模型只会看到占位符，WillDeep 会在本地工具实际执行时再解析。"
+            "value" : "一次最多添加三个机密。每个机密只保存在本机钥匙串里；模型只会看到占位符，WillDeep 会在本地工具实际执行时再解析。"
           }
         }
       }
@@ -4836,6 +4872,24 @@
         }
       }
     },
+    "composer.insert-secret.usage" : {
+      "comment" : "Usage guidance shown in the protected secret insertion sheet",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use one row per password or token. After inserting, place the generated placeholders exactly where the command, header, or form field needs them."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每行填写一个密码或 Token。插入后，把生成的占位符放到命令、请求头或表单字段真正需要的位置。"
+          }
+        }
+      }
+    },
     "composer.queue-send.help" : {
       "comment" : "tooltip for queueing the current composer message while Agent is responding",
       "extractionState" : "manual",
@@ -4850,6 +4904,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "把这条消息排到当前轮次之后发送"
+          }
+        }
+      }
+    },
+    "composer.remove-secret.help" : {
+      "comment" : "Tooltip for removing a protected secret row",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove this secret row"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除这行机密"
           }
         }
       }
@@ -20176,13 +20248,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Auto-approve safe commands"
+            "value" : "AI-approve normal commands"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "自动批准安全命令"
+            "value" : "AI 批准正常命令"
           }
         }
       }

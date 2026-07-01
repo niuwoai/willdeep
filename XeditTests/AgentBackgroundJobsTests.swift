@@ -666,7 +666,43 @@ struct AgentBackgroundJobsTests {
 
         appState.agentToolCalls[0].status = .running
         let runningTool = AgentTaskMonitorSnapshot.capture(from: appState)
-        #expect(runningTool.hasAutoOpenMonitorContent)
+        #expect(runningTool.isAgentActivityActive)
+        #expect(runningTool.hasVisibleMonitorContent)
+        #expect(!runningTool.hasAutoOpenMonitorContent)
+    }
+
+    @Test
+    func taskMonitorSnapshotAutoOpenDigestIgnoresForegroundVerification() {
+        let sessionID = UUID()
+        let baseline = AgentTaskMonitorSnapshot(
+            sessionID: sessionID,
+            isAgentResponding: true,
+            isCompressingContext: false,
+            runningTaskCount: 0,
+            attentionToolIDs: [],
+            jobDigest: [],
+            mediaTaskDigest: [],
+            todoDigest: ["goal:write tests"],
+            workFileDigest: [],
+            learningDigest: []
+        )
+        let verifying = AgentTaskMonitorSnapshot(
+            sessionID: sessionID,
+            isAgentResponding: true,
+            isCompressingContext: false,
+            runningTaskCount: 1,
+            attentionToolIDs: ["tool:running:run_command"],
+            jobDigest: [],
+            mediaTaskDigest: [],
+            todoDigest: ["goal:write tests"],
+            workFileDigest: [],
+            learningDigest: []
+        )
+
+        #expect(baseline.hasAutoOpenMonitorContent)
+        #expect(verifying.hasAutoOpenMonitorContent)
+        #expect(verifying != baseline)
+        #expect(verifying.autoOpenDigest == baseline.autoOpenDigest)
     }
 
     // MARK: - Helpers

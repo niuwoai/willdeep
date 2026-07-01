@@ -32,14 +32,22 @@ struct AgentTaskMonitorSnapshot: Equatable {
     var hasAutoOpenMonitorContent: Bool {
         // 等待审批/确认/回答已经以内联 tool card 展示在 chat 区,不再
         // 因为这类状态自动打开右侧任务监控；真正后台/产物/待办等
-        // 需要另一个监控面板承载的内容才触发自动展开。
-        isCompressingContext
-            || runningTaskCount > 0
-            || !jobDigest.isEmpty
-            || !mediaTaskDigest.isEmpty
-            || !todoDigest.isEmpty
-            || !workFileDigest.isEmpty
-            || !learningDigest.isEmpty
+        // 需要另一个监控面板承载的内容才触发自动展开。前台
+        // run_command 的「验证中」状态只留在 composer / 状态行,不要抢右栏。
+        !autoOpenDigest.isEmpty
+    }
+
+    var autoOpenDigest: [String] {
+        var digest: [String] = []
+        if isCompressingContext {
+            digest.append("compressing")
+        }
+        digest.append(contentsOf: jobDigest.map { "job:\($0)" })
+        digest.append(contentsOf: mediaTaskDigest.map { "media:\($0)" })
+        digest.append(contentsOf: todoDigest.map { "todo:\($0)" })
+        digest.append(contentsOf: workFileDigest.map { "work:\($0)" })
+        digest.append(contentsOf: learningDigest.map { "learning:\($0)" })
+        return digest
     }
 
     var hasVisibleMonitorContent: Bool {

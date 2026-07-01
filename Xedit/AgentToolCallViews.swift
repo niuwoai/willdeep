@@ -803,7 +803,7 @@ struct AgentToolCallCard: View {
         case .user: return nil
         case .alwaysAllowList: return "You pinned this command signature as always-allowed."
         case .staticAllowlist: return "Matched the built-in read-only allowlist (safe shell commands / read-style MCP tools)."
-        case .llmJudge: return "An LLM judge classified this call as read-only / safe."
+        case .llmJudge: return "An LLM judge classified this call as non-malicious normal work."
         case .goalMode: return "Auto-approved because this session is in Goal mode. Danger-tier commands still ask."
         case .workspaceAccess: return "Auto-approved by this session's Workspace Access approval mode. Danger-tier commands still ask."
         case .escalated: return "You approved this call to run outside the default sandbox boundary."

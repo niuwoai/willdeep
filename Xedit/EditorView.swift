@@ -318,9 +318,10 @@ struct EditorView: NSViewRepresentable {
 
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView = notification.object as? WillDeepTextView else { return }
+            textView.invalidateCurrentLineHighlight()
             publishCursorPosition(for: textView)
             applyBracketHighlight(to: textView)
-            refreshEditorChrome(for: textView)
+            refreshEditorChrome(for: textView, redrawTextView: false)
         }
 
         @objc func visibleRectDidChange(_ notification: Notification) {
@@ -695,12 +696,14 @@ struct EditorView: NSViewRepresentable {
             refreshEditorChrome(for: textView)
         }
 
-        private func refreshEditorChrome(for textView: WillDeepTextView) {
+        private func refreshEditorChrome(for textView: WillDeepTextView, redrawTextView: Bool = true) {
             // Only re-apply folding when scopes are actually folded. Applying it
             // unconditionally forced a full-document glyph/layout invalidation on
             // every caret move, which produced severe arrow-key lag.
             textView.refreshFoldedScopesIfNeeded()
-            textView.needsDisplay = true
+            if redrawTextView {
+                textView.needsDisplay = true
+            }
             (textView.enclosingScrollView?.verticalRulerView as? LineNumberRulerView)?.needsDisplay = true
         }
 

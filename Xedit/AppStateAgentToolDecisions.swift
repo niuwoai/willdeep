@@ -121,7 +121,16 @@ extension AppState {
             return nil
         }
 
-        if sandboxDecision.mode == .escalated {
+        if sandboxDecision.requiresTypedConfirmation {
+            return nil
+        }
+
+        if sandboxDecision.mode == .escalated,
+           isAgentToolCallAlwaysAllowed(toolName: toolName, arguments: arguments, risk: risk) {
+            return .alwaysAllowList
+        }
+
+        if !Self.canSendToSafetyJudge(toolName: toolName, sandboxDecision: sandboxDecision) {
             if isAgentToolCallAlwaysAllowed(toolName: toolName, arguments: arguments, risk: risk) {
                 return .alwaysAllowList
             }
@@ -199,6 +208,17 @@ extension AppState {
         let client = AgentClient(configuration: configuration)
         let safe = await client.judgeCommandSafety(command: command)
         return safe ? .llmJudge : nil
+    }
+
+    nonisolated static func canSendToSafetyJudge(
+        toolName: String,
+        sandboxDecision: AgentSandboxDecision
+    ) -> Bool {
+        guard !sandboxDecision.requiresTypedConfirmation else { return false }
+        if sandboxDecision.mode == .escalated {
+            return toolName == "run_command"
+        }
+        return true
     }
 
     func sandboxModeForToolExecution(

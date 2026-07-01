@@ -835,10 +835,14 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 - [ ] 如果本机保存过 `q3` 或其他 SSH runtime，确认它只作为“已配置的 SSH 主机”出现；点击“管理 SSH 主机...”能打开 Settings → Runtimes，可在设置里删除或改名。
 - [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.109.0-rc496`，短剧制作能力无新增。
 
-## 1.111.0-rc1 — 短剧指针同步 / Browser Ops HAR 诊断
+## 1.112.0-rc5 — 短剧指针同步 / Editor 光标闪动收敛
 
-- [ ] 本版本新增 Browser Ops 的 HAR 导出、AJAX/API 请求响应头、storage/cookie、页面性能和失败资源聚合诊断工具；不新增、不改变短剧项目、分镜、制作包、Widget、handoff bundle 和 smoke evidence 合约。
-- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.111.0-rc1`，短剧制作能力无新增。
+- [ ] 本版本修复 Agent 浅色自定义皮肤在系统 dark mode 下的文字可读性；不新增、不改变短剧项目、分镜、制作包、Widget、handoff bundle 和 smoke evidence 合约。
+- [ ] 本版本修复 Agent 前台 `run_command`「验证中」自动切到任务监控侧栏的问题；不新增、不改变短剧项目、分镜、制作包、Widget、handoff bundle 和 smoke evidence 合约。
+- [ ] 复测 Agent：前台 `run_command` 进入「验证中」时，右侧侧边栏不会自动切到「任务监控」；已有后台 job、媒体任务、待办、工作文件或学习事件时仍可自动打开任务监控。
+- [ ] 复测智能审批：`ssh ... "docker run ..."`、重启/重载 nginx、添加 nginx 站点等非 typed-confirmation 运维命令应进入 AI safety judge；`rm -rf /`、读 `~/.ssh/id_rsa` 等仍要求人工确认。
+- [ ] 复测 Editor：在 editor 模式里连续点击不同行/不同列移动光标，竖线高度应贴近字体实际字形高度，当前行高亮和光标移动不应出现明显整页闪动。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.112.0-rc5`，短剧制作能力无新增。
 
 ---
 

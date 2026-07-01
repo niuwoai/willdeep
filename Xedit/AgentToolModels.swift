@@ -283,8 +283,8 @@ enum AgentToolDecision {
 /// How a write-tier tool call ended up running. `.user` covers both the
 /// per-call Allow button and the legacy auto-allow path. `.alwaysAllowList`
 /// means the user previously pinned this command signature. `.staticAllowlist`
-/// means the SafeCommand classifier flagged it as read-only. `.llmJudge`
-/// means the LLM judge classifier approved it. `.goalMode` means the
+/// means the SafeCommand classifier flagged it as low-risk. `.llmJudge`
+/// means the LLM judge classifier approved it as non-malicious work. `.goalMode` means the
 /// session was in Goal mode, which auto-approves write-tier calls
 /// (danger-tier still gates on the user). `.workspaceAccess` means the
 /// current session's composer approval mode grants write-tier access

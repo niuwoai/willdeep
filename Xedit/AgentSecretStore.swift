@@ -14,7 +14,13 @@ struct AgentSecretResolution: Equatable {
     var secretValues: [String]
 }
 
+struct AgentSecretInput: Equatable {
+    var label: String
+    var secret: String
+}
+
 enum AgentSecretStore {
+    nonisolated static let maxBatchInsertCount = 3
     nonisolated static let placeholderPrefix = "${secret:"
     nonisolated private static let keychainAccountPrefix = "agent-secret/"
     nonisolated private static let encodedValuePrefix = "base64:"
@@ -25,6 +31,14 @@ enum AgentSecretStore {
         let encoded = Data(secret.utf8).base64EncodedString()
         AgentCredentialStore.save("\(encodedValuePrefix)\(encoded)", account: account(for: identifier))
         return placeholder(identifier: identifier)
+    }
+
+    nonisolated static func saveSecrets(_ inputs: [AgentSecretInput]) -> [String] {
+        inputs
+            .lazy
+            .filter { !$0.secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .prefix(maxBatchInsertCount)
+            .compactMap { saveSecret($0.secret, label: $0.label) }
     }
 
     nonisolated static func placeholder(identifier: String, transform: String? = nil) -> String {

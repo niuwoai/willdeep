@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-06-30 | Current version: v1.111.0-rc1
+> Last updated: 2026-07-01 | Current version: v1.112.0-rc5
 
 ## Positioning
 
@@ -14,6 +14,11 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Editor 光标点击定位闪动收敛（1.112.0-rc5）** —— 编辑器插入点竖线按字体实际 ascender/descender 高度居中绘制，不再因行高大于字形高度而显得偏高；点击不同位置移动光标时，selection change 只让旧/新当前行附近重绘，减少整篇 text view 刷新带来的轻微闪动。
+- **智能审批 AI 判断正常运维命令（1.112.0-rc4）** —— Smart approval 不再把所有网络/远端 `run_command` 一刀切给用户；非 typed-confirmation 的 `ssh`、Docker/nginx 运维、部署类命令会进入 safety judge，由 AI 判断是否属于正常开发/部署/运维工作。清盘、广泛删除、读私钥/泄露密钥、隐藏持久化、关闭安全控制和无边界 root/远端交互 shell 仍要求人工确认或直接不自动放行。
+- **Agent 验证中不抢右栏（1.112.0-rc3）** —— 前台 `run_command` 进入「验证中」时只更新 composer / 状态行，不再自动把右侧侧边栏切到「任务监控」；任务监控自动展开改由后台 job、媒体任务、待办、工作文件、学习事件、上下文压缩等真实右栏内容摘要驱动。
+- **Agent 浅色皮肤暗色系统可读性修复（1.112.0-rc2）** —— `mist-forest` 和 `rice-paper` 两个浅色自定义皮肤显式固定为 light color scheme，避免 macOS dark mode 下浅色 Agent 窗口继承白色系统文字；system 皮肤仍跟随系统，`sci-fi-raster` / `midnight-slate` / `aurora-night` / `ember-graphite` 继续固定 dark。
+- **受保护机密批量插入（1.112.0-rc1）** —— Agent Composer 的“插入受保护机密”弹窗一次最多支持 3 个密码/Token，每行填写一个标签和机密内容；插入后多个 `${secret:...}` 占位符会按顺序追加到输入框。弹窗会提示用户把占位符放到命令、请求头或表单字段实际需要的位置；真实值仍只保存在本机 Keychain，本地工具执行前才解析。
 - **Browser Ops HAR / API / 性能诊断（1.111.0-rc1）** —— Browser Ops 继续扩展为内嵌浏览器诊断工作台：新增 AJAX/API 请求列表、脱敏请求/响应头、HAR 1.2 文件导出、同源 cookie/localStorage/sessionStorage/IndexedDB 概况、导航/绘制/Web Vitals/long task/资源聚合性能视图，以及 DOM 资源错误、HTTP 失败和 Resource Timing 失败聚合。请求头与 cookie 等敏感字段默认脱敏或不展示值，避免诊断时把凭据直接带出。
 - **Browser Ops 诊断工具（1.110.0-rc1）** —— 内嵌浏览器工具面新增 DOM snapshot、wait-for、受控 JS eval、console 读取和网络资源性能读取。WKWebView 页面启动时注入本地诊断脚本，捕获 console/error/unhandledrejection；网络数据来自 Performance Resource Timing，返回资源 URL、initiator、协议、transfer/encoded/decoded bytes、DNS/connect/request/download 耗时和估算 bytes/s，便于排查页面加载慢、资源过大或前端报错。
 - **侧边栏内嵌浏览器与 Browser Ops 专家（1.109.0-rc498）** —— Agent Composer 的专家入口新增 Browser Ops，激活后才显示右侧 Browser 面板并暴露浏览器操作工具。Browser 面板内置 WKWebView、地址栏、前进/后退/刷新和截图按钮；Agent 可对可见内嵌浏览器执行导航、页面读取、CSS selector 点击、填写文本和 PNG 截图保存。Chrome bridge 工具继续服务用户真实 Chrome 标签页与登录态，也统一归入 Browser Ops 专家包。

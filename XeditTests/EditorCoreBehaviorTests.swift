@@ -9,6 +9,7 @@
 import Testing
 import Foundation
 import AppKit
+import SwiftUI
 @testable import WillDeep
 
 @Suite(.serialized)
@@ -290,6 +291,17 @@ struct EditorCoreBehaviorTests {
             #expect(!L10n.Settings.InterfaceSkin.name(skin).isEmpty)
             #expect(!L10n.Settings.InterfaceSkin.summary(skin).isEmpty)
         }
+    }
+
+    @Test("custom interface skins pin color scheme to their palette contrast")
+    func testCustomInterfaceSkinsPinReadableColorScheme() {
+        #expect(EditorInterfaceSkin.system.preferredColorScheme == nil)
+        #expect(EditorInterfaceSkin.mistForest.preferredColorScheme == .light)
+        #expect(EditorInterfaceSkin.ricePaper.preferredColorScheme == .light)
+        #expect(EditorInterfaceSkin.sciFiRaster.preferredColorScheme == .dark)
+        #expect(EditorInterfaceSkin.midnightSlate.preferredColorScheme == .dark)
+        #expect(EditorInterfaceSkin.auroraNight.preferredColorScheme == .dark)
+        #expect(EditorInterfaceSkin.emberGraphite.preferredColorScheme == .dark)
     }
 
     @Test("changing editor settings refreshes the active editor")

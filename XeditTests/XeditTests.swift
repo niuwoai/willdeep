@@ -897,6 +897,46 @@ struct WillDeepTests {
         #expect(normalApproval == nil)
     }
 
+    @Test("smart approval sends non-confirmation network ops to safety judge")
+    @MainActor
+    func testSmartApprovalSendsNetworkOpsToSafetyJudge() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-test-workspace")
+
+        let deployDecision = AgentSandboxPolicy.commandDecision(
+            command: #"ssh -p 60022 root@example.com "docker load -i /tmp/adminer-latest.tar && docker run -d --name adminer -p 3377:8080 adminer:latest""#,
+            rootDirectory: root
+        )
+        #expect(deployDecision.mode == .escalated)
+        #expect(deployDecision.requiresUserApproval)
+        #expect(!deployDecision.requiresTypedConfirmation)
+        #expect(AppState.canSendToSafetyJudge(toolName: "run_command", sandboxDecision: deployDecision))
+
+        let destructiveDecision = AgentSandboxPolicy.commandDecision(
+            command: "rm -rf /",
+            rootDirectory: root
+        )
+        #expect(destructiveDecision.requiresTypedConfirmation)
+        #expect(!AppState.canSendToSafetyJudge(toolName: "run_command", sandboxDecision: destructiveDecision))
+
+        let secretDecision = AgentSandboxPolicy.commandDecision(
+            command: #"ssh deploy@example.com "cat ~/.ssh/id_rsa""#,
+            rootDirectory: root
+        )
+        #expect(secretDecision.requiresTypedConfirmation)
+        #expect(!AppState.canSendToSafetyJudge(toolName: "run_command", sandboxDecision: secretDecision))
+    }
+
+    @Test("safety judge prompt allows normal operations but rejects malicious commands")
+    func testSafetyJudgePromptUsesMaliciousCommandPolicy() {
+        let prompt = AgentInjectionDefense.judgeSystemPrompt
+        #expect(prompt.contains("normal development"))
+        #expect(prompt.contains("starting Docker containers"))
+        #expect(prompt.contains("reloading nginx"))
+        #expect(prompt.contains("delete broad paths"))
+        #expect(prompt.contains("steal or print secrets"))
+        #expect(prompt.contains("When in doubt, output NO"))
+    }
+
     @Test("approval mode controls write-tier auto approval")
     @MainActor
     func testApprovalModeControlsWriteTierAutoApproval() async {

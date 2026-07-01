@@ -194,6 +194,29 @@ struct AgentToolsCoreTests {
     }
 
     @Test
+    func agentSecretBatchInsertCapsAtThreePlaceholders() throws {
+        _ = AgentCredentialStore._setTestKeychainServiceOverride("agent-secret-batch-\(UUID().uuidString)")
+        defer {
+            AgentCredentialStore._wipeTestKeychain()
+            AgentCredentialStore._setTestKeychainServiceOverride(nil)
+        }
+
+        let placeholders = AgentSecretStore.saveSecrets([
+            AgentSecretInput(label: "First", secret: "first-secret"),
+            AgentSecretInput(label: "Blank", secret: "   "),
+            AgentSecretInput(label: "Second", secret: "second-secret"),
+            AgentSecretInput(label: "Third", secret: "third-secret"),
+            AgentSecretInput(label: "Fourth", secret: "fourth-secret"),
+        ])
+
+        #expect(AgentSecretStore.maxBatchInsertCount == 3)
+        #expect(placeholders.count == 3)
+        let resolved = AgentSecretStore.resolvePlaceholders(in: placeholders.joined(separator: " "))
+        #expect(resolved.secretValues == ["first-secret", "second-secret", "third-secret"])
+        #expect(!resolved.text.contains("fourth-secret"))
+    }
+
+    @Test
     func runCommandResolvesSecretPlaceholderButRedactsOutputs() async throws {
         _ = AgentCredentialStore._setTestKeychainServiceOverride("agent-secret-run-\(UUID().uuidString)")
         defer {

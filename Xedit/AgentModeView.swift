@@ -172,6 +172,7 @@ struct AgentModeView: View {
         }
 
         let baseline = lastTaskMonitorSnapshot ?? oldSnapshot
+        let didAutoOpenContentChange = newSnapshot.autoOpenDigest != baseline.autoOpenDigest
         defer { lastTaskMonitorSnapshot = newSnapshot }
         if sidePanel == .backgroundTasks, !newSnapshot.hasVisibleMonitorContent {
             sidePanel = nil
@@ -180,7 +181,7 @@ struct AgentModeView: View {
 
         guard didObserveAgentTaskMonitorActivity,
               newSnapshot.hasAutoOpenMonitorContent,
-              newSnapshot != baseline,
+              didAutoOpenContentChange,
               sidePanel == nil else {
             return
         }

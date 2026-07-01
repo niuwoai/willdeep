@@ -605,8 +605,8 @@ private struct ComposerCard: View {
                     isSecretSheetPresented = false
                     inputFocused = true
                 },
-                onInsert: { label, secret in
-                    insertSecret(label: label, secret: secret)
+                onInsert: { secrets in
+                    insertSecrets(secrets)
                     isSecretSheetPresented = false
                     inputFocused = true
                 }
@@ -646,8 +646,9 @@ private struct ComposerCard: View {
         }
     }
 
-    private func insertSecret(label: String, secret: String) {
-        guard let placeholder = AgentSecretStore.saveSecret(secret, label: label) else { return }
+    private func insertSecrets(_ secrets: [AgentSecretInput]) {
+        let placeholders = AgentSecretStore.saveSecrets(secrets)
+        guard !placeholders.isEmpty else { return }
         let current = appState.agentInput
         let separator: String
         if current.isEmpty || current.hasSuffix(" ") || current.hasSuffix("\n") {
@@ -655,7 +656,7 @@ private struct ComposerCard: View {
         } else {
             separator = " "
         }
-        appState.agentInput = current + separator + placeholder
+        appState.agentInput = current + separator + placeholders.joined(separator: " ")
     }
 
     private func closeAtMenu() {
@@ -761,12 +762,10 @@ private struct ComposerCard: View {
 }
 
 private struct AgentSecretInsertSheet: View {
-    @State private var label: String = ""
-    @State private var secret: String = ""
-    @FocusState private var secretFocused: Bool
+    @State private var rows: [AgentSecretInput] = [AgentSecretInput(label: "", secret: "")]
 
     let onCancel: () -> Void
-    let onInsert: (_ label: String, _ secret: String) -> Void
+    let onInsert: (_ secrets: [AgentSecretInput]) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -782,12 +781,31 @@ private struct AgentSecretInsertSheet: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            VStack(alignment: .leading, spacing: 8) {
-                TextField(L10n.Composer.secretLabelPlaceholder, text: $label)
-                    .textFieldStyle(.roundedBorder)
-                SecureField(L10n.Composer.secretValuePlaceholder, text: $secret)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($secretFocused)
+            Text(L10n.Composer.insertSecretUsage)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(rows.indices, id: \.self) { index in
+                    AgentSecretInputRow(
+                        ordinal: index + 1,
+                        label: $rows[index].label,
+                        secret: $rows[index].secret,
+                        shouldFocusOnAppear: index == 0,
+                        canRemove: rows.count > 1,
+                        onRemove: { removeRow(at: index) }
+                    )
+                }
+                if rows.count < AgentSecretStore.maxBatchInsertCount {
+                    Button {
+                        rows.append(AgentSecretInput(label: "", secret: ""))
+                    } label: {
+                        Label(L10n.Composer.addSecretAction, systemImage: "plus")
+                    }
+                    .buttonStyle(.link)
+                    .help(L10n.Composer.addSecretHelp)
+                }
             }
 
             HStack {
@@ -795,15 +813,62 @@ private struct AgentSecretInsertSheet: View {
                 Button(L10n.Automation.cancel, action: onCancel)
                     .keyboardShortcut(.cancelAction)
                 Button(L10n.Composer.insertSecretAction) {
-                    onInsert(label, secret)
+                    onInsert(rows)
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(validSecretCount == 0)
             }
         }
         .padding(18)
-        .frame(width: 380)
+        .frame(width: 430)
+    }
+
+    private var validSecretCount: Int {
+        rows.filter { !$0.secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
+    }
+
+    private func removeRow(at index: Int) {
+        guard rows.indices.contains(index), rows.count > 1 else { return }
+        rows.remove(at: index)
+    }
+}
+
+private struct AgentSecretInputRow: View {
+    let ordinal: Int
+    @Binding var label: String
+    @Binding var secret: String
+    let shouldFocusOnAppear: Bool
+    let canRemove: Bool
+    let onRemove: () -> Void
+    @FocusState private var secretFocused: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text("\(ordinal)")
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
+                .frame(width: 18, height: 24)
+
+            VStack(alignment: .leading, spacing: 6) {
+                TextField(L10n.Composer.secretLabelPlaceholder, text: $label)
+                    .textFieldStyle(.roundedBorder)
+                SecureField(L10n.Composer.secretValuePlaceholder, text: $secret)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($secretFocused)
+            }
+
+            Button(action: onRemove) {
+                Image(systemName: "minus.circle")
+                    .font(.system(size: 14))
+                    .foregroundStyle(canRemove ? .secondary : .tertiary)
+            }
+            .buttonStyle(.plain)
+            .disabled(!canRemove)
+            .help(L10n.Composer.removeSecretHelp)
+            .padding(.top, 4)
+        }
         .onAppear {
+            guard shouldFocusOnAppear else { return }
             DispatchQueue.main.async { secretFocused = true }
         }
     }

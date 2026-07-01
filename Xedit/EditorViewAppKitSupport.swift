@@ -57,6 +57,7 @@ final class WillDeepTextView: NSTextView {
     var onAskSelectionInAgentPanel: ((AgentEditorSelectionContext) -> Void)?
     var onGoToDefinition: ((String) -> Void)?
     private var foldedGuides: Set<ScopeGuide> = []
+    private var lastCurrentLineHighlightRect: NSRect?
 
     /// Tracks whether the layout currently reflects `foldedGuides`. While this is
     /// `true`, caret moves and chrome refreshes can skip the expensive
@@ -329,39 +330,78 @@ final class WillDeepTextView: NSTextView {
         replaceSelectedLines(using: Self.outdentingLines(_:))
     }
 
+    override func drawInsertionPoint(in rect: NSRect, color: NSColor, turnedOn flag: Bool) {
+        super.drawInsertionPoint(in: insertionPointRectMatchingFont(in: rect), color: color, turnedOn: flag)
+    }
+
+    private func insertionPointRectMatchingFont(in rect: NSRect) -> NSRect {
+        guard let font else { return rect }
+
+        let glyphHeight = ceil(font.ascender - font.descender)
+        let targetHeight = min(rect.height, max(2, glyphHeight))
+        var adjusted = rect
+        adjusted.origin.y += floor((rect.height - targetHeight) / 2)
+        adjusted.size.height = targetHeight
+        return adjusted
+    }
+
     override func drawBackground(in rect: NSRect) {
         super.drawBackground(in: rect)
 
         if showsCurrentLineHighlight {
             currentLineColor.setFill()
 
-            if string.isEmpty {
-                let lineHeight = font?.boundingRectForFont.height ?? 16
-                NSRect(
-                    x: 0,
-                    y: textContainerInset.height,
-                    width: bounds.width,
-                    height: lineHeight + 2
-                ).fill()
-                return
+            if let highlightRect = currentLineHighlightRect() {
+                highlightRect.fill()
+                lastCurrentLineHighlightRect = highlightRect
             }
-
-            guard let layoutManager = layoutManager else { return }
-
-            let selectedLocation = min(selectedRange().location, max(0, string.utf16.count - 1))
-            let glyphIndex = layoutManager.glyphIndexForCharacter(at: selectedLocation)
-            var lineGlyphRange = NSRange(location: 0, length: 0)
-            let lineRect = layoutManager.lineFragmentRect(
-                forGlyphAt: glyphIndex,
-                effectiveRange: &lineGlyphRange,
-                withoutAdditionalLayout: true
-            )
-
-            let y = lineRect.minY + textContainerOrigin.y
-            NSRect(x: 0, y: y, width: bounds.width, height: lineRect.height).fill()
         }
 
         drawFoldedPlaceholders(in: rect)
+    }
+
+    func invalidateCurrentLineHighlight() {
+        guard showsCurrentLineHighlight else {
+            lastCurrentLineHighlightRect = nil
+            return
+        }
+
+        let nextRect = currentLineHighlightRect()
+        let dirtyRects = [lastCurrentLineHighlightRect, nextRect].compactMap { $0 }
+        if dirtyRects.isEmpty {
+            needsDisplay = true
+        } else {
+            for rect in dirtyRects {
+                setNeedsDisplay(rect.insetBy(dx: 0, dy: -1))
+            }
+        }
+        lastCurrentLineHighlightRect = nextRect
+    }
+
+    private func currentLineHighlightRect() -> NSRect? {
+        if string.isEmpty {
+            let lineHeight = font?.boundingRectForFont.height ?? 16
+            return NSRect(
+                x: 0,
+                y: textContainerInset.height,
+                width: bounds.width,
+                height: lineHeight + 2
+            )
+        }
+
+        guard let layoutManager else { return nil }
+
+        let selectedLocation = min(selectedRange().location, max(0, string.utf16.count - 1))
+        let glyphIndex = layoutManager.glyphIndexForCharacter(at: selectedLocation)
+        var lineGlyphRange = NSRange(location: 0, length: 0)
+        let lineRect = layoutManager.lineFragmentRect(
+            forGlyphAt: glyphIndex,
+            effectiveRange: &lineGlyphRange,
+            withoutAdditionalLayout: true
+        )
+
+        let y = lineRect.minY + textContainerOrigin.y
+        return NSRect(x: 0, y: y, width: bounds.width, height: lineRect.height)
     }
 
     func toggleFold(at line: Int) {
