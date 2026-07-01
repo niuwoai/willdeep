@@ -68,6 +68,7 @@ struct EditorView: NSViewRepresentable {
 
     /// Language-server folding ranges rendered in the gutter when available.
     var languageServiceFoldingGuides: [ScopeGuide] = []
+    var languageServiceFoldingIsAuthoritative = false
 
     /// Called whenever the user makes a text change (not during programmatic updates).
     var onEdit: (() -> Void)?
@@ -170,6 +171,7 @@ struct EditorView: NSViewRepresentable {
         textView.inlayHintSpans = inlayHintSpans
         textView.documentLinkSpans = documentLinkSpans
         textView.languageServiceFoldingGuides = languageServiceFoldingGuides
+        textView.languageServiceFoldingIsAuthoritative = languageServiceFoldingIsAuthoritative
         textView.onSyntaxHighlightingChange = { [weak coordinator = context.coordinator] selection in
             coordinator?.parent.onSyntaxHighlightingChange?(selection)
         }
@@ -260,6 +262,7 @@ struct EditorView: NSViewRepresentable {
         let inlayHintsChanged = context.coordinator.currentInlayHintSpans != inlayHintSpans
         let documentLinksChanged = context.coordinator.currentDocumentLinkSpans != documentLinkSpans
         let languageServiceFoldingChanged = context.coordinator.currentLanguageServiceFoldingGuides != languageServiceFoldingGuides
+            || context.coordinator.currentLanguageServiceFoldingIsAuthoritative != languageServiceFoldingIsAuthoritative
         context.coordinator.currentLanguage = language
         context.coordinator.currentSettings = settings
         context.coordinator.currentRenderRevision = renderRevision
@@ -274,6 +277,7 @@ struct EditorView: NSViewRepresentable {
         context.coordinator.currentInlayHintSpans = inlayHintSpans
         context.coordinator.currentDocumentLinkSpans = documentLinkSpans
         context.coordinator.currentLanguageServiceFoldingGuides = languageServiceFoldingGuides
+        context.coordinator.currentLanguageServiceFoldingIsAuthoritative = languageServiceFoldingIsAuthoritative
         textView.layoutManager?.delegate = context.coordinator
         textView.syntaxHighlightingSelection = syntaxHighlightingSelection
         textView.detectedLanguage = detectedLanguage
@@ -287,6 +291,7 @@ struct EditorView: NSViewRepresentable {
         }
         if languageServiceFoldingChanged {
             textView.languageServiceFoldingGuides = languageServiceFoldingGuides
+            textView.languageServiceFoldingIsAuthoritative = languageServiceFoldingIsAuthoritative
             textView.clearFoldedScopes()
             nsView.verticalRulerView?.needsDisplay = true
         }
@@ -432,6 +437,7 @@ struct EditorView: NSViewRepresentable {
         var currentInlayHintSpans: [EditorInlayHintSpan]
         var currentDocumentLinkSpans: [EditorDocumentLinkSpan]
         var currentLanguageServiceFoldingGuides: [ScopeGuide]
+        var currentLanguageServiceFoldingIsAuthoritative: Bool
 
         /// Debounced highlight work item.
         private var highlightWorkItem: DispatchWorkItem?
@@ -495,6 +501,7 @@ struct EditorView: NSViewRepresentable {
             self.currentInlayHintSpans = parent.inlayHintSpans
             self.currentDocumentLinkSpans = parent.documentLinkSpans
             self.currentLanguageServiceFoldingGuides = parent.languageServiceFoldingGuides
+            self.currentLanguageServiceFoldingIsAuthoritative = parent.languageServiceFoldingIsAuthoritative
         }
 
         func textDidChange(_ notification: Notification) {

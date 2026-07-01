@@ -21,6 +21,13 @@ struct ScopeGuide: Equatable, Hashable, Sendable {
     }
 }
 
+nonisolated enum EditorLanguageServiceFoldingStatus: Equatable {
+    case unavailable
+    case loading(uri: String)
+    case available(uri: String)
+    case failed(uri: String)
+}
+
 enum ScopeGuideCalculator {
     nonisolated static func guides(in source: String, language: Language?) -> [ScopeGuide] {
         guard let language, !source.isEmpty else { return [] }

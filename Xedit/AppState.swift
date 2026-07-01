@@ -40,13 +40,16 @@ final class AppState: ObservableObject {
     var pendingDefinitionNavigation: EditorDefinitionLocation?
     let editorLanguageServiceManager = EditorLanguageServiceManager()
     @Published var editorLanguageServiceOutlineItems: [EditorOutlineItem] = []
+    @Published var editorLanguageServiceOutlineStatus: EditorLanguageServiceOutlineStatus = .unavailable
     @Published var editorWorkspaceSymbolItems: [EditorWorkspaceSymbolItem] = []
+    @Published var editorWorkspaceSymbolSearchStatus: EditorWorkspaceSymbolSearchStatus = .unavailable
     @Published var isEditorWorkspaceSymbolSearchLoading = false
     @Published var editorLanguageServiceDiagnosticIssues: [EditorDiagnosticIssue] = []
     @Published var editorSemanticTokenSpans: [EditorSemanticTokenSpan] = []
     @Published var editorInlayHintSpans: [EditorInlayHintSpan] = []
     @Published var editorDocumentLinkSpans: [EditorDocumentLinkSpan] = []
     @Published var editorLanguageServiceFoldingGuides: [ScopeGuide] = []
+    @Published var editorLanguageServiceFoldingStatus: EditorLanguageServiceFoldingStatus = .unavailable
     @Published var editorDocumentHighlightSpans: [EditorDocumentHighlightSpan] = []
     @Published var editorHoverInfo: EditorHoverInfo?
     @Published var editorCompletionPanel: EditorCompletionPanelState?

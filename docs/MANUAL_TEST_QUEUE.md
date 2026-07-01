@@ -1054,6 +1054,36 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 - [ ] 复测 Editor：Go / Swift / TypeScript / JavaScript 语义 token 中的 `variable` / `parameter` / `label` 应覆盖正则 fallback 呈现；变量 declaration/definition 仍应加粗。
 - [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.117.0-rc1`，短剧制作能力无新增。
 
+## 1.118.0-rc1 — 短剧指针同步 / Editor LSP workspace resource operations
+
+- [ ] 复测 Editor：Go / TypeScript / JavaScript / Swift 的 rename 或 quick fix 若返回 `WorkspaceEdit.documentChanges` 中的 `create` / `rename` / `delete`，应在当前 workspace 内安全应用资源操作。
+- [ ] 复测 Editor：资源操作命中未保存 tab 时应阻止应用并给出错误；成功创建、重命名、删除后应发送对应 watched-file `created` / `deleted` 事件。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.118.0-rc1`，短剧制作能力无新增。
+
+## 1.119.0-rc1 — 短剧指针同步 / Editor LSP authoritative outline
+
+- [ ] 复测 Editor：Go / TypeScript / JavaScript / Swift 的结构面板与符号跳转在 LSP `textDocument/documentSymbol` 返回空结果时应展示空大纲，不应再用正则 outline 填充伪结构。
+- [ ] 复测 Editor：语言服务器不可用或请求失败时，结构面板与符号跳转仍应回退旧正则 outline，保证基础浏览能力不中断。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.119.0-rc1`，短剧制作能力无新增。
+
+## 1.120.0-rc1 — 短剧指针同步 / Editor LSP authoritative folding
+
+- [ ] 复测 Editor：Go / TypeScript / JavaScript / Swift 的 gutter 折叠/作用域引导线在 LSP `textDocument/foldingRange` 返回空结果时应展示空折叠，不应再用本地括号/缩进 fallback 填充伪折叠。
+- [ ] 复测 Editor：语言服务器不可用或 folding range 请求失败时，gutter 折叠/作用域引导线仍应回退旧本地计算，保证基础折叠能力不中断。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.120.0-rc1`，短剧制作能力无新增。
+
+## 1.121.0-rc1 — 短剧指针同步 / Editor LSP authoritative definition misses
+
+- [ ] 复测 Editor：Go / TypeScript / JavaScript / Swift 的 Go to Definition 在 LSP `textDocument/definition` 正常返回空结果时应只提示未找到，不应继续用正则 resolver 跳到疑似匹配位置。
+- [ ] 复测 Editor：语言服务器不可用、启动失败或 definition 请求异常时，Go to Definition 仍应回退旧正则 resolver，保证未安装 LSP 环境的基础跳转不中断。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.121.0-rc1`，短剧制作能力无新增。
+
+## 1.122.0-rc1 — 短剧指针同步 / Editor LSP authoritative workspace symbol misses
+
+- [ ] 复测 Editor：Go / TypeScript / JavaScript / Swift 的 Symbol Jump 查询在 LSP `workspace/symbol` 正常返回空结果时应展示无结果，不应继续过滤当前文件 outline 补本地猜测。
+- [ ] 复测 Editor：语言服务器不可用、启动失败或 workspace symbol 请求异常时，Symbol Jump 查询仍应回退当前文件大纲过滤，保证未安装 LSP 环境的基础跳转不中断。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.122.0-rc1`，短剧制作能力无新增。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）

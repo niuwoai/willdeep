@@ -943,6 +943,7 @@ struct EditorInspectorSidebar: View {
     let text: String
     let language: Language?
     let ideOutlineItems: [EditorOutlineItem]
+    let ideOutlineIsAuthoritative: Bool
     @Binding var mode: EditorInspectorMode
     let orderedModes: [EditorInspectorMode]
     let onNavigateToLine: (Int) -> Void
@@ -979,7 +980,7 @@ struct EditorInspectorSidebar: View {
                 EditorMinimapView(text: text, onNavigateToLine: onNavigateToLine)
             case .structure:
                 EditorStructureView(
-                    items: ideOutlineItems.isEmpty ? outline : ideOutlineItems,
+                    items: ideOutlineIsAuthoritative ? ideOutlineItems : outline,
                     onNavigateToLine: onNavigateToLine
                 )
             }
@@ -988,9 +989,18 @@ struct EditorInspectorSidebar: View {
         .overlay(alignment: .leading) {
             Divider()
         }
-        .task(id: TextLanguageKey(text: text, language: language, mode: mode)) {
+        .task(id: TextLanguageKey(
+            text: text,
+            language: language,
+            mode: mode,
+            ideOutlineIsAuthoritative: ideOutlineIsAuthoritative
+        )) {
             guard mode == .structure else { return }
             onRefreshIDEOutline()
+            guard !ideOutlineIsAuthoritative else {
+                outline = []
+                return
+            }
             let source = text
             let lang = language
             let extracted = await Task.detached(priority: .userInitiated) {
@@ -1006,6 +1016,7 @@ private struct TextLanguageKey: Equatable {
     let text: String
     let language: Language?
     let mode: EditorInspectorMode
+    let ideOutlineIsAuthoritative: Bool
 }
 
 private struct EditorMinimapView: View {

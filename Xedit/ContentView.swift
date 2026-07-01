@@ -228,6 +228,7 @@ struct ContentView: View {
                             inlayHintSpans: appState.editorInlayHintSpans,
                             documentLinkSpans: appState.editorDocumentLinkSpans,
                             languageServiceFoldingGuides: appState.editorLanguageServiceFoldingGuides,
+                            languageServiceFoldingIsAuthoritative: appState.editorLanguageServiceFoldingIsAuthoritative,
                             onEdit: {
                                 // Mark dirty when the user types.
                                 appState.isEdited = true
@@ -323,6 +324,7 @@ struct ContentView: View {
                                 text: appState.fileContent,
                                 language: editorLanguage,
                                 ideOutlineItems: appState.editorLanguageServiceOutlineItems,
+                                ideOutlineIsAuthoritative: appState.editorLanguageServiceOutlineIsAuthoritative,
                                 mode: $appState.inspectorMode,
                                 orderedModes: appState.editorSettings.orderedInspectorModes,
                                 onNavigateToLine: { line in
@@ -962,15 +964,17 @@ private struct SymbolJumpPanel: View {
     private func extractOutline() -> [EditorOutlineItem] {
         guard let url = appState.openedFileURL else { return [] }
         let language = appState.effectiveLanguage ?? Language.fromURL(url)
-        let fallback = EditorOutlineExtractor.outline(for: appState.fileContent, language: language)
-        return appState.editorOutlineItems(fallback: fallback)
+        return appState.editorOutlineItems {
+            EditorOutlineExtractor.outline(for: appState.fileContent, language: language)
+        }
     }
 
     private var symbols: [SymbolJumpResult] {
         let query = appState.symbolJumpQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return allSymbols.map(SymbolJumpResult.outline) }
         let workspaceMatches = appState.editorWorkspaceSymbolItems.map(SymbolJumpResult.workspace)
-        if !workspaceMatches.isEmpty || appState.isEditorWorkspaceSymbolSearchLoading {
+        if appState.isEditorWorkspaceSymbolSearchLoading
+            || appState.editorWorkspaceSymbolSearchIsAuthoritative(query: query) {
             return workspaceMatches
         }
         return allSymbols.filter { item in
@@ -1104,11 +1108,18 @@ private struct SymbolJumpPanel: View {
             allSymbols = extractOutline()
             clampSelection()
         }
+        .onCompatibleChange(of: appState.editorLanguageServiceOutlineStatus) { _, _ in
+            allSymbols = extractOutline()
+            clampSelection()
+        }
         .onCompatibleChange(of: appState.symbolJumpQuery) { _, _ in
             appState.refreshEditorWorkspaceSymbols(query: appState.symbolJumpQuery)
             resetSelection()
         }
         .onCompatibleChange(of: appState.editorWorkspaceSymbolItems) { _, _ in
+            clampSelection()
+        }
+        .onCompatibleChange(of: appState.editorWorkspaceSymbolSearchStatus) { _, _ in
             clampSelection()
         }
         .onCompatibleChange(of: symbols.count) { _, _ in

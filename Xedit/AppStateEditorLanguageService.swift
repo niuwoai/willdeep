@@ -344,6 +344,7 @@ extension AppState {
                     newName: newName
                 )
                 let changes = EditorWorkspaceEditApplier.fileChanges(from: edit)
+                let resourceChanges = EditorWorkspaceEditApplier.resourceChanges(from: edit)
                 try await MainActor.run {
                     guard self.openedFileURL?.standardizedFileURL == fileURL.standardizedFileURL,
                           self.effectiveLanguage == language,
@@ -352,6 +353,7 @@ extension AppState {
                     }
                     try self.applyEditorWorkspaceEditChanges(
                         changes,
+                        resourceChanges: resourceChanges,
                         currentFileURL: fileURL,
                         currentText: text,
                         rootURL: rootForSafety
@@ -782,9 +784,11 @@ extension AppState {
         )
         if let edit = item.edit {
             let changes = EditorWorkspaceEditApplier.fileChanges(from: edit)
+            let resourceChanges = EditorWorkspaceEditApplier.resourceChanges(from: edit)
             do {
                 try applyEditorWorkspaceEditChanges(
                     changes,
+                    resourceChanges: resourceChanges,
                     currentFileURL: fileURL,
                     currentText: text,
                     rootURL: rootForSafety
@@ -952,14 +956,30 @@ extension AppState {
 
     private func applyEditorWorkspaceEditChanges(
         _ changes: [EditorWorkspaceEditFileChange],
+        resourceChanges: [EditorWorkspaceEditResourceChange] = [],
         currentFileURL: URL,
         currentText: String,
         rootURL: URL
     ) throws {
-        guard !changes.isEmpty else { throw EditorWorkspaceEditApplicationError.noChanges }
+        guard !changes.isEmpty || !resourceChanges.isEmpty else {
+            throw EditorWorkspaceEditApplicationError.noChanges
+        }
 
         var appliedCount = 0
-        var appliedFileURLs: [URL] = []
+        var fileEvents: [(url: URL, type: LSPFileChangeType)] = []
+        for change in resourceChanges {
+            for fileURL in change.affectedFileURLs {
+                guard EditorWorkspaceEditApplier.isSafeFileURL(fileURL, inside: rootURL) else {
+                    throw EditorWorkspaceEditApplicationError.unsafeFile(fileURL)
+                }
+            }
+            let events = try applyEditorWorkspaceResourceChange(change)
+            if !events.isEmpty {
+                appliedCount += 1
+                fileEvents.append(contentsOf: events)
+            }
+        }
+
         for change in changes {
             let fileURL = change.fileURL.standardizedFileURL
             guard EditorWorkspaceEditApplier.isSafeFileURL(fileURL, inside: rootURL) else {
@@ -974,7 +994,7 @@ extension AppState {
                 fileContent = updated
                 isEdited = true
                 appliedCount += 1
-                appliedFileURLs.append(fileURL)
+                fileEvents.append((fileURL, .changed))
                 continue
             }
 
@@ -993,7 +1013,7 @@ extension AppState {
                 tabs[tabIndex].isEdited = false
                 knownModificationDates[fileURL] = Self.modificationDate(at: fileURL)
                 appliedCount += 1
-                appliedFileURLs.append(fileURL)
+                fileEvents.append((fileURL, .changed))
                 continue
             }
 
@@ -1006,13 +1026,13 @@ extension AppState {
             try updated.write(to: fileURL, atomically: true, encoding: .utf8)
             knownModificationDates[fileURL] = Self.modificationDate(at: fileURL)
             appliedCount += 1
-            appliedFileURLs.append(fileURL)
+            fileEvents.append((fileURL, .changed))
         }
 
         guard appliedCount > 0 else { throw EditorWorkspaceEditApplicationError.noChanges }
 
-        for fileURL in appliedFileURLs {
-            notifyEditorLanguageServiceWatchedFileChanged(url: fileURL, type: .changed)
+        for event in fileEvents {
+            notifyEditorLanguageServiceWatchedFileChanged(url: event.url, type: event.type)
         }
         editorCompletionPanel = nil
         editorSignatureHelpPanel = nil
@@ -1027,6 +1047,151 @@ extension AppState {
         refreshGitStatus()
         persistSession()
         NSApplication.shared.keyWindow?.isDocumentEdited = isEdited
+    }
+
+    private func applyEditorWorkspaceResourceChange(
+        _ change: EditorWorkspaceEditResourceChange
+    ) throws -> [(url: URL, type: LSPFileChangeType)] {
+        switch change.operation.kind {
+        case .create:
+            guard let fileURL = change.fileURL else {
+                throw EditorWorkspaceEditApplicationError.invalidEdit(URL(fileURLWithPath: "/"))
+            }
+            return try applyEditorWorkspaceCreateFile(fileURL, options: change.operation.options)
+        case .rename:
+            guard let oldURL = change.oldFileURL,
+                  let newURL = change.newFileURL else {
+                throw EditorWorkspaceEditApplicationError.invalidEdit(URL(fileURLWithPath: "/"))
+            }
+            return try applyEditorWorkspaceRenameFile(oldURL, to: newURL, options: change.operation.options)
+        case .delete:
+            guard let fileURL = change.fileURL else {
+                throw EditorWorkspaceEditApplicationError.invalidEdit(URL(fileURLWithPath: "/"))
+            }
+            return try applyEditorWorkspaceDeleteFile(fileURL, options: change.operation.options)
+        }
+    }
+
+    private func applyEditorWorkspaceCreateFile(
+        _ fileURL: URL,
+        options: LSPWorkspaceResourceOperationOptions?
+    ) throws -> [(url: URL, type: LSPFileChangeType)] {
+        let fileManager = FileManager.default
+        let exists = fileManager.fileExists(atPath: fileURL.path)
+        if exists {
+            if options?.ignoreIfExists == true { return [] }
+            guard options?.overwrite == true else {
+                throw EditorWorkspaceEditApplicationError.invalidEdit(fileURL)
+            }
+            if let tabIndex = tabIndex(for: fileURL), tabs[tabIndex].isEdited {
+                throw EditorWorkspaceEditApplicationError.unsavedOpenTab(fileURL)
+            }
+            try fileManager.removeItem(at: fileURL)
+        }
+
+        var isDirectory: ObjCBool = false
+        let parentURL = fileURL.deletingLastPathComponent()
+        guard fileManager.fileExists(atPath: parentURL.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            throw EditorWorkspaceEditApplicationError.invalidEdit(fileURL)
+        }
+
+        try Data().write(to: fileURL, options: [.atomic])
+        knownModificationDates[fileURL] = Self.modificationDate(at: fileURL)
+        if let tabIndex = tabIndex(for: fileURL) {
+            tabs[tabIndex].content = ""
+            tabs[tabIndex].savedContent = ""
+            tabs[tabIndex].isEdited = false
+            if tabs[tabIndex].id == activeTabID {
+                fileContent = ""
+                isEdited = false
+                bumpEditorRenderRevision()
+                bumpEditorHighlightRevision()
+            }
+        }
+        return [(fileURL, .created)]
+    }
+
+    private func applyEditorWorkspaceRenameFile(
+        _ oldURL: URL,
+        to newURL: URL,
+        options: LSPWorkspaceResourceOperationOptions?
+    ) throws -> [(url: URL, type: LSPFileChangeType)] {
+        let fileManager = FileManager.default
+        guard !Self.sameFileURL(oldURL, newURL) else { return [] }
+        let targetTabID = tabIndex(for: newURL).map { tabs[$0].id }
+        guard fileManager.fileExists(atPath: oldURL.path) else {
+            if options?.ignoreIfNotExists == true { return [] }
+            throw EditorWorkspaceEditApplicationError.invalidEdit(oldURL)
+        }
+        if let oldTabIndex = tabIndex(for: oldURL), tabs[oldTabIndex].isEdited {
+            throw EditorWorkspaceEditApplicationError.unsavedOpenTab(oldURL)
+        }
+        if let newTabIndex = tabIndex(for: newURL), tabs[newTabIndex].isEdited {
+            throw EditorWorkspaceEditApplicationError.unsavedOpenTab(newURL)
+        }
+
+        if fileManager.fileExists(atPath: newURL.path) {
+            if options?.ignoreIfExists == true { return [] }
+            guard options?.overwrite == true else {
+                throw EditorWorkspaceEditApplicationError.invalidEdit(newURL)
+            }
+            try fileManager.removeItem(at: newURL)
+        }
+
+        try fileManager.moveItem(at: oldURL, to: newURL)
+        knownModificationDates.removeValue(forKey: oldURL)
+        knownModificationDates[newURL] = Self.modificationDate(at: newURL)
+
+        if let oldTabIndex = tabIndex(for: oldURL) {
+            tabs[oldTabIndex].url = newURL
+            tabs[oldTabIndex].isUntitled = false
+            if tabs[oldTabIndex].id == activeTabID {
+                suppressURLChangeProcessing = true
+                openedFileURL = newURL
+                selectedSidebarFileURL = newURL
+                updateWindowTitle(url: newURL, isEdited: tabs[oldTabIndex].isEdited)
+            }
+        }
+        if let targetTabID {
+            closeTab(id: targetTabID)
+        }
+        return [(oldURL, .deleted), (newURL, .created)]
+    }
+
+    private func applyEditorWorkspaceDeleteFile(
+        _ fileURL: URL,
+        options: LSPWorkspaceResourceOperationOptions?
+    ) throws -> [(url: URL, type: LSPFileChangeType)] {
+        let fileManager = FileManager.default
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: fileURL.path, isDirectory: &isDirectory) else {
+            if options?.ignoreIfNotExists == true { return [] }
+            throw EditorWorkspaceEditApplicationError.invalidEdit(fileURL)
+        }
+        guard !isDirectory.boolValue || options?.recursive == true else {
+            throw EditorWorkspaceEditApplicationError.invalidEdit(fileURL)
+        }
+        let affectedTabIndices = isDirectory.boolValue
+            ? tabs.indices.filter { Self.isFileURL(tabs[$0].url, insideOrEqualTo: fileURL) }
+            : tabs.indices.filter { Self.sameFileURL(tabs[$0].url, fileURL) }
+        if let unsavedIndex = affectedTabIndices.first(where: { tabs[$0].isEdited }) {
+            throw EditorWorkspaceEditApplicationError.unsavedOpenTab(tabs[unsavedIndex].url)
+        }
+
+        let tabIDs = affectedTabIndices.map { tabs[$0].id }
+        try fileManager.removeItem(at: fileURL)
+        knownModificationDates.removeValue(forKey: fileURL)
+        for tabID in tabIDs {
+            closeTab(id: tabID)
+        }
+        return [(fileURL, .deleted)]
+    }
+
+    private nonisolated static func isFileURL(_ url: URL, insideOrEqualTo directoryURL: URL) -> Bool {
+        let directoryPath = directoryURL.standardizedFileURL.path
+        let filePath = url.standardizedFileURL.path
+        return filePath == directoryPath || filePath.hasPrefix(directoryPath + "/")
     }
 
     private func editorRenameErrorMessage(_ error: EditorWorkspaceEditApplicationError) -> String {
@@ -1066,10 +1231,12 @@ extension AppState {
             explicitRoot: rootDirectory
         )
         let changes = EditorWorkspaceEditApplier.fileChanges(from: params.edit)
+        let resourceChanges = EditorWorkspaceEditApplier.resourceChanges(from: params.edit)
 
         do {
             try applyEditorWorkspaceEditChanges(
                 changes,
+                resourceChanges: resourceChanges,
                 currentFileURL: fileURL,
                 currentText: fileContent,
                 rootURL: rootForSafety
@@ -1161,12 +1328,51 @@ extension AppState {
         }
     }
 
-    func editorOutlineItems(fallback: [EditorOutlineItem]) -> [EditorOutlineItem] {
+    var editorLanguageServiceOutlineIsAuthoritative: Bool {
         guard EditorLanguageServiceRegistry.isFirstStageIDELanguage(effectiveLanguage),
-              !editorLanguageServiceOutlineItems.isEmpty else {
-            return fallback
+              let uri = openedFileURL?.absoluteString else {
+            return false
         }
-        return editorLanguageServiceOutlineItems
+        switch editorLanguageServiceOutlineStatus {
+        case .available(let availableURI):
+            return availableURI == uri
+        case .unavailable, .loading, .failed:
+            return false
+        }
+    }
+
+    var editorLanguageServiceFoldingIsAuthoritative: Bool {
+        guard EditorLanguageServiceRegistry.isFirstStageIDELanguage(effectiveLanguage),
+              let uri = openedFileURL?.absoluteString else {
+            return false
+        }
+        switch editorLanguageServiceFoldingStatus {
+        case .available(let availableURI):
+            return availableURI == uri
+        case .unavailable, .loading, .failed:
+            return false
+        }
+    }
+
+    func editorOutlineItems(fallback: () -> [EditorOutlineItem]) -> [EditorOutlineItem] {
+        guard EditorLanguageServiceRegistry.isFirstStageIDELanguage(effectiveLanguage) else {
+            return fallback()
+        }
+        return editorLanguageServiceOutlineIsAuthoritative ? editorLanguageServiceOutlineItems : fallback()
+    }
+
+    func editorWorkspaceSymbolSearchIsAuthoritative(query: String) -> Bool {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedQuery.isEmpty,
+              EditorLanguageServiceRegistry.isFirstStageIDELanguage(effectiveLanguage) else {
+            return false
+        }
+        switch editorWorkspaceSymbolSearchStatus {
+        case .available(let availableQuery):
+            return availableQuery == normalizedQuery
+        case .unavailable, .loading, .failed:
+            return false
+        }
     }
 
     func refreshEditorWorkspaceSymbols(query: String) {
@@ -1177,6 +1383,7 @@ extension AppState {
             editorWorkspaceSymbolRevision += 1
             editorWorkspaceSymbolRequestKey = nil
             editorWorkspaceSymbolItems = []
+            editorWorkspaceSymbolSearchStatus = .unavailable
             isEditorWorkspaceSymbolSearchLoading = false
             return
         }
@@ -1190,6 +1397,7 @@ extension AppState {
         editorWorkspaceSymbolRevision += 1
         let revision = editorWorkspaceSymbolRevision
         editorWorkspaceSymbolRequestKey = requestKey
+        editorWorkspaceSymbolSearchStatus = .loading(query: normalizedQuery)
         isEditorWorkspaceSymbolSearchLoading = true
 
         Task { [weak self] in
@@ -1221,6 +1429,7 @@ extension AppState {
                         return
                     }
                     self.editorWorkspaceSymbolItems = items
+                    self.editorWorkspaceSymbolSearchStatus = .available(query: normalizedQuery)
                     self.isEditorWorkspaceSymbolSearchLoading = false
                 }
             } catch {
@@ -1231,6 +1440,7 @@ extension AppState {
                         return
                     }
                     self.editorWorkspaceSymbolItems = []
+                    self.editorWorkspaceSymbolSearchStatus = .failed(query: normalizedQuery)
                     self.isEditorWorkspaceSymbolSearchLoading = false
                 }
             }
@@ -1243,6 +1453,7 @@ extension AppState {
             editorWorkspaceSymbolRevision += 1
             editorWorkspaceSymbolRequestKey = nil
             editorWorkspaceSymbolItems = []
+            editorWorkspaceSymbolSearchStatus = .unavailable
             isEditorWorkspaceSymbolSearchLoading = false
             editorLanguageServiceDiagnosticsURI = nil
             editorLanguageServiceDiagnosticIssues = []
@@ -1254,6 +1465,7 @@ extension AppState {
             editorDocumentLinkSpans = []
             editorLanguageServiceFoldingURI = nil
             editorLanguageServiceFoldingGuides = []
+            editorLanguageServiceFoldingStatus = .unavailable
             editorLanguageServiceDocumentHighlightsURI = nil
             editorDocumentHighlightRequestKey = nil
             editorDocumentHighlightRevision += 1
@@ -1271,6 +1483,7 @@ extension AppState {
             editorWorkspaceSymbolRevision += 1
             editorWorkspaceSymbolRequestKey = nil
             editorWorkspaceSymbolItems = []
+            editorWorkspaceSymbolSearchStatus = .unavailable
             isEditorWorkspaceSymbolSearchLoading = false
             editorLanguageServiceDiagnosticsURI = nil
             editorLanguageServiceDiagnosticIssues = []
@@ -1282,6 +1495,7 @@ extension AppState {
             editorDocumentLinkSpans = []
             editorLanguageServiceFoldingURI = nil
             editorLanguageServiceFoldingGuides = []
+            editorLanguageServiceFoldingStatus = .unavailable
             editorLanguageServiceDocumentHighlightsURI = nil
             editorDocumentHighlightRequestKey = nil
             editorDocumentHighlightRevision += 1
@@ -1313,6 +1527,7 @@ extension AppState {
         if editorLanguageServiceFoldingURI != url.absoluteString {
             editorLanguageServiceFoldingURI = nil
             editorLanguageServiceFoldingGuides = []
+            editorLanguageServiceFoldingStatus = .unavailable
         }
         if editorLanguageServiceDocumentHighlightsURI != url.absoluteString {
             editorLanguageServiceDocumentHighlightsURI = nil
@@ -1358,6 +1573,15 @@ extension AppState {
 
         Task { [weak self] in
             guard let self else { return }
+            let uri = url.absoluteString
+            await MainActor.run {
+                guard self.openedFileURL?.standardizedFileURL == url.standardizedFileURL,
+                      self.effectiveLanguage == language,
+                      self.fileContent == text else {
+                    return
+                }
+                self.editorLanguageServiceFoldingStatus = .loading(uri: uri)
+            }
             do {
                 let foldingGuides = try await self.editorLanguageServiceManager.foldingRanges(
                     fileURL: url,
@@ -1371,8 +1595,9 @@ extension AppState {
                           self.fileContent == text else {
                         return
                     }
-                    self.editorLanguageServiceFoldingURI = url.absoluteString
+                    self.editorLanguageServiceFoldingURI = uri
                     self.editorLanguageServiceFoldingGuides = foldingGuides
+                    self.editorLanguageServiceFoldingStatus = .available(uri: uri)
                 }
             } catch {
                 await MainActor.run {
@@ -1383,6 +1608,7 @@ extension AppState {
                     }
                     self.editorLanguageServiceFoldingURI = nil
                     self.editorLanguageServiceFoldingGuides = []
+                    self.editorLanguageServiceFoldingStatus = .failed(uri: uri)
                 }
             }
         }
@@ -1523,16 +1749,20 @@ extension AppState {
         installEditorLanguageServiceDiagnosticsHandlerIfNeeded()
         guard let url = openedFileURL else {
             editorLanguageServiceOutlineItems = []
+            editorLanguageServiceOutlineStatus = .unavailable
             return
         }
         let language = effectiveLanguage
         guard EditorLanguageServiceRegistry.isFirstStageIDELanguage(language) else {
             editorLanguageServiceOutlineItems = []
+            editorLanguageServiceOutlineStatus = .unavailable
             return
         }
 
         let text = fileContent
         let root = rootDirectory
+        let uri = url.absoluteString
+        editorLanguageServiceOutlineStatus = .loading(uri: uri)
 
         Task { [weak self] in
             guard let self else { return }
@@ -1551,6 +1781,7 @@ extension AppState {
                         return
                     }
                     self.editorLanguageServiceOutlineItems = outline
+                    self.editorLanguageServiceOutlineStatus = .available(uri: uri)
                 }
             } catch {
                 await MainActor.run {
@@ -1560,6 +1791,7 @@ extension AppState {
                         return
                     }
                     self.editorLanguageServiceOutlineItems = []
+                    self.editorLanguageServiceOutlineStatus = .failed(uri: uri)
                 }
             }
         }

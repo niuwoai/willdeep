@@ -1,6 +1,12 @@
 import Foundation
 import AppKit
 
+nonisolated enum EditorDefinitionFallbackPolicy {
+    static func shouldFallbackToRegex(didReceiveLanguageServerResponse: Bool) -> Bool {
+        !didReceiveLanguageServerResponse
+    }
+}
+
 extension AppState {
     var primaryAgentChangedFile: AgentFileChangeSummary? {
         if let openedFileURL,
@@ -205,12 +211,24 @@ extension AppState {
                        await self.navigateToLanguageServerLocation(location) {
                         return
                     }
+                    if EditorDefinitionFallbackPolicy.shouldFallbackToRegex(didReceiveLanguageServerResponse: true) {
+                        await MainActor.run {
+                            self.goToRegexDefinition(symbol: request.symbol)
+                        }
+                    } else {
+                        await MainActor.run {
+                            NSSound.beep()
+                        }
+                    }
+                    return
                 } catch {
                     // Missing or failing language servers fall back to the
                     // lightweight resolver so existing editor behavior survives.
                 }
-                await MainActor.run {
-                    self.goToRegexDefinition(symbol: request.symbol)
+                if EditorDefinitionFallbackPolicy.shouldFallbackToRegex(didReceiveLanguageServerResponse: false) {
+                    await MainActor.run {
+                        self.goToRegexDefinition(symbol: request.symbol)
+                    }
                 }
             }
             return

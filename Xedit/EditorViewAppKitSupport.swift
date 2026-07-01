@@ -63,6 +63,12 @@ final class WillDeepTextView: NSTextView {
             invalidateFoldableGuidesCache()
         }
     }
+    var languageServiceFoldingIsAuthoritative = false {
+        didSet {
+            guard oldValue != languageServiceFoldingIsAuthoritative else { return }
+            invalidateFoldableGuidesCache()
+        }
+    }
     var syntaxHighlightingSelection: SyntaxHighlightingSelection = .automatic
     var detectedLanguage: Language?
     var onSyntaxHighlightingChange: ((SyntaxHighlightingSelection) -> Void)?
@@ -103,6 +109,7 @@ final class WillDeepTextView: NSTextView {
     /// language-server folding ranges change.
     private var cachedFoldableGuides: [ScopeGuide]?
     private var cachedFoldableGuidesLanguage: Language?
+    private var cachedFoldableGuidesUsedAuthoritativeLSP = false
 
     private enum SyntaxMenuToken {
         static let automatic = "__automatic"
@@ -777,16 +784,19 @@ final class WillDeepTextView: NSTextView {
     }
 
     func foldableGuides() -> [ScopeGuide] {
-        if let cachedFoldableGuides, cachedFoldableGuidesLanguage == scopeGuideLanguage {
+        if let cachedFoldableGuides,
+           cachedFoldableGuidesLanguage == scopeGuideLanguage,
+           cachedFoldableGuidesUsedAuthoritativeLSP == languageServiceFoldingIsAuthoritative {
             return cachedFoldableGuides
         }
-        let sourceGuides = languageServiceFoldingGuides.isEmpty
-            ? ScopeGuideCalculator.guides(in: string, language: scopeGuideLanguage)
-            : languageServiceFoldingGuides
+        let sourceGuides = languageServiceFoldingIsAuthoritative
+            ? languageServiceFoldingGuides
+            : ScopeGuideCalculator.guides(in: string, language: scopeGuideLanguage)
         let guides = sourceGuides
             .filter { $0.endLine - $0.startLine >= 2 }
         cachedFoldableGuides = guides
         cachedFoldableGuidesLanguage = scopeGuideLanguage
+        cachedFoldableGuidesUsedAuthoritativeLSP = languageServiceFoldingIsAuthoritative
         return guides
     }
 
@@ -794,6 +804,7 @@ final class WillDeepTextView: NSTextView {
     /// Called whenever the text content changes.
     func invalidateFoldableGuidesCache() {
         cachedFoldableGuides = nil
+        cachedFoldableGuidesUsedAuthoritativeLSP = false
         // Folded ranges are keyed by line offsets, which shift when text changes.
         invalidateFoldedRangesCache()
     }

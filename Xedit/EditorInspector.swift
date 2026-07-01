@@ -69,6 +69,13 @@ nonisolated struct EditorOutlineItem: Identifiable, Equatable {
     let level: Int
 }
 
+nonisolated enum EditorLanguageServiceOutlineStatus: Equatable {
+    case unavailable
+    case loading(uri: String)
+    case available(uri: String)
+    case failed(uri: String)
+}
+
 nonisolated enum EditorOutlineExtractor {
     static func outline(from symbols: [LSPDocumentSymbol]) -> [EditorOutlineItem] {
         var items: [EditorOutlineItem] = []

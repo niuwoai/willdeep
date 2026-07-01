@@ -726,9 +726,57 @@ nonisolated struct LSPTextDocumentEdit: Codable, Equatable, Sendable {
     let edits: [LSPTextEdit]
 }
 
+nonisolated enum LSPWorkspaceResourceOperationKind: String, Codable, Equatable, Sendable {
+    case create
+    case rename
+    case delete
+}
+
+nonisolated struct LSPWorkspaceResourceOperationOptions: Codable, Equatable, Sendable {
+    let overwrite: Bool?
+    let ignoreIfExists: Bool?
+    let recursive: Bool?
+    let ignoreIfNotExists: Bool?
+
+    init(
+        overwrite: Bool? = nil,
+        ignoreIfExists: Bool? = nil,
+        recursive: Bool? = nil,
+        ignoreIfNotExists: Bool? = nil
+    ) {
+        self.overwrite = overwrite
+        self.ignoreIfExists = ignoreIfExists
+        self.recursive = recursive
+        self.ignoreIfNotExists = ignoreIfNotExists
+    }
+}
+
+nonisolated struct LSPWorkspaceResourceOperation: Codable, Equatable, Sendable {
+    let kind: LSPWorkspaceResourceOperationKind
+    let uri: String?
+    let oldUri: String?
+    let newUri: String?
+    let options: LSPWorkspaceResourceOperationOptions?
+
+    init(
+        kind: LSPWorkspaceResourceOperationKind,
+        uri: String? = nil,
+        oldUri: String? = nil,
+        newUri: String? = nil,
+        options: LSPWorkspaceResourceOperationOptions? = nil
+    ) {
+        self.kind = kind
+        self.uri = uri
+        self.oldUri = oldUri
+        self.newUri = newUri
+        self.options = options
+    }
+}
+
 nonisolated struct LSPWorkspaceEdit: Codable, Equatable, Sendable {
     let changes: [String: [LSPTextEdit]]
     let documentChanges: [LSPTextDocumentEdit]
+    let resourceOperations: [LSPWorkspaceResourceOperation]
 
     var textEditChanges: [String: [LSPTextEdit]] {
         var result = changes
@@ -743,15 +791,22 @@ nonisolated struct LSPWorkspaceEdit: Codable, Equatable, Sendable {
         case documentChanges
     }
 
-    init(changes: [String: [LSPTextEdit]] = [:], documentChanges: [LSPTextDocumentEdit] = []) {
+    init(
+        changes: [String: [LSPTextEdit]] = [:],
+        documentChanges: [LSPTextDocumentEdit] = [],
+        resourceOperations: [LSPWorkspaceResourceOperation] = []
+    ) {
         self.changes = changes
         self.documentChanges = documentChanges
+        self.resourceOperations = resourceOperations
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         changes = try container.decodeIfPresent([String: [LSPTextEdit]].self, forKey: .changes) ?? [:]
-        documentChanges = try container.decodeTextDocumentEditsIfPresent(forKey: .documentChanges)
+        let decodedDocumentChanges = try container.decodeDocumentChangesIfPresent(forKey: .documentChanges)
+        documentChanges = decodedDocumentChanges.textEdits
+        resourceOperations = decodedDocumentChanges.resourceOperations
     }
 
     func encode(to encoder: Encoder) throws {
@@ -759,8 +814,14 @@ nonisolated struct LSPWorkspaceEdit: Codable, Equatable, Sendable {
         if !changes.isEmpty {
             try container.encode(changes, forKey: .changes)
         }
-        if !documentChanges.isEmpty {
-            try container.encode(documentChanges, forKey: .documentChanges)
+        if !documentChanges.isEmpty || !resourceOperations.isEmpty {
+            var nested = container.nestedUnkeyedContainer(forKey: .documentChanges)
+            for documentChange in documentChanges {
+                try nested.encode(documentChange)
+            }
+            for operation in resourceOperations {
+                try nested.encode(operation)
+            }
         }
     }
 }
@@ -896,18 +957,23 @@ nonisolated enum LSPCodeActionResult: Decodable, Equatable, Sendable {
 }
 
 private extension KeyedDecodingContainer {
-    nonisolated func decodeTextDocumentEditsIfPresent(forKey key: Key) throws -> [LSPTextDocumentEdit] {
-        guard contains(key) else { return [] }
+    nonisolated func decodeDocumentChangesIfPresent(
+        forKey key: Key
+    ) throws -> (textEdits: [LSPTextDocumentEdit], resourceOperations: [LSPWorkspaceResourceOperation]) {
+        guard contains(key) else { return ([], []) }
         var nested = try nestedUnkeyedContainer(forKey: key)
-        var edits: [LSPTextDocumentEdit] = []
+        var textEdits: [LSPTextDocumentEdit] = []
+        var resourceOperations: [LSPWorkspaceResourceOperation] = []
         while !nested.isAtEnd {
             if let edit = try? nested.decode(LSPTextDocumentEdit.self) {
-                edits.append(edit)
+                textEdits.append(edit)
+            } else if let operation = try? nested.decode(LSPWorkspaceResourceOperation.self) {
+                resourceOperations.append(operation)
             } else {
                 _ = try nested.decode(LSPIgnoredDocumentChange.self)
             }
         }
-        return edits
+        return (textEdits, resourceOperations)
     }
 }
 

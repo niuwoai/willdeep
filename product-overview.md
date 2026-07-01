@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-01 | Current version: v1.117.0-rc1
+> Last updated: 2026-07-01 | Current version: v1.122.0-rc1
 
 ## Positioning
 
@@ -14,6 +14,11 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Editor LSP Authoritative Workspace Symbol Misses（1.122.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的符号跳转查询会把 LSP `workspace/symbol` 成功返回的空结果视为权威未命中，不再过滤当前文件 outline 来补本地猜测结果；只有 LSP 未就绪或失败时才回退当前文件大纲过滤。
+- **Editor LSP Authoritative Definition Misses（1.121.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的 Go to Definition 会把 LSP 成功返回的空 definition 结果视为权威“未找到定义”，不再用正则 resolver 补跳到可能错误的位置；只有 LSP 缺失或请求失败时才回退正则。
+- **Editor LSP Authoritative Folding（1.120.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的折叠/作用域引导线会区分 LSP folding range loading / available / failed 状态；当 `textDocument/foldingRange` 已返回时完全信任语言服务器结果，只有未就绪或失败时才使用本地括号/缩进 fallback。
+- **Editor LSP Authoritative Outline（1.119.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的结构面板与符号跳转会区分 LSP 大纲 loading / available / failed 状态；当 `textDocument/documentSymbol` 已返回时完全信任语言服务器结果，只有未就绪或失败时才使用正则 fallback。
+- **Editor LSP Workspace Resource Operations（1.118.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的 LSP `WorkspaceEdit.documentChanges` 支持 `create` / `rename` / `delete` 文件资源操作；应用时限制在当前 workspace 内、保护未保存 tab，并在文件结构变化后发送 watched-file created/deleted 事件。
 - **Editor LSP Workspace Edit Refresh / Semantic Token Polish（1.117.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的 rename、quick fix 和 server `workspace/applyEdit` 成功改写文件后，会把实际变更文件发送 `workspace/didChangeWatchedFiles` `changed` 事件；语义高亮新增 `variable` / `parameter` / `label` token 映射，让 LSP 语义 token 更稳定地覆盖正则 fallback。
 - **Editor LSP Watched Files（1.116.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的 editor 会在保存、新建文件、新建文件夹和创建缺失外部文件成功后发送 `workspace/didChangeWatchedFiles`，让语言服务器刷新项目索引；无法识别语言的配置文件变更会通知当前 workspace 下已有的 LSP session，不额外启动无关 server。
 - **Voice 转录语言设置（1.115.0-rc1）** —— Settings → Voice 提供转录语言选择，默认跟随系统语言，也可强制使用自动检测、中文、英文、粤语、日语或韩语；Fn push-to-talk 和 composer 麦克风按钮会按该偏好调用 SenseVoice ONNX，便于日本市场日语语音输入验证。

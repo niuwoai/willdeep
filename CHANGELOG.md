@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.122.0-rc1 - 2026-07-01
+
+### Added
+- **Editor LSP Authoritative Workspace Symbol Misses（1.122.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的符号跳转查询现在会把 LSP `workspace/symbol` 成功返回的空结果视为权威未命中，不再继续过滤当前文件 outline 来补一个本地猜测结果。
+- `SymbolJump` 现在区分 workspace symbol 的 `loading` / `available` / `failed` 状态；LSP 正常响应时显示 workspace symbol 结果（即使为空），只有 LSP 未就绪或失败时才回退当前文件大纲过滤。
+- 新增 `EditorLanguageServiceTests` 覆盖空 workspace symbol 结果从 LSP manager 原样返回，并新增 `EditorWorkflowTests` 覆盖第一批语言 workspace symbol available 空结果权威、failed 才 fallback 的策略。版本号从 **1.121.0-rc1** 提升为 **1.122.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.121.0-rc1 - 2026-07-01
+
+### Added
+- **Editor LSP Authoritative Definition Misses（1.121.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的 Go to Definition 现在会把 LSP 成功返回的空 definition 结果视为权威“未找到定义”，不再继续用正则 resolver 补跳到一个看似匹配但可能错误的位置。
+- 语言服务器缺失、启动失败或请求异常时仍保留旧正则 fallback，保证未安装 LSP 的环境还能基础跳转；但只要 LSP 正常响应，就由 LSP 决定是否存在定义。
+- 新增 `EditorLanguageServiceTests` 覆盖空 definition 结果从 LSP manager 原样返回，以及第一批语言定义 fallback policy 的空结果权威语义。版本号从 **1.120.0-rc1** 提升为 **1.121.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.120.0-rc1 - 2026-07-01
+
+### Added
+- **Editor LSP Authoritative Folding（1.120.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的折叠/作用域引导线现在会区分 LSP folding range 的 `loading` / `available` / `failed` 状态；当语言服务器已返回 `textDocument/foldingRange` 时会完全信任 LSP 结果，即使为空也不再用本地括号/缩进启发式补折叠线。
+- AppKit editor 的 folding cache 现在把“LSP folding 是否权威”纳入缓存 key，避免从 fallback 切到 LSP 空结果后继续显示旧的本地 scope guides；语言服务器失败或未就绪时仍保留旧本地 fallback。
+- 新增 `EditorWorkflowTests` 覆盖第一批语言 LSP folding available 时不执行本地 fallback、failed 时才 fallback 的策略。版本号从 **1.119.0-rc1** 提升为 **1.120.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.119.0-rc1 - 2026-07-01
+
+### Added
+- **Editor LSP Authoritative Outline（1.119.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的结构面板与符号跳转现在会区分 LSP 大纲的 `loading` / `available` / `failed` 状态；当语言服务器已返回结果时会完全信任 `textDocument/documentSymbol`，即使结果为空也不再用正则 outline 补一个看似合理但可能错误的结构。
+- 结构面板在 LSP 大纲已可用时不再启动后台正则提取，只有语言服务器未就绪或失败时才使用旧正则 fallback，减少第一批 IDE 语言继续被正则驱动的情况。
+- 新增 `EditorWorkflowTests` 覆盖第一批语言 LSP 大纲 available 时不执行 fallback、failed 时才 fallback 的策略。版本号从 **1.118.0-rc1** 提升为 **1.119.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.118.0-rc1 - 2026-07-01
+
+### Added
+- **Editor LSP Workspace Resource Operations（1.118.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的 LSP `WorkspaceEdit.documentChanges` 现在会保留并应用 `create` / `rename` / `delete` 文件资源操作，不再把 server 返回的资源变更吞掉。
+- 资源操作应用沿用当前 workspace 安全边界：所有目标路径必须位于 root 内，未保存 tab 会阻止覆盖、移动或删除；成功创建、重命名或删除后会发送对应 `workspace/didChangeWatchedFiles` `created` / `deleted` 事件，帮助语言服务器刷新项目结构索引。
+- 新增 `EditorLanguageServiceTests` 覆盖 resource operation 解码与 applier 映射。版本号从 **1.117.0-rc1** 提升为 **1.118.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
 ## 1.117.0-rc1 - 2026-07-01
 
 ### Added

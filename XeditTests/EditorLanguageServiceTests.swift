@@ -421,6 +421,44 @@ struct EditorLanguageServiceTests {
         #expect(changes["file:///tmp/main.go"]?.first?.newText == "renamedValue")
         #expect(changes["file:///tmp/other.go"]?.first?.range.start.character == 4)
         #expect(changes.count == 2)
+        #expect(edit.resourceOperations.count == 1)
+        #expect(edit.resourceOperations.first?.kind == .rename)
+        #expect(edit.resourceOperations.first?.oldUri == "file:///tmp/a.go")
+        #expect(edit.resourceOperations.first?.newUri == "file:///tmp/b.go")
+    }
+
+    @Test("workspace edit applier maps resource operations")
+    func testWorkspaceEditApplierMapsResourceOperations() throws {
+        let edit = LSPWorkspaceEdit(resourceOperations: [
+            LSPWorkspaceResourceOperation(
+                kind: .create,
+                uri: "file:///tmp/new.go",
+                options: LSPWorkspaceResourceOperationOptions(ignoreIfExists: true)
+            ),
+            LSPWorkspaceResourceOperation(
+                kind: .rename,
+                oldUri: "file:///tmp/old.go",
+                newUri: "file:///tmp/renamed.go",
+                options: LSPWorkspaceResourceOperationOptions(overwrite: true)
+            ),
+            LSPWorkspaceResourceOperation(
+                kind: .delete,
+                uri: "file:///tmp/remove.go",
+                options: LSPWorkspaceResourceOperationOptions(ignoreIfNotExists: true)
+            ),
+            LSPWorkspaceResourceOperation(kind: .delete, uri: "https://example.test/remove.go")
+        ])
+
+        let changes = EditorWorkspaceEditApplier.resourceChanges(from: edit)
+
+        #expect(changes.count == 3)
+        #expect(changes[0].operation.kind == .create)
+        #expect(changes[0].fileURL?.path == "/tmp/new.go")
+        #expect(changes[1].operation.kind == .rename)
+        #expect(changes[1].oldFileURL?.path == "/tmp/old.go")
+        #expect(changes[1].newFileURL?.path == "/tmp/renamed.go")
+        #expect(changes[2].operation.kind == .delete)
+        #expect(changes[2].fileURL?.path == "/tmp/remove.go")
     }
 
     @Test("LSP semantic token decoder maps relative token data into editor ranges")
@@ -493,6 +531,36 @@ struct EditorLanguageServiceTests {
         #expect(position["line"] as? Int == 3)
         #expect(position["character"] as? Int == 13)
         #expect(locations == [FakeLanguageServerTransport.definitionLocation])
+    }
+
+    @Test("language service manager preserves empty definition results")
+    func testLanguageServiceManagerPreservesEmptyDefinitionResults() async throws {
+        let transport = FakeLanguageServerTransport()
+        transport.autoRespond = true
+        transport.definitionLocations = []
+        let manager = EditorLanguageServiceManager(
+            transportFactory: { _, _, _ in transport },
+            executableResolver: { _ in URL(fileURLWithPath: "/usr/bin/true") }
+        )
+        let text = "package main\n\nfunc main() {\n\tfmt.Println(value)\n}\n"
+
+        let locations = try await manager.definition(
+            fileURL: URL(fileURLWithPath: "/tmp/main.go"),
+            language: .go,
+            rootDirectory: URL(fileURLWithPath: "/tmp"),
+            text: text,
+            characterOffset: (text as NSString).range(of: "value").location
+        )
+
+        let methods = transport.sentPayloads.compactMap(FakeLanguageServerTransport.methodName)
+        #expect(methods.contains("textDocument/definition"))
+        #expect(locations.isEmpty)
+    }
+
+    @Test("definition fallback policy treats LSP empty results as authoritative")
+    func testDefinitionFallbackPolicyTreatsEmptyLSPResultsAsAuthoritative() {
+        #expect(!EditorDefinitionFallbackPolicy.shouldFallbackToRegex(didReceiveLanguageServerResponse: true))
+        #expect(EditorDefinitionFallbackPolicy.shouldFallbackToRegex(didReceiveLanguageServerResponse: false))
     }
 
     @Test("language service manager synchronizes document before didSave")
@@ -974,6 +1042,29 @@ struct EditorLanguageServiceTests {
         #expect(items.map(\.fileName) == ["service.go", "service.go"])
         #expect(items.map(\.line) == [2, 8])
         #expect(items.map(\.kind) == [.type, .function])
+    }
+
+    @Test("language service manager preserves empty workspace symbol results")
+    func testLanguageServiceManagerPreservesEmptyWorkspaceSymbolResults() async throws {
+        let transport = FakeLanguageServerTransport()
+        transport.autoRespond = true
+        transport.workspaceSymbolResults = []
+        let manager = EditorLanguageServiceManager(
+            transportFactory: { _, _, _ in transport },
+            executableResolver: { _ in URL(fileURLWithPath: "/usr/bin/true") }
+        )
+
+        let items = try await manager.workspaceSymbols(
+            fileURL: URL(fileURLWithPath: "/tmp/main.go"),
+            language: .go,
+            rootDirectory: URL(fileURLWithPath: "/tmp"),
+            text: "package main\n",
+            query: "DefinitelyMissingSymbol"
+        )
+
+        let methods = transport.sentPayloads.compactMap(FakeLanguageServerTransport.methodName)
+        #expect(methods.contains("workspace/symbol"))
+        #expect(items.isEmpty)
     }
 
     @Test("language service manager requests selection ranges through LSP")
@@ -1579,6 +1670,9 @@ struct EditorLanguageServiceTests {
 }
 
 private final class FakeLanguageServerTransport: LanguageServerTransport {
+    var definitionLocations: [LSPLocation]?
+    var workspaceSymbolResults: [LSPWorkspaceSymbol]?
+
     static let definitionLocation = LSPLocation(
         uri: "file:///tmp/main.go",
         range: LSPRange(
@@ -2083,7 +2177,7 @@ private final class FakeLanguageServerTransport: LanguageServerTransport {
                     ]
             ]))
         case "textDocument/definition":
-            pushServerPayload(responsePayload(id: id, result: [Self.locationObject(Self.definitionLocation)]))
+            pushServerPayload(responsePayload(id: id, result: (definitionLocations ?? [Self.definitionLocation]).map(Self.locationObject)))
         case "textDocument/typeDefinition":
             pushServerPayload(responsePayload(id: id, result: Self.locationObject(Self.typeDefinitionLocation)))
         case "textDocument/implementation":
@@ -2105,7 +2199,7 @@ private final class FakeLanguageServerTransport: LanguageServerTransport {
         case "textDocument/documentSymbol":
             pushServerPayload(responsePayload(id: id, result: Self.documentSymbols.map(Self.documentSymbolObject)))
         case "workspace/symbol":
-            pushServerPayload(responsePayload(id: id, result: Self.workspaceSymbols.map(Self.workspaceSymbolObject)))
+            pushServerPayload(responsePayload(id: id, result: (workspaceSymbolResults ?? Self.workspaceSymbols).map(Self.workspaceSymbolObject)))
         case "textDocument/selectionRange":
             pushServerPayload(responsePayload(id: id, result: Self.selectionRanges.map(Self.selectionRangeObject)))
         case "textDocument/prepareCallHierarchy":
@@ -2212,8 +2306,8 @@ private final class FakeLanguageServerTransport: LanguageServerTransport {
                 edits.map(textEditObject)
             }
         }
-        if !edit.documentChanges.isEmpty {
-            object["documentChanges"] = edit.documentChanges.map { documentEdit in
+        if !edit.documentChanges.isEmpty || !edit.resourceOperations.isEmpty {
+            var documentChanges: [[String: Any]] = edit.documentChanges.map { documentEdit in
                 var textDocument: [String: Any] = [
                     "uri": documentEdit.textDocument.uri
                 ]
@@ -2225,6 +2319,40 @@ private final class FakeLanguageServerTransport: LanguageServerTransport {
                     "edits": documentEdit.edits.map(textEditObject)
                 ]
             }
+            documentChanges.append(contentsOf: edit.resourceOperations.map(resourceOperationObject))
+            object["documentChanges"] = documentChanges
+        }
+        return object
+    }
+
+    private static func resourceOperationObject(_ operation: LSPWorkspaceResourceOperation) -> [String: Any] {
+        var object: [String: Any] = [
+            "kind": operation.kind.rawValue
+        ]
+        if let uri = operation.uri {
+            object["uri"] = uri
+        }
+        if let oldUri = operation.oldUri {
+            object["oldUri"] = oldUri
+        }
+        if let newUri = operation.newUri {
+            object["newUri"] = newUri
+        }
+        if let options = operation.options {
+            var optionsObject: [String: Any] = [:]
+            if let overwrite = options.overwrite {
+                optionsObject["overwrite"] = overwrite
+            }
+            if let ignoreIfExists = options.ignoreIfExists {
+                optionsObject["ignoreIfExists"] = ignoreIfExists
+            }
+            if let recursive = options.recursive {
+                optionsObject["recursive"] = recursive
+            }
+            if let ignoreIfNotExists = options.ignoreIfNotExists {
+                optionsObject["ignoreIfNotExists"] = ignoreIfNotExists
+            }
+            object["options"] = optionsObject
         }
         return object
     }

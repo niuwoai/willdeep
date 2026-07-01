@@ -605,6 +605,89 @@ extension WillDeepTests {
         #expect(codeState.isPreviewVisible == false)
     }
 
+    @MainActor
+    @Test("first-stage language outline trusts completed LSP results before regex fallback")
+    func testFirstStageOutlineTrustsCompletedLSPResultsBeforeRegexFallback() {
+        let fileURL = URL(fileURLWithPath: "/tmp/willdeep_outline.go")
+        let appState = AppState(openedFileURL: fileURL, fileContent: "package main\n")
+        let fallbackItem = EditorOutlineItem(title: "RegexFallback", kind: .function, line: 1, level: 0)
+
+        appState.editorLanguageServiceOutlineItems = []
+        appState.editorLanguageServiceOutlineStatus = .available(uri: fileURL.absoluteString)
+
+        var fallbackCalls = 0
+        let availableItems = appState.editorOutlineItems {
+            fallbackCalls += 1
+            return [fallbackItem]
+        }
+
+        #expect(appState.editorLanguageServiceOutlineIsAuthoritative)
+        #expect(availableItems.isEmpty)
+        #expect(fallbackCalls == 0)
+
+        appState.editorLanguageServiceOutlineStatus = .failed(uri: fileURL.absoluteString)
+        let failedItems = appState.editorOutlineItems {
+            fallbackCalls += 1
+            return [fallbackItem]
+        }
+
+        #expect(!appState.editorLanguageServiceOutlineIsAuthoritative)
+        #expect(failedItems == [fallbackItem])
+        #expect(fallbackCalls == 1)
+    }
+
+    @MainActor
+    @Test("first-stage folding trusts completed LSP ranges before local scope fallback")
+    func testFirstStageFoldingTrustsCompletedLSPRangesBeforeLocalFallback() {
+        let fileURL = URL(fileURLWithPath: "/tmp/willdeep_folding.go")
+        let appState = AppState(openedFileURL: fileURL, fileContent: "package main\n")
+        appState.editorLanguageServiceFoldingStatus = .available(uri: fileURL.absoluteString)
+
+        #expect(appState.editorLanguageServiceFoldingIsAuthoritative)
+
+        let textView = WillDeepTextView(frame: .zero)
+        textView.scopeGuideLanguage = .go
+        textView.string = """
+        package main
+
+        func main() {
+            if true {
+                println("ok")
+            }
+        }
+        """
+
+        #expect(!textView.foldableGuides().isEmpty)
+
+        textView.languageServiceFoldingIsAuthoritative = true
+        textView.languageServiceFoldingGuides = []
+        #expect(textView.foldableGuides().isEmpty)
+
+        let lspGuide = ScopeGuide(startLine: 3, endLine: 6, column: 0, depth: 0)
+        textView.languageServiceFoldingGuides = [lspGuide]
+        #expect(textView.foldableGuides() == [lspGuide])
+
+        appState.editorLanguageServiceFoldingStatus = .failed(uri: fileURL.absoluteString)
+        #expect(!appState.editorLanguageServiceFoldingIsAuthoritative)
+    }
+
+    @MainActor
+    @Test("first-stage workspace symbol search trusts completed LSP misses before outline filtering")
+    func testFirstStageWorkspaceSymbolSearchTrustsCompletedLSPMissesBeforeOutlineFiltering() {
+        let fileURL = URL(fileURLWithPath: "/tmp/willdeep_workspace_symbol.go")
+        let appState = AppState(openedFileURL: fileURL, fileContent: "package main\n")
+
+        appState.editorWorkspaceSymbolItems = []
+        appState.editorWorkspaceSymbolSearchStatus = .available(query: "MissingService")
+        #expect(appState.editorWorkspaceSymbolSearchIsAuthoritative(query: " MissingService "))
+
+        appState.editorWorkspaceSymbolSearchStatus = .failed(query: "MissingService")
+        #expect(!appState.editorWorkspaceSymbolSearchIsAuthoritative(query: "MissingService"))
+
+        appState.editorWorkspaceSymbolSearchStatus = .available(query: "OtherService")
+        #expect(!appState.editorWorkspaceSymbolSearchIsAuthoritative(query: "MissingService"))
+    }
+
     @Test("markdown preview parser extracts common blocks")
     func testMarkdownPreviewParserExtractsCommonBlocks() {
         let source = """

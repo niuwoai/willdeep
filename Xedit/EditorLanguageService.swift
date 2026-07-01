@@ -485,6 +485,13 @@ nonisolated struct EditorWorkspaceSymbolItem: Identifiable, Equatable, Sendable 
     }
 }
 
+nonisolated enum EditorWorkspaceSymbolSearchStatus: Equatable {
+    case unavailable
+    case loading(query: String)
+    case available(query: String)
+    case failed(query: String)
+}
+
 nonisolated struct EditorCallHierarchyResponse: Equatable, Sendable {
     let target: LSPCallHierarchyItem?
     let incoming: [LSPCallHierarchyIncomingCall]
@@ -913,6 +920,45 @@ nonisolated struct EditorWorkspaceEditFileChange: Equatable, Sendable {
     let edits: [LSPTextEdit]
 }
 
+nonisolated struct EditorWorkspaceEditResourceChange: Equatable, Sendable {
+    let operation: LSPWorkspaceResourceOperation
+    let fileURL: URL?
+    let oldFileURL: URL?
+    let newFileURL: URL?
+
+    init?(operation: LSPWorkspaceResourceOperation) {
+        switch operation.kind {
+        case .create, .delete:
+            guard let uri = operation.uri,
+                  let url = URL(string: uri),
+                  url.isFileURL else {
+                return nil
+            }
+            self.operation = operation
+            self.fileURL = url.standardizedFileURL
+            self.oldFileURL = nil
+            self.newFileURL = nil
+        case .rename:
+            guard let oldUri = operation.oldUri,
+                  let newUri = operation.newUri,
+                  let oldURL = URL(string: oldUri),
+                  let newURL = URL(string: newUri),
+                  oldURL.isFileURL,
+                  newURL.isFileURL else {
+                return nil
+            }
+            self.operation = operation
+            self.fileURL = nil
+            self.oldFileURL = oldURL.standardizedFileURL
+            self.newFileURL = newURL.standardizedFileURL
+        }
+    }
+
+    var affectedFileURLs: [URL] {
+        [fileURL, oldFileURL, newFileURL].compactMap(\.self)
+    }
+}
+
 nonisolated enum EditorWorkspaceEditApplier {
     static func fileChanges(from edit: LSPWorkspaceEdit) -> [EditorWorkspaceEditFileChange] {
         edit.textEditChanges
@@ -923,6 +969,10 @@ nonisolated enum EditorWorkspaceEditApplier {
             .sorted { lhs, rhs in
                 lhs.fileURL.path.localizedCaseInsensitiveCompare(rhs.fileURL.path) == .orderedAscending
             }
+    }
+
+    static func resourceChanges(from edit: LSPWorkspaceEdit) -> [EditorWorkspaceEditResourceChange] {
+        edit.resourceOperations.compactMap(EditorWorkspaceEditResourceChange.init(operation:))
     }
 
     static func apply(fileChange: EditorWorkspaceEditFileChange, to text: String) -> String? {
