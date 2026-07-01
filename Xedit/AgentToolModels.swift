@@ -182,11 +182,35 @@ struct AgentToolContext {
     }
 }
 
+nonisolated struct AgentSourceReference: Equatable, Sendable, Identifiable {
+    var id: String { url }
+    let title: String?
+    let url: String
+    let toolName: String
+
+    var host: String {
+        guard let url = URL(string: url), let host = url.host, !host.isEmpty else {
+            return self.url
+        }
+        return host
+    }
+}
+
 nonisolated struct AgentToolResult: Equatable, Sendable {
     /// Short one-liner for the UI status row.
     let summary: String
     /// Full payload returned to the model as the tool message content.
     let payload: String
+    /// Structured public references surfaced by research tools. The
+    /// model still receives `payload`; UI uses this compact list for
+    /// clickable source affordances after the turn.
+    let references: [AgentSourceReference]
+
+    init(summary: String, payload: String, references: [AgentSourceReference] = []) {
+        self.summary = summary
+        self.payload = payload
+        self.references = references
+    }
 }
 
 enum AgentToolError: LocalizedError {

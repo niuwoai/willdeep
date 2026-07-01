@@ -22,4 +22,16 @@ struct VoiceRuntimeResourcePolicyTests {
 
         UserDefaults.standard.removeObject(forKey: "willdeep.voice.preloadOnLaunch")
     }
+
+    @Test("voice transcript language preference can follow system or force Japanese")
+    func voiceTranscriptLanguagePreferenceResolvesLanguages() {
+        #expect(VoiceTranscriptLanguagePreference.systemTranscriptLanguage(preferredLanguages: ["ja-JP"]) == .ja)
+        #expect(VoiceTranscriptLanguagePreference.systemTranscriptLanguage(preferredLanguages: ["zh-Hans-CN"]) == .zh)
+        #expect(VoiceTranscriptLanguagePreference.systemTranscriptLanguage(preferredLanguages: ["en-US"]) == .en)
+        #expect(VoiceTranscriptLanguagePreference.systemTranscriptLanguage(preferredLanguages: ["ko-KR"]) == .ko)
+        #expect(VoiceTranscriptLanguagePreference.systemTranscriptLanguage(preferredLanguages: ["fr-FR"]) == .auto)
+
+        #expect(VoiceTranscriptLanguagePreference.ja.transcriptLanguage == .ja)
+        #expect(VoiceTranscriptLanguagePreference.auto.transcriptLanguage == .auto)
+    }
 }

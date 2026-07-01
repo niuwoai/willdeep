@@ -288,11 +288,12 @@ extension AppState {
     /// Mirrors the worktree-diff resolver so patch apply works in Agent
     /// mode even when the editor window has no folder open.
     func agentPatchWorkspaceRoot() -> URL? {
+        if let runtime = activeRuntime,
+           (runtime.workspaceRootPath?.isEmpty == false || runtime.workspaceLocation?.localPath != nil) {
+            return try? runtime.localWorkspaceURLForOptimisticUse()
+        }
         if let repoRoot = agentWorktreeChanges.repositoryRoot {
             return repoRoot.standardizedFileURL
-        }
-        if let path = activeRuntime?.workspaceRootPath, !path.isEmpty {
-            return URL(fileURLWithPath: path).standardizedFileURL
         }
         return rootDirectory?.standardizedFileURL
     }

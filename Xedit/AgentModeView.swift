@@ -32,6 +32,7 @@ struct AgentModeView: View {
     /// choice survives relaunch. The leftmost sessions sidebar stays
     /// fixed; only the chat ↔ side-panel boundary is draggable.
     @AppStorage("agentSidePanelWidth") private var sidePanelWidth: Double = 320
+    @State private var liveSidePanelWidth: Double?
     private let sidePanelWidthRange: ClosedRange<Double> = 240...760
 
     /// 收窄窗口时的列宽规约(rc 用户反馈:最左列被挤出窗体左缘 /
@@ -48,14 +49,22 @@ struct AgentModeView: View {
     /// 右面板打开时把它的宽度计进窗口下限,否则 `sidebar + panel` 早
     /// 就超过旧的固定 720 窗口宽。
     private var chatColumnComfortWidth: CGFloat { sidebarWidth * 1.4 }
+    private var currentSidePanelWidth: Double {
+        min(max(liveSidePanelWidth ?? sidePanelWidth, sidePanelWidthRange.lowerBound), sidePanelWidthRange.upperBound)
+    }
+
     private var contentMinWidth: CGFloat {
         (sessionsSidebarVisible ? sidebarWidth : 0)
             + chatColumnComfortWidth
+            // During drag, keep NSWindow.contentMinSize stable. Rewriting it
+            // every pixel competes with SwiftUI layout and is a visible source
+            // of side-panel shimmer; commit the new minimum when the drag ends.
             + (sidePanel != nil ? CGFloat(sidePanelWidth) : 0)
     }
 
     var body: some View {
         let skin = appState.editorSettings.interfaceSkin
+        let panelWidth = currentSidePanelWidth
         HStack(spacing: 0) {
             if sessionsSidebarVisible {
                 AgentSessionsSidebar()
@@ -97,16 +106,26 @@ struct AgentModeView: View {
                 // 可拖动的分隔条:拖它来调聊天主区 ↔ 侧栏的边界。
                 // 侧栏在右侧,所以向左拖(translation.width 变负)= 加宽侧栏。
                 AgentSidePanelResizeHandle(
-                    width: $sidePanelWidth,
-                    range: sidePanelWidthRange
+                    width: Binding(
+                        get: { currentSidePanelWidth },
+                        set: { liveSidePanelWidth = $0 }
+                    ),
+                    range: sidePanelWidthRange,
+                    onCommit: { committedWidth in
+                        liveSidePanelWidth = nil
+                        sidePanelWidth = committedWidth
+                    }
                 )
                 AgentSidePanelHost(
                     kind: $sidePanel,
                     selectedFile: $sidePanelFile,
-                    width: CGFloat(sidePanelWidth)
+                    width: CGFloat(panelWidth)
                 )
                     // 固定到用户选定的宽度,父 HStack 不靠压缩它来腾位置。
                     .fixedSize(horizontal: true, vertical: false)
+                    .transaction { transaction in
+                        transaction.disablesAnimations = true
+                    }
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
@@ -126,6 +145,9 @@ struct AgentModeView: View {
             handleTaskMonitorSnapshotChange(from: oldSnapshot, to: newSnapshot)
         }
         .onCompatibleChange(of: sidePanel) { oldPanel, newPanel in
+            if newPanel == nil {
+                liveSidePanelWidth = nil
+            }
             guard oldPanel == .backgroundTasks, newPanel == nil else { return }
             lastTaskMonitorSnapshot = currentTaskMonitorSnapshot
         }
@@ -228,6 +250,7 @@ private struct AgentWindowMinWidthSetter: NSViewRepresentable {
 private struct AgentSidePanelResizeHandle: View {
     @Binding var width: Double
     let range: ClosedRange<Double>
+    let onCommit: (Double) -> Void
 
     @State private var dragStartWidth: Double?
     @State private var isHovering = false
@@ -267,7 +290,11 @@ private struct AgentSidePanelResizeHandle: View {
                         txn.disablesAnimations = true
                         withTransaction(txn) { width = snapped }
                     }
-                    .onEnded { _ in dragStartWidth = nil }
+                    .onEnded { _ in
+                        let committedWidth = width
+                        dragStartWidth = nil
+                        onCommit(committedWidth)
+                    }
             )
     }
 }

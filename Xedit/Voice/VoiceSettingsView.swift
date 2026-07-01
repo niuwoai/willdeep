@@ -24,6 +24,8 @@ struct VoiceSettingsView: View {
                 actionRow
                 progressView
                 Divider().padding(.vertical, 4)
+                languageSection
+                Divider().padding(.vertical, 4)
                 overlaySection
                 Divider().padding(.vertical, 4)
                 lifecycleSection
@@ -215,6 +217,28 @@ struct VoiceSettingsView: View {
             Text(L10n.Settings.Voice.overlayDescription)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private var languageSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L10n.Settings.Voice.languageSection)
+                .font(.headline)
+
+            LabeledContent(L10n.Settings.Voice.languageLabel) {
+                Picker("", selection: $preferences.transcriptLanguagePreference) {
+                    ForEach(VoiceTranscriptLanguagePreference.allCases) { preference in
+                        Text(preference.displayName).tag(preference)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 240)
+            }
+
+            Text(L10n.Settings.Voice.languageDescription)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

@@ -39,6 +39,9 @@ struct EditorView: NSViewRepresentable {
     /// A one-shot line navigation request from the inspector/minimap.
     var navigationRequest: EditorNavigationRequest?
 
+    /// A one-shot exact cursor placement request after programmatic editor edits.
+    var textSelectionRequest: EditorTextSelectionRequest?
+
     /// Lines whose current content differs from the last saved content.
     var changedLineNumbers: Set<Int> = []
 
@@ -48,11 +51,29 @@ struct EditorView: NSViewRepresentable {
     /// The active find match, shown more prominently than the rest.
     var activeSearchRange: NSRange?
 
+    /// Language-server diagnostics rendered as editor underlines.
+    var diagnosticIssues: [EditorDiagnosticIssue] = []
+
+    /// Language-server document highlights for the symbol under the caret.
+    var documentHighlightSpans: [EditorDocumentHighlightSpan] = []
+
+    /// Language-server semantic tokens rendered over regex fallback colors.
+    var semanticTokenSpans: [EditorSemanticTokenSpan] = []
+
+    /// Language-server inlay hints rendered as virtual overlay text.
+    var inlayHintSpans: [EditorInlayHintSpan] = []
+
+    /// Language-server document links rendered as clickable semantic links.
+    var documentLinkSpans: [EditorDocumentLinkSpan] = []
+
+    /// Language-server folding ranges rendered in the gutter when available.
+    var languageServiceFoldingGuides: [ScopeGuide] = []
+
     /// Called whenever the user makes a text change (not during programmatic updates).
     var onEdit: (() -> Void)?
 
     /// Called when the caret or selection moves so the status bar can stay current.
-    var onSelectionChange: ((Int, Int, Int, Int, String) -> Void)?
+    var onSelectionChange: ((Int, Int, Int, Int, String, Int) -> Void)?
 
     /// Called when the user picks a syntax highlighting mode from the editor menu.
     var onSyntaxHighlightingChange: ((SyntaxHighlightingSelection) -> Void)?
@@ -67,7 +88,49 @@ struct EditorView: NSViewRepresentable {
 
     /// Called when the user asks to jump to the project-local definition of a
     /// symbol under the cursor.
-    var onGoToDefinition: ((String) -> Void)?
+    var onGoToDefinition: ((EditorDefinitionRequest) -> Void)?
+
+    /// Called when the user asks to jump to the language-server declaration.
+    var onGoToDeclaration: ((EditorDeclarationRequest) -> Void)?
+
+    /// Called when the user asks to jump to the language-server type definition.
+    var onGoToTypeDefinition: ((EditorTypeDefinitionRequest) -> Void)?
+
+    /// Called when the user asks to jump to the language-server implementation.
+    var onGoToImplementation: ((EditorImplementationRequest) -> Void)?
+
+    /// Called when the user asks for language-server references.
+    var onFindReferences: ((EditorReferenceRequest) -> Void)?
+
+    /// Called when the user asks for language-server call hierarchy.
+    var onShowCallHierarchy: ((EditorCallHierarchyRequest) -> Void)?
+
+    /// Called when the user asks the language server to rename a symbol.
+    var onRenameSymbol: ((EditorRenameRequest) -> Void)?
+
+    /// Called when the user asks the language server to format the document.
+    var onFormatDocument: (() -> Void)?
+
+    /// Called when the user asks the language server to format the current selection.
+    var onFormatSelection: ((EditorRangeFormattingRequest) -> Void)?
+
+    /// Called when the user asks for language-server hover information.
+    var onShowHoverInfo: ((EditorHoverRequest) -> Void)?
+
+    /// Called when the user asks for language-server completions.
+    var onShowCompletions: ((EditorCompletionRequest) -> Void)?
+
+    /// Called when the user asks for language-server signature help.
+    var onShowSignatureHelp: ((EditorSignatureHelpRequest) -> Void)?
+
+    /// Called when the user asks for language-server code actions.
+    var onShowCodeActions: ((EditorCodeActionRequest) -> Void)?
+
+    /// Called when the user asks the language server for a semantic selection expansion.
+    var onExpandSelection: ((EditorSelectionRangeRequest) -> Void)?
+
+    /// Called when the user command-clicks a language-server document link.
+    var onOpenDocumentLink: ((EditorDocumentLinkSpan) -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -104,6 +167,9 @@ struct EditorView: NSViewRepresentable {
         textView.syntaxHighlightingSelection = syntaxHighlightingSelection
         textView.detectedLanguage = detectedLanguage
         textView.scopeGuideLanguage = language
+        textView.inlayHintSpans = inlayHintSpans
+        textView.documentLinkSpans = documentLinkSpans
+        textView.languageServiceFoldingGuides = languageServiceFoldingGuides
         textView.onSyntaxHighlightingChange = { [weak coordinator = context.coordinator] selection in
             coordinator?.parent.onSyntaxHighlightingChange?(selection)
         }
@@ -113,8 +179,50 @@ struct EditorView: NSViewRepresentable {
         textView.onAskSelectionInAgentPanel = { [weak coordinator = context.coordinator] selection in
             coordinator?.parent.onAskSelectionInAgentPanel?(selection)
         }
-        textView.onGoToDefinition = { [weak coordinator = context.coordinator] symbol in
-            coordinator?.parent.onGoToDefinition?(symbol)
+        textView.onGoToDefinition = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onGoToDefinition?(request)
+        }
+        textView.onGoToDeclaration = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onGoToDeclaration?(request)
+        }
+        textView.onGoToTypeDefinition = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onGoToTypeDefinition?(request)
+        }
+        textView.onGoToImplementation = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onGoToImplementation?(request)
+        }
+        textView.onFindReferences = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onFindReferences?(request)
+        }
+        textView.onShowCallHierarchy = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onShowCallHierarchy?(request)
+        }
+        textView.onRenameSymbol = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onRenameSymbol?(request)
+        }
+        textView.onFormatDocument = { [weak coordinator = context.coordinator] in
+            coordinator?.parent.onFormatDocument?()
+        }
+        textView.onFormatSelection = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onFormatSelection?(request)
+        }
+        textView.onShowHoverInfo = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onShowHoverInfo?(request)
+        }
+        textView.onShowCompletions = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onShowCompletions?(request)
+        }
+        textView.onShowSignatureHelp = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onShowSignatureHelp?(request)
+        }
+        textView.onShowCodeActions = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onShowCodeActions?(request)
+        }
+        textView.onExpandSelection = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onExpandSelection?(request)
+        }
+        textView.onOpenDocumentLink = { [weak coordinator = context.coordinator] link in
+            coordinator?.parent.onOpenDocumentLink?(link)
         }
 
         let ruler = LineNumberRulerView(scrollView: scrollView, textView: textView)
@@ -143,19 +251,45 @@ struct EditorView: NSViewRepresentable {
         let renderRevisionChanged = context.coordinator.currentRenderRevision != renderRevision
         let highlightRevisionChanged = context.coordinator.currentHighlightRevision != highlightRevision
         let navigationChanged = context.coordinator.currentNavigationRequest != navigationRequest
+        let textSelectionChanged = context.coordinator.currentTextSelectionRequest != textSelectionRequest
         let searchChanged = context.coordinator.currentSearchRanges != searchRanges
             || context.coordinator.currentActiveSearchRange != activeSearchRange
+        let diagnosticsChanged = context.coordinator.currentDiagnosticIssues != diagnosticIssues
+        let documentHighlightsChanged = context.coordinator.currentDocumentHighlightSpans != documentHighlightSpans
+        let semanticTokensChanged = context.coordinator.currentSemanticTokenSpans != semanticTokenSpans
+        let inlayHintsChanged = context.coordinator.currentInlayHintSpans != inlayHintSpans
+        let documentLinksChanged = context.coordinator.currentDocumentLinkSpans != documentLinkSpans
+        let languageServiceFoldingChanged = context.coordinator.currentLanguageServiceFoldingGuides != languageServiceFoldingGuides
         context.coordinator.currentLanguage = language
         context.coordinator.currentSettings = settings
         context.coordinator.currentRenderRevision = renderRevision
         context.coordinator.currentHighlightRevision = highlightRevision
         context.coordinator.currentNavigationRequest = navigationRequest
+        context.coordinator.currentTextSelectionRequest = textSelectionRequest
         context.coordinator.currentSearchRanges = searchRanges
         context.coordinator.currentActiveSearchRange = activeSearchRange
+        context.coordinator.currentDiagnosticIssues = diagnosticIssues
+        context.coordinator.currentDocumentHighlightSpans = documentHighlightSpans
+        context.coordinator.currentSemanticTokenSpans = semanticTokenSpans
+        context.coordinator.currentInlayHintSpans = inlayHintSpans
+        context.coordinator.currentDocumentLinkSpans = documentLinkSpans
+        context.coordinator.currentLanguageServiceFoldingGuides = languageServiceFoldingGuides
         textView.layoutManager?.delegate = context.coordinator
         textView.syntaxHighlightingSelection = syntaxHighlightingSelection
         textView.detectedLanguage = detectedLanguage
         textView.scopeGuideLanguage = language
+        if inlayHintsChanged {
+            textView.inlayHintSpans = inlayHintSpans
+            textView.needsDisplay = true
+        }
+        if documentLinksChanged {
+            textView.documentLinkSpans = documentLinkSpans
+        }
+        if languageServiceFoldingChanged {
+            textView.languageServiceFoldingGuides = languageServiceFoldingGuides
+            textView.clearFoldedScopes()
+            nsView.verticalRulerView?.needsDisplay = true
+        }
         textView.onSyntaxHighlightingChange = { [weak coordinator = context.coordinator] selection in
             coordinator?.parent.onSyntaxHighlightingChange?(selection)
         }
@@ -165,8 +299,50 @@ struct EditorView: NSViewRepresentable {
         textView.onAskSelectionInAgentPanel = { [weak coordinator = context.coordinator] selection in
             coordinator?.parent.onAskSelectionInAgentPanel?(selection)
         }
-        textView.onGoToDefinition = { [weak coordinator = context.coordinator] symbol in
-            coordinator?.parent.onGoToDefinition?(symbol)
+        textView.onGoToDefinition = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onGoToDefinition?(request)
+        }
+        textView.onGoToDeclaration = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onGoToDeclaration?(request)
+        }
+        textView.onGoToTypeDefinition = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onGoToTypeDefinition?(request)
+        }
+        textView.onGoToImplementation = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onGoToImplementation?(request)
+        }
+        textView.onFindReferences = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onFindReferences?(request)
+        }
+        textView.onShowCallHierarchy = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onShowCallHierarchy?(request)
+        }
+        textView.onRenameSymbol = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onRenameSymbol?(request)
+        }
+        textView.onFormatDocument = { [weak coordinator = context.coordinator] in
+            coordinator?.parent.onFormatDocument?()
+        }
+        textView.onFormatSelection = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onFormatSelection?(request)
+        }
+        textView.onShowHoverInfo = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onShowHoverInfo?(request)
+        }
+        textView.onShowCompletions = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onShowCompletions?(request)
+        }
+        textView.onShowSignatureHelp = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onShowSignatureHelp?(request)
+        }
+        textView.onShowCodeActions = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onShowCodeActions?(request)
+        }
+        textView.onExpandSelection = { [weak coordinator = context.coordinator] request in
+            coordinator?.parent.onExpandSelection?(request)
+        }
+        textView.onOpenDocumentLink = { [weak coordinator = context.coordinator] link in
+            coordinator?.parent.onOpenDocumentLink?(link)
         }
         // `applyAppearance` sets a dozen NSTextView properties (font, theme,
         // typingAttributes, paragraph style) and re-tiles the line-number ruler
@@ -188,13 +364,16 @@ struct EditorView: NSViewRepresentable {
         let tabSwitched = context.coordinator.beginTabTransitionIfNeeded(to: activeTabID, in: textView)
 
         // Detect programmatic text changes (file load, not user typing).
-        if textView.string != text || langChanged || settingsChanged || renderRevisionChanged || highlightRevisionChanged {
+        if textView.string != text || langChanged || settingsChanged || renderRevisionChanged || highlightRevisionChanged || semanticTokensChanged {
             textView.clearFoldedScopes()
             context.coordinator.suppressDirtyFlag = true
             context.coordinator.applyText(text, to: textView)
             context.coordinator.suppressDirtyFlag = false
         } else if searchChanged {
             context.coordinator.applySearchHighlights(to: textView)
+        }
+        if diagnosticsChanged || documentHighlightsChanged || documentLinksChanged || searchChanged || highlightRevisionChanged || renderRevisionChanged || settingsChanged || langChanged {
+            context.coordinator.applyDiagnosticHighlights(to: textView)
         }
 
         // Restore the incoming tab's cursor/scroll after its content is in place.
@@ -204,6 +383,9 @@ struct EditorView: NSViewRepresentable {
 
         if navigationChanged, let navigationRequest {
             context.coordinator.navigate(toLine: navigationRequest.line, in: textView)
+        }
+        if textSelectionChanged, let textSelectionRequest {
+            context.coordinator.select(range: textSelectionRequest.range, in: textView)
         }
     }
 
@@ -241,8 +423,15 @@ struct EditorView: NSViewRepresentable {
         var currentRenderRevision: Int
         var currentHighlightRevision: Int
         var currentNavigationRequest: EditorNavigationRequest?
+        var currentTextSelectionRequest: EditorTextSelectionRequest?
         var currentSearchRanges: [NSRange]
         var currentActiveSearchRange: NSRange?
+        var currentDiagnosticIssues: [EditorDiagnosticIssue]
+        var currentDocumentHighlightSpans: [EditorDocumentHighlightSpan]
+        var currentSemanticTokenSpans: [EditorSemanticTokenSpan]
+        var currentInlayHintSpans: [EditorInlayHintSpan]
+        var currentDocumentLinkSpans: [EditorDocumentLinkSpan]
+        var currentLanguageServiceFoldingGuides: [ScopeGuide]
 
         /// Debounced highlight work item.
         private var highlightWorkItem: DispatchWorkItem?
@@ -297,8 +486,15 @@ struct EditorView: NSViewRepresentable {
             self.currentRenderRevision = parent.renderRevision
             self.currentHighlightRevision = parent.highlightRevision
             self.currentNavigationRequest = parent.navigationRequest
+            self.currentTextSelectionRequest = parent.textSelectionRequest
             self.currentSearchRanges = parent.searchRanges
             self.currentActiveSearchRange = parent.activeSearchRange
+            self.currentDiagnosticIssues = parent.diagnosticIssues
+            self.currentDocumentHighlightSpans = parent.documentHighlightSpans
+            self.currentSemanticTokenSpans = parent.semanticTokenSpans
+            self.currentInlayHintSpans = parent.inlayHintSpans
+            self.currentDocumentLinkSpans = parent.documentLinkSpans
+            self.currentLanguageServiceFoldingGuides = parent.languageServiceFoldingGuides
         }
 
         func textDidChange(_ notification: Notification) {
@@ -454,7 +650,8 @@ struct EditorView: NSViewRepresentable {
                 newText,
                 language: lang,
                 theme: settings.theme,
-                font: settings.editorFont()
+                font: settings.editorFont(),
+                semanticTokenSpans: currentSemanticTokenSpans
             ) { [weak self, weak textView] highlighted in
                 guard let self = self, let textView = textView else { return }
                 guard self.highlightGeneration == generation else { return }
@@ -481,6 +678,7 @@ struct EditorView: NSViewRepresentable {
             let source = textView.string
             let theme = settings.theme
             let font = settings.editorFont()
+            let semanticTokenSpans = currentSemanticTokenSpans
             highlightGeneration += 1
             let generation = highlightGeneration
 
@@ -490,7 +688,8 @@ struct EditorView: NSViewRepresentable {
                     range: target,
                     language: language,
                     theme: theme,
-                    font: font
+                    font: font,
+                    semanticTokenSpans: semanticTokenSpans
                 )
                 DispatchQueue.main.async {
                     guard let self = self, let textView = textView else { return }
@@ -556,6 +755,7 @@ struct EditorView: NSViewRepresentable {
             }
             refreshVisibleTextLayout(for: textView)
             applySearchHighlights(to: textView, scrollToActiveMatch: false)
+            applyDiagnosticHighlights(to: textView)
             if let selected {
                 textView.selectedRanges = selected
             }
@@ -564,6 +764,106 @@ struct EditorView: NSViewRepresentable {
                 restoreTopVisibleAnchor(topAnchor, in: textView)
             }
             refreshEditorChrome(for: textView)
+        }
+
+        private var highlightedDiagnosticRanges: [NSRange] = []
+        private var highlightedDocumentHighlightRanges: [NSRange] = []
+        private var highlightedDocumentLinkRanges: [NSRange] = []
+
+        func applyDiagnosticHighlights(to textView: WillDeepTextView) {
+            guard let layoutManager = textView.layoutManager else { return }
+            let length = (textView.string as NSString).length
+
+            for range in highlightedDiagnosticRanges where NSMaxRange(range) <= length {
+                layoutManager.removeTemporaryAttribute(.underlineStyle, forCharacterRange: range)
+                layoutManager.removeTemporaryAttribute(.underlineColor, forCharacterRange: range)
+                layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: range)
+            }
+            for range in highlightedDocumentHighlightRanges where NSMaxRange(range) <= length {
+                layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: range)
+            }
+            for range in highlightedDocumentLinkRanges where NSMaxRange(range) <= length {
+                layoutManager.removeTemporaryAttribute(.underlineStyle, forCharacterRange: range)
+                layoutManager.removeTemporaryAttribute(.underlineColor, forCharacterRange: range)
+                layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: range)
+            }
+            highlightedDiagnosticRanges = []
+            highlightedDocumentHighlightRanges = []
+            highlightedDocumentLinkRanges = []
+
+            for span in currentDocumentHighlightSpans where NSMaxRange(span.range) <= length {
+                layoutManager.addTemporaryAttribute(
+                    .backgroundColor,
+                    value: documentHighlightColor(for: span.kind),
+                    forCharacterRange: span.range
+                )
+                highlightedDocumentHighlightRanges.append(span.range)
+            }
+
+            for link in currentDocumentLinkSpans where NSMaxRange(link.range) <= length {
+                layoutManager.addTemporaryAttribute(
+                    .underlineStyle,
+                    value: NSUnderlineStyle.single.rawValue,
+                    forCharacterRange: link.range
+                )
+                layoutManager.addTemporaryAttribute(
+                    .underlineColor,
+                    value: NSColor.linkColor,
+                    forCharacterRange: link.range
+                )
+                layoutManager.addTemporaryAttribute(
+                    .foregroundColor,
+                    value: NSColor.linkColor,
+                    forCharacterRange: link.range
+                )
+                highlightedDocumentLinkRanges.append(link.range)
+            }
+
+            for issue in currentDiagnosticIssues where NSMaxRange(issue.range) <= length {
+                let color = diagnosticColor(for: issue.severity)
+                layoutManager.addTemporaryAttribute(
+                    .underlineStyle,
+                    value: NSUnderlineStyle.single.rawValue,
+                    forCharacterRange: issue.range
+                )
+                layoutManager.addTemporaryAttribute(
+                    .underlineColor,
+                    value: color,
+                    forCharacterRange: issue.range
+                )
+                layoutManager.addTemporaryAttribute(
+                    .backgroundColor,
+                    value: color.withAlphaComponent(0.10),
+                    forCharacterRange: issue.range
+                )
+                highlightedDiagnosticRanges.append(issue.range)
+            }
+
+            refreshEditorChrome(for: textView)
+        }
+
+        private func documentHighlightColor(for kind: Int?) -> NSColor {
+            switch kind {
+            case 3:
+                return NSColor.systemOrange.withAlphaComponent(0.16)
+            case 2:
+                return NSColor.controlAccentColor.withAlphaComponent(0.14)
+            default:
+                return NSColor.selectedTextBackgroundColor.withAlphaComponent(0.32)
+            }
+        }
+
+        private func diagnosticColor(for severity: EditorDiagnosticIssue.Severity) -> NSColor {
+            switch severity {
+            case .error:
+                return .systemRed
+            case .warning:
+                return .systemOrange
+            case .information:
+                return .systemBlue
+            case .hint:
+                return .systemGray
+            }
         }
 
         private func refreshVisibleTextLayout(for textView: WillDeepTextView) {
@@ -794,6 +1094,19 @@ struct EditorView: NSViewRepresentable {
             }
         }
 
+        func select(range: NSRange, in textView: WillDeepTextView) {
+            let length = (textView.string as NSString).length
+            let safeLocation = min(max(0, range.location), length)
+            let safeEnd = min(max(safeLocation, NSMaxRange(range)), length)
+            let safeRange = NSRange(location: safeLocation, length: safeEnd - safeLocation)
+            textView.window?.makeFirstResponder(textView)
+            textView.setSelectedRange(safeRange)
+            textView.scrollRangeToVisible(safeRange)
+            publishCursorPosition(for: textView)
+            applyBracketHighlight(to: textView)
+            refreshEditorChrome(for: textView)
+        }
+
         static func rangeForLine(_ line: Int, in text: String) -> NSRange {
             guard line > 1, !text.isEmpty else {
                 return NSRange(location: 0, length: 0)
@@ -834,7 +1147,14 @@ struct EditorView: NSViewRepresentable {
                 in: content,
                 maxLength: Self.publishedSelectionTextLimit
             )
-            parent.onSelectionChange?(position.line, position.column, selectedRange.length, selectedLines, selectedText)
+            parent.onSelectionChange?(
+                position.line,
+                position.column,
+                selectedRange.length,
+                selectedLines,
+                selectedText,
+                selectedRange.location
+            )
         }
 
         /// The two single-character ranges currently carrying the bracket-match
@@ -1048,7 +1368,8 @@ struct EditorView: NSViewRepresentable {
                     latestText,
                     language: lang,
                     theme: settings.theme,
-                    font: settings.editorFont()
+                    font: settings.editorFont(),
+                    semanticTokenSpans: self.currentSemanticTokenSpans
                 ) { [weak self, weak textView] highlighted in
                     guard let self = self, let textView = textView else { return }
                     guard self.highlightGeneration == generation else { return }

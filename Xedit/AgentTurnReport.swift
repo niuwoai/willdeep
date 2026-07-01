@@ -38,10 +38,11 @@ struct AgentTurnReport: Identifiable, Equatable {
     var recallSnapshot: AgentTurnRecallSnapshot?
     var toolSummary: ToolSummary
     var tools: [AgentToolCall]
+    var sourceReferences: [AgentSourceReference]
     var learningEvents: [AgentLearningEvent]
 
     var hasUsefulContent: Bool {
-        assistantMessageCount > 0 || toolSummary.total > 0 || !learningEvents.isEmpty || recallSnapshot?.hasUsefulContent == true
+        assistantMessageCount > 0 || toolSummary.total > 0 || !sourceReferences.isEmpty || !learningEvents.isEmpty || recallSnapshot?.hasUsefulContent == true
     }
 }
 
@@ -75,6 +76,7 @@ extension AgentTurnReport {
             recallSnapshot: runtime.latestTurnRecall?.createdAt ?? .distantPast >= latestUser.createdAt ? runtime.latestTurnRecall : nil,
             toolSummary: summarizeTools(tools),
             tools: Array(tools.prefix(8)),
+            sourceReferences: summarizeSources(tools),
             learningEvents: Array(learningEvents.prefix(6))
         )
         return report.hasUsefulContent ? report : nil
@@ -132,6 +134,18 @@ extension AgentTurnReport {
             escalated: tools.filter { $0.approvalSource == .escalated }.count,
             sandboxModes: Array(Set(sandboxModes)).sorted()
         )
+    }
+
+    private static func summarizeSources(_ tools: [AgentToolCall]) -> [AgentSourceReference] {
+        var seen = Set<String>()
+        var result: [AgentSourceReference] = []
+        for reference in tools.flatMap({ $0.result?.references ?? [] }) {
+            let key = reference.url.lowercased()
+            guard !key.isEmpty, !seen.contains(key) else { continue }
+            seen.insert(key)
+            result.append(reference)
+        }
+        return Array(result.prefix(24))
     }
 }
 

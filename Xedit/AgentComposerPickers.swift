@@ -48,9 +48,15 @@ import SwiftUI
 ///      opens a menu with the same picker on top, plus three
 ///      affordances against the *current* folder: Show in Finder /
 ///      Copy path / Copy branch name.
+private struct WorkspaceMenuItem: Identifiable {
+    let id: String
+    let path: String
+    let displayName: String
+}
+
 struct WorkspacePickerPill: View {
     @EnvironmentObject var appState: AppState
-    @State private var knownWorkspaceCache: [URL] = []
+    @State private var knownWorkspaceCache: [WorkspaceMenuItem] = []
     @State private var remoteRuntimeCache: [RuntimeDescriptor] = []
 
     var body: some View {
@@ -119,6 +125,8 @@ struct WorkspacePickerPill: View {
 
     @ViewBuilder
     private var menuContent: some View {
+        let activeLocalPath = activeLocalWorkspacePath
+
         // Section 1 — the "current folder" affordances (only if one is set).
         if let root = activeLocalWorkspaceURL {
             Section(root.lastPathComponent) {
@@ -164,7 +172,7 @@ struct WorkspacePickerPill: View {
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
-                            if isActiveWorktree(worktree) {
+                            if activeLocalPath == worktree.url.path {
                                 Image(systemName: "checkmark")
                             }
                         }
@@ -196,13 +204,13 @@ struct WorkspacePickerPill: View {
         let knownRoots = knownWorkspaceCache
         if !knownRoots.isEmpty {
             Section(L10n.ComposerWorkspace.switchWorkspace) {
-                ForEach(knownRoots, id: \.self) { url in
+                ForEach(knownRoots) { url in
                     Button {
-                        appState.moveActiveAgentSessionToWorkspace(at: url.standardizedFileURL.path)
+                        appState.moveActiveAgentSessionToWorkspace(at: url.path)
                     } label: {
                         HStack {
-                            Text(url.lastPathComponent)
-                            if activeLocalWorkspaceURL?.standardizedFileURL == url.standardizedFileURL {
+                            Text(url.displayName)
+                            if activeLocalPath == url.path {
                                 Image(systemName: "checkmark")
                             }
                         }
@@ -254,20 +262,22 @@ struct WorkspacePickerPill: View {
     }
 
     private var activeLocalWorkspaceURL: URL? {
+        guard let path = activeLocalWorkspacePath else { return nil }
+        return URL(fileURLWithPath: path)
+    }
+
+    private var activeLocalWorkspacePath: String? {
         guard let path = appState.activeRuntime?.workspaceLocation?.localPath, !path.isEmpty else {
             return nil
         }
-        return URL(fileURLWithPath: path).standardizedFileURL
+        return URL(fileURLWithPath: path).standardizedFileURL.path
     }
 
     private var activeRemovableWorktree: AgentGitWorktree? {
-        appState.agentGitWorktrees.first { worktree in
-            isActiveWorktree(worktree) && !worktree.isPrimary && !worktree.isBare
+        guard let activeLocalWorkspacePath else { return nil }
+        return appState.agentGitWorktrees.first { worktree in
+            activeLocalWorkspacePath == worktree.url.path && !worktree.isPrimary && !worktree.isBare
         }
-    }
-
-    private func isActiveWorktree(_ worktree: AgentGitWorktree) -> Bool {
-        activeLocalWorkspaceURL?.path == worktree.url.path
     }
 
     private var activeRemoteWorkspaceLabel: String? {
@@ -306,25 +316,35 @@ struct WorkspacePickerPill: View {
 
     /// Union of (a) folder paths that appear as workspaceRootPath on
     /// any agent session, and (b) recentFolders. Both deduped to a
-    /// canonical URL; sorted by lastPathComponent for menu stability.
-    private func sortedKnownWorkspaces() -> [URL] {
+    /// canonical path; sorted by display name for menu stability.
+    private func sortedKnownWorkspaces() -> [WorkspaceMenuItem] {
         var seen = Set<String>()
-        var result: [URL] = []
+        var result: [WorkspaceMenuItem] = []
 
-        let sessionRoots: [URL] = appState.agentSessions
-            .compactMap { session -> URL? in
+        let sessionRoots: [String] = appState.agentSessions
+            .compactMap { session -> String? in
                 guard let path = session.workspaceRootPath, !path.isEmpty else { return nil }
-                return URL(fileURLWithPath: path).standardizedFileURL
+                return URL(fileURLWithPath: path).standardizedFileURL.path
             }
 
-        for url in sessionRoots + appState.recentFolders.map(\.standardizedFileURL) {
-            let key = url.path
+        let recentRoots = appState.recentFolders.map { $0.standardizedFileURL.path }
+        for path in sessionRoots + recentRoots {
+            let key = path
             if seen.insert(key).inserted {
-                result.append(url)
+                result.append(workspaceMenuItem(for: key))
             }
         }
 
-        return result.sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
+        return result.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    private func workspaceMenuItem(for path: String) -> WorkspaceMenuItem {
+        let name = URL(fileURLWithPath: path).lastPathComponent
+        return WorkspaceMenuItem(
+            id: path,
+            path: path,
+            displayName: name.isEmpty ? path : name
+        )
     }
 }
 

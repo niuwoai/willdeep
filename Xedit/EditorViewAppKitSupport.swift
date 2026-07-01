@@ -50,12 +50,39 @@ final class WillDeepTextView: NSTextView {
     var foldedPlaceholderBackgroundColor: NSColor = NSColor.secondaryLabelColor.withAlphaComponent(0.12)
     var showsCurrentLineHighlight = true
     var scopeGuideLanguage: Language?
+    var inlayHintSpans: [EditorInlayHintSpan] = [] {
+        didSet {
+            guard oldValue != inlayHintSpans else { return }
+            needsDisplay = true
+        }
+    }
+    var documentLinkSpans: [EditorDocumentLinkSpan] = []
+    var languageServiceFoldingGuides: [ScopeGuide] = [] {
+        didSet {
+            guard oldValue != languageServiceFoldingGuides else { return }
+            invalidateFoldableGuidesCache()
+        }
+    }
     var syntaxHighlightingSelection: SyntaxHighlightingSelection = .automatic
     var detectedLanguage: Language?
     var onSyntaxHighlightingChange: ((SyntaxHighlightingSelection) -> Void)?
     var onAddSelectionToAgentConversation: ((AgentEditorSelectionContext) -> Void)?
     var onAskSelectionInAgentPanel: ((AgentEditorSelectionContext) -> Void)?
-    var onGoToDefinition: ((String) -> Void)?
+    var onGoToDefinition: ((EditorDefinitionRequest) -> Void)?
+    var onGoToDeclaration: ((EditorDeclarationRequest) -> Void)?
+    var onGoToTypeDefinition: ((EditorTypeDefinitionRequest) -> Void)?
+    var onGoToImplementation: ((EditorImplementationRequest) -> Void)?
+    var onFindReferences: ((EditorReferenceRequest) -> Void)?
+    var onShowCallHierarchy: ((EditorCallHierarchyRequest) -> Void)?
+    var onRenameSymbol: ((EditorRenameRequest) -> Void)?
+    var onFormatDocument: (() -> Void)?
+    var onFormatSelection: ((EditorRangeFormattingRequest) -> Void)?
+    var onShowHoverInfo: ((EditorHoverRequest) -> Void)?
+    var onShowCompletions: ((EditorCompletionRequest) -> Void)?
+    var onShowSignatureHelp: ((EditorSignatureHelpRequest) -> Void)?
+    var onShowCodeActions: ((EditorCodeActionRequest) -> Void)?
+    var onExpandSelection: ((EditorSelectionRangeRequest) -> Void)?
+    var onOpenDocumentLink: ((EditorDocumentLinkSpan) -> Void)?
     private var foldedGuides: Set<ScopeGuide> = []
     private var lastCurrentLineHighlightRect: NSRect?
 
@@ -70,10 +97,10 @@ final class WillDeepTextView: NSTextView {
     /// above the fold is never touched.
     private var lastFoldInvalidationStart = 0
 
-    /// Cached result of `foldableGuides()`. Computing it re-parses the entire
-    /// document via `ScopeGuideCalculator`, and the line-number ruler asks for it
-    /// on every redraw (i.e. every scroll/edit), so we memoize until the text or
-    /// language changes.
+    /// Cached result of `foldableGuides()`. Fallback guide computation re-parses
+    /// the entire document via `ScopeGuideCalculator`, and the line-number ruler
+    /// asks for it on every redraw, so we memoize until the text, language, or
+    /// language-server folding ranges change.
     private var cachedFoldableGuides: [ScopeGuide]?
     private var cachedFoldableGuidesLanguage: Language?
 
@@ -84,13 +111,111 @@ final class WillDeepTextView: NSTextView {
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = super.menu(for: event) ?? NSMenu()
-        if let symbol = definitionSymbol(at: event) {
+        if let request = codeActionRequest(at: event) {
             if menu.items.isEmpty == false {
                 menu.addItem(.separator())
             }
-            let item = NSMenuItem(title: "Go to Definition", action: #selector(goToDefinition(_:)), keyEquivalent: "")
+            let item = NSMenuItem(title: L10n.EditorContextMenu.showCodeActions, action: #selector(showCodeActions(_:)), keyEquivalent: "")
             item.target = self
-            item.representedObject = symbol
+            item.representedObject = request
+            menu.addItem(item)
+        }
+        if let request = hoverRequest(at: event) {
+            if menu.items.isEmpty == false {
+                menu.addItem(.separator())
+            }
+            let item = NSMenuItem(title: L10n.EditorContextMenu.showHoverInfo, action: #selector(showHoverInfo(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = request
+            menu.addItem(item)
+        }
+        if let request = completionRequest(at: event) {
+            if menu.items.isEmpty == false {
+                menu.addItem(.separator())
+            }
+            let item = NSMenuItem(title: L10n.EditorContextMenu.showCompletions, action: #selector(showCompletions(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = request
+            menu.addItem(item)
+        }
+        if let request = signatureHelpRequest(at: event) {
+            if menu.items.isEmpty == false {
+                menu.addItem(.separator())
+            }
+            let item = NSMenuItem(title: L10n.EditorContextMenu.showSignatureHelp, action: #selector(showSignatureHelp(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = request
+            menu.addItem(item)
+        }
+        if let request = definitionRequest(at: event) {
+            if menu.items.isEmpty == false {
+                menu.addItem(.separator())
+            }
+            let item = NSMenuItem(title: L10n.EditorContextMenu.goToDefinition, action: #selector(goToDefinition(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = request
+            menu.addItem(item)
+        }
+        if let request = declarationRequest(at: event) {
+            let item = NSMenuItem(title: L10n.EditorContextMenu.goToDeclaration, action: #selector(goToDeclaration(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = request
+            menu.addItem(item)
+        }
+        if let request = typeDefinitionRequest(at: event) {
+            let item = NSMenuItem(title: L10n.EditorContextMenu.goToTypeDefinition, action: #selector(goToTypeDefinition(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = request
+            menu.addItem(item)
+        }
+        if let request = implementationRequest(at: event) {
+            let item = NSMenuItem(title: L10n.EditorContextMenu.goToImplementation, action: #selector(goToImplementation(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = request
+            menu.addItem(item)
+        }
+        if let request = referenceRequest(at: event) {
+            if menu.items.isEmpty == false {
+                menu.addItem(.separator())
+            }
+            let item = NSMenuItem(title: L10n.EditorContextMenu.findReferences, action: #selector(findReferences(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = request
+            menu.addItem(item)
+        }
+        if let request = callHierarchyRequest(at: event) {
+            let item = NSMenuItem(title: L10n.EditorContextMenu.showCallHierarchy, action: #selector(showCallHierarchy(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = request
+            menu.addItem(item)
+        }
+        if let request = renameRequest(at: event) {
+            if menu.items.isEmpty == false {
+                menu.addItem(.separator())
+            }
+            let item = NSMenuItem(title: L10n.EditorContextMenu.renameSymbol, action: #selector(renameSymbol(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = request
+            menu.addItem(item)
+        }
+        if supportsLanguageServerFormatting {
+            if menu.items.isEmpty == false {
+                menu.addItem(.separator())
+            }
+            if let request = rangeFormattingRequest() {
+                let formatSelectionItem = NSMenuItem(title: L10n.EditorContextMenu.formatSelection, action: #selector(formatSelection(_:)), keyEquivalent: "")
+                formatSelectionItem.target = self
+                formatSelectionItem.representedObject = request
+                menu.addItem(formatSelectionItem)
+            }
+            if let request = selectionRangeRequest(at: event) {
+                let selectionItem = NSMenuItem(title: L10n.EditorContextMenu.expandSelection, action: #selector(expandSelection(_:)), keyEquivalent: "")
+                selectionItem.target = self
+                selectionItem.representedObject = request
+                menu.addItem(selectionItem)
+            }
+            let item = NSMenuItem(title: L10n.EditorContextMenu.formatDocument, action: #selector(formatDocument(_:)), keyEquivalent: "")
+            item.target = self
             menu.addItem(item)
         }
         if currentAgentSelectionContext() != nil {
@@ -114,10 +239,15 @@ final class WillDeepTextView: NSTextView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        if event.modifierFlags.contains(.command),
-           let symbol = definitionSymbol(at: event) {
-            onGoToDefinition?(symbol)
-            return
+        if event.modifierFlags.contains(.command) {
+            if let link = documentLink(at: event) {
+                onOpenDocumentLink?(link)
+                return
+            }
+            if let request = definitionRequest(at: event) {
+                onGoToDefinition?(request)
+                return
+            }
         }
         super.mouseDown(with: event)
     }
@@ -166,17 +296,211 @@ final class WillDeepTextView: NSTextView {
     }
 
     @objc private func goToDefinition(_ sender: NSMenuItem) {
-        guard let symbol = sender.representedObject as? String else { return }
-        onGoToDefinition?(symbol)
+        guard let request = sender.representedObject as? EditorDefinitionRequest else { return }
+        onGoToDefinition?(request)
     }
 
-    private func definitionSymbol(at event: NSEvent) -> String? {
+    @objc private func goToDeclaration(_ sender: NSMenuItem) {
+        guard let request = sender.representedObject as? EditorDeclarationRequest else { return }
+        onGoToDeclaration?(request)
+    }
+
+    @objc private func goToTypeDefinition(_ sender: NSMenuItem) {
+        guard let request = sender.representedObject as? EditorTypeDefinitionRequest else { return }
+        onGoToTypeDefinition?(request)
+    }
+
+    @objc private func goToImplementation(_ sender: NSMenuItem) {
+        guard let request = sender.representedObject as? EditorImplementationRequest else { return }
+        onGoToImplementation?(request)
+    }
+
+    @objc private func findReferences(_ sender: NSMenuItem) {
+        guard let request = sender.representedObject as? EditorReferenceRequest else { return }
+        onFindReferences?(request)
+    }
+
+    @objc private func showCallHierarchy(_ sender: NSMenuItem) {
+        guard let request = sender.representedObject as? EditorCallHierarchyRequest else { return }
+        onShowCallHierarchy?(request)
+    }
+
+    @objc private func renameSymbol(_ sender: NSMenuItem) {
+        guard let request = sender.representedObject as? EditorRenameRequest else { return }
+        onRenameSymbol?(request)
+    }
+
+    @objc private func formatDocument(_ sender: NSMenuItem) {
+        onFormatDocument?()
+    }
+
+    @objc private func formatSelection(_ sender: NSMenuItem) {
+        guard let request = sender.representedObject as? EditorRangeFormattingRequest else { return }
+        onFormatSelection?(request)
+    }
+
+    @objc private func showHoverInfo(_ sender: NSMenuItem) {
+        guard let request = sender.representedObject as? EditorHoverRequest else { return }
+        onShowHoverInfo?(request)
+    }
+
+    @objc private func showCompletions(_ sender: NSMenuItem) {
+        guard let request = sender.representedObject as? EditorCompletionRequest else { return }
+        onShowCompletions?(request)
+    }
+
+    @objc private func showSignatureHelp(_ sender: NSMenuItem) {
+        guard let request = sender.representedObject as? EditorSignatureHelpRequest else { return }
+        onShowSignatureHelp?(request)
+    }
+
+    @objc private func showCodeActions(_ sender: NSMenuItem) {
+        guard let request = sender.representedObject as? EditorCodeActionRequest else { return }
+        onShowCodeActions?(request)
+    }
+
+    @objc private func expandSelection(_ sender: NSMenuItem) {
+        guard let request = sender.representedObject as? EditorSelectionRangeRequest else { return }
+        onExpandSelection?(request)
+    }
+
+    private func definitionRequest(at event: NSEvent) -> EditorDefinitionRequest? {
+        guard let request = symbolRequest(at: event) else { return nil }
+        return EditorDefinitionRequest(symbol: request.symbol, characterOffset: request.characterOffset)
+    }
+
+    private func declarationRequest(at event: NSEvent) -> EditorDeclarationRequest? {
+        guard supportsLanguageServerFormatting,
+              let request = symbolRequest(at: event) else { return nil }
+        return EditorDeclarationRequest(symbol: request.symbol, characterOffset: request.characterOffset)
+    }
+
+    private func typeDefinitionRequest(at event: NSEvent) -> EditorTypeDefinitionRequest? {
+        guard supportsLanguageServerFormatting,
+              let request = symbolRequest(at: event) else { return nil }
+        return EditorTypeDefinitionRequest(symbol: request.symbol, characterOffset: request.characterOffset)
+    }
+
+    private func implementationRequest(at event: NSEvent) -> EditorImplementationRequest? {
+        guard supportsLanguageServerFormatting,
+              let request = symbolRequest(at: event) else { return nil }
+        return EditorImplementationRequest(symbol: request.symbol, characterOffset: request.characterOffset)
+    }
+
+    private func referenceRequest(at event: NSEvent) -> EditorReferenceRequest? {
+        guard let request = symbolRequest(at: event) else { return nil }
+        return EditorReferenceRequest(symbol: request.symbol, characterOffset: request.characterOffset)
+    }
+
+    private func callHierarchyRequest(at event: NSEvent) -> EditorCallHierarchyRequest? {
+        guard supportsLanguageServerFormatting,
+              let request = symbolRequest(at: event) else { return nil }
+        return EditorCallHierarchyRequest(symbol: request.symbol, characterOffset: request.characterOffset)
+    }
+
+    private func renameRequest(at event: NSEvent) -> EditorRenameRequest? {
+        guard supportsLanguageServerFormatting,
+              let request = symbolRequest(at: event) else { return nil }
+        return EditorRenameRequest(symbol: request.symbol, characterOffset: request.characterOffset)
+    }
+
+    private func hoverRequest(at event: NSEvent) -> EditorHoverRequest? {
+        guard let request = symbolRequest(at: event) else { return nil }
+        return EditorHoverRequest(symbol: request.symbol, characterOffset: request.characterOffset)
+    }
+
+    private func completionRequest(at event: NSEvent) -> EditorCompletionRequest? {
+        if selectedRange().length > 0 {
+            let selected = selectedRange()
+            let nsText = string as NSString
+            guard NSMaxRange(selected) <= nsText.length else { return nil }
+            let prefix = nsText.substring(with: selected)
+            return EditorCompletionRequest(
+                characterOffset: selected.location,
+                replacementRange: selected,
+                prefix: prefix
+            )
+        }
+
+        let pointInView = convert(event.locationInWindow, from: nil)
+        let index = characterIndex(at: pointInView) ?? selectedRange().location
+        let prefixRange = completionPrefixRange(endingAt: index)
+        let prefix = (string as NSString).substring(with: prefixRange)
+        return EditorCompletionRequest(
+            characterOffset: index,
+            replacementRange: prefixRange,
+            prefix: prefix
+        )
+    }
+
+    private func signatureHelpRequest(at event: NSEvent) -> EditorSignatureHelpRequest? {
+        let pointInView = convert(event.locationInWindow, from: nil)
+        let index = characterIndex(at: pointInView) ?? selectedRange().location
+        return EditorSignatureHelpRequest(characterOffset: index)
+    }
+
+    private func selectionRangeRequest(at event: NSEvent) -> EditorSelectionRangeRequest? {
+        let nsText = string as NSString
+        guard nsText.length > 0 else { return nil }
+        let selected = selectedRange()
+        if selected.length > 0, selected.location >= 0, NSMaxRange(selected) <= nsText.length {
+            return EditorSelectionRangeRequest(characterOffset: selected.location, currentRange: selected)
+        }
+
+        let pointInView = convert(event.locationInWindow, from: nil)
+        let index = characterIndex(at: pointInView) ?? selectedRange().location
+        let bounded = min(max(0, index), nsText.length)
+        return EditorSelectionRangeRequest(
+            characterOffset: bounded,
+            currentRange: NSRange(location: bounded, length: 0)
+        )
+    }
+
+    private func rangeFormattingRequest() -> EditorRangeFormattingRequest? {
+        let nsText = string as NSString
+        let selected = selectedRange()
+        guard selected.length > 0,
+              selected.location >= 0,
+              NSMaxRange(selected) <= nsText.length else {
+            return nil
+        }
+        return EditorRangeFormattingRequest(range: selected)
+    }
+
+    private func codeActionRequest(at event: NSEvent) -> EditorCodeActionRequest? {
+        guard supportsLanguageServerFormatting else { return nil }
+        let nsText = string as NSString
+        if selectedRange().length > 0 {
+            let selected = selectedRange()
+            guard selected.location >= 0, NSMaxRange(selected) <= nsText.length else { return nil }
+            return EditorCodeActionRequest(characterOffset: selected.location, range: selected)
+        }
+
+        let pointInView = convert(event.locationInWindow, from: nil)
+        let index = characterIndex(at: pointInView) ?? selectedRange().location
+        let bounded = min(max(0, index), nsText.length)
+        return EditorCodeActionRequest(characterOffset: bounded, range: NSRange(location: bounded, length: 0))
+    }
+
+    private func documentLink(at event: NSEvent) -> EditorDocumentLinkSpan? {
+        guard !documentLinkSpans.isEmpty else { return nil }
+        let pointInView = convert(event.locationInWindow, from: nil)
+        guard let index = characterIndex(at: pointInView) else { return nil }
+        return documentLinkSpans.first { NSLocationInRange(index, $0.range) }
+    }
+
+    private var supportsLanguageServerFormatting: Bool {
+        EditorLanguageServiceRegistry.isFirstStageIDELanguage(detectedLanguage ?? scopeGuideLanguage)
+    }
+
+    private func symbolRequest(at event: NSEvent) -> (symbol: String, characterOffset: Int)? {
         if let selected = selectedSymbol(), !selected.isEmpty {
-            return selected
+            return (selected, selectedRange().location)
         }
         let pointInView = convert(event.locationInWindow, from: nil)
         guard let index = characterIndex(at: pointInView) else { return nil }
-        return symbol(at: index)
+        guard let symbol = symbol(at: index) else { return nil }
+        return (symbol, index)
     }
 
     private func selectedSymbol() -> String? {
@@ -219,6 +543,18 @@ final class WillDeepTextView: NSTextView {
         let raw = nsText.substring(with: NSRange(location: start, length: end - start + 1))
         let trimmed = raw.trimmingCharacters(in: CharacterSet(charactersIn: ".-$"))
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func completionPrefixRange(endingAt index: Int) -> NSRange {
+        let nsText = string as NSString
+        guard nsText.length > 0 else { return NSRange(location: 0, length: 0) }
+        let scalars = string.utf16.map { unichar($0) }
+        let safeEnd = min(max(0, index), scalars.count)
+        var start = safeEnd
+        while start > 0, Self.isSymbolCharacter(scalars[start - 1]) {
+            start -= 1
+        }
+        return NSRange(location: start, length: safeEnd - start)
     }
 
     private static func isSymbolCharacter(_ character: unichar) -> Bool {
@@ -358,6 +694,7 @@ final class WillDeepTextView: NSTextView {
         }
 
         drawFoldedPlaceholders(in: rect)
+        drawInlayHints(in: rect)
     }
 
     func invalidateCurrentLineHighlight() {
@@ -443,7 +780,10 @@ final class WillDeepTextView: NSTextView {
         if let cachedFoldableGuides, cachedFoldableGuidesLanguage == scopeGuideLanguage {
             return cachedFoldableGuides
         }
-        let guides = ScopeGuideCalculator.guides(in: string, language: scopeGuideLanguage)
+        let sourceGuides = languageServiceFoldingGuides.isEmpty
+            ? ScopeGuideCalculator.guides(in: string, language: scopeGuideLanguage)
+            : languageServiceFoldingGuides
+        let guides = sourceGuides
             .filter { $0.endLine - $0.startLine >= 2 }
         cachedFoldableGuides = guides
         cachedFoldableGuidesLanguage = scopeGuideLanguage
@@ -562,6 +902,71 @@ final class WillDeepTextView: NSTextView {
             backgroundRect.fill()
             placeholder.draw(at: NSPoint(x: x, y: y + 2), withAttributes: attributes)
         }
+    }
+
+    private func drawInlayHints(in rect: NSRect) {
+        guard let layoutManager,
+              let textContainer,
+              let font,
+              !inlayHintSpans.isEmpty,
+              !string.isEmpty else {
+            return
+        }
+
+        let nsText = string as NSString
+        let hintFont = NSFont.monospacedSystemFont(ofSize: max(9, font.pointSize - 3), weight: .regular)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: hintFont,
+            .foregroundColor: foldedPlaceholderColor.withAlphaComponent(0.78),
+        ]
+        let backgroundColor = foldedPlaceholderBackgroundColor.withAlphaComponent(0.78)
+
+        for hint in inlayHintSpans {
+            guard hint.location >= 0, hint.location <= nsText.length else { continue }
+            let point = inlayHintPoint(for: hint.location, layoutManager: layoutManager, textContainer: textContainer)
+            guard point.y <= rect.maxY, point.y + hintFont.boundingRectForFont.height >= rect.minY else {
+                continue
+            }
+
+            let label = " \(hint.label) " as NSString
+            let size = label.size(withAttributes: attributes)
+            let backgroundRect = NSRect(
+                x: point.x - 1,
+                y: point.y,
+                width: size.width + 2,
+                height: size.height + 1
+            )
+            backgroundColor.setFill()
+            backgroundRect.fill()
+            label.draw(at: NSPoint(x: point.x, y: point.y), withAttributes: attributes)
+        }
+    }
+
+    private func inlayHintPoint(
+        for location: Int,
+        layoutManager: NSLayoutManager,
+        textContainer: NSTextContainer
+    ) -> NSPoint {
+        let nsText = string as NSString
+        let bounded = min(max(0, location), nsText.length)
+        let characterIndex = min(max(0, bounded), max(0, nsText.length - 1))
+        let glyphIndex = layoutManager.glyphIndexForCharacter(at: characterIndex)
+        let lineRect = layoutManager.lineFragmentRect(
+            forGlyphAt: glyphIndex,
+            effectiveRange: nil,
+            withoutAdditionalLayout: true
+        )
+        var glyphLocation = layoutManager.location(forGlyphAt: glyphIndex)
+        if bounded == nsText.length {
+            let glyphRect = layoutManager.boundingRect(
+                forGlyphRange: NSRange(location: glyphIndex, length: 1),
+                in: textContainer
+            )
+            glyphLocation.x = glyphRect.maxX
+        }
+
+        let y = textContainerOrigin.y + lineRect.minY + max(0, (lineRect.height - (font?.boundingRectForFont.height ?? lineRect.height)) / 2)
+        return NSPoint(x: textContainerOrigin.x + glyphLocation.x, y: y + 1)
     }
 
     private func lineFragmentRect(

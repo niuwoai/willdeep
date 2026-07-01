@@ -25,6 +25,27 @@
 import AppKit
 import Foundation
 
+nonisolated private final class LanguageServiceWillSaveResultBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: String
+
+    init(_ value: String) {
+        self.value = value
+    }
+
+    func set(_ newValue: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        value = newValue
+    }
+
+    func get() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+}
+
 extension AppState {
     // MARK: - Folder Opening
 
@@ -374,6 +395,7 @@ extension AppState {
         registerRecentFile(url)
         registerRecentFolder(url.deletingLastPathComponent())
         persistSession()
+        synchronizeEditorLanguageServiceDocument()
 
         if let pendingDefinitionNavigation,
            pendingDefinitionNavigation.url.standardizedFileURL == url.standardizedFileURL {
@@ -508,7 +530,12 @@ extension AppState {
     @discardableResult
     func writeCurrentFile(to url: URL, updateOpenedURL: Bool, showsAlert: Bool = true) -> Bool {
         do {
-            let contentToWrite = Self.contentForSave(fileContent, settings: editorSettings)
+            let fileExistedBeforeSave = FileManager.default.fileExists(atPath: url.path)
+            let normalizedContent = Self.contentForSave(fileContent, settings: editorSettings)
+            let contentToWrite = Self.contentForSave(
+                contentByApplyingLanguageServiceWillSaveEdits(to: normalizedContent, url: url),
+                settings: editorSettings
+            )
             if contentToWrite != fileContent {
                 fileContent = contentToWrite
             }
@@ -533,6 +560,12 @@ extension AppState {
             refreshGitStatus()
             reloadTerminalShortcutsIfNeeded(savedURL: url)
             persistSession()
+            notifyEditorLanguageServiceWatchedFileChanged(
+                url: url,
+                type: fileExistedBeforeSave ? .changed : .created,
+                language: effectiveLanguage
+            )
+            notifyEditorLanguageServiceDocumentSaved(url: url, text: contentToWrite)
             return true
         } catch {
             guard showsAlert else {
@@ -547,6 +580,38 @@ extension AppState {
             alert.runModal()
             return false
         }
+    }
+
+    private func contentByApplyingLanguageServiceWillSaveEdits(to text: String, url: URL) -> String {
+        guard EditorLanguageServiceRegistry.isFirstStageIDELanguage(effectiveLanguage) else {
+            return text
+        }
+
+        let manager = editorLanguageServiceManager
+        let language = effectiveLanguage
+        let root = rootDirectory
+        let fileURL = url.standardizedFileURL
+        let semaphore = DispatchSemaphore(value: 0)
+        let resultBox = LanguageServiceWillSaveResultBox(text)
+
+        Task.detached {
+            defer { semaphore.signal() }
+            do {
+                let edits = try await manager.willSaveWaitUntil(
+                    fileURL: fileURL,
+                    language: language,
+                    rootDirectory: root,
+                    text: text
+                )
+                guard let updated = EditorTextEditApplier.apply(edits: edits, to: text) else { return }
+                resultBox.set(updated)
+            } catch {
+                return
+            }
+        }
+
+        _ = semaphore.wait(timeout: .now() + 1.5)
+        return resultBox.get()
     }
 
     private func reloadTerminalShortcutsIfNeeded(savedURL: URL) {

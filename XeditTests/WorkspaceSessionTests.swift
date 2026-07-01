@@ -54,4 +54,34 @@ extension WillDeepTests {
         #expect(appState.activeRuntime?.workspaceRootPath == secondWorkspace.standardizedFileURL.path)
         #expect(appState.activeRuntime?.workspaceLocation == .local(path: secondWorkspace.standardizedFileURL.path))
     }
+
+    @MainActor
+    @Test("agent workspace rename/delete 后只在失败诊断时标记异常且不静默改路径")
+    func testAgentWorkspaceAvailabilityDiagnosesMovedOrMissingWithoutSilentRebind() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_workspace_availability_\(UUID().uuidString)")
+        let original = base.appendingPathComponent("project")
+        let renamed = base.appendingPathComponent("project-renamed")
+        try FileManager.default.createDirectory(at: original, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let session = AgentSession(workspaceRootPath: original.path)
+        let runtime = AgentRuntime(session: session)
+        #expect(try runtime.localWorkspaceURLForOptimisticUse()?.path == original.standardizedFileURL.path)
+
+        try FileManager.default.moveItem(at: original, to: renamed)
+
+        let availability = runtime.diagnoseLocalWorkspaceAfterFailure()
+        #expect(runtime.workspaceRootPath == original.standardizedFileURL.path)
+        #expect(runtime.workspaceLocation == .local(path: original.standardizedFileURL.path))
+        #expect(availability?.blocksLocalWorkspaceUse == true)
+        #expect(throws: AgentWorkspaceAvailabilityError.self) {
+            _ = try runtime.localWorkspaceURLForOptimisticUse()
+        }
+
+        if case .moved(let originalPath, let resolvedPath, _) = availability {
+            #expect(originalPath == original.standardizedFileURL.path)
+            #expect(resolvedPath == renamed.standardizedFileURL.path)
+        }
+    }
 }

@@ -183,7 +183,148 @@ extension AppState {
         symbolJumpQuery = ""
     }
 
-    func goToDefinition(symbol: String) {
+    func goToDefinition(request: EditorDefinitionRequest) {
+        let fileURL = openedFileURL
+        let language = effectiveLanguage
+        let root = rootDirectory
+        let text = fileContent
+
+        if let fileURL,
+           EditorLanguageServiceRegistry.isFirstStageIDELanguage(language) {
+            Task { [weak self] in
+                guard let self else { return }
+                do {
+                    let locations = try await self.editorLanguageServiceManager.definition(
+                        fileURL: fileURL,
+                        language: language,
+                        rootDirectory: root,
+                        text: text,
+                        characterOffset: request.characterOffset
+                    )
+                    if let location = locations.first,
+                       await self.navigateToLanguageServerLocation(location) {
+                        return
+                    }
+                } catch {
+                    // Missing or failing language servers fall back to the
+                    // lightweight resolver so existing editor behavior survives.
+                }
+                await MainActor.run {
+                    self.goToRegexDefinition(symbol: request.symbol)
+                }
+            }
+            return
+        }
+
+        goToRegexDefinition(symbol: request.symbol)
+    }
+
+    func goToDeclaration(request: EditorDeclarationRequest) {
+        guard let fileURL = openedFileURL,
+              EditorLanguageServiceRegistry.isFirstStageIDELanguage(effectiveLanguage) else {
+            NSSound.beep()
+            return
+        }
+
+        let language = effectiveLanguage
+        let root = rootDirectory
+        let text = fileContent
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let locations = try await self.editorLanguageServiceManager.declaration(
+                    fileURL: fileURL,
+                    language: language,
+                    rootDirectory: root,
+                    text: text,
+                    characterOffset: request.characterOffset
+                )
+                if let location = locations.first,
+                   await self.navigateToLanguageServerLocation(location) {
+                    return
+                }
+            } catch {
+                // Declaration lookup is semantic-only; do not fall back to a
+                // regex match that may land on an implementation instead.
+            }
+            await MainActor.run {
+                NSSound.beep()
+            }
+        }
+    }
+
+    func goToTypeDefinition(request: EditorTypeDefinitionRequest) {
+        guard let fileURL = openedFileURL,
+              EditorLanguageServiceRegistry.isFirstStageIDELanguage(effectiveLanguage) else {
+            NSSound.beep()
+            return
+        }
+
+        let language = effectiveLanguage
+        let root = rootDirectory
+        let text = fileContent
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let locations = try await self.editorLanguageServiceManager.typeDefinition(
+                    fileURL: fileURL,
+                    language: language,
+                    rootDirectory: root,
+                    text: text,
+                    characterOffset: request.characterOffset
+                )
+                if let location = locations.first,
+                   await self.navigateToLanguageServerLocation(location) {
+                    return
+                }
+            } catch {
+                // Type definition has no reliable regex fallback; avoid jumping
+                // to an unrelated text match when the language server cannot help.
+            }
+            await MainActor.run {
+                NSSound.beep()
+            }
+        }
+    }
+
+    func goToImplementation(request: EditorImplementationRequest) {
+        guard let fileURL = openedFileURL,
+              EditorLanguageServiceRegistry.isFirstStageIDELanguage(effectiveLanguage) else {
+            NSSound.beep()
+            return
+        }
+
+        let language = effectiveLanguage
+        let root = rootDirectory
+        let text = fileContent
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let locations = try await self.editorLanguageServiceManager.implementation(
+                    fileURL: fileURL,
+                    language: language,
+                    rootDirectory: root,
+                    text: text,
+                    characterOffset: request.characterOffset
+                )
+                if let location = locations.first,
+                   await self.navigateToLanguageServerLocation(location) {
+                    return
+                }
+            } catch {
+                // Implementation lookup is semantic-only; a regex fallback would
+                // look confident while often landing on the wrong declaration.
+            }
+            await MainActor.run {
+                NSSound.beep()
+            }
+        }
+    }
+
+    func goToRegexDefinition(symbol: String) {
         guard let location = EditorDefinitionResolver.definition(
             for: symbol,
             from: openedFileURL,
@@ -193,6 +334,10 @@ extension AppState {
             return
         }
 
+        navigateToDefinitionLocation(location)
+    }
+
+    func navigateToDefinitionLocation(_ location: EditorDefinitionLocation) {
         if openedFileURL?.standardizedFileURL == location.url.standardizedFileURL {
             navigateEditor(toLine: location.line)
             return

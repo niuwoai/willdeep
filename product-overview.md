@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-01 | Current version: v1.112.0-rc5
+> Last updated: 2026-07-01 | Current version: v1.117.0-rc1
 
 ## Positioning
 
@@ -14,6 +14,46 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Editor LSP Workspace Edit Refresh / Semantic Token Polish（1.117.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的 rename、quick fix 和 server `workspace/applyEdit` 成功改写文件后，会把实际变更文件发送 `workspace/didChangeWatchedFiles` `changed` 事件；语义高亮新增 `variable` / `parameter` / `label` token 映射，让 LSP 语义 token 更稳定地覆盖正则 fallback。
+- **Editor LSP Watched Files（1.116.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的 editor 会在保存、新建文件、新建文件夹和创建缺失外部文件成功后发送 `workspace/didChangeWatchedFiles`，让语言服务器刷新项目索引；无法识别语言的配置文件变更会通知当前 workspace 下已有的 LSP session，不额外启动无关 server。
+- **Voice 转录语言设置（1.115.0-rc1）** —— Settings → Voice 提供转录语言选择，默认跟随系统语言，也可强制使用自动检测、中文、英文、粤语、日语或韩语；Fn push-to-talk 和 composer 麦克风按钮会按该偏好调用 SenseVoice ONNX，便于日本市场日语语音输入验证。
+- **Editor LSP Will Save Wait Until（1.114.0-rc17）** —— Go / TypeScript / JavaScript / Swift 保存前会在 server 声明 `textDocumentSync.willSaveWaitUntil` 时请求 `textDocument/willSaveWaitUntil`，把 server 返回的保存前 edits 应用到即将写盘的内容；LSP 失败或超时会回退原内容，保存流程不中断。
+- **Editor LSP Range Formatting（1.114.0-rc16）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单在有选区时新增 Format Selection，通过 `textDocument/rangeFormatting` 只格式化当前选区；无选区时继续使用整文档 Format Document。
+- **Editor LSP Inlay Hint Resolve（1.114.0-rc15）** —— Go / TypeScript / JavaScript / Swift 的 inlay hint 会保留 server 返回的 `data`，并在 server 声明 `inlayHintProvider.resolveProvider` 后请求 `inlayHint/resolve`；resolved tooltip / text edits / padding 信息会被保留下来，resolve 失败时回退原 hint。
+- **Editor LSP Document Link Resolve（1.114.0-rc14）** —— Go / TypeScript / JavaScript / Swift 的 document link 会保留 server 返回的 `DocumentLink.data`；Command-click 命中没有初始 `target` 的链接时，会在 server 声明 `documentLinkProvider.resolveProvider` 后请求 `documentLink/resolve`，拿到安全的 `file` / `http` / `https` target 再打开。
+- **Editor LSP Code Action Resolve（1.114.0-rc13）** —— Go / TypeScript / JavaScript / Swift 应用 quick fix 前会在 server 声明 `codeActionProvider.resolveProvider` 时请求 `codeAction/resolve`，拿到懒加载的 `WorkspaceEdit` / command / `data` 后再执行；resolve 失败会回退原 action，不中断已有 quick fix 路径。
+- **Editor LSP Workspace Requests（1.114.0-rc12）** —— Go / TypeScript / JavaScript / Swift 的语言服务器主动请求 `workspace/configuration` 时会收到按 items 对齐的空配置对象数组；请求 `workspace/workspaceFolders` 时会拿到当前 initialize root，避免 server 因等待 workspace response 卡住或退化。
+- **Editor LSP Completion Resolve（1.114.0-rc11）** —— Go / TypeScript / JavaScript / Swift 应用补全前会在 server 声明 `completionProvider.resolveProvider` 时请求 `completionItem/resolve`，拿到懒加载的文档、详情、`additionalTextEdits` 和 server `data` 后再应用补全；resolve 失败会回退原 item，不打断输入。
+- **Editor LSP DidSave（1.114.0-rc10）** —— Go / TypeScript / JavaScript / Swift 保存成功后会按 server 的 `textDocumentSync.save` 能力发送 `textDocument/didSave`；如果 server 要求 `includeText`，通知会携带最终写盘文本，帮助语言服务器在真实保存生命周期后刷新诊断、索引和项目状态。
+- **Editor LSP Code Action Commands（1.114.0-rc9）** —— Go / TypeScript / JavaScript / Swift 的 quick fix 不再只支持带 `WorkspaceEdit` 的 code action，也会执行语言服务器声明过的 command-only action；`workspace/applyEdit` 回调复用现有安全应用路径，限制在当前 workspace 内并保护未保存 tab。
+- **Editor LSP Document Links（1.114.0-rc8）** —— Go / TypeScript / JavaScript / Swift 会在 server 声明 `documentLinkProvider` 后请求 `textDocument/documentLink`，把 import 路径、URL 或文件引用等语言服务器识别出的语义链接绘制为可点击链接；Command-click 会打开安全的 `file` / `http` / `https` target，避免用本地正则猜链接。
+- **Editor LSP Document Symbols 兼容增强（1.114.0-rc7）** —— Go / TypeScript / JavaScript / Swift 的 outline 会在 server 声明 `documentSymbolProvider` 后请求 `textDocument/documentSymbol`，并兼容标准的层级 `DocumentSymbol[]`、扁平 `SymbolInformation[]` 和 `null` 返回；不再因为 server 返回扁平符号列表而退回正则 outline。
+- **Editor LSP Inlay Hints（1.114.0-rc6）** —— Go / TypeScript / JavaScript / Swift 会通过 `textDocument/inlayHint` 获取参数名、类型等语义提示，转为 editor hint spans 并由 TextKit 轻量绘制为虚拟提示；提示不写入正文，语言服务器不可用或切换文件时清空回退。
+- **Editor LSP Completion TextEdit / Additional Edits（1.114.0-rc5）** —— Go / TypeScript / JavaScript / Swift 的 completion 应用优先使用语言服务器返回的 `CompletionItem.textEdit` / `InsertReplaceEdit` 精确替换范围，并支持 `additionalTextEdits` 与 snippet placeholder 清理；补全可以同时应用 import 等语义 edit，减少本地前缀正则猜测。
+- **Editor LSP Declaration / Go to Declaration 导航（1.114.0-rc4）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Go to Declaration，通过 `textDocument/declaration` 跳转到符号声明位置；该路径只使用语言服务器返回的语义 location，不用正则伪造声明跳转，失败时给可控空反馈。
+- **Editor LSP prepareRename / Rename Symbol 预校验（1.114.0-rc3）** —— Go / TypeScript / JavaScript / Swift 的 Rename Symbol 在弹输入框前会调用 `textDocument/prepareRename`，由语言服务器确认当前位置可重命名并提供 range / placeholder；server 未声明 prepare 能力时继续走原 LSP rename，明确不可重命名时给出提示，不做本地正则伪判断。
+- **Editor LSP Call Hierarchy / Show Call Hierarchy（1.114.0-rc2）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Show Call Hierarchy，通过 `textDocument/prepareCallHierarchy`、`callHierarchy/incomingCalls` 和 `callHierarchy/outgoingCalls` 查询当前符号调用关系；右上角浮层按 Incoming / Outgoing 展示调用方与被调用方，点击结果可跳转到对应文件位置，无可靠 LSP 结果时不做正则伪回退。
+- **Agent 联网调研来源胶囊（1.114.0-rc1）** —— `web_search` / `web_fetch` 会把搜索结果或抓取页面写入结构化来源列表；本轮 assistant 输出后在底部图标条显示紧凑 favicon 来源胶囊，点击可展开来源清单并用系统浏览器打开。来源会从本轮全部工具结果去重收集，且沿用工具结果脱敏链路处理标题和 URL。
+- **Editor LSP Selection Range / Expand Selection（1.113.0-rc20）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Expand Selection，通过语言服务器 `textDocument/selectionRange` 取得语法树选区链，并把当前选区扩到下一层语义范围；LSP 不可用或无更大范围时给出明确提示，不做本地正则伪回退。
+- **Editor LSP Workspace Symbols / Symbol Jump 项目搜索（1.113.0-rc19）** —— Go / TypeScript / JavaScript / Swift 的 Symbol Jump 在非空查询时优先调用 `workspace/symbol` 做项目级语义符号搜索，结果显示文件、行号和容器并可跨文件跳转；LSP 不可用或无结果时继续回退到当前文件 outline 过滤。
+- **Editor LSP Type Definition / Implementation 导航（1.113.0-rc18）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Go to Type Definition 与 Go to Implementation，分别请求 `textDocument/typeDefinition` 和 `textDocument/implementation`，复用现有 LSP location 跳转路径；无可靠语义结果时不做正则伪回退。
+- **Agent 侧边栏快捷入口与拖拽稳定性（1.113.0-rc17）** —— Agent 标题栏右侧提供 Diff、Terminal、Preview、Files 四个高频右侧面板快捷图标，`...` 菜单继续承载完整侧栏 tab 列表；Editor 窗口入口独立强调显示。右侧面板拖宽过程改用临时宽度状态，松手后再持久化和更新窗口最小宽度，减少拖拽时的抖动和闪动。
+- **Editor LSP Document Highlights 接入（1.113.0-rc16）** —— Go / TypeScript / JavaScript / Swift 的 editor 光标移动到符号上时，会通过语言服务器 `textDocument/documentHighlight` 高亮当前文档内相关读/写引用；请求做 120ms 防抖和过期响应丢弃，并与诊断临时高亮统一刷新。
+- **Editor LSP Code Actions 接入（1.113.0-rc15）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单可请求 `textDocument/codeAction`，右上角浮层展示 quick fix / source action 候选；带 `WorkspaceEdit` 的 action 会沿用 workspace 安全应用路径，限制在当前 workspace 内并保护未保存 tab。
+- **Editor LSP Signature Help 接入（1.113.0-rc14）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单可请求 `textDocument/signatureHelp`，右上角浮层展示当前调用签名、文档、参数列表和 active parameter。
+- **Editor LSP Folding Ranges 接入（1.113.0-rc13）** —— Go / TypeScript / JavaScript / Swift 的折叠 gutter 会优先使用语言服务器 `textDocument/foldingRange` 返回的语法树折叠范围；LSP 不可用、未声明能力或返回为空时继续回退到本地 `ScopeGuideCalculator`。
+- **Editor LSP Rename Symbol 接入（1.113.0-rc12）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Rename Symbol，输入新名称后通过 `textDocument/rename` 获取语义级 `WorkspaceEdit`；应用 edits 时会限制在当前 workspace 内，保护已打开且未保存的其他 tab，当前文件保持 dirty，其他安全文件写回磁盘。
+- **Editor LSP Document Formatting 接入（1.113.0-rc11）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Format Document，当前文件会通过 `textDocument/formatting` 获取 LSP `TextEdit`；edits 会按位置倒序应用到正文，格式化成功后标记 dirty、同步 LSP 文档并刷新语义 tokens。
+- **Agent workspace 移动/删除懒诊断（1.113.0-rc10）** —— Agent session 会保存本地 workspace 的 security-scoped bookmark 与文件身份线索；正常工具调用不轮询目录是否存在，只在工具/文件操作失败或 runtime 已知 missing/moved 时解析 bookmark 并诊断旧路径。发现 workspace 被 rename/move 后不会静默改会话路径，而是阻断工具并要求用户重新选择确认。
+- **Editor LSP References 接入（1.113.0-rc9）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Find References，当前符号会通过 `textDocument/references` 查询语言服务器，并在右上角面板展示文件名、行列和预览行；点击引用结果会跳转到对应文件位置。
+- **Editor LSP Semantic Tokens 接入（1.113.0-rc8）** —— Go / TypeScript / JavaScript / Swift 的 editor 高亮会读取 LSP initialize 返回的 semantic token legend，并请求 `textDocument/semanticTokens/full`；返回的语义 token 会覆盖 regex fallback 颜色，让第一批语言的函数、类型、关键字、字符串、数字、注释等高亮来自语言服务器语义。
+- **Editor LSP Completion 接入（1.113.0-rc7）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单可请求 `textDocument/completion`，右上角浮层展示 LSP 候选、详情和文档摘要；点击候选会按当前符号前缀或选区替换文本，优先使用 `insertText` 并把光标放到插入文本末尾。
+- **Editor LSP Hover 接入（1.113.0-rc6）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单可对当前符号请求 `textDocument/hover`，并在右上角浮层展示可复制的类型/文档信息；hover 解码支持 markdown、普通字符串和 marked-string 数组，语言服务器不可用或无内容时提供可控空态。
+- **Workspace 菜单 URL 比较卡死修复（1.113.0-rc5）** —— Agent Composer 的 Workspace 下拉不再把 `URL` 作为 SwiftUI `ForEach` identity，也不在菜单布局期间反复执行 `standardizedFileURL ==` / `.path` / `.lastPathComponent`；已知工作区菜单缓存改为稳定的 `id/path/displayName` 快照，active 状态用字符串 path 比较，避免主线程在 `Menu` 构建中被 `URL.==` 和字符串桥接打满。
+- **Editor LSP 诊断接入（1.113.0-rc4）** —— Go / TypeScript / JavaScript / Swift 的 `textDocument/publishDiagnostics` 会同步到当前 editor，正文以错误/警告/信息/提示下划线和轻量背景展示，状态栏显示错误/警告数量并支持跳转首个诊断；切换文件、切换到非第一批 IDE 语言或关闭文件时会清理过期诊断。
+- **Editor LSP 结构大纲接入（1.113.0-rc3）** —— Go / TypeScript / JavaScript / Swift 的 Structure 侧栏和符号跳转优先使用 LSP `textDocument/documentSymbol` 返回的真实语义结构；语言服务器不可用、返回为空或刷新尚未完成时继续使用原有正则 outline 作为 fallback。
+- **Editor LSP 定义跳转接入（1.113.0-rc2）** —— Go / TypeScript / JavaScript / Swift 文件打开、加载和编辑时会同步到 `EditorLanguageServiceManager` 管理的 LSP session；Command-click / 右键 Go to Definition 现在优先调用 LSP `textDocument/definition`，失败或无结果时自动回退到原有正则 resolver，保留轻量编辑器的可用性。
+- **第一批 IDE 语言服务底座（1.113.0-rc1）** —— 新增 Go / TypeScript / JavaScript / Swift 的 `EditorLanguageServiceRegistry`、LSP 协议模型、JSON-RPC framing、进程 transport 和 `LanguageServerClient`，为 `gopls`、`typescript-language-server`、`sourcekit-lsp` 接入 diagnostics、hover、definition、document symbols 和 completion 打底；当前正则高亮/outline/definition 仍作为 fallback 保留，后续 UI 接入走 LSP 优先。
 - **Editor 光标点击定位闪动收敛（1.112.0-rc5）** —— 编辑器插入点竖线按字体实际 ascender/descender 高度居中绘制，不再因行高大于字形高度而显得偏高；点击不同位置移动光标时，selection change 只让旧/新当前行附近重绘，减少整篇 text view 刷新带来的轻微闪动。
 - **智能审批 AI 判断正常运维命令（1.112.0-rc4）** —— Smart approval 不再把所有网络/远端 `run_command` 一刀切给用户；非 typed-confirmation 的 `ssh`、Docker/nginx 运维、部署类命令会进入 safety judge，由 AI 判断是否属于正常开发/部署/运维工作。清盘、广泛删除、读私钥/泄露密钥、隐藏持久化、关闭安全控制和无边界 root/远端交互 shell 仍要求人工确认或直接不自动放行。
 - **Agent 验证中不抢右栏（1.112.0-rc3）** —— 前台 `run_command` 进入「验证中」时只更新 composer / 状态行，不再自动把右侧侧边栏切到「任务监控」；任务监控自动展开改由后台 job、媒体任务、待办、工作文件、学习事件、上下文压缩等真实右栏内容摘要驱动。

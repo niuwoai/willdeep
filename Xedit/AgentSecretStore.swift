@@ -135,7 +135,14 @@ enum AgentSecretStore {
     nonisolated static func redact(_ result: AgentToolResult, secretValues: [String]) -> AgentToolResult {
         AgentToolResult(
             summary: redact(result.summary, secretValues: secretValues),
-            payload: redact(result.payload, secretValues: secretValues)
+            payload: redact(result.payload, secretValues: secretValues),
+            references: result.references.map { reference in
+                AgentSourceReference(
+                    title: reference.title.map { redact($0, secretValues: secretValues) },
+                    url: redact(reference.url, secretValues: secretValues),
+                    toolName: reference.toolName
+                )
+            }
         )
     }
 

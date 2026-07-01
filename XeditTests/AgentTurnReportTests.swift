@@ -66,6 +66,35 @@ struct AgentTurnReportTests {
                 status: .succeeded,
                 result: AgentToolResult(summary: "ok", payload: "ok"),
                 approvalSource: .workspaceAccess
+            ),
+            AgentToolCall(
+                messageID: assistant.id,
+                externalID: "search-tool",
+                toolName: "web_search",
+                arguments: ["query": .string("swift")],
+                risk: .read,
+                status: .succeeded,
+                result: AgentToolResult(
+                    summary: "2 results",
+                    payload: "results",
+                    references: [
+                        AgentSourceReference(
+                            title: "Swift",
+                            url: "https://swift.org/",
+                            toolName: "web_search"
+                        ),
+                        AgentSourceReference(
+                            title: "Swift duplicate",
+                            url: "https://swift.org/",
+                            toolName: "web_search"
+                        ),
+                        AgentSourceReference(
+                            title: "Docs",
+                            url: "https://docs.swift.org/swift-book/",
+                            toolName: "web_search"
+                        )
+                    ]
+                )
             )
         ]
         runtime.learningEvents = [
@@ -111,11 +140,12 @@ struct AgentTurnReportTests {
         #expect(report.assistantMessageCount == 1)
         #expect(report.elapsedSeconds == 4.25)
         #expect(report.totalTokens == 300)
-        #expect(report.toolSummary.total == 1)
+        #expect(report.toolSummary.total == 2)
         #expect(report.toolSummary.writeRisk == 1)
         #expect(report.toolSummary.autoApproved == 1)
         #expect(report.toolSummary.sandboxModes == ["workspace-write"])
-        #expect(report.tools.map(\.toolName) == ["run_command"])
+        #expect(report.tools.map(\.toolName) == ["run_command", "web_search"])
+        #expect(report.sourceReferences.map(\.url) == ["https://swift.org/", "https://docs.swift.org/swift-book/"])
         #expect(report.recallSnapshot?.items.count == 2)
         #expect(report.recallSnapshot?.items.map(\.kind) == [.memory, .skill])
         #expect(report.learningEvents.map(\.title) == ["Created user skill"])

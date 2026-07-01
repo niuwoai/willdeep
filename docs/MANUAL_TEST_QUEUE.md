@@ -1,6 +1,6 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-06-28
+> Last updated: 2026-07-01
 
 CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态机的特性
 都得人坐到机器前面点。这个文件按版本累积着每次发版后我提醒你
@@ -835,14 +835,224 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 - [ ] 如果本机保存过 `q3` 或其他 SSH runtime，确认它只作为“已配置的 SSH 主机”出现；点击“管理 SSH 主机...”能打开 Settings → Runtimes，可在设置里删除或改名。
 - [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.109.0-rc496`，短剧制作能力无新增。
 
-## 1.112.0-rc5 — 短剧指针同步 / Editor 光标闪动收敛
+## 1.113.0-rc4 — 短剧指针同步 / Editor LSP diagnostics
 
 - [ ] 本版本修复 Agent 浅色自定义皮肤在系统 dark mode 下的文字可读性；不新增、不改变短剧项目、分镜、制作包、Widget、handoff bundle 和 smoke evidence 合约。
 - [ ] 本版本修复 Agent 前台 `run_command`「验证中」自动切到任务监控侧栏的问题；不新增、不改变短剧项目、分镜、制作包、Widget、handoff bundle 和 smoke evidence 合约。
+- [ ] 本版本新增 Go / TypeScript / JavaScript / Swift 的第一批 IDE 语言服务底座；不新增、不改变短剧项目、分镜、制作包、Widget、handoff bundle 和 smoke evidence 合约。
+- [ ] 本版本接入 Go / TypeScript / JavaScript / Swift 的 editor LSP 定义跳转；不新增、不改变短剧项目、分镜、制作包、Widget、handoff bundle 和 smoke evidence 合约。
+- [ ] 本版本接入 Go / TypeScript / JavaScript / Swift 的 editor LSP 结构大纲和符号跳转；不新增、不改变短剧项目、分镜、制作包、Widget、handoff bundle 和 smoke evidence 合约。
+- [ ] 本版本接入 Go / TypeScript / JavaScript / Swift 的 editor LSP diagnostics 诊断展示；不新增、不改变短剧项目、分镜、制作包、Widget、handoff bundle 和 smoke evidence 合约。
 - [ ] 复测 Agent：前台 `run_command` 进入「验证中」时，右侧侧边栏不会自动切到「任务监控」；已有后台 job、媒体任务、待办、工作文件或学习事件时仍可自动打开任务监控。
 - [ ] 复测智能审批：`ssh ... "docker run ..."`、重启/重载 nginx、添加 nginx 站点等非 typed-confirmation 运维命令应进入 AI safety judge；`rm -rf /`、读 `~/.ssh/id_rsa` 等仍要求人工确认。
 - [ ] 复测 Editor：在 editor 模式里连续点击不同行/不同列移动光标，竖线高度应贴近字体实际字形高度，当前行高亮和光标移动不应出现明显整页闪动。
-- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.112.0-rc5`，短剧制作能力无新增。
+- [ ] 复测语言服务底座：确认 Go / TypeScript / JavaScript / Swift 的 registry、LSP framing、document lifecycle 和 definition response tests 通过。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.113.0-rc4`，短剧制作能力无新增。
+
+## 1.113.0-rc5 — 短剧指针同步 / Workspace 菜单卡死修复
+
+- [ ] 复测 Agent Composer 的 Workspace 下拉：打开包含多个 recent folders / sessions / worktrees 的会话，展开菜单不应触发主线程持续 100% CPU，当前 workspace / worktree 的勾选状态仍正确。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.113.0-rc5`，短剧制作能力无新增。
+
+## 1.113.0-rc6 — 短剧指针同步 / Editor LSP hover
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件中右键符号，选择 hover 信息入口后应显示来自语言服务器的类型/文档浮层；语言服务器不可用时应显示可控空态，不影响原有定义跳转、结构大纲和 diagnostics。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.113.0-rc6`，短剧制作能力无新增。
+
+## 1.113.0-rc7 — 短剧指针同步 / Editor LSP completion
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件中右键符号或光标位置选择补全入口，应显示 LSP completion 候选；点击候选应替换当前前缀/选区并把光标放到插入文本末尾；不影响定义跳转、结构大纲、diagnostics 和 hover。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.113.0-rc7`，短剧制作能力无新增。
+
+## 1.113.0-rc8 — 短剧指针同步 / Editor LSP semantic tokens
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件中打开可用语言服务器的项目，等待同步后高亮应由 semantic tokens 覆盖 regex fallback；函数/类型/关键字等颜色应稳定，语言服务器不可用时仍保留原有 regex 高亮。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.113.0-rc8`，短剧制作能力无新增。
+
+## 1.113.0-rc9 — 短剧指针同步 / Editor LSP references
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件中右键符号选择 Find References，应显示 LSP 引用列表；点击结果应跳转到对应文件和行；语言服务器不可用时显示可控空态，不影响 definition、outline、diagnostics、hover、completion 和 semantic tokens。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.113.0-rc9`，短剧制作能力无新增。
+
+## 1.113.0-rc10 — 短剧指针同步 / Agent workspace 懒诊断
+
+- [ ] 复测 Agent：启动绑定本地 workspace 的会话后，在 Finder 中改名或移动该 workspace，再触发一次读文件/运行命令；应只在失败后提示 workspace missing/moved，不应静默把会话改绑到新路径。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.113.0-rc10`，短剧制作能力无新增。
+
+## 1.113.0-rc11 — 短剧指针同步 / Editor LSP document formatting
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件中右键选择 Format Document，应通过语言服务器格式化当前文件；格式化后文档标记为已修改，semantic tokens / diagnostics / outline 不应卡死或残留旧状态；语言服务器不可用时不应影响已有 definition、references、completion、hover、semantic tokens。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.113.0-rc11`，短剧制作能力无新增。
+
+## 1.113.0-rc12 — 短剧指针同步 / Editor LSP rename symbol
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件中右键符号选择 Rename Symbol，输入新名称后应通过语言服务器返回的 WorkspaceEdit 重命名引用；当前文件应标记为已修改，workspace 内其他安全文件可写回磁盘，已打开且未保存的其他 tab 不应被覆盖。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.113.0-rc12`，短剧制作能力无新增。
+
+## 1.113.0-rc13 — 短剧指针同步 / Editor LSP folding ranges
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件中打开有嵌套函数/类型/代码块的文件，折叠 gutter 应优先跟随语言服务器 `textDocument/foldingRange` 返回的范围；语言服务器不可用或不支持 folding ranges 时应回退到原有本地折叠规则。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.113.0-rc13`，短剧制作能力无新增。
+
+## 1.113.0-rc14 — 短剧指针同步 / Editor LSP signature help
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件的函数调用参数位置右键选择 Show Signature Help，应显示语言服务器返回的当前调用签名、参数文档和 active parameter；语言服务器不可用或无签名时应显示可控空态，不影响 hover、completion、references、rename、formatting、folding ranges。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.113.0-rc14`，短剧制作能力无新增。
+
+## 1.113.0-rc15 — 短剧指针同步 / Editor LSP code actions
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件里制造可被语言服务器诊断的错误，右键选择 Show Code Actions，应显示 quick fix / source action 候选；选择带 `WorkspaceEdit` 的 action 后，当前文件应变为 dirty，跨文件 edits 只允许写入当前 workspace 内且会阻止覆盖未保存 tab。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.113.0-rc15`，短剧制作能力无新增。
+
+## 1.113.0-rc16 — 短剧指针同步 / Editor LSP document highlights
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件中把光标移动到变量、函数或类型符号上，当前文档内对应读/写引用应出现轻量背景高亮；移动到空白处、拖选文本、切换非 IDE 语言或切换文件后，高亮应及时清空且不遮盖 diagnostics 下划线。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.113.0-rc16`，短剧制作能力无新增。
+
+## 1.113.0-rc17 — 短剧指针同步 / Agent 侧边栏入口优化
+
+- [ ] 复测 Agent：标题栏右侧 Diff、Terminal、Preview、Files 四个高频侧边栏图标应能直接打开/关闭对应面板，`...` 菜单仍能打开完整侧栏 tab 列表，Editor 入口应保持独立且视觉上明显区别于侧栏入口。
+- [ ] 复测 Agent 右侧面板：拖动聊天区与右侧面板之间的分隔条时，面板宽度应跟手变化，边界和面板内容不应出现明显抖动、闪动；松手后宽度应持久化。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.113.0-rc17`，短剧制作能力无新增。
+
+## 1.113.0-rc18 — 短剧指针同步 / Editor LSP type definition / implementation
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件里右键符号，Go to Type Definition 应跳到语言服务器返回的类型定义；语言服务器未声明能力或无结果时应只提示失败，不应回退到普通文本定义。
+- [ ] 复测 Editor：在接口、协议、抽象类型或可实现符号上右键 Go to Implementation，应跳到语言服务器返回的实现位置；普通 Go to Definition、Find References、Rename、Hover、Document Highlights 仍应保持可用。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.113.0-rc18`，短剧制作能力无新增。
+
+## 1.113.0-rc19 — 短剧指针同步 / Editor LSP workspace symbols
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 项目里打开 Symbol Jump，输入非空查询时应显示 LSP `workspace/symbol` 返回的项目级符号，结果行应包含文件名、行号和容器信息；选择跨文件结果应打开目标文件并跳到对应行。
+- [ ] 复测 Editor：语言服务器不可用、未声明 workspace symbol 能力或项目级查询无结果时，Symbol Jump 应继续回退到当前文件 outline 过滤；空查询仍显示当前文件结构，不应误触发项目级搜索。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.113.0-rc19`，短剧制作能力无新增。
+
+## 1.113.0-rc20 — 短剧指针同步 / Editor LSP selection range
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件里右键选择 Expand Selection，光标处应按语言服务器 `textDocument/selectionRange` 返回的语法树链逐级扩选，例如从标识符扩到调用表达式、语句或函数体。
+- [ ] 复测 Editor：已有选区时再次 Expand Selection 应扩到下一层更大的语义范围；语言服务器不可用或没有更大范围时应提示不可用/无更大范围，不应使用本地正则伪造结果。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.113.0-rc20`，短剧制作能力无新增。
+
+## 1.114.0-rc1 — 短剧指针同步 / Agent 联网调研来源胶囊
+
+- [ ] 复测 Agent：配置可用 web search key 后发起一次需要 `web_search` 的调研，本轮 assistant 输出后底部应显示紧凑来源胶囊，胶囊内应有多个 favicon / fallback 图标和“来源”标签。
+- [ ] 复测 Agent：点击来源胶囊应展开来源清单；清单行应显示标题、脱敏 URL、host 图标和外链图标，点击任一行应使用系统浏览器打开对应网页。
+- [ ] 复测 Agent：执行一次 `web_fetch` 抓取公开网页后，来源胶囊应至少包含该抓取页；带 `key` / `api` / `token` query 的测试 URL 不应在来源列表中泄露原始敏感值。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.114.0-rc1`，短剧制作能力无新增。
+
+## 1.114.0-rc2 — 短剧指针同步 / Editor LSP call hierarchy
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件里右键符号选择 Show Call Hierarchy，应通过 LSP 显示 Incoming / Outgoing 调用关系；点击任一调用条目应跳转到对应文件和行。
+- [ ] 复测 Editor：语言服务器不可用、未声明 call hierarchy 能力或当前符号没有调用关系时，应显示清晰的不可用/无结果状态，不应使用本地正则伪造调用层级。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.114.0-rc2`，短剧制作能力无新增。
+
+## 1.114.0-rc3 — 短剧指针同步 / Editor LSP prepare rename
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件里右键可重命名符号选择 Rename Symbol，输入框默认名称应优先来自语言服务器 `textDocument/prepareRename` 返回的 placeholder 或 range 文本。
+- [ ] 复测 Editor：对不可重命名位置执行 Rename Symbol 时，应显示语言服务器不可重命名提示；server 未声明 prepare 能力时仍应保留原 LSP rename 流程，不应使用本地正则伪造可重命名判断。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.114.0-rc3`，短剧制作能力无新增。
+
+## 1.114.0-rc4 — 短剧指针同步 / Editor LSP declaration navigation
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件里右键符号选择 Go to Declaration，应通过 LSP `textDocument/declaration` 跳转到声明位置。
+- [ ] 复测 Editor：语言服务器不可用、未声明 declaration 能力或当前位置无声明结果时，应只给可控失败反馈，不应使用本地正则伪造声明跳转。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.114.0-rc4`，短剧制作能力无新增。
+
+## 1.114.0-rc5 — 短剧指针同步 / Editor LSP completion edits
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件里触发 Show Completions 并选择候选，补全应优先使用 LSP 返回的 `textEdit` / `InsertReplaceEdit` 精确替换范围，不能只按本地前缀误替换。
+- [ ] 复测 Editor：选择会触发 import / using / module 引入的 completion 候选时，`additionalTextEdits` 应与主补全一起应用；snippet 候选不应把 `$0`、`${1:...}` 等 placeholder 原样插进正文。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.114.0-rc5`，短剧制作能力无新增。
+
+## 1.114.0-rc6 — 短剧指针同步 / Editor LSP inlay hints
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件里打开包含可推断参数名或类型提示的代码，语言服务器可用时应显示轻量 inlay hint 提示，正文保存内容不应包含这些提示文字。
+- [ ] 复测 Editor：切换文件、切换到非第一批 IDE 语言或语言服务器不可用时，旧 inlay hints 应清空，不应遗留到新文件。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.114.0-rc6`，短剧制作能力无新增。
+
+## 1.114.0-rc7 — 短剧指针同步 / Editor LSP document symbols
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件里打开 Outline / Symbol Jump，语言服务器返回层级 `DocumentSymbol[]` 或扁平 `SymbolInformation[]` 时都应显示语义 outline，而不是回退到本地正则提取。
+- [ ] 复测 Editor：语言服务器未声明 `documentSymbolProvider`、返回 `null` 或不可用时，outline 应保持可控空态或使用既有非 IDE 语言本地 fallback，不应报错或卡住。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.114.0-rc7`，短剧制作能力无新增。
+
+## 1.114.0-rc8 — 短剧指针同步 / Editor LSP document links
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件里打开包含 import 路径、URL 或文件引用的代码，语言服务器返回 `textDocument/documentLink` 时对应文本应显示链接样式，Command-click 应打开 `file` / `http` / `https` target。
+- [ ] 复测 Editor：语言服务器未声明 `documentLinkProvider`、返回 `null`、返回无 target 或返回不支持的 scheme 时，不应绘制可点击链接，也不应影响原有 Go to Definition 的 Command-click。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.114.0-rc8`，短剧制作能力无新增。
+
+## 1.114.0-rc9 — 短剧指针同步 / Editor LSP code action commands
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件里触发 Show Code Actions，选择只有 command 的 quick fix（如 organize imports / apply fix）时，应发送 `workspace/executeCommand` 并能处理 server 随后的 `workspace/applyEdit`。
+- [ ] 复测 Editor：server 未声明 `executeCommandProvider` 或 command 不在声明列表时，不应发送 executeCommand；带 `WorkspaceEdit` 的原 code action 路径仍应可用。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.114.0-rc9`，短剧制作能力无新增。
+
+## 1.114.0-rc10 — 短剧指针同步 / Editor LSP didSave
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件保存成功后，server 声明 `textDocumentSync.save` 时应收到 `textDocument/didSave`；如果声明 `includeText`，payload 应携带最终写盘文本。
+- [ ] 复测 Editor：server 未声明 save 能力时不应发送 didSave；保存失败时也不应发送 didSave，避免语言服务器误以为磁盘状态已更新。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.114.0-rc10`，短剧制作能力无新增。
+
+## 1.114.0-rc11 — 短剧指针同步 / Editor LSP completion resolve
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件里选择需要懒加载的补全项时，如果 server 声明 `completionProvider.resolveProvider`，应用前应发送 `completionItem/resolve` 并使用返回的 `additionalTextEdits`，例如自动插入 import。
+- [ ] 复测 Editor：resolve 请求失败、server 未声明 resolveProvider 或当前文件内容已变化时，补全应回退原 item 或取消过期应用，不应插入错位文本。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.114.0-rc11`，短剧制作能力无新增。
+
+## 1.114.0-rc12 — 短剧指针同步 / Editor LSP workspace requests
+
+- [ ] 复测 Editor：启动 Go / TypeScript / JavaScript / Swift 语言服务器后，如果 server 发起 `workspace/configuration`，client 应返回与 items 数量一致的配置数组，不应让 server request 挂起。
+- [ ] 复测 Editor：server 发起 `workspace/workspaceFolders` 时，应返回当前 workspace root 的 URI/name；打开不同项目时 root 应跟随项目标记或显式 root。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.114.0-rc12`，短剧制作能力无新增。
+
+## 1.114.0-rc13 — 短剧指针同步 / Editor LSP code action resolve
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件里选择需要懒加载的 quick fix 时，如果 server 声明 `codeActionProvider.resolveProvider`，应用前应发送 `codeAction/resolve` 并使用返回的 `WorkspaceEdit` 或 command。
+- [ ] 复测 Editor：resolve 请求失败、server 未声明 resolveProvider 或当前文件内容已变化时，quick fix 应回退原 action 或取消过期应用，不应插入错位文本。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.114.0-rc13`，短剧制作能力无新增。
+
+## 1.114.0-rc14 — 短剧指针同步 / Editor LSP document link resolve
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件里 Command-click 一个 server 返回 range 但初始没有 `target` 的 document link 时，如果 server 声明 `documentLinkProvider.resolveProvider`，应先发送 `documentLink/resolve` 再打开 resolved target。
+- [ ] 复测 Editor：resolved target 只允许 `file` / `http` / `https`；resolve 失败、server 未声明 resolveProvider 或当前文件内容已变化时，不应打开不可信或过期链接。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.114.0-rc14`，短剧制作能力无新增。
+
+## 1.114.0-rc15 — 短剧指针同步 / Editor LSP inlay hint resolve
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件里请求 inlay hints 时，如果 server 声明 `inlayHintProvider.resolveProvider`，client 应对返回的 hint 发送 `inlayHint/resolve` 并保留 resolved tooltip / text edits / padding 信息。
+- [ ] 复测 Editor：单个 hint resolve 失败、server 未声明 resolveProvider 或返回空 tooltip 时，应继续显示原始 hint label，不应清空整页 inlay hints。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.114.0-rc15`，短剧制作能力无新增。
+
+## 1.114.0-rc16 — 短剧指针同步 / Editor LSP range formatting
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件里选中一段代码右键 Format Selection 时，应发送 `textDocument/rangeFormatting`，只应用 server 返回的选区 edits。
+- [ ] 复测 Editor：无选区时不显示 Format Selection；server 未声明 `documentRangeFormattingProvider` 时不应发送 range formatting 请求，Format Document 仍走整文档格式化。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.114.0-rc16`，短剧制作能力无新增。
+
+## 1.114.0-rc17 — 短剧指针同步 / Editor LSP willSaveWaitUntil
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift 文件里保存时，如果 server 声明 `textDocumentSync.willSaveWaitUntil`，写盘前应发送 `textDocument/willSaveWaitUntil` 并应用返回 edits。
+- [ ] 复测 Editor：willSaveWaitUntil 失败、超时或 server 未声明 capability 时，应继续保存原内容，并在保存成功后照常发送 `textDocument/didSave`。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.114.0-rc17`，短剧制作能力无新增。
+
+## 1.115.0-rc1 — 短剧指针同步 / Voice 转录语言设置
+
+- [ ] 打开 Settings → Voice，确认“转录语言”默认是“跟随系统”，并且可切换到自动检测、中文、英文、粤语、日语、韩语。
+- [ ] 将转录语言切到“日语”，用 composer 麦克风或 Fn push-to-talk 说一句日语，确认文本进入输入框且不再依赖自动识别。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.115.0-rc1`，短剧制作能力无新增。
+
+## 1.116.0-rc1 — 短剧指针同步 / Editor LSP watched files
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift workspace 内保存或新建源文件后，应向对应语言服务器发送 `workspace/didChangeWatchedFiles`，并保留原有 `textDocument/didSave` 行为。
+- [ ] 复测 Editor：新建文件夹或修改 `package.json` / `go.mod` 等非源文件时，应通知当前 workspace 下已有 LSP session，不应为了未知语言文件额外启动无关 server。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.116.0-rc1`，短剧制作能力无新增。
+
+## 1.117.0-rc1 — 短剧指针同步 / Editor LSP workspace edit refresh
+
+- [ ] 复测 Editor：在 Go / TypeScript / JavaScript / Swift workspace 内执行 rename 或 quick fix 后，被实际改写的当前文件、已打开 tab 和磁盘文件应发送 `workspace/didChangeWatchedFiles` `changed` 事件。
+- [ ] 复测 Editor：Go / Swift / TypeScript / JavaScript 语义 token 中的 `variable` / `parameter` / `label` 应覆盖正则 fallback 呈现；变量 declaration/definition 仍应加粗。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.117.0-rc1`，短剧制作能力无新增。
 
 ---
 

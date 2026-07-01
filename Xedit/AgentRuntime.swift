@@ -39,6 +39,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// that drifts when the user opens a different folder.
     private(set) var workspaceRootPath: String?
     private(set) var workspaceLocation: WorkspaceLocation?
+    @Published private(set) var workspaceAvailability: AgentWorkspaceAvailability = .optimistic
 
     // MARK: - Conversation state
 
@@ -190,16 +191,46 @@ final class AgentRuntime: ObservableObject, Identifiable {
         let normalized = path?.trimmingCharacters(in: .whitespacesAndNewlines)
         workspaceRootPath = normalized?.isEmpty == true ? nil : normalized
         workspaceLocation = workspaceRootPath.map { .local(path: $0) }
+        workspaceAvailability = .optimistic
         session.workspaceRootPath = workspaceRootPath
         session.workspaceLocation = workspaceLocation
+        session.localWorkspaceIdentity = AgentWorkspaceAvailabilityResolver.captureIdentity(for: workspaceRootPath)
     }
 
     func rebindRemoteWorkspace(runtimeID: UUID, path: String) {
         let normalized = RemotePathValidator.normalizedWorkspaceRoot(path)
         workspaceRootPath = nil
         workspaceLocation = .remote(runtimeID: runtimeID, path: normalized)
+        workspaceAvailability = .optimistic
         session.workspaceRootPath = nil
         session.workspaceLocation = workspaceLocation
+        session.localWorkspaceIdentity = nil
+    }
+
+    func localWorkspaceURLForOptimisticUse() throws -> URL? {
+        if workspaceAvailability.blocksLocalWorkspaceUse,
+           let message = workspaceAvailability.message {
+            throw AgentWorkspaceAvailabilityError.unavailable(message)
+        }
+        guard let path = workspaceLocation?.localPath ?? workspaceRootPath, !path.isEmpty else {
+            return nil
+        }
+        return URL(fileURLWithPath: path).standardizedFileURL
+    }
+
+    @discardableResult
+    func diagnoseLocalWorkspaceAfterFailure() -> AgentWorkspaceAvailability? {
+        guard let path = workspaceLocation?.localPath ?? workspaceRootPath, !path.isEmpty else {
+            return nil
+        }
+        let identity = session.localWorkspaceIdentity
+            ?? AgentWorkspaceAvailabilityResolver.captureIdentity(for: path)
+        if session.localWorkspaceIdentity == nil, identity?.hasIdentity == true {
+            session.localWorkspaceIdentity = identity
+        }
+        let availability = AgentWorkspaceAvailabilityResolver.diagnose(path: path, identity: identity)
+        workspaceAvailability = availability
+        return availability
     }
 
     // MARK: - Persistence
@@ -213,6 +244,11 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.contextSummaryThroughMessageID = contextSummaryThroughMessageID
         session.workspaceRootPath = workspaceRootPath
         session.workspaceLocation = workspaceLocation
+        if workspaceLocation?.localPath == nil {
+            session.localWorkspaceIdentity = nil
+        } else if session.localWorkspaceIdentity == nil {
+            session.localWorkspaceIdentity = AgentWorkspaceAvailabilityResolver.captureIdentity(for: workspaceLocation?.localPath ?? workspaceRootPath)
+        }
         session.didEditFiles = didEditFiles
         session.agentEditedPaths = agentEditedPaths.sorted()
         session.interactionMode = interactionMode

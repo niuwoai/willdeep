@@ -326,7 +326,21 @@ extension AppState {
         // current folder is a UI concept, not a session concept.
         let workspaceLocation = runtime.workspaceLocation
             ?? runtime.workspaceRootPath.map { .local(path: $0) }
-        let workspaceURL = workspaceLocation?.localPath.map { URL(fileURLWithPath: $0) }
+        let workspaceURL: URL?
+        do {
+            workspaceURL = try runtime.localWorkspaceURLForOptimisticUse()
+        } catch {
+            runtime.errorMessage = error.localizedDescription
+            runtime.errorDetails = nil
+            runtime.messages.append(
+                AgentMessage(
+                    role: .assistant,
+                    content: error.localizedDescription,
+                    origin: .nativeModel
+                )
+            )
+            return
+        }
         let remoteRuntimeDescriptor: RuntimeDescriptor? = workspaceLocation?.remoteRuntimeID.flatMap {
             AgentRuntimeStore.descriptor(id: $0)
         }
@@ -937,9 +951,15 @@ extension AppState {
                     }
                     appendToolMessage(for: runtime, toolCallID: call.externalID, payload: result.payload)
                 } catch {
+                    let workspaceIssue = diagnoseLocalWorkspaceIfNeeded(
+                        after: error,
+                        runtime: runtime,
+                        workspaceURL: workspaceURL
+                    )
+                    let errorMessage = workspaceIssue ?? error.localizedDescription
                     if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
                         runtime.toolCalls[index].status = .failed
-                        runtime.toolCalls[index].errorMessage = error.localizedDescription
+                        runtime.toolCalls[index].errorMessage = errorMessage
                     }
                     AgentSandboxAuditLog.append(
                         toolName: call.toolName,
@@ -953,7 +973,7 @@ extension AppState {
                     appendToolMessage(
                         for: runtime,
                         toolCallID: call.externalID,
-                        payload: "Tool error: \(error.localizedDescription)\n\n(WillDeep: this tool call failed. Do not stop here — diagnose the cause from the exit code/stderr above and try another approach to accomplish the goal. Only give up if you are genuinely blocked, and then explain what you tried and what you still need.)",
+                        payload: "Tool error: \(errorMessage)\n\n(WillDeep: this tool call failed. Do not stop here — diagnose the cause from the exit code/stderr above and try another approach to accomplish the goal. Only give up if you are genuinely blocked, and then explain what you tried and what you still need.)",
                         source: .systemNotice
                     )
                 }
@@ -1661,6 +1681,26 @@ extension AppState {
         runtime.messages.append(
             AgentMessage(role: .tool, content: limited, toolCallID: toolCallID)
         )
+    }
+
+    private func diagnoseLocalWorkspaceIfNeeded(
+        after error: Error,
+        runtime: AgentRuntime,
+        workspaceURL: URL?
+    ) -> String? {
+        guard workspaceURL != nil else { return nil }
+        if let availabilityError = error as? AgentWorkspaceAvailabilityError {
+            return availabilityError.localizedDescription
+        }
+        guard let availability = runtime.diagnoseLocalWorkspaceAfterFailure(),
+              availability.blocksLocalWorkspaceUse,
+              let message = availability.message else {
+            return nil
+        }
+        runtime.errorMessage = message
+        runtime.errorDetails = nil
+        persistAgentSession(runtime: runtime)
+        return message
     }
 
 }

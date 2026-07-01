@@ -38,6 +38,35 @@ final class AppState: ObservableObject {
     @Published private(set) var editorHighlightRevision = 0
     @Published private(set) var editorNavigationRequest: EditorNavigationRequest?
     var pendingDefinitionNavigation: EditorDefinitionLocation?
+    let editorLanguageServiceManager = EditorLanguageServiceManager()
+    @Published var editorLanguageServiceOutlineItems: [EditorOutlineItem] = []
+    @Published var editorWorkspaceSymbolItems: [EditorWorkspaceSymbolItem] = []
+    @Published var isEditorWorkspaceSymbolSearchLoading = false
+    @Published var editorLanguageServiceDiagnosticIssues: [EditorDiagnosticIssue] = []
+    @Published var editorSemanticTokenSpans: [EditorSemanticTokenSpan] = []
+    @Published var editorInlayHintSpans: [EditorInlayHintSpan] = []
+    @Published var editorDocumentLinkSpans: [EditorDocumentLinkSpan] = []
+    @Published var editorLanguageServiceFoldingGuides: [ScopeGuide] = []
+    @Published var editorDocumentHighlightSpans: [EditorDocumentHighlightSpan] = []
+    @Published var editorHoverInfo: EditorHoverInfo?
+    @Published var editorCompletionPanel: EditorCompletionPanelState?
+    @Published var editorSignatureHelpPanel: EditorSignatureHelpPanelState?
+    @Published var editorCodeActionPanel: EditorCodeActionPanelState?
+    @Published var editorReferencesPanel: EditorReferencesPanelState?
+    @Published var editorCallHierarchyPanel: EditorCallHierarchyPanelState?
+    @Published var editorTextSelectionRequest: EditorTextSelectionRequest?
+    var editorLanguageServiceDiagnosticsURI: String?
+    var editorLanguageServiceSemanticTokensURI: String?
+    var editorLanguageServiceInlayHintsURI: String?
+    var editorLanguageServiceDocumentLinksURI: String?
+    var editorLanguageServiceFoldingURI: String?
+    var editorLanguageServiceDocumentHighlightsURI: String?
+    var editorLanguageServiceDiagnosticsHandlerInstalled = false
+    var editorTextSelectionRevision = 0
+    var editorDocumentHighlightRevision = 0
+    var editorDocumentHighlightRequestKey: String?
+    var editorWorkspaceSymbolRevision = 0
+    var editorWorkspaceSymbolRequestKey: String?
     @Published var isFindBarVisible = false
     @Published var findQuery = "" {
         didSet {
@@ -641,13 +670,17 @@ final class AppState: ObservableObject {
         column: Int,
         selectedCharacters: Int,
         selectedLines: Int,
-        selectedText: String = ""
+        selectedText: String = "",
+        characterOffset: Int? = nil
     ) {
         cursorLine = max(1, line)
         cursorColumn = max(1, column)
         selectedCharacterCount = max(0, selectedCharacters)
         selectedLineCount = max(0, selectedLines)
         self.selectedText = selectedText
+        if let characterOffset {
+            refreshEditorDocumentHighlights(characterOffset: characterOffset, selectedLength: selectedCharacters)
+        }
     }
 
     func navigateEditor(toLine line: Int) {
@@ -703,6 +736,7 @@ final class AppState: ObservableObject {
         do {
             try Data().write(to: fileURL, options: [.atomic])
             openEditorFile(fileURL, performsSafetyChecks: false)
+            notifyEditorLanguageServiceWatchedFileChanged(url: fileURL, type: .created)
             persistSession()
         } catch {
             openMissingExternalFileDraft(at: fileURL)
@@ -1002,6 +1036,7 @@ final class AppState: ObservableObject {
                 try Data().write(to: fileURL)
                 openEditorFile(fileURL)
                 refreshGitStatus()
+                notifyEditorLanguageServiceWatchedFileChanged(url: fileURL, type: .created)
                 completion?()
             } catch {
                 showFileOperationError(error.localizedDescription)
@@ -1027,6 +1062,7 @@ final class AppState: ObservableObject {
                 registerRecentFolder(folderURL)
                 selectedFolderURL = folderURL
                 refreshGitStatus()
+                notifyEditorLanguageServiceWatchedFileChanged(url: folderURL, type: .created)
                 completion?()
             } catch {
                 showFileOperationError(error.localizedDescription)

@@ -1,5 +1,285 @@
 # Changelog
 
+## 1.117.0-rc1 - 2026-07-01
+
+### Added
+- **Editor LSP Workspace Edit Refresh（1.117.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的 rename、quick fix 和 server `workspace/applyEdit` 在成功改写当前文件、已打开 tab 或磁盘文件后，会把实际变更文件逐个发送 `workspace/didChangeWatchedFiles` `changed` 事件，帮助语言服务器刷新跨文件索引和诊断。
+- **Editor LSP Semantic Token Polish（1.117.0-rc1）** —— 语义高亮现在识别 LSP 常见的 `variable`、`parameter` 和 `label` token；`variable` 可覆盖正则误判的类型名颜色并保留 declaration/definition 加粗，`parameter` 使用独立颜色，Go / Swift / TypeScript / JavaScript 的语义 token 呈现更接近 IDE。
+- 新增 `EditorLanguageServiceTests` 覆盖变量、参数语义 token 覆盖正则高亮的行为。版本号从 **1.116.0-rc1** 提升为 **1.117.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.116.0-rc1 - 2026-07-01
+
+### Added
+- **Editor LSP Watched Files（1.116.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的 editor 会在保存、新建文件、新建文件夹和创建缺失外部文件成功后发送 `workspace/didChangeWatchedFiles`，帮助 gopls / typescript-language-server / sourcekit-lsp 刷新项目索引。
+- `LanguageServerClient` 现在声明 workspace `didChangeWatchedFiles` client capability，并支持 `created` / `changed` / `deleted` file event payload；`EditorLanguageServiceManager` 会把第一批语言文件精确投递给对应 session，把配置文件或文件夹变更投递给当前 root 覆盖路径的已有 session，不无端启动无关 server。
+- 新增 `EditorLanguageServiceTests` 覆盖 client 级 watched-files notification payload，以及 manager 对 `package.json` 这类非源文件变更通知已有 workspace session 的路由。版本号从 **1.115.0-rc1** 提升为 **1.116.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.115.0-rc1 - 2026-07-01
+
+### Added
+- **Voice 转录语言设置（1.115.0-rc1）** —— Settings → Voice 新增“转录语言”选择，默认跟随系统语言，也可强制使用自动检测、中文、英文、粤语、日语或韩语，方便日本市场和多语言语音输入测试。
+- Fn push-to-talk 与 composer 麦克风按钮现在会读取该偏好后再调用 SenseVoice ONNX 推理；日语系统会默认映射到 SenseVoice `ja`，手动选择“日语”时也会固定走日语识别。
+- 新增语音语言偏好解析测试，覆盖日语、中文、英文、韩语和未知系统语言回退。版本号从 **1.114.0-rc17** 提升为 **1.115.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.114.0-rc17 - 2026-07-01
+
+### Added
+- **Editor LSP Will Save Wait Until（1.114.0-rc17）** —— Go / TypeScript / JavaScript / Swift 保存前会在 server 声明 `textDocumentSync.willSaveWaitUntil` 时请求 `textDocument/willSaveWaitUntil`，把语言服务器返回的保存前 edits 应用到即将写盘的内容，再继续原有 `textDocument/didSave` 通知。
+- 保存流程会先执行本地 `contentForSave` 归一化，再用短超时等待 LSP 保存前 edits，最后再次按本地保存规则归一化；LSP 失败或超时时回退原内容，不阻断保存。
+- 新增 `EditorLanguageServiceTests` 覆盖 client 级 `willSaveWaitUntil` 请求参数、manager 保存前同步顺序和 fake server edits。版本号从 **1.114.0-rc16** 提升为 **1.114.0-rc17**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc16 - 2026-07-01
+
+### Added
+- **Editor LSP Range Formatting（1.114.0-rc16）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单在有选区时新增 Format Selection，通过 `textDocument/rangeFormatting` 只格式化当前选区，不再只能对整篇文档发 `textDocument/formatting`。
+- `LanguageServerClient` 现在声明 `textDocument.rangeFormatting` capability、读取 `documentRangeFormattingProvider`，并在 server 支持时发送 `LSPDocumentRangeFormattingParams`；AppState 复用现有 `EditorTextEditApplier` 安全应用 edits，并在异步返回前校验当前文件、语言和文本未变化。
+- 新增 `EditorLanguageServiceTests` 覆盖 manager 级 `textDocument/rangeFormatting` 主流程、range 参数和 formatting options。版本号从 **1.114.0-rc15** 提升为 **1.114.0-rc16**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc15 - 2026-07-01
+
+### Added
+- **Editor LSP Inlay Hint Resolve（1.114.0-rc15）** —— Go / TypeScript / JavaScript / Swift 的 inlay hint 现在会保留 server 返回的 `data`，并在 server 声明 `inlayHintProvider.resolveProvider` 时请求 `inlayHint/resolve`，拿到懒加载 tooltip / text edits / padding 等信息后再映射到 editor hint span。
+- `LSPInlayHint`、`LSPInlayHintLabel` 和 label parts 升级为 `Codable`，支持把 hint 原样发回 server；`EditorInlayHintSpan` 新增 tooltip 承载位，resolve 失败时回退原 hint，不让单个懒加载失败清空整页提示。
+- 新增 `EditorLanguageServiceInlayHintTests` 覆盖 manager 级 `inlayHint/resolve` 主流程、resolve 请求 `data` 回传和 resolved tooltip 映射。版本号从 **1.114.0-rc14** 提升为 **1.114.0-rc15**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc14 - 2026-07-01
+
+### Added
+- **Editor LSP Document Link Resolve（1.114.0-rc14）** —— Go / TypeScript / JavaScript / Swift 的 document link 现在会保留 server 返回的原始 `DocumentLink.data`，当链接没有初始 `target` 且 server 声明 `documentLinkProvider.resolveProvider` 时，Command-click 会先请求 `documentLink/resolve` 再打开安全 target。
+- `EditorDocumentLinkSpan` 现在可以承载 unresolved link range，不再因为初始 `target` 为空就丢弃 import/module 链接；AppState 会在当前文件、语言和文本仍匹配时打开 resolve 后的 `file` / `http` / `https` URL，继续过滤不可信 scheme。
+- 新增 `EditorLanguageServiceDocumentLinkTests` 覆盖 manager 级 `documentLink/resolve` 主流程、resolve 请求 `data` 回传和 resolved target 解码。版本号从 **1.114.0-rc13** 提升为 **1.114.0-rc14**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc13 - 2026-07-01
+
+### Added
+- **Editor LSP Code Action Resolve（1.114.0-rc13）** —— Go / TypeScript / JavaScript / Swift 应用 quick fix 前会在 server 声明 `codeActionProvider.resolveProvider` 时请求 `codeAction/resolve`，拿到懒加载的 `WorkspaceEdit` / command / `data` 后再执行。
+- `LSPCodeAction` 现在保留并回传 `data`，`LSPWorkspaceEdit` 支持编码；AppState 在当前文件、语言和文本仍匹配时使用 resolve 后的 action，并复用现有 workspace edit 安全应用路径。resolve 失败会回退原 action。
+- 新增 `EditorLanguageServiceTests` 覆盖 manager 级 `codeAction/resolve` 主流程、resolve 前同步文档顺序、server `data` 回传和 resolved edit 应用数据。版本号从 **1.114.0-rc12** 提升为 **1.114.0-rc13**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc12 - 2026-07-01
+
+### Added
+- **Editor LSP Workspace Requests（1.114.0-rc12）** —— Go / TypeScript / JavaScript / Swift 的语言服务器主动请求 `workspace/configuration` 时，client 现在会按请求项数量返回空配置对象数组，避免 server 等不到 JSON-RPC response；后续有真实语言设置 UI 时可在同一路径填入 per-language 配置。
+- `LanguageServerClient` 现在声明 workspace `configuration` capability，并响应 `workspace/workspaceFolders`，返回 initialize root 的 URI 和名称，帮助 gopls / typescript-language-server / sourcekit-lsp 识别当前工作区。
+- 新增 `EditorLanguageServiceTests` 覆盖 server-initiated `workspace/configuration` 与 `workspace/workspaceFolders` 请求响应。版本号从 **1.114.0-rc11** 提升为 **1.114.0-rc12**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc11 - 2026-07-01
+
+### Added
+- **Editor LSP Completion Resolve（1.114.0-rc11）** —— Go / TypeScript / JavaScript / Swift 应用补全前会在 server 声明 `completionProvider.resolveProvider` 时请求 `completionItem/resolve`，拿到懒加载的 detail、documentation、`additionalTextEdits` 和 server `data` 后再应用补全。
+- `LSPCompletionItem` 现在保留 `data` 字段并随 resolve 请求原样回传；AppState 会在当前文件、语言和文本仍匹配时使用 resolve 后的 item，resolve 失败则回退原 item，避免补全动作因为懒加载失败而中断。
+- 新增 `EditorLanguageServiceTests` 覆盖 manager 级 `completionItem/resolve` 主流程、保存原始 completion `data`、以及 resolve 前同步文档顺序。版本号从 **1.114.0-rc10** 提升为 **1.114.0-rc11**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc10 - 2026-07-01
+
+### Added
+- **Editor LSP DidSave（1.114.0-rc10）** —— Go / TypeScript / JavaScript / Swift 保存成功后会按语言服务器声明的 `textDocumentSync.save` 能力发送 `textDocument/didSave`，让 gopls / typescript-language-server / sourcekit-lsp 能在真实保存生命周期后刷新诊断、索引和项目状态。
+- `LanguageServerClient` 现在解析 `textDocumentSync` 的数字与 options 两种形态，只有 server 声明 save 支持时才发保存通知，并尊重 `save.includeText` 决定是否携带最终写盘文本；`EditorLanguageServiceManager` 会先同步最新 buffer，再发送 didSave。
+- 新增 `EditorLanguageServiceTests` 覆盖 client 级 didSave capability 协商、includeText payload，以及 manager 级保存前同步顺序。版本号从 **1.114.0-rc9** 提升为 **1.114.0-rc10**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc9 - 2026-07-01
+
+### Added
+- **Editor LSP Code Action Commands（1.114.0-rc9）** —— Go / TypeScript / JavaScript / Swift 的 code action 现在支持执行语言服务器返回的 command-only quick fix：读取 `executeCommandProvider.commands` 后发送 `workspace/executeCommand`，并兼容裸 `Command` action 的 `arguments`。
+- `LanguageServerClient` 现在处理语言服务器发起的 `workspace/applyEdit` 请求，AppState 复用现有 workspace edit 安全应用路径，限制在当前 workspace 内并保护未保存 tab；执行后刷新当前 LSP 文档状态和 outline。
+- 新增 `EditorLanguageServiceCodeActionCommandTests`，覆盖裸 Command 解码、manager 级 `workspace/executeCommand` 主流程、null result 响应和未声明 capability 时不请求。版本号从 **1.114.0-rc8** 提升为 **1.114.0-rc9**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc8 - 2026-07-01
+
+### Added
+- **Editor LSP Document Links（1.114.0-rc8）** —— Go / TypeScript / JavaScript / Swift 打开或编辑时会在 server 声明 `documentLinkProvider` 后请求 LSP `textDocument/documentLink`，把语言服务器识别出的 import 路径、URL 或文件引用映射为 editor link spans。
+- Editor 会用临时 underline / link color 绘制 document links，Command-click 命中语义链接时通过系统默认应用打开安全的 `file` / `http` / `https` target；切换文件、切换语言或语言服务器不可用时清空 stale links。
+- 新增 `EditorLanguageServiceDocumentLinkTests`，覆盖 document link 解码、target scheme 过滤、manager 级 `textDocument/documentLink` 主流程和未声明 capability 时不请求。版本号从 **1.114.0-rc7** 提升为 **1.114.0-rc8**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc7 - 2026-07-01
+
+### Added
+- **Editor LSP Document Symbols 兼容增强（1.114.0-rc7）** —— Go / TypeScript / JavaScript / Swift 的 outline 现在完整兼容 LSP `textDocument/documentSymbol` 的层级 `DocumentSymbol[]`、扁平 `SymbolInformation[]` 和 `null` 返回形态，扁平符号会映射为现有 editor outline items。
+- `LanguageServerClient` 现在会读取 `documentSymbolProvider` capability，server 未声明能力时不再直接请求；声明能力后再走 LSP 符号树，减少第一批 IDE 语言退回本地正则 outline 的概率。
+- 新增 `EditorLanguageServiceDocumentSymbolTests`，覆盖 document symbol 三种返回形态解码和 manager 级 `SymbolInformation[]` 主流程。版本号从 **1.114.0-rc6** 提升为 **1.114.0-rc7**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc6 - 2026-07-01
+
+### Added
+- **Editor LSP Inlay Hints（1.114.0-rc6）** —— Go / TypeScript / JavaScript / Swift 打开或编辑时会请求 LSP `textDocument/inlayHint`，把参数名、类型等语义提示转换为 editor hint spans，并在 TextKit 中作为轻量虚拟提示绘制，不写入正文。
+- `LanguageServerClient` 现在声明并解析 `inlayHintProvider`，支持 string label 与 label parts 两种返回形态；AppState 会按当前文件 URI 管理 hint 生命周期，切换文件、切换语言或语言服务器不可用时清空 stale hints。
+- 新增 `EditorLanguageServiceInlayHintTests`，覆盖 inlay hint 解码和 manager 级 `textDocument/inlayHint` 主流程。版本号从 **1.114.0-rc5** 提升为 **1.114.0-rc6**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc5 - 2026-07-01
+
+### Added
+- **Editor LSP Completion TextEdit / Additional Edits（1.114.0-rc5）** —— Go / TypeScript / JavaScript / Swift 的 completion 应用现在优先使用 LSP `CompletionItem.textEdit` / `InsertReplaceEdit` 指定的替换范围，不再只靠本地前缀范围猜测补全边界。
+- Completion item 会声明并处理 `snippetSupport`、`additionalTextEditsSupport`、`insertTextFormat`、`additionalTextEdits`；应用补全时会把 snippet placeholder 清成可插入文本，并将 server 返回的额外 edits 与主 edit 原子应用，支持补全同时插入 import 等语义改动。
+- 新增 `EditorLanguageServiceCompletionTests`，覆盖 completion item 解码、server text edit + additional edits 应用、snippet placeholder 清理和旧式本地 replacement range fallback。版本号从 **1.114.0-rc4** 提升为 **1.114.0-rc5**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc4 - 2026-07-01
+
+### Added
+- **Editor LSP Declaration / Go to Declaration 导航（1.114.0-rc4）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Go to Declaration，通过 LSP `textDocument/declaration` 跳转到符号声明位置，继续减少正则 resolver 在第一批 IDE 语言中的职责。
+- `LanguageServerClient` 现在声明 declaration client capability，解析 `declarationProvider`，并复用现有 `LSPDefinitionResult` 兼容单个 location、location 数组和空结果；Declaration 失败时只给可控失败反馈，不做本地正则伪回退。
+- 新增 `EditorLanguageServiceNavigationTests`，覆盖 manager 级 `textDocument/declaration` 主流程，并将导航专项测试从接近 2000 行的主语言服务测试文件拆出。版本号从 **1.114.0-rc3** 提升为 **1.114.0-rc4**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc3 - 2026-07-01
+
+### Added
+- **Editor LSP prepareRename / Rename Symbol 预校验（1.114.0-rc3）** —— Go / TypeScript / JavaScript / Swift 的 Rename Symbol 在弹出输入框前会优先调用 LSP `textDocument/prepareRename`，由语言服务器确认当前位置是否可重命名，并读取返回的 range / placeholder 作为默认名称。
+- `LanguageServerClient` 现在声明 rename `prepareSupport`，解析 `renameProvider.prepareProvider`，并支持 `prepareRename` 的 `null`、裸 `Range`、`{ range, placeholder }` 三种返回形态；未声明 prepare 能力的 server 会继续走原有 LSP rename 流程，已声明但返回不可重命名时显示明确提示。
+- 新增 `EditorLanguageServiceRenameTests` 2 条，覆盖 first-stage capability 暴露和 manager 级 `textDocument/prepareRename` 主流程。版本号从 **1.114.0-rc2** 提升为 **1.114.0-rc3**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc2 - 2026-07-01
+
+### Added
+- **Editor LSP Call Hierarchy / Show Call Hierarchy（1.114.0-rc2）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Show Call Hierarchy，会通过 LSP `textDocument/prepareCallHierarchy`、`callHierarchy/incomingCalls` 和 `callHierarchy/outgoingCalls` 查询当前符号调用关系。
+- 右上角新增 Call Hierarchy 浮层，分 Incoming / Outgoing 展示调用方与被调用方的符号名、文件、行列、detail 和预览行；点击条目会跳转到对应文件位置，语言服务器不可用或无结果时只显示可控空态，不做本地正则伪回退。
+- `EditorLanguageServiceTests` 扩展到 43 条，新增 manager 级 call hierarchy 主流程测试，并覆盖 first-stage capability 暴露。版本号从 **1.114.0-rc1** 提升为 **1.114.0-rc2**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc1 - 2026-07-01
+
+### Added
+- **Agent 联网调研来源胶囊（1.114.0-rc1）** —— `web_search` / `web_fetch` 工具结果新增结构化来源列表，当前轮 assistant 输出后会显示紧凑 favicon 来源胶囊，点击可展开来源清单并打开对应网页。
+- `AgentTurnReport` 会从本轮全部工具结果中去重收集来源，不受工具明细前 8 条展示限制；工具结果脱敏链路同步处理来源标题和 URL，避免 token / key 类 query 值进入 UI。
+- `AgentWebToolsTests` 和 `AgentTurnReportTests` 覆盖搜索来源提取、host 解析和回合来源去重。版本号从 **1.113.0-rc20** 提升为 **1.114.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc20 - 2026-07-01
+
+### Added
+- **Editor LSP Selection Range / Expand Selection（1.113.0-rc20）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Expand Selection，会通过 LSP `textDocument/selectionRange` 请求语言服务器的语法树选区链，并把当前光标或选区扩到下一层更大的语义范围。
+- 新增 `EditorSelectionRangeResolver`、selection range LSP 协议模型、client capability、manager 请求和 AppState 选区应用路径；没有可靠 LSP 范围时只提示不可用或无更大范围，不做本地正则伪回退。
+- `EditorLanguageServiceTests` 扩展到 42 条，新增 manager 级 `textDocument/selectionRange` 主流程和 selection range 扩选 resolver 测试。版本号从 **1.113.0-rc19** 提升为 **1.113.0-rc20**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc19 - 2026-07-01
+
+### Added
+- **Editor LSP Workspace Symbols / Symbol Jump 项目搜索（1.113.0-rc19）** —— Go / TypeScript / JavaScript / Swift 的 Symbol Jump 在输入非空查询时会优先通过 LSP `workspace/symbol` 做项目级语义符号搜索，结果展示文件名、行号和容器名，并可跨文件跳转到语言服务器返回的位置。
+- Symbol Jump 仍保留当前文件 outline fallback：空查询继续显示当前文件结构；语言服务器不可用、未声明 workspace symbol 能力或项目级查询无结果时，继续用当前文件 outline 过滤，避免项目符号搜索失败时把面板变成死路。
+- `EditorLanguageServiceTests` 扩展到 40 条，新增 manager 级 `workspace/symbol` 主流程测试，并覆盖 first-stage capability 暴露。版本号从 **1.113.0-rc18** 提升为 **1.113.0-rc19**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc18 - 2026-07-01
+
+### Added
+- **Editor LSP Type Definition / Implementation 导航（1.113.0-rc18）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Go to Type Definition 和 Go to Implementation，分别通过 LSP `textDocument/typeDefinition` 与 `textDocument/implementation` 跳转到类型定义或实现位置。
+- LSP initialize 现在声明并协商 type definition / implementation client capability；`LanguageServerClient`、`EditorLanguageServiceManager` 和 AppState 导航路径复用现有 location 跳转能力。普通 Definition 仍保留正则 fallback；Type Definition / Implementation 没有可靠正则语义时只提示失败，避免跳到看似相关但实际错误的位置。
+- `EditorLanguageServiceTests` 扩展到 39 条，新增 manager 级 `textDocument/typeDefinition` 和 `textDocument/implementation` 主流程测试，并覆盖 first-stage capability 暴露。版本号从 **1.113.0-rc17** 提升为 **1.113.0-rc18**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc17 - 2026-07-01
+
+### Changed
+- **Agent 侧边栏快捷入口优化（1.113.0-rc17）** —— Agent 标题栏右侧新增 Diff、Terminal、Preview、Files 四个高频侧边栏小图标，点击即可直接打开或关闭对应右侧面板；完整面板列表收进 `...` 菜单，保留原有所有侧栏 tab 选择能力。
+- Editor 窗口入口继续保留，但改为独立强调色胶囊按钮，并与侧栏工具组之间加入分隔线，避免和普通 side panel 入口混在一起。
+
+### Fixed
+- 右侧侧边栏拖拽改宽时不再每像素写入 `@AppStorage`，窗口最小宽度约束也延后到拖拽结束后提交；拖动过程只更新临时宽度并关闭隐式动画，减少面板内容和边界的抖动、闪动。版本号从 **1.113.0-rc16** 提升为 **1.113.0-rc17**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.113.0-rc16 - 2026-07-01
+
+### Added
+- **Editor LSP Document Highlights 接入（1.113.0-rc16）** —— Go / TypeScript / JavaScript / Swift 的 editor 光标移动到符号上时，会通过 LSP `textDocument/documentHighlight` 请求当前文档内的语义关联位置，并以轻量背景高亮读/写引用。
+- Document highlight 请求接入 `LanguageServerClient`、`EditorLanguageServiceManager`、`AppState` 和 `EditorView`：光标移动带 UTF-16 字符偏移，AppState 做 120ms 防抖和过期响应丢弃，EditorView 将符号高亮与诊断临时属性统一刷新，诊断显示优先级更高。
+- `EditorLanguageServiceTests` 扩展到 37 条，新增 document highlight 结果解码、manager 级 `textDocument/documentHighlight` 主流程和 first-stage capability 覆盖测试。版本号从 **1.113.0-rc15** 提升为 **1.113.0-rc16**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc15 - 2026-07-01
+
+### Added
+- **Editor LSP Code Actions 接入（1.113.0-rc15）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Show Code Actions，会通过 LSP `textDocument/codeAction` 获取 quick fix / source action 候选，并在右上角浮层展示。
+- Code Action 会携带当前选区或光标命中的诊断上下文；带 `WorkspaceEdit` 的 action 会复用 rename 的 workspace 安全应用路径，限制在当前 workspace 内，保护已打开且未保存的其他 tab，当前文件保持 dirty，其他安全文件写回磁盘。
+- `EditorLanguageServiceTests` 扩展到 35 条，新增 code action 联合结果解码、manager 级 `textDocument/codeAction` 主流程和面板 item 映射测试。版本号从 **1.113.0-rc14** 提升为 **1.113.0-rc15**，并同步 Xcode / Go agent / Help / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc14 - 2026-07-01
+
+### Added
+- **Editor LSP Signature Help 接入（1.113.0-rc14）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Show Signature Help，会通过 LSP `textDocument/signatureHelp` 展示当前调用签名、文档和 active parameter。
+- 新增 `LSPSignatureHelp`、`LSPSignatureInformation`、`LSPParameterInformation` 和 `EditorSignatureHelpPanelState`，支持参数 label 的字符串与 `[start, end]` 两种 LSP 形态；面板会高亮当前参数，语言服务器不可用时给出可控空态。
+- `EditorLanguageServiceTests` 扩展到 32 条，新增 signature help 解码、manager 级 `textDocument/signatureHelp` 主流程和 active parameter 面板映射测试。版本号从 **1.113.0-rc13** 提升为 **1.113.0-rc14**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc13 - 2026-07-01
+
+### Added
+- **Editor LSP Folding Ranges 接入（1.113.0-rc13）** —— Go / TypeScript / JavaScript / Swift 的 editor 折叠 gutter 现在会优先使用 LSP `textDocument/foldingRange` 返回的语法树折叠范围，不再只依赖本地 brace/indent/regex 规则。
+- 新增 `LSPFoldingRangeParams`、`LSPFoldingRange`、client folding range capability 和 `EditorFoldingRangeMapper`，把 LSP 0-based range 转为 editor 1-based `ScopeGuide`；语言服务器不可用或未声明 folding range 支持时继续使用 `ScopeGuideCalculator` fallback。
+- `EditorLanguageServiceTests` 扩展到 29 条，新增 folding range 到 scope guide 的映射测试和 manager 级 `textDocument/foldingRange` 主流程测试。版本号从 **1.113.0-rc12** 提升为 **1.113.0-rc13**，并同步 Xcode / Go agent / Help / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc12 - 2026-07-01
+
+### Added
+- **Editor LSP Rename Symbol 接入（1.113.0-rc12）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Rename Symbol，会通过 LSP `textDocument/rename` 获取语义级 `WorkspaceEdit`，而不是按正则直接替换当前单词。
+- 新增 `LSPRenameParams`、`LSPWorkspaceEdit`、`LSPTextDocumentEdit` 和 `EditorWorkspaceEditApplier`，支持 LSP `changes` 与常见 `documentChanges` text edits；rename 应用会限制在当前 workspace 内，保护已打开且未保存的其他 tab，当前文件改动保持为 dirty，其他安全文件写回磁盘。
+- `EditorLanguageServiceTests` 扩展到 27 条，新增 WorkspaceEdit 解码、manager 级 `textDocument/rename` 主流程和 workspace edit 应用测试。版本号从 **1.113.0-rc11** 提升为 **1.113.0-rc12**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc11 - 2026-07-01
+
+### Added
+- **Editor LSP Document Formatting 接入（1.113.0-rc11）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Format Document，当前文件会通过 LSP `textDocument/formatting` 获取语言服务器返回的 `TextEdit` 并应用到正文。
+- 新增 `LSPFormattingOptions`、`LSPTextEdit`、`LSPTextEditResult` 和 `EditorTextEditApplier`，格式化 edits 会按文档位置倒序应用，避免多段 replacement 因前序编辑导致 range 漂移；格式化成功后会标记 dirty、同步 LSP 文档并刷新语义 tokens。
+- `EditorLanguageServiceTests` 扩展到 24 条，新增 manager 级 `textDocument/formatting` 主流程和 TextEdit 应用顺序测试。版本号从 **1.113.0-rc10** 提升为 **1.113.0-rc11**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc10 - 2026-07-01
+
+### Fixed
+- **Agent workspace 移动/删除懒诊断（1.113.0-rc10）** —— Agent session 持久化本地 workspace 的 security-scoped bookmark 与文件身份线索，正常工具调用继续乐观使用记录路径，不做周期性目录轮询。
+- 工具、delegated agent、移动端读文件、patch 应用和 worktree 刷新现在会尊重 runtime 的 workspace availability；只有在工具/文件操作失败或 runtime 已知 missing/moved 时才诊断旧路径和 bookmark，检测到 rename/move 后不会静默改会话路径，而是要求用户重新选择确认。新增 `WorkspaceSessionTests` 覆盖 rename 后不静默 rebind 的行为。版本号从 **1.113.0-rc9** 提升为 **1.113.0-rc10**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc9 - 2026-07-01
+
+### Added
+- **Editor LSP References 接入（1.113.0-rc9）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Find References，会通过 LSP `textDocument/references` 查询当前符号引用，并在 editor 右上角显示可点击引用列表。
+- References 面板支持 loading、空结果和不可用状态，结果行展示文件名、行列和预览行；点击结果会复用现有 LSP location 导航能力跳转到对应文件和位置。
+- `EditorLanguageServiceTests` 扩展到 22 条，新增 manager 级 `textDocument/references` 主流程和 `EditorReferenceItem` 显示元数据映射测试。版本号从 **1.113.0-rc8** 提升为 **1.113.0-rc9**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc8 - 2026-07-01
+
+### Added
+- **Editor LSP Semantic Tokens 接入（1.113.0-rc8）** —— Go / TypeScript / JavaScript / Swift 的 editor 高亮现在会在 regex fallback 之后优先应用 LSP `textDocument/semanticTokens/full` 返回的语义 token，让函数、类型、关键字、字符串、数字、注释等颜色来自语言服务器的语法树/AST 语义。
+- LSP initialize 现在声明 semantic tokens client capability，并读取 server 返回的 legend；editor 会把相对 delta token 数据解码成 UTF-16 range，切文件/切语言/语言服务器不可用时清空语义 token 并继续保留原有 regex 高亮 fallback。
+- `EditorLanguageServiceTests` 扩展到 20 条，新增 semantic token delta 解码、manager 级 `textDocument/semanticTokens/full` 主流程和 semantic token 覆盖 regex 高亮颜色测试。版本号从 **1.113.0-rc7** 提升为 **1.113.0-rc8**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc7 - 2026-07-01
+
+### Added
+- **Editor LSP Completion 接入（1.113.0-rc7）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 LSP 补全入口，会通过 `textDocument/completion` 获取语言服务器候选，并在 editor 右上角显示可点击候选面板。
+- 补全面板支持 loading、空结果和不可用状态；选择候选后会按当前符号前缀或选区替换文本，优先使用 LSP `insertText`，没有时回退到 `label`，并把光标移动到插入文本末尾。
+- `EditorLanguageServiceTests` 扩展到 17 条，新增 completion array/list/null 解码、manager 级 `textDocument/completion` 主流程和 `EditorCompletionItem` 插入文本 fallback 测试。版本号从 **1.113.0-rc6** 提升为 **1.113.0-rc7**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc6 - 2026-07-01
+
+### Added
+- **Editor LSP Hover 接入（1.113.0-rc6）** —— Go / TypeScript / JavaScript / Swift 的右键菜单新增 LSP Hover 信息入口，当前符号会通过 `textDocument/hover` 查询语言服务器，并在 editor 右上角显示可复制的轻量信息面板。
+- LSP hover 解码支持 markdown、普通字符串和 marked-string 数组，避免不同语言服务器返回形态不一致时丢失文档或类型签名；语言服务器不可用、无内容或切换文件时会显示可控空态并清理过期 hover。
+- `EditorLanguageServiceTests` 扩展到 14 条，新增 hover 内容解码、manager 级 `textDocument/hover` 主流程和 `EditorHoverInfo` 映射测试。版本号从 **1.113.0-rc5** 提升为 **1.113.0-rc6**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc5 - 2026-07-01
+
+### Fixed
+- **Workspace 菜单 URL 比较卡死（1.113.0-rc5）** —— 采样显示 WillDeep 主线程 3715/3715 个样本卡在 SwiftUI `Menu` / `GraphHost.flushTransactions` 布局刷新链路，热点集中于 `URL.==`、`URL.path`、`NSURL.relativeString` 和 Swift 字符串桥接。
+- `WorkspacePickerPill` 的已知工作区缓存从 `[URL]` 改为稳定的 `id/path/displayName` 轻量快照，菜单 `ForEach` 不再用 `URL` 自身当 identity，active check 改为字符串 path 比较，避免 SwiftUI 在菜单布局和 diff 期间反复标准化、桥接和比较 URL。版本号从 **1.113.0-rc4** 提升为 **1.113.0-rc5**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc4 - 2026-07-01
+
+### Added
+- **Editor LSP 诊断接入（1.113.0-rc4）** —— Go / TypeScript / JavaScript / Swift 的 LSP `textDocument/publishDiagnostics` 现在会进入 AppState，并按当前文件 URI 转换为 editor 可绘制的错误、警告、信息和提示区间。
+- Editor 正文新增 LSP 诊断下划线与轻量背景提示，状态栏显示错误/警告数量，并可一键跳转到首个诊断位置；切换到非第一批 IDE 语言或关闭文件时会清理过期诊断。
+- `EditorLanguageServiceTests` 扩展到 11 条，新增 diagnostics notification 分发、UTF-16 range 反向转换和 editor diagnostic issue 映射测试。版本号从 **1.113.0-rc3** 提升为 **1.113.0-rc4**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.113.0-rc3 - 2026-07-01
+
+### Added
+- **Editor LSP 结构大纲接入（1.113.0-rc3）** —— Go / TypeScript / JavaScript / Swift 的 Structure 侧栏和符号跳转现在优先使用 LSP `textDocument/documentSymbol` 返回的真实语义结构；语言服务器不可用、返回为空或刷新尚未完成时继续使用原有正则 outline 作为 fallback。
+- `EditorLanguageServiceManager` 新增 document symbols 请求，AppState 增加当前文件 IDE outline 缓存与刷新桥接，Structure 面板打开和 Symbol Jump 打开/编辑时会触发 LSP outline 刷新，并在结果仍匹配当前文件内容时替换本地 outline。
+- `EditorLanguageServiceTests` 扩展到 9 条，新增 LSP document symbol 嵌套结构到 outline 的映射测试，以及 manager 级 `textDocument/documentSymbol` 主流程测试。版本号从 **1.113.0-rc2** 提升为 **1.113.0-rc3**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.113.0-rc2 - 2026-07-01
+
+### Added
+- **Editor LSP 定义跳转接入（1.113.0-rc2）** —— Go / TypeScript / JavaScript / Swift 文件打开和编辑时会同步到 `EditorLanguageServiceManager` 管理的 LSP session；Command-click / 右键 Go to Definition 现在优先走 LSP `textDocument/definition`，找不到服务器、请求失败或无结果时自动回退到原有正则 resolver。
+- 新增 editor UTF-16 offset 到 LSP line/character 的位置转换，补齐 `EditorDefinitionRequest` 光标 offset 传递、LSP location 到现有 editor navigation 的桥接，以及 manager 级 session 复用、didOpen/didChange 版本递增逻辑。
+- `EditorLanguageServiceTests` 扩展到 7 条，新增 LSP position 转换和 manager definition 主流程测试，锁住 initialize → initialized → didOpen → definition 的第一批 IDE 通路。版本号从 **1.113.0-rc1** 提升为 **1.113.0-rc2**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.113.0-rc1 - 2026-07-01
+
+### Added
+- **第一批 IDE 语言服务底座（1.113.0-rc1）** —— 新增 `EditorLanguageServiceRegistry`，把 Go、TypeScript、JavaScript、Swift 标记为第一批 IDE 级语言，分别映射到 `gopls`、`typescript-language-server --stdio` 和 `sourcekit-lsp`，并记录 workspace marker、安装提示和 diagnostics / hover / definition / document symbols / completion 等本期能力。
+- 新增最小 LSP 协议模型、`Content-Length` JSON-RPC framing、进程 transport、可执行文件解析和 `LanguageServerClient`，支持 initialize、didOpen、didChange、didClose、hover、definition、document symbols 与 diagnostics 通知缓存；现有正则高亮/outline/definition 保持 fallback，后续 UI 接入走 LSP 优先。
+- 新增 `EditorLanguageServiceTests`，覆盖第一批语言 registry、workspace root 探测、LSP 帧解析、文档生命周期通知和 request/response 解码。版本号从 **1.112.0-rc5** 提升为 **1.113.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
 ## 1.112.0-rc5 - 2026-07-01
 
 ### Fixed

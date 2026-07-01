@@ -70,6 +70,12 @@ nonisolated struct EditorOutlineItem: Identifiable, Equatable {
 }
 
 nonisolated enum EditorOutlineExtractor {
+    static func outline(from symbols: [LSPDocumentSymbol]) -> [EditorOutlineItem] {
+        var items: [EditorOutlineItem] = []
+        append(symbols: symbols, level: 0, to: &items)
+        return items
+    }
+
     static func outline(for source: String, language: Language?) -> [EditorOutlineItem] {
         guard !source.isEmpty else { return [] }
 
@@ -219,6 +225,42 @@ nonisolated enum EditorOutlineExtractor {
             self.kind = kind
             self.levelGroup = levelGroup
             self.titleGroup = titleGroup
+        }
+    }
+
+    private static func append(symbols: [LSPDocumentSymbol], level: Int, to items: inout [EditorOutlineItem]) {
+        for symbol in symbols.sorted(by: { lhs, rhs in
+            if lhs.range.start.line == rhs.range.start.line {
+                return lhs.range.start.character < rhs.range.start.character
+            }
+            return lhs.range.start.line < rhs.range.start.line
+        }) {
+            let title = symbol.detail.map { "\(symbol.name) \($0)" } ?? symbol.name
+            items.append(EditorOutlineItem(
+                title: title,
+                kind: outlineKind(for: symbol.kind),
+                line: symbol.range.start.line + 1,
+                level: level
+            ))
+
+            if let children = symbol.children, !children.isEmpty {
+                append(symbols: children, level: level + 1, to: &items)
+            }
+        }
+    }
+
+    private static func outlineKind(for symbolKind: Int) -> EditorOutlineItem.Kind {
+        switch symbolKind {
+        case 5, 10, 11, 23, 26:
+            return .type
+        case 6, 9, 12, 25:
+            return .function
+        case 7, 8, 13, 14:
+            return .property
+        case 20:
+            return .key
+        default:
+            return .section
         }
     }
 

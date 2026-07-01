@@ -218,21 +218,33 @@ struct ContentView: View {
                             renderRevision: appState.editorRenderRevision,
                             highlightRevision: appState.editorHighlightRevision,
                             navigationRequest: appState.editorNavigationRequest,
+                            textSelectionRequest: appState.editorTextSelectionRequest,
                             changedLineNumbers: appState.changedLineNumbers,
                             searchRanges: appState.findMatchRanges,
                             activeSearchRange: appState.activeFindRange,
+                            diagnosticIssues: appState.editorLanguageServiceDiagnosticIssues,
+                            documentHighlightSpans: appState.editorDocumentHighlightSpans,
+                            semanticTokenSpans: appState.editorSemanticTokenSpans,
+                            inlayHintSpans: appState.editorInlayHintSpans,
+                            documentLinkSpans: appState.editorDocumentLinkSpans,
+                            languageServiceFoldingGuides: appState.editorLanguageServiceFoldingGuides,
                             onEdit: {
                                 // Mark dirty when the user types.
                                 appState.isEdited = true
+                                appState.synchronizeEditorLanguageServiceDocument()
+                                if appState.inspectorMode == .structure || appState.isSymbolJumpVisible {
+                                    appState.refreshEditorLanguageServiceOutline()
+                                }
                                 NSApplication.shared.keyWindow?.isDocumentEdited = true
                             },
-                            onSelectionChange: { line, column, selectedCharacters, selectedLines, selectedText in
+                            onSelectionChange: { line, column, selectedCharacters, selectedLines, selectedText, characterOffset in
                                 appState.updateSelectionInfo(
                                     line: line,
                                     column: column,
                                     selectedCharacters: selectedCharacters,
                                     selectedLines: selectedLines,
-                                    selectedText: selectedText
+                                    selectedText: selectedText,
+                                    characterOffset: characterOffset
                                 )
                             },
                             onSyntaxHighlightingChange: { selection in
@@ -244,8 +256,50 @@ struct ContentView: View {
                             onAskSelectionInAgentPanel: { selection in
                                 appState.askAgentAboutEditorSelection(selection)
                             },
-                            onGoToDefinition: { symbol in
-                                appState.goToDefinition(symbol: symbol)
+                            onGoToDefinition: { request in
+                                appState.goToDefinition(request: request)
+                            },
+                            onGoToDeclaration: { request in
+                                appState.goToDeclaration(request: request)
+                            },
+                            onGoToTypeDefinition: { request in
+                                appState.goToTypeDefinition(request: request)
+                            },
+                            onGoToImplementation: { request in
+                                appState.goToImplementation(request: request)
+                            },
+                            onFindReferences: { request in
+                                appState.showEditorReferences(request: request)
+                            },
+                            onShowCallHierarchy: { request in
+                                appState.showEditorCallHierarchy(request: request)
+                            },
+                            onRenameSymbol: { request in
+                                appState.renameEditorSymbol(request: request)
+                            },
+                            onFormatDocument: {
+                                appState.formatEditorDocument()
+                            },
+                            onFormatSelection: { request in
+                                appState.formatEditorSelection(request: request)
+                            },
+                            onShowHoverInfo: { request in
+                                appState.showEditorHoverInfo(request: request)
+                            },
+                            onShowCompletions: { request in
+                                appState.showEditorCompletions(request: request)
+                            },
+                            onShowSignatureHelp: { request in
+                                appState.showEditorSignatureHelp(request: request)
+                            },
+                            onShowCodeActions: { request in
+                                appState.showEditorCodeActions(request: request)
+                            },
+                            onExpandSelection: { request in
+                                appState.expandEditorSelection(request: request)
+                            },
+                            onOpenDocumentLink: { link in
+                                appState.openEditorDocumentLink(link)
                             }
                         )
                         .editorGlassBackground(settings: appState.editorSettings)
@@ -268,10 +322,14 @@ struct ContentView: View {
                             EditorInspectorSidebar(
                                 text: appState.fileContent,
                                 language: editorLanguage,
+                                ideOutlineItems: appState.editorLanguageServiceOutlineItems,
                                 mode: $appState.inspectorMode,
                                 orderedModes: appState.editorSettings.orderedInspectorModes,
                                 onNavigateToLine: { line in
                                     appState.navigateEditor(toLine: line)
+                                },
+                                onRefreshIDEOutline: {
+                                    appState.refreshEditorLanguageServiceOutline()
                                 },
                                 onClose: {
                                     appState.isInspectorVisible = false
@@ -345,6 +403,63 @@ struct ContentView: View {
                 if appState.isSymbolJumpVisible {
                     SymbolJumpPanel()
                         .environmentObject(appState)
+                }
+                if let hoverInfo = appState.editorHoverInfo {
+                    EditorHoverInfoPanel(info: hoverInfo) {
+                        appState.dismissEditorHoverInfo()
+                    }
+                }
+                if let completionPanel = appState.editorCompletionPanel {
+                    EditorCompletionPanel(
+                        state: completionPanel,
+                        onSelect: { item in
+                            appState.applyEditorCompletion(item)
+                        },
+                        onClose: {
+                            appState.dismissEditorCompletionPanel()
+                        }
+                    )
+                }
+                if let signatureHelpPanel = appState.editorSignatureHelpPanel {
+                    EditorSignatureHelpPanel(
+                        state: signatureHelpPanel,
+                        onClose: {
+                            appState.dismissEditorSignatureHelpPanel()
+                        }
+                    )
+                }
+                if let codeActionPanel = appState.editorCodeActionPanel {
+                    EditorCodeActionPanel(
+                        state: codeActionPanel,
+                        onSelect: { item in
+                            appState.applyEditorCodeAction(item)
+                        },
+                        onClose: {
+                            appState.dismissEditorCodeActionPanel()
+                        }
+                    )
+                }
+                if let referencesPanel = appState.editorReferencesPanel {
+                    EditorReferencesPanel(
+                        state: referencesPanel,
+                        onSelect: { item in
+                            appState.navigateToEditorReference(item)
+                        },
+                        onClose: {
+                            appState.dismissEditorReferencesPanel()
+                        }
+                    )
+                }
+                if let callHierarchyPanel = appState.editorCallHierarchyPanel {
+                    EditorCallHierarchyPanel(
+                        state: callHierarchyPanel,
+                        onSelect: { entry in
+                            appState.navigateToEditorCallHierarchyEntry(entry)
+                        },
+                        onClose: {
+                            appState.dismissEditorCallHierarchyPanel()
+                        }
+                    )
                 }
             }
     }
@@ -790,22 +905,81 @@ private struct SymbolJumpPanel: View {
     // typing in the query field.
     @State private var allSymbols: [EditorOutlineItem] = []
 
-    private func extractOutline() -> [EditorOutlineItem] {
-        guard let url = appState.openedFileURL else { return [] }
-        let language = appState.effectiveLanguage ?? Language.fromURL(url)
-        return EditorOutlineExtractor.outline(for: appState.fileContent, language: language)
-    }
+    private enum SymbolJumpResult: Identifiable, Equatable {
+        case outline(EditorOutlineItem)
+        case workspace(EditorWorkspaceSymbolItem)
 
-    private var symbols: [EditorOutlineItem] {
-        let query = appState.symbolJumpQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return allSymbols }
-        return allSymbols.filter { item in
-            item.title.localizedCaseInsensitiveContains(query)
-                || item.kind.rawValue.localizedCaseInsensitiveContains(query)
+        var id: String {
+            switch self {
+            case .outline(let item):
+                return "outline-\(item.id)"
+            case .workspace(let item):
+                return "workspace-\(item.id)"
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .outline(let item):
+                return item.title
+            case .workspace(let item):
+                return item.name
+            }
+        }
+
+        var kind: EditorOutlineItem.Kind {
+            switch self {
+            case .outline(let item):
+                return item.kind
+            case .workspace(let item):
+                return item.kind
+            }
+        }
+
+        var line: Int {
+            switch self {
+            case .outline(let item):
+                return item.line
+            case .workspace(let item):
+                return item.line
+            }
+        }
+
+        var detail: String {
+            switch self {
+            case .outline(let item):
+                return L10n.SymbolJump.symbolKindLine(item.kind.rawValue, String(item.line))
+            case .workspace(let item):
+                let location = L10n.SymbolJump.workspaceSymbolLocation(item.fileName, String(item.line))
+                guard let containerName = item.containerName, !containerName.isEmpty else {
+                    return location
+                }
+                return L10n.SymbolJump.workspaceSymbolContainerLocation(containerName, location)
+            }
         }
     }
 
-    private var selectedSymbol: EditorOutlineItem? {
+    private func extractOutline() -> [EditorOutlineItem] {
+        guard let url = appState.openedFileURL else { return [] }
+        let language = appState.effectiveLanguage ?? Language.fromURL(url)
+        let fallback = EditorOutlineExtractor.outline(for: appState.fileContent, language: language)
+        return appState.editorOutlineItems(fallback: fallback)
+    }
+
+    private var symbols: [SymbolJumpResult] {
+        let query = appState.symbolJumpQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return allSymbols.map(SymbolJumpResult.outline) }
+        let workspaceMatches = appState.editorWorkspaceSymbolItems.map(SymbolJumpResult.workspace)
+        if !workspaceMatches.isEmpty || appState.isEditorWorkspaceSymbolSearchLoading {
+            return workspaceMatches
+        }
+        return allSymbols.filter { item in
+            item.title.localizedCaseInsensitiveContains(query)
+                || item.kind.rawValue.localizedCaseInsensitiveContains(query)
+        }.map(SymbolJumpResult.outline)
+    }
+
+    private var selectedSymbol: SymbolJumpResult? {
         guard symbols.indices.contains(selectedIndex) else { return nil }
         return symbols[selectedIndex]
     }
@@ -834,7 +1008,7 @@ private struct SymbolJumpPanel: View {
                     VStack(spacing: 8) {
                         Image(systemName: "list.bullet.indent")
                             .font(.system(size: 22))
-                        Text(L10n.SymbolJump.noSymbols)
+                        Text(appState.isEditorWorkspaceSymbolSearchLoading ? L10n.SymbolJump.searchingWorkspace : L10n.SymbolJump.noSymbols)
                             .font(.caption)
                     }
                     .foregroundColor(.secondary)
@@ -859,7 +1033,7 @@ private struct SymbolJumpPanel: View {
                                                     .font(.system(size: 13, weight: .medium))
                                                     .lineLimit(1)
                                                     .truncationMode(.middle)
-                                                Text(L10n.SymbolJump.symbolKindLine(item.kind.rawValue, String(item.line)))
+                                                Text(item.detail)
                                                     .font(.caption2)
                                                     .foregroundColor(.secondary)
                                             }
@@ -909,19 +1083,33 @@ private struct SymbolJumpPanel: View {
         }
         .onAppear {
             queryFocused = true
+            appState.refreshEditorLanguageServiceOutline()
+            appState.refreshEditorWorkspaceSymbols(query: appState.symbolJumpQuery)
             allSymbols = extractOutline()
             resetSelection()
         }
         .onCompatibleChange(of: appState.fileContent) { _, _ in
+            appState.refreshEditorLanguageServiceOutline()
+            appState.refreshEditorWorkspaceSymbols(query: appState.symbolJumpQuery)
             allSymbols = extractOutline()
             clampSelection()
         }
         .onCompatibleChange(of: appState.effectiveLanguage) { _, _ in
+            appState.refreshEditorLanguageServiceOutline()
+            appState.refreshEditorWorkspaceSymbols(query: appState.symbolJumpQuery)
+            allSymbols = extractOutline()
+            clampSelection()
+        }
+        .onCompatibleChange(of: appState.editorLanguageServiceOutlineItems) { _, _ in
             allSymbols = extractOutline()
             clampSelection()
         }
         .onCompatibleChange(of: appState.symbolJumpQuery) { _, _ in
+            appState.refreshEditorWorkspaceSymbols(query: appState.symbolJumpQuery)
             resetSelection()
+        }
+        .onCompatibleChange(of: appState.editorWorkspaceSymbolItems) { _, _ in
+            clampSelection()
         }
         .onCompatibleChange(of: symbols.count) { _, _ in
             clampSelection()
@@ -985,9 +1173,18 @@ private struct SymbolJumpPanel: View {
         }
     }
 
-    private func jump(_ item: EditorOutlineItem?) {
+    private func jump(_ item: SymbolJumpResult?) {
         guard let item else { return }
-        appState.navigateEditor(toLine: item.line)
+        switch item {
+        case .outline(let outline):
+            appState.navigateEditor(toLine: outline.line)
+        case .workspace(let symbol):
+            appState.navigateToDefinitionLocation(EditorDefinitionLocation(
+                url: symbol.fileURL,
+                line: symbol.line,
+                title: symbol.name
+            ))
+        }
         appState.hideSymbolJump()
     }
 

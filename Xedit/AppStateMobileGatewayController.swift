@@ -477,10 +477,15 @@ extension AppState: AgentMobileGatewayControlling {
         maxBytes: Int?
     ) throws -> AgentMobileGatewayFileSnapshot {
         let runtime = try mobileGatewayRuntime(sessionID: sessionID)
-        guard let workspaceRootPath = runtime.workspaceRootPath, !workspaceRootPath.isEmpty else {
+        let workspaceURL: URL?
+        do {
+            workspaceURL = try runtime.localWorkspaceURLForOptimisticUse()
+        } catch {
+            throw AgentMobileGatewayCommandError.workspaceUnavailable(error.localizedDescription)
+        }
+        guard let root = workspaceURL else {
             throw AgentMobileGatewayCommandError.noWorkspace
         }
-        let root = URL(fileURLWithPath: workspaceRootPath).standardizedFileURL
         let rootPath = root.path
         let requestedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
         let targetURL: URL
@@ -496,6 +501,12 @@ extension AppState: AgentMobileGatewayControlling {
 
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: targetPath, isDirectory: &isDirectory) else {
+            if let availability = runtime.diagnoseLocalWorkspaceAfterFailure(),
+               availability.blocksLocalWorkspaceUse,
+               let message = availability.message {
+                persistAgentSession(runtime: runtime)
+                throw AgentMobileGatewayCommandError.workspaceUnavailable(message)
+            }
             throw AgentMobileGatewayCommandError.fileNotFound(path)
         }
         guard !isDirectory.boolValue else {

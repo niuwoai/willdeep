@@ -38,7 +38,9 @@ struct AgentChatHeader: View {
 
             Spacer(minLength: 8)
 
+            sidePanelShortcutStrip
             sidePanelMenu
+            editorModeSeparator
 
             Button {
                 // 1.80.0-rc1：editor / agent 已经分窗口，这个按钮的
@@ -51,10 +53,20 @@ struct AgentChatHeader: View {
                 }
             } label: {
                 Image(systemName: "pencil.and.outline")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 28, height: 24)
+                    .background(
+                        RoundedRectangle(cornerRadius: 7)
+                            .fill(appState.editorSettings.interfaceSkin.palette.accent.opacity(0.14))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7)
+                            .stroke(appState.editorSettings.interfaceSkin.palette.accent.opacity(0.34), lineWidth: 1)
+                    )
             }
             .buttonStyle(.plain)
             .focusable(false)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
             .help(L10n.Header.switchToEditor)
         }
         .padding(.leading, 18 + leadingTrafficLightInset)
@@ -88,6 +100,46 @@ struct AgentChatHeader: View {
         .keyboardShortcut("p", modifiers: [.command, .shift])
     }
 
+    private var sidePanelShortcutStrip: some View {
+        HStack(spacing: 3) {
+            ForEach(frequentSidePanelKinds) { item in
+                sidePanelShortcutButton(for: item)
+            }
+        }
+        .padding(2)
+        .background(
+            Capsule()
+                .fill(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
+        )
+        .overlay(
+            Capsule()
+                .stroke(appState.editorSettings.interfaceSkin.palette.hairline.opacity(0.82), lineWidth: 1)
+        )
+        .fixedSize()
+    }
+
+    private func sidePanelShortcutButton(for item: AgentSidePanelKind) -> some View {
+        let isSelected = sidePanel == item
+        let palette = appState.editorSettings.interfaceSkin.palette
+        return Button {
+            sidePanel = isSelected ? nil : item
+        } label: {
+            Image(systemName: item.systemImage)
+                .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                .frame(width: 24, height: 22)
+                .contentShape(Rectangle())
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(isSelected ? palette.accent.opacity(0.18) : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .foregroundStyle(isSelected ? palette.accent : palette.secondaryText)
+        .help(sidePanelTitle(for: item))
+        .accessibilityLabel(Text(sidePanelTitle(for: item)))
+    }
+
     private var sidePanelMenu: some View {
         Menu {
             ForEach(visibleKinds) { item in
@@ -108,8 +160,10 @@ struct AgentChatHeader: View {
             }
         } label: {
             ZStack(alignment: .topTrailing) {
-                Image(systemName: "sidebar.right")
-                    .foregroundStyle(.secondary)
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 24, height: 22)
+                    .foregroundStyle(appState.editorSettings.interfaceSkin.palette.secondaryText)
                 if let badge = mediaTaskMenuBadge {
                     Text(badge.text)
                         .font(.system(size: 8, weight: .bold))
@@ -129,6 +183,19 @@ struct AgentChatHeader: View {
         .fixedSize()
         .focusable(false)
         .help(L10n.Header.openSidePanel)
+    }
+
+    private var editorModeSeparator: some View {
+        Rectangle()
+            .fill(appState.editorSettings.interfaceSkin.palette.hairline.opacity(0.9))
+            .frame(width: 1, height: 18)
+            .padding(.horizontal, 3)
+    }
+
+    private var frequentSidePanelKinds: [AgentSidePanelKind] {
+        [.diff, .terminal, .preview, .files].filter { kind in
+            visibleKinds.contains(kind)
+        }
     }
 
     /// Plan 一项只在 active runtime 真的有 plan 时出现 — 没有 plan

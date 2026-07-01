@@ -1279,10 +1279,17 @@ enum SyntaxHighlighter {
         language: Language,
         theme: EditorTheme,
         font: NSFont,
+        semanticTokenSpans: [EditorSemanticTokenSpan] = [],
         completion: @escaping (NSAttributedString) -> Void
     ) {
         DispatchQueue.global(qos: .userInitiated).async {
-            let result = highlightSync(source, language: language, theme: theme, font: font)
+            let result = highlightSync(
+                source,
+                language: language,
+                theme: theme,
+                font: font,
+                semanticTokenSpans: semanticTokenSpans
+            )
             DispatchQueue.main.async {
                 completion(result)
             }
@@ -1295,7 +1302,8 @@ enum SyntaxHighlighter {
         _ source: String,
         language: Language,
         theme: EditorTheme,
-        font: NSFont
+        font: NSFont,
+        semanticTokenSpans: [EditorSemanticTokenSpan] = []
     ) -> NSAttributedString {
         let base = NSMutableAttributedString(
             string: source,
@@ -1331,6 +1339,13 @@ enum SyntaxHighlighter {
             }
         }
 
+        for span in semanticHighlightSpans(semanticTokenSpans, theme: theme, font: font) {
+            let r = NSIntersectionRange(span.range, NSRange(location: 0, length: base.length))
+            if r.length > 0 {
+                base.addAttributes(span.attributes, range: r)
+            }
+        }
+
         return base
     }
 
@@ -1357,7 +1372,8 @@ enum SyntaxHighlighter {
         range: NSRange,
         language: Language,
         theme: EditorTheme,
-        font: NSFont
+        font: NSFont,
+        semanticTokenSpans: [EditorSemanticTokenSpan] = []
     ) -> [HighlightSpan] {
         let nsSource = source as NSString
         let safeRange = NSIntersectionRange(range, NSRange(location: 0, length: nsSource.length))
@@ -1382,7 +1398,63 @@ enum SyntaxHighlighter {
             }
         }
 
+        spans.append(contentsOf: semanticHighlightSpans(semanticTokenSpans, range: safeRange, theme: theme, font: font))
         return spans
+    }
+
+    static func semanticHighlightSpans(
+        _ semanticTokens: [EditorSemanticTokenSpan],
+        range: NSRange? = nil,
+        theme: EditorTheme,
+        font: NSFont
+    ) -> [HighlightSpan] {
+        semanticTokens.compactMap { token in
+            if let range, NSIntersectionRange(token.range, range).length == 0 {
+                return nil
+            }
+            guard let attributes = semanticTokenAttributes(for: token, theme: theme, font: font) else {
+                return nil
+            }
+            return HighlightSpan(range: token.range, attributes: attributes)
+        }
+    }
+
+    static func semanticTokenAttributes(
+        for token: EditorSemanticTokenSpan,
+        theme: EditorTheme,
+        font: NSFont
+    ) -> [NSAttributedString.Key: Any]? {
+        var attributes: [NSAttributedString.Key: Any] = [:]
+        switch token.tokenType {
+        case "namespace", "type", "class", "enum", "interface", "struct", "typeParameter":
+            attributes[.foregroundColor] = theme.typeNameColor
+        case "function", "method", "macro":
+            attributes[.foregroundColor] = theme.headerColor
+        case "variable":
+            attributes[.foregroundColor] = theme.foregroundColor
+        case "parameter":
+            attributes[.foregroundColor] = theme.numberColor
+        case "keyword", "modifier", "operator", "decorator":
+            attributes[.foregroundColor] = theme.keywordColor
+        case "comment":
+            attributes[.foregroundColor] = theme.commentColor
+        case "string", "regexp":
+            attributes[.foregroundColor] = theme.stringColor
+        case "number", "enumMember":
+            attributes[.foregroundColor] = theme.numberColor
+        case "property", "event", "label":
+            attributes[.foregroundColor] = theme.typeNameColor
+        default:
+            return nil
+        }
+
+        if token.tokenModifiers.contains("declaration") || token.tokenModifiers.contains("definition") {
+            attributes[.font] = font.bold()
+        }
+        if token.tokenModifiers.contains("deprecated") {
+            attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
+        }
+        return attributes
     }
 
     /// Apply computed spans to a live text storage, resetting the range to the

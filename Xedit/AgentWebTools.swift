@@ -131,7 +131,17 @@ enum AgentWebTools {
 
         let host = url.host ?? "?"
         let summary = "Fetched \(host) (\(text.count) chars\(truncatedDownload || truncatedText ? ", truncated" : ""))"
-        return AgentToolResult(summary: summary, payload: payload)
+        return AgentToolResult(
+            summary: summary,
+            payload: payload,
+            references: [
+                AgentSourceReference(
+                    title: extraction.title,
+                    url: redacted(url),
+                    toolName: "web_fetch"
+                )
+            ]
+        )
     }
 
     // MARK: - web_search
@@ -325,10 +335,14 @@ enum AgentWebTools {
         }
 
         var lines: [String] = ["Web search results for \"\(query)\" (Exa):", ""]
+        var references: [AgentSourceReference] = []
         for (index, item) in decoded.results.enumerated() {
             let title = condenseWhitespace(decodeHTMLEntities(stripTags(item.title ?? "")))
             lines.append("\(index + 1). \(title.isEmpty ? "(untitled)" : title)")
             lines.append("   \(item.url ?? "")")
+            if let reference = sourceReference(title: title, rawURL: item.url, toolName: "web_search") {
+                references.append(reference)
+            }
 
             var metadata: [String] = []
             if let publishedDate = item.publishedDate, !publishedDate.isEmpty {
@@ -352,7 +366,8 @@ enum AgentWebTools {
         }
         return AgentToolResult(
             summary: "\(decoded.results.count) Exa result\(decoded.results.count == 1 ? "" : "s") for “\(query)”",
-            payload: lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            payload: lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines),
+            references: references
         )
     }
 
@@ -399,11 +414,15 @@ enum AgentWebTools {
         }
 
         var lines: [String] = ["Web search results for \"\(query)\":", ""]
+        var references: [AgentSourceReference] = []
         for (index, item) in items.enumerated() {
             let title = condenseWhitespace(decodeHTMLEntities(stripTags(item.title ?? "")))
             let snippet = condenseWhitespace(decodeHTMLEntities(stripTags(item.description ?? "")))
             lines.append("\(index + 1). \(title.isEmpty ? "(untitled)" : title)")
             lines.append("   \(item.url ?? "")")
+            if let reference = sourceReference(title: title, rawURL: item.url, toolName: "web_search") {
+                references.append(reference)
+            }
             if !snippet.isEmpty {
                 lines.append("   \(snippet)")
             }
@@ -411,7 +430,8 @@ enum AgentWebTools {
         }
         return AgentToolResult(
             summary: "\(items.count) result\(items.count == 1 ? "" : "s") for “\(query)”",
-            payload: lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            payload: lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines),
+            references: references
         )
     }
 
@@ -607,6 +627,22 @@ enum AgentWebTools {
 
     private static func redacted(_ url: URL) -> String {
         AgentNetworkSupport.redactedURLString(url)
+    }
+
+    private static func sourceReference(title: String, rawURL: String?, toolName: String) -> AgentSourceReference? {
+        guard let rawURL = rawURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawURL.isEmpty,
+              let url = URL(string: rawURL),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              url.host?.isEmpty == false else {
+            return nil
+        }
+        return AgentSourceReference(
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : title,
+            url: redacted(url),
+            toolName: toolName
+        )
     }
 
     private static func clampMaxChars(_ requested: Int?) -> Int {

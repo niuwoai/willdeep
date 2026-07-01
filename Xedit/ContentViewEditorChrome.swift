@@ -87,6 +87,31 @@ struct EditorStatusBar: View {
             }
             Text(appState.isEdited ? L10n.EditorStatusBar.modified : L10n.EditorStatusBar.saved)
                 .foregroundColor(appState.isEdited ? .orange : .secondary)
+            if appState.editorDiagnosticSummary.total > 0 {
+                Button {
+                    appState.navigateToFirstDiagnostic()
+                } label: {
+                    HStack(spacing: 5) {
+                        if appState.editorDiagnosticSummary.errors > 0 {
+                            Label(
+                                String(appState.editorDiagnosticSummary.errors),
+                                systemImage: "xmark.octagon.fill"
+                            )
+                            .foregroundColor(.red)
+                        }
+                        if appState.editorDiagnosticSummary.warnings > 0 {
+                            Label(
+                                String(appState.editorDiagnosticSummary.warnings),
+                                systemImage: "exclamationmark.triangle.fill"
+                            )
+                            .foregroundColor(.orange)
+                        }
+                    }
+                    .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.EditorStatusBar.diagnosticsHelp)
+            }
             Text(L10n.EditorStatusBar.cursorPosition(String(appState.cursorLine), String(appState.cursorColumn)))
             if appState.selectedCharacterCount > 0 {
                 Text("\(L10n.EditorStatusBar.selection(String(appState.selectedCharacterCount))), \(L10n.EditorStatusBar.selectionLines(String(appState.selectedLineCount)))")
@@ -122,6 +147,671 @@ struct EditorStatusBar: View {
         .overlay(alignment: .top) {
             Divider()
         }
+    }
+}
+
+struct EditorHoverInfoPanel: View {
+    let info: EditorHoverInfo
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "info.circle")
+                    .foregroundStyle(Color.accentColor)
+                Text(info.title)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 0)
+                if info.isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.7)
+                }
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.EditorHover.close)
+            }
+
+            ScrollView {
+                Text(info.content)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 220)
+        }
+        .padding(12)
+        .frame(width: 420, alignment: .leading)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .shadow(radius: 18, y: 8)
+        .padding(.top, 54)
+        .padding(.trailing, 18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .background(alignment: .topTrailing) {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onClose)
+        }
+        .background {
+            FloatingPanelEscapeKeyHandler {
+                onClose()
+            }
+        }
+    }
+}
+
+struct EditorCompletionPanel: View {
+    let state: EditorCompletionPanelState
+    let onSelect: (EditorCompletionItem) -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "text.cursor")
+                    .foregroundStyle(Color.accentColor)
+                Text(state.request.prefix.isEmpty ? L10n.EditorCompletion.title : state.request.prefix)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 0)
+                if state.isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.7)
+                }
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.EditorCompletion.close)
+            }
+
+            if let message = state.message, state.items.isEmpty {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 10)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(state.items.prefix(40)) { item in
+                            Button {
+                                onSelect(item)
+                            } label: {
+                                EditorCompletionRow(item: item)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .frame(maxHeight: 280)
+            }
+        }
+        .padding(10)
+        .frame(width: 430, alignment: .leading)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .shadow(radius: 18, y: 8)
+        .padding(.top, 54)
+        .padding(.trailing, 18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .background(alignment: .topTrailing) {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onClose)
+        }
+        .background {
+            FloatingPanelEscapeKeyHandler {
+                onClose()
+            }
+        }
+    }
+}
+
+private struct EditorCompletionRow: View {
+    let item: EditorCompletionItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
+                Image(systemName: iconName)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16)
+                Text(item.label)
+                    .font(.system(.caption, design: .monospaced).weight(.semibold))
+                    .lineLimit(1)
+                if let detail = item.detail, !detail.isEmpty {
+                    Text(detail)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            if let documentation = item.documentation, !documentation.isEmpty {
+                Text(documentation)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .padding(.leading, 24)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.primary.opacity(0.04))
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    private var iconName: String {
+        switch item.kind {
+        case 2:
+            return "cube"
+        case 3:
+            return "function"
+        case 5, 6, 7:
+            return "number"
+        case 9:
+            return "cube.box"
+        case 10:
+            return "shippingbox"
+        case 14:
+            return "puzzlepiece"
+        default:
+            return "sparkle.magnifyingglass"
+        }
+    }
+}
+
+struct EditorSignatureHelpPanel: View {
+    let state: EditorSignatureHelpPanelState
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "function")
+                    .foregroundStyle(Color.accentColor)
+                Text(L10n.EditorSignatureHelp.title)
+                    .font(.caption.weight(.semibold))
+                Spacer(minLength: 0)
+                if state.isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.7)
+                }
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.EditorSignatureHelp.close)
+            }
+
+            if let message = state.message, state.signatureLabel.isEmpty {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 10)
+            } else {
+                Text(state.signatureLabel)
+                    .font(.system(.caption, design: .monospaced).weight(.semibold))
+                    .textSelection(.enabled)
+                    .lineLimit(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if let documentation = state.documentation, !documentation.isEmpty {
+                    Text(documentation)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .lineLimit(4)
+                }
+
+                if !state.parameters.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(state.parameters) { parameter in
+                            EditorSignatureParameterRow(parameter: parameter)
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+            }
+        }
+        .padding(10)
+        .frame(width: 430, alignment: .leading)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .shadow(radius: 18, y: 8)
+        .padding(.top, 54)
+        .padding(.trailing, 18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .background(alignment: .topTrailing) {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onClose)
+        }
+        .background {
+            FloatingPanelEscapeKeyHandler {
+                onClose()
+            }
+        }
+    }
+}
+
+private struct EditorSignatureParameterRow: View {
+    let parameter: EditorSignatureParameter
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(parameter.label)
+                .font(.system(.caption2, design: .monospaced).weight(parameter.isActive ? .semibold : .regular))
+                .foregroundStyle(parameter.isActive ? Color.accentColor : Color.primary)
+                .lineLimit(1)
+            if let documentation = parameter.documentation, !documentation.isEmpty {
+                Text(documentation)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(parameter.isActive ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.04))
+        )
+    }
+}
+
+struct EditorCodeActionPanel: View {
+    let state: EditorCodeActionPanelState
+    let onSelect: (EditorCodeActionItem) -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "lightbulb")
+                    .foregroundStyle(Color.accentColor)
+                Text(L10n.EditorCodeAction.title)
+                    .font(.caption.weight(.semibold))
+                Spacer(minLength: 0)
+                if state.isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.7)
+                }
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.EditorCodeAction.close)
+            }
+
+            if let message = state.message, state.items.isEmpty {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 10)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(state.items.prefix(60)) { item in
+                            Button {
+                                onSelect(item)
+                            } label: {
+                                EditorCodeActionRow(item: item)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .frame(maxHeight: 300)
+            }
+        }
+        .padding(10)
+        .frame(width: 430, alignment: .leading)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .shadow(radius: 18, y: 8)
+        .padding(.top, 54)
+        .padding(.trailing, 18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .background(alignment: .topTrailing) {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onClose)
+        }
+        .background {
+            FloatingPanelEscapeKeyHandler {
+                onClose()
+            }
+        }
+    }
+}
+
+private struct EditorCodeActionRow: View {
+    let item: EditorCodeActionItem
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: item.edit == nil ? "terminal" : "wand.and.stars")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(item.title)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(2)
+                    if item.isPreferred {
+                        Text(L10n.EditorCodeAction.preferred)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Color.accentColor)
+                    }
+                }
+                if let kind = item.kind, !kind.isEmpty {
+                    Text(kind)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(item.isPreferred ? Color.accentColor.opacity(0.11) : Color.primary.opacity(0.04))
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+struct EditorReferencesPanel: View {
+    let state: EditorReferencesPanelState
+    let onSelect: (EditorReferenceItem) -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "point.3.connected.trianglepath.dotted")
+                    .foregroundStyle(Color.accentColor)
+                Text(state.request.symbol.isEmpty ? L10n.EditorReferences.title : state.request.symbol)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 0)
+                if state.isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.7)
+                }
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.EditorReferences.close)
+            }
+
+            if let message = state.message, state.items.isEmpty {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 10)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(state.items.prefix(80))) { item in
+                            Button {
+                                onSelect(item)
+                            } label: {
+                                EditorReferenceRow(item: item)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .frame(maxHeight: 320)
+            }
+        }
+        .padding(10)
+        .frame(width: 460, alignment: .leading)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .shadow(radius: 18, y: 8)
+        .padding(.top, 54)
+        .padding(.trailing, 18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .background(alignment: .topTrailing) {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onClose)
+        }
+        .background {
+            FloatingPanelEscapeKeyHandler {
+                onClose()
+            }
+        }
+    }
+}
+
+private struct EditorReferenceRow: View {
+    let item: EditorReferenceItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.turn.down.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16)
+                Text(item.fileName)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text("\(item.line):\(item.column)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            if !item.preview.isEmpty {
+                Text(item.preview)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .padding(.leading, 24)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.primary.opacity(0.04))
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+struct EditorCallHierarchyPanel: View {
+    let state: EditorCallHierarchyPanelState
+    let onSelect: (EditorCallHierarchyEntry) -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "point.3.connected.trianglepath.dotted")
+                    .foregroundStyle(Color.accentColor)
+                Text(state.request.symbol.isEmpty ? L10n.EditorCallHierarchy.title : state.request.symbol)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 0)
+                if state.isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.7)
+                }
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.EditorCallHierarchy.close)
+            }
+
+            if let message = state.message, state.incoming.isEmpty, state.outgoing.isEmpty {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 10)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 8) {
+                        EditorCallHierarchySection(
+                            title: L10n.EditorCallHierarchy.incoming,
+                            entries: state.incoming,
+                            onSelect: onSelect
+                        )
+                        EditorCallHierarchySection(
+                            title: L10n.EditorCallHierarchy.outgoing,
+                            entries: state.outgoing,
+                            onSelect: onSelect
+                        )
+                    }
+                }
+                .frame(maxHeight: 360)
+            }
+        }
+        .padding(10)
+        .frame(width: 500, alignment: .leading)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .shadow(radius: 18, y: 8)
+        .padding(.top, 54)
+        .padding(.trailing, 18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .background(alignment: .topTrailing) {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onClose)
+        }
+        .background {
+            FloatingPanelEscapeKeyHandler {
+                onClose()
+            }
+        }
+    }
+}
+
+private struct EditorCallHierarchySection: View {
+    let title: String
+    let entries: [EditorCallHierarchyEntry]
+    let onSelect: (EditorCallHierarchyEntry) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text("\(entries.count)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                Spacer(minLength: 0)
+            }
+
+            if entries.isEmpty {
+                Text(L10n.EditorCallHierarchy.emptySection)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                ForEach(Array(entries.prefix(60))) { entry in
+                    Button {
+                        onSelect(entry)
+                    } label: {
+                        EditorCallHierarchyRow(entry: entry)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+}
+
+private struct EditorCallHierarchyRow: View {
+    let entry: EditorCallHierarchyEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Image(systemName: entry.direction == .incoming ? "arrow.down.left" : "arrow.up.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16)
+                Text(entry.name)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(entry.fileName)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text("\(entry.line):\(entry.column)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            if let detail = entry.detail, !detail.isEmpty {
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .padding(.leading, 24)
+            }
+            if !entry.preview.isEmpty {
+                Text(entry.preview)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .padding(.leading, 24)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.primary.opacity(0.04))
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 6))
     }
 }
 
@@ -252,9 +942,11 @@ struct InspectorCollapsedRail: View {
 struct EditorInspectorSidebar: View {
     let text: String
     let language: Language?
+    let ideOutlineItems: [EditorOutlineItem]
     @Binding var mode: EditorInspectorMode
     let orderedModes: [EditorInspectorMode]
     let onNavigateToLine: (Int) -> Void
+    let onRefreshIDEOutline: () -> Void
     let onClose: () -> Void
 
     @State private var outline: [EditorOutlineItem] = []
@@ -287,7 +979,7 @@ struct EditorInspectorSidebar: View {
                 EditorMinimapView(text: text, onNavigateToLine: onNavigateToLine)
             case .structure:
                 EditorStructureView(
-                    items: outline,
+                    items: ideOutlineItems.isEmpty ? outline : ideOutlineItems,
                     onNavigateToLine: onNavigateToLine
                 )
             }
@@ -298,6 +990,7 @@ struct EditorInspectorSidebar: View {
         }
         .task(id: TextLanguageKey(text: text, language: language, mode: mode)) {
             guard mode == .structure else { return }
+            onRefreshIDEOutline()
             let source = text
             let lang = language
             let extracted = await Task.detached(priority: .userInitiated) {

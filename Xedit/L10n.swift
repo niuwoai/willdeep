@@ -340,6 +340,7 @@ enum L10n {
             return String(format: template, a1, a2)
         }
         static let cursorPositionCol = String(localized: "editor-status-bar.cursor-position.col", defaultValue: "Col")
+        static let diagnosticsHelp = String(localized: "editor-status-bar.diagnostics.help", defaultValue: "Jump to first language diagnostic")
         static let externalChanges = String(localized: "editor-status-bar.external-changes", defaultValue: "External changes")
         static func gitBranch(_ a1: String) -> String {
             let template = String(localized: "editor-status-bar.git-branch", defaultValue: "Git")
@@ -358,6 +359,123 @@ enum L10n {
             let template = String(localized: "editor-status-bar.selection.lines", defaultValue: "lines selected")
             return String(format: template, a1)
         }
+    }
+
+    enum EditorContextMenu {
+        static let goToDefinition = String(localized: "editor-context-menu.go-to-definition", defaultValue: "Go to Definition")
+        static let goToDeclaration = String(localized: "editor-context-menu.go-to-declaration", defaultValue: "Go to Declaration")
+        static let goToTypeDefinition = String(localized: "editor-context-menu.go-to-type-definition", defaultValue: "Go to Type Definition")
+        static let goToImplementation = String(localized: "editor-context-menu.go-to-implementation", defaultValue: "Go to Implementation")
+        static let findReferences = String(localized: "editor-context-menu.find-references", defaultValue: "Find References")
+        static let showCallHierarchy = String(localized: "editor-context-menu.show-call-hierarchy", defaultValue: "Show Call Hierarchy")
+        static let renameSymbol = String(localized: "editor-context-menu.rename-symbol", defaultValue: "Rename Symbol…")
+        static let formatDocument = String(localized: "editor-context-menu.format-document", defaultValue: "Format Document")
+        static let formatSelection = String(localized: "editor-context-menu.format-selection", defaultValue: "Format Selection")
+        static let showHoverInfo = String(localized: "editor-context-menu.show-hover-info", defaultValue: "Show Hover Info")
+        static let showCompletions = String(localized: "editor-context-menu.show-completions", defaultValue: "Show Completions")
+        static let showSignatureHelp = String(localized: "editor-context-menu.show-signature-help", defaultValue: "Show Signature Help")
+        static let showCodeActions = String(localized: "editor-context-menu.show-code-actions", defaultValue: "Show Code Actions")
+        static let expandSelection = String(localized: "editor-context-menu.expand-selection", defaultValue: "Expand Selection")
+    }
+
+    enum EditorSelectionRange {
+        static let noRange = String(localized: "editor-selection-range.no-range", defaultValue: "The language server did not return a larger semantic selection.")
+        static let unavailable = String(localized: "editor-selection-range.unavailable", defaultValue: "Language server selection range is unavailable.")
+        static func failed(_ reason: String) -> String {
+            let template = String(localized: "editor-selection-range.failed", defaultValue: "Could not expand selection: %@")
+            return String(format: template, reason)
+        }
+    }
+
+    enum EditorRename {
+        static let title = String(localized: "editor-rename.title", defaultValue: "Rename Symbol")
+        static func message(_ symbol: String) -> String {
+            let template = String(localized: "editor-rename.message", defaultValue: "Enter a new name for “%@”.")
+            return String(format: template, symbol)
+        }
+        static let confirm = String(localized: "editor-rename.confirm", defaultValue: "Rename")
+        static let cancel = String(localized: "editor-rename.cancel", defaultValue: "Cancel")
+        static let emptyName = String(localized: "editor-rename.empty-name", defaultValue: "Enter a non-empty symbol name.")
+        static let noChanges = String(localized: "editor-rename.no-changes", defaultValue: "The language server did not return any rename edits.")
+        static let notRenameable = String(localized: "editor-rename.not-renameable", defaultValue: "The language server says this symbol cannot be renamed.")
+        static let unavailable = String(localized: "editor-rename.unavailable", defaultValue: "Language server rename is unavailable.")
+        static func unsafeFile(_ path: String) -> String {
+            let template = String(localized: "editor-rename.unsafe-file", defaultValue: "Rename returned edits outside the current workspace: %@")
+            return String(format: template, path)
+        }
+        static func failed(_ reason: String) -> String {
+            let template = String(localized: "editor-rename.failed", defaultValue: "Could not rename symbol: %@")
+            return String(format: template, reason)
+        }
+        static func unsavedFile(_ path: String) -> String {
+            let template = String(localized: "editor-rename.unsaved-file", defaultValue: "Save or close the unsaved tab before renaming: %@")
+            return String(format: template, path)
+        }
+    }
+
+    enum EditorHover {
+        static let close = String(localized: "editor-hover.close", defaultValue: "Close hover info")
+        static let loading = String(localized: "editor-hover.loading", defaultValue: "Loading...")
+        static let noInformation = String(localized: "editor-hover.no-information", defaultValue: "No hover information available.")
+        static let unavailable = String(localized: "editor-hover.unavailable", defaultValue: "Language server hover information is unavailable.")
+    }
+
+    enum EditorCompletion {
+        static let title = String(localized: "editor-completion.title", defaultValue: "Completions")
+        static let close = String(localized: "editor-completion.close", defaultValue: "Close completions")
+        static let loading = String(localized: "editor-completion.loading", defaultValue: "Loading completions...")
+        static let noItems = String(localized: "editor-completion.no-items", defaultValue: "No completions available.")
+        static let unavailable = String(localized: "editor-completion.unavailable", defaultValue: "Language server completions are unavailable.")
+    }
+
+    enum EditorSignatureHelp {
+        static let title = String(localized: "editor-signature-help.title", defaultValue: "Signature Help")
+        static let close = String(localized: "editor-signature-help.close", defaultValue: "Close signature help")
+        static let loading = String(localized: "editor-signature-help.loading", defaultValue: "Loading signature help...")
+        static let noItems = String(localized: "editor-signature-help.no-items", defaultValue: "No signature help available.")
+        static let unavailable = String(localized: "editor-signature-help.unavailable", defaultValue: "Language server signature help is unavailable.")
+    }
+
+    enum EditorCodeAction {
+        static let title = String(localized: "editor-code-action.title", defaultValue: "Code Actions")
+        static let close = String(localized: "editor-code-action.close", defaultValue: "Close code actions")
+        static let loading = String(localized: "editor-code-action.loading", defaultValue: "Loading code actions...")
+        static let noItems = String(localized: "editor-code-action.no-items", defaultValue: "No code actions available.")
+        static let noChanges = String(localized: "editor-code-action.no-changes", defaultValue: "The language server did not return any code action edits.")
+        static let preferred = String(localized: "editor-code-action.preferred", defaultValue: "Preferred")
+        static let unavailable = String(localized: "editor-code-action.unavailable", defaultValue: "Language server code actions are unavailable.")
+        static let unsupportedCommand = String(localized: "editor-code-action.unsupported-command", defaultValue: "This code action only returned a command, which is not supported yet.")
+        static func unsafeFile(_ path: String) -> String {
+            let template = String(localized: "editor-code-action.unsafe-file", defaultValue: "Code action returned edits outside the current workspace: %@")
+            return String(format: template, path)
+        }
+        static func failed(_ reason: String) -> String {
+            let template = String(localized: "editor-code-action.failed", defaultValue: "Could not apply code action: %@")
+            return String(format: template, reason)
+        }
+        static func unsavedFile(_ path: String) -> String {
+            let template = String(localized: "editor-code-action.unsaved-file", defaultValue: "Save or close the unsaved tab before applying this code action: %@")
+            return String(format: template, path)
+        }
+    }
+
+    enum EditorReferences {
+        static let title = String(localized: "editor-references.title", defaultValue: "References")
+        static let close = String(localized: "editor-references.close", defaultValue: "Close references")
+        static let loading = String(localized: "editor-references.loading", defaultValue: "Loading references...")
+        static let noItems = String(localized: "editor-references.no-items", defaultValue: "No references found.")
+        static let unavailable = String(localized: "editor-references.unavailable", defaultValue: "Language server references are unavailable.")
+    }
+
+    enum EditorCallHierarchy {
+        static let title = String(localized: "editor-call-hierarchy.title", defaultValue: "Call Hierarchy")
+        static let close = String(localized: "editor-call-hierarchy.close", defaultValue: "Close call hierarchy")
+        static let loading = String(localized: "editor-call-hierarchy.loading", defaultValue: "Loading call hierarchy...")
+        static let noItems = String(localized: "editor-call-hierarchy.no-items", defaultValue: "No calls found.")
+        static let unavailable = String(localized: "editor-call-hierarchy.unavailable", defaultValue: "Language server call hierarchy is unavailable.")
+        static let incoming = String(localized: "editor-call-hierarchy.incoming", defaultValue: "Incoming")
+        static let outgoing = String(localized: "editor-call-hierarchy.outgoing", defaultValue: "Outgoing")
+        static let emptySection = String(localized: "editor-call-hierarchy.empty-section", defaultValue: "No items in this direction.")
     }
 
     enum EditorStructure {
@@ -917,8 +1035,17 @@ enum L10n {
     enum SymbolJump {
         static let noSymbols = String(localized: "symbol-jump.no-symbols", defaultValue: "No Symbols")
         static let placeholder = String(localized: "symbol-jump.placeholder", defaultValue: "Go to Symbol")
+        static let searchingWorkspace = String(localized: "symbol-jump.searching-workspace", defaultValue: "Searching workspace…")
         static func symbolKindLine(_ a1: String, _ a2: String) -> String {
             let template = String(localized: "symbol-jump.symbol-kind.line", defaultValue: "line")
+            return String(format: template, a1, a2)
+        }
+        static func workspaceSymbolLocation(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "symbol-jump.workspace-symbol.location", defaultValue: "%@ · line %@")
+            return String(format: template, a1, a2)
+        }
+        static func workspaceSymbolContainerLocation(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "symbol-jump.workspace-symbol.container-location", defaultValue: "%@ · %@")
             return String(format: template, a1, a2)
         }
     }
@@ -1263,6 +1390,16 @@ enum L10n {
 
             static let headerTitle = String(localized: "settings.voice.header-title", defaultValue: "On-device Voice (SenseVoice)")
             static let headerDescription = String(localized: "settings.voice.header-description", defaultValue: "Push-to-talk in the composer transcribes 100% on-device. Nothing leaves your Mac.")
+            static let languageSection = String(localized: "settings.voice.language.section", defaultValue: "Transcription Language")
+            static let languageLabel = String(localized: "settings.voice.language.label", defaultValue: "Language")
+            static let languageDescription = String(localized: "settings.voice.language.description", defaultValue: "Follow system is the default. Choose Japanese or another fixed language when you need deterministic voice-input testing.")
+            static let languageFollowSystem = String(localized: "settings.voice.language.follow-system", defaultValue: "Follow system")
+            static let languageAuto = String(localized: "settings.voice.language.auto", defaultValue: "Auto detect")
+            static let languageChinese = String(localized: "settings.voice.language.chinese", defaultValue: "Chinese")
+            static let languageEnglish = String(localized: "settings.voice.language.english", defaultValue: "English")
+            static let languageCantonese = String(localized: "settings.voice.language.cantonese", defaultValue: "Cantonese")
+            static let languageJapanese = String(localized: "settings.voice.language.japanese", defaultValue: "Japanese")
+            static let languageKorean = String(localized: "settings.voice.language.korean", defaultValue: "Korean")
             static let statusInstalledTitle = String(localized: "settings.voice.status-installed-title", defaultValue: "SenseVoice model installed")
             static let statusNotInstalledTitle = String(localized: "settings.voice.status-not-installed-title", defaultValue: "Model not installed yet")
             static let statusInstalledDetail = String(localized: "settings.voice.status-installed-detail", defaultValue: "Mic button in composer is enabled. Press and hold to record, release to transcribe. Tip: hold the Fn key anywhere in the app for the same push-to-talk.")

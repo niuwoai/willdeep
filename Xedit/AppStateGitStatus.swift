@@ -497,13 +497,20 @@ extension AppState {
             agentWorktreeChanges = .init()
             return
         }
-        guard let workspaceRootPath = runtime.workspaceRootPath else {
+        let workspaceURL: URL?
+        do {
+            workspaceURL = try runtime.localWorkspaceURLForOptimisticUse()
+        } catch {
+            runtime.worktreeChanges = .init()
+            agentWorktreeChanges = .init()
+            return
+        }
+        guard let targetDirectory = workspaceURL else {
             runtime.worktreeChanges = .init()
             return
         }
 
         let runtimeID = runtime.id
-        let targetDirectory = URL(fileURLWithPath: workspaceRootPath).standardizedFileURL
         let editedPaths = runtime.agentEditedPaths
         Task { [weak self] in
             let snapshot = await Self.loadAgentWorktreeSnapshot(
@@ -513,7 +520,7 @@ extension AppState {
             await MainActor.run {
                 guard let self,
                       let runtime = self.agentRuntimes[runtimeID],
-                      runtime.workspaceRootPath == workspaceRootPath else {
+                      runtime.workspaceRootPath == targetDirectory.path else {
                     return
                 }
 

@@ -356,6 +356,7 @@ enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
     case jobNotFound(String)
     case queueMessageNotFound(UUID)
     case noWorkspace
+    case workspaceUnavailable(String)
     case pathOutsideWorkspace(String)
     case fileNotFound(String)
     case notRegularFile(String)
@@ -402,6 +403,8 @@ enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
             return "Queued message not found: \(id.uuidString)."
         case .noWorkspace:
             return "No local workspace is available for this session."
+        case .workspaceUnavailable(let message):
+            return message
         case .pathOutsideWorkspace(let path):
             return "Path is outside the session workspace: \(path)."
         case .fileNotFound(let path):

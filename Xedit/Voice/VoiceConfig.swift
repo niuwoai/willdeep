@@ -12,6 +12,71 @@
 import Foundation
 import Combine
 
+enum VoiceTranscriptLanguagePreference: String, CaseIterable, Identifiable {
+    case followSystem
+    case auto
+    case zh
+    case en
+    case yue
+    case ja
+    case ko
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .followSystem: return L10n.Settings.Voice.languageFollowSystem
+        case .auto: return L10n.Settings.Voice.languageAuto
+        case .zh: return L10n.Settings.Voice.languageChinese
+        case .en: return L10n.Settings.Voice.languageEnglish
+        case .yue: return L10n.Settings.Voice.languageCantonese
+        case .ja: return L10n.Settings.Voice.languageJapanese
+        case .ko: return L10n.Settings.Voice.languageKorean
+        }
+    }
+
+    var transcriptLanguage: TranscriptLanguage {
+        switch self {
+        case .followSystem:
+            return Self.systemTranscriptLanguage()
+        case .auto:
+            return .auto
+        case .zh:
+            return .zh
+        case .en:
+            return .en
+        case .yue:
+            return .yue
+        case .ja:
+            return .ja
+        case .ko:
+            return .ko
+        }
+    }
+
+    static func systemTranscriptLanguage(preferredLanguages: [String] = Locale.preferredLanguages) -> TranscriptLanguage {
+        guard let primary = preferredLanguages.first?.lowercased() else {
+            return .auto
+        }
+        if primary.hasPrefix("ja") {
+            return .ja
+        }
+        if primary.hasPrefix("ko") {
+            return .ko
+        }
+        if primary.hasPrefix("yue") || primary.contains("-yue") || primary.contains("_yue") {
+            return .yue
+        }
+        if primary.hasPrefix("zh") {
+            return .zh
+        }
+        if primary.hasPrefix("en") {
+            return .en
+        }
+        return .auto
+    }
+}
+
 /// Shim for the fastv `UserPreferences` global the ported STT code reaches
 /// into. Persists voice-only knobs via `com.willdeep.voice.*` keys so they
 /// never collide with the rest of the AgentSettingsStore namespace.
@@ -24,6 +89,7 @@ final class UserPreferences: ObservableObject {
         static let waveformOverlayPosition = "com.willdeep.voice.waveformOverlay.position.v1"
         static let waveformOverlayStyle = "com.willdeep.voice.waveformOverlay.style.v1"
         static let waveformOverlayColorStyle = "com.willdeep.voice.waveformOverlay.colorStyle.v1"
+        static let transcriptLanguagePreference = "com.willdeep.voice.transcriptLanguagePreference.v1"
     }
 
     @Published var enableCTCDeduplication: Bool {
@@ -40,6 +106,12 @@ final class UserPreferences: ObservableObject {
 
     @Published var waveformOverlayColorStyle: WaveformOverlayWindowColorStyle {
         didSet { UserDefaults.standard.set(waveformOverlayColorStyle.rawValue, forKey: Keys.waveformOverlayColorStyle) }
+    }
+
+    @Published var transcriptLanguagePreference: VoiceTranscriptLanguagePreference {
+        didSet {
+            UserDefaults.standard.set(transcriptLanguagePreference.rawValue, forKey: Keys.transcriptLanguagePreference)
+        }
     }
 
     private init() {
@@ -70,6 +142,13 @@ final class UserPreferences: ObservableObject {
             self.waveformOverlayColorStyle = colorStyle
         } else {
             self.waveformOverlayColorStyle = .darkGrayBlue
+        }
+
+        if let raw = UserDefaults.standard.string(forKey: Keys.transcriptLanguagePreference),
+           let preference = VoiceTranscriptLanguagePreference(rawValue: raw) {
+            self.transcriptLanguagePreference = preference
+        } else {
+            self.transcriptLanguagePreference = .followSystem
         }
     }
 }

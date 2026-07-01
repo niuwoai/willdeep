@@ -181,6 +181,8 @@ struct AgentWebToolsTests {
         #expect(result.payload.contains("general-purpose language & more"))
         #expect(result.payload.contains("Provider cost estimate: $0.001230"))
         #expect(!result.payload.contains("<strong>"))
+        #expect(result.references.map(\.url) == ["https://swift.org/", "https://docs.swift.org/swift-book/"])
+        #expect(result.references.map(\.title) == ["Swift.org - Welcome", "The Swift Programming Language"])
     }
 
     @Test
@@ -235,6 +237,8 @@ struct AgentWebToolsTests {
         #expect(result.payload.contains("general-purpose language & more"))
         #expect(result.payload.contains("2. The Swift Programming Language"))
         #expect(!result.payload.contains("<strong>"))
+        #expect(result.references.map(\.url) == ["https://swift.org/", "https://docs.swift.org/swift-book/"])
+        #expect(result.references.map(\.host) == ["swift.org", "docs.swift.org"])
     }
 
     @Test

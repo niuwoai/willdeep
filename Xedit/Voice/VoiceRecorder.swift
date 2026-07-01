@@ -156,9 +156,10 @@ final class VoiceRecorder: ObservableObject {
         }
 
         do {
+            let language = UserPreferences.shared.transcriptLanguagePreference.transcriptLanguage
             let transcript = try await SpeechTranscriber.transcribe(
                 audioURL: url,
-                language: .auto,
+                language: language,
                 enableCTCDeduplication: false
             )
             log.info("stopAndTranscribe: transcript=\(transcript.isEmpty ? "<empty>" : transcript)")

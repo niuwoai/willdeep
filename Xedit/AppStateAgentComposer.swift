@@ -199,7 +199,22 @@ extension AppState {
         var arguments = initialArguments
         let workspaceLocation = runtime.workspaceLocation
             ?? runtime.workspaceRootPath.map { .local(path: $0) }
-        let workspaceURL = workspaceLocation?.localPath.map { URL(fileURLWithPath: $0) }
+        let workspaceURL: URL?
+        do {
+            workspaceURL = try runtime.localWorkspaceURLForOptimisticUse()
+        } catch {
+            finishDelegatedAgentRecord(
+                runtime: runtime,
+                recordID: recordID,
+                externalID: externalID,
+                executionAgent: executionAgent,
+                status: .failed,
+                result: nil,
+                errorMessage: error.localizedDescription,
+                toolPayload: "Delegated agent failed: \(error.localizedDescription)"
+            )
+            return
+        }
         let remoteRuntimeDescriptor: RuntimeDescriptor? = workspaceLocation?.remoteRuntimeID.flatMap {
             AgentRuntimeStore.descriptor(id: $0)
         }
@@ -369,6 +384,11 @@ extension AppState {
                 toolPayload: "Delegated agent cancelled."
             )
         } catch {
+            let errorMessage = diagnoseDelegatedLocalWorkspaceIfNeeded(
+                after: error,
+                runtime: runtime,
+                workspaceURL: workspaceURL
+            ) ?? error.localizedDescription
             AgentSandboxAuditLog.append(
                 toolName: toolName,
                 arguments: arguments,
@@ -383,10 +403,30 @@ extension AppState {
                 executionAgent: executionAgent,
                 status: .failed,
                 result: nil,
-                errorMessage: error.localizedDescription,
-                toolPayload: "Tool error: \(error.localizedDescription)"
+                errorMessage: errorMessage,
+                toolPayload: "Tool error: \(errorMessage)"
             )
         }
+    }
+
+    private func diagnoseDelegatedLocalWorkspaceIfNeeded(
+        after error: Error,
+        runtime: AgentRuntime,
+        workspaceURL: URL?
+    ) -> String? {
+        guard workspaceURL != nil else { return nil }
+        if let availabilityError = error as? AgentWorkspaceAvailabilityError {
+            return availabilityError.localizedDescription
+        }
+        guard let availability = runtime.diagnoseLocalWorkspaceAfterFailure(),
+              availability.blocksLocalWorkspaceUse,
+              let message = availability.message else {
+            return nil
+        }
+        runtime.errorMessage = message
+        runtime.errorDetails = nil
+        persistAgentSession(runtime: runtime)
+        return message
     }
 
     nonisolated static func delegatedComposerApprovalSource(
