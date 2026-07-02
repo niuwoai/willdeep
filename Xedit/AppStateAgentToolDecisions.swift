@@ -7,6 +7,7 @@
 //  can stay focused on turn execution and streaming.
 //
 
+import AppKit
 import Foundation
 
 extension AppState {
@@ -40,6 +41,22 @@ extension AppState {
     /// provided"; use `denyAgentToolCall` to skip outright.
     func answerAgentToolCall(id: AgentToolCall.ID, answer: String) {
         resolveAgentToolCallDecision(id: id, decision: .answered(answer))
+    }
+
+    func fillTerminalShortcutProtectedInputs(
+        shortcutID: UUID,
+        valuesByEventIndex: [Int: String]
+    ) -> Bool {
+        do {
+            _ = try agentTerminalController.fillProtectedInputs(
+                shortcutID: shortcutID,
+                valuesByEventIndex: valuesByEventIndex
+            )
+            return true
+        } catch {
+            NSSound.beep()
+            return false
+        }
     }
 
     func removeAgentAlwaysAllowedCommand(id: AgentAlwaysAllowedCommand.ID) {

@@ -95,7 +95,7 @@ extension AppState {
         set { activeRuntime?.pendingTextAttachments = newValue }
     }
 
-    /// Skills the user attached via `@skill` for the next send.
+    /// Skills the user attached via `$skill` for the next send.
     var agentPendingSkills: [AgentSkillEntry] {
         get { activeRuntime?.pendingSkills ?? [] }
         set { activeRuntime?.pendingSkills = newValue }

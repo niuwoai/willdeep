@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import AppKit
 import SwiftUI
 
 enum SomeIMGenerationKind: String, Codable, CaseIterable, Identifiable {
@@ -69,6 +70,7 @@ struct SomeIMModel: Identifiable, Codable, Equatable {
 struct SomeIMIntegrationSettings: Codable, Equatable {
     static let defaultBaseURL = SomeIMRelayRegion.internationalBaseURL
     static let defaultImageModel = "gpt-image-2"
+    static let defaultTextModel = "someim-auto-flash"
     static let defaultVisionModel = "qwen3-vl-plus"
 
     var enabled: Bool
@@ -122,8 +124,12 @@ struct SomeIMIntegrationSettings: Codable, Equatable {
 }
 
 enum SomeIMIntegrationStore {
+    static let accountDidChangeNotification = Notification.Name("com.willdeep.someIM.accountDidChange")
+
     private static let settingsKey = "com.willdeep.someIM.integrationSettings.v1"
+    private static let accountKey = "com.willdeep.someIM.account.v1"
     private static let apiKeyAccount = "some-im/api-key"
+    private static let sessionTokenAccount = "some-im/customer-session"
 
     static func loadSettings() -> SomeIMIntegrationSettings {
         guard let data = UserDefaults.standard.data(forKey: settingsKey),
@@ -140,6 +146,20 @@ enum SomeIMIntegrationStore {
         }
     }
 
+    static func loadAccount() -> SomeIMAccount? {
+        guard let data = UserDefaults.standard.data(forKey: accountKey) else { return nil }
+        return try? JSONDecoder().decode(SomeIMAccount.self, from: data)
+    }
+
+    static func saveAccount(_ account: SomeIMAccount?) {
+        if let account, let data = try? JSONEncoder().encode(account) {
+            UserDefaults.standard.set(data, forKey: accountKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: accountKey)
+        }
+        NotificationCenter.default.post(name: accountDidChangeNotification, object: nil)
+    }
+
     static func loadAPIKey() -> String {
         AgentCredentialStore.load(account: apiKeyAccount)
     }
@@ -148,8 +168,41 @@ enum SomeIMIntegrationStore {
         AgentCredentialStore.save(apiKey, account: apiKeyAccount)
     }
 
+    static func loadSessionToken() -> String {
+        AgentCredentialStore.load(account: sessionTokenAccount)
+    }
+
+    static func saveSessionToken(_ token: String) {
+        AgentCredentialStore.save(token, account: sessionTokenAccount)
+    }
+
+    static func loadClientLoginSecret() -> String {
+        let env = ProcessInfo.processInfo.environment["WILLDEEP_CLIENT_LOGIN_SECRET"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !env.isEmpty { return env }
+        let info = (Bundle.main.object(forInfoDictionaryKey: "WillDeepSomeIMClientLoginSecret") as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if info.hasPrefix("$(") { return "" }
+        return info
+    }
+
     static var isConfigured: Bool {
         loadSettings().enabled && !loadAPIKey().isEmpty
+    }
+}
+
+struct SomeIMAccount: Codable, Equatable {
+    var email: String
+    var tenantID: String?
+    var balanceUSD: String
+    var credits: String
+    var creditsPerUSD: Int
+    var defaultModel: String
+    var lastUpdatedAt: Date
+
+    var displayCredits: String {
+        guard let value = Int64(credits) else { return credits }
+        return NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
     }
 }
 
@@ -159,6 +212,148 @@ struct SomeIMGeneratedImage: Equatable, Sendable {
 }
 
 enum SomeIMClient {
+    private static let willDeepClientID = "willdeep"
+
+    static func sendClientLoginCode(
+        email: String,
+        settings: SomeIMIntegrationSettings
+    ) async throws {
+        try await sendClientLoginCode(
+            email: email,
+            settings: settings,
+            session: AgentNetworkSupport.defaultSession()
+        )
+    }
+
+    static func sendClientLoginCode(
+        email: String,
+        settings: SomeIMIntegrationSettings,
+        session: URLSession
+    ) async throws {
+        let endpoint = try publicAPIEndpoint(from: settings.normalized.baseURL, suffix: "public/client-login/email/send")
+        var request = jsonRequest(url: endpoint, method: "POST")
+        applyClientLoginSecret(to: &request)
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "email": email.trimmingCharacters(in: .whitespacesAndNewlines),
+            "client_id": willDeepClientID
+        ], options: [.sortedKeys])
+        let data = try await send(request, session: session)
+        _ = try decodeEnvelope(ClientLoginSendData.self, from: data)
+    }
+
+    static func verifyClientLoginCode(
+        email: String,
+        code: String,
+        settings: SomeIMIntegrationSettings
+    ) async throws -> SomeIMAccount {
+        try await verifyClientLoginCode(
+            email: email,
+            code: code,
+            settings: settings,
+            session: AgentNetworkSupport.defaultSession()
+        )
+    }
+
+    static func verifyClientLoginCode(
+        email: String,
+        code: String,
+        settings: SomeIMIntegrationSettings,
+        session: URLSession
+    ) async throws -> SomeIMAccount {
+        let normalized = settings.normalized
+        let endpoint = try publicAPIEndpoint(from: normalized.baseURL, suffix: "public/client-login/email/verify")
+        var request = jsonRequest(url: endpoint, method: "POST")
+        applyClientLoginSecret(to: &request)
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "email": email.trimmingCharacters(in: .whitespacesAndNewlines),
+            "code": code.trimmingCharacters(in: .whitespacesAndNewlines),
+            "client_id": willDeepClientID
+        ], options: [.sortedKeys])
+        let data = try await send(request, session: session)
+        let decoded = try decodeEnvelope(ClientLoginVerifyData.self, from: data)
+        let account = decoded.account.account(
+            fallbackEmail: email,
+            fallbackModel: decoded.default_model.nonEmpty ?? SomeIMIntegrationSettings.defaultTextModel
+        )
+        SomeIMIntegrationStore.saveAPIKey(decoded.api_key)
+        if let token = decoded.token?.trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty {
+            SomeIMIntegrationStore.saveSessionToken(token)
+        }
+        SomeIMIntegrationStore.saveAccount(account)
+        var nextSettings = normalized
+        nextSettings.enabled = true
+        SomeIMIntegrationStore.saveSettings(nextSettings)
+        return account
+    }
+
+    static func fetchAccountBalance() async throws -> SomeIMAccount {
+        try await fetchAccountBalance(
+            settings: SomeIMIntegrationStore.loadSettings(),
+            apiKey: SomeIMIntegrationStore.loadAPIKey(),
+            session: AgentNetworkSupport.defaultSession()
+        )
+    }
+
+    static func fetchAccountBalance(
+        settings: SomeIMIntegrationSettings,
+        apiKey: String,
+        session: URLSession
+    ) async throws -> SomeIMAccount {
+        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedKey.isEmpty else { throw AgentClientError.missingAPIKey }
+        let endpoint = try AgentNetworkSupport.endpoint(from: settings.normalized.baseURL, suffix: "account/balance")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(trimmedKey)", forHTTPHeaderField: "Authorization")
+        AgentNetworkSupport.applyStandardHeaders(to: &request)
+        let data = try await send(request, session: session)
+        let decoded = try JSONDecoder().decode(AccountBalanceData.self, from: data)
+        let previous = SomeIMIntegrationStore.loadAccount()
+        let balance = decoded.balance.trimmingCharacters(in: .whitespacesAndNewlines)
+        let account = SomeIMAccount(
+            email: previous?.email ?? "",
+            tenantID: decoded.tenant_id.nonEmpty ?? previous?.tenantID,
+            balanceUSD: balance,
+            credits: credits(fromUSD: balance),
+            creditsPerUSD: 100000,
+            defaultModel: previous?.defaultModel ?? SomeIMIntegrationSettings.defaultTextModel,
+            lastUpdatedAt: Date()
+        )
+        SomeIMIntegrationStore.saveAccount(account)
+        return account
+    }
+
+    static func fetchHandoffLoginURL() async throws -> URL {
+        try await fetchHandoffLoginURL(
+            settings: SomeIMIntegrationStore.loadSettings(),
+            sessionToken: SomeIMIntegrationStore.loadSessionToken(),
+            session: AgentNetworkSupport.defaultSession()
+        )
+    }
+
+    static func fetchHandoffLoginURL(
+        settings: SomeIMIntegrationSettings,
+        sessionToken: String,
+        session: URLSession
+    ) async throws -> URL {
+        let token = sessionToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else {
+            throw AgentToolError.invalidArgument("some.im session token is missing. Reconnect your account.")
+        }
+        let endpoint = try publicAPIEndpoint(from: settings.normalized.baseURL, suffix: "public/client-login/handoff-link")
+        var request = jsonRequest(url: endpoint, method: "POST")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        applyClientLoginSecret(to: &request)
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["next": "/customer"], options: [.sortedKeys])
+        let data = try await send(request, session: session)
+        let decoded = try decodeEnvelope(HandoffLinkData.self, from: data)
+        guard let url = URL(string: decoded.login_url), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
+            throw AgentToolError.invalidArgument("some.im returned an invalid login URL.")
+        }
+        return url
+    }
+
     static func fetchModels(
         settings: SomeIMIntegrationSettings,
         apiKey: String,
@@ -318,6 +513,57 @@ enum SomeIMClient {
         return components.url
     }
 
+    private static func publicAPIEndpoint(from baseURL: String, suffix: String) throws -> URL {
+        guard var components = URLComponents(string: baseURL.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            throw AgentClientError.invalidResponse
+        }
+        let cleaned = suffix.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        components.path = "/api/v1/\(cleaned)"
+        components.query = nil
+        guard let url = components.url else { throw AgentClientError.invalidResponse }
+        return url
+    }
+
+    private static func jsonRequest(url: URL, method: String) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = AgentNetworkSupport.resourceTimeout
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        AgentNetworkSupport.applyStandardHeaders(to: &request)
+        return request
+    }
+
+    private static func applyClientLoginSecret(to request: inout URLRequest) {
+        let secret = SomeIMIntegrationStore.loadClientLoginSecret()
+        guard !secret.isEmpty else { return }
+        request.setValue(secret, forHTTPHeaderField: "X-WillDeep-Client-Secret")
+    }
+
+    private static func send(_ request: URLRequest, session: URLSession) async throws -> Data {
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw AgentClientError.invalidResponse
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw AgentToolError.httpFailed(http.statusCode, AgentNetworkSupport.limitDebugText(String(data: data, encoding: .utf8) ?? "<non-UTF8 response body>"))
+        }
+        return data
+    }
+
+    private static func decodeEnvelope<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+        if let direct = try? JSONDecoder().decode(T.self, from: data) {
+            return direct
+        }
+        return try JSONDecoder().decode(APIEnvelope<T>.self, from: data).data
+    }
+
+    private static func credits(fromUSD usd: String) -> String {
+        let decimal = Decimal(string: usd.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+        let credits = decimal * Decimal(100000)
+        return max(Int64(0), NSDecimalNumber(decimal: credits).int64Value).description
+    }
+
     private static func outputURL(fileExtension: String) -> URL {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd-HHmmss"
@@ -393,14 +639,68 @@ enum SomeIMClient {
             let url: String?
         }
     }
+
+    private struct APIEnvelope<T: Decodable>: Decodable {
+        let data: T
+    }
+
+    private struct ClientLoginSendData: Decodable {
+        let ok: Bool?
+    }
+
+    private struct ClientLoginVerifyData: Decodable {
+        let api_key: String
+        let default_model: String
+        let token: String?
+        let account: AccountData
+    }
+
+    private struct AccountData: Decodable {
+        let email: String?
+        let tenant_id: String?
+        let balance_usd: String?
+        let credits: String?
+        let credits_per_usd: Int?
+        let default_model: String?
+
+        func account(fallbackEmail: String, fallbackModel: String) -> SomeIMAccount {
+            let balance = balance_usd?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? "0"
+            return SomeIMAccount(
+                email: email?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? fallbackEmail.trimmingCharacters(in: .whitespacesAndNewlines),
+                tenantID: tenant_id?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty,
+                balanceUSD: balance,
+                credits: credits?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? SomeIMClient.credits(fromUSD: balance),
+                creditsPerUSD: credits_per_usd ?? 100000,
+                defaultModel: default_model?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? fallbackModel,
+                lastUpdatedAt: Date()
+            )
+        }
+    }
+
+    private struct AccountBalanceData: Decodable {
+        let tenant_id: String
+        let currency: String
+        let balance: String
+    }
+
+    private struct HandoffLinkData: Decodable {
+        let login_url: String
+        let expires_in: Int?
+    }
 }
 
 struct SomeIMIntegrationSettingsView: View {
     @EnvironmentObject private var appState: AppState
     @State private var settings = SomeIMIntegrationStore.loadSettings()
     @State private var apiKey = SomeIMIntegrationStore.loadAPIKey()
+    @State private var account = SomeIMIntegrationStore.loadAccount()
+    @State private var accountEmail = SomeIMIntegrationStore.loadAccount()?.email ?? ""
+    @State private var verificationCode = ""
     @State private var fetchedModels: [SomeIMModel] = []
     @State private var isFetching = false
+    @State private var isSendingCode = false
+    @State private var isVerifyingCode = false
+    @State private var isRefreshingBalance = false
     @State private var status = ""
 
     private var imageModels: [SomeIMModel] {
@@ -413,6 +713,53 @@ struct SomeIMIntegrationSettingsView: View {
 
     var body: some View {
         Form {
+            Section(L10n.Settings.SomeIM.accountSection) {
+                if let account {
+                    LabeledContent(L10n.Settings.SomeIM.accountConnected) {
+                        Text(L10n.Settings.SomeIM.accountSummary(account.email, account.displayCredits))
+                            .foregroundStyle(.secondary)
+                    }
+                    LabeledContent(L10n.Settings.SomeIM.defaultModelLabel) {
+                        Text(account.defaultModel)
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Button(isRefreshingBalance ? L10n.Settings.SomeIM.fetchingModels : L10n.Settings.SomeIM.refreshBalance) {
+                            refreshBalance()
+                        }
+                        .disabled(isRefreshingBalance)
+                        Button(L10n.Settings.SomeIM.openSomeIM) {
+                            openSomeIM()
+                        }
+                    }
+                } else {
+                    Text(L10n.Settings.SomeIM.accountNotConnected)
+                        .foregroundStyle(.secondary)
+                }
+                LabeledContent(L10n.Settings.SomeIM.emailLabel) {
+                    TextField("", text: $accountEmail)
+                        .textFieldStyle(.roundedBorder)
+                        .disableAutocorrection(true)
+                }
+                LabeledContent(L10n.Settings.SomeIM.emailCodeLabel) {
+                    TextField("", text: $verificationCode)
+                        .textFieldStyle(.roundedBorder)
+                        .disableAutocorrection(true)
+                }
+                HStack {
+                    Button(isSendingCode ? L10n.Settings.SomeIM.sendingCode : L10n.Settings.SomeIM.sendCode) {
+                        sendCode()
+                    }
+                    .disabled(isSendingCode || accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button(isVerifyingCode ? L10n.Settings.SomeIM.verifyingCode : L10n.Settings.SomeIM.verifyCode) {
+                        verifyCode()
+                    }
+                    .disabled(isVerifyingCode
+                        || accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || verificationCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+
             Section(L10n.Settings.SomeIM.connectionSection) {
                 Toggle(L10n.Settings.SomeIM.enabledToggle, isOn: $settings.enabled)
                 LabeledContent(L10n.Settings.SomeIM.regionLabel) {
@@ -558,6 +905,100 @@ struct SomeIMIntegrationSettingsView: View {
         SomeIMIntegrationStore.saveAPIKey(trimmedKey)
         appState.syncSomeIMProvider(settings: normalized, apiKey: trimmedKey)
         status = L10n.Settings.savedStatus
+    }
+
+    private func sendCode() {
+        isSendingCode = true
+        status = ""
+        let email = accountEmail
+        let currentSettings = settings.normalized
+        Task {
+            let result: Result<Void, Error>
+            do {
+                try await SomeIMClient.sendClientLoginCode(email: email, settings: currentSettings)
+                result = .success(())
+            } catch {
+                result = .failure(error)
+            }
+            await MainActor.run {
+                isSendingCode = false
+                switch result {
+                case .success:
+                    status = L10n.Settings.SomeIM.codeSent
+                case .failure(let error):
+                    status = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func verifyCode() {
+        isVerifyingCode = true
+        status = ""
+        let email = accountEmail
+        let code = verificationCode
+        let currentSettings = settings.normalized
+        Task {
+            let result: Result<SomeIMAccount, Error>
+            do {
+                result = .success(try await SomeIMClient.verifyClientLoginCode(email: email, code: code, settings: currentSettings))
+            } catch {
+                result = .failure(error)
+            }
+            await MainActor.run {
+                isVerifyingCode = false
+                switch result {
+                case .success(let linked):
+                    account = linked
+                    accountEmail = linked.email
+                    apiKey = SomeIMIntegrationStore.loadAPIKey()
+                    settings = SomeIMIntegrationStore.loadSettings()
+                    appState.syncSomeIMProvider(settings: settings, apiKey: apiKey)
+                    appState.syncSomeIMImageUnderstanding(apiKey: apiKey)
+                    status = L10n.Settings.SomeIM.connected
+                case .failure(let error):
+                    status = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func refreshBalance() {
+        isRefreshingBalance = true
+        status = ""
+        Task {
+            let result: Result<SomeIMAccount, Error>
+            do {
+                result = .success(try await SomeIMClient.fetchAccountBalance())
+            } catch {
+                result = .failure(error)
+            }
+            await MainActor.run {
+                isRefreshingBalance = false
+                switch result {
+                case .success(let refreshed):
+                    account = refreshed
+                    status = L10n.Settings.savedStatus
+                case .failure(let error):
+                    status = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func openSomeIM() {
+        Task {
+            do {
+                let url = try await SomeIMClient.fetchHandoffLoginURL()
+                await MainActor.run {
+                    _ = NSWorkspace.shared.open(url)
+                }
+            } catch {
+                await MainActor.run {
+                    status = error.localizedDescription
+                }
+            }
+        }
     }
 
     private func fetchModels() {

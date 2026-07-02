@@ -49,7 +49,7 @@ extension AppState {
                 kind: .skill,
                 title: skill.identifier,
                 detail: oneLine(skill.description, limit: 160),
-                reasons: ["Attached via @skill for this turn."]
+                reasons: ["Attached via $skill for this turn."]
             )
         })
         guard !items.isEmpty else { return nil }

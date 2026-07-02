@@ -76,6 +76,34 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "terminal_list_shortcuts",
+            description: "List saved visible Agent Terminal recording shortcuts and their editable event structure. Read-only. Protected echo-off/password input is never exposed; it is shown only as a protected event with metadata.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "shortcut_id", type: .string, description: "Optional shortcut UUID to inspect. Omit to list all terminal shortcuts.", required: false),
+                AgentToolParameter(name: "max_text_characters", type: .integer, description: "Maximum visible text characters per event. Defaults to 400, capped at 4000. Protected input is never returned.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "terminal_create_shortcut",
+            description: "Create a saved Agent Terminal recording shortcut from a user-described sequence after approval. Use this when the user dictates terminal steps and asks to turn them into a recording. Pass events_json as an array: {\"command\":\"cd app\"} sends the command plus Enter; {\"text\":\"raw bytes\\n\"} sends exact visible text; {\"control\":\"enter|tab|escape|backspace|ctrl_c\"} sends a control key; {\"protected_placeholder\":\"密码 1\"} creates a local password placeholder that WillDeep will ask the user to fill in the chat UI after the shortcut is created. Add delay_ms to an event to wait before sending it. Never include plaintext passwords/secrets; password, secret, protected_text, and requires_echo_off fields are rejected.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "title", type: .string, description: "Shortcut title derived from the dictated operation.", required: true),
+                AgentToolParameter(name: "events_json", type: .string, description: "JSON array of events. Each event must include command, text, control, or protected_placeholder; optional delay_ms waits before the event.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "terminal_edit_shortcut",
+            description: "Edit a saved Agent Terminal recording shortcut after user approval. Supports renaming, changing event delays, deleting events, and replacing or setting visible input text. It cannot read or rewrite protected echo-off/password bytes; protected events can only be preserved or deleted. Pass operations_json as an array like [{\"op\":\"set_delay\",\"event_index\":1,\"delay_ms\":1200},{\"op\":\"replace_visible_text\",\"event_index\":0,\"find\":\"old\",\"replace\":\"new\"}].",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "shortcut_id", type: .string, description: "Shortcut UUID from terminal_list_shortcuts.", required: true),
+                AgentToolParameter(name: "title", type: .string, description: "Optional new shortcut title.", required: false),
+                AgentToolParameter(name: "operations_json", type: .string, description: "JSON array of edit operations. Supported op values: set_delay, delete_event, replace_visible_text, set_visible_text, delete_visible_text.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "terminal_snapshot",
             description: "Read only the latest live visible screen of the active Agent Terminal side-panel tab (a real terminal the user is watching — local shell by default, or SSH). It does not include scrollback/history by default. Read-only; redacts common secrets. Use it to read back what your terminal_send_command produced, or to inspect the current prompt, banner, and newest command output.",
             risk: .read,
@@ -172,7 +200,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "create_user_skill",
-            description: "Create a local user Codex skill under ~/.willdeep/skills when a reusable workflow has emerged and should be available via @skill/list_skills in future turns. Include when to use it, steps, verification, and safety notes. Requires approval outside autonomous modes.",
+            description: "Create a local user Codex skill under ~/.willdeep/skills when a reusable workflow has emerged and should be available via $skill/list_skills in future turns. Include when to use it, steps, verification, and safety notes. Requires approval outside autonomous modes.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "name", type: .string, description: "Short skill name, e.g. `release-guardian` or `ppt-qc-workflow`.", required: true),

@@ -177,6 +177,51 @@ struct WillDeepTests {
         #expect(appState.activeRuntime?.session.activeExperts == [.shortDrama])
     }
 
+    @Test("terminal shortcut recorder coalesces per-character password input into one protected event")
+    func testTerminalShortcutRecorderCoalescesPasswordKeystrokes() throws {
+        let service = AgentCredentialStore._setTestKeychainServiceOverride("terminal-shortcuts-\(UUID().uuidString)")
+        let shortcutsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("terminal-shortcuts-\(UUID().uuidString)", isDirectory: true)
+        TerminalShortcutStore._setTestDirectoryOverride(shortcutsDirectory)
+        defer {
+            AgentCredentialStore._wipeTestKeychain()
+            AgentCredentialStore._setTestKeychainServiceOverride(nil)
+            TerminalShortcutStore._setTestDirectoryOverride(nil)
+            try? FileManager.default.removeItem(at: shortcutsDirectory)
+            UserDefaults.standard.removeObject(forKey: "com.willdeep.terminalShortcuts.v1")
+        }
+        #expect(service.hasPrefix("terminal-shortcuts-"))
+
+        let recorder = TerminalShortcutRecorder(startedAt: Date(timeIntervalSince1970: 0))
+        // Visible command line.
+        recorder.record(data: Array("ssh user@example.com\n".utf8), echoEnabled: true, now: Date(timeIntervalSince1970: 1))
+        // Password typed one character at a time with echo disabled, the way a
+        // real prompt delivers keystrokes. Every character used to become its own
+        // protected event (the "19 protected inputs" bug).
+        let password = "hunter2secret"
+        for (offset, byte) in Array(password.utf8).enumerated() {
+            recorder.record(data: [byte], echoEnabled: false, now: Date(timeIntervalSince1970: 2 + Double(offset) * 0.1))
+        }
+        // Enter is still delivered with echo off; it terminates the password line.
+        recorder.record(data: [13], echoEnabled: false, now: Date(timeIntervalSince1970: 5))
+
+        let shortcut = try #require(recorder.finish(title: "SSH login", finishedAt: Date(timeIntervalSince1970: 6)))
+
+        let protectedEvents = shortcut.events.filter(\.requiresEchoOff)
+        #expect(protectedEvents.count == 1)
+        #expect(shortcut.hasProtectedInput)
+        let protectedEvent = try #require(protectedEvents.first)
+        #expect(protectedEvent.resolvedBytes() == Array(password.utf8))
+        // The password's leading delay is measured to when typing STARTED (t=2s),
+        // not diluted across the per-character keystrokes.
+        #expect(protectedEvent.delayMilliseconds == 1_000)
+        // The echo-off Enter is preserved as a visible submit event so replay
+        // still submits the line, but it does not count as protected input.
+        let visibleText = String(decoding: shortcut.events.flatMap(\.bytes), as: UTF8.self)
+        #expect(!visibleText.contains(password))
+        #expect(visibleText.contains("\r") || visibleText.contains("\n"))
+    }
+
     @Test("terminal shortcut recorder protects echo-off input for echo-off replay only")
     func testTerminalShortcutRecorderProtectsEchoOffInput() throws {
         let service = AgentCredentialStore._setTestKeychainServiceOverride("terminal-shortcuts-\(UUID().uuidString)")
@@ -349,16 +394,22 @@ struct WillDeepTests {
         #expect(AgentCredentialStore._testLoadCount(account: account) == 0)
         #expect(AgentCredentialStore._testSaveCount(account: account) == 0)
         let persistedJSON = try String(contentsOf: TerminalShortcutStore.fileURL, encoding: .utf8)
-        #expect(persistedJSON.contains(account))
+        let reloadedAccount = try #require(TerminalShortcutStore.load().first?.events.first?.protectedBytesReference)
+        #expect(reloadedAccount == account)
         #expect(!persistedJSON.contains("secret-password"))
     }
 
-    @Test("terminal shortcut protected replay cache reads each Keychain account once")
-    func testTerminalShortcutProtectedReplayCacheReadsEachAccountOnce() {
+    @Test("terminal shortcut protected replay migrates old Keychain rows into local vault")
+    func testTerminalShortcutProtectedReplayMigratesOldKeychainRowsIntoLocalVault() {
         _ = AgentCredentialStore._setTestKeychainServiceOverride("terminal-shortcut-replay-cache-\(UUID().uuidString)")
+        let shortcutsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("terminal-shortcut-replay-cache-\(UUID().uuidString)", isDirectory: true)
+        TerminalShortcutStore._setTestDirectoryOverride(shortcutsDirectory)
         defer {
             AgentCredentialStore._wipeTestKeychain()
             AgentCredentialStore._setTestKeychainServiceOverride(nil)
+            TerminalShortcutStore._setTestDirectoryOverride(nil)
+            try? FileManager.default.removeItem(at: shortcutsDirectory)
         }
 
         let account = "terminal-shortcut/replay/event"
@@ -383,6 +434,307 @@ struct WillDeepTests {
         #expect(first.resolvedBytes(cache: &cache) == secretBytes)
         #expect(second.resolvedBytes(cache: &cache) == secretBytes)
         #expect(AgentCredentialStore._testLoadCount(account: account) == 1)
+
+        AgentCredentialStore._resetTestAccessCounts()
+        var secondPlaybackCache: [String: [UInt8]] = [:]
+        #expect(first.resolvedBytes(cache: &secondPlaybackCache) == secretBytes)
+        #expect(AgentCredentialStore._testLoadCount(account: account) == 0)
+    }
+
+    @Test("terminal shortcut exposes recorded and replay durations")
+    func testTerminalShortcutExposesRecordedAndReplayDurations() {
+        let shortcut = TerminalShortcut(
+            id: UUID(),
+            title: "Timed replay",
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 5),
+            durationMilliseconds: 5_000,
+            events: [
+                TerminalShortcutEvent(delayMilliseconds: 1_000, bytes: Array("pwd\n".utf8)),
+                TerminalShortcutEvent(delayMilliseconds: 2_500, bytes: Array("ls\n".utf8)),
+                TerminalShortcutEvent(delayMilliseconds: 0, bytes: [13])
+            ],
+            hasProtectedInput: false
+        )
+        let startedAt = Date(timeIntervalSince1970: 10)
+        let state = TerminalShortcutPlaybackState(
+            shortcutID: shortcut.id,
+            title: shortcut.title,
+            currentEventIndex: 2,
+            totalEvents: shortcut.eventCount,
+            startedAt: startedAt,
+            estimatedFinishedAt: startedAt.addingTimeInterval(Double(shortcut.playbackDurationMilliseconds) / 1000),
+            totalDelayMilliseconds: shortcut.playbackDurationMilliseconds,
+            status: .running
+        )
+
+        #expect(shortcut.durationMilliseconds == 5_000)
+        #expect(shortcut.playbackDurationMilliseconds == 3_500)
+        #expect(state.elapsedMilliseconds(now: startedAt.addingTimeInterval(1.25)) == 1_250)
+        #expect(state.remainingMilliseconds(now: startedAt.addingTimeInterval(1.25)) == 2_250)
+        #expect(state.isRunning)
+    }
+
+    @MainActor
+    @Test("terminal shortcut can be created from dictated visible steps")
+    func testTerminalShortcutCanBeCreatedFromDictatedVisibleSteps() async throws {
+        let shortcutsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("terminal-shortcut-create-\(UUID().uuidString)", isDirectory: true)
+        TerminalShortcutStore._setTestDirectoryOverride(shortcutsDirectory)
+        defer {
+            TerminalShortcutStore._setTestDirectoryOverride(nil)
+            try? FileManager.default.removeItem(at: shortcutsDirectory)
+        }
+
+        let controller = AgentInteractiveTerminalController()
+        let context = AgentToolContext(
+            rootDirectory: nil,
+            sandboxMode: .workspaceWrite,
+            terminalController: controller
+        )
+        let eventsJSON = """
+        [
+          {"command":"cd web"},
+          {"delay_ms":1200,"command":"yarn test"},
+          {"text":"echo done\\n"},
+          {"control":"escape"}
+        ]
+        """
+        let result = try await AgentTerminalTools.createShortcut(
+            arguments: [
+                "title": .string("口述测试流程"),
+                "events_json": .string(eventsJSON)
+            ],
+            context: context
+        )
+
+        let shortcut = try #require(controller.shortcuts.first)
+        #expect(result.summary == "terminal shortcut created: 口述测试流程")
+        #expect(shortcut.title == "口述测试流程")
+        #expect(shortcut.events.count == 4)
+        #expect(shortcut.durationMilliseconds == 1_200)
+        #expect(shortcut.playbackDurationMilliseconds == 1_200)
+        #expect(String(decoding: shortcut.events[0].bytes, as: UTF8.self) == "cd web\n")
+        #expect(String(decoding: shortcut.events[1].bytes, as: UTF8.self) == "yarn test\n")
+        #expect(String(decoding: shortcut.events[2].bytes, as: UTF8.self) == "echo done\n")
+        #expect(shortcut.events[3].bytes == [27])
+    }
+
+    @MainActor
+    @Test("terminal shortcut creation rejects protected dictated secrets")
+    func testTerminalShortcutCreationRejectsProtectedDictatedSecrets() async throws {
+        let controller = AgentInteractiveTerminalController()
+        let context = AgentToolContext(
+            rootDirectory: nil,
+            sandboxMode: .workspaceWrite,
+            terminalController: controller
+        )
+
+        await #expect(throws: AgentToolError.self) {
+            try await AgentTerminalTools.createShortcut(
+                arguments: [
+                    "title": .string("Secret login"),
+                    "events_json": .string("[{\"password\":\"hunter2\"}]")
+                ],
+                context: context
+            )
+        }
+    }
+
+    @MainActor
+    @Test("terminal shortcut dictated placeholders are filled locally into vault")
+    func testTerminalShortcutDictatedPlaceholdersFillLocallyIntoVault() async throws {
+        let shortcutsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("terminal-shortcut-placeholder-\(UUID().uuidString)", isDirectory: true)
+        TerminalShortcutStore._setTestDirectoryOverride(shortcutsDirectory)
+        defer {
+            TerminalShortcutStore._setTestDirectoryOverride(nil)
+            try? FileManager.default.removeItem(at: shortcutsDirectory)
+        }
+
+        let controller = AgentInteractiveTerminalController()
+        let context = AgentToolContext(
+            rootDirectory: nil,
+            sandboxMode: .workspaceWrite,
+            terminalController: controller
+        )
+        let result = try await AgentTerminalTools.createShortcut(
+            arguments: [
+                "title": .string("需要密码的流程"),
+                "events_json": .string("""
+                [
+                  {"command":"ssh deploy@example.com"},
+                  {"protected_placeholder":"密码 1"},
+                  {"control":"enter"}
+                ]
+                """)
+            ],
+            context: context
+        )
+
+        var shortcut = try #require(controller.shortcuts.first)
+        #expect(shortcut.hasProtectedInput)
+        #expect(shortcut.hasPendingProtectedInput)
+        #expect(shortcut.pendingProtectedInputCount == 1)
+        #expect(result.payload.contains(#""kind" : "protected_placeholder""#))
+        #expect(result.payload.contains(#""placeholder" : "密码 1""#))
+
+        let filled = try controller.fillProtectedInputs(
+            shortcutID: shortcut.id,
+            valuesByEventIndex: [1: " local-only-password "]
+        )
+        shortcut = try #require(controller.shortcuts.first)
+
+        #expect(filled.hasPendingProtectedInput == false)
+        #expect(shortcut.hasPendingProtectedInput == false)
+        #expect(shortcut.events[1].resolvedBytes() == Array(" local-only-password ".utf8))
+
+        let persistedJSON = try String(contentsOf: TerminalShortcutStore.fileURL, encoding: .utf8)
+        let vaultJSON = try String(
+            contentsOf: shortcutsDirectory.appendingPathComponent("protected-vault.json"),
+            encoding: .utf8
+        )
+        #expect(!persistedJSON.contains("local-only-password"))
+        #expect(!vaultJSON.contains("local-only-password"))
+    }
+
+    @Test("terminal shortcut persistence deduplicates repeated protected input")
+    func testTerminalShortcutPersistenceDeduplicatesRepeatedProtectedInput() throws {
+        _ = AgentCredentialStore._setTestKeychainServiceOverride("terminal-shortcut-protected-dedupe-\(UUID().uuidString)")
+        let shortcutsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("terminal-shortcut-protected-dedupe-\(UUID().uuidString)", isDirectory: true)
+        TerminalShortcutStore._setTestDirectoryOverride(shortcutsDirectory)
+        defer {
+            AgentCredentialStore._wipeTestKeychain()
+            AgentCredentialStore._setTestKeychainServiceOverride(nil)
+            TerminalShortcutStore._setTestDirectoryOverride(nil)
+            try? FileManager.default.removeItem(at: shortcutsDirectory)
+        }
+
+        let repeatedSecret = Array("same-secret-password".utf8)
+        let shortcut = TerminalShortcut(
+            id: UUID(),
+            title: "Repeated password",
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 1),
+            durationMilliseconds: 2_000,
+            events: [
+                TerminalShortcutEvent(
+                    delayMilliseconds: 0,
+                    bytes: [],
+                    requiresEchoOff: true,
+                    transientProtectedBytes: repeatedSecret
+                ),
+                TerminalShortcutEvent(
+                    delayMilliseconds: 500,
+                    bytes: [],
+                    requiresEchoOff: true,
+                    transientProtectedBytes: repeatedSecret
+                )
+            ],
+            hasProtectedInput: true
+        )
+
+        TerminalShortcutStore.save([shortcut])
+        let loaded = try #require(TerminalShortcutStore.load().first)
+        let accounts = loaded.events.compactMap(\.protectedBytesReference)
+
+        #expect(accounts.count == 2)
+        #expect(Set(accounts).count == 1)
+
+        AgentCredentialStore._resetTestAccessCounts()
+        var cache: [String: [UInt8]] = [:]
+        #expect(loaded.events[0].resolvedBytes(cache: &cache) == repeatedSecret)
+        #expect(loaded.events[1].resolvedBytes(cache: &cache) == repeatedSecret)
+        #expect(AgentCredentialStore._testLoadCount(account: try #require(accounts.first)) == 0)
+        #expect(AgentCredentialStore._testSaveCount(account: try #require(accounts.first)) == 0)
+
+        let persistedJSON = try String(contentsOf: TerminalShortcutStore.fileURL, encoding: .utf8)
+        let vaultJSON = try String(
+            contentsOf: shortcutsDirectory.appendingPathComponent("protected-vault.json"),
+            encoding: .utf8
+        )
+        #expect(!persistedJSON.contains("same-secret-password"))
+        #expect(!vaultJSON.contains("same-secret-password"))
+    }
+
+    @MainActor
+    @Test("terminal shortcut AI edit operations avoid protected bytes")
+    func testTerminalShortcutAIEditOperationsAvoidProtectedBytes() throws {
+        let shortcutsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("terminal-shortcut-ai-edit-\(UUID().uuidString)", isDirectory: true)
+        TerminalShortcutStore._setTestDirectoryOverride(shortcutsDirectory)
+        defer {
+            TerminalShortcutStore._setTestDirectoryOverride(nil)
+            try? FileManager.default.removeItem(at: shortcutsDirectory)
+        }
+
+        let shortcut = TerminalShortcut(
+            id: UUID(),
+            title: "Before",
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 1),
+            durationMilliseconds: 2_000,
+            events: [
+                TerminalShortcutEvent(
+                    delayMilliseconds: 1_000,
+                    bytes: Array("echo old\n".utf8)
+                ),
+                TerminalShortcutEvent(
+                    delayMilliseconds: 500,
+                    bytes: [],
+                    requiresEchoOff: true,
+                    protectedBytesReference: "terminal-shortcut/existing/protected"
+                )
+            ],
+            hasProtectedInput: true
+        )
+        TerminalShortcutStore.save([shortcut])
+
+        let controller = AgentInteractiveTerminalController()
+        let edited = try controller.editShortcut(
+            id: shortcut.id,
+            title: "After",
+            operations: [
+                TerminalShortcutEditOperation(
+                    kind: .setDelay,
+                    eventIndex: 0,
+                    delayMilliseconds: 250,
+                    text: nil,
+                    find: nil,
+                    replacement: nil
+                ),
+                TerminalShortcutEditOperation(
+                    kind: .replaceVisibleText,
+                    eventIndex: 0,
+                    delayMilliseconds: nil,
+                    text: nil,
+                    find: "old",
+                    replacement: "new"
+                )
+            ]
+        )
+
+        #expect(edited.title == "After")
+        #expect(edited.events[0].delayMilliseconds == 250)
+        #expect(String(decoding: edited.events[0].bytes, as: UTF8.self) == "echo new\n")
+
+        #expect(throws: AgentToolError.self) {
+            try controller.editShortcut(
+                id: shortcut.id,
+                title: nil,
+                operations: [
+                    TerminalShortcutEditOperation(
+                        kind: .setVisibleText,
+                        eventIndex: 1,
+                        delayMilliseconds: nil,
+                        text: "exposed",
+                        find: nil,
+                        replacement: nil
+                    )
+                ]
+            )
+        }
     }
 
     @MainActor

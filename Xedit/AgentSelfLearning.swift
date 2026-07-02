@@ -284,7 +284,7 @@ enum AgentSelfLearning {
         )
         return AgentToolResult(
             summary: "Created skill \(url.deletingLastPathComponent().lastPathComponent)",
-            payload: "Created user skill at \(url.path). Refresh skills or type @ to attach it in a future turn."
+            payload: "Created user skill at \(url.path). Refresh skills or type $ to attach it in a future turn."
         )
     }
 

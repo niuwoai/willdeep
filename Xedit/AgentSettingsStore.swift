@@ -785,8 +785,6 @@ enum AgentCredentialStore {
             return
         }
 
-        if load(account: account) == trimmed { return }
-
         let baseQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,

@@ -46,6 +46,9 @@ nonisolated enum AgentToolDisplay {
         "git_status": "查看 Git 状态",
         "run_command": "运行命令",
         "terminal_snapshot": "终端快照",
+        "terminal_create_shortcut": "生成终端录制",
+        "terminal_list_shortcuts": "终端录制列表",
+        "terminal_edit_shortcut": "编辑终端录制",
         "terminal_send_command": "终端执行命令",
         "terminal_send_control": "终端控制键",
         "create_file": "创建文件",
@@ -317,6 +320,8 @@ struct AgentToolCallCard: View {
     @State private var isExpanded = false
     @State private var answerInput = ""
     @State private var selectedOptions: Set<String> = []
+    @State private var protectedInputValues: [Int: String] = [:]
+    @State private var protectedInputsSaved = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: isInteractive ? 6 : 3) {
@@ -432,6 +437,8 @@ struct AgentToolCallCard: View {
                 askUserBody
             } else if call.toolName == "ask_user" {
                 askUserResolvedRow
+            } else if call.toolName == "terminal_create_shortcut" {
+                terminalShortcutProtectedInputsBody
             }
         }
         .padding(.horizontal, 7)
@@ -571,6 +578,80 @@ struct AgentToolCallCard: View {
         }
     }
 
+    @ViewBuilder
+    private var terminalShortcutProtectedInputsBody: some View {
+        if let promptSet = terminalShortcutProtectedPromptSet {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "lock.shield")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(askUserSecondaryAccentColor)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("填写终端录制密码占位")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("这些值只会写入本机加密 vault，不会发送给 AI。")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                ForEach(promptSet.prompts) { prompt in
+                    SecureField(prompt.label, text: Binding(
+                        get: { protectedInputValues[prompt.eventIndex] ?? "" },
+                        set: { protectedInputValues[prompt.eventIndex] = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12))
+                }
+
+                HStack(spacing: 6) {
+                    Button("稍后填写") {
+                        protectedInputsSaved = true
+                        protectedInputValues.removeAll()
+                    }
+                    Spacer(minLength: 0)
+                    Button("保存到录制") {
+                        let values = promptSet.prompts.reduce(into: [Int: String]()) { result, prompt in
+                            result[prompt.eventIndex] = protectedInputValues[prompt.eventIndex] ?? ""
+                        }
+                        if appState.fillTerminalShortcutProtectedInputs(
+                            shortcutID: promptSet.shortcutID,
+                            valuesByEventIndex: values
+                        ) {
+                            protectedInputsSaved = true
+                            protectedInputValues.removeAll()
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canSaveTerminalShortcutProtectedInputs(promptSet))
+                }
+                .font(.caption)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(askUserAccentColor.opacity(0.08))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(askUserAccentColor.opacity(0.28), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        } else if protectedInputsSaved {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.green)
+                Text("密码占位已保存到本机加密 vault。")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+        }
+    }
+
     private func singleSelectChoices(_ options: [String]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(options, id: \.self) { option in
@@ -639,6 +720,12 @@ struct AgentToolCallCard: View {
         }
         if isMultiSelect { return !selectedOptions.isEmpty }
         return false
+    }
+
+    private func canSaveTerminalShortcutProtectedInputs(_ promptSet: TerminalShortcutProtectedPromptSet) -> Bool {
+        promptSet.prompts.allSatisfy { prompt in
+            protectedInputValues[prompt.eventIndex]?.isEmpty == false
+        }
     }
 
     private func submitAnswer(options: [String], isMultiSelect: Bool) {
@@ -731,6 +818,9 @@ struct AgentToolCallCard: View {
     }
 
     private var iconName: String {
+        if terminalShortcutProtectedPromptSet != nil {
+            return "lock.shield"
+        }
         switch call.status {
         case .pendingApproval, .awaitingConfirm: return "questionmark.circle"
         case .awaitingUserAnswer: return "bubble.left.and.text.bubble.right"
@@ -742,6 +832,9 @@ struct AgentToolCallCard: View {
     }
 
     private var iconColor: Color {
+        if terminalShortcutProtectedPromptSet != nil {
+            return askUserAccentColor
+        }
         switch call.status {
         case .pendingApproval: return appState.editorSettings.interfaceSkin.palette.accent
         case .awaitingConfirm: return destructiveAccentColor
@@ -754,6 +847,9 @@ struct AgentToolCallCard: View {
     }
 
     private var statusColor: Color {
+        if terminalShortcutProtectedPromptSet != nil {
+            return askUserAccentColor
+        }
         switch call.status {
         case .pendingApproval: return appState.editorSettings.interfaceSkin.palette.accent
         case .awaitingConfirm: return destructiveAccentColor
@@ -764,6 +860,9 @@ struct AgentToolCallCard: View {
     }
 
     private var isInteractive: Bool {
+        if terminalShortcutProtectedPromptSet != nil {
+            return true
+        }
         switch call.status {
         case .pendingApproval, .awaitingConfirm, .awaitingUserAnswer:
             return true
@@ -773,7 +872,8 @@ struct AgentToolCallCard: View {
     }
 
     private var hasExpandableContent: Bool {
-        !argumentsLines.isEmpty
+        terminalShortcutProtectedPromptSet != nil
+        || !argumentsLines.isEmpty
         || !(call.result?.payload.isEmpty ?? true)
         || !(call.errorMessage?.isEmpty ?? true)
     }
@@ -825,6 +925,9 @@ struct AgentToolCallCard: View {
         case .awaitingUserAnswer: return L10n.ToolCard.statusAskingYou
         case .running: return L10n.ToolCard.statusRunning
         case .succeeded:
+            if terminalShortcutProtectedPromptSet != nil {
+                return "等待填写密码占位"
+            }
             if let summary = call.result?.summary, !summary.isEmpty {
                 return summary
             }
@@ -865,4 +968,65 @@ struct AgentToolCallCard: View {
     private var askUserSecondaryAccentColor: Color {
         appState.editorSettings.interfaceSkin.palette.secondaryAccent
     }
+
+    private var terminalShortcutProtectedPromptSet: TerminalShortcutProtectedPromptSet? {
+        guard call.toolName == "terminal_create_shortcut",
+              call.status == .succeeded,
+              !protectedInputsSaved,
+              let payload = call.result?.payload,
+              let parsed = TerminalShortcutProtectedPromptSet.parse(payload: payload),
+              !parsed.prompts.isEmpty else {
+            return nil
+        }
+        guard let current = appState.agentTerminalController.shortcuts.first(where: { $0.id == parsed.shortcutID }) else {
+            return parsed
+        }
+        let pendingIndexes = Set(
+            current.events.enumerated()
+                .filter { $0.element.needsProtectedInputValue }
+                .map(\.offset)
+        )
+        let pendingPrompts = parsed.prompts.filter { pendingIndexes.contains($0.eventIndex) }
+        guard !pendingPrompts.isEmpty else { return nil }
+        return TerminalShortcutProtectedPromptSet(shortcutID: parsed.shortcutID, title: parsed.title, prompts: pendingPrompts)
+    }
+}
+
+private struct TerminalShortcutProtectedPromptSet: Equatable {
+    let shortcutID: UUID
+    let title: String
+    let prompts: [TerminalShortcutProtectedPrompt]
+
+    static func parse(payload: String) -> TerminalShortcutProtectedPromptSet? {
+        guard let data = payload.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rawID = object["id"] as? String,
+              let shortcutID = UUID(uuidString: rawID) else {
+            return nil
+        }
+        let title = (object["title"] as? String) ?? "Terminal Shortcut"
+        guard let events = object["events"] as? [[String: Any]] else {
+            return nil
+        }
+        let prompts = events.compactMap { event -> TerminalShortcutProtectedPrompt? in
+            guard (event["kind"] as? String) == "protected_placeholder",
+                  (event["needs_value"] as? Bool) == true,
+                  let eventIndex = event["index"] as? Int else {
+                return nil
+            }
+            let rawLabel = (event["placeholder"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let label = rawLabel?.isEmpty == false ? rawLabel! : "密码 \(eventIndex + 1)"
+            return TerminalShortcutProtectedPrompt(eventIndex: eventIndex, label: label)
+        }
+        guard !prompts.isEmpty else { return nil }
+        return TerminalShortcutProtectedPromptSet(shortcutID: shortcutID, title: title, prompts: prompts)
+    }
+}
+
+private struct TerminalShortcutProtectedPrompt: Identifiable, Equatable {
+    let eventIndex: Int
+    let label: String
+
+    var id: Int { eventIndex }
 }

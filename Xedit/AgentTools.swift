@@ -56,6 +56,12 @@ enum AgentToolRunner {
                 result = try await AgentFileTools.gitStatus(context: activeContext)
             case "run_command":
                 result = try await runCommand(arguments: activeArguments, context: activeContext)
+            case "terminal_list_shortcuts":
+                result = try await AgentTerminalTools.listShortcuts(arguments: activeArguments, context: activeContext)
+            case "terminal_create_shortcut":
+                result = try await AgentTerminalTools.createShortcut(arguments: activeArguments, context: activeContext)
+            case "terminal_edit_shortcut":
+                result = try await AgentTerminalTools.editShortcut(arguments: activeArguments, context: activeContext)
             case "terminal_snapshot":
                 result = try await AgentTerminalTools.snapshot(arguments: activeArguments, context: activeContext)
             case "terminal_send_command":

@@ -87,23 +87,25 @@ private struct AgentSidePanelTerminalContentView: View {
     // MARK: Tab bar
 
     private var shortcutsBar: some View {
-        HStack(spacing: 6) {
-            recordButton
-                .layoutPriority(1)
+        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+            HStack(spacing: 6) {
+                recordButton
+                    .layoutPriority(1)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(controller.shortcuts) { shortcut in
-                        shortcutMenu(shortcut)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(controller.shortcuts) { shortcut in
+                            shortcutMenu(shortcut, now: timeline.date)
+                        }
                     }
+                    .padding(.vertical, 4)
                 }
-                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 34)
+            .padding(.horizontal, 8)
+            .background(terminalBackground.opacity(0.92))
         }
-        .frame(height: 34)
-        .padding(.horizontal, 8)
-        .background(terminalBackground.opacity(0.92))
     }
 
     private var recordButton: some View {
@@ -128,14 +130,20 @@ private struct AgentSidePanelTerminalContentView: View {
         .help(controller.isRecording ? "停止录制终端捷径" : "开始录制终端捷径")
     }
 
-    private func shortcutMenu(_ shortcut: TerminalShortcut) -> some View {
-        Menu {
+    private func shortcutMenu(_ shortcut: TerminalShortcut, now: Date) -> some View {
+        let playbackState = playbackState(for: shortcut)
+        return Menu {
             Button {
                 controller.playShortcut(shortcut)
             } label: {
                 Label("回放", systemImage: "play.fill")
             }
-            .disabled(controller.isRecording || controller.activeTab?.isRunning != true)
+            .disabled(
+                controller.isRecording ||
+                    controller.activeTab?.isRunning != true ||
+                    controller.activeTab?.isPlayingShortcut == true ||
+                    shortcut.hasPendingProtectedInput
+            )
 
             Button {
                 editShortcut(shortcut)
@@ -157,12 +165,17 @@ private struct AgentSidePanelTerminalContentView: View {
                 Label("删除", systemImage: "trash")
             }
         } label: {
-            TerminalShortcutChip(shortcut: shortcut)
+            TerminalShortcutChip(
+                shortcut: shortcut,
+                playbackState: playbackState,
+                now: now,
+                accent: skinAccent
+            )
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help(shortcutTooltip(shortcut))
+        .help(shortcutTooltip(shortcut, playbackState: playbackState, now: now))
     }
 
     private func editShortcut(_ shortcut: TerminalShortcut) {
@@ -361,16 +374,80 @@ private struct AgentSidePanelTerminalContentView: View {
         return lines.joined(separator: " · ")
     }
 
-    private func shortcutTooltip(_ shortcut: TerminalShortcut) -> String {
+    private func playbackState(for shortcut: TerminalShortcut) -> TerminalShortcutPlaybackState? {
+        guard let state = controller.activeShortcutPlaybackState,
+              state.shortcutID == shortcut.id else {
+            return nil
+        }
+        return state
+    }
+
+    private func shortcutTooltip(
+        _ shortcut: TerminalShortcut,
+        playbackState: TerminalShortcutPlaybackState?,
+        now: Date
+    ) -> String {
         var lines = [
             shortcut.title,
-            "\(shortcut.eventCount) 段输入 · \(max(1, shortcut.durationMilliseconds / 1000)) 秒"
+            L10n.AgentTerminal.shortcutMeta(
+                formatShortcutDuration(shortcut.durationMilliseconds),
+                "\(shortcut.eventCount)"
+            ),
+            L10n.AgentTerminal.shortcutReplayWait(
+                formatShortcutDuration(shortcut.playbackDurationMilliseconds)
+            )
         ]
+        if let playbackState {
+            switch playbackState.status {
+            case .running:
+                lines.append(L10n.AgentTerminal.shortcutRunning)
+                lines.append(
+                    L10n.AgentTerminal.shortcutRemaining(
+                        formatShortcutDuration(playbackState.remainingMilliseconds(now: now))
+                    )
+                )
+                lines.append(L10n.AgentTerminal.shortcutEstimatedFinish(Self.shortcutETAFormatter.string(from: playbackState.estimatedFinishedAt)))
+                lines.append(
+                    L10n.AgentTerminal.shortcutProgress(
+                        "\(playbackState.currentEventIndex)",
+                        "\(playbackState.totalEvents)"
+                    )
+                )
+            case .finished:
+                lines.append(L10n.AgentTerminal.shortcutFinished)
+            case .cancelled:
+                lines.append(L10n.AgentTerminal.shortcutCancelled)
+            }
+        }
         if shortcut.hasProtectedInput {
-            lines.append("包含受保护输入，仅在不回显提示下回放")
+            lines.append(L10n.AgentTerminal.shortcutProtected)
+        }
+        if shortcut.hasPendingProtectedInput {
+            lines.append("还有 \(shortcut.pendingProtectedInputCount) 个密码占位待填写")
         }
         return lines.joined(separator: " · ")
     }
+
+    private func formatShortcutDuration(_ milliseconds: Int) -> String {
+        let seconds = max(0, Int(ceil(Double(milliseconds) / 1000)))
+        if seconds < 60 {
+            return "\(seconds)s"
+        }
+        let minutes = seconds / 60
+        let remainder = seconds % 60
+        if minutes < 60 {
+            return remainder == 0 ? "\(minutes)m" : "\(minutes)m \(String(format: "%02ds", remainder))"
+        }
+        let hours = minutes / 60
+        let minuteRemainder = minutes % 60
+        return minuteRemainder == 0 ? "\(hours)h" : "\(hours)h \(String(format: "%02dm", minuteRemainder))"
+    }
+
+    private static let shortcutETAFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
 }
 
 private struct TerminalShortcutRenameDraft: Identifiable {
@@ -386,16 +463,25 @@ private struct TerminalShortcutRenameDraft: Identifiable {
 
 private struct TerminalShortcutChip: View {
     let shortcut: TerminalShortcut
+    let playbackState: TerminalShortcutPlaybackState?
+    let now: Date
+    let accent: Color
 
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: "play.fill")
+            Image(systemName: statusIcon)
                 .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(statusColor)
             Text(shortcut.title)
                 .font(.system(size: 11, weight: .medium))
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(maxWidth: 150)
+                .frame(maxWidth: 124)
+            Text(statusText)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(statusColor)
+                .monospacedDigit()
+                .lineLimit(1)
             if shortcut.hasProtectedInput {
                 Image(systemName: "lock.shield")
                     .font(.system(size: 9, weight: .semibold))
@@ -406,12 +492,78 @@ private struct TerminalShortcutChip: View {
         .padding(.vertical, 5)
         .background(
             Capsule(style: .continuous)
-                .fill(Color.primary.opacity(0.07))
+                .fill(backgroundColor)
         )
         .overlay(
             Capsule(style: .continuous)
-                .stroke(Color.primary.opacity(0.10), lineWidth: 1)
+                .stroke(borderColor, lineWidth: 1)
         )
+    }
+
+    private var statusIcon: String {
+        guard let playbackState else { return "play.fill" }
+        switch playbackState.status {
+        case .running:
+            return "play.circle.fill"
+        case .finished:
+            return "checkmark.circle.fill"
+        case .cancelled:
+            return "exclamationmark.circle.fill"
+        }
+    }
+
+    private var statusText: String {
+        guard let playbackState else {
+            return formatDuration(shortcut.durationMilliseconds)
+        }
+        switch playbackState.status {
+        case .running:
+            let remaining = formatDuration(playbackState.remainingMilliseconds(now: now))
+            let progress = L10n.AgentTerminal.shortcutProgress(
+                "\(playbackState.currentEventIndex)",
+                "\(playbackState.totalEvents)"
+            )
+            return "\(remaining) · \(progress)"
+        case .finished:
+            return L10n.AgentTerminal.shortcutFinished
+        case .cancelled:
+            return L10n.AgentTerminal.shortcutCancelled
+        }
+    }
+
+    private var statusColor: Color {
+        guard let playbackState else { return .secondary }
+        switch playbackState.status {
+        case .running:
+            return accent
+        case .finished:
+            return .green
+        case .cancelled:
+            return .orange
+        }
+    }
+
+    private var backgroundColor: Color {
+        playbackState?.isRunning == true ? accent.opacity(0.16) : Color.primary.opacity(0.07)
+    }
+
+    private var borderColor: Color {
+        playbackState?.isRunning == true ? accent.opacity(0.45) : Color.primary.opacity(0.10)
+    }
+
+    private func formatDuration(_ milliseconds: Int) -> String {
+        let seconds = max(0, Int(ceil(Double(milliseconds) / 1000)))
+        if seconds < 60 {
+            return "\(seconds)s"
+        }
+        let minutes = seconds / 60
+        let remainder = seconds % 60
+        if minutes < 60 {
+            return remainder == 0 ? "\(minutes)m" : "\(minutes)m \(String(format: "%02ds", remainder))"
+        }
+        let hours = minutes / 60
+        let minuteRemainder = minutes % 60
+        return minuteRemainder == 0 ? "\(hours)h" : "\(hours)h \(String(format: "%02dm", minuteRemainder))"
     }
 }
 

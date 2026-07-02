@@ -1,5 +1,77 @@
 # Changelog
 
+## 1.128.0-rc4 - 2026-07-02
+
+### Fixed
+- **终端录制受保护输入按“回车”成条计数** —— 手动录制终端会话时，echo-off 隐藏输入（密码）此前按字符逐个生成受保护事件：一条 19 字符的密码会被记成 19 次“受保护输入”。现在连续按键合并到一个待定缓冲区，直到用户按回车（CR/LF）或 echo 恢复才落成一个受保护事件，做到“一条密码 = 一次受保护输入”。回车键本身作为普通提交事件保留，回放仍能正常提交密码行；录制中途结束时未提交的密码行也会在 `finish` 时补齐，不再丢失。
+
+### Changed
+- 版本号从 **1.128.0-rc3** 提升为 **1.128.0-rc4**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.128.0-rc3 - 2026-07-02
+
+### Added
+- **口述录制密码占位本地填写（1.128.0-rc3）** —— `terminal_create_shortcut` 支持 `protected_placeholder` 事件，Agent 只生成“密码 1 / 密码 2”这类占位；工具成功后聊天区工具卡片会像 `ask_user` 一样显示本地 SecureField，让用户填写真实密码并直接写入终端录制 vault。
+- 未填写密码占位的终端录制禁止回放，侧边栏 tooltip 会提示待填写数量，避免用户误以为录制已完整可用。
+
+### Security
+- 真实密码不作为 tool 参数、不进入聊天消息、不回传模型、不写入录制 JSON；本地提交只调用 App 内部方法把值写入 AES-GCM vault。
+- `terminal_create_shortcut` 继续拒绝 `password` / `secret` / `protected_text` 等明文字段，只允许无密文的 `protected_placeholder` 标签。
+
+### Changed
+- 版本号从 **1.128.0-rc2** 提升为 **1.128.0-rc3**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.128.0-rc2 - 2026-07-02
+
+### Fixed
+- **终端录制受保护输入不再反复触发 Keychain 解锁（1.128.0-rc2）** —— 新录制的隐藏输入改为写入本地 AES-GCM 加密 vault，回放时优先从 vault 读取，避免一个录制里多个密码片段逐条弹系统密码。
+- 旧版终端录制的 Keychain 引用仍保留兼容 fallback：首次成功读取后会迁移写入本地 vault，后续回放不再依赖 Keychain 读取。
+
+### Security
+- 终端录制受保护输入 vault 文件和密钥文件落在本机 Application Support 录制目录，并收紧为当前用户可读写；录制 JSON 仍不保存明文密码。
+
+### Changed
+- 版本号从 **1.128.0-rc1** 提升为 **1.128.0-rc2**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.128.0-rc1 - 2026-07-02
+
+### Added
+- **口述生成终端录制（1.128.0-rc1）** —— 新增 `terminal_create_shortcut` Agent 工具，可把用户口述的终端操作转换为可回放的终端录制捷径；事件支持命令、可见文本、控制键和等待时间，生成前仍需用户审批。
+
+### Security
+- `terminal_create_shortcut` 拒绝生成 password / protected / echo-off 隐藏输入事件，避免把口述中的敏感内容写入可回放录制；密码类步骤仍建议由用户手动录制受保护输入。
+
+### Changed
+- 版本号从 **1.127.0-rc1** 提升为 **1.128.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.127.0-rc1 - 2026-07-02
+
+### Added
+- **终端录制回放状态可视化（1.127.0-rc1）** —— 终端录制捷径现在会在列表中展示录制总耗时；回放执行时高亮当前捷径，显示剩余时间、当前事件进度和预计结束时间，结束或中断后保留状态提示。
+- **some.im 邮箱验证码自动接入（1.127.0-rc1）** —— Onboarding 与 Settings 支持填写邮箱、收验证码、自动注册/登录 some.im 并保存 app 专用令牌；默认文本模型切到 `someim-auto-flash`，侧边栏左下角显示按 `1 USD = 100000 credits` 换算后的剩余 credits，并可一键打开自动登录后的 some.im 后台。
+
+### Changed
+- 版本号从 **1.126.0-rc1** 提升为 **1.127.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.126.0-rc1 - 2026-07-02
+
+### Added
+- **AI 辅助终端录制编辑（1.126.0-rc1）** —— 新增 `terminal_list_shortcuts` 与 `terminal_edit_shortcut` Agent 工具，AI 可列出终端录制事件结构，并在用户批准后修改标题、等待时间、删除事件、替换或重写可见输入文本。
+
+### Fixed
+- 终端录制保存时会把同一录制中重复的 echo-off 隐藏输入合并到同一个本地凭据引用，回放时同一密码只需读取一次；`AgentCredentialStore.save` 不再为了比较旧值而先读取 Keychain，减少保存或回放录制时反复要求解锁钥匙串的情况。
+- 终端录制编辑工具不会向模型暴露隐藏输入明文，也拒绝对受保护事件执行可见文本替换或重写。
+- 版本号从 **1.125.0-rc1** 提升为 **1.126.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.125.0-rc1 - 2026-07-02
+
+### Added
+- **Agent Composer 触发符语义统一（1.125.0-rc1）** —— Agent composer 新增 `$` Skill picker，技能 chip 也改为 `$skill` 展示；`@` picker 只保留 workspace 与项目文件引用，`/` 继续负责命令和 workflow，和通用软件里的“命令 / 引用 / 能力包”心智保持一致。
+
+### Changed
+- `@` picker 的搜索提示和空状态不再提及 skills，新增 `$` 技能搜索提示与空状态本地化文案。
+- 版本号从 **1.124.0-rc1** 提升为 **1.125.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
 ## 1.124.0-rc1 - 2026-07-01
 
 ### Changed

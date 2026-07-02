@@ -29,6 +29,10 @@ struct OnboardingView: View {
     @State private var providerSaveError: String?
     @State private var someIMSettings = SomeIMIntegrationStore.loadSettings()
     @State private var someIMAPIKey = SomeIMIntegrationStore.loadAPIKey()
+    @State private var someIMAccountEmail = SomeIMIntegrationStore.loadAccount()?.email ?? ""
+    @State private var someIMVerificationCode = ""
+    @State private var isSendingSomeIMCode = false
+    @State private var isVerifyingSomeIMCode = false
     @State private var someIMStatus = ""
 
     private let curatedPresets: [AgentProviderPreset] = AgentProviderPreset.all.filter {
@@ -200,7 +204,6 @@ struct OnboardingView: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 Toggle(L10n.Settings.SomeIM.enabledToggle, isOn: $someIMSettings.enabled)
-
                 LabeledContent(L10n.Settings.SomeIM.regionLabel) {
                     Picker("", selection: someIMRelayRegionBinding) {
                         ForEach(SomeIMRelayRegion.allCases) { region in
@@ -217,31 +220,34 @@ struct OnboardingView: View {
                         .disableAutocorrection(true)
                 }
 
-                LabeledContent(L10n.Settings.SomeIM.apiKeyLabel) {
-                    SecureField("", text: $someIMAPIKey)
-                        .textFieldStyle(.roundedBorder)
-                }
-
-                LabeledContent(L10n.Settings.SomeIM.imageModelLabel) {
-                    TextField("", text: $someIMSettings.preferredImageModel)
+                LabeledContent(L10n.Settings.SomeIM.emailLabel) {
+                    TextField("", text: $someIMAccountEmail)
                         .textFieldStyle(.roundedBorder)
                         .disableAutocorrection(true)
                 }
 
-                LabeledContent(L10n.Settings.SomeIM.videoModelLabel) {
-                    TextField("", text: $someIMSettings.preferredVideoModel)
+                LabeledContent(L10n.Settings.SomeIM.emailCodeLabel) {
+                    TextField("", text: $someIMVerificationCode)
                         .textFieldStyle(.roundedBorder)
                         .disableAutocorrection(true)
-                        .disabled(true)
                 }
-                Text(L10n.Settings.SomeIM.videoHelp)
+
+                HStack {
+                    Button(isSendingSomeIMCode ? L10n.Settings.SomeIM.sendingCode : L10n.Settings.SomeIM.sendCode) {
+                        sendSomeIMCode()
+                    }
+                    .disabled(isSendingSomeIMCode || someIMAccountEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button(isVerifyingSomeIMCode ? L10n.Settings.SomeIM.verifyingCode : L10n.Settings.SomeIM.verifyCode) {
+                        verifySomeIMCode()
+                    }
+                    .disabled(isVerifyingSomeIMCode
+                        || someIMAccountEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || someIMVerificationCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                Text(L10n.Onboarding.SomeIM.note)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-
-            Text(L10n.Onboarding.SomeIM.note)
-                .font(.caption)
-                .foregroundStyle(.secondary)
 
             if !someIMStatus.isEmpty {
                 Text(someIMStatus)
@@ -272,6 +278,61 @@ struct OnboardingView: View {
         appState.syncSomeIMProvider(settings: normalized, apiKey: trimmedKey)
         appState.syncSomeIMImageUnderstanding(apiKey: trimmedKey)
         someIMStatus = L10n.Settings.savedStatus
+    }
+
+    private func sendSomeIMCode() {
+        isSendingSomeIMCode = true
+        someIMStatus = ""
+        let email = someIMAccountEmail
+        let currentSettings = someIMSettings.normalized
+        Task {
+            let result: Result<Void, Error>
+            do {
+                try await SomeIMClient.sendClientLoginCode(email: email, settings: currentSettings)
+                result = .success(())
+            } catch {
+                result = .failure(error)
+            }
+            await MainActor.run {
+                isSendingSomeIMCode = false
+                switch result {
+                case .success:
+                    someIMStatus = L10n.Settings.SomeIM.codeSent
+                case .failure(let error):
+                    someIMStatus = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func verifySomeIMCode() {
+        isVerifyingSomeIMCode = true
+        someIMStatus = ""
+        let email = someIMAccountEmail
+        let code = someIMVerificationCode
+        let currentSettings = someIMSettings.normalized
+        Task {
+            let result: Result<SomeIMAccount, Error>
+            do {
+                result = .success(try await SomeIMClient.verifyClientLoginCode(email: email, code: code, settings: currentSettings))
+            } catch {
+                result = .failure(error)
+            }
+            await MainActor.run {
+                isVerifyingSomeIMCode = false
+                switch result {
+                case .success(let account):
+                    someIMAPIKey = SomeIMIntegrationStore.loadAPIKey()
+                    someIMSettings = SomeIMIntegrationStore.loadSettings()
+                    someIMAccountEmail = account.email
+                    appState.syncSomeIMProvider(settings: someIMSettings, apiKey: someIMAPIKey)
+                    appState.syncSomeIMImageUnderstanding(apiKey: someIMAPIKey)
+                    someIMStatus = L10n.Settings.SomeIM.accountSummary(account.email, account.displayCredits)
+                case .failure(let error):
+                    someIMStatus = error.localizedDescription
+                }
+            }
+        }
     }
 
     // MARK: - Step 4: Voice

@@ -17,8 +17,10 @@
 
 import AppKit
 import Combine
+import CryptoKit
 import Darwin
 import Foundation
+import Security
 import SwiftTerm
 
 // MARK: - Runtime terminal profile (unchanged surface; used by SSH tabs)
@@ -109,6 +111,7 @@ struct TerminalShortcutEvent: Codable, Equatable, Identifiable {
     var bytes: [UInt8]
     var requiresEchoOff: Bool
     var protectedBytesReference: String?
+    var protectedPlaceholder: String?
     var transientProtectedBytes: [UInt8]
 
     init(
@@ -117,6 +120,7 @@ struct TerminalShortcutEvent: Codable, Equatable, Identifiable {
         bytes: [UInt8],
         requiresEchoOff: Bool = false,
         protectedBytesReference: String? = nil,
+        protectedPlaceholder: String? = nil,
         transientProtectedBytes: [UInt8] = []
     ) {
         self.id = id
@@ -124,11 +128,13 @@ struct TerminalShortcutEvent: Codable, Equatable, Identifiable {
         self.requiresEchoOff = requiresEchoOff
         self.bytes = requiresEchoOff ? [] : bytes
         self.protectedBytesReference = protectedBytesReference
+        let trimmedPlaceholder = protectedPlaceholder?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.protectedPlaceholder = trimmedPlaceholder.isEmpty ? nil : trimmedPlaceholder
         self.transientProtectedBytes = requiresEchoOff ? transientProtectedBytes : []
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, delayMilliseconds, bytes, requiresEchoOff, protectedBytesReference
+        case id, delayMilliseconds, bytes, requiresEchoOff, protectedBytesReference, protectedPlaceholder
     }
 
     init(from decoder: Decoder) throws {
@@ -138,6 +144,7 @@ struct TerminalShortcutEvent: Codable, Equatable, Identifiable {
         bytes = try container.decodeIfPresent([UInt8].self, forKey: .bytes) ?? []
         requiresEchoOff = try container.decodeIfPresent(Bool.self, forKey: .requiresEchoOff) ?? false
         protectedBytesReference = try container.decodeIfPresent(String.self, forKey: .protectedBytesReference)
+        protectedPlaceholder = try container.decodeIfPresent(String.self, forKey: .protectedPlaceholder)
         transientProtectedBytes = []
     }
 
@@ -148,13 +155,23 @@ struct TerminalShortcutEvent: Codable, Equatable, Identifiable {
         try container.encode(requiresEchoOff ? [] : bytes, forKey: .bytes)
         try container.encode(requiresEchoOff, forKey: .requiresEchoOff)
         try container.encodeIfPresent(protectedBytesReference, forKey: .protectedBytesReference)
+        try container.encodeIfPresent(protectedPlaceholder, forKey: .protectedPlaceholder)
     }
 
     var isPlayable: Bool {
         if requiresEchoOff {
-            return !transientProtectedBytes.isEmpty || protectedBytesReference?.isEmpty == false
+            return !transientProtectedBytes.isEmpty ||
+                protectedBytesReference?.isEmpty == false ||
+                protectedPlaceholder?.isEmpty == false
         }
         return !bytes.isEmpty
+    }
+
+    var needsProtectedInputValue: Bool {
+        guard requiresEchoOff else { return false }
+        if !transientProtectedBytes.isEmpty { return false }
+        guard let protectedBytesReference, !protectedBytesReference.isEmpty else { return true }
+        return TerminalShortcutProtectedVault.load(account: protectedBytesReference) == nil
     }
 
     func resolvedBytes() -> [UInt8] {
@@ -170,9 +187,14 @@ struct TerminalShortcutEvent: Codable, Equatable, Identifiable {
         if let cached = cache[protectedBytesReference] {
             return cached
         }
+        if let resolved = TerminalShortcutProtectedVault.load(account: protectedBytesReference) {
+            cache[protectedBytesReference] = resolved
+            return resolved
+        }
         let encoded = AgentCredentialStore.load(account: protectedBytesReference)
         guard let data = Data(base64Encoded: encoded) else { return [] }
         let resolved = Array(data)
+        TerminalShortcutProtectedVault.save(resolved, account: protectedBytesReference)
         cache[protectedBytesReference] = resolved
         return resolved
     }
@@ -189,6 +211,17 @@ struct TerminalShortcut: Codable, Equatable, Identifiable {
 
     var eventCount: Int { events.count }
     var isPlayable: Bool { !events.isEmpty }
+    var pendingProtectedInputCount: Int {
+        events.filter(\.needsProtectedInputValue).count
+    }
+    var hasPendingProtectedInput: Bool {
+        pendingProtectedInputCount > 0
+    }
+    var playbackDurationMilliseconds: Int {
+        events.reduce(0) { partial, event in
+            partial + max(0, event.delayMilliseconds)
+        }
+    }
 
     var normalized: TerminalShortcut {
         var copy = self
@@ -197,6 +230,67 @@ struct TerminalShortcut: Codable, Equatable, Identifiable {
         copy.durationMilliseconds = max(0, durationMilliseconds)
         copy.events = events.filter(\.isPlayable)
         return copy
+    }
+}
+
+struct TerminalShortcutEditOperation: Equatable {
+    enum Kind: String {
+        case setDelay = "set_delay"
+        case deleteEvent = "delete_event"
+        case replaceVisibleText = "replace_visible_text"
+        case setVisibleText = "set_visible_text"
+        case deleteVisibleText = "delete_visible_text"
+    }
+
+    var kind: Kind
+    var eventIndex: Int
+    var delayMilliseconds: Int?
+    var text: String?
+    var find: String?
+    var replacement: String?
+}
+
+struct TerminalShortcutCreateEvent: Equatable {
+    enum Kind: String {
+        case command
+        case text
+        case control
+        case protectedPlaceholder = "protected_placeholder"
+    }
+
+    var kind: Kind
+    var delayMilliseconds: Int
+    var value: String
+}
+
+struct TerminalShortcutPlaybackState: Equatable {
+    enum Status: Equatable {
+        case running
+        case finished
+        case cancelled(reason: String)
+    }
+
+    var shortcutID: UUID
+    var title: String
+    var currentEventIndex: Int
+    var totalEvents: Int
+    var startedAt: Date
+    var estimatedFinishedAt: Date
+    var totalDelayMilliseconds: Int
+    var status: Status
+
+    var isRunning: Bool {
+        if case .running = status { return true }
+        return false
+    }
+
+    func elapsedMilliseconds(now: Date) -> Int {
+        max(0, Int(now.timeIntervalSince(startedAt) * 1000))
+    }
+
+    func remainingMilliseconds(now: Date) -> Int {
+        guard isRunning else { return 0 }
+        return max(0, Int(estimatedFinishedAt.timeIntervalSince(now) * 1000))
     }
 }
 
@@ -210,6 +304,15 @@ final class TerminalShortcutRecorder {
     private let maxEvents = 4_000
     private let maxRecordedBytes = 64 * 1024
 
+    /// Buffer of consecutive echo-off (protected) keystrokes that have not yet
+    /// been finalized into an event. A password prompt hides every character, so
+    /// each keystroke arrives as its own `record` call; we coalesce them here and
+    /// only emit a single protected event once the user presses Enter (or echo is
+    /// restored). This keeps "one password = one protected input" instead of one
+    /// per character.
+    private var pendingProtectedBytes: [UInt8] = []
+    private var pendingProtectedStartedAt: Date?
+
     init(startedAt: Date = Date()) {
         self.startedAt = startedAt
         self.lastRecordedInputAt = startedAt
@@ -217,10 +320,58 @@ final class TerminalShortcutRecorder {
 
     func record(data: [UInt8], echoEnabled: Bool, now: Date = Date()) {
         guard !data.isEmpty else { return }
+
+        if echoEnabled {
+            // Echo is back on: any password line in progress is complete.
+            flushPendingProtectedInput(now: now)
+            appendEvent(bytes: data, echoEnabled: true, now: now)
+            return
+        }
+
+        // Echo off => protected input. Accumulate keystrokes, and treat Enter
+        // (CR/LF) as the line terminator that finalizes one protected event.
+        for byte in data {
+            if byte == 0x0D || byte == 0x0A {
+                flushPendingProtectedInput(now: now)
+                // The Enter keypress itself is not a secret; record it as a
+                // normal event so replay still submits the password line.
+                appendEvent(bytes: [byte], echoEnabled: true, now: now)
+            } else if totalRecordedBytes + pendingProtectedBytes.count < maxRecordedBytes {
+                if pendingProtectedBytes.isEmpty {
+                    pendingProtectedStartedAt = now
+                }
+                pendingProtectedBytes.append(byte)
+            }
+        }
+    }
+
+    /// Finalize the buffered protected keystrokes into a single event.
+    private func flushPendingProtectedInput(now: Date) {
+        defer {
+            pendingProtectedBytes.removeAll(keepingCapacity: true)
+            pendingProtectedStartedAt = nil
+        }
+        guard !pendingProtectedBytes.isEmpty else { return }
+        appendEvent(
+            bytes: pendingProtectedBytes,
+            echoEnabled: false,
+            now: pendingProtectedStartedAt ?? now,
+            anchor: now
+        )
+    }
+
+    /// Appends one recorded event, honoring the event/byte budgets.
+    /// - Parameters:
+    ///   - now: reference time used to compute this event's leading delay.
+    ///   - anchor: time to advance the "last input" cursor to (defaults to `now`);
+    ///     for a coalesced protected line this is the moment Enter was pressed so
+    ///     the following event's delay does not absorb the typing duration.
+    private func appendEvent(bytes rawBytes: [UInt8], echoEnabled: Bool, now: Date, anchor: Date? = nil) {
+        guard !rawBytes.isEmpty else { return }
         guard events.count < maxEvents, totalRecordedBytes < maxRecordedBytes else { return }
 
         let remainingBytes = maxRecordedBytes - totalRecordedBytes
-        let safeBytes = Array(data.prefix(remainingBytes))
+        let safeBytes = Array(rawBytes.prefix(remainingBytes))
         guard !safeBytes.isEmpty else { return }
 
         let delay = max(0, Int(now.timeIntervalSince(lastRecordedInputAt) * 1000))
@@ -236,7 +387,7 @@ final class TerminalShortcutRecorder {
             )
         )
         totalRecordedBytes += safeBytes.count
-        lastRecordedInputAt = now
+        lastRecordedInputAt = anchor ?? now
     }
 
     func finish(
@@ -244,6 +395,9 @@ final class TerminalShortcutRecorder {
         id: UUID = UUID(),
         finishedAt: Date = Date()
     ) -> TerminalShortcut? {
+        // Flush a password line the user never submitted (e.g. recording stopped
+        // mid-prompt) so it is not silently dropped.
+        flushPendingProtectedInput(now: finishedAt)
         guard !events.isEmpty else { return nil }
         return TerminalShortcut(
             id: id,
@@ -329,9 +483,12 @@ enum TerminalShortcutStore {
     static func deleteProtectedInputs(for shortcut: TerminalShortcut) {
         for event in shortcut.events {
             if let account = event.protectedBytesReference, !account.isEmpty {
+                TerminalShortcutProtectedVault.delete(account: account)
                 AgentCredentialStore.delete(account: account)
             } else if event.requiresEchoOff {
-                AgentCredentialStore.delete(account: protectedInputAccount(shortcutID: shortcut.id, eventID: event.id))
+                let account = protectedInputAccount(shortcutID: shortcut.id, eventID: event.id)
+                TerminalShortcutProtectedVault.delete(account: account)
+                AgentCredentialStore.delete(account: account)
             }
         }
     }
@@ -348,14 +505,25 @@ enum TerminalShortcutStore {
 
     private static func prepareForPersistence(_ shortcut: TerminalShortcut) -> TerminalShortcut {
         var copy = shortcut.normalized
+        var transientProtectedAccountsByPayload: [String: String] = [:]
         copy.events = copy.events.map { event in
             guard event.requiresEchoOff else { return event }
             var prepared = event
-            let account = event.protectedBytesReference ?? protectedInputAccount(shortcutID: shortcut.id, eventID: event.id)
             if !event.transientProtectedBytes.isEmpty {
-                AgentCredentialStore.save(Data(event.transientProtectedBytes).base64EncodedString(), account: account)
+                let payload = Data(event.transientProtectedBytes).base64EncodedString()
+                let account = transientProtectedAccountsByPayload[payload]
+                    ?? event.protectedBytesReference
+                    ?? protectedInputAccount(shortcutID: shortcut.id, eventID: event.id)
+                transientProtectedAccountsByPayload[payload] = account
+                TerminalShortcutProtectedVault.save(event.transientProtectedBytes, account: account)
+                prepared.protectedBytesReference = account
+            } else {
+                prepared.protectedBytesReference = event.protectedBytesReference
+                if prepared.protectedBytesReference == nil,
+                   event.protectedPlaceholder?.isEmpty != false {
+                    prepared.protectedBytesReference = protectedInputAccount(shortcutID: shortcut.id, eventID: event.id)
+                }
             }
-            prepared.protectedBytesReference = account
             prepared.transientProtectedBytes = []
             prepared.bytes = []
             return prepared
@@ -398,7 +566,122 @@ enum TerminalShortcutStore {
     static func _setTestDirectoryOverride(_ directory: URL?) -> URL? {
         let previous = directoryOverride
         directoryOverride = directory
+        TerminalShortcutProtectedVault.resetInMemoryKeyForTests()
         return previous
+    }
+}
+
+enum TerminalShortcutProtectedVault {
+    private static let keyFileName = "protected-vault.key"
+    private static let dataFileName = "protected-vault.json"
+    private static var cachedKeyData: Data?
+
+    private struct Payload: Codable {
+        var version: Int
+        var entries: [String: String]
+    }
+
+    private static var keyURL: URL {
+        TerminalShortcutStore.directory.appendingPathComponent(keyFileName)
+    }
+
+    private static var dataURL: URL {
+        TerminalShortcutStore.directory.appendingPathComponent(dataFileName)
+    }
+
+    static func save(_ bytes: [UInt8], account: String) {
+        guard !bytes.isEmpty, !account.isEmpty else {
+            delete(account: account)
+            return
+        }
+        do {
+            var payload = try loadPayload()
+            let sealed = try AES.GCM.seal(Data(bytes), using: key())
+            guard let combined = sealed.combined else { return }
+            payload.entries[account] = combined.base64EncodedString()
+            try savePayload(payload)
+        } catch {
+            print("TerminalShortcutProtectedVault: failed to save protected input: \(error)")
+        }
+    }
+
+    static func load(account: String) -> [UInt8]? {
+        guard !account.isEmpty else { return nil }
+        do {
+            let payload = try loadPayload()
+            guard let encoded = payload.entries[account],
+                  let combined = Data(base64Encoded: encoded) else { return nil }
+            let sealed = try AES.GCM.SealedBox(combined: combined)
+            let opened = try AES.GCM.open(sealed, using: key())
+            return Array(opened)
+        } catch {
+            print("TerminalShortcutProtectedVault: failed to load protected input: \(error)")
+            return nil
+        }
+    }
+
+    static func delete(account: String) {
+        guard !account.isEmpty else { return }
+        do {
+            var payload = try loadPayload()
+            payload.entries.removeValue(forKey: account)
+            try savePayload(payload)
+        } catch {
+            print("TerminalShortcutProtectedVault: failed to delete protected input: \(error)")
+        }
+    }
+
+    private static func key() throws -> SymmetricKey {
+        if let cachedKeyData, cachedKeyData.count == 32 {
+            return SymmetricKey(data: cachedKeyData)
+        }
+        if let existing = try? Data(contentsOf: keyURL), existing.count == 32 {
+            cachedKeyData = existing
+            return SymmetricKey(data: existing)
+        }
+        try ensureDirectory()
+        var generated = Data(count: 32)
+        let status = generated.withUnsafeMutableBytes { buffer in
+            SecRandomCopyBytes(kSecRandomDefault, 32, buffer.baseAddress!)
+        }
+        guard status == errSecSuccess else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        try generated.write(to: keyURL, options: .atomic)
+        try setOwnerOnlyPermissions(at: keyURL, mode: 0o600)
+        cachedKeyData = generated
+        return SymmetricKey(data: generated)
+    }
+
+    private static func loadPayload() throws -> Payload {
+        guard FileManager.default.fileExists(atPath: dataURL.path) else {
+            return Payload(version: 1, entries: [:])
+        }
+        let data = try Data(contentsOf: dataURL)
+        return try JSONDecoder().decode(Payload.self, from: data)
+    }
+
+    private static func savePayload(_ payload: Payload) throws {
+        try ensureDirectory()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(payload)
+        try data.write(to: dataURL, options: .atomic)
+        try setOwnerOnlyPermissions(at: dataURL, mode: 0o600)
+    }
+
+    private static func ensureDirectory() throws {
+        let directory = TerminalShortcutStore.directory
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try setOwnerOnlyPermissions(at: directory, mode: 0o700)
+    }
+
+    private static func setOwnerOnlyPermissions(at url: URL, mode: Int) throws {
+        try FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: url.path)
+    }
+
+    static func resetInMemoryKeyForTests() {
+        cachedKeyData = nil
     }
 }
 
@@ -511,6 +794,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
     @Published private(set) var recentCommands: [String] = []
     @Published private(set) var activeRecordingStartedAt: Date?
     @Published private(set) var isPlayingShortcut = false
+    @Published private(set) var shortcutPlaybackState: TerminalShortcutPlaybackState?
 
     /// Last moment the tab saw user input or fresh process output. Drives
     /// the idle reaper. Not @Published — sampled by a timer, not the UI.
@@ -619,6 +903,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
     func terminate() {
         guard isRunning else { return }
         cancelRecording()
+        finishShortcutPlayback(status: .cancelled(reason: "terminal_stopped"))
         terminalView.terminate()
         isRunning = false
     }
@@ -648,23 +933,45 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
     }
 
     func playShortcut(_ shortcut: TerminalShortcut) {
-        guard isRunning, shortcut.isPlayable, !isRecording, !isPlayingShortcut else { return }
+        guard isRunning,
+              shortcut.isPlayable,
+              !shortcut.hasPendingProtectedInput,
+              !isRecording,
+              !isPlayingShortcut else { return }
         isPlayingShortcut = true
+        let startedAt = Date()
+        let totalDelay = shortcut.playbackDurationMilliseconds
+        shortcutPlaybackState = TerminalShortcutPlaybackState(
+            shortcutID: shortcut.id,
+            title: shortcut.title,
+            currentEventIndex: 0,
+            totalEvents: shortcut.eventCount,
+            startedAt: startedAt,
+            estimatedFinishedAt: startedAt.addingTimeInterval(Double(totalDelay) / 1000),
+            totalDelayMilliseconds: totalDelay,
+            status: .running
+        )
         Task { [weak self] in
             var protectedBytesCache: [String: [UInt8]] = [:]
-            for event in shortcut.events {
+            var completedNormally = true
+            for (index, event) in shortcut.events.enumerated() {
+                await MainActor.run {
+                    guard let self, self.isRunning else { return }
+                    self.shortcutPlaybackState?.currentEventIndex = index + 1
+                }
                 if event.delayMilliseconds > 0 {
                     try? await Task.sleep(nanoseconds: UInt64(event.delayMilliseconds) * 1_000_000)
                 }
                 let shouldContinue = await MainActor.run {
                     guard let self, self.isRunning else { return false }
                     if event.requiresEchoOff, self.terminalView.terminalEchoEnabled {
-                        self.isPlayingShortcut = false
+                        self.finishShortcutPlayback(status: .cancelled(reason: "echo_enabled"))
                         return false
                     }
                     return true
                 }
                 if shouldContinue == false {
+                    completedNormally = false
                     break
                 }
                 let bytes = event.resolvedBytes(cache: &protectedBytesCache)
@@ -675,9 +982,21 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
                 }
             }
             await MainActor.run {
-                self?.isPlayingShortcut = false
+                guard let self else { return }
+                if completedNormally {
+                    self.finishShortcutPlayback(status: .finished)
+                } else if self.isPlayingShortcut {
+                    self.finishShortcutPlayback(status: .cancelled(reason: "interrupted"))
+                }
             }
         }
+    }
+
+    private func finishShortcutPlayback(status: TerminalShortcutPlaybackState.Status) {
+        isPlayingShortcut = false
+        guard shortcutPlaybackState != nil else { return }
+        shortcutPlaybackState?.status = status
+        shortcutPlaybackState?.currentEventIndex = shortcutPlaybackState?.totalEvents ?? 0
     }
 
     // MARK: Agent-tool surface
@@ -791,6 +1110,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
 
     func processTerminated(source: TerminalView, exitCode: Int32?) {
         isRunning = false
+        finishShortcutPlayback(status: .cancelled(reason: "terminal_exited"))
     }
 
     // MARK: Helpers
@@ -870,6 +1190,10 @@ final class AgentInteractiveTerminalController: ObservableObject {
 
     var isRecording: Bool {
         recordingTabID != nil
+    }
+
+    var activeShortcutPlaybackState: TerminalShortcutPlaybackState? {
+        activeTab?.shortcutPlaybackState
     }
 
     var runtimeOptions: [RuntimeDescriptor] {
@@ -1003,6 +1327,122 @@ final class AgentInteractiveTerminalController: ObservableObject {
         persistShortcuts()
     }
 
+    @discardableResult
+    func createShortcut(
+        title: String,
+        events createEvents: [TerminalShortcutCreateEvent],
+        now: Date = Date()
+    ) throws -> TerminalShortcut {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw AgentToolError.missingArgument("title")
+        }
+        guard !createEvents.isEmpty else {
+            throw AgentToolError.invalidArgument("Terminal shortcut creation requires at least one event.")
+        }
+
+        let events = try createEvents.map { createEvent in
+            let delay = min(max(createEvent.delayMilliseconds, 0), 300_000)
+            if createEvent.kind == .protectedPlaceholder {
+                let placeholder = createEvent.value.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !placeholder.isEmpty else {
+                    throw AgentToolError.invalidArgument("Terminal shortcut protected placeholders cannot be empty.")
+                }
+                return TerminalShortcutEvent(
+                    delayMilliseconds: delay,
+                    bytes: [],
+                    requiresEchoOff: true,
+                    protectedPlaceholder: String(placeholder.prefix(80))
+                )
+            }
+            let bytes = try Self.shortcutBytes(for: createEvent)
+            guard !bytes.isEmpty else {
+                throw AgentToolError.invalidArgument("Terminal shortcut events cannot be empty.")
+            }
+            return TerminalShortcutEvent(
+                delayMilliseconds: delay,
+                bytes: bytes
+            )
+        }
+        let duration = events.reduce(0) { $0 + max(0, $1.delayMilliseconds) }
+        let shortcut = TerminalShortcut(
+            id: UUID(),
+            title: trimmed,
+            createdAt: now,
+            updatedAt: now,
+            durationMilliseconds: duration,
+            events: events,
+            hasProtectedInput: events.contains { $0.requiresEchoOff }
+        ).normalized
+        shortcuts.insert(shortcut, at: 0)
+        persistShortcuts()
+        return shortcut
+    }
+
+    @discardableResult
+    func editShortcut(
+        id: UUID,
+        title: String?,
+        operations: [TerminalShortcutEditOperation]
+    ) throws -> TerminalShortcut {
+        guard let index = shortcuts.firstIndex(where: { $0.id == id }) else {
+            throw AgentToolError.invalidArgument("Unknown terminal shortcut id: \(id.uuidString).")
+        }
+
+        var shortcut = shortcuts[index]
+        if let title {
+            let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                shortcut.title = trimmed
+            }
+        }
+
+        for operation in operations {
+            guard shortcut.events.indices.contains(operation.eventIndex) else {
+                throw AgentToolError.invalidArgument("Terminal shortcut event index \(operation.eventIndex) is out of range.")
+            }
+
+            switch operation.kind {
+            case .setDelay:
+                guard let delay = operation.delayMilliseconds else {
+                    throw AgentToolError.missingArgument("delay_ms")
+                }
+                shortcut.events[operation.eventIndex].delayMilliseconds = min(max(delay, 0), 300_000)
+            case .deleteEvent:
+                shortcut.events.remove(at: operation.eventIndex)
+            case .replaceVisibleText:
+                try editVisibleEventText(
+                    shortcut: &shortcut,
+                    eventIndex: operation.eventIndex,
+                    find: operation.find,
+                    replacement: operation.replacement ?? ""
+                )
+            case .setVisibleText:
+                guard let text = operation.text else {
+                    throw AgentToolError.missingArgument("text")
+                }
+                try setVisibleEventText(shortcut: &shortcut, eventIndex: operation.eventIndex, text: text)
+            case .deleteVisibleText:
+                try editVisibleEventText(
+                    shortcut: &shortcut,
+                    eventIndex: operation.eventIndex,
+                    find: operation.find,
+                    replacement: ""
+                )
+            }
+        }
+
+        shortcut.updatedAt = Date()
+        shortcut.hasProtectedInput = shortcut.events.contains { $0.requiresEchoOff }
+        let normalized = shortcut.normalized
+        guard normalized.isPlayable else {
+            throw AgentToolError.invalidArgument("Terminal shortcut edits removed all playable events.")
+        }
+        shortcuts[index] = normalized
+        persistShortcuts()
+        return normalized
+    }
+
     func deleteShortcut(id: UUID) {
         shortcuts
             .filter { $0.id == id }
@@ -1021,8 +1461,109 @@ final class AgentInteractiveTerminalController: ObservableObject {
     }
 
     private func persistShortcuts() {
-        shortcuts = Array(shortcuts.map(\.normalized).filter(\.isPlayable).prefix(24))
-        TerminalShortcutStore.save(shortcuts)
+        let normalized = Array(shortcuts.map(\.normalized).filter(\.isPlayable).prefix(24))
+        TerminalShortcutStore.save(normalized)
+        shortcuts = TerminalShortcutStore.load()
+    }
+
+    @discardableResult
+    func fillProtectedInputs(
+        shortcutID: UUID,
+        valuesByEventIndex: [Int: String]
+    ) throws -> TerminalShortcut {
+        guard let index = shortcuts.firstIndex(where: { $0.id == shortcutID }) else {
+            throw AgentToolError.invalidArgument("Unknown terminal shortcut id: \(shortcutID.uuidString).")
+        }
+        guard !valuesByEventIndex.isEmpty else {
+            throw AgentToolError.missingArgument("protected input values")
+        }
+
+        var shortcut = shortcuts[index]
+        for (eventIndex, value) in valuesByEventIndex {
+            guard shortcut.events.indices.contains(eventIndex) else {
+                throw AgentToolError.invalidArgument("Terminal shortcut event index \(eventIndex) is out of range.")
+            }
+            guard shortcut.events[eventIndex].requiresEchoOff else {
+                throw AgentToolError.invalidArgument("Terminal shortcut event \(eventIndex) is not a protected input placeholder.")
+            }
+            guard !value.isEmpty else {
+                throw AgentToolError.invalidArgument("Protected input for event \(eventIndex) cannot be empty.")
+            }
+            shortcut.events[eventIndex].transientProtectedBytes = Array(value.utf8)
+        }
+
+        shortcut.updatedAt = Date()
+        shortcut.hasProtectedInput = shortcut.events.contains { $0.requiresEchoOff }
+        shortcuts[index] = shortcut.normalized
+        persistShortcuts()
+
+        guard let updated = shortcuts.first(where: { $0.id == shortcutID }) else {
+            throw AgentToolError.notFound(shortcutID.uuidString)
+        }
+        return updated
+    }
+
+    private static func shortcutBytes(for createEvent: TerminalShortcutCreateEvent) throws -> [UInt8] {
+        switch createEvent.kind {
+        case .command:
+            let command = createEvent.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !command.isEmpty else {
+                throw AgentToolError.invalidArgument("Terminal shortcut command events cannot be empty.")
+            }
+            return Array((command + "\n").utf8)
+        case .text:
+            return Array(createEvent.value.utf8)
+        case .control:
+            switch createEvent.value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "enter":
+                return [13]
+            case "tab":
+                return [9]
+            case "escape", "esc":
+                return [27]
+            case "backspace":
+                return [127]
+            case "ctrl_c", "ctrl-c":
+                return [3]
+            default:
+                throw AgentToolError.invalidArgument("control must be one of: enter, tab, escape, backspace, ctrl_c.")
+            }
+        case .protectedPlaceholder:
+            throw AgentToolError.invalidArgument("Protected placeholders are not visible byte events.")
+        }
+    }
+
+    private func editVisibleEventText(
+        shortcut: inout TerminalShortcut,
+        eventIndex: Int,
+        find: String?,
+        replacement: String
+    ) throws {
+        guard let find, !find.isEmpty else {
+            throw AgentToolError.missingArgument("find")
+        }
+        var text = try visibleEventText(shortcut.events[eventIndex], eventIndex: eventIndex)
+        guard text.contains(find) else {
+            throw AgentToolError.invalidArgument("Terminal shortcut event \(eventIndex) does not contain the requested visible text.")
+        }
+        text = text.replacingOccurrences(of: find, with: replacement)
+        try setVisibleEventText(shortcut: &shortcut, eventIndex: eventIndex, text: text)
+    }
+
+    private func setVisibleEventText(
+        shortcut: inout TerminalShortcut,
+        eventIndex: Int,
+        text: String
+    ) throws {
+        _ = try visibleEventText(shortcut.events[eventIndex], eventIndex: eventIndex)
+        shortcut.events[eventIndex].bytes = Array(text.utf8)
+    }
+
+    private func visibleEventText(_ event: TerminalShortcutEvent, eventIndex: Int) throws -> String {
+        guard !event.requiresEchoOff else {
+            throw AgentToolError.invalidArgument("Terminal shortcut event \(eventIndex) is protected echo-off input and cannot expose or rewrite secret bytes.")
+        }
+        return String(decoding: event.bytes, as: UTF8.self)
     }
 
     /// Make sure the panel always has at least one live tab to show; opens

@@ -169,8 +169,8 @@ enum L10n {
     enum Onboarding {
         enum SomeIM {
             static let title = String(localized: "onboarding.some-im.title", defaultValue: "Connect some.im")
-            static let subtitle = String(localized: "onboarding.some-im.subtitle", defaultValue: "Optional. Add your relay key so image, video, and future multimodal skills can route to the right model automatically.")
-            static let note = String(localized: "onboarding.some-im.note", defaultValue: "You can skip this and configure it later in Settings -> some.im. The image default is gpt-image-2.")
+            static let subtitle = String(localized: "onboarding.some-im.subtitle", defaultValue: "Enter your email, verify the code, and WillDeep will configure some.im with the default someim-auto-flash model.")
+            static let note = String(localized: "onboarding.some-im.note", defaultValue: "New some.im accounts receive the current signup bonus. WillDeep shows the remaining balance as credits.")
         }
         enum Welcome {
             static let title = String(localized: "onboarding.welcome.title", defaultValue: "Welcome to WillDeep")
@@ -732,6 +732,30 @@ enum L10n {
         static let manageSSHHosts = String(localized: "agent-terminal.manage-ssh-hosts", defaultValue: "Manage SSH Hosts...")
         static let localShellTooltip = String(localized: "agent-terminal.local-shell-tooltip", defaultValue: "Local shell")
         static let openedByThisSession = String(localized: "agent-terminal.opened-by-this-session", defaultValue: "Opened by this chat session")
+        static let shortcutRunning = String(localized: "agent-terminal.shortcut.running", defaultValue: "Running")
+        static let shortcutFinished = String(localized: "agent-terminal.shortcut.finished", defaultValue: "Finished")
+        static let shortcutCancelled = String(localized: "agent-terminal.shortcut.cancelled", defaultValue: "Interrupted")
+        static let shortcutProtected = String(localized: "agent-terminal.shortcut.protected", defaultValue: "Contains protected input; replays only while terminal echo is off")
+        static func shortcutMeta(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "agent-terminal.shortcut.meta", defaultValue: "%1$@ · %2$@ events")
+            return String(format: template, a1, a2)
+        }
+        static func shortcutReplayWait(_ a1: String) -> String {
+            let template = String(localized: "agent-terminal.shortcut.replay-wait", defaultValue: "Replay wait: %@")
+            return String(format: template, a1)
+        }
+        static func shortcutRemaining(_ a1: String) -> String {
+            let template = String(localized: "agent-terminal.shortcut.remaining", defaultValue: "Remaining %@")
+            return String(format: template, a1)
+        }
+        static func shortcutProgress(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "agent-terminal.shortcut.progress", defaultValue: "%1$@/%2$@")
+            return String(format: template, a1, a2)
+        }
+        static func shortcutEstimatedFinish(_ a1: String) -> String {
+            let template = String(localized: "agent-terminal.shortcut.estimated-finish", defaultValue: "Estimated finish: %@")
+            return String(format: template, a1)
+        }
         static func newSSHTab(_ a1: String) -> String {
             let template = String(localized: "agent-terminal.new-ssh-tab", defaultValue: "SSH: %@")
             return String(format: template, a1)
@@ -1001,6 +1025,13 @@ enum L10n {
             let template = String(localized: "sidebar.session-row.updated-tooltip", defaultValue: "Updated %@ ago")
             return String(format: template, a1)
         }
+        static let someIMAccountTitle = String(localized: "sidebar.some-im.account-title", defaultValue: "some.im")
+        static func someIMCredits(_ a1: String) -> String {
+            let template = String(localized: "sidebar.some-im.credits", defaultValue: "%@ credits")
+            return String(format: template, a1)
+        }
+        static let someIMOpenTooltip = String(localized: "sidebar.some-im.open-tooltip", defaultValue: "Open some.im with this account")
+        static let someIMRefreshTooltip = String(localized: "sidebar.some-im.refresh-tooltip", defaultValue: "Refresh some.im credits")
         static let workspaceHeader = String(localized: "sidebar.workspace-header", defaultValue: "Workspaces")
         static let workspaceHeaderOpenTooltip = String(localized: "sidebar.workspace-header.open-tooltip", defaultValue: "Open another folder as a new workspace")
         static let workspaceMenuNewChat = String(localized: "sidebar.workspace-menu.new-chat", defaultValue: "New Chat in this Workspace")
@@ -1290,6 +1321,21 @@ enum L10n {
         }
 
         enum SomeIM {
+            static let accountSection = String(localized: "settings.some-im.account-section", defaultValue: "some.im Account")
+            static let emailLabel = String(localized: "settings.some-im.email", defaultValue: "Email")
+            static let emailCodeLabel = String(localized: "settings.some-im.email-code", defaultValue: "Verification Code")
+            static let sendCode = String(localized: "settings.some-im.send-code", defaultValue: "Send Code")
+            static let sendingCode = String(localized: "settings.some-im.sending-code", defaultValue: "Sending...")
+            static let verifyCode = String(localized: "settings.some-im.verify-code", defaultValue: "Verify & Connect")
+            static let verifyingCode = String(localized: "settings.some-im.verifying-code", defaultValue: "Connecting...")
+            static let refreshBalance = String(localized: "settings.some-im.refresh-balance", defaultValue: "Refresh Balance")
+            static let openSomeIM = String(localized: "settings.some-im.open", defaultValue: "Open some.im")
+            static let accountNotConnected = String(localized: "settings.some-im.account-not-connected", defaultValue: "Not connected")
+            static let accountConnected = String(localized: "settings.some-im.account-connected", defaultValue: "Connected")
+            static let creditsLabel = String(localized: "settings.some-im.credits", defaultValue: "Credits")
+            static let defaultModelLabel = String(localized: "settings.some-im.default-model", defaultValue: "Default Model")
+            static let codeSent = String(localized: "settings.some-im.code-sent", defaultValue: "Verification code sent.")
+            static let connected = String(localized: "settings.some-im.connected", defaultValue: "some.im connected.")
             static let connectionSection = String(localized: "settings.some-im.connection-section", defaultValue: "some.im Integration")
             static let enabledToggle = String(localized: "settings.some-im.enabled-toggle", defaultValue: "Use some.im for multimodal generation")
             static let regionLabel = String(localized: "settings.some-im.region", defaultValue: "Region")
@@ -1305,6 +1351,10 @@ enum L10n {
             static let priorityPlaceholder = String(localized: "settings.some-im.priority-placeholder", defaultValue: "Priority models, comma-separated")
             static let imageHelp = String(localized: "settings.some-im.image-help", defaultValue: "Image generation tools prefer this list. Default is gpt-image-2 when some.im is configured.")
             static let videoHelp = String(localized: "settings.some-im.video-help", defaultValue: "Choose the preferred some.im video model for async video-generation tasks.")
+            static func accountSummary(_ email: String, _ credits: String) -> String {
+                let template = String(localized: "settings.some-im.account-summary", defaultValue: "%1$@ · %2$@ credits")
+                return String(format: template, email, credits)
+            }
             static func fetchedModels(_ a1: String) -> String {
                 let template = String(localized: "settings.some-im.fetched-models", defaultValue: "Fetched %@ models.")
                 return String(format: template, a1)

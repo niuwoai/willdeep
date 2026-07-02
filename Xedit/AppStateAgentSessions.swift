@@ -91,11 +91,11 @@ extension AppState {
             displayName: existing?.displayName ?? AgentProviderPreset.preset(id: presetID)?.displayName,
             baseURL: normalizedSettings.baseURL,
             apiKey: trimmedKey,
-            flashPrimary: "deepseek-v4-flash",
+            flashPrimary: SomeIMIntegrationSettings.defaultTextModel,
             flashAlternates: existing?.flashAlternates ?? [],
-            proPrimary: "deepseek-v4-pro",
+            proPrimary: existing?.proPrimary ?? SomeIMIntegrationSettings.defaultTextModel,
             proAlternates: existing?.proAlternates ?? [],
-            routingMode: existing?.routingMode ?? .auto
+            routingMode: existing?.routingMode ?? .flash
         )
 
         agentProviderLibrary.upsert(entry)

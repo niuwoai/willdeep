@@ -41,6 +41,10 @@ struct AgentSessionsSidebar: View {
     /// trailing "+" (new chat in this workspace) button visibility,
     /// same show-on-aim pattern as the session rows.
     @State private var hoveredWorkspaceHeader: String?
+    @State private var someIMAccount = SomeIMIntegrationStore.loadAccount()
+    @State private var isRefreshingSomeIMAccount = false
+    @State private var isOpeningSomeIMAccount = false
+    @State private var someIMAccountStatus = ""
 
     private let initialRowCount = 5
 
@@ -84,14 +88,86 @@ struct AgentSessionsSidebar: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+            someIMAccountFooter
         }
         // sidebar 整体再 clip 一次:即便 SwiftUI 在 narrow window 下
         // 没把某个子 view 完美约束,溢出的部分也不会糊到 chat / side
         // panel 上去。
         .clipped()
-        .onAppear(perform: prunePersistedWorkspaceStateIfNeeded)
+        .onAppear(perform: handleAppear)
         .onCompatibleChange(of: workspaceStatePruneKey) { _, _ in
             prunePersistedWorkspaceStateIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: SomeIMIntegrationStore.accountDidChangeNotification)) { _ in
+            someIMAccount = SomeIMIntegrationStore.loadAccount()
+        }
+    }
+
+    @ViewBuilder
+    private var someIMAccountFooter: some View {
+        if let account = someIMAccount {
+            Divider()
+            HStack(spacing: 8) {
+                Button {
+                    openSomeIMAccount()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
+                            .frame(width: 16, height: 16)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(L10n.Sidebar.someIMAccountTitle)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            Text(L10n.Sidebar.someIMCredits(account.displayCredits))
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                        if isOpeningSomeIMAccount {
+                            ProgressView()
+                                .controlSize(.small)
+                                .scaleEffect(0.7)
+                        } else {
+                            Image(systemName: "arrow.up.forward")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(height: 42)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isOpeningSomeIMAccount)
+                .help(someIMAccountStatus.isEmpty ? L10n.Sidebar.someIMOpenTooltip : someIMAccountStatus)
+
+                Button {
+                    refreshSomeIMAccount()
+                } label: {
+                    if isRefreshingSomeIMAccount {
+                        ProgressView()
+                            .controlSize(.small)
+                            .scaleEffect(0.7)
+                            .frame(width: 22, height: 22)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 22, height: 22)
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(isRefreshingSomeIMAccount)
+                .help(L10n.Sidebar.someIMRefreshTooltip)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 7)
+            .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.48))
         }
     }
 
@@ -618,11 +694,62 @@ struct AgentSessionsSidebar: View {
         return values.remove(workspace) != nil
     }
 
+    private func handleAppear() {
+        prunePersistedWorkspaceStateIfNeeded()
+        someIMAccount = SomeIMIntegrationStore.loadAccount()
+    }
+
     private func prunePersistedWorkspaceStateIfNeeded() {
         let valid = Set(workspaceStatePruneKey)
         expandedWorkspaces = AgentSidebarWorkspaceStateStore.prune(expandedWorkspaces, to: valid, kind: .expandedWorkspaces)
         collapsedWorkspaces = AgentSidebarWorkspaceStateStore.prune(collapsedWorkspaces, to: valid, kind: .collapsedWorkspaces)
         expandedArchivedGroups = AgentSidebarWorkspaceStateStore.prune(expandedArchivedGroups, to: valid, kind: .expandedArchivedGroups)
+    }
+
+    private func refreshSomeIMAccount() {
+        guard !isRefreshingSomeIMAccount else { return }
+        isRefreshingSomeIMAccount = true
+        someIMAccountStatus = ""
+        Task {
+            let result: Result<SomeIMAccount, Error>
+            do {
+                result = .success(try await SomeIMClient.fetchAccountBalance())
+            } catch {
+                result = .failure(error)
+            }
+            await MainActor.run {
+                isRefreshingSomeIMAccount = false
+                switch result {
+                case .success(let account):
+                    someIMAccount = account
+                case .failure(let error):
+                    someIMAccountStatus = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func openSomeIMAccount() {
+        guard !isOpeningSomeIMAccount else { return }
+        isOpeningSomeIMAccount = true
+        someIMAccountStatus = ""
+        Task {
+            let result: Result<URL, Error>
+            do {
+                result = .success(try await SomeIMClient.fetchHandoffLoginURL())
+            } catch {
+                result = .failure(error)
+            }
+            await MainActor.run {
+                isOpeningSomeIMAccount = false
+                switch result {
+                case .success(let url):
+                    NSWorkspace.shared.open(url)
+                case .failure(let error):
+                    someIMAccountStatus = error.localizedDescription
+                }
+            }
+        }
     }
 
     private func workspaceDisplayName(_ key: String) -> String {

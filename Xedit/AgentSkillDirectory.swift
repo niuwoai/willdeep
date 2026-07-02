@@ -9,7 +9,7 @@
 //     SKILL.md body, with a character cap to keep one skill from blowing
 //     the context budget.
 //   - `AgentSkillEntry`: the public record exposed to UI consumers (the
-//     `@skill` composer popover) so views can list and inline skills
+//     `$skill` composer popover) so views can list and inline skills
 //     without going through the LLM tool round-trip.
 //   - `AgentSkillDirectory`: file-system enumeration over bundled,
 //     user (~/.codex/skills), and plugin-cache roots; YAML front-matter
@@ -66,7 +66,7 @@ enum AgentSkillCatalog {
     }
 }
 
-/// Public skill record + discovery surface for UI consumers (the `@skill`
+/// Public skill record + discovery surface for UI consumers (the `$skill`
 /// composer popover). Mirrors `AgentSkillCatalog.SkillRecord` but exposed
 /// outside the private enum so views and AppState helpers can list and
 /// inline skills without going through the LLM tool-call round-trip.

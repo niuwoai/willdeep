@@ -597,10 +597,16 @@ struct AgentToolsCoreTests {
         let snapshot = AgentToolRegistry.descriptor(for: "terminal_snapshot")
         let sendCommand = AgentToolRegistry.descriptor(for: "terminal_send_command")
         let sendControl = AgentToolRegistry.descriptor(for: "terminal_send_control")
+        let listShortcuts = AgentToolRegistry.descriptor(for: "terminal_list_shortcuts")
+        let createShortcut = AgentToolRegistry.descriptor(for: "terminal_create_shortcut")
+        let editShortcut = AgentToolRegistry.descriptor(for: "terminal_edit_shortcut")
 
         #expect(snapshot?.risk == .read)
         #expect(sendCommand?.risk == .write)
         #expect(sendControl?.risk == .write)
+        #expect(listShortcuts?.risk == .read)
+        #expect(createShortcut?.risk == .write)
+        #expect(editShortcut?.risk == .write)
 
         let commandDecision = AgentSandboxPolicy.decision(
             toolName: "terminal_send_command",
@@ -618,6 +624,24 @@ struct AgentToolsCoreTests {
         )
         #expect(snapshotDecision.mode == .readOnly)
         #expect(snapshotDecision.requiresUserApproval == false)
+
+        let editDecision = AgentSandboxPolicy.decision(
+            toolName: "terminal_edit_shortcut",
+            arguments: [:],
+            rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        )
+        #expect(editDecision.mode == .workspaceWrite)
+        #expect(editDecision.requiresUserApproval == true)
+        #expect(editDecision.requiresTypedConfirmation == false)
+
+        let createDecision = AgentSandboxPolicy.decision(
+            toolName: "terminal_create_shortcut",
+            arguments: [:],
+            rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        )
+        #expect(createDecision.mode == .workspaceWrite)
+        #expect(createDecision.requiresUserApproval == true)
+        #expect(createDecision.requiresTypedConfirmation == false)
     }
 
     @Test
