@@ -20,6 +20,7 @@ import SwiftUI
 
 struct ComposerTextEditor: NSViewRepresentable {
     @Binding var text: String
+    let placeholder: String
     let onSubmit: () -> Void
     let onPasteImage: () -> Void
     let onPasteText: (String) -> Void
@@ -120,6 +121,7 @@ struct ComposerTextEditor: NSViewRepresentable {
         textView.isSelectable = true
         textView.autoresizingMask = [.width]
         textView.textContainerInset = NSSize(width: 0, height: 2)
+        textView.placeholder = placeholder
         textView.string = text
         textView.drawsBackground = false
         textView.minSize = NSSize(width: 0, height: 0)
@@ -136,7 +138,8 @@ struct ComposerTextEditor: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
-        guard let textView = nsView.documentView as? NSTextView else { return }
+        guard let textView = nsView.documentView as? ComposerNSTextView else { return }
+        textView.placeholder = placeholder
         if textView.string != text {
             // 1.85.0-rc15:绝大多数「我输了东西被覆盖掉/回退掉」的现象,
             // 根因是这里的 binding-echo 竞态。流程:
@@ -173,6 +176,7 @@ struct ComposerTextEditor: NSViewRepresentable {
             // 比对也跳过同值回声。
             context.coordinator.lastPublishedValue = text
         }
+        textView.needsDisplay = true
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
@@ -300,6 +304,7 @@ struct ComposerTextEditor: NSViewRepresentable {
             onSlashQueryChange(newValue)
             updateAtMenuVisibility(for: textView)
             updateSkillMenuVisibility(for: textView)
+            textView.needsDisplay = true
         }
 
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
@@ -458,6 +463,7 @@ struct ComposerTextEditor: NSViewRepresentable {
             // Park the caret at end so the user can keep typing.
             let end = (value as NSString).length
             textView.setSelectedRange(NSRange(location: end, length: 0))
+            textView.needsDisplay = true
         }
 
         private func updateSlashMenuVisibility(for newValue: String) {
@@ -569,6 +575,7 @@ struct ComposerTextEditor: NSViewRepresentable {
             text.wrappedValue = result
             let newCaret = i + (replacement as NSString).length
             textView.setSelectedRange(NSRange(location: newCaret, length: 0))
+            textView.needsDisplay = true
             return true
         }
 
@@ -594,6 +601,13 @@ struct ComposerTextEditor: NSViewRepresentable {
 
 fileprivate final class ComposerNSTextView: NSTextView {
     fileprivate weak var coordinator: ComposerTextEditor.Coordinator?
+    fileprivate var placeholder: String = "" {
+        didSet {
+            if placeholder != oldValue {
+                needsDisplay = true
+            }
+        }
+    }
 
     // A plain-text NSTextView (`isRichText = false`) only advertises text
     // flavors as readable, so AppKit DISABLES the `paste:` action — and
@@ -607,6 +621,37 @@ fileprivate final class ComposerNSTextView: NSTextView {
     // then routes it into the image-attach pipeline.
     override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
         super.readablePasteboardTypes + [.png, .tiff]
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        drawPlaceholderIfNeeded()
+    }
+
+    private func drawPlaceholderIfNeeded() {
+        guard string.isEmpty, !placeholder.isEmpty, !hasMarkedText() else { return }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        let textFont = font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        let containerPadding = textContainer?.lineFragmentPadding ?? 0
+        let origin = NSPoint(
+            x: textContainerInset.width + containerPadding,
+            y: textContainerInset.height
+        )
+        let rect = NSRect(
+            x: origin.x,
+            y: origin.y,
+            width: max(0, bounds.width - origin.x - textContainerInset.width - containerPadding),
+            height: ceil(textFont.ascender - textFont.descender + textFont.leading) + 2
+        )
+        (placeholder as NSString).draw(
+            in: rect,
+            withAttributes: [
+                .font: textFont,
+                .foregroundColor: NSColor.placeholderTextColor,
+                .paragraphStyle: paragraph
+            ]
+        )
     }
 
     override func paste(_ sender: Any?) {

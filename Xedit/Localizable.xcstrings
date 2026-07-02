@@ -4797,6 +4797,23 @@
         }
       }
     },
+    "composer.input.placeholder" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Ask anything... / commands, @ files/workspace, $ skills & plugins"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入问题... / 唤起命令，@ 引用文件/工作区，$ 挂载技能与插件"
+          }
+        }
+      }
+    },
     "composer.skill-picker.no-matches" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {

@@ -1099,6 +1099,13 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 - [ ] 手动录制一段需要输密码的终端会话（echo-off），逐字符输入一整条密码再按回车，保存后确认“受保护输入”计数按“回车次数/密码条数”统计（例如 2 条密码显示 2），不再按字符数（不再出现 19 这种数字）。
 - [ ] 录制一个包含多个 echo-off 隐藏输入的终端录制，保存后确认回放不再为每个隐藏输入逐条弹 macOS Keychain 系统密码。
 
+## 1.129.0-rc1 — 短剧指针同步 / Composer placeholder / SwiftUI hang skill
+
+- [ ] 复测 Agent composer：空输入时显示多语言 placeholder，提示 `/`、`@`、`$` 的用途；开始输入、粘贴、选择历史消息或插入 token 后 placeholder 应消失。
+- [ ] 切换系统语言或用本地化覆盖验证：英文应提示 commands/files-workspace/skills & plugins，简中应提示命令、文件/工作区、技能与插件，不应出现 JSX/SwiftUI 硬编码文案。
+- [ ] 复测内置技能：Settings → Skills 或 `$` skill picker 可搜索 `swiftui` / `卡死` / `sample` 找到 `swiftui-hang-diagnose`，Agent `read_skill` 能读到 `sample <PID> 5 -mayDie` 与 `spindump <PID> 5` 诊断流程。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.129.0-rc1`，短剧制作能力无新增。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）

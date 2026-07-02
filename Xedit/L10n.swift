@@ -242,6 +242,7 @@ enum L10n {
         static let insertSecretHelp = String(localized: "composer.insert-secret.help", defaultValue: "Insert protected secret")
         static let insertSecretTitle = String(localized: "composer.insert-secret.title", defaultValue: "Insert Protected Secret")
         static let insertSecretUsage = String(localized: "composer.insert-secret.usage", defaultValue: "Use one row per password or token. After inserting, place the generated placeholders exactly where the command, header, or form field needs them.")
+        static let inputPlaceholder = String(localized: "composer.input.placeholder", defaultValue: "Ask anything... / commands, @ files/workspace, $ skills & plugins")
         static let queueSendHelp = String(localized: "composer.queue-send.help", defaultValue: "Queue this message after the current turn")
         static let removeSecretHelp = String(localized: "composer.remove-secret.help", defaultValue: "Remove this secret row")
         static let secretLabelPlaceholder = String(localized: "composer.secret-label.placeholder", defaultValue: "Label, e.g. Production SSH password")

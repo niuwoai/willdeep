@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-02 | Current version: v1.128.0-rc6
+> Last updated: 2026-07-02 | Current version: v1.129.0-rc1
 
 ## Positioning
 
@@ -14,6 +14,8 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Agent Composer 空输入提示（1.129.0-rc1）** —— Agent composer 在空输入时显示多语言 placeholder，引导用户用 `/` 打开命令、用 `@` 引用文件/工作区、用 `$` 挂载技能与插件；提示由 `Localizable.xcstrings` 驱动，输入、粘贴、历史召回或 token 插入后自动消失。
+- **内置 SwiftUI 卡死诊断技能（1.129.0-rc1）** —— `BundledSkills/swiftui-hang-diagnose` 随 App 打包，Settings → Skills、`$` skill picker 和 Agent 的 `list_skills` / `read_skill` 工具都能发现并读取；该技能指导 Agent 用 macOS `sample` / `spindump` 采样原生 SwiftUI/AppKit/UIKit App，按主线程调用栈判断布局不收敛、重渲染循环、死锁和同步 IO 阻塞等常见卡死模式。
 - **终端录制受保护输入按“回车”成条计数（1.128.0-rc4）** —— 手动录制终端会话时，echo-off 隐藏输入（密码）不再按字符逐个生成受保护事件；连续按键会合并到一个待定缓冲区，直到用户按回车（CR/LF）或 echo 恢复才落成一个受保护事件。这样“一条密码 = 一次受保护输入”，捷径栏和工具卡片显示的受保护输入条数与用户实际输入的密码条数一致（此前一条 19 字符密码会被记成 19 次）。回车键本身作为普通提交事件保留，回放仍能正常提交密码行。
 - **终端录制密码占位本地填写（1.128.0-rc3）** —— 口述生成终端录制时，Agent 可生成 `protected_placeholder`（如“密码 1”“密码 2”）事件；生成后聊天工具卡片在本地 SecureField 中收集真实密码并写入终端录制 vault，真实密码不进入模型上下文、不写入录制 JSON。
 - **终端录制受保护输入本地加密 vault（1.128.0-rc2）** —— 终端录制的隐藏输入改为保存在本地 AES-GCM 加密 vault 中，不再为新录制逐条写入或读取 macOS Keychain；旧 Keychain 录制项仍可在首次回放时迁移到 vault，减少重复系统密码解锁弹窗。

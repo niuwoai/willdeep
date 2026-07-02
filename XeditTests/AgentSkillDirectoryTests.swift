@@ -35,6 +35,21 @@ struct AgentSkillDirectoryTests {
     }
 
     @Test
+    func bundledSwiftUIHangDiagnoseSkillIsDiscoveredAndReadable() throws {
+        AgentSkillSettingsStore.setSkillEnabled(identifier: "swiftui-hang-diagnose", enabled: true)
+        let skills = AgentSkillDirectory.list(includeDisabled: true)
+        let skill = try #require(skills.first { $0.identifier == "swiftui-hang-diagnose" })
+        let body = try #require(AgentSkillDirectory.loadBody(for: skill))
+
+        #expect(skill.source == .bundled)
+        #expect(skill.name == "swiftui-hang-diagnose")
+        #expect(skill.description.contains("SwiftUI"))
+        #expect(body.contains("sample <PID> 5 -mayDie"))
+        #expect(body.contains("spindump <PID> 5"))
+        #expect(body.contains("com.apple.main-thread"))
+    }
+
+    @Test
     func disabledSkillIsHiddenFromAgentListButVisibleInSettingsList() {
         AgentSkillSettingsStore.setSkillEnabled(identifier: "browser", enabled: false)
         defer {

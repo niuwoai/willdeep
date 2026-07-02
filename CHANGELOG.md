@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.129.0-rc1 - 2026-07-02
+
+### Added
+- **Agent Composer 空输入提示（1.129.0-rc1）** —— composer 在用户尚未输入时显示多语言 placeholder，提示 `/` 唤起命令、`@` 引用文件/工作区、`$` 挂载技能与插件；开始输入、粘贴文本、选择历史消息或插入触发 token 后提示会自动消失。
+- **内置 SwiftUI 卡死诊断技能（1.129.0-rc1）** —— `BundledSkills` 新增 `swiftui-hang-diagnose`，WillDeep 的技能目录、设置页与 `$` skill picker 可直接发现并读取该技能；技能内置 `sample` / `spindump` 主线程采样流程和 SwiftUI/AppKit/UIKit 卡死模式库，用于诊断原生 Mac/iOS App 转圈、Beachball、CPU 跑满和主线程死锁。
+
+### Changed
+- 版本号从 **1.128.0-rc6** 提升为 **1.129.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
 ## 1.128.0-rc6 - 2026-07-02
 
 ### Fixed

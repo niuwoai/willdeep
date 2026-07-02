@@ -134,6 +134,11 @@ enum AgentSkillLocalization {
             description: "Capture and resize macOS screenshots for UI debugging or screen inspection.",
             aliases: ["screen capture", "capture"]
         ),
+        "swiftui-hang-diagnose": .init(
+            name: "swiftui-hang-diagnose",
+            description: "Diagnose native SwiftUI/AppKit/UIKit app hangs with sample, spindump, main-thread stack reading, and fix patterns.",
+            aliases: ["SwiftUI hang", "beachball", "sample", "spindump", "main thread", "CPU 100%"]
+        ),
         "self-management": .init(
             name: "self-management",
             description: "Read and update Alma settings such as voice, TTS, models, and configuration.",
@@ -242,6 +247,7 @@ enum AgentSkillLocalization {
         "reactions": .init(name: "消息反应", description: "在 Telegram、Discord 和飞书上给消息添加 emoji 反应。", aliases: ["表情", "回应"]),
         "scheduler": .init(name: "定时任务", description: "创建和管理提醒、循环任务、cron 作业和心跳检查。", aliases: ["提醒", "定时", "自动化"]),
         "screenshot": .init(name: "屏幕截图", description: "截取并缩放 macOS 屏幕截图,用于界面调试或查看屏幕。", aliases: ["截图", "屏幕捕获"]),
+        "swiftui-hang-diagnose": .init(name: "SwiftUI 卡死诊断", description: "用 sample、spindump 和主线程栈判读诊断原生 SwiftUI/AppKit/UIKit App 卡死、转圈、CPU 跑满等问题。", aliases: ["SwiftUI 卡死", "主线程卡死", "转圈", "彩虹圈", "sample", "spindump", "CPU 100%"]),
         "self-management": .init(name: "自我设置", description: "读取和更新 Alma 的语音、TTS、模型与配置。", aliases: ["设置", "配置"]),
         "self-reflection": .init(name: "自我反思", description: "执行每日反思、提炼经验、更新人格笔记并写日记。", aliases: ["日记", "反思", "成长"]),
         "selfie": .init(name: "自拍", description: "基于私有参考相册创建一致的人像自拍或自画像。", aliases: ["自拍照", "头像", "人像"]),

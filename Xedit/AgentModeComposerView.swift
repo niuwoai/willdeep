@@ -532,6 +532,7 @@ private struct ComposerCard: View {
                             onUserEdit(oldValue, newValue)
                         }
                     ),
+                    placeholder: L10n.Composer.inputPlaceholder,
                     onSubmit: { appState.sendAgentMessage() },
                     onPasteImage: handlePastedImage,
                     onPasteText: handlePastedText,
