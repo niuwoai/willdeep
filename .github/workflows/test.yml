@@ -163,6 +163,9 @@ jobs:
 
       - name: Upload test artifacts
         if: always()
+        # Artifact 存储配额满时不要把整个 run 标红：测试结论以前面的步骤为准，
+        # 报告同时已写入 job summary，上传失败只损失可下载副本。
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: xedit-test-results
@@ -202,4 +205,4 @@ jobs:
             build/ci/short_drama_mvp_handoff_bundle_contract_report.json
             build/ci/short_drama_mvp_handoff_bundle_contract
             build/ci/xcodebuild.log
-          retention-days: 14
+          retention-days: 7

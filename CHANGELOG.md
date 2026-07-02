@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.128.0-rc6 - 2026-07-02
+
+### Fixed
+- **CI artifact 上传配额不再拖红整个 run** —— GitHub Actions artifact 存储被约 300 个历史测试报告（13.3GB，主要是每次约 100MB 的 xcresult）占满后，`Upload test artifacts` 步骤失败会把测试全绿的 run 标成 failure。已清理旧 artifact（保留最近 10 个），上传步骤加 `continue-on-error: true`（测试结论以前置步骤为准，报告仍写入 job summary），retention 从 14 天缩短到 7 天减缓积累。
+
+### Changed
+- 版本号从 **1.128.0-rc5** 提升为 **1.128.0-rc6**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
 ## 1.128.0-rc5 - 2026-07-02
 
 ### Fixed
