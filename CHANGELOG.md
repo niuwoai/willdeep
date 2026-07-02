@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.128.0-rc5 - 2026-07-02
+
+### Fixed
+- **修复 CI 上 some.im provider 同步测试断言过期** —— `syncSomeIMProvider` 自 1.127.0-rc1 起默认文本模型改为 `someim-auto-flash`，但 `syncingSomeIMProviderCreatesActiveChatProvider` 测试仍断言旧的 `deepseek-v4-flash/pro`，导致 main 上 GitHub Actions 失败。测试改为断言 `SomeIMIntegrationSettings.defaultTextModel`，与实现保持单一事实来源。
+
+### Changed
+- 版本号从 **1.128.0-rc4** 提升为 **1.128.0-rc5**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
 ## 1.128.0-rc4 - 2026-07-02
 
 ### Fixed

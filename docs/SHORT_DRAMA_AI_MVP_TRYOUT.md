@@ -1,6 +1,6 @@
 # Short Drama AI MVP Tryout
 
-> Last updated: 2026-07-02 | Baseline version: v1.128.0-rc4
+> Last updated: 2026-07-02 | Baseline version: v1.128.0-rc5
 
 这份文档用于试用当前短剧 AI MVP。它不是完整产品手册，只覆盖“不完美但可用”的主路径。
 
@@ -112,4 +112,4 @@ import_media_manifest(package_directory=build/ci/short_drama_mvp_tryout_package,
 
 ## 验收记录
 
-人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.128.0-rc4 — 短剧指针同步 / 口述终端录制密码占位` 小节。
+人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.128.0-rc5 — 短剧指针同步 / 口述终端录制密码占位` 小节。

@@ -278,12 +278,12 @@ struct AgentProviderLibraryTests {
         #expect(active?.providerID == "some-im")
         #expect(active?.baseURL == "https://some.im/v1")
         #expect(active?.apiKey == "sk-some-im")
-        #expect(active?.flashPrimary == "deepseek-v4-flash")
-        #expect(active?.proPrimary == "deepseek-v4-pro")
+        #expect(active?.flashPrimary == SomeIMIntegrationSettings.defaultTextModel)
+        #expect(active?.proPrimary == SomeIMIntegrationSettings.defaultTextModel)
         #expect(appState.agentConfiguration.providerID == "some-im")
         #expect(appState.agentConfiguration.apiKey == "sk-some-im")
-        #expect(appState.agentConfiguration.flashModel == "deepseek-v4-flash")
-        #expect(appState.agentConfiguration.proModel == "deepseek-v4-pro")
+        #expect(appState.agentConfiguration.flashModel == SomeIMIntegrationSettings.defaultTextModel)
+        #expect(appState.agentConfiguration.proModel == SomeIMIntegrationSettings.defaultTextModel)
     }
 
     @MainActor
