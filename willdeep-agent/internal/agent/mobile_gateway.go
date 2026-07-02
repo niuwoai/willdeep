@@ -38,6 +38,9 @@ type MobileGatewayConfigInput struct {
 	PairingTTL     time.Duration
 	AllowPairing   bool
 	PairingBaseURL string
+	RelayBaseURL   string
+	RelayRoom      string
+	RelayToken     string
 }
 
 type MobileGatewayConfig struct {
@@ -48,6 +51,9 @@ type MobileGatewayConfig struct {
 	PairingTTL     time.Duration
 	AllowPairing   bool
 	PairingBaseURL string
+	RelayBaseURL   string
+	RelayRoom      string
+	RelayToken     string
 }
 
 type MobileGateway struct {
@@ -172,6 +178,9 @@ func NewMobileGatewayConfig(input MobileGatewayConfigInput) (MobileGatewayConfig
 		PairingTTL:     pairingTTL,
 		AllowPairing:   input.AllowPairing,
 		PairingBaseURL: strings.TrimRight(strings.TrimSpace(input.PairingBaseURL), "/"),
+		RelayBaseURL:   strings.TrimRight(strings.TrimSpace(input.RelayBaseURL), "/"),
+		RelayRoom:      strings.Trim(strings.TrimSpace(input.RelayRoom), "/"),
+		RelayToken:     strings.TrimSpace(input.RelayToken),
 	}, nil
 }
 
@@ -586,13 +595,19 @@ func (g *MobileGateway) pairingPayloadLocked(now time.Time) map[string]any {
 	if !g.pairingAvailableLocked(now) {
 		return nil
 	}
-	return map[string]any{
+	payload := map[string]any{
 		"base_url":         g.pairingBaseURLLocked(),
 		"pairing_token":    g.pairingToken,
 		"protocol_version": MobileGatewayProtocolVersion,
 		"desktop_name":     g.config.DesktopName,
 		"expires_at":       g.pairingExpires.UTC().Format(time.RFC3339Nano),
 	}
+	if g.config.RelayBaseURL != "" && g.config.RelayRoom != "" && g.config.RelayToken != "" {
+		payload["relay_base_url"] = g.config.RelayBaseURL
+		payload["relay_room"] = g.config.RelayRoom
+		payload["relay_token"] = g.config.RelayToken
+	}
+	return payload
 }
 
 func (g *MobileGateway) pairingBaseURLLocked() string {

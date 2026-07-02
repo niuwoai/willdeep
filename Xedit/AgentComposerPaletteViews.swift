@@ -2,7 +2,7 @@
 //  AgentComposerPaletteViews.swift
 //  WillDeep
 //
-//  Slash command palette, @ attachment picker, composer chips, and
+//  Slash command palette, @ attachment picker, $ skill picker, composer chips, and
 //  compact session mode badges used by the Agent composer/sidebar.
 //
 
@@ -186,7 +186,7 @@ struct AgentComposerSkillStrip: View {
                         Image(systemName: "wand.and.stars")
                             .font(.system(size: 10))
                             .foregroundStyle(Color.accentColor)
-                        Text("@\(skill.identifier)")
+                        Text("$\(skill.identifier)")
                             .font(.system(size: 11, weight: .medium, design: .monospaced))
                             .lineLimit(1)
                         Button {
@@ -269,18 +269,16 @@ struct AgentComposerAttachmentStrip: View {
     }
 }
 
-/// One row in the `@` popover. Skills, project files, and the special
-/// `workspace` shortcut are unified so the user can fuzzy-match across
-/// every attachable thing in one list.
+/// One row in the `@` popover. Project files and the special `workspace`
+/// shortcut are unified so the user can fuzzy-match across attachable
+/// context references without mixing them with `$` skills.
 enum AtPickerEntry: Identifiable, Equatable {
     case workspace
-    case skill(AgentSkillEntry)
     case file(url: URL, relativePath: String)
 
     var id: String {
         switch self {
         case .workspace: return "@workspace"
-        case .skill(let s): return "skill:\(s.identifier)"
         case .file(let url, _): return "file:\(url.standardizedFileURL.path)"
         }
     }
@@ -288,7 +286,6 @@ enum AtPickerEntry: Identifiable, Equatable {
     var symbol: String {
         switch self {
         case .workspace: return "folder"
-        case .skill: return "wand.and.stars"
         case .file: return "doc.text"
         }
     }
@@ -296,7 +293,6 @@ enum AtPickerEntry: Identifiable, Equatable {
     var title: String {
         switch self {
         case .workspace: return "workspace"
-        case .skill(let s): return s.identifier
         case .file(_, let rel): return rel
         }
     }
@@ -304,8 +300,34 @@ enum AtPickerEntry: Identifiable, Equatable {
     var subtitle: String {
         switch self {
         case .workspace: return "Attach the current workspace root + file list"
-        case .skill(let s): return s.description
         case .file(let url, _): return url.deletingLastPathComponent().lastPathComponent
+        }
+    }
+}
+
+/// One row in the `$` popover. `$` is reserved for reusable capability
+/// packs / skills, matching the product convention that `/` is an action
+/// command and `@` is an object reference.
+enum SkillPickerEntry: Identifiable, Equatable {
+    case skill(AgentSkillEntry)
+
+    var id: String {
+        switch self {
+        case .skill(let skill): return "skill:\(skill.identifier)"
+        }
+    }
+
+    var symbol: String { "wand.and.stars" }
+
+    var title: String {
+        switch self {
+        case .skill(let skill): return skill.identifier
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .skill(let skill): return skill.description
         }
     }
 }
@@ -401,6 +423,114 @@ private struct AtPickerRow: View {
                 .frame(width: 16)
             VStack(alignment: .leading, spacing: 1) {
                 Text(entry.title)
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(isSelected ? Color.white : Color.primary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(entry.subtitle)
+                    .font(.system(size: 10))
+                    .foregroundStyle(isSelected ? Color.white.opacity(0.85) : Color.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(isSelected ? Color.accentColor : Color.clear)
+    }
+}
+
+struct SkillPickerMenu: View {
+    private enum Metrics {
+        static let width: CGFloat = 540
+        static let maxListHeight: CGFloat = 340
+    }
+
+    let entries: [SkillPickerEntry]
+    @Binding var query: String
+    @Binding var selection: Int
+    let onPick: (Int) -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                TextField(L10n.Composer.skillPickerSearchPlaceholder, text: $query)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 18, height: 18)
+                        .background(Color.primary.opacity(0.06), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .help(L10n.AgentSidePanel.close)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Color(nsColor: .textBackgroundColor).opacity(0.78))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(Color.primary.opacity(0.10), lineWidth: 1)
+            )
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
+
+            if entries.isEmpty {
+                Text(L10n.Composer.skillPickerNoMatches)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                            SkillPickerRow(entry: entry, isSelected: index == selection)
+                                .contentShape(Rectangle())
+                                .onTapGesture { onPick(index) }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+                .frame(maxHeight: Metrics.maxListHeight)
+            }
+        }
+        .padding(.bottom, 6)
+        .frame(width: Metrics.width, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.primary.opacity(0.16), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.18), radius: 12, y: 4)
+    }
+}
+
+private struct SkillPickerRow: View {
+    let entry: SkillPickerEntry
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: entry.symbol)
+                .font(.system(size: 11))
+                .foregroundStyle(isSelected ? Color.white : Color.secondary)
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("$\(entry.title)")
                     .font(.system(size: 12, weight: .semibold, design: .monospaced))
                     .foregroundStyle(isSelected ? Color.white : Color.primary)
                     .lineLimit(1)

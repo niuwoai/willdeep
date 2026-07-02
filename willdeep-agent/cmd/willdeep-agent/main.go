@@ -83,6 +83,10 @@ func newServeMobileCommand() *cobra.Command {
 	var pairingTTL time.Duration
 	var allowPairing bool
 	var pairingBaseURL string
+	var relayBaseURL string
+	var relayRoom string
+	var relayToken string
+	var relayTokenFile string
 
 	cmd := &cobra.Command{
 		Use:   "serve-mobile",
@@ -96,6 +100,14 @@ func newServeMobileCommand() *cobra.Command {
 				}
 				resolvedDesktopToken = string(bytes)
 			}
+			resolvedRelayToken := relayToken
+			if relayTokenFile != "" {
+				bytes, err := os.ReadFile(relayTokenFile)
+				if err != nil {
+					return fmt.Errorf("read relay token file: %w", err)
+				}
+				resolvedRelayToken = string(bytes)
+			}
 			cfg, err := agent.NewMobileGatewayConfig(agent.MobileGatewayConfigInput{
 				Host:           host,
 				Port:           port,
@@ -104,6 +116,9 @@ func newServeMobileCommand() *cobra.Command {
 				PairingTTL:     pairingTTL,
 				AllowPairing:   allowPairing,
 				PairingBaseURL: pairingBaseURL,
+				RelayBaseURL:   relayBaseURL,
+				RelayRoom:      relayRoom,
+				RelayToken:     resolvedRelayToken,
 			})
 			if err != nil {
 				return err
@@ -122,6 +137,10 @@ func newServeMobileCommand() *cobra.Command {
 	cmd.Flags().DurationVar(&pairingTTL, "pairing-ttl", 2*time.Minute, "pairing token lifetime")
 	cmd.Flags().BoolVar(&allowPairing, "allow-pairing", true, "allow QR pairing for new devices")
 	cmd.Flags().StringVar(&pairingBaseURL, "pairing-base-url", "", "public LAN base URL embedded in pairing payload")
+	cmd.Flags().StringVar(&relayBaseURL, "relay-base-url", "", "public relay base URL embedded in pairing payload")
+	cmd.Flags().StringVar(&relayRoom, "relay-room", "", "public relay broadcast room embedded in pairing payload")
+	cmd.Flags().StringVar(&relayToken, "relay-token", "", "public relay bearer token embedded in pairing payload; prefer --relay-token-file")
+	cmd.Flags().StringVar(&relayTokenFile, "relay-token-file", "", "file containing public relay bearer token")
 	return cmd
 }
 

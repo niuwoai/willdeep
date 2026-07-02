@@ -4616,13 +4616,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "No matching skills, files, or shortcuts"
+            "value" : "No matching files or workspace shortcuts"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "没有匹配的技能、文件或快捷指令"
+            "value" : "没有匹配的文件或工作区快捷指令"
           }
         }
       }
@@ -4633,13 +4633,47 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Search skills, files, or workspace..."
+            "value" : "Search files or workspace..."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "搜索技能、文件或工作区…"
+            "value" : "搜索文件或工作区…"
+          }
+        }
+      }
+    },
+    "composer.skill-picker.no-matches" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No matching skills"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有匹配的技能"
+          }
+        }
+      }
+    },
+    "composer.skill-picker.search-placeholder" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Search skills..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索技能…"
           }
         }
       }

@@ -1,16 +1,16 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-07-01 | Target version: v1.122.0-rc1
+> Last updated: 2026-07-01 | Target version: v1.124.0-rc1
 
 ## Summary
 
-Mobile Gateway lets an Android client connect to WillDeep over the local network. The phone is a display and control surface; the Mac remains the authority for Agent execution, tool approval, patch application, workspace access, and safety gates.
+Mobile Gateway lets an Android client connect to WillDeep over the local network or the default public relay at `https://j.niuwoai.com`. The phone is a display and control surface; the Mac remains the authority for Agent execution, tool approval, patch application, workspace access, and safety gates.
 
-This Mac repository implements the Go gateway, Swift desktop peer, and protocol contract. The Android client is developed in the separate `willdeep-android` repository; this repository does not ship cloud relay, public tunnel, push notifications, or direct mobile access to filesystem and shell APIs.
+This Mac repository implements the Go gateway, Swift desktop peer, and protocol contract. The Android client is developed in the separate `willdeep-android` repository; the public relay is provided by `cdnproxy` at `/ws/broadcast/*`, while this repository still does not ship push notifications or direct mobile access to filesystem and shell APIs.
 
 ## Product Goals
 
-- Allow the Mac to expose an opt-in LAN gateway for paired mobile devices.
+- Allow the Mac to expose an opt-in gateway for paired mobile devices, with LAN fallback and default public relay support.
 - Pair a device by scanning a short-lived QR payload generated on the Mac.
 - Let a paired device subscribe to Agent session events and send control commands.
 - Keep Agent decisions inside the desktop app so mobile commands reuse existing Plan gate, danger confirmation, workspace path guard, MCP trust, patch review, and approval behavior.
@@ -20,7 +20,7 @@ This Mac repository implements the Go gateway, Swift desktop peer, and protocol 
 
 - No Android project in this phase.
 - No same-network anonymous access.
-- No cloud account, NAT traversal, hosted relay, or remote push.
+- No cloud account or remote push.
 - No direct mobile calls to `/v1/fs/*`, `/v1/run/*`, or other remote-runtime execution APIs.
 - No mobile-side model provider credentials.
 
@@ -66,8 +66,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.122.0-rc1`
-- `X-Server-Version: 1.122.0-rc1`
+- `X-App-Version: 1.124.0-rc1`
+- `X-Server-Version: 1.124.0-rc1`
 
 ### `GET /mobile/health`
 
@@ -79,7 +79,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.122.0-rc1",
+    "version": "1.124.0-rc1",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"

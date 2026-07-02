@@ -232,8 +232,8 @@ enum L10n {
     }
 
     enum Composer {
-        static let atPickerNoMatches = String(localized: "composer.at-picker.no-matches", defaultValue: "No matching skills, files, or shortcuts")
-        static let atPickerSearchPlaceholder = String(localized: "composer.at-picker.search-placeholder", defaultValue: "Search skills, files, or workspace...")
+        static let atPickerNoMatches = String(localized: "composer.at-picker.no-matches", defaultValue: "No matching files or workspace shortcuts")
+        static let atPickerSearchPlaceholder = String(localized: "composer.at-picker.search-placeholder", defaultValue: "Search files or workspace...")
         static let addSecretAction = String(localized: "composer.add-secret.action", defaultValue: "Add another secret")
         static let addSecretHelp = String(localized: "composer.add-secret.help", defaultValue: "Add another protected secret, up to three total")
         static let attachImageHelp = String(localized: "composer.attach-image.help", defaultValue: "Attach image")
@@ -247,6 +247,8 @@ enum L10n {
         static let secretLabelPlaceholder = String(localized: "composer.secret-label.placeholder", defaultValue: "Label, e.g. Production SSH password")
         static let secretValuePlaceholder = String(localized: "composer.secret-value.placeholder", defaultValue: "Secret value")
         static let sendHelp = String(localized: "composer.send.help", defaultValue: "Send")
+        static let skillPickerNoMatches = String(localized: "composer.skill-picker.no-matches", defaultValue: "No matching skills")
+        static let skillPickerSearchPlaceholder = String(localized: "composer.skill-picker.search-placeholder", defaultValue: "Search skills...")
         static let stopHelp = String(localized: "composer.stop.help", defaultValue: "Stop the current Agent turn")
         static let overflowHelp = String(localized: "composer.overflow.help", defaultValue: "More settings: approval, executor, plugins, experts")
         static let overflowTitle = String(localized: "composer.overflow.title", defaultValue: "More settings")
@@ -1479,6 +1481,8 @@ enum L10n {
             static let portPrompt = String(localized: "settings.mobile-gateway.port-prompt", defaultValue: "8877")
             static let desktopNamePrompt = String(localized: "settings.mobile-gateway.desktop-name-prompt", defaultValue: "Desktop name shown on Android")
             static let executablePathPrompt = String(localized: "settings.mobile-gateway.executable-path-prompt", defaultValue: "Optional willdeep-agent executable path")
+            static let relayBaseURLPrompt = String(localized: "settings.mobile-gateway.relay-base-url-prompt", defaultValue: "Optional public relay URL")
+            static let relayRoomPrompt = String(localized: "settings.mobile-gateway.relay-room-prompt", defaultValue: "Relay room")
             static let restartButton = String(localized: "settings.mobile-gateway.restart", defaultValue: "Apply & Restart")
             static let refreshButton = String(localized: "settings.mobile-gateway.refresh", defaultValue: "Refresh")
             static let copyPayloadButton = String(localized: "settings.mobile-gateway.copy-payload", defaultValue: "Copy pairing payload")

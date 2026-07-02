@@ -12,6 +12,7 @@ struct MobileGatewayCoordinatorTests {
     @Test
     func defaultSettingsUseLANMobileGatewayPort8877() {
         #expect(MobileGatewaySettings.default.port == 8877)
+        #expect(MobileGatewaySettings.default.relayBaseURL == "https://j.niuwoai.com")
     }
 
     @Test
@@ -21,13 +22,17 @@ struct MobileGatewayCoordinatorTests {
             port: 70_000,
             desktopName: "  ",
             executablePath: "  /tmp/willdeep-agent  ",
-            allowPairing: true
+            allowPairing: true,
+            relayBaseURL: "  https://relay.example.com  ",
+            relayRoom: "  room-a  "
         ).normalized
 
         #expect(settings.host == "0.0.0.0")
         #expect(settings.port == 65_535)
         #expect(!settings.desktopName.isEmpty)
         #expect(settings.executablePath == "/tmp/willdeep-agent")
+        #expect(settings.relayBaseURL == "https://relay.example.com")
+        #expect(settings.relayRoom == "room-a")
     }
 
     @Test
@@ -50,6 +55,9 @@ struct MobileGatewayCoordinatorTests {
         #expect(settings.desktopName == "Legacy Mac")
         #expect(settings.executablePath == "")
         #expect(settings.allowPairing)
+        #expect(settings.relayBaseURL == "https://j.niuwoai.com")
+        #expect(settings.relayRoom.starts(with: "willdeep-"))
+        #expect(MobileGatewaySettingsStore.load(defaults: defaults).relayRoom == settings.relayRoom)
     }
 
     @Test
@@ -59,7 +67,25 @@ struct MobileGatewayCoordinatorTests {
 
         let settings = MobileGatewaySettingsStore.load(defaults: defaults)
 
-        #expect(settings == MobileGatewaySettings.default.normalized)
+        #expect(settings.host == "0.0.0.0")
+        #expect(settings.port == 8877)
+        #expect(settings.relayBaseURL == "https://j.niuwoai.com")
+        #expect(settings.relayRoom.starts(with: "willdeep-"))
+    }
+
+    @Test
+    func settingsLoadReplacesLegacyDefaultRelayRoomWithInstallRoom() throws {
+        let defaults = try #require(UserDefaults(suiteName: "willdeep-mobile-gateway-relay-room-\(UUID().uuidString)"))
+        var settings = MobileGatewaySettings.default
+        settings.relayRoom = MobileGatewaySettings.legacyDefaultRelayRoom
+        MobileGatewaySettingsStore.save(settings, defaults: defaults)
+
+        let loaded = MobileGatewaySettingsStore.load(defaults: defaults)
+
+        #expect(loaded.relayBaseURL == "https://j.niuwoai.com")
+        #expect(loaded.relayRoom.starts(with: "willdeep-"))
+        #expect(loaded.relayRoom != MobileGatewaySettings.legacyDefaultRelayRoom)
+        #expect(MobileGatewaySettingsStore.load(defaults: defaults).relayRoom == loaded.relayRoom)
     }
 
     @Test
@@ -69,7 +95,9 @@ struct MobileGatewayCoordinatorTests {
             port: 8877,
             desktopName: "Mac",
             executablePath: "",
-            allowPairing: true
+            allowPairing: true,
+            relayBaseURL: "",
+            relayRoom: "room-a"
         )
 
         #expect(MobileGatewayCoordinator.desktopBaseURL(for: settings).absoluteString == "http://127.0.0.1:8877")
@@ -93,7 +121,10 @@ struct MobileGatewayCoordinatorTests {
             pairingToken: "token",
             protocolVersion: "mobile-gateway.v1",
             desktopName: "Mac",
-            expiresAt: expiresAt
+            expiresAt: expiresAt,
+            relayBaseURL: "https://j.niuwoai.com",
+            relayRoom: "room-a",
+            relayToken: "relay-secret"
         )
 
         let data = try #require(payload.qrJSONString.data(using: .utf8))
@@ -103,6 +134,9 @@ struct MobileGatewayCoordinatorTests {
         #expect(raw?["pairing_token"] as? String == "token")
         #expect(raw?["protocol_version"] as? String == "mobile-gateway.v1")
         #expect(raw?["desktop_name"] as? String == "Mac")
+        #expect(raw?["relay_base_url"] as? String == "https://j.niuwoai.com")
+        #expect(raw?["relay_room"] as? String == "room-a")
+        #expect(raw?["relay_token"] as? String == "relay-secret")
     }
 
     @Test
@@ -126,6 +160,7 @@ struct MobileGatewayCoordinatorTests {
 
         #expect(payload.baseURL == "http://192.168.1.20:8877")
         #expect(payload.fallbackBaseURLs.isEmpty)
+        #expect(payload.relayBaseURL == nil)
     }
 
     @Test
@@ -135,7 +170,9 @@ struct MobileGatewayCoordinatorTests {
             port: 8877,
             desktopName: "Mac",
             executablePath: "",
-            allowPairing: true
+            allowPairing: true,
+            relayBaseURL: "",
+            relayRoom: "room-a"
         )
 
         let fallbacks = MobileGatewayCoordinator.pairingFallbackBaseURLs(
@@ -162,7 +199,9 @@ struct MobileGatewayCoordinatorTests {
             port: 8877,
             desktopName: "Mac",
             executablePath: "",
-            allowPairing: true
+            allowPairing: true,
+            relayBaseURL: "",
+            relayRoom: "room-a"
         )
 
         let fallbacks = MobileGatewayCoordinator.pairingFallbackBaseURLs(

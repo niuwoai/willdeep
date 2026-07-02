@@ -18,6 +18,9 @@ struct MobileGatewayPairingPayload: Codable, Equatable {
     var protocolVersion: String
     var desktopName: String
     var expiresAt: Date
+    var relayBaseURL: String?
+    var relayRoom: String?
+    var relayToken: String?
 
     enum CodingKeys: String, CodingKey {
         case baseURL = "base_url"
@@ -26,6 +29,9 @@ struct MobileGatewayPairingPayload: Codable, Equatable {
         case protocolVersion = "protocol_version"
         case desktopName = "desktop_name"
         case expiresAt = "expires_at"
+        case relayBaseURL = "relay_base_url"
+        case relayRoom = "relay_room"
+        case relayToken = "relay_token"
     }
 
     init(
@@ -34,7 +40,10 @@ struct MobileGatewayPairingPayload: Codable, Equatable {
         pairingToken: String,
         protocolVersion: String,
         desktopName: String,
-        expiresAt: Date
+        expiresAt: Date,
+        relayBaseURL: String? = nil,
+        relayRoom: String? = nil,
+        relayToken: String? = nil
     ) {
         self.baseURL = baseURL
         self.fallbackBaseURLs = fallbackBaseURLs
@@ -42,6 +51,9 @@ struct MobileGatewayPairingPayload: Codable, Equatable {
         self.protocolVersion = protocolVersion
         self.desktopName = desktopName
         self.expiresAt = expiresAt
+        self.relayBaseURL = relayBaseURL
+        self.relayRoom = relayRoom
+        self.relayToken = relayToken
     }
 
     init(from decoder: Decoder) throws {
@@ -52,6 +64,9 @@ struct MobileGatewayPairingPayload: Codable, Equatable {
         protocolVersion = try container.decode(String.self, forKey: .protocolVersion)
         desktopName = try container.decode(String.self, forKey: .desktopName)
         expiresAt = try container.decode(Date.self, forKey: .expiresAt)
+        relayBaseURL = try container.decodeIfPresent(String.self, forKey: .relayBaseURL)
+        relayRoom = try container.decodeIfPresent(String.self, forKey: .relayRoom)
+        relayToken = try container.decodeIfPresent(String.self, forKey: .relayToken)
     }
 
     var qrJSONString: String {
@@ -82,7 +97,10 @@ struct MobileGatewayPairingPayload: Codable, Equatable {
             pairingToken: pairingToken,
             protocolVersion: protocolVersion,
             desktopName: desktopName,
-            expiresAt: expiresAt
+            expiresAt: expiresAt,
+            relayBaseURL: relayBaseURL,
+            relayRoom: relayRoom,
+            relayToken: relayToken
         )
     }
 }
@@ -155,6 +173,7 @@ final class MobileGatewayCoordinator: ObservableObject {
     private var appTerminationObserver: NSObjectProtocol?
     private var monitorTask: Task<Void, Never>?
     private var tokenFileURL: URL?
+    private var relayTokenFileURL: URL?
     private let session: URLSession
     /// Tail (~4KB) of the child's stdout/stderr. Surfaced live in the
     /// settings "Gateway log" panel so the user can see the gateway's own
@@ -168,7 +187,7 @@ final class MobileGatewayCoordinator: ObservableObject {
         session: URLSession? = nil
     ) {
         self.appState = appState
-        self.settings = (settings ?? MobileGatewaySettingsStore.load()).normalized
+        self.settings = MobileGatewaySettingsStore.normalize(settings ?? MobileGatewaySettingsStore.load())
         // Loopback session: the gateway always lives on 127.0.0.1, so a
         // configured system proxy must not intercept these probes.
         self.session = session ?? AgentNetworkSupport.loopbackSession()
@@ -201,7 +220,7 @@ final class MobileGatewayCoordinator: ObservableObject {
     }
 
     func updateSettings(_ newSettings: MobileGatewaySettings) {
-        settings = newSettings.normalized
+        settings = MobileGatewaySettingsStore.normalize(newSettings)
         MobileGatewaySettingsStore.save(settings)
     }
 
@@ -216,12 +235,15 @@ final class MobileGatewayCoordinator: ObservableObject {
         state = .starting
         recentOutput = ""
         do {
-            var normalized = settings.normalized
+            var normalized = MobileGatewaySettingsStore.normalize(settings)
             let executableURL = try Self.resolveExecutableURL(settings: normalized)
             resolvedExecutablePath = executableURL.path
             let desktopToken = try MobileGatewaySettingsStore.loadOrCreateDesktopToken()
             let tokenURL = try Self.writeDesktopTokenFile(desktopToken)
             tokenFileURL = tokenURL
+            let relayToken = try MobileGatewaySettingsStore.loadOrCreateRelayToken()
+            let relayTokenURL = try Self.writeRelayTokenFile(relayToken)
+            relayTokenFileURL = relayTokenURL
             // 1.90.0-rc5：原本同步调 `reapStaleGatewayProcesses` 会在
             // main thread 上 `ps.waitUntilExit()`，加上 `ps` stdout 超过 64KB
             // pipe buffer 后又永远等不到 main thread 来读 → 互锁 → 启动转圈
@@ -249,7 +271,7 @@ final class MobileGatewayCoordinator: ObservableObject {
 
             let gatewayProcess = Process()
             gatewayProcess.executableURL = executableURL
-            gatewayProcess.arguments = [
+            var arguments = [
                 "serve-mobile",
                 "--host", normalized.host,
                 "--port", String(normalized.port),
@@ -259,6 +281,16 @@ final class MobileGatewayCoordinator: ObservableObject {
                 "--allow-pairing=\(normalized.allowPairing ? "true" : "false")",
                 "--pairing-base-url", pairingBaseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             ]
+            let relayBaseURL = normalized.relayBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            let relayRoom = normalized.relayRoom.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !relayBaseURL.isEmpty, !relayRoom.isEmpty, !relayToken.isEmpty {
+                arguments += [
+                    "--relay-base-url", relayBaseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
+                    "--relay-room", relayRoom.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
+                    "--relay-token-file", relayTokenURL.path
+                ]
+            }
+            gatewayProcess.arguments = arguments
             let outputPipe = Pipe()
             gatewayProcess.standardOutput = outputPipe
             gatewayProcess.standardError = outputPipe
@@ -272,7 +304,15 @@ final class MobileGatewayCoordinator: ObservableObject {
             drain(pipe: outputPipe)
 
             try await waitUntilHealthy(baseURL: desktopBaseURL)
-            appState?.mobileGatewayDesktopPeer.connect(baseURL: desktopBaseURL, desktopToken: desktopToken)
+            if let relayURL = URL(string: relayBaseURL), !relayRoom.isEmpty, !relayToken.isEmpty {
+                appState?.mobileGatewayDesktopPeer.connectRelay(
+                    baseURL: relayURL,
+                    room: relayRoom,
+                    relayToken: relayToken
+                )
+            } else {
+                appState?.mobileGatewayDesktopPeer.connect(baseURL: desktopBaseURL, desktopToken: desktopToken)
+            }
             state = .running
             await refresh()
         } catch {
@@ -294,6 +334,10 @@ final class MobileGatewayCoordinator: ObservableObject {
         if let tokenFileURL {
             try? FileManager.default.removeItem(at: tokenFileURL)
             self.tokenFileURL = nil
+        }
+        if let relayTokenFileURL {
+            try? FileManager.default.removeItem(at: relayTokenFileURL)
+            self.relayTokenFileURL = nil
         }
     }
 
@@ -617,10 +661,18 @@ final class MobileGatewayCoordinator: ObservableObject {
     }
 
     static func writeDesktopTokenFile(_ token: String) throws -> URL {
+        try writeTokenFile(token, name: "desktop-token")
+    }
+
+    static func writeRelayTokenFile(_ token: String) throws -> URL {
+        try writeTokenFile(token, name: "relay-token")
+    }
+
+    private static func writeTokenFile(_ token: String, name: String) throws -> URL {
         let directory = try applicationSupportDirectory()
             .appendingPathComponent("MobileGateway", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let url = directory.appendingPathComponent("desktop-token")
+        let url = directory.appendingPathComponent(name)
         try token.write(to: url, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
         return url

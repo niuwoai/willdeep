@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.124.0-rc1 - 2026-07-01
+
+### Changed
+- **Mobile Gateway 默认公网中继（1.124.0-rc1）** —— Mac 端 Mobile Gateway 默认使用 `https://j.niuwoai.com` 作为 relay base URL，用户不再需要手动填写中继站点域名。
+- **安装级自动 room** —— relay room 从固定 `willdeep-mobile` 改为首次安装后自动生成并持久化的 `willdeep-<uuid>`；已保存旧默认 room 的配置会自动迁移到安装级 room，避免不同 Mac 共用默认房间名。
+- 版本号从 **1.123.0-rc1** 提升为 **1.124.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.123.0-rc1 - 2026-07-01
+
+### Added
+- **Mobile Gateway Public Relay（1.123.0-rc1）** —— Mobile Gateway 配对二维码现在可携带公网 relay 信息，Mac desktop peer 可连接 `cdnproxy` 的 `/ws/broadcast/*` 房间，Android 扫码后可直接通过公网 WebSocket 发送 `message.send`、`session.list`、审批/补丁决策等既有 Mobile Gateway 命令，不再必须与 Mac 处于同一局域网。
+- `willdeep-agent serve-mobile` 新增 `--relay-base-url`、`--relay-room`、`--relay-token-file`，relay token 通过 0600 文件传入，避免出现在进程命令行；Swift coordinator 会把 relay 信息写入二维码 payload，并用同一 relay 房间连接桌面端业务桥。
+- 版本号从 **1.122.0-rc1** 提升为 **1.123.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
 ## 1.122.0-rc1 - 2026-07-01
 
 ### Added

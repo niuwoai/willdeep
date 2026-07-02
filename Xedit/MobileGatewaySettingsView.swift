@@ -181,6 +181,18 @@ struct MobileGatewaySettingsView: View {
                     ))
                     .textFieldStyle(.roundedBorder)
 
+                    TextField(L10n.Settings.MobileGateway.relayBaseURLPrompt, text: Binding(
+                        get: { draft.relayBaseURL },
+                        set: { draft.relayBaseURL = $0; saveDraft() }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+
+                    TextField(L10n.Settings.MobileGateway.relayRoomPrompt, text: Binding(
+                        get: { draft.relayRoom },
+                        set: { draft.relayRoom = $0; saveDraft() }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+
                     if let resolved = coordinator.resolvedExecutablePath {
                         MobileGatewayCopyableValue(
                             text: L10n.Settings.MobileGateway.resolvedExecutable(resolved),

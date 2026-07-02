@@ -6,12 +6,12 @@
 //  AgentModeComposerView.swift in rc42. Two pieces:
 //   - `ComposerTextEditor` (NSViewRepresentable): the SwiftUI bridge.
 //     Wires Return-submits, ↑/↓ history cycling, Cmd+V image intercept,
-//     and the "/" and "@" popover state bindings owned by ComposerCard.
+//     and the "/", "@", "$" popover state bindings owned by ComposerCard.
 //   - `ComposerNSTextView` (NSTextView subclass): force-plain-text paste,
 //     image-pasteboard detection via `AgentImagePasteboardHelper`.
 //
 //  The coordinator owns the history cursor (savedDraft + historyIndex)
-//  and the @-token query derivation — both are stateful enough to need
+//  and the @/$-token query derivation — both are stateful enough to need
 //  a class rather than living inside the SwiftUI struct.
 //
 
@@ -42,7 +42,7 @@ struct ComposerTextEditor: NSViewRepresentable {
     /// tracks this dedicated query the same way the "@" picker tracks its
     /// own (`onAtQueryChange`).
     let onSlashQueryChange: (String) -> Void
-    /// Same shape as the slash palette, used for the "@" skill picker.
+    /// Same shape as the slash palette, used for the "@" reference picker.
     @Binding var atMenuVisible: Bool
     @Binding var atMenuSelection: Int
     let atMenuItemCount: () -> Int
@@ -52,6 +52,13 @@ struct ComposerTextEditor: NSViewRepresentable {
     /// changed (e.g. user kept typing letters after `@`), so the popover
     /// can re-filter its entries.
     let onAtQueryChange: (String?) -> Void
+    /// Same shape as the @ picker, used for `$` skills.
+    @Binding var skillMenuVisible: Bool
+    @Binding var skillMenuSelection: Int
+    let skillMenuItemCount: () -> Int
+    let onSkillCommit: () -> Bool
+    let onSkillCancel: () -> Void
+    let onSkillQueryChange: (String?) -> Void
     /// Holder the parent passes in so it can hand the coordinator
     /// pointer back to SwiftUI menu callbacks (used by the @-token
     /// replacement helper). Filled in inside `makeCoordinator`.
@@ -74,7 +81,13 @@ struct ComposerTextEditor: NSViewRepresentable {
             atMenuItemCount: atMenuItemCount,
             onAtCommit: onAtCommit,
             onAtCancel: onAtCancel,
-            onAtQueryChange: onAtQueryChange
+            onAtQueryChange: onAtQueryChange,
+            skillMenuVisible: $skillMenuVisible,
+            skillMenuSelection: $skillMenuSelection,
+            skillMenuItemCount: skillMenuItemCount,
+            onSkillCommit: onSkillCommit,
+            onSkillCancel: onSkillCancel,
+            onSkillQueryChange: onSkillQueryChange
         )
         coordinatorRef.coordinator = coord
         return coord
@@ -179,6 +192,12 @@ struct ComposerTextEditor: NSViewRepresentable {
         let onAtCommit: () -> Bool
         let onAtCancel: () -> Void
         let onAtQueryChange: (String?) -> Void
+        var skillMenuVisible: Binding<Bool>
+        var skillMenuSelection: Binding<Int>
+        let skillMenuItemCount: () -> Int
+        let onSkillCommit: () -> Bool
+        let onSkillCancel: () -> Void
+        let onSkillQueryChange: (String?) -> Void
 
         // History cursor state. `historyIndex` counts back from the most
         // recent user message: 0 = newest, 1 = next-newest, etc. nil
@@ -216,7 +235,13 @@ struct ComposerTextEditor: NSViewRepresentable {
             atMenuItemCount: @escaping () -> Int,
             onAtCommit: @escaping () -> Bool,
             onAtCancel: @escaping () -> Void,
-            onAtQueryChange: @escaping (String?) -> Void
+            onAtQueryChange: @escaping (String?) -> Void,
+            skillMenuVisible: Binding<Bool>,
+            skillMenuSelection: Binding<Int>,
+            skillMenuItemCount: @escaping () -> Int,
+            onSkillCommit: @escaping () -> Bool,
+            onSkillCancel: @escaping () -> Void,
+            onSkillQueryChange: @escaping (String?) -> Void
         ) {
             self.text = text
             self.onSubmit = onSubmit
@@ -234,6 +259,12 @@ struct ComposerTextEditor: NSViewRepresentable {
             self.onAtCommit = onAtCommit
             self.onAtCancel = onAtCancel
             self.onAtQueryChange = onAtQueryChange
+            self.skillMenuVisible = skillMenuVisible
+            self.skillMenuSelection = skillMenuSelection
+            self.skillMenuItemCount = skillMenuItemCount
+            self.onSkillCommit = onSkillCommit
+            self.onSkillCancel = onSkillCancel
+            self.onSkillQueryChange = onSkillQueryChange
         }
 
         func markTextReplacedExternally(to newValue: String) {
@@ -256,7 +287,7 @@ struct ComposerTextEditor: NSViewRepresentable {
             lastPublishedValue = newValue
             text.wrappedValue = newValue
             // Any user edit invalidates the history cursor and re-derives
-            // slash + @ visibility.
+            // slash + @ + $ visibility.
             if newValue != lastHistoryString {
                 historyIndex = nil
                 lastHistoryString = nil
@@ -268,6 +299,7 @@ struct ComposerTextEditor: NSViewRepresentable {
             // `appState.agentInput` in `body`.
             onSlashQueryChange(newValue)
             updateAtMenuVisibility(for: textView)
+            updateSkillMenuVisibility(for: textView)
         }
 
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
@@ -297,10 +329,36 @@ struct ComposerTextEditor: NSViewRepresentable {
                 }
             }
 
-            // @ skill picker takes priority over submit while it's open,
+            // $ skill picker takes priority over submit while it's open,
+            // but defers caret motion (↑/↓) ONLY when the menu actually
+            // has items to step through.
+            if skillMenuVisible.wrappedValue {
+                switch commandSelector {
+                case #selector(NSResponder.moveUp(_:)):
+                    let count = skillMenuItemCount()
+                    guard count > 0 else { break }
+                    skillMenuSelection.wrappedValue = (skillMenuSelection.wrappedValue - 1 + count) % count
+                    return true
+                case #selector(NSResponder.moveDown(_:)):
+                    let count = skillMenuItemCount()
+                    guard count > 0 else { break }
+                    skillMenuSelection.wrappedValue = (skillMenuSelection.wrappedValue + 1) % count
+                    return true
+                case #selector(NSResponder.insertNewline(_:)),
+                     #selector(NSResponder.insertTab(_:)):
+                    if onSkillCommit() { return true }
+                case #selector(NSResponder.cancelOperation(_:)):
+                    onSkillCancel()
+                    return true
+                default:
+                    break
+                }
+            }
+
+            // @ reference picker takes priority over submit while it's open,
             // but defers caret motion (↑/↓) ONLY when the menu actually
             // has items to step through — keeps multi-line composition
-            // unaffected when there are no skill matches.
+            // unaffected when there are no reference matches.
             if atMenuVisible.wrappedValue {
                 switch commandSelector {
                 case #selector(NSResponder.moveUp(_:)):
@@ -419,10 +477,10 @@ struct ComposerTextEditor: NSViewRepresentable {
         }
 
         /// Looks at the caret position and decides whether the user is
-        /// inside an `@token` (counting backwards from the caret to the
-        /// nearest `@`, stopping at whitespace/newline/another `@`).
-        /// Returns the substring after `@` so the popover can filter.
-        fileprivate func currentAtQuery(in textView: NSTextView) -> String? {
+        /// inside a trigger token (counting backwards from the caret to the
+        /// nearest trigger, stopping at whitespace/newline/another trigger).
+        /// Returns the substring after the trigger so the popover can filter.
+        fileprivate func currentTriggerQuery(in textView: NSTextView, trigger: UInt16) -> String? {
             let nsString = textView.string as NSString
             let caret = textView.selectedRange().location
             guard caret > 0, caret <= nsString.length else { return nil }
@@ -430,8 +488,8 @@ struct ComposerTextEditor: NSViewRepresentable {
             while i >= 0 {
                 let ch = nsString.character(at: i)
                 let scalar = UnicodeScalar(ch)
-                if ch == 0x40 { // '@'
-                    // Require that '@' sits at the start of the buffer
+                if ch == trigger {
+                    // Require that the trigger sits at the start of the buffer
                     // or right after whitespace — avoids matching email
                     // addresses, file paths, etc.
                     if i == 0 {
@@ -452,6 +510,16 @@ struct ComposerTextEditor: NSViewRepresentable {
             return nil
         }
 
+        /// Looks at the caret position and decides whether the user is
+        /// inside an `@token`. Returns the substring after `@` so the popover can filter.
+        fileprivate func currentAtQuery(in textView: NSTextView) -> String? {
+            currentTriggerQuery(in: textView, trigger: 0x40)
+        }
+
+        fileprivate func currentSkillQuery(in textView: NSTextView) -> String? {
+            currentTriggerQuery(in: textView, trigger: 0x24)
+        }
+
         private func updateAtMenuVisibility(for textView: NSTextView) {
             let query = currentAtQuery(in: textView)
             onAtQueryChange(query)
@@ -464,11 +532,21 @@ struct ComposerTextEditor: NSViewRepresentable {
             }
         }
 
-        /// Replace the in-progress `@token` at the caret with the chosen
-        /// skill's identifier (kept around for transparency — actual
-        /// skill content gets spliced in at send time) and dismiss the
-        /// popover. Returns true if it edited the buffer.
-        func replaceCurrentAtToken(with replacement: String) -> Bool {
+        private func updateSkillMenuVisibility(for textView: NSTextView) {
+            let query = currentSkillQuery(in: textView)
+            onSkillQueryChange(query)
+            let shouldShow = query != nil
+            if skillMenuVisible.wrappedValue != shouldShow {
+                skillMenuVisible.wrappedValue = shouldShow
+                if shouldShow {
+                    skillMenuSelection.wrappedValue = 0
+                }
+            }
+        }
+
+        /// Replace the in-progress trigger token at the caret and dismiss
+        /// the matching popover. Returns true if it edited the buffer.
+        func replaceCurrentTriggerToken(trigger: UInt16, replacement: String) -> Bool {
             guard let textView = activeTextView else { return false }
             let nsString = textView.string as NSString
             let caret = textView.selectedRange().location
@@ -476,7 +554,7 @@ struct ComposerTextEditor: NSViewRepresentable {
             var i = caret - 1
             while i >= 0 {
                 let ch = nsString.character(at: i)
-                if ch == 0x40 { break }
+                if ch == trigger { break }
                 if let s = UnicodeScalar(ch), CharacterSet.whitespacesAndNewlines.contains(s) { return false }
                 i -= 1
             }
@@ -491,8 +569,23 @@ struct ComposerTextEditor: NSViewRepresentable {
             text.wrappedValue = result
             let newCaret = i + (replacement as NSString).length
             textView.setSelectedRange(NSRange(location: newCaret, length: 0))
-            atMenuVisible.wrappedValue = false
             return true
+        }
+
+        /// Replace the in-progress `@token` at the caret. Returns true if
+        /// it edited the buffer.
+        func replaceCurrentAtToken(with replacement: String) -> Bool {
+            let didReplace = replaceCurrentTriggerToken(trigger: 0x40, replacement: replacement)
+            atMenuVisible.wrappedValue = false
+            return didReplace
+        }
+
+        /// Replace the in-progress `$token` at the caret. Returns true if
+        /// it edited the buffer.
+        func replaceCurrentSkillToken(with replacement: String) -> Bool {
+            let didReplace = replaceCurrentTriggerToken(trigger: 0x24, replacement: replacement)
+            skillMenuVisible.wrappedValue = false
+            return didReplace
         }
     }
 

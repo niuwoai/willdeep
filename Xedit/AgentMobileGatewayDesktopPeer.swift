@@ -16,8 +16,8 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
     private weak var appState: AppState?
     private var webSocketTask: URLSessionWebSocketTask?
     private var reconnectTask: Task<Void, Never>?
-    private var reconnectBaseURL: URL?
-    private var reconnectDesktopToken: String?
+    private var reconnectWebSocketURL: URL?
+    private var reconnectToken: String?
     private var reconnectSession: URLSession = .shared
     private var shouldReconnect = false
     /// 1.87.0-rc3:连续失败次数,做指数退避。每次 receive 失败 +1,
@@ -46,10 +46,19 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
     func connect(baseURL: URL, desktopToken: String, session: URLSession = .shared) {
         disconnect()
         shouldReconnect = true
-        reconnectBaseURL = baseURL
-        reconnectDesktopToken = desktopToken
+        reconnectWebSocketURL = websocketURL(from: baseURL)
+        reconnectToken = desktopToken
         reconnectSession = session
-        open(baseURL: baseURL, desktopToken: desktopToken, session: session)
+        open(webSocketURL: websocketURL(from: baseURL), token: desktopToken, session: session)
+    }
+
+    func connectRelay(baseURL: URL, room: String, relayToken: String, session: URLSession = .shared) {
+        disconnect()
+        shouldReconnect = true
+        reconnectWebSocketURL = relayWebSocketURL(from: baseURL, room: room)
+        reconnectToken = relayToken
+        reconnectSession = session
+        open(webSocketURL: reconnectWebSocketURL, token: relayToken, session: session)
     }
 
     func disconnect() {
@@ -62,8 +71,8 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         isConnected = false
-        reconnectBaseURL = nil
-        reconnectDesktopToken = nil
+        reconnectWebSocketURL = nil
+        reconnectToken = nil
         reconnectSession = .shared
         consecutiveFailures = 0
     }
@@ -97,13 +106,13 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         }
     }
 
-    private func open(baseURL: URL, desktopToken: String, session: URLSession) {
-        guard let url = websocketURL(from: baseURL) else {
+    private func open(webSocketURL: URL?, token: String, session: URLSession) {
+        guard let url = webSocketURL else {
             lastErrorMessage = "Invalid Mobile Gateway URL."
             return
         }
         var request = URLRequest(url: url)
-        request.setValue("Bearer \(desktopToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let task = session.webSocketTask(with: request)
         webSocketTask = task
         isConnected = true
@@ -188,8 +197,8 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
     private func scheduleReconnect() {
         guard shouldReconnect,
               reconnectTask == nil,
-              let baseURL = reconnectBaseURL,
-              let desktopToken = reconnectDesktopToken else {
+              let webSocketURL = reconnectWebSocketURL,
+              let token = reconnectToken else {
             return
         }
         consecutiveFailures += 1
@@ -203,7 +212,7 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
             try? await Task.sleep(nanoseconds: delay)
             guard let self, !Task.isCancelled, self.shouldReconnect else { return }
             self.reconnectTask = nil
-            self.open(baseURL: baseURL, desktopToken: desktopToken, session: self.reconnectSession)
+            self.open(webSocketURL: webSocketURL, token: token, session: self.reconnectSession)
         }
     }
 
@@ -220,6 +229,25 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
             return nil
         }
         components?.path = "/mobile/ws"
+        components?.query = nil
+        return components?.url
+    }
+
+    private func relayWebSocketURL(from baseURL: URL, room: String) -> URL? {
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
+        switch components?.scheme?.lowercased() {
+        case "http":
+            components?.scheme = "ws"
+        case "https":
+            components?.scheme = "wss"
+        case "ws", "wss":
+            break
+        default:
+            return nil
+        }
+        let cleanRoom = room.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !cleanRoom.isEmpty else { return nil }
+        components?.path = "/ws/broadcast/\(cleanRoom)"
         components?.query = nil
         return components?.url
     }

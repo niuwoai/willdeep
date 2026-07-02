@@ -1078,11 +1078,11 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 - [ ] 复测 Editor：语言服务器不可用、启动失败或 definition 请求异常时，Go to Definition 仍应回退旧正则 resolver，保证未安装 LSP 环境的基础跳转不中断。
 - [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.121.0-rc1`，短剧制作能力无新增。
 
-## 1.122.0-rc1 — 短剧指针同步 / Editor LSP authoritative workspace symbol misses
+## 1.124.0-rc1 — 短剧指针同步 / Mobile Gateway default relay
 
-- [ ] 复测 Editor：Go / TypeScript / JavaScript / Swift 的 Symbol Jump 查询在 LSP `workspace/symbol` 正常返回空结果时应展示无结果，不应继续过滤当前文件 outline 补本地猜测。
-- [ ] 复测 Editor：语言服务器不可用、启动失败或 workspace symbol 请求异常时，Symbol Jump 查询仍应回退当前文件大纲过滤，保证未安装 LSP 环境的基础跳转不中断。
-- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.122.0-rc1`，短剧制作能力无新增。
+- [ ] 复测 Mobile Gateway：Mac 端不手动填写公网 relay 地址时，二维码 payload 也应包含 `relay_base_url=https://j.niuwoai.com`、安装级 `relay_room`、`relay_token`，Android 扫码后应直接连 `/ws/broadcast/<room>`，不再依赖局域网 `/mobile/pair/claim`。
+- [ ] 复测 Mobile Gateway：Android 断开重连后仍使用保存的 relay room 与 relay token，能够继续操作当前 Mac Agent 会话。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.124.0-rc1`，短剧制作能力无新增。
 
 ---
 

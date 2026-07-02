@@ -2,7 +2,7 @@
 //  AgentModeComposerView.swift
 //  WillDeep
 //
-//  Composer, status bar, slash/at pickers, and compact session badges
+//  Composer, status bar, slash/@/$ pickers, and compact session badges
 //  used by the dedicated Agent mode surface. Split from AgentModeView
 //  to keep the top-level view file reviewable.
 //
@@ -370,7 +370,10 @@ private struct ComposerCard: View {
     @State private var atMenuVisible: Bool = false
     @State private var atMenuSelection: Int = 0
     @State private var atMenuQuery: String = ""
-    /// Cached skill list — re-fetched whenever the @ popover opens so we
+    @State private var skillMenuVisible: Bool = false
+    @State private var skillMenuSelection: Int = 0
+    @State private var skillMenuQuery: String = ""
+    /// Cached skill list — re-fetched whenever the $ popover opens so we
     /// pick up newly installed skills without recomputing on every
     /// keystroke.
     @State private var skillCatalog: [AgentSkillEntry] = []
@@ -386,11 +389,9 @@ private struct ComposerCard: View {
         )
     }
 
-    /// Unified entries for the `@` picker — skills + workspace shortcut
-    /// + project files (from the already-cached Quick Open list, which
-    /// honors the project file cache). All three are fuzzy-filtered by
-    /// the same query and capped so a 10k-file repo doesn't carpet the
-    /// popover.
+    /// Unified entries for the `@` picker — workspace shortcut + project
+    /// files (from the already-cached Quick Open list, which honors the
+    /// project file cache). `$` owns skills.
     private var filteredAtEntries: [AtPickerEntry] {
         let q = atMenuQuery.lowercased()
         var entries: [AtPickerEntry] = []
@@ -401,14 +402,6 @@ private struct ComposerCard: View {
            q.isEmpty || "workspace".contains(q) {
             entries.append(.workspace)
         }
-
-        // Skills (cached once per popover open).
-        let skills = q.isEmpty ? skillCatalog : skillCatalog.filter {
-            $0.identifier.lowercased().contains(q)
-                || $0.name.lowercased().contains(q)
-                || $0.description.lowercased().contains(q)
-        }
-        entries.append(contentsOf: skills.map { .skill($0) })
 
         // Project files — limit to 30 matches so the popover stays
         // navigable. Match by last path component first, then full
@@ -439,6 +432,17 @@ private struct ComposerCard: View {
         }
 
         return entries
+    }
+
+    /// `$` picker entries are only skills / reusable capability packs.
+    private var filteredSkillEntries: [SkillPickerEntry] {
+        let q = skillMenuQuery.lowercased()
+        let skills = q.isEmpty ? skillCatalog : skillCatalog.filter {
+            $0.identifier.lowercased().contains(q)
+                || $0.name.lowercased().contains(q)
+                || $0.description.lowercased().contains(q)
+        }
+        return skills.map { .skill($0) }
     }
 
     var body: some View {
@@ -484,6 +488,21 @@ private struct ComposerCard: View {
                 )
                 .transition(.opacity.combined(with: .move(edge: .top)))
                 .zIndex(20)
+            }
+
+            if skillMenuVisible {
+                SkillPickerMenu(
+                    entries: filteredSkillEntries,
+                    query: $skillMenuQuery,
+                    selection: $skillMenuSelection,
+                    onPick: { index in
+                        skillMenuSelection = index
+                        _ = commitSelectedSkillEntry()
+                    },
+                    onClose: { closeSkillMenu() }
+                )
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                .zIndex(21)
             }
 
             ZStack(alignment: .topLeading) {
@@ -540,6 +559,12 @@ private struct ComposerCard: View {
                     onAtCommit: { commitSelectedAtEntry() },
                     onAtCancel: { closeAtMenu() },
                     onAtQueryChange: { handleAtQueryChange($0) },
+                    skillMenuVisible: $skillMenuVisible,
+                    skillMenuSelection: $skillMenuSelection,
+                    skillMenuItemCount: { filteredSkillEntries.count },
+                    onSkillCommit: { commitSelectedSkillEntry() },
+                    onSkillCancel: { closeSkillMenu() },
+                    onSkillQueryChange: { handleSkillQueryChange($0) },
                     coordinatorRef: coordinatorRef
                 )
                 .focused($inputFocused)
@@ -634,15 +659,30 @@ private struct ComposerCard: View {
 
     private func handleAtQueryChange(_ query: String?) {
         if let q = query {
-            // Refresh the catalog on transition from closed → open so a
-            // newly installed skill shows up the next time `@` is typed.
-            if !atMenuVisible || skillCatalog.isEmpty {
-                skillCatalog = AgentSkillDirectory.list()
+            if skillMenuVisible {
+                closeSkillMenu()
             }
             atMenuQuery = q
         } else {
             atMenuQuery = ""
             atMenuVisible = false
+        }
+    }
+
+    private func handleSkillQueryChange(_ query: String?) {
+        if let q = query {
+            if atMenuVisible {
+                closeAtMenu()
+            }
+            // Refresh the catalog on transition from closed → open so a
+            // newly installed skill shows up the next time `$` is typed.
+            if !skillMenuVisible || skillCatalog.isEmpty {
+                skillCatalog = AgentSkillDirectory.list()
+            }
+            skillMenuQuery = q
+        } else {
+            skillMenuQuery = ""
+            skillMenuVisible = false
         }
     }
 
@@ -665,6 +705,12 @@ private struct ComposerCard: View {
         atMenuQuery = ""
     }
 
+    private func closeSkillMenu() {
+        skillMenuVisible = false
+        skillMenuSelection = 0
+        skillMenuQuery = ""
+    }
+
     @discardableResult
     private func commitSelectedAtEntry() -> Bool {
         let entries = filteredAtEntries
@@ -673,7 +719,7 @@ private struct ComposerCard: View {
         let entry = entries[safeIndex]
         // Drop the @-token from the buffer. AppState side-effects then
         // surface as chips above the composer; the actual context
-        // (SKILL.md body, file contents, workspace overview) is
+        // (file contents, workspace overview) is
         // spliced into the prompt by composeAttachedPrompt at send time.
         _ = coordinatorRef.coordinator?.replaceCurrentAtToken(with: "")
         switch entry {
@@ -681,12 +727,25 @@ private struct ComposerCard: View {
             if !appState.agentPendingIncludeWorkspaceOverview {
                 appState.toggleAgentWorkspaceOverview()
             }
-        case .skill(let skill):
-            appState.attachAgentSkill(skill)
         case .file(let url, _):
             appState.attachAgentFile(url: url)
         }
         closeAtMenu()
+        return true
+    }
+
+    @discardableResult
+    private func commitSelectedSkillEntry() -> Bool {
+        let entries = filteredSkillEntries
+        guard !entries.isEmpty else { return false }
+        let safeIndex = min(max(0, skillMenuSelection), entries.count - 1)
+        let entry = entries[safeIndex]
+        _ = coordinatorRef.coordinator?.replaceCurrentSkillToken(with: "")
+        switch entry {
+        case .skill(let skill):
+            appState.attachAgentSkill(skill)
+        }
+        closeSkillMenu()
         return true
     }
 

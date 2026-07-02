@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-01 | Current version: v1.122.0-rc1
+> Last updated: 2026-07-01 | Current version: v1.124.0-rc1
 
 ## Positioning
 
@@ -14,6 +14,8 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Mobile Gateway 默认公网中继（1.124.0-rc1）** —— Mobile Gateway 默认使用 `https://j.niuwoai.com` 作为 relay base URL，并为每次安装自动生成稳定 room；配对二维码携带 relay 信息，Mac desktop peer 与 Android 客户端都连接 `/ws/broadcast/*` 公网房间来交换既有 `session.list`、`message.send`、审批、补丁和 worktree 事件，手机离开局域网后仍能操作办公室 Mac 上的当前 Agent 会话。
+- **Mobile Gateway Public Relay（1.123.0-rc1）** —— Mobile Gateway 配对二维码可携带 `cdnproxy` relay 信息；Mac desktop peer 与 Android 客户端都连接 `/ws/broadcast/*` 公网房间来交换既有 `session.list`、`message.send`、审批、补丁和 worktree 事件，手机离开局域网后仍能操作办公室 Mac 上的当前 Agent 会话。
 - **Editor LSP Authoritative Workspace Symbol Misses（1.122.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的符号跳转查询会把 LSP `workspace/symbol` 成功返回的空结果视为权威未命中，不再过滤当前文件 outline 来补本地猜测结果；只有 LSP 未就绪或失败时才回退当前文件大纲过滤。
 - **Editor LSP Authoritative Definition Misses（1.121.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的 Go to Definition 会把 LSP 成功返回的空 definition 结果视为权威“未找到定义”，不再用正则 resolver 补跳到可能错误的位置；只有 LSP 缺失或请求失败时才回退正则。
 - **Editor LSP Authoritative Folding（1.120.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的折叠/作用域引导线会区分 LSP folding range loading / available / failed 状态；当 `textDocument/foldingRange` 已返回时完全信任语言服务器结果，只有未就绪或失败时才使用本地括号/缩进 fallback。
