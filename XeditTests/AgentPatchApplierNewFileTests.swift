@@ -66,4 +66,56 @@ struct AgentPatchApplierNewFileTests {
         #expect(change.isNewFile == false)
         #expect(try AgentPatchApplier.apply(change, to: "keep\nold") == "keep\nnew")
     }
+
+    // MARK: - isAlreadyApplied
+
+    private let insertDiff = """
+    --- a/foo.txt
+    +++ b/foo.txt
+    @@ -1,2 +1,3 @@
+     keep
+    +added
+     tail
+    """
+
+    @Test
+    func alreadyAppliedTrueWhenFileHoldsTargetState() throws {
+        let change = try #require(try AgentPatchApplier.parse(insertDiff).first)
+        // File already contains the post-patch result: applying it again is a
+        // no-op, and the raw apply would throw because the pre-patch context
+        // no longer matches.
+        #expect(AgentPatchApplier.isAlreadyApplied(change, to: "keep\nadded\ntail"))
+        #expect(throws: AgentPatchError.self) {
+            _ = try AgentPatchApplier.apply(change, to: "keep\nadded\ntail")
+        }
+    }
+
+    @Test
+    func alreadyAppliedFalseWhenChangeStillPending() throws {
+        let change = try #require(try AgentPatchApplier.parse(insertDiff).first)
+        // Genuine pre-patch state: the change has not landed, so this must NOT
+        // be mistaken for already-applied.
+        #expect(AgentPatchApplier.isAlreadyApplied(change, to: "keep\ntail") == false)
+        #expect(try AgentPatchApplier.apply(change, to: "keep\ntail") == "keep\nadded\ntail")
+    }
+
+    @Test
+    func alreadyAppliedFalseForNewFile() throws {
+        let change = try #require(try AgentPatchApplier.parse(newFileDiff).first)
+        #expect(AgentPatchApplier.isAlreadyApplied(change, to: "line one\nline two\nline three") == false)
+    }
+
+    @Test
+    func alreadyAppliedFalseForPureDeletionHunk() throws {
+        // A hunk with only removed lines has an empty replacement; presence
+        // can't confirm it, so we stay conservative and report not-applied.
+        let diff = """
+        --- a/foo.txt
+        +++ b/foo.txt
+        @@ -1,1 +0,0 @@
+        -remove
+        """
+        let change = try #require(try AgentPatchApplier.parse(diff).first)
+        #expect(AgentPatchApplier.isAlreadyApplied(change, to: "") == false)
+    }
 }

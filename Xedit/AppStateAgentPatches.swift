@@ -51,14 +51,12 @@ extension AppState {
     ) -> Int {
         var resolvedCount = 0
         for index in runtime.patchProposals.indices where runtime.patchProposals[index].status == .pending {
-            do {
-                try applyAgentPatch(runtime.patchProposals[index].diff)
-                runtime.patchProposals[index].status = .applied
-                runtime.patchProposals[index].statusMessage = autoApplyStatusMessage(for: source)
-            } catch {
-                runtime.patchProposals[index].status = .failed
-                runtime.patchProposals[index].statusMessage = error.localizedDescription
-            }
+            let outcome = resolveAgentPatchApplication(
+                runtime.patchProposals[index].diff,
+                appliedMessage: autoApplyStatusMessage(for: source)
+            )
+            runtime.patchProposals[index].status = outcome.status
+            runtime.patchProposals[index].statusMessage = outcome.message
             resolvedCount += 1
         }
 
@@ -119,14 +117,50 @@ extension AppState {
     func applyAgentPatchProposal(id: AgentPatchProposal.ID) {
         guard let index = agentPatchProposals.firstIndex(where: { $0.id == id }) else { return }
 
+        let outcome = resolveAgentPatchApplication(agentPatchProposals[index].diff, appliedMessage: "Applied")
+        agentPatchProposals[index].status = outcome.status
+        agentPatchProposals[index].statusMessage = outcome.message
+    }
+
+    /// Apply `diff`, folding a benign "already applied" outcome into
+    /// `.applied` so a change that landed earlier — Goal/workspace
+    /// auto-apply, another session touching the same working tree, or a
+    /// duplicate card whose twin was applied — no longer surfaces as a scary
+    /// "hunk did not match" failure the user can't act on. Shared by the
+    /// manual Apply button, batch auto-apply, and immediate apply so all
+    /// three treat an already-landed change identically.
+    func resolveAgentPatchApplication(
+        _ diff: String,
+        appliedMessage: String
+    ) -> (status: AgentPatchStatus, message: String) {
         do {
-            try applyAgentPatch(agentPatchProposals[index].diff)
-            agentPatchProposals[index].status = .applied
-            agentPatchProposals[index].statusMessage = "Applied"
+            try applyAgentPatch(diff)
+            return (.applied, appliedMessage)
         } catch {
-            agentPatchProposals[index].status = .failed
-            agentPatchProposals[index].statusMessage = error.localizedDescription
+            if case AgentPatchError.hunkDidNotMatch = error, agentPatchIsAlreadyApplied(diff) {
+                return (.applied, L10n.AgentPatch.alreadyApplied)
+            }
+            return (.failed, error.localizedDescription)
         }
+    }
+
+    /// After an apply throws `hunkDidNotMatch`, decide whether the file is
+    /// simply already in the patch's target state (see
+    /// `AgentPatchApplier.isAlreadyApplied`). Reads the current in-tab / on
+    /// disk content per file so it reflects edits made outside this card.
+    func agentPatchIsAlreadyApplied(_ diff: String) -> Bool {
+        guard let root = agentPatchWorkspaceRoot() else { return false }
+        guard let changes = try? AgentPatchApplier.parse(diff), !changes.isEmpty else { return false }
+        let standardizedRoot = root.standardizedFileURL
+        let rootPath = standardizedRoot.path
+        for change in changes {
+            guard let url = try? resolveAgentPatchURL(change.path, root: standardizedRoot, rootPath: rootPath),
+                  let content = try? editableContent(forAgentPatchURL: url),
+                  AgentPatchApplier.isAlreadyApplied(change, to: content) else {
+                return false
+            }
+        }
+        return true
     }
 
     func captureAgentPatchProposals(for runtime: AgentRuntime, fromMessageID messageID: UUID) {
@@ -177,16 +211,12 @@ extension AppState {
         // (applyImmediately)。其余编辑仍排进 chat 卡片等用户点 Apply。
         if (autoApplySource != nil || isPureCreation || applyImmediately),
            runtime.patchProposals[proposalIndex].status == .pending {
-            do {
-                try applyAgentPatch(diff)
-                runtime.patchProposals[proposalIndex].status = .applied
-                runtime.patchProposals[proposalIndex].statusMessage = autoApplySource
-                    .map(autoApplyStatusMessage(for:))
-                    ?? (isPureCreation ? "New file written automatically" : "Applied immediately as requested")
-            } catch {
-                runtime.patchProposals[proposalIndex].status = .failed
-                runtime.patchProposals[proposalIndex].statusMessage = error.localizedDescription
-            }
+            let appliedMessage = autoApplySource
+                .map(autoApplyStatusMessage(for:))
+                ?? (isPureCreation ? "New file written automatically" : "Applied immediately as requested")
+            let outcome = resolveAgentPatchApplication(diff, appliedMessage: appliedMessage)
+            runtime.patchProposals[proposalIndex].status = outcome.status
+            runtime.patchProposals[proposalIndex].statusMessage = outcome.message
         }
 
         persistAgentSession(runtime: runtime)
@@ -326,7 +356,13 @@ extension AppState {
         let standardizedPath = url.standardizedFileURL.path
 
         for index in tabs.indices where tabs[index].url.standardizedFileURL.path == standardizedPath {
+            if tabs[index].content != content {
+                tabs[index].contentRevision += 1
+            }
             tabs[index].content = content
+            if tabs[index].savedContent != content {
+                tabs[index].savedContentRevision += 1
+            }
             tabs[index].savedContent = content
             tabs[index].isEdited = false
         }

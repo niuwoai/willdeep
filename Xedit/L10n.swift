@@ -643,6 +643,13 @@ enum L10n {
         static func countFailed(_ n: Int) -> String {
             String(format: String(localized: "agent-patch.count-failed", defaultValue: "%d failed"), n)
         }
+
+        /// Status shown when applying a card is a no-op because the file is
+        /// already in the patch's target state (the change landed earlier).
+        static let alreadyApplied = String(
+            localized: "agent-patch.already-applied",
+            defaultValue: "Change already present — nothing to apply"
+        )
     }
 
     enum AgentPatchError {

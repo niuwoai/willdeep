@@ -204,6 +204,38 @@ enum AgentPatchApplier {
         return lines.joined(separator: "\n")
     }
 
+    /// True when `content` already contains this change's post-patch result
+    /// for every hunk — i.e. the edit already landed (an earlier Goal /
+    /// workspace auto-apply, another session touching the same working tree,
+    /// or a duplicate card whose twin was applied). Used to turn a confusing
+    /// "hunk did not match" failure into a benign "already applied" outcome
+    /// instead of asking the user to re-apply what is effectively a no-op.
+    ///
+    /// Conservative on purpose: a hunk counts as satisfied only when its full
+    /// replacement block (context + added lines) is present verbatim. A
+    /// pure-deletion hunk (empty replacement) can't be confirmed by presence,
+    /// so we bail and let the real failure surface.
+    static func isAlreadyApplied(_ change: AgentPatchFileChange, to content: String) -> Bool {
+        if change.isNewFile { return false }
+
+        let lines = content.components(separatedBy: "\n")
+        for hunk in change.hunks {
+            let replacement = hunk.lines.compactMap { line -> String? in
+                switch line.kind {
+                case .context, .added:
+                    return line.text
+                case .removed:
+                    return nil
+                }
+            }
+            guard !replacement.isEmpty else { return false }
+            if matchingIndex(for: replacement, in: lines, near: max(0, hunk.oldStart - 1)) == nil {
+                return false
+            }
+        }
+        return true
+    }
+
     private static func normalizedPath(_ path: String) -> String {
         var result = path
         if result.hasPrefix("a/") || result.hasPrefix("b/") {

@@ -701,6 +701,23 @@
         }
       }
     },
+    "agent-patch.already-applied" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Change already present — nothing to apply"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "改动已存在，无需重复应用"
+          }
+        }
+      }
+    },
     "agent-patch-error.hunk-did-not-match" : {
       "extractionState" : "manual",
       "localizations" : {
