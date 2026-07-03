@@ -250,7 +250,11 @@ enum AgentSelfLearning {
             in: arguments,
             maxCharacters: maxMemoryCharacters
         )
-        let scope = parseScope(arguments["scope"]?.stringValue())
+        let scope = resolveScope(
+            arguments["scope"]?.stringValue(),
+            content: content,
+            rootDirectory: rootDirectory
+        )
         let lifetime = parseLifetime(arguments["lifetime"]?.stringValue())
         state.addMemory(
             content: content,
@@ -1016,12 +1020,21 @@ enum AgentSelfLearning {
         needles.contains { lower.contains($0.lowercased()) }
     }
 
-    private static func parseScope(_ raw: String?) -> AgentMemoryScope {
+    /// Explicit scope argument wins; when the model omits it, infer from the
+    /// content instead of silently defaulting repo conventions to global.
+    static func resolveScope(
+        _ raw: String?,
+        content: String,
+        rootDirectory: URL?
+    ) -> AgentMemoryScope {
         switch raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "project", "workspace":
             return .project
-        default:
+        case "global", "user":
             return .global
+        default:
+            let canBindProject = AgentMemoryEngine.projectFingerprint(for: rootDirectory) != nil
+            return canBindProject && AgentMemoryEngine.looksProjectScoped(content) ? .project : .global
         }
     }
 

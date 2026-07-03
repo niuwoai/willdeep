@@ -207,7 +207,7 @@ enum AgentToolRegistry {
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "content", type: .string, description: "The concise memory to save. Prefer one durable fact or rule, not a transcript summary.", required: true),
-                AgentToolParameter(name: "scope", type: .string, description: "`global` for user-wide preference, or `project` for workspace-specific conventions. Defaults to global.", required: false),
+                AgentToolParameter(name: "scope", type: .string, description: "`global` for user-wide preferences, `project` for conventions tied to THIS workspace (repo rules, versioning, test commands — project memories are only recalled inside the same workspace). Omit to let the host infer from the content; prefer passing it explicitly.", required: false),
                 AgentToolParameter(name: "lifetime", type: .string, description: "`longTerm` for durable rules or `transient` for short-lived context. Defaults to longTerm.", required: false)
             ]
         ),

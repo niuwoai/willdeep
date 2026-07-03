@@ -2239,6 +2239,19 @@ enum L10n {
                 let template = String(localized: "settings.memory.project-fingerprint-line", defaultValue: "Project fingerprint: %@")
                 return String(format: template, a1)
             }
+            static func projectPathLine(_ a1: String) -> String {
+                let template = String(localized: "settings.memory.project-path-line", defaultValue: "Project: %@")
+                return String(format: template, a1)
+            }
+            static func projectUnknownLine(_ a1: String) -> String {
+                let template = String(localized: "settings.memory.project-unknown-line", defaultValue: "Unknown project (fingerprint %@) — edit and re-save as Project while the workspace is open to rebind")
+                return String(format: template, a1)
+            }
+            static let scopeFilterLabel = String(localized: "settings.memory.scope-filter", defaultValue: "Show")
+            static let scopeFilterAll = String(localized: "settings.memory.scope-filter-all", defaultValue: "All")
+            static let scopeFilterGlobal = String(localized: "settings.memory.scope-filter-global", defaultValue: "Global only")
+            static let scopeFilterCurrentProject = String(localized: "settings.memory.scope-filter-current-project", defaultValue: "This workspace")
+            static let currentProjectTag = String(localized: "settings.memory.current-project-tag", defaultValue: "Current workspace")
             static func lastAccessedLine(_ a1: String) -> String {
                 let template = String(localized: "settings.memory.last-accessed-line", defaultValue: "Last retrieved: %@")
                 return String(format: template, a1)

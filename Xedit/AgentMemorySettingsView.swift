@@ -18,6 +18,13 @@ struct AgentMemorySettingsView: View {
     @State private var newMemoryScope: AgentMemoryScope = .global
     @State private var searchQuery = ""
     @State private var includeArchived = false
+    @State private var scopeFilter: MemoryScopeFilter = .all
+
+    enum MemoryScopeFilter: Hashable {
+        case all
+        case globalOnly
+        case currentProject
+    }
     @State private var editingMemoryID: UUID?
     @State private var editingMemoryContent = ""
     @State private var editingMemoryLifetime: AgentMemoryLifetime = .longTerm
@@ -25,7 +32,28 @@ struct AgentMemorySettingsView: View {
     @State private var exportStatus = ""
 
     private var visibleMemories: [AgentMemoryRecord] {
-        memoryState.memories(matching: searchQuery, includeArchived: includeArchived)
+        let matching = memoryState.memories(matching: searchQuery, includeArchived: includeArchived)
+        switch scopeFilter {
+        case .all:
+            return matching
+        case .globalOnly:
+            return matching.filter { $0.scope == .global }
+        case .currentProject:
+            return matching.filter { $0.scope == .project && isBoundToCurrentWorkspace($0) }
+        }
+    }
+
+    private var currentWorkspaceFingerprint: String? {
+        AgentMemoryEngine.projectFingerprint(for: appState.rootDirectory)
+    }
+
+    private func isBoundToCurrentWorkspace(_ memory: AgentMemoryRecord) -> Bool {
+        guard let root = appState.rootDirectory else { return false }
+        return AgentMemoryEngine.applies(
+            memory,
+            projectID: currentWorkspaceFingerprint,
+            rootPath: root.standardizedFileURL.path
+        ) && memory.scope == .project
     }
 
     private var autoMemoryCount: Int {
@@ -272,6 +300,18 @@ struct AgentMemorySettingsView: View {
                     Toggle(L10n.Settings.Memory.includeArchivedToggle, isOn: $includeArchived)
                         .toggleStyle(.checkbox)
                 }
+                Picker(L10n.Settings.Memory.scopeFilterLabel, selection: $scopeFilter) {
+                    Text(L10n.Settings.Memory.scopeFilterAll).tag(MemoryScopeFilter.all)
+                    Text(L10n.Settings.Memory.scopeFilterGlobal).tag(MemoryScopeFilter.globalOnly)
+                    Text(L10n.Settings.Memory.scopeFilterCurrentProject)
+                        .tag(MemoryScopeFilter.currentProject)
+                }
+                .pickerStyle(.segmented)
+                if scopeFilter == .currentProject, appState.rootDirectory == nil {
+                    Text(L10n.Settings.Memory.projectScopeRequiresWorkspace)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section {
@@ -307,6 +347,12 @@ struct AgentMemorySettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear {
+            // Legacy project memories only carry the fingerprint; when the
+            // matching workspace is open, write its readable path back so
+            // rows can show where each memory is mounted.
+            memoryState.backfillProjectPaths(rootDirectory: appState.rootDirectory)
+        }
     }
 
     private var maintenanceHeader: some View {
@@ -446,6 +492,12 @@ struct AgentMemorySettingsView: View {
                             tag(memory.source.displayName)
                             tag(memory.lifetime.displayName)
                             tag(memory.scope.displayName)
+                            if memory.scope == .project, let name = memory.projectDisplayName {
+                                tag(name)
+                            }
+                            if isBoundToCurrentWorkspace(memory) {
+                                tag(L10n.Settings.Memory.currentProjectTag)
+                            }
                             tag(L10n.Settings.Memory.confidenceTag("\(Int(memory.confidence * 100))"))
                             if memory.containsSensitiveContent {
                                 tag(L10n.Settings.Memory.sensitiveTag)
@@ -473,10 +525,19 @@ struct AgentMemorySettingsView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                        if let projectFingerprint = memory.projectFingerprint {
-                            Text(L10n.Settings.Memory.projectFingerprintLine(shortFingerprint(projectFingerprint)))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        if memory.scope == .project {
+                            if let projectPath = memory.projectPath {
+                                Text(L10n.Settings.Memory.projectPathLine(projectPath))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .help(projectPath)
+                            } else if let projectFingerprint = memory.projectFingerprint {
+                                Text(L10n.Settings.Memory.projectUnknownLine(shortFingerprint(projectFingerprint)))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         if let lastAccessedAt = memory.lastAccessedAt {
                             Text(L10n.Settings.Memory.lastAccessedLine(formatDate(lastAccessedAt)))

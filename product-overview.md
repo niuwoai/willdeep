@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-03 | Current version: v1.129.0-rc21
+> Last updated: 2026-07-03 | Current version: v1.129.0-rc22
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **workspace 级记忆可视与隔离补强（1.129.0-rc22）** —— 记忆的 Global/Project 隔离链路原本就在（project 记忆按 workspace 指纹只在对应项目注入），本次补齐可用性：记忆记录新增可读 `projectPath`，设置 → 记忆列表显示每条 project 记忆挂载的项目名/路径，并新增「全部 / 仅全局 / 当前项目」过滤；老记录在对应 workspace 打开时自动回填路径，仓库搬家后指纹失联可通过路径兜底匹配或编辑重存一键重绑；`add_memory` 不传 scope 时按内容启发式推断（提到仓库/版本/测试等 → project），不再一律默认 global。
 - **聊天代码块自动换行（1.129.0-rc21）** —— 聊天 markdown 代码块长行从「裁剪 + 隐蔽的横向滚动」改为按字符自动换行，docker 命令、长 URL 等完整可读；平移 glyph 的横向滚动绘制路径删除，表格保持不换行并继续用表格详情窗口看宽表。
 - **edit_file 精确替换编辑工具（1.129.0-rc21）** —— Agent 编辑既有文件的首选原语从「模型手写 unified diff」切换为 Claude Code 式 `edit_file`（path + old_string + new_string 精确替换，支持 replace_all）：宿主在当前内容（优先编辑器 tab 未保存缓冲，回退磁盘）中定位唯一匹配、自己合成上下文行逐字节精确的 diff，再走既有 apply_patch 审核卡片/自动应用/undo/worktree 跟踪管线，并做 parse→apply 往返自检。old_string 找不到/不唯一/与 new_string 相同都会以可自纠的工具错误回传模型。`apply_patch` 降级为 legacy fallback；patch 解析器同步修复 hunk 内 `-- `/`++ ` 开头内容行被误判为文件头的歧义。
 - **Apply 卡片点击后收起（1.129.0-rc20）** —— Agent patch proposal 列表只保留仍待处理的 `.pending` 卡片；用户点击 Apply 或 Reject 后，卡片立即从聊天区收起，即使 apply 失败也不再留下一张带灰色按钮的操作卡。失败原因仍保存在 proposal 状态里，供诊断、持久化和移动端状态同步使用。

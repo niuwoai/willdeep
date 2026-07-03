@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.129.0-rc22 - 2026-07-03
+
+### Added
+- **workspace 级记忆可视与隔离补强** —— Global/Project 记忆隔离链路原本就在（project 记忆按 workspace 指纹只在对应项目注入），本次补齐可用性短板：
+  - 记忆记录新增可读 `projectPath`；设置 → 记忆列表为 project 记忆显示项目名 tag 与完整路径行，当前 workspace 的记忆带「当前项目」标识；
+  - 记忆列表新增「全部 / 仅全局 / 当前项目」scope 过滤器；
+  - 只有指纹的老记录在对应 workspace 打开时自动回填可读路径（retrieve 和设置页 onAppear 两处触发）；检索匹配增加路径兜底，指纹方案变化不再导致 project 记忆失联；编辑重存为 Project 可把搬家后的孤儿记忆一键重绑到当前 workspace；
+  - `add_memory` 不传 scope 时不再一律默认 global，改为按内容启发式推断（提到仓库/项目/版本/changelog/测试等且有 workspace → project），工具描述同步引导模型显式传 scope。
+
+### Changed
+- 版本号从 **1.129.0-rc21** 提升为 **1.129.0-rc22**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
 ## 1.129.0-rc21 - 2026-07-03
 
 ### Added

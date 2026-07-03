@@ -83,6 +83,11 @@ struct AgentMemoryRecord: Identifiable, Codable, Equatable {
     var lifetime: AgentMemoryLifetime
     var scope: AgentMemoryScope
     var projectFingerprint: String?
+    /// Readable workspace root path for `.project` memories. The fingerprint
+    /// stays the matching key; the path makes the binding visible in the UI
+    /// and lets a memory survive fingerprint-scheme changes (normalization
+    /// recomputes a missing fingerprint from the path).
+    var projectPath: String?
     var topics: [String]
     var confidence: Double
     var containsSensitiveContent: Bool
@@ -100,6 +105,7 @@ struct AgentMemoryRecord: Identifiable, Codable, Equatable {
         lifetime: AgentMemoryLifetime = .longTerm,
         scope: AgentMemoryScope = .global,
         projectFingerprint: String? = nil,
+        projectPath: String? = nil,
         topics: [String] = [],
         confidence: Double = 1.0,
         containsSensitiveContent: Bool = false,
@@ -116,6 +122,7 @@ struct AgentMemoryRecord: Identifiable, Codable, Equatable {
         self.lifetime = lifetime
         self.scope = scope
         self.projectFingerprint = projectFingerprint
+        self.projectPath = projectPath
         self.topics = topics
         self.confidence = confidence
         self.containsSensitiveContent = containsSensitiveContent
@@ -140,6 +147,19 @@ struct AgentMemoryRecord: Identifiable, Codable, Equatable {
         if copy.projectFingerprint?.isEmpty == true {
             copy.projectFingerprint = nil
         }
+        copy.projectPath = copy.projectPath?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if copy.projectPath?.isEmpty == true {
+            copy.projectPath = nil
+        }
+        if copy.scope == .global {
+            copy.projectPath = nil
+        } else if copy.projectFingerprint == nil, let path = copy.projectPath {
+            // Self-heal: the fingerprint is derived from the path, so a
+            // record that carries only the readable path re-earns its key.
+            copy.projectFingerprint = AgentMemoryEngine.projectFingerprint(
+                for: URL(fileURLWithPath: path, isDirectory: true)
+            )
+        }
         copy.topics = AgentMemoryKeywordExtractor.keywords(from: copy.topics.joined(separator: " ") + " " + copy.content, limit: 8)
         copy.confidence = max(0, min(1, copy.confidence))
         copy.provenance = copy.provenance?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -161,8 +181,16 @@ struct AgentMemoryRecord: Identifiable, Codable, Equatable {
             || scope.displayName.localizedCaseInsensitiveContains(trimmed)
     }
 
+    /// Short human label for the bound workspace ("Xedit"), or nil for
+    /// global / legacy records that only carry a fingerprint.
+    var projectDisplayName: String? {
+        guard let projectPath else { return nil }
+        let name = URL(fileURLWithPath: projectPath).lastPathComponent
+        return name.isEmpty ? projectPath : name
+    }
+
     private enum CodingKeys: String, CodingKey {
-        case id, content, source, lifetime, scope, projectFingerprint, topics, confidence
+        case id, content, source, lifetime, scope, projectFingerprint, projectPath, topics, confidence
         case containsSensitiveContent, provenance, createdAt, updatedAt, lastAccessedAt, accessCount, archivedAt
     }
 
@@ -174,6 +202,7 @@ struct AgentMemoryRecord: Identifiable, Codable, Equatable {
         lifetime = try c.decodeIfPresent(AgentMemoryLifetime.self, forKey: .lifetime) ?? .longTerm
         scope = try c.decodeIfPresent(AgentMemoryScope.self, forKey: .scope) ?? .global
         projectFingerprint = try c.decodeIfPresent(String.self, forKey: .projectFingerprint)
+        projectPath = try c.decodeIfPresent(String.self, forKey: .projectPath)
         topics = try c.decodeIfPresent([String].self, forKey: .topics) ?? []
         confidence = try c.decodeIfPresent(Double.self, forKey: .confidence) ?? 1.0
         containsSensitiveContent = try c.decodeIfPresent(Bool.self, forKey: .containsSensitiveContent) ?? false
@@ -317,6 +346,7 @@ enum AgentMemoryEngine {
     ) -> [AgentMemoryRetrievalResult] {
         guard settings.isMemoryEnabled, settings.autoRetrievalEnabled else { return [] }
         let projectID = projectFingerprint(for: rootDirectory)
+        let rootPath = rootDirectory?.standardizedFileURL.path
         let queryText = [
             query,
             openedFileURL?.lastPathComponent ?? "",
@@ -329,7 +359,7 @@ enum AgentMemoryEngine {
         return records
             .map(\.normalized)
             .filter { !$0.isArchived }
-            .filter { applies($0, projectID: projectID) }
+            .filter { applies($0, projectID: projectID, rootPath: rootPath) }
             .compactMap { record -> AgentMemoryRetrievalResult? in
                 let result = score(record, queryTokens: queryTokens, queryText: queryText, now: now)
                 guard result.score >= settings.similarityThreshold else { return nil }
@@ -397,6 +427,7 @@ enum AgentMemoryEngine {
                 lifetime: .longTerm,
                 scope: isProjectScoped ? .project : .global,
                 projectFingerprint: isProjectScoped ? projectID : nil,
+                projectPath: isProjectScoped ? rootDirectory?.standardizedFileURL.path : nil,
                 topics: AgentMemoryKeywordExtractor.keywords(from: content, limit: 8),
                 confidence: confidence(for: content),
                 containsSensitiveContent: sanitized.redacted,
@@ -426,6 +457,7 @@ enum AgentMemoryEngine {
             existing.lastAccessedAt = [existing.lastAccessedAt, record.lastAccessedAt].compactMap { $0 }.max()
             existing.confidence = max(existing.confidence, record.confidence)
             existing.containsSensitiveContent = existing.containsSensitiveContent || record.containsSensitiveContent
+            existing.projectPath = existing.projectPath ?? record.projectPath
             existing.topics = AgentMemoryKeywordExtractor.keywords(
                 from: (existing.topics + record.topics).joined(separator: " ") + " " + existing.content,
                 limit: 8
@@ -445,12 +477,17 @@ enum AgentMemoryEngine {
         return (sorted, mergedCount)
     }
 
-    private static func applies(_ record: AgentMemoryRecord, projectID: String?) -> Bool {
+    static func applies(_ record: AgentMemoryRecord, projectID: String?, rootPath: String? = nil) -> Bool {
         switch record.scope {
         case .global:
             return true
         case .project:
-            return record.projectFingerprint != nil && record.projectFingerprint == projectID
+            if record.projectFingerprint != nil && record.projectFingerprint == projectID {
+                return true
+            }
+            // Fallback on the readable path so records survive fingerprint-
+            // scheme changes; equivalent when both derive from the same path.
+            return record.projectPath != nil && rootPath != nil && record.projectPath == rootPath
         }
     }
 
@@ -512,7 +549,7 @@ enum AgentMemoryEngine {
             }
     }
 
-    private static func looksProjectScoped(_ text: String) -> Bool {
+    static func looksProjectScoped(_ text: String) -> Bool {
         let lower = text.lowercased()
         return lower.contains("repo")
             || lower.contains("project")
@@ -642,6 +679,7 @@ final class AgentMemoryState: ObservableObject {
                 lifetime: lifetime,
                 scope: projectID == nil && scope == .project ? .global : scope,
                 projectFingerprint: projectID,
+                projectPath: projectID == nil ? nil : rootDirectory?.standardizedFileURL.path,
                 topics: AgentMemoryKeywordExtractor.keywords(from: trimmed, limit: 8),
                 confidence: source == .manual ? 1.0 : 0.7,
                 createdAt: now,
@@ -693,9 +731,15 @@ final class AgentMemoryState: ObservableObject {
             switch scope {
             case .global:
                 memories[index].projectFingerprint = nil
+                memories[index].projectPath = nil
             case .project:
-                memories[index].projectFingerprint = AgentMemoryEngine.projectFingerprint(for: rootDirectory)
-                    ?? memories[index].projectFingerprint
+                // A workspace being open rebinds the memory to it (this is
+                // also the rescue path for orphaned records after a repo
+                // moved); otherwise keep the existing binding.
+                if let newFingerprint = AgentMemoryEngine.projectFingerprint(for: rootDirectory) {
+                    memories[index].projectFingerprint = newFingerprint
+                    memories[index].projectPath = rootDirectory?.standardizedFileURL.path
+                }
                 if memories[index].projectFingerprint == nil {
                     memories[index].scope = .global
                 }
@@ -752,7 +796,29 @@ final class AgentMemoryState: ObservableObject {
             now: now
         )
         markAccessed(ids: results.map(\.record.id), now: now)
+        backfillProjectPaths(rootDirectory: rootDirectory)
         return results
+    }
+
+    /// Legacy project memories only carry the fingerprint hash. Whenever the
+    /// matching workspace is actually open we know its readable path — write
+    /// it back so the UI can show where the memory is mounted.
+    func backfillProjectPaths(rootDirectory: URL?) {
+        guard let rootDirectory,
+              let projectID = AgentMemoryEngine.projectFingerprint(for: rootDirectory) else { return }
+        let path = rootDirectory.standardizedFileURL.path
+        var changed = false
+        for index in memories.indices
+        where memories[index].scope == .project
+            && memories[index].projectFingerprint == projectID
+            && memories[index].projectPath == nil {
+            memories[index].projectPath = path
+            changed = true
+        }
+        if changed {
+            AgentMemorySettingsStore.saveRecords(memories)
+            objectWillChange.send()
+        }
     }
 
     func markAccessed(ids: [AgentMemoryRecord.ID], now: Date = Date()) {
