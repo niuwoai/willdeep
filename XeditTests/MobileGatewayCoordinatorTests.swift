@@ -16,6 +16,77 @@ struct MobileGatewayCoordinatorTests {
     }
 
     @Test
+    func defaultTransportModeIsRelay() {
+        #expect(MobileGatewaySettings.default.transportMode == .relay)
+    }
+
+    @Test
+    func legacySettingsWithoutTransportModeDefaultToRelay() throws {
+        let defaults = try #require(UserDefaults(suiteName: "willdeep-mobile-gateway-mode-\(UUID().uuidString)"))
+        // Installs predating the transportMode field must migrate to relay.
+        let legacyPayload: [String: Any] = ["host": "0.0.0.0", "port": 8877]
+        let data = try JSONSerialization.data(withJSONObject: legacyPayload)
+        defaults.set(data, forKey: "com.willdeep.mobileGateway.settings.v1")
+
+        #expect(MobileGatewaySettingsStore.load(defaults: defaults).transportMode == .relay)
+    }
+
+    @Test
+    func explicitLanGatewayModeRoundTripsThroughDecodeAndNormalize() throws {
+        let payload: [String: Any] = ["transportMode": "lanGateway", "host": "0.0.0.0"]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        let decoded = try JSONDecoder().decode(MobileGatewaySettings.self, from: data)
+        #expect(decoded.transportMode == .lanGateway)
+        #expect(decoded.normalized.transportMode == .lanGateway)
+    }
+
+    @Test
+    func relayPairingPayloadCarriesRelayCoordinates() {
+        let settings = MobileGatewaySettings(
+            transportMode: .relay,
+            host: "0.0.0.0",
+            port: 8877,
+            desktopName: "Rocky Mac",
+            executablePath: "",
+            allowPairing: true,
+            relayBaseURL: "https://j.niuwoai.com/",
+            relayRoom: "willdeep-abc"
+        )
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let payload = MobileGatewayCoordinator.relayPairingPayload(
+            for: settings,
+            relayToken: "relay-secret",
+            now: now
+        )
+
+        // Relay coordinates the phone actually joins with.
+        #expect(payload.relayBaseURL == "https://j.niuwoai.com")
+        #expect(payload.relayRoom == "willdeep-abc")
+        #expect(payload.relayToken == "relay-secret")
+        // Wire-compat fields for clients that key off base_url / pairing_token.
+        #expect(payload.baseURL == "https://j.niuwoai.com")
+        #expect(payload.pairingToken == "relay-secret")
+        #expect(payload.protocolVersion == "mobile-gateway.v1")
+        #expect(payload.fallbackBaseURLs.isEmpty)
+        // Long-lived: no meaningful countdown (rotate to revoke).
+        #expect(payload.expiresAt > now.addingTimeInterval(60 * 60 * 24 * 365))
+        // Round-trips through the QR JSON encoder without losing relay fields.
+        let json = payload.qrJSONString
+        #expect(json.contains("relay_room"))
+        #expect(json.contains("relay_token"))
+    }
+
+    @Test
+    func regenerateRelayRoomProducesFreshRoom() throws {
+        let defaults = try #require(UserDefaults(suiteName: "willdeep-mobile-gateway-room-\(UUID().uuidString)"))
+        let first = MobileGatewaySettingsStore.regenerateRelayRoom(defaults: defaults)
+        let second = MobileGatewaySettingsStore.regenerateRelayRoom(defaults: defaults)
+        #expect(first.starts(with: "willdeep-"))
+        #expect(second.starts(with: "willdeep-"))
+        #expect(first != second)
+    }
+
+    @Test
     func settingsNormalizeHostPortAndDesktopName() {
         let settings = MobileGatewaySettings(
             host: "  ",

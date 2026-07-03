@@ -17132,6 +17132,69 @@
         }
       }
     },
+    "settings.mobile-gateway.running-relay" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Running (internet relay)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "运行中（互联网中继）" } }
+      }
+    },
+    "settings.mobile-gateway.transport-mode" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接方式" } }
+      }
+    },
+    "settings.mobile-gateway.transport-mode-relay" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Internet relay" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "互联网中继" } }
+      }
+    },
+    "settings.mobile-gateway.transport-mode-lan" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Local network" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "局域网" } }
+      }
+    },
+    "settings.mobile-gateway.transport-mode-relay-caption" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Default. Connects through the public relay, so your phone works from anywhere with no local gateway to run. Session content is routed through the relay server (transport-encrypted, not yet end-to-end)." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "默认。通过公共中继连接，手机在任何网络下都能用，无需运行本地网关。会话内容经中继服务器转发（传输层加密，尚未端到端加密）。" } }
+      }
+    },
+    "settings.mobile-gateway.transport-mode-lan-caption" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Fallback. Runs a local gateway process for same-network pairing with per-device tokens — useful offline or on isolated networks." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "备选。启动本地网关进程，在同一网络内用按设备令牌配对——适合离线或隔离网络。" } }
+      }
+    },
+    "settings.mobile-gateway.rotate-relay" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Rotate relay room" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "轮换中继房间" } }
+      }
+    },
+    "settings.mobile-gateway.scan-hint-relay" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Scan this QR code with the WillDeep Android app to pair over the internet relay. Works off your local network." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用 WillDeep 安卓 App 扫描此二维码，通过互联网中继配对。无需在同一局域网。" } }
+      }
+    },
+    "settings.mobile-gateway.devices-relay-note" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Relay mode shares one room token instead of per-device tokens. To de-authorize a phone, rotate the relay room — every paired device must re-scan." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "中继模式共用一个房间令牌，没有按设备令牌。要注销某台手机，请轮换中继房间——所有已配对设备都需重新扫码。" } }
+      }
+    },
     "settings.mobile-gateway.running" : {
       "extractionState" : "manual",
       "localizations" : {

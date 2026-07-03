@@ -32,6 +32,17 @@ struct MobileGatewaySettingsView: View {
             // After that it stays alive for this app session so a paired
             // phone keeps working after Settings is closed.
             Section(L10n.Settings.MobileGateway.controlSection) {
+                Picker(L10n.Settings.MobileGateway.transportModeLabel, selection: transportModeBinding) {
+                    Text(L10n.Settings.MobileGateway.transportModeRelay).tag(MobileGatewayTransportMode.relay)
+                    Text(L10n.Settings.MobileGateway.transportModeLanGateway).tag(MobileGatewayTransportMode.lanGateway)
+                }
+                .pickerStyle(.segmented)
+                Text(draft.transportMode == .relay
+                     ? L10n.Settings.MobileGateway.transportModeRelayCaption
+                     : L10n.Settings.MobileGateway.transportModeLanGatewayCaption)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 LabeledContent(L10n.Settings.MobileGateway.statusLabel) {
                     Text(statusText)
                         .foregroundStyle(statusColor)
@@ -83,12 +94,18 @@ struct MobileGatewaySettingsView: View {
                             unavailableText: L10n.Settings.MobileGateway.qrUnavailable,
                             pointSize: 220
                         )
-                        Text(L10n.Settings.MobileGateway.scanHint)
+                        Text(coordinator.isRelayMode
+                             ? L10n.Settings.MobileGateway.scanHintRelay
+                             : L10n.Settings.MobileGateway.scanHint)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
-                        LabeledContent(L10n.Settings.MobileGateway.expiresLabel) {
-                            Text(payload.expiresAt, style: .relative)
+                        // Relay tokens are long-lived (rotate to revoke), so
+                        // there's no meaningful pairing-token countdown to show.
+                        if !coordinator.isRelayMode {
+                            LabeledContent(L10n.Settings.MobileGateway.expiresLabel) {
+                                Text(payload.expiresAt, style: .relative)
+                            }
                         }
                         HStack(spacing: 8) {
                             Button(L10n.Settings.MobileGateway.copyPayloadButton) {
@@ -98,7 +115,10 @@ struct MobileGatewaySettingsView: View {
                             Button {
                                 Task { await coordinator.rotatePairingPayload() }
                             } label: {
-                                Label(L10n.Settings.MobileGateway.refreshPairingButton, systemImage: "arrow.clockwise")
+                                Label(coordinator.isRelayMode
+                                      ? L10n.Settings.MobileGateway.rotateRelayButton
+                                      : L10n.Settings.MobileGateway.refreshPairingButton,
+                                      systemImage: "arrow.clockwise")
                             }
                         }
                     }
@@ -207,7 +227,13 @@ struct MobileGatewaySettingsView: View {
             }
 
             Section(L10n.Settings.MobileGateway.devicesSection) {
-                if coordinator.devices.isEmpty {
+                if coordinator.isRelayMode {
+                    // The relay bus authenticates with a single shared room
+                    // token; there's no per-device registry to list or revoke.
+                    Text(L10n.Settings.MobileGateway.devicesRelayNote)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if coordinator.devices.isEmpty {
                     Text(L10n.Settings.MobileGateway.noDevices)
                         .foregroundStyle(.secondary)
                 } else {
@@ -256,7 +282,9 @@ struct MobileGatewaySettingsView: View {
         case .starting:
             return L10n.Settings.MobileGateway.starting
         case .running:
-            return L10n.Settings.MobileGateway.running
+            return coordinator.isRelayMode
+                ? L10n.Settings.MobileGateway.runningRelay
+                : L10n.Settings.MobileGateway.running
         case .failed(let message):
             return L10n.Settings.MobileGateway.failed(message)
         }
@@ -302,6 +330,23 @@ struct MobileGatewaySettingsView: View {
         }
         draft.port = port
         saveDraft()
+    }
+
+    private var transportModeBinding: Binding<MobileGatewayTransportMode> {
+        Binding(
+            get: { draft.transportMode },
+            set: { newMode in
+                guard newMode != draft.transportMode else { return }
+                draft.transportMode = newMode
+                saveDraft()
+                // Restart so the new transport takes over immediately: relay
+                // tears down any Go process; lanGateway launches it.
+                Task {
+                    coordinator.stop()
+                    await coordinator.start()
+                }
+            }
+        )
     }
 
     private func syncDraftFromCoordinator() {

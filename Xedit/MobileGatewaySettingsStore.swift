@@ -13,10 +13,28 @@ import Security
 
 let mobileGatewayPortRange = 1...65535
 
+/// How the Mac exposes the Mobile Gateway to a paired phone.
+///
+/// - `relay`: the Swift desktop peer connects directly to the public
+///   internet relay (`j.niuwoai.com`) and the app builds the QR pairing
+///   payload itself. NO local Go process runs — works off-LAN, nothing to
+///   install. This is the default.
+/// - `lanGateway`: launch the bundled Go `willdeep-agent serve-mobile`
+///   process for same-network HTTP pairing + per-device tokens. Kept as an
+///   opt-in fallback for offline/air-gapped LANs or when the phone needs
+///   the HTTP claim flow.
+enum MobileGatewayTransportMode: String, Codable, CaseIterable, Identifiable {
+    case relay
+    case lanGateway
+
+    var id: String { rawValue }
+}
+
 struct MobileGatewaySettings: Codable, Equatable {
     static let defaultRelayBaseURL = "https://j.niuwoai.com"
     static let legacyDefaultRelayRoom = "willdeep-mobile"
 
+    var transportMode: MobileGatewayTransportMode
     var host: String
     var port: Int
     var desktopName: String
@@ -26,6 +44,7 @@ struct MobileGatewaySettings: Codable, Equatable {
     var relayRoom: String
 
     enum CodingKeys: String, CodingKey {
+        case transportMode
         case host
         case port
         case desktopName
@@ -40,6 +59,7 @@ struct MobileGatewaySettings: Codable, Equatable {
     // 旧持久化里 `isEnabled` 字段保留在 JSON 里也无所谓(Codable 忽略多余
     // key),但本结构不再有这个字段。
     static let `default` = MobileGatewaySettings(
+        transportMode: .relay,
         host: "0.0.0.0",
         port: 8877,
         desktopName: Host.current().localizedName ?? "WillDeep Mac",
@@ -50,6 +70,7 @@ struct MobileGatewaySettings: Codable, Equatable {
     )
 
     init(
+        transportMode: MobileGatewayTransportMode = .relay,
         host: String,
         port: Int,
         desktopName: String,
@@ -58,6 +79,7 @@ struct MobileGatewaySettings: Codable, Equatable {
         relayBaseURL: String,
         relayRoom: String
     ) {
+        self.transportMode = transportMode
         self.host = host
         self.port = port
         self.desktopName = desktopName
@@ -70,6 +92,10 @@ struct MobileGatewaySettings: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let fallback = Self.default
+        // Legacy installs predate transportMode; default them to relay so the
+        // whole install base moves to the internet relay unless a user opts
+        // back into the LAN gateway.
+        transportMode = try container.decodeIfPresent(MobileGatewayTransportMode.self, forKey: .transportMode) ?? fallback.transportMode
         host = try container.decodeIfPresent(String.self, forKey: .host) ?? fallback.host
         port = try container.decodeIfPresent(Int.self, forKey: .port) ?? fallback.port
         desktopName = try container.decodeIfPresent(String.self, forKey: .desktopName) ?? fallback.desktopName
@@ -90,6 +116,7 @@ struct MobileGatewaySettings: Codable, Equatable {
             ? Self.legacyDefaultRelayRoom
             : defaultRelayRoom.trimmingCharacters(in: .whitespacesAndNewlines)
         return MobileGatewaySettings(
+            transportMode: transportMode,
             host: host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "0.0.0.0" : host.trimmingCharacters(in: .whitespacesAndNewlines),
             port: min(max(port, mobileGatewayPortRange.lowerBound), mobileGatewayPortRange.upperBound),
             desktopName: desktopName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -172,11 +199,32 @@ enum MobileGatewaySettingsStore {
         return token
     }
 
+    /// Mint a fresh relay token, replacing the stored one. In relay mode this
+    /// is how a phone is de-authorized: rotating the token (paired with a new
+    /// room) invalidates the credential every previously paired device holds,
+    /// so they must re-scan the QR. There is no per-device revoke over the
+    /// relay — the shared room token is all-or-nothing by design.
+    @discardableResult
+    static func resetRelayToken() throws -> String {
+        let token = try generateDesktopToken()
+        try saveToken(token, account: relayTokenAccount)
+        return token
+    }
+
     private static func loadOrCreateRelayRoom(defaults: UserDefaults) -> String {
         if let stored = defaults.string(forKey: relayRoomKey)?.trimmingCharacters(in: .whitespacesAndNewlines),
            !stored.isEmpty {
             return stored
         }
+        let room = "willdeep-\(UUID().uuidString.lowercased())"
+        defaults.set(room, forKey: relayRoomKey)
+        return room
+    }
+
+    /// Replace the persisted relay room with a fresh random one and return it.
+    /// Used alongside `resetRelayToken()` to rotate relay credentials.
+    @discardableResult
+    static func regenerateRelayRoom(defaults: UserDefaults = .standard) -> String {
         let room = "willdeep-\(UUID().uuidString.lowercased())"
         defaults.set(room, forKey: relayRoomKey)
         return room

@@ -215,6 +215,10 @@ final class MobileGatewayCoordinator: ObservableObject {
         return false
     }
 
+    var isRelayMode: Bool {
+        settings.transportMode == .relay
+    }
+
     var desktopPeerIsConnected: Bool {
         appState?.mobileGatewayDesktopPeer.isConnected ?? false
     }
@@ -228,6 +232,59 @@ final class MobileGatewayCoordinator: ObservableObject {
         if case .starting = state {
             return
         }
+        switch settings.transportMode {
+        case .relay:
+            await startRelayPeer()
+        case .lanGateway:
+            await startLanGateway()
+        }
+    }
+
+    /// Relay transport (default): no local process. The Swift desktop peer
+    /// dials the public relay directly and the app builds the QR pairing
+    /// payload itself from its own relay settings. Idempotent — re-entering
+    /// the settings tab while already connected only refreshes the payload.
+    private func startRelayPeer() async {
+        if case .running = state, desktopPeerIsConnected {
+            rebuildRelayPairingPayload()
+            return
+        }
+        // Drop any leftover Go process/state from a prior lanGateway session
+        // so switching modes never leaves an orphaned gateway running.
+        terminateActiveGatewayProcess()
+        state = .starting
+        recentOutput = ""
+        do {
+            let normalized = MobileGatewaySettingsStore.normalize(settings)
+            settings = normalized
+            MobileGatewaySettingsStore.save(normalized)
+            let relayToken = try MobileGatewaySettingsStore.loadOrCreateRelayToken()
+            let relayBaseURL = normalized.relayBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            let relayRoom = normalized.relayRoom.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let relayURL = URL(string: relayBaseURL), !relayRoom.isEmpty, !relayToken.isEmpty else {
+                throw CoordinatorError.relayNotConfigured
+            }
+            health = nil
+            devices = []
+            displayBaseURL = relayURL
+            pairingPayload = Self.relayPairingPayload(for: normalized, relayToken: relayToken)
+            appState?.mobileGatewayDesktopPeer.connectRelay(
+                baseURL: relayURL,
+                room: relayRoom,
+                relayToken: relayToken
+            )
+            state = .running
+        } catch {
+            fail(error.localizedDescription)
+        }
+    }
+
+    private func rebuildRelayPairingPayload() {
+        guard let relayToken = try? MobileGatewaySettingsStore.loadOrCreateRelayToken() else { return }
+        pairingPayload = Self.relayPairingPayload(for: settings, relayToken: relayToken)
+    }
+
+    private func startLanGateway() async {
         guard process == nil else {
             await refresh()
             return
@@ -341,7 +398,23 @@ final class MobileGatewayCoordinator: ObservableObject {
         }
     }
 
+    private func terminateActiveGatewayProcess() {
+        let activeProcess = process
+        process = nil
+        Self.terminateGatewayProcess(activeProcess)
+        monitorTask?.cancel()
+        monitorTask = nil
+    }
+
     func refresh() async {
+        // Relay mode has no HTTP control plane — liveness is the desktop
+        // peer's own WebSocket connection state, and the pairing payload is
+        // built locally. Just rebuild it so a manual Refresh reflects any
+        // edited relay settings.
+        if settings.transportMode == .relay {
+            rebuildRelayPairingPayload()
+            return
+        }
         guard process != nil else { return }
         guard let desktopToken = try? MobileGatewaySettingsStore.loadOrCreateDesktopToken() else { return }
         let baseURL = Self.desktopBaseURL(for: settings)
@@ -376,6 +449,20 @@ final class MobileGatewayCoordinator: ObservableObject {
     }
 
     func rotatePairingPayload() async {
+        // Relay rotation = new room + new relay token. Every previously paired
+        // phone's credential is invalidated and must re-scan; this is the only
+        // de-authorization primitive over the shared relay room.
+        if settings.transportMode == .relay {
+            let newRoom = MobileGatewaySettingsStore.regenerateRelayRoom()
+            _ = try? MobileGatewaySettingsStore.resetRelayToken()
+            var updated = settings
+            updated.relayRoom = newRoom
+            updateSettings(updated)
+            appState?.mobileGatewayDesktopPeer.disconnect()
+            state = .stopped
+            await startRelayPeer()
+            return
+        }
         guard process != nil else { return }
         guard let desktopToken = try? MobileGatewaySettingsStore.loadOrCreateDesktopToken() else { return }
         do {
@@ -628,6 +715,38 @@ final class MobileGatewayCoordinator: ObservableObject {
         throw CoordinatorError.executableNotFound
     }
 
+    /// Protocol version advertised to paired phones. Matches the Go gateway
+    /// and the health/pairing contract in docs/MOBILE_GATEWAY_REQUIREMENTS.md.
+    static let protocolVersion = "mobile-gateway.v1"
+
+    /// Build the QR pairing payload for relay mode without a Go gateway. The
+    /// phone joins the relay room using `relay_token`; the LAN `base_url` /
+    /// `pairing_token` fields are filled with relay-equivalents so clients
+    /// that key off them still authenticate against the same shared secret
+    /// that `relay_token` already carries (the Go gateway advertises the same
+    /// relay fields today, so this is wire-compatible with existing phones).
+    /// `expiresAt` is far out because the relay token is long-lived — rotate
+    /// it (new room + token) to de-authorize devices instead.
+    static func relayPairingPayload(
+        for settings: MobileGatewaySettings,
+        relayToken: String,
+        now: Date = Date()
+    ) -> MobileGatewayPairingPayload {
+        let relayBaseURL = settings.relayBaseURL.trimmingCharacters(in: CharacterSet(charactersIn: " /"))
+        let relayRoom = settings.relayRoom.trimmingCharacters(in: CharacterSet(charactersIn: " /"))
+        return MobileGatewayPairingPayload(
+            baseURL: relayBaseURL,
+            fallbackBaseURLs: [],
+            pairingToken: relayToken,
+            protocolVersion: Self.protocolVersion,
+            desktopName: settings.desktopName,
+            expiresAt: now.addingTimeInterval(60 * 60 * 24 * 365 * 10),
+            relayBaseURL: relayBaseURL,
+            relayRoom: relayRoom,
+            relayToken: relayToken
+        )
+    }
+
     static func desktopBaseURL(for settings: MobileGatewaySettings) -> URL {
         let host = ["0.0.0.0", "::", ""].contains(settings.host) ? "127.0.0.1" : settings.host
         return URL(string: "http://\(host):\(settings.port)")!
@@ -838,6 +957,7 @@ private enum CoordinatorError: LocalizedError, Equatable {
     case gatewayDidNotBecomeHealthy
     case invalidResponse
     case apiError(String)
+    case relayNotConfigured
 
     var errorDescription: String? {
         switch self {
@@ -849,6 +969,8 @@ private enum CoordinatorError: LocalizedError, Equatable {
             return "Mobile Gateway returned an invalid response."
         case .apiError(let message):
             return message
+        case .relayNotConfigured:
+            return "Relay is not configured. Set a relay base URL and room in advanced settings."
         }
     }
 }

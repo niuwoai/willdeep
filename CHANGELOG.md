@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.129.0-rc24 - 2026-07-03
+
+### Changed
+- **移动网关默认改为互联网中继，Go 本地网关降级为可选备选** —— 新增连接方式设置（Settings → 移动网关 → 连接方式），两档：
+  - **互联网中继（默认）**：不再启动本地 Go 网关进程。Swift 桌面 peer 直接连中继房间（`wss://j.niuwoai.com/ws/broadcast/{room}`），并由 App 自己用中继设置生成配对二维码（`relay_base_url`/`relay_room`/`relay_token`）；手机凭共享 `relay_token` 加入同一房间，脱离局域网也能用，无需安装/运行任何本地进程。存活状态取桌面 peer 自己的 WebSocket 连接（无 `/mobile/health`）。注销设备为全体轮换：轮换房间 + 令牌后所有已配对设备需重新扫码。
+  - **局域网网关（备选，默认关闭）**：仍可一键切回，启动 Go `serve-mobile` 进程走同网 HTTP 配对 + 按设备令牌 + 按设备注销（rc24 前的行为，现改为 opt-in）。
+  - 关键事实：Go 网关从不自己连中继，rc24 前它只是在配对负载里「广告」中继坐标；中继总线一直是 Swift peer 直连——所以中继模式可完全不跑 Go 进程。
+  - 向后兼容：配对二维码里的 `relay_*` 字段与现有安卓端读取的完全一致；旧安装缺 `transportMode` 字段的一律迁移为中继。
+- **会话内容加密说明**：中继模式下内容经中继服务器转发，目前仅传输层加密（WSS），尚未端到端加密。端到端加密设计（需与 `willdeep-android` 仓库协同）见新增文档 [MOBILE_GATEWAY_E2E_ENCRYPTION_DESIGN.md](docs/MOBILE_GATEWAY_E2E_ENCRYPTION_DESIGN.md)。
+- 版本号从 **1.129.0-rc23** 提升为 **1.129.0-rc24**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
 ## 1.129.0-rc23 - 2026-07-03
 
 ### Fixed

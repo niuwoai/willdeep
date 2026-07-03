@@ -1,12 +1,23 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-07-03 | Target version: v1.129.0-rc23
+> Last updated: 2026-07-03 | Target version: v1.129.0-rc24
 
 ## Summary
 
-Mobile Gateway lets an Android client connect to WillDeep over the local network or the default public relay at `https://j.niuwoai.com`. The phone is a display and control surface; the Mac remains the authority for Agent execution, tool approval, patch application, workspace access, and safety gates.
+Mobile Gateway lets an Android client connect to WillDeep over the default public relay at `https://j.niuwoai.com`, or over the local network as a fallback. The phone is a display and control surface; the Mac remains the authority for Agent execution, tool approval, patch application, workspace access, and safety gates.
 
 This Mac repository implements the Go gateway, Swift desktop peer, and protocol contract. The Android client is developed in the separate `willdeep-android` repository; the public relay is provided by `cdnproxy` at `/ws/broadcast/*`, while this repository still does not ship push notifications or direct mobile access to filesystem and shell APIs.
+
+## Transport Modes
+
+Since v1.129.0-rc24 the gateway has two selectable transports (Settings → Mobile Gateway → Connection):
+
+- **Internet relay (default).** No local process runs. The Swift desktop peer connects directly to the relay room (`wss://j.niuwoai.com/ws/broadcast/{room}`) and the app builds the QR pairing payload itself from its own relay settings (`relay_base_url` / `relay_room` / `relay_token`). The phone joins the same room with the shared `relay_token` — works off the local network with nothing to install. Liveness is the desktop peer's own WebSocket state (no `/mobile/health`). De-authorization is all-or-nothing: rotate the room + token, which forces every paired device to re-scan. Content is transport-encrypted (WSS) but not yet end-to-end — see [MOBILE_GATEWAY_E2E_ENCRYPTION_DESIGN.md](MOBILE_GATEWAY_E2E_ENCRYPTION_DESIGN.md).
+- **Local network gateway (fallback, off by default).** Launches the bundled Go `willdeep-agent serve-mobile` process for same-network HTTP pairing (`/mobile/pair/claim`) with per-device tokens and per-device revoke. Use offline / on isolated networks, or when the phone needs the HTTP claim flow. This is the pre-rc24 behavior, now opt-in.
+
+The Go gateway does **not** itself dial the relay; in the pre-rc24 design it only advertised the relay coordinates inside the pairing payload. The relay bus is, and always was, the Swift desktop peer connecting directly. That is why relay mode can run with no Go process at all.
+
+The HTTP API, pairing, device, and WebSocket sections below describe the **local network gateway** transport. In relay mode those HTTP endpoints do not exist; the QR payload's `relay_*` fields are the entire pairing contract.
 
 ## Product Goals
 
@@ -66,8 +77,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.129.0-rc23`
-- `X-Server-Version: 1.129.0-rc23`
+- `X-App-Version: 1.129.0-rc24`
+- `X-Server-Version: 1.129.0-rc24`
 
 ### `GET /mobile/health`
 
@@ -79,7 +90,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.129.0-rc23",
+    "version": "1.129.0-rc24",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
