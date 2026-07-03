@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.129.0-rc23 - 2026-07-03
+
+### Fixed
+- **移动网关快照不再在主线程反复物化/淘汰/落盘 runtime** —— `mobileGatewayQueuedMessages` / `mobileGatewayRecentMessages` / `mobileGatewayWorktreeChanges` 此前经由 `runtime(for:)` 读状态：每次周期快照都会把所有持久化会话物化成 runtime（磁盘读 + JSON 解码），随即触发 idle runtime 淘汰、对每个被淘汰会话同步 JSONEncoder 编码 + 原子写盘，全部发生在 @MainActor，下一次快照又重来 —— materialize→evict→persist 死循环把 CPU 常驻拖到 20–60%（rc21 采样 `/tmp/WillDeep-29480.sample.txt` 定位）。快照访问器现在只读已存活的 `agentRuntimes`（新增只读 `mobileGatewayLiveRuntimes`），零副作用；手机端打开会话仍走命令路径按需物化单个会话。新增防回归测试断言快照访问器不改变 `agentRuntimes`。
+
+### Changed
+- 版本号从 **1.129.0-rc22** 提升为 **1.129.0-rc23**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
 ## 1.129.0-rc22 - 2026-07-03
 
 ### Added

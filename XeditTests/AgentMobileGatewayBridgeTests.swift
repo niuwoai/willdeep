@@ -934,6 +934,35 @@ struct AgentMobileGatewayBridgeTests {
         ).date ?? Date(timeIntervalSince1970: 0)
     }
 
+    @Test @MainActor
+    func gatewaySnapshotAccessorsAreReadOnlyAndNeverMaterializeRuntimes() {
+        // Regression for the rc21 CPU spin: gateway snapshot accessors went
+        // through runtime(for:), which materialized a runtime for EVERY
+        // persisted session and then triggered idle eviction — synchronous
+        // JSON encode + atomic file write per evicted session, on @MainActor,
+        // repeated on every periodic snapshot. Snapshot reads must observe
+        // only already-live runtimes and leave agentRuntimes untouched.
+        let appState = AppState()
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        let session = appState.startNewAgentSession()
+        defer { deleteSessionsCreatedByTest(appState, existingIDs: existingIDs) }
+
+        // Simulate an evicted runtime: the session stays in agentSessions
+        // (as after an eviction or a cold start), but no runtime is live.
+        appState.agentRuntimes.removeValue(forKey: session.id)
+        let liveRuntimeIDs = Set(appState.agentRuntimes.keys)
+
+        _ = appState.mobileGatewayQueuedMessages
+        _ = appState.mobileGatewayRecentMessages
+        _ = appState.mobileGatewayWorktreeChanges
+        _ = appState.mobileGatewayPendingToolApprovals
+        _ = appState.mobileGatewayPendingPatchProposals
+        _ = appState.mobileGatewayJobs
+
+        #expect(Set(appState.agentRuntimes.keys) == liveRuntimeIDs)
+        #expect(appState.agentRuntimes[session.id] == nil)
+    }
+
     @MainActor
     private func deleteSessionsCreatedByTest(_ appState: AppState, existingIDs: Set<AgentSession.ID>) {
         for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {

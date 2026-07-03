@@ -95,8 +95,22 @@ extension AppState: AgentMobileGatewayControlling {
         }
     }
 
+    /// Live runtimes in session-list order, READ-ONLY. Snapshot accessors
+    /// must never go through `runtime(for:)`: that call materializes a
+    /// runtime for every persisted session (disk read + JSON decode) and
+    /// triggers idle-runtime eviction, which synchronously JSON-encodes and
+    /// atomically writes each evicted session — all on @MainActor. With the
+    /// gateway snapshotting periodically, materialize→evict→persist looped
+    /// forever and pinned a core (v1.129.0-rc21 sample: 20–60% CPU).
+    /// Sessions without a live runtime have no queued/streaming state to
+    /// report; the phone materializes one on demand via the command path
+    /// when it opens a session.
+    private var mobileGatewayLiveRuntimes: [AgentRuntime] {
+        agentSessions.compactMap { agentRuntimes[$0.id] }
+    }
+
     var mobileGatewayQueuedMessages: [AgentMobileGatewayQueuedMessageSnapshot] {
-        agentSessions.compactMap { runtime(for: $0.id) }.flatMap { runtime in
+        mobileGatewayLiveRuntimes.flatMap { runtime in
             runtime.queuedMessages.map { message in
                 AgentMobileGatewayQueuedMessageSnapshot(
                     id: message.id,
@@ -110,7 +124,7 @@ extension AppState: AgentMobileGatewayControlling {
     }
 
     var mobileGatewayRecentMessages: [AgentMobileGatewayMessageSnapshot] {
-        agentSessions.compactMap { runtime(for: $0.id) }.flatMap { runtime in
+        mobileGatewayLiveRuntimes.flatMap { runtime in
             runtime.messages
                 .filter { message in
                     message.role == .user ||
@@ -131,7 +145,7 @@ extension AppState: AgentMobileGatewayControlling {
     }
 
     var mobileGatewayWorktreeChanges: [AgentMobileGatewayWorktreeSnapshot] {
-        agentSessions.compactMap { runtime(for: $0.id) }.compactMap { runtime in
+        mobileGatewayLiveRuntimes.compactMap { runtime in
             let changes = runtime.worktreeChanges
             guard !changes.isEmpty else { return nil }
             return AgentMobileGatewayWorktreeSnapshot(
