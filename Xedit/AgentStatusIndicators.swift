@@ -128,20 +128,20 @@ struct AgentStatsDashboard: View {
     }
 
     private var overview: AgentUsageOverview {
-        AgentUsageStats.overview(for: filteredSessions)
+        AgentUsageStats.overview(for: filteredUsageSnapshots)
     }
 
     private var modelUsageRows: [AgentModelUsageRow] {
-        AgentUsageStats.modelUsage(for: filteredSessions)
+        AgentUsageStats.modelUsage(for: filteredUsageSnapshots)
     }
 
-    private var filteredSessions: [AgentSession] {
-        guard let days = range.days else { return appState.agentSessions }
+    private var filteredUsageSnapshots: [AgentUsageSessionSnapshot] {
+        guard let days = range.days else { return appState.agentUsageSnapshots }
         let calendar = Calendar.current
         guard let threshold = calendar.date(byAdding: .day, value: -days, to: Date()) else {
-            return appState.agentSessions
+            return appState.agentUsageSnapshots
         }
-        return appState.agentSessions.map { session in
+        return appState.agentUsageSnapshots.map { session in
             var copy = session
             copy.messages = session.messages.filter { $0.createdAt >= threshold }
             return copy
@@ -179,7 +179,7 @@ struct AgentStatsDashboard: View {
                 cellSize: cellSize,
                 spacing: cellSpacing
             )
-            let cells = AgentUsageStats.heatmap(for: filteredSessions, weekCount: weekCount)
+            let cells = AgentUsageStats.heatmap(for: filteredUsageSnapshots, weekCount: weekCount)
             let maxCount = cells.flatMap { $0 }.map(\.count).max() ?? 0
 
             HStack(spacing: cellSpacing) {

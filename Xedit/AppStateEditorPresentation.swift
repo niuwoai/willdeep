@@ -114,6 +114,11 @@ extension AppState {
             && agentCurrentGoal?.isEmpty == false
     }
 
+    var shouldShowComposerGoalCard: Bool {
+        agentInteractionMode == .goal
+            && agentCurrentGoal?.isEmpty == false
+    }
+
     var canShowPreview: Bool {
         let language = effectiveLanguage
         return language == .markdown || language == .html

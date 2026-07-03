@@ -245,6 +245,65 @@ struct AgentSessionStoreTests {
     }
 
     @Test
+    func usageSnapshotRestoresStatsFromLightweightSessionJSON() throws {
+        let json = """
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "title": "Historical chat",
+          "modelID": "gpt-4.1",
+          "providerID": "openai",
+          "providerDisplayName": "OpenAI",
+          "createdAt": "2026-06-19T00:00:00Z",
+          "updatedAt": "2026-06-19T01:00:00Z",
+          "messages": [
+            {
+              "id": "22222222-2222-2222-2222-222222222222",
+              "role": "user",
+              "content": "restore usage stats",
+              "createdAt": "2026-06-19T00:10:00Z",
+              "images": [
+                {
+                  "id": "33333333-3333-3333-3333-333333333333",
+                  "mimeType": "image/png",
+                  "dataBase64": "iVBORw0KGgo="
+                }
+              ]
+            },
+            {
+              "id": "44444444-4444-4444-4444-444444444444",
+              "role": "assistant",
+              "content": "done",
+              "usageTokens": 120,
+              "promptTokens": 80,
+              "completionTokens": 40,
+              "cachedPromptTokens": 20,
+              "createdAt": "2026-06-19T00:11:00Z"
+            }
+          ]
+        }
+        """
+
+        let snapshot = try AgentSessionStore.decodeUsageSnapshotForTesting(Data(json.utf8))
+        let now = ISO8601DateFormatter().date(from: "2026-06-19T02:00:00Z")!
+        let overview = AgentUsageStats.overview(for: [snapshot], now: now)
+        let rows = AgentUsageStats.modelUsage(for: [snapshot])
+
+        #expect(snapshot.messages.count == 2)
+        #expect(overview.sessionCount == 1)
+        #expect(overview.messageCount == 2)
+        #expect(overview.totalTokens >= 720)
+        #expect(overview.hasAnyRealUsage)
+        #expect(overview.activeDays == 1)
+        #expect(overview.currentStreak == 1)
+        #expect(overview.favoriteModel == "gpt-4.1")
+        #expect(rows.first?.providerID == "openai")
+        #expect(rows.first?.modelID == "gpt-4.1")
+        #expect(rows.first?.promptTokens == 80)
+        #expect(rows.first?.completionTokens == 40)
+        #expect(rows.first?.cachedPromptTokens == 20)
+    }
+
+    @Test
     func lightweightSessionIndexDetectsPlaceholderWithoutUserMessages() throws {
         let json = """
         {

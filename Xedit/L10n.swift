@@ -552,6 +552,7 @@ enum L10n {
     }
 
     enum GoalStatusBar {
+        static let pinnedPrefix = String(localized: "goal-status-bar.pinned-prefix", defaultValue: "Goal pinned")
         static func progressHelp(_ a1: String, _ a2: String) -> String {
             let template = String(localized: "goal-status-bar.progress-help", defaultValue: "%@/%@ checklist items done")
             return String(format: template, a1, a2)
@@ -743,7 +744,30 @@ enum L10n {
         static let shortcutRunning = String(localized: "agent-terminal.shortcut.running", defaultValue: "Running")
         static let shortcutFinished = String(localized: "agent-terminal.shortcut.finished", defaultValue: "Finished")
         static let shortcutCancelled = String(localized: "agent-terminal.shortcut.cancelled", defaultValue: "Interrupted")
+        static let shortcutDefaultTitle = String(localized: "agent-terminal.shortcut.default-title", defaultValue: "Terminal Shortcut")
         static let shortcutProtected = String(localized: "agent-terminal.shortcut.protected", defaultValue: "Contains protected input; replays only while terminal echo is off")
+        static let shortcutReplay = String(localized: "agent-terminal.shortcut.replay", defaultValue: "Replay")
+        static let shortcutEdit = String(localized: "agent-terminal.shortcut.edit", defaultValue: "Edit")
+        static let shortcutRename = String(localized: "agent-terminal.shortcut.rename", defaultValue: "Rename...")
+        static let shortcutDelete = String(localized: "agent-terminal.shortcut.delete", defaultValue: "Delete")
+        static let shortcutPasswordCardDescription = String(localized: "agent-terminal.shortcut.password-card.description", defaultValue: "Saved only to this Mac's encrypted terminal vault. The AI never receives these values.")
+        static let shortcutPasswordSave = String(localized: "agent-terminal.shortcut.password-card.save", defaultValue: "Save to Recording")
+        static let shortcutRenameTitle = String(localized: "agent-terminal.shortcut.rename-title", defaultValue: "Rename Terminal Shortcut")
+        static let shortcutNamePlaceholder = String(localized: "agent-terminal.shortcut.name-placeholder", defaultValue: "Shortcut name")
+        static let shortcutRenameCancel = String(localized: "agent-terminal.shortcut.rename-cancel", defaultValue: "Cancel")
+        static let shortcutRenameSave = String(localized: "agent-terminal.shortcut.rename-save", defaultValue: "Save")
+        static func shortcutPendingProtected(_ a1: String) -> String {
+            let template = String(localized: "agent-terminal.shortcut.pending-protected", defaultValue: "%@ password placeholder(s) still need local values")
+            return String(format: template, a1)
+        }
+        static func shortcutPasswordCardTitle(_ a1: String) -> String {
+            let template = String(localized: "agent-terminal.shortcut.password-card.title", defaultValue: "Fill Passwords for %@")
+            return String(format: template, a1)
+        }
+        static func shortcutPasswordDefaultLabel(_ a1: String) -> String {
+            let template = String(localized: "agent-terminal.shortcut.password-card.default-label", defaultValue: "Password %@")
+            return String(format: template, a1)
+        }
         static func shortcutMeta(_ a1: String, _ a2: String) -> String {
             let template = String(localized: "agent-terminal.shortcut.meta", defaultValue: "%1$@ · %2$@ events")
             return String(format: template, a1, a2)
@@ -1120,6 +1144,8 @@ enum L10n {
         static let askUserSend = String(localized: "tool-card.ask-user.send", defaultValue: "Send")
         static let askUserAnswered = String(localized: "tool-card.ask-user.answered", defaultValue: "You answered")
         static let askUserSkipped = String(localized: "tool-card.ask-user.skipped", defaultValue: "You skipped this question")
+        static let terminalPasswordWaiting = String(localized: "tool-card.terminal-password.waiting", defaultValue: "Waiting for password")
+        static let terminalPasswordEntered = String(localized: "tool-card.terminal-password.entered", defaultValue: "User entered password")
     }
 
     enum AgentJobs {

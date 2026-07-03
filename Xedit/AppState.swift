@@ -210,6 +210,10 @@ final class AppState: ObservableObject {
     }
     /// Persisted Agent-mode chat sessions, newest-updated first.
     @Published var agentSessions: [AgentSession] = []
+    /// Lightweight usage snapshots decoded from persisted sessions. This
+    /// keeps the stats dashboard accurate while `agentSessions` may hold
+    /// metadata-only rows at launch for memory reasons.
+    @Published var agentUsageSnapshots: [AgentUsageSessionSnapshot] = []
     /// Sidebar group keys the user has removed from view. Removal only
     /// hides the workspace — its sessions stay on disk, so re-adding the
     /// same folder restores the full chat list. Persisted across launches.
@@ -482,6 +486,7 @@ final class AppState: ObservableObject {
                 self.editorSettings = normalizedSettings
             }
         self.agentSessions = AgentSessionStore.loadAll()
+        self.agentUsageSnapshots = AgentSessionStore.loadUsageSnapshots()
         self.agentKnownModelIDs = AgentSettingsStore.loadKnownModelIDs()
         self.agentDiscoveredModelMetadata = AgentSettingsStore.loadDiscoveredModelMetadata()
         self.agentRecentlyUsedModelIDs = AgentSettingsStore.loadRecentlyUsedModelIDs()

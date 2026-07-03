@@ -105,6 +105,121 @@ enum AgentTerminalControl: String, CaseIterable {
     }
 }
 
+enum TerminalShortcutTextCodec {
+    static func escapedText(from bytes: [UInt8]) -> String {
+        var result = ""
+        var plainBytes: [UInt8] = []
+
+        func flushPlainBytes() {
+            guard !plainBytes.isEmpty else { return }
+            result += String(decoding: plainBytes, as: UTF8.self)
+            plainBytes.removeAll(keepingCapacity: true)
+        }
+
+        for byte in bytes {
+            switch byte {
+            case 0x5C:
+                flushPlainBytes()
+                result += "\\\\"
+            case 0x0A:
+                flushPlainBytes()
+                result += "\\n"
+            case 0x0D:
+                flushPlainBytes()
+                result += "\\r"
+            case 0x09:
+                flushPlainBytes()
+                result += "\\t"
+            case 0x1B:
+                flushPlainBytes()
+                result += "\\e"
+            case 0x7F:
+                flushPlainBytes()
+                result += "\\b"
+            case 0x00...0x1F:
+                flushPlainBytes()
+                result += String(format: "\\x%02X", byte)
+            default:
+                plainBytes.append(byte)
+            }
+        }
+        flushPlainBytes()
+        return result
+    }
+
+    static func bytes(fromEscapedText text: String) -> [UInt8] {
+        var result: [UInt8] = []
+        var index = text.startIndex
+
+        while index < text.endIndex {
+            let character = text[index]
+            if character == "\u{0008}" {
+                result.append(0x7F)
+                index = text.index(after: index)
+                continue
+            }
+            guard character == "\\" else {
+                result.append(contentsOf: String(character).utf8)
+                index = text.index(after: index)
+                continue
+            }
+
+            let escapeStart = index
+            index = text.index(after: index)
+            guard index < text.endIndex else {
+                result.append(0x5C)
+                break
+            }
+
+            let escaped = text[index]
+            switch escaped {
+            case "\\":
+                result.append(0x5C)
+                index = text.index(after: index)
+            case "n":
+                result.append(0x0A)
+                index = text.index(after: index)
+            case "r":
+                result.append(0x0D)
+                index = text.index(after: index)
+            case "t":
+                result.append(0x09)
+                index = text.index(after: index)
+            case "e", "E":
+                result.append(0x1B)
+                index = text.index(after: index)
+            case "b":
+                result.append(0x7F)
+                index = text.index(after: index)
+            case "x":
+                if let byte = hexByte(in: text, after: index) {
+                    result.append(byte.value)
+                    index = byte.nextIndex
+                } else {
+                    result.append(contentsOf: String(text[escapeStart...index]).utf8)
+                    index = text.index(after: index)
+                }
+            default:
+                result.append(0x5C)
+                result.append(contentsOf: String(escaped).utf8)
+                index = text.index(after: index)
+            }
+        }
+
+        return result
+    }
+
+    private static func hexByte(in text: String, after escapeIndex: String.Index) -> (value: UInt8, nextIndex: String.Index)? {
+        let firstIndex = text.index(after: escapeIndex)
+        guard firstIndex < text.endIndex else { return nil }
+        let secondIndex = text.index(after: firstIndex)
+        guard secondIndex < text.endIndex else { return nil }
+        let hex = String(text[firstIndex...secondIndex])
+        guard let value = UInt8(hex, radix: 16) else { return nil }
+        return (value, text.index(after: secondIndex))
+    }
+}
+
 struct TerminalShortcutEvent: Codable, Equatable, Identifiable {
     var id: UUID
     var delayMilliseconds: Int
@@ -134,15 +249,21 @@ struct TerminalShortcutEvent: Codable, Equatable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, delayMilliseconds, bytes, requiresEchoOff, protectedBytesReference, protectedPlaceholder
+        case id, delayMilliseconds, text, bytes, requiresEchoOff, protectedBytesReference, protectedPlaceholder
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         delayMilliseconds = try container.decode(Int.self, forKey: .delayMilliseconds)
-        bytes = try container.decodeIfPresent([UInt8].self, forKey: .bytes) ?? []
         requiresEchoOff = try container.decodeIfPresent(Bool.self, forKey: .requiresEchoOff) ?? false
+        if requiresEchoOff {
+            bytes = []
+        } else if let text = try container.decodeIfPresent(String.self, forKey: .text) {
+            bytes = TerminalShortcutTextCodec.bytes(fromEscapedText: text)
+        } else {
+            bytes = try container.decodeIfPresent([UInt8].self, forKey: .bytes) ?? []
+        }
         protectedBytesReference = try container.decodeIfPresent(String.self, forKey: .protectedBytesReference)
         protectedPlaceholder = try container.decodeIfPresent(String.self, forKey: .protectedPlaceholder)
         transientProtectedBytes = []
@@ -152,8 +273,12 @@ struct TerminalShortcutEvent: Codable, Equatable, Identifiable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
         try container.encode(delayMilliseconds, forKey: .delayMilliseconds)
-        try container.encode(requiresEchoOff ? [] : bytes, forKey: .bytes)
         try container.encode(requiresEchoOff, forKey: .requiresEchoOff)
+        if requiresEchoOff {
+            try container.encode([UInt8](), forKey: .bytes)
+        } else {
+            try container.encode(TerminalShortcutTextCodec.escapedText(from: bytes), forKey: .text)
+        }
         try container.encodeIfPresent(protectedBytesReference, forKey: .protectedBytesReference)
         try container.encodeIfPresent(protectedPlaceholder, forKey: .protectedPlaceholder)
     }
@@ -1512,7 +1637,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
             }
             return Array((command + "\n").utf8)
         case .text:
-            return Array(createEvent.value.utf8)
+            return TerminalShortcutTextCodec.bytes(fromEscapedText: createEvent.value)
         case .control:
             switch createEvent.value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
             case "enter":
@@ -1556,7 +1681,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
         text: String
     ) throws {
         _ = try visibleEventText(shortcut.events[eventIndex], eventIndex: eventIndex)
-        shortcut.events[eventIndex].bytes = Array(text.utf8)
+        shortcut.events[eventIndex].bytes = TerminalShortcutTextCodec.bytes(fromEscapedText: text)
     }
 
     private func visibleEventText(_ event: TerminalShortcutEvent, eventIndex: Int) throws -> String {

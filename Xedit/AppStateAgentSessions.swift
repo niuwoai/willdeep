@@ -343,6 +343,10 @@ extension AppState {
               let goal = runtime.currentGoal,
               !goal.checklist.isEmpty else { return }
         guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else { return }
+        if let editedAt = runtime.currentGoalEditedAt,
+           last.createdAt < editedAt {
+            return
+        }
         if let updated = AgentGoalChecklistParser.applyEvaluation(to: goal, from: last.content) {
             runtime.currentGoal = updated
             persistAgentSession(runtime: runtime)
@@ -463,24 +467,80 @@ extension AppState {
     /// hasn't changed — so the user can tweak the goal statement or add
     /// new items without losing what's already ticked.
     func setAgentGoal(statement: String, items: [String]) {
+        guard let runtime = activeRuntime else { return }
         let trimmedStatement = statement.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedItems = items
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+        let previousGoal = runtime.currentGoal
+
         if trimmedStatement.isEmpty && trimmedItems.isEmpty {
-            agentCurrentGoal = nil
+            runtime.currentGoal = nil
+            if previousGoal != nil {
+                runtime.currentGoalEditedAt = Date()
+            }
             persistActiveAgentSession()
+            enqueueGoalUpdateNoticeIfNeeded(for: runtime, previousGoal: previousGoal, updatedGoal: nil)
             return
         }
-        let priorDone: [String: Bool] = Dictionary(uniqueKeysWithValues:
-            (agentCurrentGoal?.checklist ?? []).map { ($0.text, $0.done) })
-        agentCurrentGoal = AgentGoal(
+        var priorItemsByText: [String: AgentGoal.Item] = [:]
+        for item in runtime.currentGoal?.checklist ?? [] {
+            if priorItemsByText[item.text] == nil {
+                priorItemsByText[item.text] = item
+            }
+        }
+        let updatedGoal = AgentGoal(
             statement: trimmedStatement,
             checklist: trimmedItems.map { text in
-                AgentGoal.Item(text: text, done: priorDone[text] ?? false)
+                if let prior = priorItemsByText[text] {
+                    return AgentGoal.Item(id: prior.id, text: text, done: prior.done)
+                }
+                return AgentGoal.Item(text: text)
             }
         )
+        runtime.currentGoal = updatedGoal
+        if previousGoal != updatedGoal {
+            runtime.currentGoalEditedAt = Date()
+        }
         persistActiveAgentSession()
+        enqueueGoalUpdateNoticeIfNeeded(for: runtime, previousGoal: previousGoal, updatedGoal: updatedGoal)
+    }
+
+    private func enqueueGoalUpdateNoticeIfNeeded(
+        for runtime: AgentRuntime,
+        previousGoal: AgentGoal?,
+        updatedGoal: AgentGoal?
+    ) {
+        guard runtime.interactionMode == .goal,
+              runtime.isResponding,
+              previousGoal != updatedGoal else { return }
+        runtime.queuedMessages.append(
+            AgentQueuedMessage(
+                text: Self.goalUpdateFollowUpPrompt(for: updatedGoal),
+                images: [],
+                executionAgent: runtime.executionAgent
+            )
+        )
+    }
+
+    private static func goalUpdateFollowUpPrompt(for goal: AgentGoal?) -> String {
+        guard let goal, !goal.isEmpty else {
+            return "The user cleared the active Goal while you were working. Stop following the previous goal. Ask for a new goal if needed before continuing Goal-mode work."
+        }
+
+        var lines = [
+            "The user updated the active Goal while you were working. Continue using this updated goal and ignore the previous goal.",
+            "",
+            "Updated goal:",
+            goal.statement.isEmpty ? "- Goal statement: (none)" : "- Goal statement: \(goal.statement)"
+        ]
+        if !goal.checklist.isEmpty {
+            lines.append("- Acceptance checklist:")
+            for (index, item) in goal.checklist.enumerated() {
+                lines.append("  \(index + 1). [\(item.done ? "x" : " ")] \(item.text)")
+            }
+        }
+        return lines.joined(separator: "\n")
     }
 
     /// Toggle a single checklist item by id. The flipped state shows up
@@ -651,6 +711,20 @@ extension AppState {
         setAppMode(appMode == .agent ? .editor : .agent)
     }
 
+    private func upsertAgentUsageSnapshot(for session: AgentSession) {
+        let snapshot = AgentUsageSessionSnapshot(session: session)
+        if let index = agentUsageSnapshots.firstIndex(where: { $0.id == session.id }) {
+            agentUsageSnapshots[index] = snapshot
+        } else {
+            agentUsageSnapshots.insert(snapshot, at: 0)
+        }
+        agentUsageSnapshots.sort { $0.updatedAt > $1.updatedAt }
+    }
+
+    private func removeAgentUsageSnapshot(id: AgentSession.ID) {
+        agentUsageSnapshots.removeAll { $0.id == id }
+    }
+
     @discardableResult
     func startNewAgentSession() -> AgentSession {
         // Pre-rc2 this function cleared a wall of `agent*` fields on
@@ -690,6 +764,7 @@ extension AppState {
         agentCurrentPlan = nil
         agentCurrentGoal = nil
         AgentSessionStore.save(session)
+        upsertAgentUsageSnapshot(for: session)
         return session
     }
 
@@ -735,6 +810,7 @@ extension AppState {
         agentCurrentPlan = nil
         agentCurrentGoal = nil
         AgentSessionStore.save(session)
+        upsertAgentUsageSnapshot(for: session)
         unhideWorkspace(key: session.workspaceSidebarGroupKey)
         return session
     }
@@ -835,6 +911,7 @@ extension AppState {
         agentCurrentPlan = nil
         agentCurrentGoal = nil
         AgentSessionStore.save(session)
+        upsertAgentUsageSnapshot(for: session)
         unhideWorkspace(key: session.workspaceSidebarGroupKey)
         return session
     }
@@ -934,6 +1011,7 @@ extension AppState {
         }
         let removedIDs = Set(toRemove.map(\.id))
         agentSessions.removeAll { removedIDs.contains($0.id) }
+        agentUsageSnapshots.removeAll { removedIDs.contains($0.id) }
         // Tear down any runtimes left for the pruned sessions, lest
         // they keep republishing change events into AppState and
         // hold onto in-flight tasks for sessions that no longer exist.
@@ -1019,6 +1097,7 @@ extension AppState {
 
         AgentSessionStore.delete(id: id)
         agentSessions.removeAll { $0.id == id }
+        removeAgentUsageSnapshot(id: id)
         agentRuntimes.removeValue(forKey: id)
         if activeAgentSessionID == id {
             activeAgentSessionID = nil
@@ -1113,6 +1192,7 @@ extension AppState {
         )
         agentSessions.insert(session, at: 0)
         AgentSessionStore.save(session)
+        upsertAgentUsageSnapshot(for: session)
         let runtime = AgentRuntime(session: session)
         agentRuntimes[session.id] = runtime
         // Routine session stays a background runtime — no activeRuntime
@@ -1161,6 +1241,7 @@ extension AppState {
         guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
         agentSessions[index].pinnedAt = agentSessions[index].pinnedAt == nil ? Date() : nil
         _ = AgentSessionStore.save(agentSessions[index])
+        upsertAgentUsageSnapshot(for: agentSessions[index])
     }
 
     /// Toggle archive state. Archived sessions disappear from the main
@@ -1179,6 +1260,7 @@ extension AppState {
         // vanishes from the visible list, which is exactly what every
         // other chat app (Cursor, Slack, Linear) does.
         _ = AgentSessionStore.save(agentSessions[index])
+        upsertAgentUsageSnapshot(for: agentSessions[index])
     }
 
     /// Rename a session to a user-provided title. Sets `titleIsUserSet`
@@ -1198,6 +1280,7 @@ extension AppState {
             runtime.session.titleIsUserSet = true
         }
         _ = AgentSessionStore.save(agentSessions[index])
+        upsertAgentUsageSnapshot(for: agentSessions[index])
     }
 
     /// Manually request an LLM title summary for a session. Bypasses
@@ -1245,6 +1328,7 @@ extension AppState {
         runtime.persist()
         agentSessions[index] = runtime.session
         agentSessions.sort { $0.updatedAt > $1.updatedAt }
+        upsertAgentUsageSnapshot(for: runtime.session)
 
         // After every persist, give the LLM summarizer a chance to
         // upgrade the auto-derived first-message-prefix title to a

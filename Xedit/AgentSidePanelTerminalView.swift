@@ -136,7 +136,7 @@ private struct AgentSidePanelTerminalContentView: View {
             Button {
                 controller.playShortcut(shortcut)
             } label: {
-                Label("回放", systemImage: "play.fill")
+                Label(L10n.AgentTerminal.shortcutReplay, systemImage: "play.fill")
             }
             .disabled(
                 controller.isRecording ||
@@ -148,13 +148,13 @@ private struct AgentSidePanelTerminalContentView: View {
             Button {
                 editShortcut(shortcut)
             } label: {
-                Label("编辑", systemImage: "square.and.pencil")
+                Label(L10n.AgentTerminal.shortcutEdit, systemImage: "square.and.pencil")
             }
 
             Button {
                 renameDraft = TerminalShortcutRenameDraft(shortcut: shortcut)
             } label: {
-                Label("改名…", systemImage: "pencil")
+                Label(L10n.AgentTerminal.shortcutRename, systemImage: "pencil")
             }
 
             Divider()
@@ -162,7 +162,7 @@ private struct AgentSidePanelTerminalContentView: View {
             Button(role: .destructive) {
                 controller.deleteShortcut(id: shortcut.id)
             } label: {
-                Label("删除", systemImage: "trash")
+                Label(L10n.AgentTerminal.shortcutDelete, systemImage: "trash")
             }
         } label: {
             TerminalShortcutChip(
@@ -423,7 +423,7 @@ private struct AgentSidePanelTerminalContentView: View {
             lines.append(L10n.AgentTerminal.shortcutProtected)
         }
         if shortcut.hasPendingProtectedInput {
-            lines.append("还有 \(shortcut.pendingProtectedInputCount) 个密码占位待填写")
+            lines.append(L10n.AgentTerminal.shortcutPendingProtected("\(shortcut.pendingProtectedInputCount)"))
         }
         return lines.joined(separator: " · ")
     }
@@ -584,15 +584,15 @@ private struct TerminalShortcutRenameSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("改名终端捷径")
+            Text(L10n.AgentTerminal.shortcutRenameTitle)
                 .font(.headline)
-            TextField("捷径名称", text: $title)
+            TextField(L10n.AgentTerminal.shortcutNamePlaceholder, text: $title)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 280)
             HStack {
                 Spacer()
-                Button("取消", action: onCancel)
-                Button("保存") {
+                Button(L10n.AgentTerminal.shortcutRenameCancel, action: onCancel)
+                Button(L10n.AgentTerminal.shortcutRenameSave) {
                     onSave(title)
                 }
                 .keyboardShortcut(.defaultAction)

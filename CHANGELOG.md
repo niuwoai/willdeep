@@ -1,5 +1,57 @@
 # Changelog
 
+## 1.129.0-rc19 - 2026-07-03
+
+### Added
+- **Goal 卡片吸附到 composer 上方并可编辑** —— Goal 模式已有目标时，composer 上方显示紧凑目标卡片，展示目标摘要、运行耗时和清单进度；点击卡片或铅笔按钮可直接打开 Goal 编辑器。
+
+### Fixed
+- **修改 Goal 后后续执行立即按新目标走** —— 用户在 Agent 正在响应时保存新 Goal，会自动排入一条 follow-up，让当前 turn 结束后的下一轮带着新 Goal 继续；同时用运行期修订时间戳避免旧回复里的 `goal-check` 误勾新清单。
+
+### Changed
+- 版本号从 **1.129.0-rc18** 提升为 **1.129.0-rc19**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.129.0-rc18 - 2026-07-03
+
+### Fixed
+- **终端录制密码询问回到聊天区** —— `terminal_create_shortcut` 创建带 `protected_placeholder` 的录制后，不再自动把用户带到右侧 Terminal 侧栏填写密码；聊天区工具卡直接显示本地 SecureField 密码询问卡，保存后写入本机终端加密 vault，并折叠为“用户输了密码”。右侧 Terminal 侧栏不再显示密码输入卡，避免同一件事在两个地方问。
+
+### Changed
+- 版本号从 **1.129.0-rc17** 提升为 **1.129.0-rc18**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc17 - 2026-07-03
+
+### Fixed
+- **Agent 侧栏切换不再卸载 Terminal** —— 右侧侧栏第一次打开 Terminal 后会记住并常驻终端面板；切换到 Diff / Files / Widget / 媒体任务等其它侧栏时，Terminal 只隐藏并关闭命中测试，不再触发 SwiftUI 分支销毁，已有 PTY 进程、滚屏和输入状态继续保留。
+
+### Changed
+- 版本号从 **1.129.0-rc16** 提升为 **1.129.0-rc17**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc16 - 2026-07-03
+
+### Fixed
+- **终端录制密码输入统一放到右侧 Terminal 侧栏** —— `terminal_create_shortcut` 成功后仍自动打开终端侧栏；聊天区工具卡不再显示 SecureField 密码输入，只保留“打开终端侧栏”的本地提示，真实密码统一在侧栏顶部卡片填写并写入本机终端加密 vault，避免用户误以为需要把密码发进聊天。
+
+### Changed
+- 版本号从 **1.129.0-rc15** 提升为 **1.129.0-rc16**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc15 - 2026-07-03
+
+### Fixed
+- **Agent 统计面板恢复历史模型用量数据** —— 会话启动轻量索引仍不常驻完整 `messages`，但新增统计专用 usage snapshot，从持久化 session JSON 解码角色、时间、token、模型、图片数量和工具参数长度等轻量字段；概览、热力图、模型用量和时间范围过滤改读该快照，避免“会话数还在但消息、令牌、活跃天数全归零”。
+
+### Changed
+- 版本号从 **1.129.0-rc14** 提升为 **1.129.0-rc15**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc14 - 2026-07-03
+
+### Fixed
+- **终端录制带密码占位时不再“灰着不能播还不知道去哪填”** —— `terminal_create_shortcut` 创建录制后会自动打开右侧 Terminal 侧栏；带 `protected_placeholder` 的录制会在终端上方显示本地 SecureField 密码卡片，保存后写入本机终端加密 vault，回放按钮随即恢复可用。聊天区工具卡只提示打开终端侧栏，不再提供密码输入框；该侧栏卡片不会卸载当前 SwiftTerm/PTY 终端，填写密码时已有终端进程、滚屏和输入状态继续保留。
+- **终端录制 JSON 可见事件改成人可读文本** —— 可见输入保存为 `text` 字段，不再在编辑器里展示 `115, 115, 104...` 数字串；`text` 支持 `\n`、`\t`、`\r`、`\e`、`\b`、`\xHH` 等转义，旧 `bytes` 数组格式仍可读取。
+
+### Changed
+- 版本号从 **1.129.0-rc13** 提升为 **1.129.0-rc14**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
 ## 1.129.0-rc13 - 2026-07-03
 
 ### Changed

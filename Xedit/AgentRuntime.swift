@@ -82,6 +82,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var activeExperts: Set<AgentExpert> = []
     @Published var currentPlan: AgentPlan?
     @Published var currentGoal: AgentGoal?
+    /// Runtime-only guard for mid-turn manual goal edits. If the user edits
+    /// the goal while an old request is already in flight, that older reply's
+    /// trailing `goal-check` block must not be applied to the new checklist.
+    @Published var currentGoalEditedAt: Date?
     @Published var learningEvents: [AgentLearningEvent] = []
     @Published var latestTurnRecall: AgentTurnRecallSnapshot?
     /// Last image candidate selected from a widget in this runtime. This is

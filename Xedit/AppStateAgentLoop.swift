@@ -965,6 +965,10 @@ extension AppState {
                             runtime.toolCalls[index].approvalSource = patchAutoApplySource
                         }
                     }
+                    if call.toolName == "terminal_create_shortcut",
+                       !terminalShortcutResultRequiresChatPasswordCard(result) {
+                        agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .terminal)
+                    }
                     let effectiveApprovalSource = runtime.toolCalls.first(where: { $0.id == recordID })?.approvalSource
                         ?? autoApproval
                         ?? patchAutoApplySource
@@ -1734,6 +1738,21 @@ extension AppState {
         runtime.errorDetails = nil
         persistAgentSession(runtime: runtime)
         return message
+    }
+
+    private func terminalShortcutResultRequiresChatPasswordCard(_ result: AgentToolResult) -> Bool {
+        guard let data = result.payload.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return false
+        }
+        if object["has_pending_protected_input"] as? Bool == true {
+            return true
+        }
+        if let pendingCount = object["pending_protected_input_count"] as? Int,
+           pendingCount > 0 {
+            return true
+        }
+        return false
     }
 
 }

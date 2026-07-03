@@ -70,16 +70,66 @@ struct WillDeepTests {
         appState.agentInteractionMode = .goal
         appState.setAgentGoal(statement: "Ship the thing", items: ["Build", "Verify"])
         #expect(appState.shouldShowGoalRunningStatusBar == false)
+        #expect(appState.shouldShowComposerGoalCard == true)
 
         appState.isAgentResponding = true
         #expect(appState.shouldShowGoalRunningStatusBar == true)
+        #expect(appState.shouldShowComposerGoalCard == true)
 
         appState.agentInteractionMode = .normal
         #expect(appState.shouldShowGoalRunningStatusBar == false)
+        #expect(appState.shouldShowComposerGoalCard == false)
 
         appState.agentInteractionMode = .goal
         appState.setAgentGoal(statement: "", items: [])
         #expect(appState.shouldShowGoalRunningStatusBar == false)
+        #expect(appState.shouldShowComposerGoalCard == false)
+    }
+
+    @MainActor
+    @Test("editing goal while agent is responding queues updated goal follow-up")
+    func testEditingGoalWhileRespondingQueuesGoalUpdate() {
+        let appState = AppState()
+        appState.startNewAgentSession()
+        appState.agentInteractionMode = .goal
+        appState.setAgentGoal(statement: "Old target", items: ["First"])
+
+        appState.isAgentResponding = true
+        appState.setAgentGoal(statement: "New target", items: ["First", "Second"])
+
+        #expect(appState.agentCurrentGoal?.statement == "New target")
+        #expect(appState.agentQueuedMessages.count == 1)
+        #expect(appState.agentQueuedMessages.first?.text.contains("Updated goal:") == true)
+        #expect(appState.agentQueuedMessages.first?.text.contains("New target") == true)
+        #expect(appState.agentQueuedMessages.first?.text.contains("Second") == true)
+    }
+
+    @MainActor
+    @Test("old goal-check is ignored after a mid-turn goal edit")
+    func testOldGoalCheckIgnoredAfterGoalEdit() {
+        let appState = AppState()
+        appState.startNewAgentSession()
+        appState.agentInteractionMode = .goal
+        appState.setAgentGoal(statement: "Old target", items: ["Old first"])
+        appState.agentMessages.append(
+            AgentMessage(
+                role: .assistant,
+                content: """
+                Goal self-check: complete.
+
+                ```goal-check
+                1: done
+                ```
+                """
+            )
+        )
+
+        appState.isAgentResponding = true
+        appState.setAgentGoal(statement: "New target", items: ["New first"])
+        appState.captureAgentGoalEvaluationFromLatestMessage()
+
+        #expect(appState.agentCurrentGoal?.statement == "New target")
+        #expect(appState.agentCurrentGoal?.checklist.first?.done == false)
     }
 
     @MainActor
@@ -345,6 +395,9 @@ struct WillDeepTests {
         TerminalShortcutStore.save([shortcut])
         let json = try String(contentsOf: TerminalShortcutStore.fileURL, encoding: .utf8)
         #expect(json.contains("\n"))
+        #expect(json.contains(#""text""#))
+        #expect(!json.contains(#""bytes""#))
+        #expect(json.contains(#"pwd\\n"#))
         #expect(TerminalShortcutStore.lineNumber(for: shortcut.id, in: json) != nil)
 
         let editedJSON = json.replacingOccurrences(of: "\"Before\"", with: "\"Edited\"")
@@ -353,6 +406,54 @@ struct WillDeepTests {
         let loaded = try #require(TerminalShortcutStore.loadEditableShortcuts().first)
         #expect(loaded.title == "Edited")
         #expect(TerminalShortcutStore.isStoreFile(TerminalShortcutStore.fileURL))
+    }
+
+    @Test("terminal shortcut editable JSON text decodes escapes and legacy bytes")
+    func testTerminalShortcutEditableTextDecodesEscapesAndLegacyBytes() throws {
+        let shortcutsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("terminal-shortcut-text-codec-\(UUID().uuidString)", isDirectory: true)
+        TerminalShortcutStore._setTestDirectoryOverride(shortcutsDirectory)
+        defer {
+            TerminalShortcutStore._setTestDirectoryOverride(nil)
+            try? FileManager.default.removeItem(at: shortcutsDirectory)
+        }
+
+        let shortcutID = UUID()
+        let textEventID = UUID()
+        let legacyEventID = UUID()
+        let json = """
+        [
+          {
+            "id": "\(shortcutID.uuidString)",
+            "title": "Escaped",
+            "createdAt": "1970-01-01T00:00:00Z",
+            "updatedAt": "1970-01-01T00:00:01Z",
+            "durationMilliseconds": 1000,
+            "hasProtectedInput": false,
+            "events": [
+              {
+                "id": "\(textEventID.uuidString)",
+                "delayMilliseconds": 0,
+                "requiresEchoOff": false,
+                "text": "ssh 用户@example.com\\\\n\\\\b\\\\e\\\\x03"
+              },
+              {
+                "id": "\(legacyEventID.uuidString)",
+                "delayMilliseconds": 0,
+                "requiresEchoOff": false,
+                "bytes": [112, 119, 100, 10]
+              }
+            ]
+          }
+        ]
+        """
+        try FileManager.default.createDirectory(at: shortcutsDirectory, withIntermediateDirectories: true)
+        try json.write(to: TerminalShortcutStore.fileURL, atomically: true, encoding: .utf8)
+
+        let loaded = try #require(TerminalShortcutStore.loadEditableShortcuts().first)
+        #expect(loaded.events.count == 2)
+        #expect(loaded.events[0].bytes == Array("ssh 用户@example.com\n".utf8) + [127, 27, 3])
+        #expect(loaded.events[1].bytes == Array("pwd\n".utf8))
     }
 
     @Test("terminal shortcut rename does not touch persisted protected Keychain rows")

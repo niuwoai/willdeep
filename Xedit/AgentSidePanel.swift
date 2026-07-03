@@ -104,6 +104,7 @@ struct AgentSidePanelHost: View {
     @EnvironmentObject var appState: AppState
     @Binding var kind: AgentSidePanelKind?
     @Binding var selectedFile: URL?
+    @State private var hasMountedTerminalPanel = false
     /// Width is driven by the draggable divider in AgentModeView.
     var width: CGFloat = 320
 
@@ -116,6 +117,12 @@ struct AgentSidePanelHost: View {
         }
         .frame(width: width)
         .background(palette.panelFill)
+        .onAppear {
+            rememberTerminalMountIfNeeded(kind)
+        }
+        .onCompatibleChange(of: kind) { _, newKind in
+            rememberTerminalMountIfNeeded(newKind)
+        }
     }
 
     private var header: some View {
@@ -156,6 +163,34 @@ struct AgentSidePanelHost: View {
 
     @ViewBuilder
     private var content: some View {
+        ZStack {
+            nonTerminalContent
+                .opacity(kind == .terminal ? 0 : 1)
+                .allowsHitTesting(kind != .terminal)
+                .accessibilityHidden(kind == .terminal)
+                .zIndex(kind == .terminal ? 0 : 1)
+
+            if shouldKeepTerminalMounted {
+                AgentSidePanelTerminalView()
+                    .opacity(kind == .terminal ? 1 : 0)
+                    .allowsHitTesting(kind == .terminal)
+                    .accessibilityHidden(kind != .terminal)
+                    .zIndex(kind == .terminal ? 2 : 0)
+            }
+        }
+    }
+
+    private var shouldKeepTerminalMounted: Bool {
+        hasMountedTerminalPanel || kind == .terminal
+    }
+
+    private func rememberTerminalMountIfNeeded(_ panelKind: AgentSidePanelKind?) {
+        guard panelKind == .terminal, !hasMountedTerminalPanel else { return }
+        hasMountedTerminalPanel = true
+    }
+
+    @ViewBuilder
+    private var nonTerminalContent: some View {
         switch kind {
         case .backgroundTasks:
             // 必须把面板宽度传进去 —— Rail 默认把自己 `.frame(width: 320)`
@@ -177,7 +212,7 @@ struct AgentSidePanelHost: View {
         case .files:
             AgentSidePanelFilesView(selectedFile: $selectedFile, kind: $kind)
         case .terminal:
-            AgentSidePanelTerminalView()
+            Color.clear
         case .plan:
             AgentSidePanelPlanView()
         case .preview:

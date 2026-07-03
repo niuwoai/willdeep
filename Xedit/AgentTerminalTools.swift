@@ -159,7 +159,7 @@ enum AgentTerminalTools {
                 object["secret"] != nil ||
                 object["requires_echo_off"]?.boolValue() == true ||
                 object["requiresEchoOff"]?.boolValue() == true {
-                throw AgentToolError.invalidArgument("terminal_create_shortcut cannot accept plaintext protected/password events. Use protected_placeholder for labels such as \"密码 1\"; WillDeep will ask the user for the real value locally.")
+                throw AgentToolError.invalidArgument("terminal_create_shortcut cannot accept plaintext protected/password events. Use protected_placeholder for labels such as \"密码 1\"; WillDeep will ask the user for the real value in the chat card.")
             }
 
             let delay = object["delay_ms"]?.intValue()
@@ -174,7 +174,7 @@ enum AgentTerminalTools {
                 totalBytes += command.utf8.count + 1
             } else if let text = object["text"]?.stringValue() {
                 event = TerminalShortcutCreateEvent(kind: .text, delayMilliseconds: delay, value: text)
-                totalBytes += text.utf8.count
+                totalBytes += TerminalShortcutTextCodec.bytes(fromEscapedText: text).count
             } else if let control = object["control"]?.stringValue() {
                 event = TerminalShortcutCreateEvent(kind: .control, delayMilliseconds: delay, value: control)
                 totalBytes += 1

@@ -320,8 +320,7 @@ struct AgentToolCallCard: View {
     @State private var isExpanded = false
     @State private var answerInput = ""
     @State private var selectedOptions: Set<String> = []
-    @State private var protectedInputValues: [Int: String] = [:]
-    @State private var protectedInputsSaved = false
+    @State private var protectedInputValues: [String: String] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: isInteractive ? 6 : 3) {
@@ -580,51 +579,55 @@ struct AgentToolCallCard: View {
 
     @ViewBuilder
     private var terminalShortcutProtectedInputsBody: some View {
-        if let promptSet = terminalShortcutProtectedPromptSet {
+        switch terminalShortcutProtectedInputState {
+        case .some(.pending(let promptSet)):
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
                     Image(systemName: "lock.shield")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(askUserSecondaryAccentColor)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("填写终端录制密码占位")
+                        Text(L10n.AgentTerminal.shortcutPasswordCardTitle(promptSet.title))
                             .font(.system(size: 12, weight: .semibold))
-                        Text("这些值只会写入本机加密 vault，不会发送给 AI。")
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Text(L10n.AgentTerminal.shortcutPasswordCardDescription)
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 0)
                 }
 
                 ForEach(promptSet.prompts) { prompt in
                     SecureField(prompt.label, text: Binding(
-                        get: { protectedInputValues[prompt.eventIndex] ?? "" },
-                        set: { protectedInputValues[prompt.eventIndex] = $0 }
+                        get: { protectedInputValues[protectedInputKey(shortcutID: promptSet.shortcutID, eventIndex: prompt.eventIndex)] ?? "" },
+                        set: { protectedInputValues[protectedInputKey(shortcutID: promptSet.shortcutID, eventIndex: prompt.eventIndex)] = $0 }
                     ))
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 12))
                 }
 
                 HStack(spacing: 6) {
-                    Button("稍后填写") {
-                        protectedInputsSaved = true
-                        protectedInputValues.removeAll()
-                    }
                     Spacer(minLength: 0)
-                    Button("保存到录制") {
+                    Button(L10n.AgentTerminal.shortcutPasswordSave) {
                         let values = promptSet.prompts.reduce(into: [Int: String]()) { result, prompt in
-                            result[prompt.eventIndex] = protectedInputValues[prompt.eventIndex] ?? ""
+                            let key = protectedInputKey(shortcutID: promptSet.shortcutID, eventIndex: prompt.eventIndex)
+                            result[prompt.eventIndex] = protectedInputValues[key] ?? ""
                         }
-                        if appState.fillTerminalShortcutProtectedInputs(
+                        guard appState.fillTerminalShortcutProtectedInputs(
                             shortcutID: promptSet.shortcutID,
                             valuesByEventIndex: values
-                        ) {
-                            protectedInputsSaved = true
-                            protectedInputValues.removeAll()
+                        ) else { return }
+                        isExpanded = false
+                        for prompt in promptSet.prompts {
+                            protectedInputValues.removeValue(
+                                forKey: protectedInputKey(shortcutID: promptSet.shortcutID, eventIndex: prompt.eventIndex)
+                            )
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(!canSaveTerminalShortcutProtectedInputs(promptSet))
+                    .disabled(!canSaveProtectedInputs(promptSet))
                 }
                 .font(.caption)
             }
@@ -637,18 +640,20 @@ struct AgentToolCallCard: View {
                     .stroke(askUserAccentColor.opacity(0.28), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        } else if protectedInputsSaved {
+        case .some(.filled(_)):
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Image(systemName: "checkmark.circle.fill")
+                Image(systemName: "lock.fill")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.green)
-                Text("密码占位已保存到本机加密 vault。")
-                    .font(.system(size: 11))
+                    .foregroundStyle(askUserSecondaryAccentColor.opacity(0.72))
+                Text(L10n.ToolCard.terminalPasswordEntered)
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
+        case .none:
+            EmptyView()
         }
     }
 
@@ -722,12 +727,6 @@ struct AgentToolCallCard: View {
         return false
     }
 
-    private func canSaveTerminalShortcutProtectedInputs(_ promptSet: TerminalShortcutProtectedPromptSet) -> Bool {
-        promptSet.prompts.allSatisfy { prompt in
-            protectedInputValues[prompt.eventIndex]?.isEmpty == false
-        }
-    }
-
     private func submitAnswer(options: [String], isMultiSelect: Bool) {
         // Free-form text wins if the user typed anything — gives them an
         // escape hatch from the preset options.
@@ -749,6 +748,16 @@ struct AgentToolCallCard: View {
     private func resetAskUserInputs() {
         answerInput = ""
         selectedOptions = []
+    }
+
+    private func protectedInputKey(shortcutID: UUID, eventIndex: Int) -> String {
+        "\(call.id.uuidString):\(shortcutID.uuidString):\(eventIndex)"
+    }
+
+    private func canSaveProtectedInputs(_ promptSet: TerminalShortcutProtectedPromptSet) -> Bool {
+        promptSet.prompts.allSatisfy { prompt in
+            protectedInputValues[protectedInputKey(shortcutID: promptSet.shortcutID, eventIndex: prompt.eventIndex)]?.isEmpty == false
+        }
     }
 
     private func expandableBlock(title: String, text: String) -> some View {
@@ -818,7 +827,7 @@ struct AgentToolCallCard: View {
     }
 
     private var iconName: String {
-        if terminalShortcutProtectedPromptSet != nil {
+        if terminalShortcutProtectedInputState != nil {
             return "lock.shield"
         }
         switch call.status {
@@ -832,7 +841,7 @@ struct AgentToolCallCard: View {
     }
 
     private var iconColor: Color {
-        if terminalShortcutProtectedPromptSet != nil {
+        if terminalShortcutProtectedInputState != nil {
             return askUserAccentColor
         }
         switch call.status {
@@ -847,7 +856,7 @@ struct AgentToolCallCard: View {
     }
 
     private var statusColor: Color {
-        if terminalShortcutProtectedPromptSet != nil {
+        if terminalShortcutProtectedInputState != nil {
             return askUserAccentColor
         }
         switch call.status {
@@ -860,7 +869,7 @@ struct AgentToolCallCard: View {
     }
 
     private var isInteractive: Bool {
-        if terminalShortcutProtectedPromptSet != nil {
+        if case .some(.pending(_)) = terminalShortcutProtectedInputState {
             return true
         }
         switch call.status {
@@ -872,7 +881,10 @@ struct AgentToolCallCard: View {
     }
 
     private var hasExpandableContent: Bool {
-        terminalShortcutProtectedPromptSet != nil
+        if terminalShortcutProtectedInputFilled {
+            return false
+        }
+        return terminalShortcutProtectedInputState != nil
         || !argumentsLines.isEmpty
         || !(call.result?.payload.isEmpty ?? true)
         || !(call.errorMessage?.isEmpty ?? true)
@@ -925,8 +937,13 @@ struct AgentToolCallCard: View {
         case .awaitingUserAnswer: return L10n.ToolCard.statusAskingYou
         case .running: return L10n.ToolCard.statusRunning
         case .succeeded:
-            if terminalShortcutProtectedPromptSet != nil {
-                return "等待填写密码占位"
+            switch terminalShortcutProtectedInputState {
+            case .some(.pending):
+                return L10n.ToolCard.terminalPasswordWaiting
+            case .some(.filled(_)):
+                return L10n.ToolCard.terminalPasswordEntered
+            case .none:
+                break
             }
             if let summary = call.result?.summary, !summary.isEmpty {
                 return summary
@@ -969,17 +986,23 @@ struct AgentToolCallCard: View {
         appState.editorSettings.interfaceSkin.palette.secondaryAccent
     }
 
-    private var terminalShortcutProtectedPromptSet: TerminalShortcutProtectedPromptSet? {
+    private var terminalShortcutProtectedInputFilled: Bool {
+        if case .some(.filled(_)) = terminalShortcutProtectedInputState {
+            return true
+        }
+        return false
+    }
+
+    private var terminalShortcutProtectedInputState: TerminalShortcutProtectedInputState? {
         guard call.toolName == "terminal_create_shortcut",
               call.status == .succeeded,
-              !protectedInputsSaved,
               let payload = call.result?.payload,
               let parsed = TerminalShortcutProtectedPromptSet.parse(payload: payload),
               !parsed.prompts.isEmpty else {
             return nil
         }
         guard let current = appState.agentTerminalController.shortcuts.first(where: { $0.id == parsed.shortcutID }) else {
-            return parsed
+            return .pending(parsed)
         }
         let pendingIndexes = Set(
             current.events.enumerated()
@@ -987,9 +1010,14 @@ struct AgentToolCallCard: View {
                 .map(\.offset)
         )
         let pendingPrompts = parsed.prompts.filter { pendingIndexes.contains($0.eventIndex) }
-        guard !pendingPrompts.isEmpty else { return nil }
-        return TerminalShortcutProtectedPromptSet(shortcutID: parsed.shortcutID, title: parsed.title, prompts: pendingPrompts)
+        guard !pendingPrompts.isEmpty else { return .filled(parsed) }
+        return .pending(TerminalShortcutProtectedPromptSet(shortcutID: parsed.shortcutID, title: parsed.title, prompts: pendingPrompts))
     }
+}
+
+private enum TerminalShortcutProtectedInputState: Equatable {
+    case pending(TerminalShortcutProtectedPromptSet)
+    case filled(TerminalShortcutProtectedPromptSet)
 }
 
 private struct TerminalShortcutProtectedPromptSet: Equatable {
@@ -1004,7 +1032,7 @@ private struct TerminalShortcutProtectedPromptSet: Equatable {
               let shortcutID = UUID(uuidString: rawID) else {
             return nil
         }
-        let title = (object["title"] as? String) ?? "Terminal Shortcut"
+        let title = (object["title"] as? String) ?? L10n.AgentTerminal.shortcutDefaultTitle
         guard let events = object["events"] as? [[String: Any]] else {
             return nil
         }
@@ -1016,7 +1044,9 @@ private struct TerminalShortcutProtectedPromptSet: Equatable {
             }
             let rawLabel = (event["placeholder"] as? String)?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            let label = rawLabel?.isEmpty == false ? rawLabel! : "密码 \(eventIndex + 1)"
+            let label = rawLabel?.isEmpty == false
+                ? rawLabel!
+                : L10n.AgentTerminal.shortcutPasswordDefaultLabel("\(eventIndex + 1)")
             return TerminalShortcutProtectedPrompt(eventIndex: eventIndex, label: label)
         }
         guard !prompts.isEmpty else { return nil }

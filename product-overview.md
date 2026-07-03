@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-03 | Current version: v1.129.0-rc13
+> Last updated: 2026-07-03 | Current version: v1.129.0-rc19
 
 ## Positioning
 
@@ -14,6 +14,12 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Goal 修改吸附卡（1.129.0-rc19）** —— Goal 模式已有目标时，composer 上方显示紧凑可编辑目标卡片，展示目标摘要、运行耗时和清单进度。用户在 Agent 正在响应时修改 Goal，会自动把“目标已更新”的 follow-up 排到后续回合，并用修订时间戳阻止旧回复里的 `goal-check` 误勾新清单。
+- **终端录制密码询问回聊天区（1.129.0-rc18）** —— `terminal_create_shortcut` 创建带 `protected_placeholder` 的录制后，聊天工具卡直接显示本地 SecureField 密码询问卡，真实值只写入本机终端加密 vault，不进入聊天文本、模型上下文或录制 JSON。用户保存后卡片收起，只保留“用户输了密码”的状态提示；右侧 Terminal 侧栏不再承载密码输入卡，带密码占位的录制也不再因为创建成功而自动打开侧栏。
+- **终端侧栏切换保活（1.129.0-rc17）** —— Agent 右侧侧栏第一次打开 Terminal 后会把终端面板常驻在侧栏宿主里；切换到 Diff / Files / Widget / 媒体任务等其它侧栏时，Terminal 只隐藏并禁用命中测试，不再从 SwiftUI 树移除，已有 PTY 进程、滚屏和输入状态继续保留。
+- **终端录制密码侧栏化（1.129.0-rc16）** —— `terminal_create_shortcut` 创建带密码占位的录制后，聊天区工具卡只提示打开右侧 Terminal 侧栏，不再显示密码输入框；真实密码统一在侧栏顶部的本地 SecureField 卡片填写，写入本机终端加密 vault 后回放按钮恢复可用，当前 SwiftTerm/PTY 终端不会被卸载。
+- **Agent 统计快照恢复（1.129.0-rc15）** —— Agent 会话列表继续使用轻量索引以避免启动时常驻完整聊天记录；统计面板改为读取 `AgentUsageSessionSnapshot`，从持久化 session JSON 提取消息时间、模型/provider、token 用量、图片数量和工具参数长度等统计字段。这样概览、热力图、模型用量和时间范围过滤能恢复历史调用量，同时不把大图 base64 或完整 transcript 留在内存里。
+- **终端录制密码填写与可读事件编辑（1.129.0-rc14）** —— `terminal_create_shortcut` 创建带 `protected_placeholder` 的录制后会自动打开右侧 Terminal 侧栏，并在终端上方显示本地 SecureField 密码卡片；真实密码只写入本机终端加密 vault，不进入聊天文本、模型上下文或录制 JSON。聊天区工具卡只提示打开终端侧栏，不再收集密码。侧栏卡片不会卸载当前 SwiftTerm/PTY 终端，填写密码时已有终端进程、滚屏和输入状态继续保留。终端录制 JSON 的可见输入从数字 `bytes` 数组改为 `text` 字段，支持 `\n`、`\t`、`\r`、`\e`、`\b`、`\xHH` 等转义；旧 `bytes` 格式仍可读取。
 - **本地模型辅助加速（1.129.0-rc13）** —— Agent provider 清单新增 `Ollama / Local OpenAI`，本机 OpenAI-compatible endpoint 可空 API Key；Settings → AI Providers 新增「本地模型加速」，配置本地 endpoint、图片理解模型和 summary 模型。图片理解模型默认并迁移为 `qwen3.5-4b-vl-q4_k_m`，Summary 模型继续默认 `qwen3.5-4b-q4_k_m`；图片识别、会话标题和上下文压缩会先尝试本地模型，失败或空结果自动回退远端 Image Understanding / 主 provider。设置页也提供推荐 VL 模型包后台下载入口，仅下载 `Qwen3.5-4B.Q4_K_M.gguf` 与 `mmproj-BF16.gguf` 两个必要文件，并显示当前文件、总体进度、速度、保存目录、取消按钮和“查找本地文件”；查找会用 `/usr/bin/find` 按文件名搜索常见目录，并根据文件大小给出候选判断。走内置 Ollama 或 localhost / 127.0.0.1 / ::1 自定义 endpoint 时，system prompt 会追加当前系统首选语言偏好。普通生产 Agent 对话仍建议 OpenAI / Claude / some.im 等远端 provider，本地小模型主要承担低风险辅助任务。
 - **Agent 会话轻量索引显示修复（1.129.0-rc10）** —— 会话启动加载仍只读取轻量索引，不把完整 `messages` / `contextSummary` 常驻内存；索引现在额外记录是否存在用户消息，侧边栏和空会话清理据此区分“真实历史会话”和空 New Chat，避免历史会话被误藏。
 - **模型级图片支持判断（1.129.0-rc9）** —— `AgentConfiguration.supportsImageInput` 不再只看 provider preset：中转型 provider（some.im）可同时挂视觉和纯文本模型，现在叠加 `modelAcceptsImageInput` 模型级判断（DeepSeek 非 `-vl` 系、`someim-auto*` 判为纯文本），避免长会话历史里的图片被编码成 `image_url` 后让纯文本模型 400 掉整个请求；错误详情卡片的复制按钮同版扩大命中区并加「已复制 ✓」反馈。

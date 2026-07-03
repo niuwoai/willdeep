@@ -4,8 +4,9 @@
 //
 //  Pure analytics over the persisted Agent sessions. Powers the
 //  Claude-Code-style stats dashboard shown in place of the empty-chat
-//  hero. Nothing here touches disk or talks to a provider — feed it
-//  the in-memory `[AgentSession]` and it computes everything else.
+//  hero. Nothing here talks to a provider — feed it either live
+//  `[AgentSession]` values or lightweight persisted usage snapshots and
+//  it computes everything else.
 //
 
 import Foundation
@@ -74,10 +75,129 @@ struct AgentModelUsageRow: Identifiable, Equatable {
     }
 }
 
+struct AgentUsageSessionSnapshot: Identifiable, Equatable {
+    let id: UUID
+    var modelID: String?
+    var providerID: String?
+    var providerDisplayName: String?
+    var createdAt: Date
+    var updatedAt: Date
+    var messages: [AgentUsageMessageSnapshot]
+
+    init(
+        id: UUID,
+        modelID: String?,
+        providerID: String?,
+        providerDisplayName: String?,
+        createdAt: Date,
+        updatedAt: Date,
+        messages: [AgentUsageMessageSnapshot]
+    ) {
+        self.id = id
+        self.modelID = modelID
+        self.providerID = providerID
+        self.providerDisplayName = providerDisplayName
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.messages = messages
+    }
+
+    init(session: AgentSession) {
+        self.init(
+            id: session.id,
+            modelID: session.modelID,
+            providerID: session.providerID,
+            providerDisplayName: session.providerDisplayName,
+            createdAt: session.createdAt,
+            updatedAt: session.updatedAt,
+            messages: session.messages.map { AgentUsageMessageSnapshot(message: $0) }
+        )
+    }
+}
+
+struct AgentUsageMessageSnapshot: Equatable {
+    var role: AgentRole
+    var contentCharacterCount: Int
+    var reasoningCharacterCount: Int
+    var imageCount: Int
+    var toolCallArgumentCharacterCount: Int
+    var usageTokens: Int?
+    var promptTokens: Int?
+    var completionTokens: Int?
+    var cachedPromptTokens: Int?
+    var cacheWritePromptTokens: Int?
+    var reasoningTokens: Int?
+    var origin: AgentMessageOrigin?
+    var originLabel: String?
+    var requestStablePrefixCharacters: Int?
+    var createdAt: Date
+
+    init(
+        role: AgentRole,
+        contentCharacterCount: Int,
+        reasoningCharacterCount: Int = 0,
+        imageCount: Int = 0,
+        toolCallArgumentCharacterCount: Int = 0,
+        usageTokens: Int? = nil,
+        promptTokens: Int? = nil,
+        completionTokens: Int? = nil,
+        cachedPromptTokens: Int? = nil,
+        cacheWritePromptTokens: Int? = nil,
+        reasoningTokens: Int? = nil,
+        origin: AgentMessageOrigin? = nil,
+        originLabel: String? = nil,
+        requestStablePrefixCharacters: Int? = nil,
+        createdAt: Date
+    ) {
+        self.role = role
+        self.contentCharacterCount = contentCharacterCount
+        self.reasoningCharacterCount = reasoningCharacterCount
+        self.imageCount = imageCount
+        self.toolCallArgumentCharacterCount = toolCallArgumentCharacterCount
+        self.usageTokens = usageTokens
+        self.promptTokens = promptTokens
+        self.completionTokens = completionTokens
+        self.cachedPromptTokens = cachedPromptTokens
+        self.cacheWritePromptTokens = cacheWritePromptTokens
+        self.reasoningTokens = reasoningTokens
+        self.origin = origin
+        self.originLabel = originLabel
+        self.requestStablePrefixCharacters = requestStablePrefixCharacters
+        self.createdAt = createdAt
+    }
+
+    init(message: AgentMessage) {
+        self.init(
+            role: message.role,
+            contentCharacterCount: message.modelContent.count,
+            reasoningCharacterCount: message.reasoningContent?.count ?? 0,
+            imageCount: message.images.count,
+            toolCallArgumentCharacterCount: message.toolCalls.reduce(0) { $0 + $1.argumentsJSON.count },
+            usageTokens: message.usageTokens,
+            promptTokens: message.promptTokens,
+            completionTokens: message.completionTokens,
+            cachedPromptTokens: message.cachedPromptTokens,
+            cacheWritePromptTokens: message.cacheWritePromptTokens,
+            reasoningTokens: message.reasoningTokens,
+            origin: message.origin,
+            originLabel: message.originLabel,
+            requestStablePrefixCharacters: message.requestStablePrefixCharacters,
+            createdAt: message.createdAt
+        )
+    }
+}
+
 enum AgentUsageStats {
     /// Build an overview snapshot for the given sessions. Pure function
     /// — same input always produces the same output, no side effects.
     static func overview(for sessions: [AgentSession], now: Date = Date()) -> AgentUsageOverview {
+        overview(for: sessions.map { AgentUsageSessionSnapshot(session: $0) }, now: now)
+    }
+
+    static func overview(
+        for sessions: [AgentUsageSessionSnapshot],
+        now: Date = Date()
+    ) -> AgentUsageOverview {
         let allMessages = sessions.flatMap(\.messages)
         let messageCount = allMessages.count
         let sessionCount = sessions.count
@@ -140,6 +260,14 @@ enum AgentUsageStats {
         weekCount: Int = 12,
         now: Date = Date()
     ) -> [[AgentHeatmapCell]] {
+        heatmap(for: sessions.map { AgentUsageSessionSnapshot(session: $0) }, weekCount: weekCount, now: now)
+    }
+
+    static func heatmap(
+        for sessions: [AgentUsageSessionSnapshot],
+        weekCount: Int = 12,
+        now: Date = Date()
+    ) -> [[AgentHeatmapCell]] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: now)
         guard let earliestStart = calendar.date(byAdding: .day, value: -(weekCount * 7 - 1), to: today) else {
@@ -177,6 +305,10 @@ enum AgentUsageStats {
     }
 
     static func modelUsage(for sessions: [AgentSession]) -> [AgentModelUsageRow] {
+        modelUsage(for: sessions.map { AgentUsageSessionSnapshot(session: $0) })
+    }
+
+    static func modelUsage(for sessions: [AgentUsageSessionSnapshot]) -> [AgentModelUsageRow] {
         var rows: [String: AgentModelUsageRow] = [:]
 
         for session in sessions {
@@ -241,19 +373,15 @@ enum AgentUsageStats {
 
     // MARK: - Internals
 
-    private static func estimateTokens(for message: AgentMessage) -> Int {
-        var total = max(0, message.modelContent.count / 4)
+    private static func estimateTokens(for message: AgentUsageMessageSnapshot) -> Int {
+        var total = max(0, message.contentCharacterCount / 4)
         // Reasoning content costs tokens too even when the provider
         // doesn't split it out.
-        if let reasoning = message.reasoningContent {
-            total += reasoning.count / 4
-        }
+        total += message.reasoningCharacterCount / 4
         // Tool-call argument bodies are part of the wire payload.
-        for call in message.toolCalls {
-            total += call.argumentsJSON.count / 4
-        }
+        total += message.toolCallArgumentCharacterCount / 4
         // Per-image flat budget aligning with AppState.estimatedAgentTokens.
-        total += message.images.count * 600
+        total += message.imageCount * 600
         return total
     }
 
@@ -262,7 +390,10 @@ enum AgentUsageStats {
         return trimmed.isEmpty ? "unknown-model" : trimmed
     }
 
-    private static func providerSnapshot(for session: AgentSession, modelID: String) -> (id: String, name: String) {
+    private static func providerSnapshot(
+        for session: AgentUsageSessionSnapshot,
+        modelID: String
+    ) -> (id: String, name: String) {
         if let providerID = session.providerID?.trimmingCharacters(in: .whitespacesAndNewlines),
            !providerID.isEmpty {
             let display = session.providerDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -279,8 +410,8 @@ enum AgentUsageStats {
     }
 
     private static func usageIdentity(
-        for message: AgentMessage,
-        session: AgentSession
+        for message: AgentUsageMessageSnapshot,
+        session: AgentUsageSessionSnapshot
     ) -> (provider: (id: String, name: String), modelID: String, isDelegatedExternal: Bool) {
         if message.origin == .delegatedExternal {
             let label = message.originLabel?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -305,7 +436,7 @@ enum AgentUsageStats {
         return AgentProviderPreset.customID
     }
 
-    private static func usageBreakdown(for message: AgentMessage) -> (
+    private static func usageBreakdown(for message: AgentUsageMessageSnapshot) -> (
         prompt: Int,
         completion: Int,
         cachedPrompt: Int,
@@ -326,7 +457,10 @@ enum AgentUsageStats {
         }
 
         if let total = message.usageTokens, total > 0 {
-            let completionEstimate = max(1, message.modelContent.count / 4 + (message.reasoningContent?.count ?? 0) / 4)
+            let completionEstimate = max(
+                1,
+                message.contentCharacterCount / 4 + message.reasoningCharacterCount / 4
+            )
             let completion = min(total, completionEstimate)
             return (max(0, total - completion), completion, cached, cacheWrite, reasoning, total, total, true)
         }

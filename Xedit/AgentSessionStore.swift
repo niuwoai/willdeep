@@ -153,6 +153,175 @@ enum AgentSessionStore {
         }
     }
 
+    private struct UsageImageIndex: Decodable {
+        init(from _: Decoder) throws {}
+    }
+
+    private struct UsageTextAttachmentIndex: Decodable {
+        let filename: String?
+        let content: String
+
+        enum CodingKeys: String, CodingKey {
+            case filename, content
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            filename = try c.decodeIfPresent(String.self, forKey: .filename)
+            content = try c.decodeIfPresent(String.self, forKey: .content) ?? ""
+        }
+
+        var modelBlockCharacterCount: Int {
+            let displayName: String
+            if let filename,
+               !filename.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                displayName = filename
+            } else {
+                displayName = AgentTextAttachment.pastedTextFilename
+            }
+            return """
+            ### Attached text: \(displayName)
+
+            ```text
+            \(content)
+            ```
+            """.count
+        }
+    }
+
+    private struct UsageToolCallIndex: Decodable {
+        let argumentsJSON: String
+
+        enum CodingKeys: String, CodingKey {
+            case argumentsJSON
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            argumentsJSON = try c.decodeIfPresent(String.self, forKey: .argumentsJSON) ?? ""
+        }
+    }
+
+    private struct UsageMessageIndex: Decodable {
+        let role: String?
+        let content: String
+        let reasoningContent: String?
+        let images: [UsageImageIndex]
+        let textAttachments: [UsageTextAttachmentIndex]
+        let toolCalls: [UsageToolCallIndex]
+        let usageTokens: Int?
+        let promptTokens: Int?
+        let completionTokens: Int?
+        let cachedPromptTokens: Int?
+        let cacheWritePromptTokens: Int?
+        let reasoningTokens: Int?
+        let origin: AgentMessageOrigin?
+        let originLabel: String?
+        let requestStablePrefixCharacters: Int?
+        let createdAt: Date?
+
+        enum CodingKeys: String, CodingKey {
+            case role, content, reasoningContent, images, textAttachments, toolCalls
+            case usageTokens, promptTokens, completionTokens
+            case cachedPromptTokens, cacheWritePromptTokens, reasoningTokens
+            case origin, originLabel, requestStablePrefixCharacters
+            case createdAt
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            role = try c.decodeIfPresent(String.self, forKey: .role)
+            content = try c.decodeIfPresent(String.self, forKey: .content) ?? ""
+            reasoningContent = try c.decodeIfPresent(String.self, forKey: .reasoningContent)
+            images = try c.decodeIfPresent([UsageImageIndex].self, forKey: .images) ?? []
+            textAttachments = try c.decodeIfPresent([UsageTextAttachmentIndex].self, forKey: .textAttachments) ?? []
+            toolCalls = try c.decodeIfPresent([UsageToolCallIndex].self, forKey: .toolCalls) ?? []
+            usageTokens = try c.decodeIfPresent(Int.self, forKey: .usageTokens)
+            promptTokens = try c.decodeIfPresent(Int.self, forKey: .promptTokens)
+            completionTokens = try c.decodeIfPresent(Int.self, forKey: .completionTokens)
+            cachedPromptTokens = try c.decodeIfPresent(Int.self, forKey: .cachedPromptTokens)
+            cacheWritePromptTokens = try c.decodeIfPresent(Int.self, forKey: .cacheWritePromptTokens)
+            reasoningTokens = try c.decodeIfPresent(Int.self, forKey: .reasoningTokens)
+            origin = try c.decodeIfPresent(AgentMessageOrigin.self, forKey: .origin)
+            originLabel = try c.decodeIfPresent(String.self, forKey: .originLabel)
+            requestStablePrefixCharacters = try c.decodeIfPresent(Int.self, forKey: .requestStablePrefixCharacters)
+            createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
+        }
+
+        var snapshot: AgentUsageMessageSnapshot? {
+            guard let roleValue = role,
+                  let role = AgentRole(rawValue: roleValue),
+                  let createdAt else {
+                return nil
+            }
+
+            var modelContentLength = content.count
+            if !textAttachments.isEmpty {
+                var blockLengths: [Int] = []
+                if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    blockLengths.append(content.count)
+                }
+                blockLengths.append(contentsOf: textAttachments.map(\.modelBlockCharacterCount))
+                modelContentLength = blockLengths.reduce(0, +) + max(0, blockLengths.count - 1) * 2
+            }
+
+            return AgentUsageMessageSnapshot(
+                role: role,
+                contentCharacterCount: modelContentLength,
+                reasoningCharacterCount: reasoningContent?.count ?? 0,
+                imageCount: images.count,
+                toolCallArgumentCharacterCount: toolCalls.reduce(0) { $0 + $1.argumentsJSON.count },
+                usageTokens: usageTokens,
+                promptTokens: promptTokens,
+                completionTokens: completionTokens,
+                cachedPromptTokens: cachedPromptTokens,
+                cacheWritePromptTokens: cacheWritePromptTokens,
+                reasoningTokens: reasoningTokens,
+                origin: origin,
+                originLabel: originLabel,
+                requestStablePrefixCharacters: requestStablePrefixCharacters,
+                createdAt: createdAt
+            )
+        }
+    }
+
+    private struct UsageSessionIndex: Decodable {
+        let id: UUID
+        let modelID: String?
+        let providerID: String?
+        let providerDisplayName: String?
+        let createdAt: Date
+        let updatedAt: Date
+        let messages: [UsageMessageIndex]
+
+        enum CodingKeys: String, CodingKey {
+            case id, modelID, providerID, providerDisplayName, createdAt, updatedAt, messages
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decode(UUID.self, forKey: .id)
+            modelID = try c.decodeIfPresent(String.self, forKey: .modelID)
+            providerID = try c.decodeIfPresent(String.self, forKey: .providerID)
+            providerDisplayName = try c.decodeIfPresent(String.self, forKey: .providerDisplayName)
+            createdAt = try c.decode(Date.self, forKey: .createdAt)
+            updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+            messages = try c.decodeIfPresent([UsageMessageIndex].self, forKey: .messages) ?? []
+        }
+
+        var snapshot: AgentUsageSessionSnapshot {
+            AgentUsageSessionSnapshot(
+                id: id,
+                modelID: modelID,
+                providerID: providerID,
+                providerDisplayName: providerDisplayName,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                messages: messages.compactMap(\.snapshot)
+            )
+        }
+    }
+
     /// Disk location for session JSON files. Created lazily.
     static var directory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -216,6 +385,32 @@ enum AgentSessionStore {
         return sessions.sorted { $0.updatedAt > $1.updatedAt }
     }
 
+    static func loadUsageSnapshots() -> [AgentUsageSessionSnapshot] {
+        let dir = directory
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else {
+            return []
+        }
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        var snapshots: [AgentUsageSessionSnapshot] = []
+        for url in entries where url.pathExtension == "json" {
+            guard let data = try? Data(contentsOf: url) else { continue }
+            do {
+                snapshots.append(try decoder.decode(UsageSessionIndex.self, from: data).snapshot)
+            } catch {
+                print("AgentSessionStore: skipping unreadable usage snapshot at \(url.lastPathComponent): \(error)")
+            }
+        }
+        return snapshots.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
     static func load(id: UUID) -> AgentSession? {
         let url = directory.appendingPathComponent("\(id.uuidString).json")
         guard let data = try? Data(contentsOf: url) else { return nil }
@@ -240,6 +435,10 @@ enum AgentSessionStore {
     static func decodeSessionIndexForTesting(_ data: Data) throws -> (session: AgentSession, hasUserMessage: Bool) {
         let index = try decoder.decode(SessionIndex.self, from: data)
         return (index.session, index.hasUserMessage)
+    }
+
+    static func decodeUsageSnapshotForTesting(_ data: Data) throws -> AgentUsageSessionSnapshot {
+        try decoder.decode(UsageSessionIndex.self, from: data).snapshot
     }
 
     @discardableResult

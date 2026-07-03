@@ -86,7 +86,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "terminal_create_shortcut",
-            description: "Create a saved Agent Terminal recording shortcut from a user-described sequence after approval. Use this when the user dictates terminal steps and asks to turn them into a recording. Pass events_json as an array: {\"command\":\"cd app\"} sends the command plus Enter; {\"text\":\"raw bytes\\n\"} sends exact visible text; {\"control\":\"enter|tab|escape|backspace|ctrl_c\"} sends a control key; {\"protected_placeholder\":\"密码 1\"} creates a local password placeholder that WillDeep will ask the user to fill in the chat UI after the shortcut is created. Add delay_ms to an event to wait before sending it. Never include plaintext passwords/secrets; password, secret, protected_text, and requires_echo_off fields are rejected.",
+            description: "Create a saved Agent Terminal recording shortcut from a user-described sequence after approval. Use this when the user dictates terminal steps and asks to turn them into a recording. Pass events_json as an array: {\"command\":\"cd app\"} sends the command plus Enter; {\"text\":\"raw visible text with escapes like \\\\n, \\\\t, \\\\e, \\\\b, \\\\x7f\"} sends exact visible input; {\"control\":\"enter|tab|escape|backspace|ctrl_c\"} sends a control key; {\"protected_placeholder\":\"密码 1\"} creates a local password placeholder that WillDeep asks the user to fill in the chat card after creation. Add delay_ms to an event to wait before sending it. Never include plaintext passwords/secrets; password, secret, protected_text, and requires_echo_off fields are rejected.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "title", type: .string, description: "Shortcut title derived from the dictated operation.", required: true),
@@ -95,7 +95,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "terminal_edit_shortcut",
-            description: "Edit a saved Agent Terminal recording shortcut after user approval. Supports renaming, changing event delays, deleting events, and replacing or setting visible input text. It cannot read or rewrite protected echo-off/password bytes; protected events can only be preserved or deleted. Pass operations_json as an array like [{\"op\":\"set_delay\",\"event_index\":1,\"delay_ms\":1200},{\"op\":\"replace_visible_text\",\"event_index\":0,\"find\":\"old\",\"replace\":\"new\"}].",
+            description: "Edit a saved Agent Terminal recording shortcut after user approval. Supports renaming, changing event delays, deleting events, and replacing or setting visible input text. set_visible_text accepts terminal escapes like \\\\n, \\\\t, \\\\e, \\\\b, and \\\\x7f. It cannot read or rewrite protected echo-off/password bytes; protected events can only be preserved or deleted. Pass operations_json as an array like [{\"op\":\"set_delay\",\"event_index\":1,\"delay_ms\":1200},{\"op\":\"replace_visible_text\",\"event_index\":0,\"find\":\"old\",\"replace\":\"new\"}].",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "shortcut_id", type: .string, description: "Shortcut UUID from terminal_list_shortcuts.", required: true),
