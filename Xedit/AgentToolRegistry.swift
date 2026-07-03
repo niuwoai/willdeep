@@ -129,7 +129,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "create_file",
-            description: "Create a BRAND-NEW file and write it to disk IMMEDIATELY. This is the ONLY correct way to make a new file — do NOT use apply_patch for creation. Pass the workspace-relative path and the full file content directly; no diff to hand-craft. Fails if the path already exists (to change an existing file, use apply_patch instead). Missing parent directories are created. A file card showing the new file appears inline in the chat for auditability.",
+            description: "Create a BRAND-NEW file and write it to disk IMMEDIATELY. This is the ONLY correct way to make a new file — do NOT use edit_file or apply_patch for creation. Pass the workspace-relative path and the full file content directly; no diff to hand-craft. Fails if the path already exists (to change an existing file, use edit_file instead). Missing parent directories are created. A file card showing the new file appears inline in the chat for auditability.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the NEW file, e.g. `src/utils/date.ts` or `docs/README.md`. Must not already exist.", required: true),
@@ -138,8 +138,21 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "edit_file",
+            description: "EDIT an EXISTING file by EXACT STRING REPLACEMENT — the PREFERRED way to edit files. Pass the workspace-relative path, the exact current text to replace (old_string) and its replacement (new_string). old_string must match the file content EXACTLY — including whitespace and indentation, WITHOUT read_file line-number prefixes — and must appear exactly ONCE in the file unless replace_all=true; include a few surrounding lines to make it unique. The host locates the match, builds the diff itself, and shows a patch card INLINE IN THE CHAT (below your message; there is NO separate right-side review panel) for the user to review and click Apply; in Goal mode or workspace-access approval mode the edit applies immediately. To CREATE a new file, use `create_file` — NOT this tool.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the EXISTING file to edit, e.g. `src/utils/date.ts`.", required: true),
+                AgentToolParameter(name: "old_string", type: .string, description: "Exact text currently in the file to replace, copied verbatim — same whitespace/indentation, no line-number prefixes. Must be unique in the file unless replace_all=true.", required: true),
+                AgentToolParameter(name: "new_string", type: .string, description: "Replacement text. Pass an empty string to delete old_string. Must differ from old_string.", required: true),
+                AgentToolParameter(name: "replace_all", type: .boolean, description: "Replace EVERY occurrence of old_string instead of requiring a unique match (e.g. renaming a symbol). Defaults to false.", required: false),
+                AgentToolParameter(name: "title", type: .string, description: "Optional short title for the patch card. Defaults to `编辑文件: <path>`.", required: false),
+                AgentToolParameter(name: "apply_immediately", type: .boolean, description: "Set true ONLY when the user explicitly asked to write / save directly without review (e.g. \"直接写\", \"直接落盘\", \"不用审核\", \"just write it\", \"save it directly\"). The edit then writes to disk immediately instead of waiting for the user to click Apply. Defaults to false.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "apply_patch",
-            description: "EDIT an EXISTING file via a conservative unified diff. To CREATE a new file, use `create_file` instead — NOT this tool. An edit shows a patch card INLINE IN THE CHAT, right below your message — there is NO separate right-side review panel — for the user to review and click Apply; in Goal mode or workspace-access approval mode the host applies the edit immediately. Validates the diff shape before queuing.",
+            description: "LEGACY fallback for editing an EXISTING file via a hand-written unified diff. PREFER `edit_file` (exact string replacement) — hand-crafted diffs frequently fail hunk matching. Use apply_patch only when edit_file cannot express the change (e.g. many scattered edits in one atomic patch). To CREATE a new file, use `create_file` instead — NOT this tool. An edit shows a patch card INLINE IN THE CHAT, right below your message — there is NO separate right-side review panel — for the user to review and click Apply; in Goal mode or workspace-access approval mode the host applies the edit immediately. Validates the diff shape before queuing.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "diff", type: .string, description: "Unified diff for an EXISTING file. Use workspace-relative paths (`--- a/path`, `+++ b/path`) and standard @@ hunks. (New files: use `create_file`, not a `/dev/null` diff here.)", required: true),

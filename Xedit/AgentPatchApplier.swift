@@ -113,7 +113,13 @@ enum AgentPatchApplier {
                 continue
             }
 
-            if rawLine.hasPrefix("+++ ") {
+            // Inside a hunk, a removed line whose text starts with "-- "
+            // (SQL/Lua comments) serializes as "--- …" and an added line
+            // starting with "++ " as "+++ …". Only treat these as file
+            // headers when no hunk is open, or when the target uses the
+            // unambiguous `a/` / `b/` / `/dev/null` header form.
+            if rawLine.hasPrefix("+++ "),
+               currentHunkStart == nil || looksLikeHeaderTarget(String(rawLine.dropFirst(4))) {
                 let path = String(rawLine.dropFirst(4)).trimmingCharacters(in: .whitespaces)
                 // `+++ /dev/null` is a deletion — not supported yet.
                 guard path != "/dev/null" else { throw AgentPatchError.unsupportedDiff }
@@ -121,7 +127,8 @@ enum AgentPatchApplier {
                 continue
             }
 
-            if rawLine.hasPrefix("--- ") {
+            if rawLine.hasPrefix("--- "),
+               currentHunkStart == nil || looksLikeHeaderTarget(String(rawLine.dropFirst(4))) {
                 let path = String(rawLine.dropFirst(4)).trimmingCharacters(in: .whitespaces)
                 // `--- /dev/null` means the file is being CREATED (no old
                 // version). Allow it and mark the change as a new file.
@@ -234,6 +241,14 @@ enum AgentPatchApplier {
             }
         }
         return true
+    }
+
+    /// True when a `---` / `+++` target uses the unambiguous git header
+    /// form (`a/…`, `b/…`, `/dev/null`) — used to disambiguate headers from
+    /// hunk content lines that happen to start with `--` or `++`.
+    private static func looksLikeHeaderTarget(_ target: String) -> Bool {
+        let trimmed = target.trimmingCharacters(in: .whitespaces)
+        return trimmed.hasPrefix("a/") || trimmed.hasPrefix("b/") || trimmed == "/dev/null"
     }
 
     private static func normalizedPath(_ path: String) -> String {

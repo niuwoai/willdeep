@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-03 | Current version: v1.129.0-rc20
+> Last updated: 2026-07-03 | Current version: v1.129.0-rc21
 
 ## Positioning
 
@@ -14,6 +14,8 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **聊天代码块自动换行（1.129.0-rc21）** —— 聊天 markdown 代码块长行从「裁剪 + 隐蔽的横向滚动」改为按字符自动换行，docker 命令、长 URL 等完整可读；平移 glyph 的横向滚动绘制路径删除，表格保持不换行并继续用表格详情窗口看宽表。
+- **edit_file 精确替换编辑工具（1.129.0-rc21）** —— Agent 编辑既有文件的首选原语从「模型手写 unified diff」切换为 Claude Code 式 `edit_file`（path + old_string + new_string 精确替换，支持 replace_all）：宿主在当前内容（优先编辑器 tab 未保存缓冲，回退磁盘）中定位唯一匹配、自己合成上下文行逐字节精确的 diff，再走既有 apply_patch 审核卡片/自动应用/undo/worktree 跟踪管线，并做 parse→apply 往返自检。old_string 找不到/不唯一/与 new_string 相同都会以可自纠的工具错误回传模型。`apply_patch` 降级为 legacy fallback；patch 解析器同步修复 hunk 内 `-- `/`++ ` 开头内容行被误判为文件头的歧义。
 - **Apply 卡片点击后收起（1.129.0-rc20）** —— Agent patch proposal 列表只保留仍待处理的 `.pending` 卡片；用户点击 Apply 或 Reject 后，卡片立即从聊天区收起，即使 apply 失败也不再留下一张带灰色按钮的操作卡。失败原因仍保存在 proposal 状态里，供诊断、持久化和移动端状态同步使用。
 - **侧边栏终端主机上下文防串台（1.129.0-rc20）** —— Agent system prompt 现在要求把右侧可见终端当作独立的机器上下文，在使用 `terminal_send_command` 前确认 active tab 是本地 macOS shell 还是 SSH 到某台服务器，并跟踪 host/user/directory；`terminal_snapshot` 与 `terminal_send_command` 工具说明同步强调不要把本地命令误发到已 SSH 的服务器终端里。
 - **Goal 修改吸附卡（1.129.0-rc19）** —— Goal 模式已有目标时，composer 上方显示紧凑可编辑目标卡片，展示目标摘要、运行耗时和清单进度。用户在 Agent 正在响应时修改 Goal，会自动把“目标已更新”的 follow-up 排到后续回合，并用修订时间戳阻止旧回复里的 `goal-check` 误勾新清单。

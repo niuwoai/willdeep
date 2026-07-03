@@ -192,19 +192,6 @@ final class AgentChatHistoryNSTextView: NSTextView {
         super.mouseExited(with: event)
     }
 
-    override func scrollWheel(with event: NSEvent) {
-        let horizontalDelta = event.scrollingDeltaX
-        let shiftDelta = event.modifierFlags.contains(.shift) ? event.scrollingDeltaY : 0
-        let shouldScrollCode = abs(horizontalDelta) > abs(event.scrollingDeltaY) || shiftDelta != 0
-        let delta = shiftDelta != 0 ? shiftDelta : horizontalDelta
-        if shouldScrollCode,
-           abs(delta) > 0.1,
-           scrollCodeBlock(at: convert(event.locationInWindow, from: nil), delta: delta) {
-            return
-        }
-        super.scrollWheel(with: event)
-    }
-
     /// Swap text storage only when the attributed string actually
     /// changed. SwiftUI calls `updateNSView` on every parent body
     /// pass — without the guard we'd thrash TextKit every frame.
@@ -293,68 +280,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
             return
         }
         lastContentHash = hash
-        (layoutManager as? AgentChatHistoryBubbleLayoutManager)?.codeBlockHorizontalOffsets.removeAll()
         textStorage?.setAttributedString(attr)
         invalidateIntrinsicContentSize()
-    }
-
-    private func characterIndex(at point: NSPoint) -> Int? {
-        guard let layoutManager, let textContainer, let textStorage, textStorage.length > 0 else {
-            return nil
-        }
-        var containerPoint = point
-        containerPoint.x -= textContainerInset.width
-        containerPoint.y -= textContainerInset.height
-        guard containerPoint.x >= 0, containerPoint.y >= 0 else { return nil }
-        layoutManager.ensureLayout(for: textContainer)
-        let glyphIndex = layoutManager.glyphIndex(for: containerPoint, in: textContainer)
-        guard glyphIndex < layoutManager.numberOfGlyphs else { return nil }
-        let charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
-        guard charIndex < textStorage.length else { return nil }
-        return charIndex
-    }
-
-    private func scrollCodeBlock(at point: NSPoint, delta: CGFloat) -> Bool {
-        guard let textStorage,
-              let layoutManager = layoutManager as? AgentChatHistoryBubbleLayoutManager,
-              let charIndex = characterIndex(at: point),
-              let codeID = textStorage.attribute(
-                .agentChatHistoryCodeBlockID,
-                at: charIndex,
-                effectiveRange: nil
-              ) as? NSNumber else {
-            return false
-        }
-        let id = codeID.intValue
-        let maxOffset = maxCodeBlockHorizontalOffset(id: id)
-        guard maxOffset > 0 else { return false }
-        let current = layoutManager.codeBlockHorizontalOffsets[id] ?? 0
-        let next = min(max(current + delta, 0), maxOffset)
-        guard abs(next - current) > 0.1 else { return true }
-        layoutManager.codeBlockHorizontalOffsets[id] = next
-        needsDisplay = true
-        return true
-    }
-
-    private func maxCodeBlockHorizontalOffset(id: Int) -> CGFloat {
-        guard let textStorage else { return 0 }
-        let fullRange = NSRange(location: 0, length: textStorage.length)
-        var bodyRange = NSRange(location: NSNotFound, length: 0)
-        textStorage.enumerateAttribute(.agentChatHistoryCodeBlockBodyID, in: fullRange) { value, range, stop in
-            guard (value as? NSNumber)?.intValue == id else { return }
-            bodyRange = range
-            stop.pointee = true
-        }
-        guard bodyRange.location != NSNotFound, bodyRange.length > 0 else { return 0 }
-        let body = textStorage.attributedSubstring(from: bodyRange)
-        let fallbackFont = NSFont.monospacedSystemFont(ofSize: currentBaseFontSize, weight: .regular)
-        let font = body.attribute(.font, at: 0, effectiveRange: nil) as? NSFont ?? fallbackFont
-        let longestLineWidth = body.string
-            .components(separatedBy: .newlines)
-            .map { ($0 as NSString).size(withAttributes: [.font: font]).width }
-            .max() ?? 0
-        let visibleWidth = max(bounds.width - 112, 120)
-        return max(0, longestLineWidth - visibleWidth + 24)
     }
 
     private func updateHoveredUserMessage(at point: NSPoint) {
@@ -647,84 +574,15 @@ enum AgentChatHistoryCopyRangeResolver {
 }
 
 private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
-    var codeBlockHorizontalOffsets: [Int: CGFloat] = [:]
-
+    // Code blocks used to clip long lines and pan them horizontally via a
+    // scroll-wheel override (`codeBlockHorizontalOffsets`). Code lines now
+    // char-wrap inside the card (see codeBlockParagraphStyle), so the whole
+    // shifted-glyph drawing path was removed.
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         drawAgentBubbles(forGlyphRange: glyphsToShow, at: origin)
         drawAgentTables(forGlyphRange: glyphsToShow, at: origin)
         drawAgentCodeBlocks(forGlyphRange: glyphsToShow, at: origin)
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
-    }
-
-    override func drawGlyphs(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
-        guard let textStorage, !codeBlockHorizontalOffsets.isEmpty else {
-            super.drawGlyphs(forGlyphRange: glyphsToShow, at: origin)
-            return
-        }
-        let characterRange = self.characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
-        var shiftedGlyphRanges: [(range: NSRange, id: Int)] = []
-        textStorage.enumerateAttribute(.agentChatHistoryCodeBlockBodyID, in: characterRange, options: []) { value, range, _ in
-            guard let id = (value as? NSNumber)?.intValue,
-                  (codeBlockHorizontalOffsets[id] ?? 0) > 0 else { return }
-            let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-            let visibleRange = NSIntersectionRange(glyphRange, glyphsToShow)
-            guard visibleRange.length > 0 else { return }
-            shiftedGlyphRanges.append((visibleRange, id))
-        }
-        guard !shiftedGlyphRanges.isEmpty else {
-            super.drawGlyphs(forGlyphRange: glyphsToShow, at: origin)
-            return
-        }
-
-        var cursor = glyphsToShow.location
-        for item in shiftedGlyphRanges.sorted(by: { $0.range.location < $1.range.location }) {
-            if cursor < item.range.location {
-                super.drawGlyphs(
-                    forGlyphRange: NSRange(location: cursor, length: item.range.location - cursor),
-                    at: origin
-                )
-            }
-            drawShiftedCodeGlyphs(forGlyphRange: item.range, codeBlockID: item.id, at: origin)
-            cursor = NSMaxRange(item.range)
-        }
-        let glyphsEnd = NSMaxRange(glyphsToShow)
-        if cursor < glyphsEnd {
-            super.drawGlyphs(
-                forGlyphRange: NSRange(location: cursor, length: glyphsEnd - cursor),
-                at: origin
-            )
-        }
-    }
-
-    private func drawShiftedCodeGlyphs(forGlyphRange glyphRange: NSRange, codeBlockID: Int, at origin: NSPoint) {
-        guard let textStorage,
-              let context = NSGraphicsContext.current?.cgContext,
-              let offset = codeBlockHorizontalOffsets[codeBlockID],
-              offset > 0 else {
-            super.drawGlyphs(forGlyphRange: glyphRange, at: origin)
-            return
-        }
-        let charRange = characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
-        let fullStorageRange = NSRange(location: 0, length: textStorage.length)
-        var codeRange = NSRange(location: 0, length: 0)
-        _ = textStorage.attribute(
-            .agentChatHistoryCodeBlockID,
-            at: charRange.location,
-            longestEffectiveRange: &codeRange,
-            in: fullStorageRange
-        )
-        guard codeRange.length > 0 else {
-            super.drawGlyphs(forGlyphRange: glyphRange, at: origin)
-            return
-        }
-        let codeGlyphRange = self.glyphRange(forCharacterRange: codeRange, actualCharacterRange: nil)
-        let clipRect = codeBlockRect(forGlyphRange: codeGlyphRange, at: origin)
-            .insetBy(dx: 10, dy: 0)
-        context.saveGState()
-        context.clip(to: clipRect)
-        context.translateBy(x: -offset, y: 0)
-        super.drawGlyphs(forGlyphRange: glyphRange, at: origin)
-        context.restoreGState()
     }
 
     private func drawAgentBubbles(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {

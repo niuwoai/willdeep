@@ -538,7 +538,7 @@ extension AppState {
                 - claude_code / codex_cli / cursor_agent / cline_cli — the delegated CLI runs on the remote box (it must be installed there).
 
                 RUN ON THE LOCAL MAC, NOT the remote box — do NOT use these to change or inspect the remote workspace:
-                - create_file / apply_patch — create or patch LOCAL files; they do NOT touch remote files. For remote file creation or edits use run_command.
+                - create_file / edit_file / apply_patch — create or edit LOCAL files; they do NOT touch remote files. For remote file creation or edits use run_command.
                 - terminal_snapshot / terminal_send_command / terminal_send_control — drive the visible side-panel terminal, which is a LOCAL shell by default (unless the user themselves opened an SSH tab to this host)\(remoteRuntimeDescriptor.transport == .daemon ? "; for a daemon runtime it can never reach the remote box" : ""). To run something on the remote box, use run_command, not the terminal tools.
                 - skills / memory / MCP management (list_skills, read_skill, add_memory, create_user_skill, update_user_skill, delete_user_skill, search_mcp_servers, suggest_mcp_server, configure_mcp_server), chrome_*, web_search, web_fetch, generate_image, visual_qa_screenshot — these are about the local WillDeep install / this Mac, not the remote host. web_fetch also can't reach the remote box's private/loopback services.
 
@@ -949,6 +949,12 @@ extension AppState {
                             applyImmediately: applyImmediately
                         )
                     },
+                    // edit_file matches old_string against the same content
+                    // the patch applier will later apply to (open tab buffer
+                    // first, then disk) so tab-vs-disk drift can't break it.
+                    editableContentProvider: { url in
+                        try self.editableContent(forAgentPatchURL: url)
+                    },
                     patchAutoApplySource: patchAutoApplySource,
                     terminalController: agentTerminalController
                 )
@@ -1031,7 +1037,7 @@ extension AppState {
         forToolName toolName: String,
         runtime: AgentRuntime
     ) -> AgentToolApprovalSource? {
-        guard toolName == "apply_patch" || toolName == "create_file" else { return nil }
+        guard toolName == "apply_patch" || toolName == "edit_file" || toolName == "create_file" else { return nil }
         if runtime.interactionMode == .goal {
             return .goalMode
         }

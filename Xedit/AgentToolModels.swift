@@ -90,6 +90,13 @@ struct AgentToolContext {
     /// unified diff into the session's review UI; applying it to disk is
     /// still handled by the existing user-approved patch flow.
     let patchProposalSink: (@MainActor (String?, String, Bool) async throws -> AgentPatchProposal)?
+    /// Returns the CURRENT editable content for a workspace file — the open
+    /// tab's (possibly unsaved) buffer when the file is open in the editor,
+    /// falling back to disk. `edit_file` matches old_string against this so
+    /// the synthesized diff targets exactly what the patch applier will later
+    /// match against. Nil in non-app call paths (tests, skill harness); tools
+    /// then read straight from disk.
+    let editableContentProvider: (@MainActor (URL) throws -> String)?
     /// Live Agent-mode terminal controller. Terminal tools are intentionally
     /// tied to the visible side-panel session instead of creating hidden SSH
     /// sessions on the model's behalf.
@@ -112,6 +119,7 @@ struct AgentToolContext {
         shortDramaStore: AgentShortDramaStore? = nil,
         sandboxMode: AgentSandboxMode = .readOnly,
         patchProposalSink: (@MainActor (String?, String, Bool) async throws -> AgentPatchProposal)? = nil,
+        editableContentProvider: (@MainActor (URL) throws -> String)? = nil,
         patchAutoApplySource: AgentToolApprovalSource? = nil,
         terminalController: AgentInteractiveTerminalController? = nil,
         secretRedactionValues: [String] = []
@@ -125,6 +133,7 @@ struct AgentToolContext {
         self.shortDramaStore = shortDramaStore
         self.sandboxMode = sandboxMode
         self.patchProposalSink = patchProposalSink
+        self.editableContentProvider = editableContentProvider
         self.patchAutoApplySource = patchAutoApplySource
         self.terminalController = terminalController
         self.secretRedactionValues = Self.uniqueNonEmpty(secretRedactionValues)
@@ -165,6 +174,7 @@ struct AgentToolContext {
             shortDramaStore: shortDramaStore,
             sandboxMode: sandboxMode,
             patchProposalSink: patchProposalSink,
+            editableContentProvider: editableContentProvider,
             patchAutoApplySource: patchAutoApplySource,
             terminalController: terminalController,
             secretRedactionValues: secretRedactionValues + values

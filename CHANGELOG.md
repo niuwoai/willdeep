@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.129.0-rc21 - 2026-07-03
+
+### Added
+- **edit_file 精确替换编辑工具（对齐 Claude Code）** —— Agent 编辑既有文件的首选原语不再是模型手写 unified diff，改为 `edit_file(path, old_string, new_string, replace_all)` 精确字符串替换：宿主在当前内容中定位唯一匹配、自行合成上下文行与文件逐字节一致的 diff，再走既有 patch 卡片 / Goal & workspace 自动应用 / undo / worktree 跟踪管线，合成后先做 parse→apply 往返自检。old_string 找不到、不唯一、与 new_string 相同时以可自纠的工具错误回传模型（附出现次数与修正建议）。这从根源上消除「patch 的某段与当前文件内容不匹配」的高频 Apply 失败。
+
+### Changed
+- **apply_patch 降级为 legacy fallback** —— 工具描述与 system prompt（stable prefix bump 到 v6）全面改为引导 edit_file；仅当 edit_file 无法表达变更时才允许手写 diff。create_file 指引同步更新。
+- **edit_file 读取与应用同源** —— 新增 `editableContentProvider`：edit_file 匹配 old_string 时优先取编辑器 tab 的未保存缓冲（与 patch 应用侧 `editableContent` 同一来源），tab 与磁盘不一致不再导致必然失配。
+
+### Fixed
+- **聊天代码块超宽自动换行** —— 聊天里 ``` 代码块的长行（docker 命令、URL 等）此前按 `.byClipping` 直接在卡片边缘裁掉，内容不可读；现在改为按字符自动换行。原「裁剪 + 代码块内横向滚动」机制（scroll-wheel 平移 glyph）随之整体移除；表格仍保持不换行以保住等宽列对齐，宽表格继续走表格详情窗口。
+- **patch 解析器 hunk 内伪文件头误判** —— hunk 内以 `-`/`+` 开头、内容恰为 `-- …`/`++ …` 的行（如删除 SQL/Lua 注释行）会序列化成 `--- …`/`+++ …`，此前被误当成文件头导致解析错乱；现在仅在无打开 hunk 或目标形如 `a/`、`b/`、`/dev/null` 时才按头处理。
+- 版本号从 **1.129.0-rc20** 提升为 **1.129.0-rc21**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
 ## 1.129.0-rc20 - 2026-07-03
 
 ### Fixed

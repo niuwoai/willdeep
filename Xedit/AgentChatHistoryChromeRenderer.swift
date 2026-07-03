@@ -423,7 +423,10 @@ extension AgentChatHistoryRenderer {
 
     private static func codeBlockParagraphStyle(from baseStyle: NSParagraphStyle) -> NSParagraphStyle {
         let style = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
-        style.lineBreakMode = .byClipping
+        // Char-wrap long code lines (docker commands, URLs) instead of
+        // clipping them at the card edge — chat has no horizontal scroll,
+        // so clipped text was simply unreadable.
+        style.lineBreakMode = .byCharWrapping
         if baseStyle.alignment != .right {
             style.headIndent = baseStyle.headIndent + 8
             style.firstLineHeadIndent = baseStyle.firstLineHeadIndent + 8
@@ -458,6 +461,9 @@ extension AgentChatHistoryRenderer {
 
     private static func tableBlockParagraphStyle(from baseStyle: NSParagraphStyle) -> NSParagraphStyle {
         let style = codeBlockParagraphStyle(from: baseStyle).mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        // Tables keep clipping: monospace column alignment breaks if rows
+        // wrap; wide tables open in the dedicated table detail window.
+        style.lineBreakMode = .byClipping
         style.lineSpacing = MarkdownSpacing.tableLine
         style.paragraphSpacing = MarkdownSpacing.tableParagraph
         style.paragraphSpacingBefore = MarkdownSpacing.tableParagraphBefore

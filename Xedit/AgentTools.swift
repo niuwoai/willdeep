@@ -114,6 +114,8 @@ enum AgentToolRunner {
                 result = try await AgentTerminalTools.sendControl(arguments: activeArguments, context: activeContext)
             case "create_file":
                 result = try await createFile(arguments: activeArguments, context: activeContext)
+            case "edit_file":
+                result = try await editFile(arguments: activeArguments, context: activeContext)
             case "apply_patch":
                 result = try await applyPatch(arguments: activeArguments, context: activeContext)
             case "claude_code":
@@ -328,6 +330,80 @@ enum AgentToolRunner {
             "apply_immediately": .bool(true)
         ]
         return try await applyPatch(arguments: patchArguments, context: context)
+    }
+
+    // MARK: edit_file
+
+    /// Claude-Code-style exact string replacement editor. The model passes
+    /// (path, old_string, new_string) instead of hand-crafting a unified
+    /// diff; the host matches old_string against the CURRENT file content
+    /// (open tab buffer first, then disk), synthesizes a machine-accurate
+    /// diff, and routes it through the apply_patch pipeline so the review
+    /// card, auto-apply modes, undo, and worktree tracking stay identical.
+    private static func editFile(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        guard let rootDirectory = context.rootDirectory else {
+            throw AgentToolError.noWorkspace
+        }
+        guard let rawPath = arguments["path"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawPath.isEmpty else {
+            throw AgentToolError.missingArgument("path")
+        }
+        guard let oldString = arguments["old_string"]?.stringValue(), !oldString.isEmpty else {
+            throw AgentToolError.missingArgument("old_string")
+        }
+        // `new_string` may legitimately be empty (pure deletion), so only the
+        // key's absence — not an empty string — is an error.
+        guard let newString = arguments["new_string"]?.stringValue() else {
+            throw AgentToolError.missingArgument("new_string")
+        }
+        let replaceAll = arguments["replace_all"]?.boolValue() ?? false
+
+        let path = rawPath.hasPrefix("./") ? String(rawPath.dropFirst(2)) : rawPath
+        let root = rootDirectory.standardizedFileURL
+        let url = root.appendingPathComponent(path).standardizedFileURL
+        guard url.path == root.path || url.path.hasPrefix(root.path + "/") else {
+            throw AgentToolError.pathOutsideWorkspace(path)
+        }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw AgentToolError.notFound(path)
+        }
+
+        let currentContent: String
+        if let provider = context.editableContentProvider {
+            currentContent = try await provider(url)
+        } else {
+            currentContent = AppState.decodeText(from: try Data(contentsOf: url))
+        }
+
+        let edit = try AgentEditFileSupport.makeEdit(
+            path: path,
+            oldContent: currentContent,
+            oldString: oldString,
+            newString: newString,
+            replaceAll: replaceAll
+        )
+
+        let rawTitle = arguments["title"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = (rawTitle?.isEmpty == false) ? rawTitle! : "编辑文件: \(path)"
+        var patchArguments: [String: AgentJSONValue] = [
+            "diff": .string(edit.diff),
+            "title": .string(title)
+        ]
+        if let applyImmediately = arguments["apply_immediately"]?.boolValue() {
+            patchArguments["apply_immediately"] = .bool(applyImmediately)
+        }
+        let result = try await applyPatch(arguments: patchArguments, context: context)
+        let occurrenceLine = edit.occurrences == 1
+            ? "Replaced 1 occurrence of old_string in \(path)."
+            : "Replaced \(edit.occurrences) occurrences of old_string in \(path)."
+        return AgentToolResult(
+            summary: result.summary,
+            payload: "\(occurrenceLine)\n\n\(result.payload)",
+            references: result.references
+        )
     }
 
     // MARK: apply_patch

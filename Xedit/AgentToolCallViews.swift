@@ -52,6 +52,7 @@ nonisolated enum AgentToolDisplay {
         "terminal_send_command": "终端执行命令",
         "terminal_send_control": "终端控制键",
         "create_file": "创建文件",
+        "edit_file": "编辑文件",
         "apply_patch": "应用补丁",
         "list_jobs": "查看后台任务",
         "get_job_output": "读取任务输出",

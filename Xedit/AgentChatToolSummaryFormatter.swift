@@ -176,6 +176,8 @@ enum AgentChatToolSummaryFormatter {
             preferredKeys = ["path", "title"]
         case "apply_patch":
             preferredKeys = ["title", "diff"]
+        case "edit_file":
+            preferredKeys = ["path", "title"]
         default:
             preferredKeys = ["command", "path", "pattern", "query", "question", "url", "name"]
         }

@@ -72,7 +72,9 @@ struct AgentChatHistoryRendererTests {
                 at: codeBodyRange.location,
                 effectiveRange: nil
             ) as? NSParagraphStyle
-            #expect(paragraphStyle?.lineBreakMode == .byClipping)
+            // Long code lines char-wrap inside the card (no horizontal
+            // scroll in chat) — clipping made overlong commands unreadable.
+            #expect(paragraphStyle?.lineBreakMode == .byCharWrapping)
         }
         #expect(!rendered.string.contains("# Title"))
         #expect(!rendered.string.contains("**bold**"))
