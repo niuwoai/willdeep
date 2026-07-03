@@ -1185,6 +1185,7 @@ enum L10n {
         static let sectionSave = String(localized: "settings.section.save", defaultValue: "Save")
         static let sectionAgentProviders = String(localized: "settings.section.agent-providers", defaultValue: "Agent Providers")
         static let sectionImageUnderstanding = String(localized: "settings.section.image-understanding", defaultValue: "Image Understanding")
+        static let sectionLocalModelAcceleration = String(localized: "settings.section.local-model-acceleration", defaultValue: "本地模型加速")
         static let sectionConversationTitle = String(localized: "settings.section.conversation-title", defaultValue: "Conversation Title")
         static let sectionToolApproval = String(localized: "settings.section.tool-approval", defaultValue: "Tool approval")
         static let sectionConcurrency = String(localized: "settings.section.concurrency", defaultValue: "Concurrency")
@@ -1390,6 +1391,61 @@ enum L10n {
             static let fetchImageModels = String(localized: "settings.image-understanding.fetch-image-models", defaultValue: "Fetch Image Models")
             static let fetchingImages = String(localized: "settings.image-understanding.fetching-images", defaultValue: "Fetching Images...")
             static let fetchedModelsLabel = String(localized: "settings.image-understanding.fetched-models", defaultValue: "Fetched Models")
+        }
+
+        enum LocalModel {
+            static let enabled = String(localized: "settings.local-model.enabled", defaultValue: "启用本地辅助模型")
+            static let baseURL = String(localized: "settings.local-model.base-url", defaultValue: "本地 Endpoint")
+            static let visionModel = String(localized: "settings.local-model.vision-model", defaultValue: "图片理解模型")
+            static let summaryModel = String(localized: "settings.local-model.summary-model", defaultValue: "Summary 模型")
+            static let preferVision = String(localized: "settings.local-model.prefer-vision", defaultValue: "图片识别先用本地")
+            static let preferSummary = String(localized: "settings.local-model.prefer-summary", defaultValue: "标题和上下文压缩先用本地")
+            static let description = String(localized: "settings.local-model.description", defaultValue: "启用后，图片理解、会话标题和上下文 summary 会先请求本机 OpenAI-compatible 服务；失败时自动回退到你配置的远端 provider。普通生产对话仍建议使用 OpenAI、Claude 或 some.im 等主 provider，本地小模型更适合低风险辅助任务。")
+            static let downloadSection = String(localized: "settings.local-model.download-section", defaultValue: "模型下载")
+            static let packageLabel = String(localized: "settings.local-model.package", defaultValue: "推荐包")
+            static let filesLabel = String(localized: "settings.local-model.files", defaultValue: "必要文件")
+            static let locationLabel = String(localized: "settings.local-model.location", defaultValue: "保存位置")
+            static let download = String(localized: "settings.local-model.download", defaultValue: "后台下载")
+            static let downloading = String(localized: "settings.local-model.downloading", defaultValue: "下载中")
+            static let cancel = String(localized: "settings.local-model.cancel", defaultValue: "取消")
+            static let openFolder = String(localized: "settings.local-model.open-folder", defaultValue: "打开目录")
+            static let findLocalFiles = String(localized: "settings.local-model.find-local-files", defaultValue: "查找本地文件")
+            static let findingLocalFiles = String(localized: "settings.local-model.finding-local-files", defaultValue: "查找中")
+            static let findResults = String(localized: "settings.local-model.find-results", defaultValue: "本地候选文件")
+            static let findNoResults = String(localized: "settings.local-model.find-no-results", defaultValue: "没有在常见目录找到同名必要文件。")
+            static let findMatched = String(localized: "settings.local-model.find-matched", defaultValue: "大小匹配")
+            static let findClose = String(localized: "settings.local-model.find-close", defaultValue: "大小接近")
+            static let findMismatch = String(localized: "settings.local-model.find-mismatch", defaultValue: "大小不像")
+            static let installed = String(localized: "settings.local-model.installed", defaultValue: "必要文件已就绪。")
+            static let notInstalled = String(localized: "settings.local-model.not-installed", defaultValue: "尚未下载完整模型包。")
+            static let canceled = String(localized: "settings.local-model.canceled", defaultValue: "下载已取消。")
+            static let downloadHelp = String(localized: "settings.local-model.download-help", defaultValue: "只下载主模型 GGUF 和 mmproj 视觉 projector，不会下载同仓库里的所有量化版本。下载完成后仍需要 Ollama、LM Studio 或 llama.cpp server 加载这些文件并提供 OpenAI-compatible endpoint。")
+            static let localProviderListed = String(localized: "settings.local-model.provider-listed", defaultValue: "Provider 列表里也会出现 “Ollama / Local OpenAI”。可以手动选择它做聊天模型，但默认不推荐用于复杂生产任务。")
+
+            static func progress(_ fileIndex: String, _ fileCount: String, _ fileName: String) -> String {
+                let template = String(localized: "settings.local-model.progress", defaultValue: "文件 %1$@/%2$@：%3$@")
+                return String(format: template, fileIndex, fileCount, fileName)
+            }
+
+            static func downloaded(_ done: String, _ total: String) -> String {
+                let template = String(localized: "settings.local-model.downloaded", defaultValue: "已下载 %1$@ / %2$@")
+                return String(format: template, done, total)
+            }
+
+            static func failed(_ message: String) -> String {
+                let template = String(localized: "settings.local-model.failed", defaultValue: "下载失败：%@")
+                return String(format: template, message)
+            }
+
+            static func findSize(_ actual: String, _ expected: String) -> String {
+                let template = String(localized: "settings.local-model.find-size", defaultValue: "%1$@ / 约 %2$@")
+                return String(format: template, actual, expected)
+            }
+
+            static func findFailed(_ message: String) -> String {
+                let template = String(localized: "settings.local-model.find-failed", defaultValue: "查找失败：%@")
+                return String(format: template, message)
+            }
         }
 
         enum AgentBehavior {

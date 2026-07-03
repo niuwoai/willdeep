@@ -12,10 +12,12 @@ enum AgentSessionStore {
     private nonisolated final class MetadataOnlySessionTracker: @unchecked Sendable {
         private let lock = NSLock()
         private var ids: Set<UUID> = []
+        private var userMessageIDs: Set<UUID> = []
 
-        func replace(with ids: Set<UUID>) {
+        func replace(with ids: Set<UUID>, userMessageIDs: Set<UUID>) {
             lock.lock()
             self.ids = ids
+            self.userMessageIDs = userMessageIDs
             lock.unlock()
         }
 
@@ -25,14 +27,34 @@ enum AgentSessionStore {
             return ids.contains(id)
         }
 
+        func containsUserMessage(_ id: UUID) -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return userMessageIDs.contains(id)
+        }
+
         func remove(_ id: UUID) {
             lock.lock()
             ids.remove(id)
+            userMessageIDs.remove(id)
             lock.unlock()
         }
     }
 
     private static let metadataOnlySessions = MetadataOnlySessionTracker()
+
+    private struct MessageIndex: Decodable {
+        let role: String?
+
+        enum CodingKeys: String, CodingKey {
+            case role
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            role = try c.decodeIfPresent(String.self, forKey: .role)
+        }
+    }
 
     private struct SessionIndex: Decodable {
         let id: UUID
@@ -58,11 +80,12 @@ enum AgentSessionStore {
         let pinnedAt: Date?
         let archivedAt: Date?
         let titleIsUserSet: Bool
+        let hasUserMessage: Bool
 
         enum CodingKeys: String, CodingKey {
             case id, title, workspaceRootPath, workspaceLocation, localWorkspaceIdentity, modelID
             case providerID, providerDisplayName
-            case createdAt, updatedAt
+            case createdAt, updatedAt, messages
             case didEditFiles, agentEditedPaths, interactionMode, approvalMode, executionAgent, activeExperts
             case currentPlan, currentGoal, learningEvents, latestTurnRecall
             case pinnedAt, archivedAt, titleIsUserSet
@@ -94,6 +117,8 @@ enum AgentSessionStore {
             pinnedAt = try c.decodeIfPresent(Date.self, forKey: .pinnedAt)
             archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
             titleIsUserSet = try c.decodeIfPresent(Bool.self, forKey: .titleIsUserSet) ?? false
+            let messageIndex = try c.decodeIfPresent([MessageIndex].self, forKey: .messages) ?? []
+            hasUserMessage = messageIndex.contains { $0.role == AgentRole.user.rawValue }
         }
 
         var session: AgentSession {
@@ -158,7 +183,7 @@ enum AgentSessionStore {
         let dir = directory
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else {
-            metadataOnlySessions.replace(with: [])
+            metadataOnlySessions.replace(with: [], userMessageIDs: [])
             return []
         }
         guard let entries = try? FileManager.default.contentsOfDirectory(
@@ -166,23 +191,28 @@ enum AgentSessionStore {
             includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles]
         ) else {
-            metadataOnlySessions.replace(with: [])
+            metadataOnlySessions.replace(with: [], userMessageIDs: [])
             return []
         }
 
         var sessions: [AgentSession] = []
         var metadataOnlyIDs: Set<UUID> = []
+        var metadataOnlyUserMessageIDs: Set<UUID> = []
         for url in entries where url.pathExtension == "json" {
             guard let data = try? Data(contentsOf: url) else { continue }
             do {
-                let session = try decoder.decode(SessionIndex.self, from: data).session
+                let index = try decoder.decode(SessionIndex.self, from: data)
+                let session = index.session
                 metadataOnlyIDs.insert(session.id)
+                if index.hasUserMessage {
+                    metadataOnlyUserMessageIDs.insert(session.id)
+                }
                 sessions.append(session)
             } catch {
                 print("AgentSessionStore: skipping unreadable session at \(url.lastPathComponent): \(error)")
             }
         }
-        metadataOnlySessions.replace(with: metadataOnlyIDs)
+        metadataOnlySessions.replace(with: metadataOnlyIDs, userMessageIDs: metadataOnlyUserMessageIDs)
         return sessions.sorted { $0.updatedAt > $1.updatedAt }
     }
 
@@ -201,6 +231,15 @@ enum AgentSessionStore {
 
     static func isMetadataOnly(_ id: UUID) -> Bool {
         metadataOnlySessions.contains(id)
+    }
+
+    static func metadataOnlySessionHasUserMessage(_ id: UUID) -> Bool {
+        metadataOnlySessions.containsUserMessage(id)
+    }
+
+    static func decodeSessionIndexForTesting(_ data: Data) throws -> (session: AgentSession, hasUserMessage: Bool) {
+        let index = try decoder.decode(SessionIndex.self, from: data)
+        return (index.session, index.hasUserMessage)
     }
 
     @discardableResult

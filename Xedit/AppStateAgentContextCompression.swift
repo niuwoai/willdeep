@@ -40,7 +40,7 @@ extension AppState {
         guard runtime.messages.count > effectiveKeepRecent else { return }
 
         runtime.isCompressingContext = true
-        let configuration = configurationForContextCompression()
+        let configurations = contextCompressionConfigurationCandidates()
         let head = Array(runtime.messages.prefix(runtime.messages.count - effectiveKeepRecent))
         let tail = Array(runtime.messages.suffix(effectiveKeepRecent))
         let priorSummary = hasPriorSummary ? runtime.contextSummary : nil
@@ -52,7 +52,7 @@ extension AppState {
                 head: head,
                 tail: tail,
                 priorSummary: priorSummary,
-                configuration: configuration
+                configurations: configurations
             )
         }
     }
@@ -104,7 +104,7 @@ extension AppState {
         head: [AgentMessage],
         tail: [AgentMessage],
         priorSummary: String? = nil,
-        configuration: AgentConfiguration
+        configurations: [AgentConfiguration]
     ) async {
         defer {
             runtime.isCompressingContext = false
@@ -175,29 +175,53 @@ extension AppState {
             content: "Transcript to compress:\n\n\(transcript)"
         )
 
-        let client = AgentClient(configuration: configuration)
-        let collector = CompressionSummaryCollector()
-        do {
-            try await client.streamChat(messages: [system, payload]) { event in
-                if case .textDelta(let delta) = event {
-                    await collector.append(delta)
+        var lastError: Error?
+        for configuration in configurations {
+            let client = AgentClient(configuration: configuration)
+            let collector = CompressionSummaryCollector()
+            let messages = AgentLocalModelPrompting.messagesWithLanguageInstruction(
+                systemPrompt: system.content,
+                userMessages: [payload],
+                configuration: configuration
+            )
+            do {
+                try await client.streamChat(messages: messages) { event in
+                    if case .textDelta(let delta) = event {
+                        await collector.append(delta)
+                    }
                 }
+                let trimmed = await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else {
+                    lastError = AgentClientError.serverStatus(
+                        AgentProviderHTTPError(
+                            statusCode: 502,
+                            method: "POST",
+                            url: configuration.baseURL,
+                            providerID: configuration.providerID,
+                            model: configuration.model,
+                            requestSummary: "Context compression returned an empty summary.",
+                            requestBody: "(streamed request)",
+                            responseBody: "(empty)"
+                        )
+                    )
+                    continue
+                }
+                runtime.contextSummary = trimmed
+                runtime.contextSummaryThroughMessageID = head.last?.id
+                return
+            } catch {
+                lastError = error
+                continue
             }
-        } catch {
-            runtime.errorMessage = "Context compression failed: \(error.localizedDescription)"
-            runtime.errorDetails = Self.details(for: error)
-            return
         }
 
-        let trimmed = await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            runtime.errorMessage = "Context compression returned an empty summary; nothing changed."
+        if let lastError {
+            runtime.errorMessage = "Context compression failed: \(lastError.localizedDescription)"
+            runtime.errorDetails = Self.details(for: lastError)
+        } else {
+            runtime.errorMessage = "Context compression failed: no usable summary provider is configured."
             runtime.errorDetails = nil
-            return
         }
-
-        runtime.contextSummary = trimmed
-        runtime.contextSummaryThroughMessageID = head.last?.id
     }
 
     /// Returns the transcript slice that should be sent to the model. Local

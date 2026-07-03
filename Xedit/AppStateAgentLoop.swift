@@ -162,6 +162,25 @@ extension AppState {
         _ images: [AgentImageAttachment],
         configuration: AgentConfiguration
     ) async throws -> String {
+        var lastError: Error?
+        for candidate in imageDescriptionConfigurationCandidates(fallback: configuration) {
+            do {
+                return try await requestImageDescription(images, configuration: candidate)
+            } catch {
+                lastError = error
+                continue
+            }
+        }
+        if let lastError {
+            throw lastError
+        }
+        return try await requestImageDescription(images, configuration: configuration)
+    }
+
+    private func requestImageDescription(
+        _ images: [AgentImageAttachment],
+        configuration: AgentConfiguration
+    ) async throws -> String {
         let normalized = configuration.normalized
         guard normalized.supportsImageInput else {
             throw AgentClientError.serverStatus(
@@ -184,8 +203,18 @@ extension AppState {
         If there are multiple images, number them as Image 1, Image 2, etc.
         """
         let message = AgentMessage(role: .user, content: prompt, images: images)
+        let messages: [AgentMessage]
+        if AgentLocalModelPrompting.prefersLocalLanguageInstruction(normalized) {
+            messages = AgentLocalModelPrompting.messagesWithLanguageInstruction(
+                systemPrompt: "You describe images for a coding agent.",
+                userMessages: [message],
+                configuration: normalized
+            )
+        } else {
+            messages = [message]
+        }
         let collector = CompressionSummaryCollector()
-        try await AgentClient(configuration: normalized).streamChat(messages: [message]) { event in
+        try await AgentClient(configuration: normalized).streamChat(messages: messages) { event in
             if case .textDelta(let delta) = event {
                 await collector.append(delta)
             }
@@ -541,6 +570,10 @@ extension AppState {
             if let memoryContextBlock {
                 systemPrompt += "\n\n\(memoryContextBlock)"
             }
+            systemPrompt = AgentLocalModelPrompting.applyLanguageInstruction(
+                to: systemPrompt,
+                configuration: configuration
+            )
             let cacheDiagnostics = AgentContextBuilder.cacheDiagnostics(
                 for: systemPrompt,
                 toolsEnabled: true,

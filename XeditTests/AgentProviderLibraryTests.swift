@@ -188,6 +188,107 @@ struct AgentProviderLibraryTests {
         #expect(n.proModel == "deepseek-r1")
     }
 
+    @Test
+    func ollamaPresetAllowsEmptyAPIKey() {
+        let local = AgentConfiguration(
+            providerID: AgentProviderPreset.ollamaID,
+            baseURL: "http://127.0.0.1:11434/v1",
+            model: "qwen3.5-4b-q4_k_m",
+            flashModel: "qwen3.5-4b-q4_k_m",
+            proModel: "qwen3.5-4b-q4_k_m",
+            routingMode: .flash,
+            imageDescription: .default,
+            apiKey: ""
+        ).normalized
+
+        #expect(local.providerID == AgentProviderPreset.ollamaID)
+        #expect(local.requiresAPIKey == false)
+        #expect(local.providerKind == .openAIChat)
+    }
+
+    @Test
+    func localModelSettingsNormalizeEmptyFields() {
+        let settings = AgentLocalModelSettings(
+            enabled: true,
+            baseURL: " \n ",
+            visionModel: "",
+            summaryModel: "",
+            preferForImageUnderstanding: true,
+            preferForSummaries: true
+        ).normalized
+
+        #expect(settings.baseURL == AgentLocalModelSettings.defaultBaseURL)
+        #expect(settings.visionModel == AgentLocalModelSettings.defaultVisionModelID)
+        #expect(settings.summaryModel == AgentLocalModelSettings.defaultSummaryModelID)
+    }
+
+    @Test
+    func localModelSettingsMigrateOldTextVisionDefaultToVL() {
+        let settings = AgentLocalModelSettings(
+            enabled: true,
+            baseURL: AgentLocalModelSettings.defaultBaseURL,
+            visionModel: AgentLocalModelSettings.defaultSummaryModelID,
+            summaryModel: AgentLocalModelSettings.defaultSummaryModelID,
+            preferForImageUnderstanding: true,
+            preferForSummaries: true
+        ).normalized
+
+        #expect(settings.visionModel == AgentLocalModelSettings.defaultVisionModelID)
+        #expect(settings.summaryModel == AgentLocalModelSettings.defaultSummaryModelID)
+    }
+
+    @Test
+    func localModelFileMatchQualityUsesApproximateSize() {
+        let expected: Int64 = 1_000
+
+        #expect(AgentLocalModelFileMatch.quality(bytes: 950, expectedBytes: expected) == .matched)
+        #expect(AgentLocalModelFileMatch.quality(bytes: 1_250, expectedBytes: expected) == .close)
+        #expect(AgentLocalModelFileMatch.quality(bytes: 1_600, expectedBytes: expected) == .mismatch)
+    }
+
+    @Test
+    func localModelPromptingAddsLanguagePreferenceOnlyForLocalProviders() {
+        let ollama = AgentConfiguration(
+            providerID: AgentProviderPreset.ollamaID,
+            baseURL: "http://127.0.0.1:11434/v1",
+            model: "qwen3.5-4b-q4_k_m",
+            flashModel: "qwen3.5-4b-q4_k_m",
+            proModel: "qwen3.5-4b-q4_k_m",
+            routingMode: .flash,
+            imageDescription: .default,
+            apiKey: ""
+        )
+        let lmStudio = AgentConfiguration(
+            providerID: "custom-local",
+            baseURL: "http://localhost:1234/v1",
+            model: "local-model",
+            flashModel: "local-model",
+            proModel: "local-model",
+            routingMode: .flash,
+            imageDescription: .default,
+            apiKey: ""
+        )
+        let remote = AgentConfiguration(
+            providerID: "openai",
+            baseURL: "https://api.openai.com/v1",
+            model: "gpt-4.1-mini",
+            flashModel: "gpt-4.1-mini",
+            proModel: "gpt-4.1",
+            routingMode: .flash,
+            imageDescription: .default,
+            apiKey: "sk-test"
+        )
+
+        let ollamaPrompt = AgentLocalModelPrompting.applyLanguageInstruction(to: "BASE", configuration: ollama)
+        let lmStudioPrompt = AgentLocalModelPrompting.applyLanguageInstruction(to: "BASE", configuration: lmStudio)
+        let remotePrompt = AgentLocalModelPrompting.applyLanguageInstruction(to: "BASE", configuration: remote)
+
+        #expect(ollamaPrompt.contains("LOCAL MODEL LANGUAGE PREFERENCE"))
+        #expect(ollamaPrompt.contains("请优先使用"))
+        #expect(lmStudioPrompt.contains("LOCAL MODEL LANGUAGE PREFERENCE"))
+        #expect(remotePrompt == "BASE")
+    }
+
     // MARK: - One-shot providerID-vs-baseURL repair (A 方案)
 
     @Test

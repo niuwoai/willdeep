@@ -31,7 +31,7 @@ struct OpenAIChatAdapter {
         tools: [AgentToolDescriptor] = [],
         onEvent: @escaping @Sendable (AgentClientEvent) async -> Void
     ) async throws {
-        guard !configuration.apiKey.isEmpty else {
+        guard !configuration.requiresAPIKey || !configuration.apiKey.isEmpty else {
             throw AgentClientError.missingAPIKey
         }
 
@@ -143,7 +143,7 @@ struct OpenAIChatAdapter {
     /// errors return `false` — the caller (AppState) treats that as
     /// "fall back to user approval".
     func judgeCommandSafety(command: String) async -> Bool {
-        guard !configuration.apiKey.isEmpty else { return false }
+        guard !configuration.requiresAPIKey || !configuration.apiKey.isEmpty else { return false }
 
         let endpoint: URL
         do { endpoint = try chatCompletionsEndpoint(from: configuration.baseURL) }
@@ -191,7 +191,7 @@ struct OpenAIChatAdapter {
     }
 
     func fetchModels() async throws -> [String] {
-        guard !configuration.apiKey.isEmpty else {
+        guard !configuration.requiresAPIKey || !configuration.apiKey.isEmpty else {
             throw AgentClientError.missingAPIKey
         }
 
@@ -224,7 +224,7 @@ struct OpenAIChatAdapter {
     }
 
     func fetchModelDiscoveries() async throws -> [AgentModelDiscovery] {
-        guard !configuration.apiKey.isEmpty else {
+        guard !configuration.requiresAPIKey || !configuration.apiKey.isEmpty else {
             throw AgentClientError.missingAPIKey
         }
 
@@ -257,7 +257,9 @@ struct OpenAIChatAdapter {
     }
 
     private func applyAuthenticationHeaders(to request: inout URLRequest) {
-        request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization")
+        if !configuration.apiKey.isEmpty {
+            request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization")
+        }
         AgentNetworkSupport.applyStandardHeaders(to: &request)
         applyRelayBrandingHeaders(to: &request)
     }

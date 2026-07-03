@@ -785,6 +785,10 @@ struct AgentConfiguration: Codable, Equatable {
         return Self.modelAcceptsImageInput(model)
     }
 
+    var requiresAPIKey: Bool {
+        AgentProviderPreset.preset(id: providerID)?.requiresAPIKey ?? true
+    }
+
     /// Model-level vision gate, layered on top of the provider preset flag.
     ///
     /// A relay provider (e.g. some.im) can host both vision and text-only
@@ -856,6 +860,7 @@ struct AgentProviderPreset: Identifiable, Equatable {
     let defaultProModel: String
     let supportsModelFetch: Bool
     let supportsImageInput: Bool
+    let requiresAPIKey: Bool
     /// Short list of substrings that identify a model as belonging to
     /// this provider — used by `normalized()` to detect when a stale
     /// flash/pro model name from a previous provider got carried over
@@ -866,6 +871,7 @@ struct AgentProviderPreset: Identifiable, Equatable {
 
     static let openAIID = "openai"
     static let deepSeekID = "deepseek"
+    static let ollamaID = "ollama"
     static let customID = "custom"
 
     var defaultModel: String { defaultFlashModel }
@@ -889,6 +895,7 @@ struct AgentProviderPreset: Identifiable, Equatable {
         defaultProModel: String? = nil,
         supportsModelFetch: Bool,
         supportsImageInput: Bool = true,
+        requiresAPIKey: Bool = true,
         modelHints: [String] = []
     ) {
         self.id = id
@@ -899,6 +906,7 @@ struct AgentProviderPreset: Identifiable, Equatable {
         self.defaultProModel = defaultProModel ?? defaultModel
         self.supportsModelFetch = supportsModelFetch
         self.supportsImageInput = supportsImageInput
+        self.requiresAPIKey = requiresAPIKey
         self.modelHints = modelHints
     }
 
@@ -1055,6 +1063,16 @@ struct AgentProviderPreset: Identifiable, Equatable {
             defaultModel: "deepseek-v4-flash",
             defaultProModel: "deepseek-v4-pro",
             supportsModelFetch: true,
+            modelHints: []
+        ),
+        AgentProviderPreset(
+            id: ollamaID,
+            displayName: "Ollama / Local OpenAI",
+            baseURL: "http://127.0.0.1:11434/v1",
+            defaultModel: "qwen3.5-4b-vl-q4_k_m",
+            defaultProModel: "qwen3.5-4b-vl-q4_k_m",
+            supportsModelFetch: true,
+            requiresAPIKey: false,
             modelHints: []
         ),
         AgentProviderPreset(

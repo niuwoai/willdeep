@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.129.0-rc13 - 2026-07-03
+
+### Changed
+- **本地图片理解默认模型明确为 VL** —— 本地辅助模型设置里的“图片理解模型”默认值从旧的 `qwen3.5-4b-q4_k_m` 自动迁移为 `qwen3.5-4b-vl-q4_k_m`，Summary 模型继续默认使用 `qwen3.5-4b-q4_k_m`；Provider 列表里的 `Ollama / Local OpenAI` 默认模型也改为 VL 名称，避免设置页看起来像在拿纯文本模型做图片识别。
+- **模型下载区新增本地必要文件查找** —— 设置页“模型下载”新增“查找本地文件”，通过 `/usr/bin/find` 按 `Qwen3.5-4B.Q4_K_M.gguf` 与 `mmproj-BF16.gguf` 文件名搜索常见本地目录，并根据文件大小与推荐包预估大小给出“大小匹配 / 大小接近 / 大小不像”的候选判断。
+- 版本号从 **1.129.0-rc12** 提升为 **1.129.0-rc13**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc12 - 2026-07-03
+
+### Changed
+- **本地 provider system prompt 增加语言偏好** —— 当请求走内置 `Ollama / Local OpenAI`，或自定义 OpenAI-compatible endpoint 指向 `localhost` / `127.0.0.1` / `::1` 时，system prompt 会追加“请优先使用当前系统首选语言回答；若用户最近明确使用其他语言则跟随用户语言”，并保留代码、命令、路径、API 名称和模型名原文。普通远端 OpenAI / Claude / some.im provider 不追加该提示，避免改变远端请求行为。
+- 版本号从 **1.129.0-rc11** 提升为 **1.129.0-rc12**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc11 - 2026-07-03
+
+### Added
+- **本地模型辅助加速（Ollama / LM Studio / llama.cpp server）** —— Agent provider 清单新增 `Ollama / Local OpenAI`，支持无 API Key 的本机 OpenAI-compatible endpoint。Settings → AI Providers 新增「本地模型加速」区，可配置本地 endpoint、图片理解模型、summary 模型，并分别控制“图片识别先用本地”和“标题 / 上下文压缩先用本地”。图片理解、会话标题和上下文压缩会按“本地候选 → 远端 provider”顺序尝试，本地服务不可用或返回空结果时自动 fallback，不影响用户继续用 OpenAI / Claude / some.im 做主生产对话。
+- **本地 VL 模型后台下载入口** —— 设置页新增推荐模型包下载状态，当前只下载 `Qwen3.5-4B.Q4_K_M.gguf` 和 `mmproj-BF16.gguf` 两个必要文件，跳过同仓库其他量化版本；下载在后台执行，可查看当前文件、总体进度、速度、保存目录并随时取消。下载完成后仍由 Ollama、LM Studio 或 llama.cpp server 加载模型并暴露 OpenAI-compatible endpoint，WillDeep 暂不直接在进程内加载 GGUF。
+
+### Changed
+- 版本号从 **1.129.0-rc10** 提升为 **1.129.0-rc11**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.129.0-rc10 - 2026-07-03
+
+### Fixed
+- **Agent 左侧历史会话列表恢复显示** —— 1.129.0-rc3 为降低启动内存，把会话启动加载改成只读取轻量索引，`messages` 不再常驻；但侧边栏“隐藏空 New Chat”逻辑仍用 `session.messages` 判断是否有用户消息，导致历史会话索引被误判为空会话并全部隐藏，只剩当前新对话。现在轻量索引会额外用只解 `role` 的消息索引记录“是否存在用户消息”，侧边栏显示和空会话清理都使用该标记，恢复旧会话列表，同时不回退到完整 transcript 常驻内存。
+
+### Changed
+- 版本号从 **1.129.0-rc9** 提升为 **1.129.0-rc10**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
 ## 1.129.0-rc9 - 2026-07-03
 
 ### Fixed

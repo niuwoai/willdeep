@@ -68,21 +68,12 @@ extension AppState {
 
         // Rule (4): need a usable provider config.
         let configuration = agentConfiguration.normalized
-        guard !configuration.apiKey.isEmpty else { return }
         let modelID = configuration.titleSummaryModel()
         guard !modelID.isEmpty else { return }
+        let configurations = titleSummaryConfigurationCandidates(remoteModelID: modelID)
+        guard !configurations.isEmpty else { return }
 
         titleSummarizationsInFlight.insert(runtime.id)
-
-        // Build a config that forces our chosen model for this one
-        // request only (we don't want to touch the main loop's model
-        // choice). Pin routingMode = .flash so model(for: .interactive)
-        // resolves to the same `model` we just set.
-        var summarizerConfig = configuration
-        summarizerConfig.model = modelID
-        summarizerConfig.flashModel = modelID
-        summarizerConfig.proModel = modelID
-        summarizerConfig.routingMode = .flash
 
         // Distill the chat to ~one user turn + one assistant turn so
         // the title call stays cheap even if the conversation runs
@@ -101,7 +92,7 @@ extension AppState {
                 }
             }
             let title = await Self.requestTitleSummary(
-                configuration: summarizerConfig,
+                configurations: configurations,
                 firstUser: firstUser,
                 firstAssistant: firstAssistant
             )
@@ -148,7 +139,7 @@ extension AppState {
     /// configured title model and return a cleaned-up short title, or
     /// nil if the request failed / model declined / produced garbage.
     nonisolated private static func requestTitleSummary(
-        configuration: AgentConfiguration,
+        configurations: [AgentConfiguration],
         firstUser: String,
         firstAssistant: String
     ) async -> String? {
@@ -176,20 +167,29 @@ extension AppState {
             content: "USER:\n\(userClip)\n\nASSISTANT:\n\(assistantClip)"
         )
 
-        let client = await AgentClient(configuration: configuration)
-        let collector = CompressionSummaryCollector()
-        do {
-            try await client.streamChat(messages: [system, payload]) { event in
-                if case .textDelta(let delta) = event {
-                    await collector.append(delta)
+        for configuration in configurations {
+            let client = await AgentClient(configuration: configuration)
+            let collector = CompressionSummaryCollector()
+            let messages = AgentLocalModelPrompting.messagesWithLanguageInstruction(
+                systemPrompt: system.content,
+                userMessages: [payload],
+                configuration: configuration
+            )
+            do {
+                try await client.streamChat(messages: messages) { event in
+                    if case .textDelta(let delta) = event {
+                        await collector.append(delta)
+                    }
                 }
+                let raw = await collector.value
+                if let title = Self.sanitizeAutoTitle(raw), !title.isEmpty {
+                    return title
+                }
+            } catch {
+                continue
             }
-        } catch {
-            return nil
         }
-
-        let raw = await collector.value
-        return Self.sanitizeAutoTitle(raw)
+        return nil
     }
 
     /// Defensive cleanup on whatever the model returned. Strip

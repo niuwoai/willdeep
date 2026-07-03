@@ -630,6 +630,9 @@ struct AgentSessionsSidebar: View {
         let activeID = appState.activeAgentSessionID
         let visibleSessions = appState.agentSessions.filter { session in
             if session.id == activeID { return true }
+            if AgentSessionStore.isMetadataOnly(session.id) {
+                return AgentSessionStore.metadataOnlySessionHasUserMessage(session.id)
+            }
             return session.messages.contains(where: { $0.role == .user })
         }
         let groups = Dictionary(grouping: visibleSessions) { session in

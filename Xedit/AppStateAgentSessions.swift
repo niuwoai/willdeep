@@ -914,7 +914,9 @@ extension AppState {
         let toRemove = agentSessions.filter { session in
             if session.id == activeID { return false }
             if session.id == protectedID { return false }
-            if AgentSessionStore.isMetadataOnly(session.id) { return false }
+            if AgentSessionStore.isMetadataOnly(session.id) {
+                return !AgentSessionStore.metadataOnlySessionHasUserMessage(session.id)
+            }
             if pendingDispatchQueue.contains(where: { $0.runtimeID == session.id }) { return false }
             if let runtime = agentRuntimes[session.id] {
                 if runtime.isResponding || runtime.requestTask != nil || runtime.toolDecisionWaiter != nil {

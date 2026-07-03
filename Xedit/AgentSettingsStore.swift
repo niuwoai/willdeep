@@ -32,6 +32,7 @@ enum AgentSettingsStore {
     private static let perProviderConcurrencyKey = "com.willdeep.agentSettings.perProviderConcurrencyLimit.v1"
     private static let chatBaseFontSizeKey = "com.willdeep.agentSettings.chatBaseFontSize.v1"
     private static let webSearchProviderKey = "com.willdeep.agentSettings.webSearchProvider.v1"
+    private static let localModelSettingsKey = "com.willdeep.agentSettings.localModelSettings.v1"
     /// Global toggle: 关掉后 plan 自动执行 banner 不再做 destructive keyword
     /// 扫描，所有 plan 都跑倒计时自动执行。默认开。
     private static let planAutoExecuteDangerScanKey = "com.willdeep.agentSettings.planAutoExecuteDangerScan.v1"
@@ -230,6 +231,20 @@ enum AgentSettingsStore {
 
     static func saveAutoApproveSafeCommands(_ enabled: Bool) {
         defaults.set(enabled, forKey: autoApproveKey)
+    }
+
+    static func loadLocalModelSettings() -> AgentLocalModelSettings {
+        guard let data = defaults.data(forKey: localModelSettingsKey),
+              let decoded = try? JSONDecoder().decode(AgentLocalModelSettings.self, from: data) else {
+            return .default
+        }
+        return decoded.normalized
+    }
+
+    static func saveLocalModelSettings(_ settings: AgentLocalModelSettings) {
+        if let data = try? JSONEncoder().encode(settings.normalized) {
+            defaults.set(data, forKey: localModelSettingsKey)
+        }
     }
 
     // MARK: - Plan auto-execution (1.79.0)

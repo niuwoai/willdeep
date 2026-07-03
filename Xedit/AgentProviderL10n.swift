@@ -69,6 +69,8 @@ extension AgentProviderPreset {
             return "登录 AnyRouter 控制台获取。模型 ID 与 OpenAI / Claude 原版一致。"
         case "some-im":
             return "这是 Rocky 个人中转站，需要 some.im 颁发的 token；如果你不知道这是什么，可以忽略。"
+        case AgentProviderPreset.ollamaID:
+            return "本机 Ollama、LM Studio 或 llama.cpp server 通常不需要 API Key；如果你给本地代理加了鉴权，再填写这里。"
         case AgentProviderPreset.customID:
             return ""
         default:
@@ -86,6 +88,8 @@ extension AgentProviderPreset {
             return "本应用会自动附带 `HTTP-Referer: https://willdeep.com` 与 `X-Title: WillDeep` 这两个 header，用于在 OpenRouter 应用榜上署名。无需手动填写。"
         case "some-im":
             return "这是个人中转站，请确认你拥有访问权限再使用。"
+        case AgentProviderPreset.ollamaID:
+            return "本地模型适合图片理解、标题和上下文压缩等辅助任务；一般不建议默认承担长代码改动或生产级 Agent 回合。"
         case "gemini":
             return "Gemini 的 base URL 与其他厂商不同（不带 `/v1`），保持默认即可。"
         default:

@@ -216,6 +216,51 @@ struct AgentSessionStoreTests {
         #expect(decoded.executionAgent == .willDeep)
     }
 
+    @Test
+    func lightweightSessionIndexKeepsUserMessagePresenceWithoutMaterializingTranscript() throws {
+        let json = """
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "title": "Historical chat",
+          "workspaceRootPath": "/tmp/proj",
+          "createdAt": "2026-06-19T00:00:00Z",
+          "updatedAt": "2026-06-19T01:00:00Z",
+          "messages": [
+            {
+              "id": "22222222-2222-2222-2222-222222222222",
+              "role": "user",
+              "content": "restore the sidebar history",
+              "createdAt": "2026-06-19T00:10:00Z"
+            }
+          ]
+        }
+        """
+
+        let indexed = try AgentSessionStore.decodeSessionIndexForTesting(Data(json.utf8))
+        #expect(indexed.session.title == "Historical chat")
+        #expect(indexed.session.messages.isEmpty)
+        #expect(indexed.hasUserMessage)
+        #expect(indexed.session.providerID == nil)
+        #expect(indexed.session.providerDisplayName == nil)
+    }
+
+    @Test
+    func lightweightSessionIndexDetectsPlaceholderWithoutUserMessages() throws {
+        let json = """
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "title": "New Chat",
+          "createdAt": "2026-06-19T00:00:00Z",
+          "updatedAt": "2026-06-19T00:00:00Z",
+          "messages": []
+        }
+        """
+
+        let indexed = try AgentSessionStore.decodeSessionIndexForTesting(Data(json.utf8))
+        #expect(indexed.session.messages.isEmpty)
+        #expect(!indexed.hasUserMessage)
+    }
+
     /// Corrupt JSON must throw a DecodingError — `loadAll` then catches
     /// and skips. Verifying the throw here means a single bad file
     /// cannot poison the in-memory session list.

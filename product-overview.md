@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-03 | Current version: v1.129.0-rc9
+> Last updated: 2026-07-03 | Current version: v1.129.0-rc13
 
 ## Positioning
 
@@ -14,6 +14,8 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **本地模型辅助加速（1.129.0-rc13）** —— Agent provider 清单新增 `Ollama / Local OpenAI`，本机 OpenAI-compatible endpoint 可空 API Key；Settings → AI Providers 新增「本地模型加速」，配置本地 endpoint、图片理解模型和 summary 模型。图片理解模型默认并迁移为 `qwen3.5-4b-vl-q4_k_m`，Summary 模型继续默认 `qwen3.5-4b-q4_k_m`；图片识别、会话标题和上下文压缩会先尝试本地模型，失败或空结果自动回退远端 Image Understanding / 主 provider。设置页也提供推荐 VL 模型包后台下载入口，仅下载 `Qwen3.5-4B.Q4_K_M.gguf` 与 `mmproj-BF16.gguf` 两个必要文件，并显示当前文件、总体进度、速度、保存目录、取消按钮和“查找本地文件”；查找会用 `/usr/bin/find` 按文件名搜索常见目录，并根据文件大小给出候选判断。走内置 Ollama 或 localhost / 127.0.0.1 / ::1 自定义 endpoint 时，system prompt 会追加当前系统首选语言偏好。普通生产 Agent 对话仍建议 OpenAI / Claude / some.im 等远端 provider，本地小模型主要承担低风险辅助任务。
+- **Agent 会话轻量索引显示修复（1.129.0-rc10）** —— 会话启动加载仍只读取轻量索引，不把完整 `messages` / `contextSummary` 常驻内存；索引现在额外记录是否存在用户消息，侧边栏和空会话清理据此区分“真实历史会话”和空 New Chat，避免历史会话被误藏。
 - **模型级图片支持判断（1.129.0-rc9）** —— `AgentConfiguration.supportsImageInput` 不再只看 provider preset：中转型 provider（some.im）可同时挂视觉和纯文本模型，现在叠加 `modelAcceptsImageInput` 模型级判断（DeepSeek 非 `-vl` 系、`someim-auto*` 判为纯文本），避免长会话历史里的图片被编码成 `image_url` 后让纯文本模型 400 掉整个请求；错误详情卡片的复制按钮同版扩大命中区并加「已复制 ✓」反馈。
 - **测试宿主与 Keychain/文件错误路径稳定化（1.129.0-rc7）** —— Agent provider library 启动时只 materialize active provider 的 API key，非 active entry 在切换 active 或设置页选中时再按需读取；未加载 key 会被 `apiKeyLoaded` 标记保护，保存 provider library 不会把“尚未读取”误当成“用户清空”。XCTest 环境下 `AgentSettingsStore` 使用进程内 Keychain storage，Voice smoke 改为 `WILLDEEP_VOICE_SMOKE=1` 显式 opt-in，文件加载失败路径跳过阻塞式 `NSAlert.runModal()` 并保留回退逻辑，避免全量测试受开发机 Keychain、Downloads 音频或历史大文件状态拖住。
 - **Git / 文件状态轮询 timer 收口（1.129.0-rc5）** —— editor 主视图的 10s 状态刷新 timer publisher 提升为稳定静态实例，不再随 SwiftUI body 重算反复创建 autoconnect timer；空闲 git / 外部文件状态刷新继续受 scenePhase gate 和同值保护约束。
