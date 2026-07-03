@@ -290,12 +290,11 @@ struct AgentPatchProposalList: View {
     private var groupedProposals: [(messageID: AgentMessage.ID, items: [AgentPatchProposal])] {
         var order: [AgentMessage.ID] = []
         var buckets: [AgentMessage.ID: [AgentPatchProposal]] = [:]
-        // Drop proposals the user already resolved: an applied patch is
-        // reflected by the worktree-change card, and a rejected one needs no
-        // follow-up — keeping their cards around just clutters the transcript.
-        // Still surface `.pending` (awaiting a decision) and `.failed` (apply
-        // errored, the user should know).
-        for proposal in proposals where proposal.status == .pending || proposal.status == .failed {
+        // Only unresolved proposals stay interactive. Once the user clicks
+        // Apply / Reject, the status change removes the card from the
+        // transcript so it cannot be clicked again, even if apply records a
+        // failure for diagnostics.
+        for proposal in proposals where proposal.status == .pending {
             if buckets[proposal.messageID] == nil { order.append(proposal.messageID) }
             buckets[proposal.messageID, default: []].append(proposal)
         }

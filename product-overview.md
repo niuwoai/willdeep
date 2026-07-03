@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-03 | Current version: v1.129.0-rc19
+> Last updated: 2026-07-03 | Current version: v1.129.0-rc20
 
 ## Positioning
 
@@ -14,6 +14,8 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Apply 卡片点击后收起（1.129.0-rc20）** —— Agent patch proposal 列表只保留仍待处理的 `.pending` 卡片；用户点击 Apply 或 Reject 后，卡片立即从聊天区收起，即使 apply 失败也不再留下一张带灰色按钮的操作卡。失败原因仍保存在 proposal 状态里，供诊断、持久化和移动端状态同步使用。
+- **侧边栏终端主机上下文防串台（1.129.0-rc20）** —— Agent system prompt 现在要求把右侧可见终端当作独立的机器上下文，在使用 `terminal_send_command` 前确认 active tab 是本地 macOS shell 还是 SSH 到某台服务器，并跟踪 host/user/directory；`terminal_snapshot` 与 `terminal_send_command` 工具说明同步强调不要把本地命令误发到已 SSH 的服务器终端里。
 - **Goal 修改吸附卡（1.129.0-rc19）** —— Goal 模式已有目标时，composer 上方显示紧凑可编辑目标卡片，展示目标摘要、运行耗时和清单进度。用户在 Agent 正在响应时修改 Goal，会自动把“目标已更新”的 follow-up 排到后续回合，并用修订时间戳阻止旧回复里的 `goal-check` 误勾新清单。
 - **终端录制密码询问回聊天区（1.129.0-rc18）** —— `terminal_create_shortcut` 创建带 `protected_placeholder` 的录制后，聊天工具卡直接显示本地 SecureField 密码询问卡，真实值只写入本机终端加密 vault，不进入聊天文本、模型上下文或录制 JSON。用户保存后卡片收起，只保留“用户输了密码”的状态提示；右侧 Terminal 侧栏不再承载密码输入卡，带密码占位的录制也不再因为创建成功而自动打开侧栏。
 - **终端侧栏切换保活（1.129.0-rc17）** —— Agent 右侧侧栏第一次打开 Terminal 后会把终端面板常驻在侧栏宿主里；切换到 Diff / Files / Widget / 媒体任务等其它侧栏时，Terminal 只隐藏并禁用命中测试，不再从 SwiftUI 树移除，已有 PTY 进程、滚屏和输入状态继续保留。

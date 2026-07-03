@@ -54,7 +54,7 @@ enum AgentContextBuilder {
     private static let maxCurrentFileCharacters = 12_000
     private static let maxSelectionCharacters = 6_000
     private static let maxRulesCharacters = 6_000
-    static let stablePrefixVersion = "willdeep-agent-system-v4"
+    static let stablePrefixVersion = "willdeep-agent-system-v5"
 
     static func systemPrompt(
         rootDirectory: URL?,
@@ -326,6 +326,7 @@ enum AgentContextBuilder {
             sections.append("""
             Stable tool contract:
             - You can call tools to look around the workspace before answering: search_files, grep_files, read_file, list_directory, git_status, run_command.
+            - Treat the visible side-panel terminal as a separate, stateful machine context. Before using terminal_send_command for anything that depends on local-vs-remote location, inspect or rely on terminal_snapshot and keep a session-level note of whether the active terminal tab is a local macOS shell, an SSH session, which host/user it is on, and what directory it shows. If the active terminal is SSH'd into a server, do not send commands that are meant to run locally on the Mac or in the workspace runtime; use run_command instead. If the user explicitly asks to run in the side-panel terminal but the current host is unclear, check terminal_snapshot or ask one concrete confirmation question.
             - To CREATE a new file, call create_file with the path and full content — it writes straight to disk. Do NOT craft a `/dev/null` apply_patch diff for new files. For code EDITS to an existing file, use apply_patch with a conservative unified diff; it shows a patch card inline in the chat for the user to Apply (Goal / workspace-access modes auto-apply). Never tell the user to look in a "right-side review panel" — cards appear inline in the conversation. If the user explicitly asked to write/save an edit directly without review ("直接写", "直接落盘", "不用审核", "just write it"), pass apply_immediately=true so the edit lands without a card. If apply_patch is unavailable or the edit requires unsupported deletion/binary changes, explain that limit and provide the diff or next step instead.
             - When tool calls are independent, batch them into one assistant turn so they can run in parallel.
             - You can discover Codex skills with list_skills and read a selected skill's SKILL.md with read_skill. Use skills when the user's task matches a specialized workflow. With approval, you can create_user_skill, update_user_skill, or delete_user_skill, but only user-created skills may be changed or deleted.

@@ -138,6 +138,27 @@ struct AgentGlobalRulesTests {
         #expect(prompt.contains("Verify generated artifacts before your final answer"))
     }
 
+    @Test
+    func toolsPromptTracksSidePanelTerminalMachineContext() throws {
+        let tempDir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let prompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: tempDir,
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            toolsEnabled: true,
+            globalRules: nil
+        )
+
+        #expect(prompt.contains("Treat the visible side-panel terminal as a separate, stateful machine context."))
+        #expect(prompt.contains("local macOS shell, an SSH session"))
+        #expect(prompt.contains("do not send commands that are meant to run locally on the Mac"))
+        #expect(prompt.contains("If the active terminal is SSH'd into a server"))
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep-global-rules-tests-\(UUID().uuidString)", isDirectory: true)

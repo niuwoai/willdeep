@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.129.0-rc20 - 2026-07-03
+
+### Fixed
+- **Apply 卡片点击后立即收起** —— Agent patch proposal 列表现在只渲染仍待处理的 `.pending` 卡片；用户点击 Apply 或 Reject 后，卡片会从聊天区收起，避免失败态卡片继续露出灰色按钮、让用户误以为还能重复点击。失败原因仍保留在 proposal 状态里供诊断、持久化和移动端状态使用。
+- **Agent 不再把本地命令误发到已 SSH 的侧边栏终端** —— system prompt 现在要求把右侧可见终端当作独立的会话级机器上下文：使用 `terminal_send_command` 前要确认 active tab 是本地 macOS shell 还是 SSH 到某台服务器，并记录 host/user/directory；当终端已经在远端服务器里而命令本应本地执行时，必须改用 `run_command` 或先确认。
+
+### Changed
+- **终端工具说明补强主机边界** —— `terminal_snapshot` 明确用于识别当前终端是否本地/SSH，`terminal_send_command` 明确禁止把 local-intended command 发进 SSH server tab。
+- 版本号从 **1.129.0-rc19** 提升为 **1.129.0-rc20**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
 ## 1.129.0-rc19 - 2026-07-03
 
 ### Added

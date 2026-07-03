@@ -607,6 +607,8 @@ struct AgentToolsCoreTests {
         #expect(listShortcuts?.risk == .read)
         #expect(createShortcut?.risk == .write)
         #expect(editShortcut?.risk == .write)
+        #expect(snapshot?.description.contains("whether the active terminal appears to be local or SSH'd into a server") == true)
+        #expect(sendCommand?.description.contains("never send a local-intended command into an SSH'd server tab") == true)
 
         let commandDecision = AgentSandboxPolicy.decision(
             toolName: "terminal_send_command",
