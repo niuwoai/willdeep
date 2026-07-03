@@ -54,7 +54,7 @@ struct VideoGifWorkflow: WorkflowDefinition {
 
         let audioURL = workDir.appendingPathComponent("audio.wav")
         do {
-            try VideoMediaHelpers.extractWavAudio(videoURL: videoURL, audioURL: audioURL)
+            try await VideoMediaHelpers.extractWavAudio(videoURL: videoURL, audioURL: audioURL)
         } catch {
             return "Audio extraction failed: \(error.localizedDescription)"
         }
@@ -112,7 +112,7 @@ struct VideoGifWorkflow: WorkflowDefinition {
         let paletteURL = workDir.appendingPathComponent("palette.png")
         let scaleFilter = "fps=\(preferredFps),scale=\(scaleWidth):-1:flags=lanczos"
         do {
-            try runFFmpeg([
+            try await runFFmpeg([
                 "-y",
                 "-ss", "\(pick.start)",
                 "-t", "\(pick.duration)",
@@ -127,7 +127,7 @@ struct VideoGifWorkflow: WorkflowDefinition {
         // 2. paletteuse
         let outputURL = makeOutputURL(originalPath: expanded, suffix: "-gif")
         do {
-            try runFFmpeg([
+            try await runFFmpeg([
                 "-y",
                 "-ss", "\(pick.start)",
                 "-t", "\(pick.duration)",
@@ -186,7 +186,7 @@ struct VideoGifWorkflow: WorkflowDefinition {
         return nil
     }
 
-    private func runFFmpeg(_ arguments: [String]) throws {
+    private func runFFmpeg(_ arguments: [String]) async throws {
         let p = Process()
         p.launchPath = "/usr/bin/env"
         p.arguments = ["-S", "ffmpeg"] + arguments
@@ -194,7 +194,7 @@ struct VideoGifWorkflow: WorkflowDefinition {
         p.standardOutput = Pipe()
         p.standardError = errPipe
         try p.run()
-        p.waitUntilExit()
+        await AgentProcessSupport.waitUntilExit(p)
         if p.terminationStatus != 0 {
             let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             throw NSError(domain: "video-gif", code: Int(p.terminationStatus), userInfo: [

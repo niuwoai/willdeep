@@ -50,7 +50,7 @@ struct VideoMergeWorkflow: WorkflowDefinition {
         var sizes: Set<String> = []
         for url in urls {
             do {
-                let probe = try VideoMediaHelpers.probe(videoURL: url)
+                let probe = try await VideoMediaHelpers.probe(videoURL: url)
                 if let streams = probe["streams"] as? [[String: Any]] {
                     for s in streams where (s["codec_type"] as? String) == "video" {
                         codecs.insert((s["codec_name"] as? String) ?? "?")
@@ -78,7 +78,7 @@ struct VideoMergeWorkflow: WorkflowDefinition {
             try listText.write(to: listURL, atomically: true, encoding: .utf8)
             defer { try? FileManager.default.removeItem(at: listURL) }
             do {
-                try runFFmpeg([
+                try await runFFmpeg([
                     "-y",
                     "-f", "concat", "-safe", "0",
                     "-i", listURL.path,
@@ -133,7 +133,7 @@ struct VideoMergeWorkflow: WorkflowDefinition {
             outputURL.path,
         ])
         do {
-            try runFFmpeg(args)
+            try await runFFmpeg(args)
         } catch {
             return "ffmpeg re-encode merge failed: \(error.localizedDescription)"
         }
@@ -157,7 +157,7 @@ struct VideoMergeWorkflow: WorkflowDefinition {
         """
     }
 
-    private func runFFmpeg(_ arguments: [String]) throws {
+    private func runFFmpeg(_ arguments: [String]) async throws {
         let p = Process()
         p.launchPath = "/usr/bin/env"
         p.arguments = ["-S", "ffmpeg"] + arguments
@@ -165,7 +165,7 @@ struct VideoMergeWorkflow: WorkflowDefinition {
         let errPipe = Pipe()
         p.standardError = errPipe
         try p.run()
-        p.waitUntilExit()
+        await AgentProcessSupport.waitUntilExit(p)
         if p.terminationStatus != 0 {
             let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             throw NSError(domain: "video-merge", code: Int(p.terminationStatus), userInfo: [

@@ -422,6 +422,7 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
     private let defaultTimeout: TimeInterval = 20
     private let maxForegroundTimeout: TimeInterval = 120
     private let maxOutputBytes = 32 * 1024
+    private let foregroundJobPollIntervalNanoseconds: UInt64 = 1_000_000_000
 
     func probe() async throws -> RuntimeDescriptor {
         let report: DaemonProbeReport = try await request(method: "GET", path: "/v1/probe", query: [])
@@ -580,7 +581,7 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
         let deadline = Date().addingTimeInterval(min(TimeInterval(timeout), max(1, foregroundMaxTimeout)))
         var latest = job
         while latest.exitCode == nil && Date() < deadline {
-            try await Task.sleep(nanoseconds: 250_000_000)
+            try await Task.sleep(nanoseconds: foregroundJobPollIntervalNanoseconds)
             latest = try await getJob(id: job.id)
         }
         if latest.exitCode == nil {
@@ -624,7 +625,7 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
         var latest = job
         let deadline = Date().addingTimeInterval(maxForegroundTimeout)
         while latest.exitCode == nil && Date() < deadline {
-            try await Task.sleep(nanoseconds: 250_000_000)
+            try await Task.sleep(nanoseconds: foregroundJobPollIntervalNanoseconds)
             latest = try await getJob(id: job.id)
         }
         if latest.exitCode == nil {

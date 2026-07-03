@@ -1104,15 +1104,29 @@ final class LineNumberRulerView: NSRulerView {
     var theme: EditorTheme = .paper
     var font: NSFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
     var changedLineNumbers: Set<Int> = []
+    private var textDidChangeObserver: NSObjectProtocol?
 
     init(scrollView: NSScrollView, textView: NSTextView) {
         self.textView = textView
         super.init(scrollView: scrollView, orientation: .verticalRuler)
         clientView = textView
+        textDidChangeObserver = NotificationCenter.default.addObserver(
+            forName: NSText.didChangeNotification,
+            object: textView,
+            queue: nil
+        ) { [weak self] _ in
+            self?.clearLineCaches()
+        }
     }
 
     required init(coder: NSCoder) {
         super.init(coder: coder)
+    }
+
+    deinit {
+        if let textDidChangeObserver {
+            NotificationCenter.default.removeObserver(textDidChangeObserver)
+        }
     }
 
     override var requiredThickness: CGFloat {
@@ -1329,6 +1343,15 @@ final class LineNumberRulerView: NSRulerView {
 
     private var cachedLineCount: Int = 1
     private var cachedLineCountForLength: Int = -1
+    private var cachedLineStartOffsets: [Int] = [0]
+    private var cachedLineStartOffsetsForLength: Int = -1
+
+    private func clearLineCaches() {
+        cachedLineCount = 1
+        cachedLineCountForLength = -1
+        cachedLineStartOffsets = [0]
+        cachedLineStartOffsetsForLength = -1
+    }
 
     private func lineCount() -> Int {
         guard let string = textView?.string, !string.isEmpty else { return 1 }
@@ -1342,10 +1365,7 @@ final class LineNumberRulerView: NSRulerView {
         if length == cachedLineCountForLength {
             return cachedLineCount
         }
-        var count = 1
-        for byte in string.utf8 where byte == 0x0A {
-            count += 1
-        }
+        let count = lineStartOffsets(in: string).count
         cachedLineCount = count
         cachedLineCountForLength = length
         return count
@@ -1355,11 +1375,42 @@ final class LineNumberRulerView: NSRulerView {
         guard let string = textView?.string, !string.isEmpty else { return 1 }
         let nsString = string as NSString
         let boundedLocation = min(max(0, location), nsString.length)
-        var line = 1
-        for index in 0..<boundedLocation where nsString.character(at: index) == 10 {
-            line += 1
+        let starts = lineStartOffsets(in: string)
+        var low = 0
+        var high = starts.count
+        while low < high {
+            let mid = (low + high) / 2
+            if starts[mid] <= boundedLocation {
+                low = mid + 1
+            } else {
+                high = mid
+            }
         }
-        return line
+        return max(1, low)
+    }
+
+    private func lineStartOffsets(in string: String) -> [Int] {
+        let nsString = string as NSString
+        let length = nsString.length
+        if length == cachedLineStartOffsetsForLength {
+            return cachedLineStartOffsets
+        }
+        var starts = [0]
+        starts.reserveCapacity(max(1, cachedLineCount))
+        guard length > 0 else {
+            cachedLineStartOffsets = starts
+            cachedLineStartOffsetsForLength = length
+            return starts
+        }
+        for index in 0..<length where nsString.character(at: index) == 10 {
+            let next = index + 1
+            if next < length {
+                starts.append(next)
+            }
+        }
+        cachedLineStartOffsets = starts
+        cachedLineStartOffsetsForLength = length
+        return starts
     }
 
     /// Counts newlines in the half-open character range `[from, to)`. Used to

@@ -47,6 +47,53 @@ enum AgentClientEvent {
     )
 }
 
+struct AgentStreamingStringFingerprint {
+    private static let offsetBasis: UInt64 = 14_695_981_039_346_656_037
+    private static let prime: UInt64 = 1_099_511_628_211
+
+    private(set) var byteCount = 0
+    private(set) var value = Self.offsetBasis
+
+    mutating func append(_ fragment: String) {
+        guard !fragment.isEmpty else { return }
+        for byte in fragment.utf8 {
+            value ^= UInt64(byte)
+            value &*= Self.prime
+            byteCount += 1
+        }
+    }
+
+    mutating func replace(with string: String) {
+        byteCount = 0
+        value = Self.offsetBasis
+        append(string)
+    }
+
+    var signatureComponent: String {
+        "\(byteCount):\(value)"
+    }
+}
+
+struct AgentToolCallStreamEmissionGate {
+    private static let minimumIntervalNanoseconds: UInt64 = 100_000_000
+
+    private var emittedSignature = ""
+    private var lastEmissionNanoseconds: UInt64 = 0
+
+    mutating func shouldEmit(signature: String, force: Bool = false) -> Bool {
+        guard signature != emittedSignature else { return false }
+        let now = DispatchTime.now().uptimeNanoseconds
+        guard force
+            || lastEmissionNanoseconds == 0
+            || now >= lastEmissionNanoseconds + Self.minimumIntervalNanoseconds else {
+            return false
+        }
+        emittedSignature = signature
+        lastEmissionNanoseconds = now
+        return true
+    }
+}
+
 struct AgentClient {
     private let configuration: AgentConfiguration
     private let session: URLSession?

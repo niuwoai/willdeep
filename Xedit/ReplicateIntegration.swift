@@ -375,12 +375,14 @@ enum ReplicateClient {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         AgentNetworkSupport.applyStandardHeaders(to: &request)
-        let (data, response) = try await session.data(for: request)
+        let (temporaryURL, response) = try await session.download(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw AgentToolError.invalidArgument("Replicate output download returned a non-HTTP response.")
         }
         guard (200..<300).contains(http.statusCode) else {
-            let text = String(data: data, encoding: .utf8) ?? "<non-UTF8 response body>"
+            let data = (try? Data(contentsOf: temporaryURL)) ?? Data()
+            let text = String(data: data.prefix(64 * 1024), encoding: .utf8) ?? "<non-UTF8 response body>"
+            try? FileManager.default.removeItem(at: temporaryURL)
             throw AgentToolError.httpFailed(http.statusCode, AgentNetworkSupport.limitDebugText(text))
         }
 
@@ -388,7 +390,7 @@ enum ReplicateClient {
         let safeStem = safeFileStem(title.isEmpty ? "replicate-output" : title)
         let filename = "\(safeStem)-\(String(format: "%02d", index)).\(ext)"
         let fileURL = uniqueFileURL(in: directory, filename: filename)
-        try data.write(to: fileURL, options: [.atomic])
+        try AgentNetworkSupport.moveDownloadedFile(from: temporaryURL, to: fileURL)
         return ReplicateArtifact(
             title: fileURL.lastPathComponent,
             fileURL: fileURL,

@@ -18,9 +18,15 @@ import AVFoundation
 struct VoiceSmokeTests {
     private static let maxDefaultSmokeDuration: TimeInterval = 45
     private static let maxDefaultSmokeFileSizeBytes = 80 * 1024 * 1024
+    private static let enableSmokeEnvironmentKey = "WILLDEEP_VOICE_SMOKE"
     private static let allowLongAudioEnvironmentKey = "WILLDEEP_VOICE_SMOKE_ALLOW_LONG_AUDIO"
 
     @Test func transcribeM4AIfPresent() async throws {
+        guard ProcessInfo.processInfo.environment[Self.enableSmokeEnvironmentKey] == "1" else {
+            print("[voice-smoke] Skipping. Set \(Self.enableSmokeEnvironmentKey)=1 to run local audio transcription smoke.")
+            return
+        }
+
         // Pick a test file. Order of preference: explicit
         // willdeep-voice-test.{m4a,wav,mp3}, then anything matching
         // in Downloads, then skip.

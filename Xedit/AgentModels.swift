@@ -779,7 +779,32 @@ struct AgentConfiguration: Codable, Equatable {
     }
 
     var supportsImageInput: Bool {
-        AgentProviderPreset.preset(id: providerID)?.supportsImageInput ?? true
+        guard AgentProviderPreset.preset(id: providerID)?.supportsImageInput ?? true else {
+            return false
+        }
+        return Self.modelAcceptsImageInput(model)
+    }
+
+    /// Model-level vision gate, layered on top of the provider preset flag.
+    ///
+    /// A relay provider (e.g. some.im) can host both vision and text-only
+    /// models, so the provider-level `supportsImageInput` alone is not
+    /// enough: sending an OpenAI `image_url` content part to a text-only
+    /// model like `deepseek-v4-flash` fails the whole request with
+    /// HTTP 400 "unknown variant `image_url`, expected `text`" — even when
+    /// the image sits hundreds of messages back in the history.
+    ///
+    /// Conservative denylist: only families known to reject image parts
+    /// return false; unknown models keep image support so genuinely
+    /// multimodal custom models aren't degraded.
+    nonisolated static func modelAcceptsImageInput(_ model: String) -> Bool {
+        let lower = model.lowercased()
+        // DeepSeek chat/coder models are text-only (deepseek-vl is the
+        // vision family and keeps image support).
+        if lower.contains("deepseek"), !lower.contains("vl") { return false }
+        // some.im auto-routing text tier maps to text-only backends.
+        if lower.hasPrefix("someim-auto") { return false }
+        return true
     }
 
     /// Transport-protocol family this configuration speaks. Resolution

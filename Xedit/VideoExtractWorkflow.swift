@@ -63,7 +63,7 @@ struct VideoExtractWorkflow: WorkflowDefinition {
         let metadataURL = outputDir.appendingPathComponent("metadata.json")
         let probeJSON: [String: Any]
         do {
-            probeJSON = try VideoMediaHelpers.probe(videoURL: videoURL)
+            probeJSON = try await VideoMediaHelpers.probe(videoURL: videoURL)
             let data = try JSONSerialization.data(withJSONObject: probeJSON, options: [.prettyPrinted, .sortedKeys])
             try data.write(to: metadataURL)
         } catch {
@@ -73,7 +73,7 @@ struct VideoExtractWorkflow: WorkflowDefinition {
         // -- 2. 音轨复制到 audio.m4a（无重编码）--
         let audioURL = outputDir.appendingPathComponent("audio.m4a")
         do {
-            try runFFmpeg([
+            try await runFFmpeg([
                 "-y", "-i", videoURL.path,
                 "-vn", "-c:a", "copy",
                 audioURL.path,
@@ -82,7 +82,7 @@ struct VideoExtractWorkflow: WorkflowDefinition {
             // 不少视频音轨非 AAC（比如 MP3-in-MOV），-c copy 进 m4a 会
             // 抱怨。fallback：转 AAC。
             do {
-                try runFFmpeg([
+                try await runFFmpeg([
                     "-y", "-i", videoURL.path,
                     "-vn", "-c:a", "aac", "-b:a", "128k",
                     audioURL.path,
@@ -96,7 +96,7 @@ struct VideoExtractWorkflow: WorkflowDefinition {
         // ffmpeg 的 select='gt(scene,T)' 会跳到下一个场景切换；用
         // -vsync vfr 避免重复帧。文件名按 ffmpeg 自动编号。
         do {
-            try runFFmpeg([
+            try await runFFmpeg([
                 "-y", "-i", videoURL.path,
                 "-vf", "select='gt(scene,\(sceneThreshold))',showinfo",
                 "-vsync", "vfr",
@@ -121,7 +121,7 @@ struct VideoExtractWorkflow: WorkflowDefinition {
         let wavURL = workDir.appendingPathComponent("audio.wav")
         var transcript = ""
         do {
-            try VideoMediaHelpers.extractWavAudio(videoURL: videoURL, audioURL: wavURL)
+            try await VideoMediaHelpers.extractWavAudio(videoURL: videoURL, audioURL: wavURL)
             transcript = try await SpeechTranscriber.transcribe(
                 audioURL: wavURL,
                 language: .auto,
@@ -273,7 +273,7 @@ struct VideoExtractWorkflow: WorkflowDefinition {
         return lines.isEmpty ? "(no probe data)" : lines.joined(separator: "\n")
     }
 
-    private func runFFmpeg(_ arguments: [String]) throws {
+    private func runFFmpeg(_ arguments: [String]) async throws {
         let p = Process()
         p.launchPath = "/usr/bin/env"
         p.arguments = ["-S", "ffmpeg"] + arguments
@@ -281,7 +281,7 @@ struct VideoExtractWorkflow: WorkflowDefinition {
         let errPipe = Pipe()
         p.standardError = errPipe
         try p.run()
-        p.waitUntilExit()
+        await AgentProcessSupport.waitUntilExit(p)
         if p.terminationStatus != 0 {
             let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             throw NSError(domain: "video-extract", code: Int(p.terminationStatus), userInfo: [
@@ -325,7 +325,7 @@ struct VideoExtractWorkflow: WorkflowDefinition {
             let src = keyframesDir.appendingPathComponent(name)
             let dst = workDir.appendingPathComponent("thumb-\(i).jpg")
             do {
-                try runFFmpeg([
+                try await runFFmpeg([
                     "-y", "-i", src.path,
                     "-vf", "scale=240:-1",
                     "-q:v", "5",

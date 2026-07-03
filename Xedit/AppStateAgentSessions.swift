@@ -44,6 +44,13 @@ extension AppState {
     /// 不再回灌 library，所以这里无需 reentrancy 守卫。
     func applyActiveProviderLibraryEntry() {
         guard let entry = agentProviderLibrary.active else { return }
+        if !entry.apiKeyLoaded {
+            var loadedLibrary = agentProviderLibrary
+            if AgentSettingsStore.materializeProviderLibraryAPIKey(in: &loadedLibrary, id: entry.id) {
+                agentProviderLibrary = loadedLibrary
+                return
+            }
+        }
         var cfg = agentConfiguration
         cfg.providerID = entry.providerID
         cfg.baseURL = entry.baseURL
@@ -60,8 +67,18 @@ extension AppState {
     /// it to the live configuration. No-op if the id is unknown.
     func setActiveProviderLibraryEntry(id: UUID) {
         guard agentProviderLibrary.entries.contains(where: { $0.id == id }) else { return }
-        agentProviderLibrary.setActive(id)
+        var library = agentProviderLibrary
+        library.setActive(id)
+        AgentSettingsStore.materializeProviderLibraryAPIKey(in: &library, id: id)
+        agentProviderLibrary = library
         applyActiveProviderLibraryEntry()
+    }
+
+    func materializeProviderLibraryEntryAPIKey(id: UUID) {
+        guard agentProviderLibrary.entries.contains(where: { $0.id == id }) else { return }
+        var library = agentProviderLibrary
+        guard AgentSettingsStore.materializeProviderLibraryAPIKey(in: &library, id: id) else { return }
+        agentProviderLibrary = library
     }
 
     /// Add or update a library entry. If the entry is the active one,
@@ -665,6 +682,7 @@ extension AppState {
         agentRuntimes[session.id] = newRuntime
         activeAgentSessionID = session.id
         subscribeToActiveRuntime()
+        evictInactiveAgentRuntimesIfNeeded()
         // These now go to the freshly-built runtime via delegation.
         agentSessionDidEditFiles = false
         agentInteractionMode = .normal
@@ -710,6 +728,7 @@ extension AppState {
         agentRuntimes[session.id] = newRuntime
         activeAgentSessionID = session.id
         subscribeToActiveRuntime()
+        evictInactiveAgentRuntimesIfNeeded()
         agentSessionDidEditFiles = false
         agentInteractionMode = .normal
         agentApprovalMode = .smart
@@ -809,6 +828,7 @@ extension AppState {
         agentRuntimes[session.id] = newRuntime
         activeAgentSessionID = session.id
         subscribeToActiveRuntime()
+        evictInactiveAgentRuntimesIfNeeded()
         agentSessionDidEditFiles = false
         agentInteractionMode = .normal
         agentApprovalMode = .smart
@@ -836,9 +856,10 @@ extension AppState {
         // `activeAgentSessionID` — delegated readers fall back to
         // safe defaults if the runtime is missing, which would briefly
         // show the new session as empty before the runtime appears.
-        _ = runtime(for: id)
+        guard runtime(for: id) != nil else { return }
         activeAgentSessionID = id
         subscribeToActiveRuntime()
+        evictInactiveAgentRuntimesIfNeeded()
 
         // Re-derive the session model override from the persisted
         // session record. The runtime carries it across the lifetime
@@ -893,6 +914,7 @@ extension AppState {
         let toRemove = agentSessions.filter { session in
             if session.id == activeID { return false }
             if session.id == protectedID { return false }
+            if AgentSessionStore.isMetadataOnly(session.id) { return false }
             if pendingDispatchQueue.contains(where: { $0.runtimeID == session.id }) { return false }
             if let runtime = agentRuntimes[session.id] {
                 if runtime.isResponding || runtime.requestTask != nil || runtime.toolDecisionWaiter != nil {
@@ -933,10 +955,46 @@ extension AppState {
     @discardableResult
     func runtime(for sessionID: AgentSession.ID) -> AgentRuntime? {
         if let existing = agentRuntimes[sessionID] { return existing }
-        guard let session = agentSessions.first(where: { $0.id == sessionID }) else { return nil }
+        guard let session = materializeAgentSessionIfNeeded(id: sessionID) else { return nil }
         let runtime = AgentRuntime(session: session)
         agentRuntimes[sessionID] = runtime
+        evictInactiveAgentRuntimesIfNeeded()
         return runtime
+    }
+
+    @discardableResult
+    private func materializeAgentSessionIfNeeded(id: AgentSession.ID) -> AgentSession? {
+        guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return nil }
+        guard AgentSessionStore.isMetadataOnly(id) else {
+            return agentSessions[index]
+        }
+        guard let fullSession = AgentSessionStore.load(id: id) else {
+            return nil
+        }
+        agentSessions[index] = fullSession
+        return fullSession
+    }
+
+    private func evictInactiveAgentRuntimesIfNeeded() {
+        let maximumIdleRuntimes = 6
+        var protectedIDs = Set([activeAgentSessionID].compactMap { $0 })
+        protectedIDs.formUnion(pendingDispatchQueue.map(\.runtimeID))
+        protectedIDs.formUnion(titleSummarizationsInFlight)
+        let idle = agentRuntimes.values
+            .filter { runtime in
+                !protectedIDs.contains(runtime.id)
+                    && !runtime.isResponding
+                    && runtime.requestTask == nil
+                    && runtime.toolDecisionWaiter == nil
+            }
+            .sorted { $0.session.updatedAt > $1.session.updatedAt }
+
+        guard idle.count > maximumIdleRuntimes else { return }
+        for runtime in idle.dropFirst(maximumIdleRuntimes) {
+            persistAgentSession(runtime: runtime)
+            agentSubagentRegistry.cancelAll(forParentRuntime: runtime.id)
+            agentRuntimes.removeValue(forKey: runtime.id)
+        }
     }
 
     func deleteAgentSession(id: AgentSession.ID) {
@@ -1097,6 +1155,7 @@ extension AppState {
     /// within-pinned ordering key, so re-pinning sends the row back to
     /// the top of the pinned block.
     func toggleAgentSessionPinned(id: AgentSession.ID) {
+        _ = materializeAgentSessionIfNeeded(id: id)
         guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
         agentSessions[index].pinnedAt = agentSessions[index].pinnedAt == nil ? Date() : nil
         _ = AgentSessionStore.save(agentSessions[index])
@@ -1108,6 +1167,7 @@ extension AppState {
     /// back into the active set with their original `updatedAt` intact
     /// so they sort back into their natural recency position.
     func toggleAgentSessionArchived(id: AgentSession.ID) {
+        _ = materializeAgentSessionIfNeeded(id: id)
         guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
         let willArchive = agentSessions[index].archivedAt == nil
         agentSessions[index].archivedAt = willArchive ? Date() : nil
@@ -1127,6 +1187,7 @@ extension AppState {
     func renameAgentSession(id: AgentSession.ID, to newTitle: String) {
         let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        _ = materializeAgentSessionIfNeeded(id: id)
         guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
         agentSessions[index].title = trimmed
         agentSessions[index].titleIsUserSet = true

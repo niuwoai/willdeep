@@ -15,6 +15,8 @@ struct EditorTab: Identifiable, Equatable {
     var isEdited: Bool
     var isUntitled: Bool
     var syntaxHighlightingSelection: SyntaxHighlightingSelection
+    var contentRevision: Int
+    var savedContentRevision: Int
 
     init(id: UUID = UUID(), url: URL, content: String = "", savedContent: String? = nil, isEdited: Bool = false, isUntitled: Bool = false, syntaxHighlightingSelection: SyntaxHighlightingSelection = .automatic) {
         self.id = id
@@ -24,6 +26,8 @@ struct EditorTab: Identifiable, Equatable {
         self.isEdited = isEdited
         self.isUntitled = isUntitled
         self.syntaxHighlightingSelection = syntaxHighlightingSelection
+        self.contentRevision = 0
+        self.savedContentRevision = 0
     }
 
     var title: String {

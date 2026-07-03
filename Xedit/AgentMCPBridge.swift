@@ -10,6 +10,8 @@
 import Foundation
 
 enum AgentMCPBridge {
+    private static let stdioConnectionPool = MCPStdioConnectionPool()
+
     static func listServers() throws -> AgentToolResult {
         let servers = AgentMCPServerDirectory.list()
         guard !servers.isEmpty else {
@@ -92,88 +94,212 @@ enum AgentMCPBridge {
         switch server.transport {
         case .stdio:
             let paramsData = try JSONSerialization.data(withJSONObject: params, options: [])
-            return try await Task.detached(priority: .userInitiated) {
-                try runStdioRequestSync(server: server, method: method, paramsData: paramsData)
-            }.value
+            return try await stdioConnectionPool.request(server: server, method: method, paramsData: paramsData)
         case .streamableHTTP:
             return try await runStreamableHTTPRequest(server: server, method: method, params: params)
         }
     }
 
-    nonisolated private static func runStdioRequestSync(
-        server: AgentMCPServerConfig,
-        method: String,
-        paramsData: Data
-    ) throws -> String {
-        let params = try JSONSerialization.jsonObject(with: paramsData, options: [.fragmentsAllowed])
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: server.command)
-        process.arguments = server.args
+    private nonisolated final class MCPStdioConnectionPool: @unchecked Sendable {
+        private let lock = NSLock()
+        private var connections: [String: MCPStdioConnection] = [:]
 
-        var environment = AgentToolRunner.shellEnvironment()
-        for (key, value) in server.env {
-            environment[key] = AgentCredentialStore.resolve(value)
-        }
-        process.environment = environment
+        func request(server: AgentMCPServerConfig, method: String, paramsData: Data) async throws -> String {
+            let key = connectionKey(for: server)
+            let connection = connection(for: key, server: server)
 
-        let stdinPipe = Pipe()
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardInput = stdinPipe
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-
-        let inbox = MCPLineInbox()
-        let stderrCollector = MCPDataCollector(limit: 32_000)
-        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-            inbox.append(handle.availableData)
-        }
-        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
-            stderrCollector.append(handle.availableData)
-        }
-
-        do {
-            try process.run()
-        } catch {
-            stdoutPipe.fileHandleForReading.readabilityHandler = nil
-            stderrPipe.fileHandleForReading.readabilityHandler = nil
-            throw AgentToolError.commandFailed(-1, error.localizedDescription)
-        }
-
-        defer {
-            stdoutPipe.fileHandleForReading.readabilityHandler = nil
-            stderrPipe.fileHandleForReading.readabilityHandler = nil
-            if process.isRunning {
-                process.terminate()
+            do {
+                return try await connection.request(method: method, paramsData: paramsData)
+            } catch {
+                remove(connection: connection, for: key)
+                connection.invalidate()
+                throw error
             }
-            try? stdinPipe.fileHandleForWriting.close()
         }
 
-        try send([
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": initializeParams()
-        ], to: stdinPipe)
-        _ = try waitForResponse(id: 1, inbox: inbox, timeout: server.startupTimeout, stderr: stderrCollector, process: process)
-
-        try send([
-            "jsonrpc": "2.0",
-            "method": "notifications/initialized",
-            "params": [:]
-        ], to: stdinPipe)
-
-        try send([
-            "jsonrpc": "2.0",
-            "id": 2,
-            "method": method,
-            "params": params
-        ], to: stdinPipe)
-        let response = try waitForResponse(id: 2, inbox: inbox, timeout: server.startupTimeout, stderr: stderrCollector, process: process)
-        if let result = response["result"] {
-            return prettyJSON(result)
+        private func connection(for key: String, server: AgentMCPServerConfig) -> MCPStdioConnection {
+            lock.lock()
+            defer { lock.unlock() }
+            if let existing = connections[key] {
+                return existing
+            }
+            let created = MCPStdioConnection(server: server)
+            connections[key] = created
+            return created
         }
-        return prettyJSON(response)
+
+        private func remove(connection: MCPStdioConnection, for key: String) {
+            lock.lock()
+            defer { lock.unlock() }
+            if connections[key] === connection {
+                connections.removeValue(forKey: key)
+            }
+        }
+
+        private func connectionKey(for server: AgentMCPServerConfig) -> String {
+            let envSignature = server.env
+                .map { "\($0.key)=\($0.value)" }
+                .sorted()
+                .joined(separator: "\u{1f}")
+            return [
+                server.id,
+                server.command,
+                server.args.joined(separator: "\u{1e}"),
+                envSignature
+            ].joined(separator: "\u{1d}")
+        }
+    }
+
+    private nonisolated final class MCPStdioConnection: @unchecked Sendable {
+        private let server: AgentMCPServerConfig
+        private let queue: DispatchQueue
+        private var process: Process?
+        private var stdinPipe: Pipe?
+        private var stdoutPipe: Pipe?
+        private var stderrPipe: Pipe?
+        private var inbox: MCPLineInbox?
+        private var stderrCollector: MCPDataCollector?
+        private var nextRequestID = 1
+
+        init(server: AgentMCPServerConfig) {
+            self.server = server
+            self.queue = DispatchQueue(label: "com.willdeep.mcp.stdio.\(server.id)")
+        }
+
+        func request(method: String, paramsData: Data) async throws -> String {
+            try await withCheckedThrowingContinuation { continuation in
+                queue.async {
+                    do {
+                        let result = try self.requestSync(method: method, paramsData: paramsData)
+                        continuation.resume(returning: result)
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+        }
+
+        func invalidate() {
+            queue.async {
+                self.resetProcess()
+            }
+        }
+
+        private func requestSync(method: String, paramsData: Data) throws -> String {
+            try ensureStarted()
+            guard let process, let stdinPipe, let inbox, let stderrCollector else {
+                throw AgentToolError.commandFailed(-1, "MCP stdio server is not running.")
+            }
+
+            let params = try JSONSerialization.jsonObject(with: paramsData, options: [.fragmentsAllowed])
+            let id = nextID()
+            try AgentMCPBridge.send([
+                "jsonrpc": "2.0",
+                "id": id,
+                "method": method,
+                "params": params
+            ], to: stdinPipe)
+            let response = try AgentMCPBridge.waitForResponse(
+                id: id,
+                inbox: inbox,
+                timeout: server.startupTimeout,
+                stderr: stderrCollector,
+                process: process
+            )
+            if let result = response["result"] {
+                return AgentMCPBridge.prettyJSON(result)
+            }
+            return AgentMCPBridge.prettyJSON(response)
+        }
+
+        private func ensureStarted() throws {
+            if let process, process.isRunning {
+                return
+            }
+            resetProcess()
+
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: server.command)
+            process.arguments = server.args
+
+            var environment = AgentToolRunner.shellEnvironment()
+            for (key, value) in server.env {
+                environment[key] = AgentCredentialStore.resolve(value)
+            }
+            process.environment = environment
+
+            let stdinPipe = Pipe()
+            let stdoutPipe = Pipe()
+            let stderrPipe = Pipe()
+            let inbox = MCPLineInbox()
+            let stderrCollector = MCPDataCollector(limit: 32_000)
+            process.standardInput = stdinPipe
+            process.standardOutput = stdoutPipe
+            process.standardError = stderrPipe
+
+            stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+                inbox.append(handle.availableData)
+            }
+            stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+                stderrCollector.append(handle.availableData)
+            }
+
+            do {
+                try process.run()
+            } catch {
+                stdoutPipe.fileHandleForReading.readabilityHandler = nil
+                stderrPipe.fileHandleForReading.readabilityHandler = nil
+                throw AgentToolError.commandFailed(-1, error.localizedDescription)
+            }
+
+            self.process = process
+            self.stdinPipe = stdinPipe
+            self.stdoutPipe = stdoutPipe
+            self.stderrPipe = stderrPipe
+            self.inbox = inbox
+            self.stderrCollector = stderrCollector
+
+            let initializeID = nextID()
+            try AgentMCPBridge.send([
+                "jsonrpc": "2.0",
+                "id": initializeID,
+                "method": "initialize",
+                "params": AgentMCPBridge.initializeParams()
+            ], to: stdinPipe)
+            _ = try AgentMCPBridge.waitForResponse(
+                id: initializeID,
+                inbox: inbox,
+                timeout: server.startupTimeout,
+                stderr: stderrCollector,
+                process: process
+            )
+
+            try AgentMCPBridge.send([
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized",
+                "params": [:]
+            ], to: stdinPipe)
+        }
+
+        private func nextID() -> Int {
+            defer { nextRequestID += 1 }
+            return nextRequestID
+        }
+
+        private func resetProcess() {
+            stdoutPipe?.fileHandleForReading.readabilityHandler = nil
+            stderrPipe?.fileHandleForReading.readabilityHandler = nil
+            if process?.isRunning == true {
+                process?.terminate()
+            }
+            try? stdinPipe?.fileHandleForWriting.close()
+            process = nil
+            stdinPipe = nil
+            stdoutPipe = nil
+            stderrPipe = nil
+            inbox = nil
+            stderrCollector = nil
+        }
     }
 
     private static func runStreamableHTTPRequest(

@@ -1168,6 +1168,7 @@ struct EditorView: NSViewRepresentable {
         /// highlight, so we can clear exactly those instead of sweeping the whole
         /// document's temporary attributes on every caret move.
         private var highlightedBracketRanges: [NSRange] = []
+        private static let bracketMatchScanLimit = 120_000
 
         private func applyBracketHighlight(to textView: WillDeepTextView) {
             guard let layoutManager = textView.layoutManager else { return }
@@ -1222,7 +1223,8 @@ struct EditorView: NSViewRepresentable {
         private static func findClosingBracket(from index: Int, pair: BracketPair, in text: NSString) -> Int? {
             var depth = 0
             guard index + 1 < text.length else { return nil }
-            for cursor in index..<text.length {
+            let upperBound = min(text.length, index + bracketMatchScanLimit)
+            for cursor in index..<upperBound {
                 let character = text.character(at: cursor)
                 if character == pair.opening {
                     depth += 1
@@ -1239,7 +1241,8 @@ struct EditorView: NSViewRepresentable {
         private static func findOpeningBracket(from index: Int, pair: BracketPair, in text: NSString) -> Int? {
             var depth = 0
             guard index > 0 else { return nil }
-            for cursor in stride(from: index, through: 0, by: -1) {
+            let lowerBound = max(0, index - bracketMatchScanLimit)
+            for cursor in stride(from: index, through: lowerBound, by: -1) {
                 let character = text.character(at: cursor)
                 if character == pair.closing {
                     depth += 1

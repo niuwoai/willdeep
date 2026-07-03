@@ -47,7 +47,7 @@ struct VideoClipWorkflow: WorkflowDefinition {
 
         let audioURL = workDir.appendingPathComponent("audio.wav")
         do {
-            try VideoMediaHelpers.extractWavAudio(videoURL: videoURL, audioURL: audioURL)
+            try await VideoMediaHelpers.extractWavAudio(videoURL: videoURL, audioURL: audioURL)
         } catch {
             return "Audio extraction failed: \(error.localizedDescription)"
         }
@@ -110,7 +110,7 @@ struct VideoClipWorkflow: WorkflowDefinition {
 
         let outputURL = makeOutputURL(originalPath: expanded, suffix: "-clip")
         do {
-            try VideoMediaHelpers.cutSegment(
+            try await VideoMediaHelpers.cutSegment(
                 videoURL: videoURL,
                 outputURL: outputURL,
                 startSeconds: range.start,
@@ -187,7 +187,7 @@ struct VideoClipWorkflow: WorkflowDefinition {
 
 enum VideoMediaHelpers {
     /// Audio-only extraction (16 kHz mono PCM WAV). 用于 STT。
-    static func extractWavAudio(videoURL: URL, audioURL: URL) throws {
+    static func extractWavAudio(videoURL: URL, audioURL: URL) async throws {
         let p = Process()
         p.launchPath = "/usr/bin/env"
         p.arguments = [
@@ -201,7 +201,7 @@ enum VideoMediaHelpers {
         p.standardOutput = Pipe()
         p.standardError = errPipe
         try p.run()
-        p.waitUntilExit()
+        await AgentProcessSupport.waitUntilExit(p)
         if p.terminationStatus != 0 {
             let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             throw NSError(domain: "video-media", code: Int(p.terminationStatus), userInfo: [
@@ -213,7 +213,7 @@ enum VideoMediaHelpers {
     /// 无重编码切片（`-c copy`），速度极快但只能切在关键帧边界 ——
     /// MVP 接受这个误差（最差几秒偏移）。Phase 2 加 `-c:v h264` 重编码
     /// 选项做精确切。
-    static func cutSegment(videoURL: URL, outputURL: URL, startSeconds: Int, endSeconds: Int) throws {
+    static func cutSegment(videoURL: URL, outputURL: URL, startSeconds: Int, endSeconds: Int) async throws {
         let p = Process()
         p.launchPath = "/usr/bin/env"
         p.arguments = [
@@ -228,7 +228,7 @@ enum VideoMediaHelpers {
         p.standardOutput = Pipe()
         p.standardError = errPipe
         try p.run()
-        p.waitUntilExit()
+        await AgentProcessSupport.waitUntilExit(p)
         if p.terminationStatus != 0 {
             let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             throw NSError(domain: "video-media", code: Int(p.terminationStatus), userInfo: [
@@ -238,7 +238,7 @@ enum VideoMediaHelpers {
     }
 
     /// Run ffprobe -show_format -show_streams -of json, return JSON dict.
-    static func probe(videoURL: URL) throws -> [String: Any] {
+    static func probe(videoURL: URL) async throws -> [String: Any] {
         let p = Process()
         p.launchPath = "/usr/bin/env"
         p.arguments = [
@@ -254,7 +254,7 @@ enum VideoMediaHelpers {
         p.standardOutput = outPipe
         p.standardError = errPipe
         try p.run()
-        p.waitUntilExit()
+        await AgentProcessSupport.waitUntilExit(p)
         if p.terminationStatus != 0 {
             let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             throw NSError(domain: "video-media", code: Int(p.terminationStatus), userInfo: [

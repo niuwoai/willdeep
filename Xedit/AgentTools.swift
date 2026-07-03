@@ -11,6 +11,50 @@
 import Foundation
 import Darwin
 
+enum AgentProcessSupport {
+    static func waitUntilExit(_ process: Process) async {
+        let waiter = Waiter()
+        process.terminationHandler = { _ in waiter.resume() }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            waiter.setContinuation(continuation)
+            if !process.isRunning {
+                waiter.resume()
+            }
+        }
+        process.terminationHandler = nil
+    }
+
+    private nonisolated final class Waiter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Void, Never>?
+        private var didResume = false
+
+        func setContinuation(_ continuation: CheckedContinuation<Void, Never>) {
+            lock.lock()
+            if didResume {
+                lock.unlock()
+                continuation.resume()
+                return
+            }
+            self.continuation = continuation
+            lock.unlock()
+        }
+
+        func resume() {
+            lock.lock()
+            guard !didResume else {
+                lock.unlock()
+                return
+            }
+            didResume = true
+            let pending = continuation
+            continuation = nil
+            lock.unlock()
+            pending?.resume()
+        }
+    }
+}
+
 // MARK: - Tool runner
 
 enum AgentToolRunner {
@@ -553,7 +597,7 @@ enum AgentToolRunner {
             }
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: timeoutWorkItem)
 
-            process.waitUntilExit()
+            await AgentProcessSupport.waitUntilExit(process)
             timeoutWorkItem.cancel()
             await stdoutDrain.value
             await stderrDrain.value

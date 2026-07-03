@@ -14,6 +14,7 @@ struct AgentMediaArtifactThumbnail: View {
     let sourceTask: AgentMediaTask
 
     @State private var isSubmittingUpscale = false
+    @State private var thumbnailImage: NSImage?
     private let tileSize = CGSize(width: 96, height: 78)
 
     var body: some View {
@@ -36,6 +37,16 @@ struct AgentMediaArtifactThumbnail: View {
                 }
             }
             .help(isImageArtifact ? "预览图片" : "打开产物")
+            .task(id: "\(fileURL.standardizedFileURL.path)-\(Int(tileSize.width))-\(Int(tileSize.height))") {
+                guard isImageArtifact else {
+                    thumbnailImage = nil
+                    return
+                }
+                thumbnailImage = await AgentThumbnailImageCache.image(
+                    forFileURL: fileURL,
+                    targetPixels: max(tileSize.width, tileSize.height) * 2
+                )
+            }
 
             Text(displayTitle)
                 .font(.caption2)
@@ -150,7 +161,7 @@ struct AgentMediaArtifactThumbnail: View {
 
     @ViewBuilder
     private var thumbnailContent: some View {
-        if isImageArtifact, let image = NSImage(contentsOf: fileURL) {
+        if isImageArtifact, let image = thumbnailImage {
             Image(nsImage: image)
                 .resizable()
                 .aspectRatio(contentMode: .fill)

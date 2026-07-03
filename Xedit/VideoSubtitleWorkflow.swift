@@ -62,7 +62,7 @@ struct VideoSubtitleWorkflow: WorkflowDefinition {
             try? FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
             let wavURL = workDir.appendingPathComponent("audio.wav")
             do {
-                try VideoMediaHelpers.extractWavAudio(videoURL: videoURL, audioURL: wavURL)
+                try await VideoMediaHelpers.extractWavAudio(videoURL: videoURL, audioURL: wavURL)
             } catch {
                 return "Audio extract for transcription failed: \(error.localizedDescription)"
             }
@@ -109,7 +109,7 @@ struct VideoSubtitleWorkflow: WorkflowDefinition {
         let style = "FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H80000000,Outline=2,BorderStyle=1,Shadow=0"
 
         do {
-            try runFFmpeg([
+            try await runFFmpeg([
                 "-y", "-i", videoURL.path,
                 "-vf", "subtitles='\(safeSrt.path)':force_style='\(style)'",
                 "-c:a", "copy",
@@ -201,7 +201,7 @@ struct VideoSubtitleWorkflow: WorkflowDefinition {
         return String(format: "%02d:%02d:%02d,%03d", h, m, s, ms)
     }
 
-    private func runFFmpeg(_ arguments: [String]) throws {
+    private func runFFmpeg(_ arguments: [String]) async throws {
         let p = Process()
         p.launchPath = "/usr/bin/env"
         p.arguments = ["-S", "ffmpeg"] + arguments
@@ -209,7 +209,7 @@ struct VideoSubtitleWorkflow: WorkflowDefinition {
         let errPipe = Pipe()
         p.standardError = errPipe
         try p.run()
-        p.waitUntilExit()
+        await AgentProcessSupport.waitUntilExit(p)
         if p.terminationStatus != 0 {
             let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             throw NSError(domain: "video-subtitle", code: Int(p.terminationStatus), userInfo: [

@@ -462,8 +462,13 @@ extension AppState {
             let emptyStatus = GitRepositoryStatus()
             let emptyChanges = AgentWorktreeChangeSummary()
             DispatchQueue.main.async { [weak self] in
-                self?.gitStatus = emptyStatus
-                self?.agentWorktreeChanges = emptyChanges
+                guard let self else { return }
+                if self.gitStatus != emptyStatus {
+                    self.gitStatus = emptyStatus
+                }
+                if self.agentWorktreeChanges != emptyChanges {
+                    self.agentWorktreeChanges = emptyChanges
+                }
             }
             return
         }
@@ -486,27 +491,42 @@ extension AppState {
                       self.rootDirectory?.standardizedFileURL.path == targetDirectory.path else {
                     return
                 }
-                self.gitStatus = snapshot.status
-                self.agentWorktreeChanges = snapshot.changes
+                if self.gitStatus != snapshot.status {
+                    self.gitStatus = snapshot.status
+                }
+                if self.agentWorktreeChanges != snapshot.changes {
+                    self.agentWorktreeChanges = snapshot.changes
+                }
             }
         }
     }
 
     func refreshActiveAgentWorktreeChanges() {
         guard let runtime = activeRuntime else {
-            agentWorktreeChanges = .init()
+            let empty = AgentWorktreeChangeSummary()
+            if agentWorktreeChanges != empty {
+                agentWorktreeChanges = empty
+            }
             return
         }
         let workspaceURL: URL?
         do {
             workspaceURL = try runtime.localWorkspaceURLForOptimisticUse()
         } catch {
-            runtime.worktreeChanges = .init()
-            agentWorktreeChanges = .init()
+            let empty = AgentWorktreeChangeSummary()
+            if runtime.worktreeChanges != empty {
+                runtime.worktreeChanges = empty
+            }
+            if agentWorktreeChanges != empty {
+                agentWorktreeChanges = empty
+            }
             return
         }
         guard let targetDirectory = workspaceURL else {
-            runtime.worktreeChanges = .init()
+            let empty = AgentWorktreeChangeSummary()
+            if runtime.worktreeChanges != empty {
+                runtime.worktreeChanges = empty
+            }
             return
         }
 
@@ -524,9 +544,13 @@ extension AppState {
                     return
                 }
 
-                runtime.worktreeChanges = snapshot.changes
+                if runtime.worktreeChanges != snapshot.changes {
+                    runtime.worktreeChanges = snapshot.changes
+                }
                 if self.rootDirectory?.standardizedFileURL.path == targetDirectory.path {
-                    self.gitStatus = snapshot.status
+                    if self.gitStatus != snapshot.status {
+                        self.gitStatus = snapshot.status
+                    }
                 }
             }
         }
@@ -550,7 +574,10 @@ extension AppState {
         )
         let attributedPaths = runtime.agentEditedPaths.union(changedPaths)
 
-        runtime.worktreeChanges = snapshot.changes.filtering(paths: attributedPaths)
+        let filteredChanges = snapshot.changes.filtering(paths: attributedPaths)
+        if runtime.worktreeChanges != filteredChanges {
+            runtime.worktreeChanges = filteredChanges
+        }
         // didEditFiles flips on any real worktree movement (including
         // run_command side effects), but only after attributing changed paths
         // against this turn's baseline. Pre-existing user diffs should not
@@ -562,9 +589,13 @@ extension AppState {
         }
 
         if rootDirectory?.standardizedFileURL.path == targetDirectory.path {
-            gitStatus = snapshot.status
+            if gitStatus != snapshot.status {
+                gitStatus = snapshot.status
+            }
             if activeRuntime === runtime {
-                agentWorktreeChanges = runtime.worktreeChanges
+                if agentWorktreeChanges != runtime.worktreeChanges {
+                    agentWorktreeChanges = runtime.worktreeChanges
+                }
             }
         }
     }

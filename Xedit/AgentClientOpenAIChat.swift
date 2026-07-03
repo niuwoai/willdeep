@@ -74,7 +74,7 @@ struct OpenAIChatAdapter {
         }
 
         var pendingToolCalls: [Int: PendingToolCall] = [:]
-        var emittedSignature = ""
+        var toolCallEmissionGate = AgentToolCallStreamEmissionGate()
 
         for try await line in bytes.lines {
             try Task.checkCancellation()
@@ -101,19 +101,21 @@ struct OpenAIChatAdapter {
                         if let id = call.id, !id.isEmpty { pending.externalID = id }
                         if let function = call.function {
                             if let name = function.name, !name.isEmpty { pending.toolName = name }
-                            if let args = function.arguments { pending.argumentsJSON += args }
+                            if let args = function.arguments { pending.appendArguments(args) }
                         }
                         pendingToolCalls[slot] = pending
                     }
-                    let snapshot = Self.snapshot(of: pendingToolCalls)
-                    let signature = Self.signature(of: snapshot)
-                    if signature != emittedSignature {
-                        emittedSignature = signature
-                        await onEvent(.toolCallsUpdated(snapshot))
+                    let signature = Self.signature(of: pendingToolCalls)
+                    if toolCallEmissionGate.shouldEmit(signature: signature) {
+                        await onEvent(.toolCallsUpdated(Self.snapshot(of: pendingToolCalls)))
                     }
                 }
 
                 if let finishReason = choice.finish_reason {
+                    let signature = Self.signature(of: pendingToolCalls)
+                    if toolCallEmissionGate.shouldEmit(signature: signature, force: true) {
+                        await onEvent(.toolCallsUpdated(Self.snapshot(of: pendingToolCalls)))
+                    }
                     await onEvent(.finishedTurn(finishReason))
                 }
             }
@@ -501,6 +503,12 @@ struct OpenAIChatAdapter {
         var externalID: String = ""
         var toolName: String = ""
         var argumentsJSON: String = ""
+        var argumentsFingerprint = AgentStreamingStringFingerprint()
+
+        mutating func appendArguments(_ fragment: String) {
+            argumentsJSON += fragment
+            argumentsFingerprint.append(fragment)
+        }
     }
 
     private static func snapshot(of pending: [Int: PendingToolCall]) -> [AgentMessageToolCall] {
@@ -514,8 +522,11 @@ struct OpenAIChatAdapter {
         }
     }
 
-    private static func signature(of calls: [AgentMessageToolCall]) -> String {
-        calls.map { "\($0.externalID)|\($0.toolName)|\($0.argumentsJSON)" }.joined(separator: "||")
+    private static func signature(of pending: [Int: PendingToolCall]) -> String {
+        pending.keys.sorted().map { key in
+            let entry = pending[key]!
+            return "\(key)|\(entry.externalID)|\(entry.toolName)|\(entry.argumentsFingerprint.signatureComponent)"
+        }.joined(separator: "||")
     }
 
     private func httpError(

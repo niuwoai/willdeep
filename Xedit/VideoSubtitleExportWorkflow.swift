@@ -47,7 +47,7 @@ struct VideoSubtitleExportWorkflow: WorkflowDefinition {
 
         let wavURL = workDir.appendingPathComponent("audio.wav")
         do {
-            try VideoMediaHelpers.extractWavAudio(videoURL: videoURL, audioURL: wavURL)
+            try await VideoMediaHelpers.extractWavAudio(videoURL: videoURL, audioURL: wavURL)
         } catch {
             return "Audio extract for transcription failed: \(error.localizedDescription)"
         }

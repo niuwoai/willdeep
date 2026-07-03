@@ -439,21 +439,29 @@ enum SomeIMClient {
         guard let first = decoded.data.first else {
             throw AgentToolError.invalidArgument("some.im returned no image data.")
         }
-        let imageData: Data
-        let fileExtension: String
         if let base64 = first.b64_json, let data = Data(base64Encoded: base64) {
-            imageData = data
-            fileExtension = "png"
+            let fileURL = outputURL(fileExtension: "png")
+            try data.write(to: fileURL, options: [.atomic])
+            return SomeIMGeneratedImage(fileURL: fileURL, model: model)
         } else if let urlString = first.url, let url = URL(string: urlString) {
-            let downloaded = try await session.data(from: url).0
-            imageData = downloaded
-            fileExtension = url.pathExtension.nonEmpty ?? "png"
+            var downloadRequest = URLRequest(url: url)
+            AgentNetworkSupport.applyStandardHeaders(to: &downloadRequest)
+            let (temporaryURL, response) = try await session.download(for: downloadRequest)
+            guard let http = response as? HTTPURLResponse else {
+                throw AgentClientError.invalidResponse
+            }
+            guard (200..<300).contains(http.statusCode) else {
+                let data = (try? Data(contentsOf: temporaryURL)) ?? Data()
+                let text = String(data: data.prefix(64 * 1024), encoding: .utf8) ?? "<non-UTF8 response body>"
+                try? FileManager.default.removeItem(at: temporaryURL)
+                throw AgentToolError.httpFailed(http.statusCode, AgentNetworkSupport.limitDebugText(text))
+            }
+            let fileURL = outputURL(fileExtension: url.pathExtension.nonEmpty ?? "png")
+            try AgentNetworkSupport.moveDownloadedFile(from: temporaryURL, to: fileURL)
+            return SomeIMGeneratedImage(fileURL: fileURL, model: model)
         } else {
             throw AgentToolError.invalidArgument("some.im image response did not include b64_json or url.")
         }
-        let fileURL = outputURL(fileExtension: fileExtension)
-        try imageData.write(to: fileURL, options: [.atomic])
-        return SomeIMGeneratedImage(fileURL: fileURL, model: model)
     }
 
     private static func fetchPricingModels(

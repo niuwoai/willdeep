@@ -148,6 +148,7 @@ struct AgentProviderLibrarySection: View {
         )
         .contentShape(Rectangle())
         .onTapGesture {
+            appState.materializeProviderLibraryEntryAPIKey(id: entry.id)
             selectedEntryID = entry.id
         }
     }
@@ -214,6 +215,9 @@ struct AgentProviderLibrarySection: View {
             || appState.agentProviderLibrary.entries.first(where: { $0.id == selectedEntryID }) == nil {
             selectedEntryID = appState.agentProviderLibrary.activeID
                 ?? appState.agentProviderLibrary.entries.first?.id
+        }
+        if let selectedEntryID {
+            appState.materializeProviderLibraryEntryAPIKey(id: selectedEntryID)
         }
     }
 }

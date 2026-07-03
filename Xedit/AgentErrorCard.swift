@@ -13,6 +13,9 @@ struct AgentErrorCard: View {
     let message: String
     let details: AgentErrorDetails?
     @State private var isExpanded = false
+    /// Title of the section whose copy button was just clicked — drives the
+    /// transient checkmark feedback so the user can tell the copy happened.
+    @State private var copiedSectionTitle: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -75,12 +78,34 @@ struct AgentErrorCard: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer(minLength: 0)
+                                if copiedSectionTitle == section.title {
+                                    Text("已复制")
+                                        .font(.caption2)
+                                        .foregroundStyle(.green)
+                                }
                                 Button {
                                     NSPasteboard.general.clearContents()
                                     NSPasteboard.general.setString(section.text, forType: .string)
+                                    copiedSectionTitle = section.title
+                                    let copied = section.title
+                                    Task { @MainActor in
+                                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                                        if copiedSectionTitle == copied {
+                                            copiedSectionTitle = nil
+                                        }
+                                    }
                                 } label: {
-                                    Image(systemName: "doc.on.doc")
+                                    // 10pt 的裸 SF Symbol 命中区只有十几个点，
+                                    // 很容易"点了没反应"——补 padding + contentShape
+                                    // 把可点区域撑到正常按钮大小。
+                                    Image(systemName: copiedSectionTitle == section.title
+                                          ? "checkmark" : "doc.on.doc")
                                         .font(.system(size: 10))
+                                        .foregroundStyle(copiedSectionTitle == section.title
+                                                         ? AnyShapeStyle(.green)
+                                                         : AnyShapeStyle(.secondary))
+                                        .padding(4)
+                                        .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.borderless)
                                 .help("复制完整详情")

@@ -293,18 +293,22 @@ enum SomeIMAsyncMediaClient {
         index: Int,
         session: URLSession
     ) async throws -> SomeIMMediaArtifact {
-        let (data, response) = try await session.data(from: remoteURL)
+        var request = URLRequest(url: remoteURL)
+        AgentNetworkSupport.applyStandardHeaders(to: &request)
+        let (temporaryURL, response) = try await session.download(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw AgentToolError.invalidArgument("some.im output download returned a non-HTTP response.")
         }
         guard (200..<300).contains(http.statusCode) else {
-            let text = String(data: data, encoding: .utf8) ?? "<non-UTF8 response body>"
+            let data = (try? Data(contentsOf: temporaryURL)) ?? Data()
+            let text = String(data: data.prefix(64 * 1024), encoding: .utf8) ?? "<non-UTF8 response body>"
+            try? FileManager.default.removeItem(at: temporaryURL)
             throw AgentToolError.httpFailed(http.statusCode, AgentNetworkSupport.limitDebugText(text))
         }
         let ext = fileExtension(for: remoteURL, mimeType: http.mimeType)
         let filename = "\(safeFileStem(title))-\(String(format: "%02d", index)).\(ext)"
         let fileURL = uniqueFileURL(in: directory, filename: filename)
-        try data.write(to: fileURL, options: [.atomic])
+        try AgentNetworkSupport.moveDownloadedFile(from: temporaryURL, to: fileURL)
         return SomeIMMediaArtifact(title: fileURL.lastPathComponent, fileURL: fileURL, mimeType: http.mimeType, remoteURL: remoteURL.absoluteString)
     }
 

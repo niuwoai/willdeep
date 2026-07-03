@@ -291,6 +291,10 @@ extension AppState {
         return size > Int64(maxFileSize)
     }
 
+    nonisolated private static var isRunningUnderXCTest: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
     // MARK: - Binary Detection
 
     /// Reads the first 8192 bytes of the file at `url` and returns `true` if
@@ -349,32 +353,42 @@ extension AppState {
         case .success(let content):
             applyLoadedContent(content, for: url)
         case .failure(.fileTooLarge(let size)):
-            let alert = NSAlert()
-            alert.messageText = "File Too Large"
-            let limit = ByteCountFormatter.string(
-                fromByteCount: Int64(Self.maxFileSize),
-                countStyle: .file
-            )
-            let actualSize = ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
-            alert.informativeText = "\"\(url.lastPathComponent)\" is \(actualSize); files over \(limit) require confirmation before loading."
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: "OK")
-            alert.runModal()
+            if !Self.isRunningUnderXCTest {
+                let alert = NSAlert()
+                alert.messageText = "File Too Large"
+                let limit = ByteCountFormatter.string(
+                    fromByteCount: Int64(Self.maxFileSize),
+                    countStyle: .file
+                )
+                let actualSize = ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
+                alert.informativeText = "\"\(url.lastPathComponent)\" is \(actualSize); files over \(limit) require confirmation before loading."
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+            }
             revertFailedLoad(for: url, fallbackURL: fallbackURL)
         case .failure(.unreadable):
-            let alert = NSAlert()
-            alert.messageText = "Cannot Read File"
-            alert.informativeText = "The file \"\(url.lastPathComponent)\" could not be read."
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: "OK")
-            alert.runModal()
+            if !Self.isRunningUnderXCTest {
+                let alert = NSAlert()
+                alert.messageText = "Cannot Read File"
+                alert.informativeText = "The file \"\(url.lastPathComponent)\" could not be read."
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+            }
             revertFailedLoad(for: url, fallbackURL: fallbackURL)
         }
     }
 
     func applyLoadedContent(_ content: String, for url: URL) {
         if let index = tabIndex(for: url) {
+            if tabs[index].content != content {
+                tabs[index].contentRevision += 1
+            }
             tabs[index].content = content
+            if tabs[index].savedContent != content {
+                tabs[index].savedContentRevision += 1
+            }
             tabs[index].savedContent = content
             tabs[index].isEdited = false
         }
@@ -549,6 +563,9 @@ extension AppState {
                 updateActiveTabAfterURLChange(to: url)
             }
             updateActiveTab { tab in
+                if tab.savedContent != contentToWrite {
+                    tab.savedContentRevision += 1
+                }
                 tab.savedContent = contentToWrite
             }
             isEdited = false

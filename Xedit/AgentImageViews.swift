@@ -9,18 +9,101 @@
 
 import SwiftUI
 import AppKit
+import ImageIO
 import UniformTypeIdentifiers
+
+nonisolated enum AgentThumbnailImageCache {
+    private nonisolated final class ImageStore: @unchecked Sendable {
+        private let cache = NSCache<NSString, NSImage>()
+
+        func image(for key: NSString) -> NSImage? {
+            cache.object(forKey: key)
+        }
+
+        func store(_ image: NSImage, for key: NSString) {
+            cache.setObject(image, forKey: key)
+        }
+    }
+
+    private nonisolated final class ImageBox: @unchecked Sendable {
+        let image: NSImage
+
+        init(_ image: NSImage) {
+            self.image = image
+        }
+    }
+
+    private static let store = ImageStore()
+
+    static func image(forFileURL url: URL, targetPixels: CGFloat) async -> NSImage? {
+        let targetPixels = max(1, Int(targetPixels.rounded(.up)))
+        let modificationTime = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate?.timeIntervalSince1970) ?? 0
+        let key = "\(url.standardizedFileURL.path)|\(modificationTime)|\(targetPixels)" as NSString
+        if let cached = store.image(for: key) {
+            return cached
+        }
+
+        return await Task.detached(priority: .utility) { () -> ImageBox? in
+            guard let image = downsampledImage(from: url as CFURL, targetPixels: targetPixels) else {
+                return nil
+            }
+            store.store(image, for: key)
+            return ImageBox(image)
+        }.value?.image
+    }
+
+    static func image(forBase64 base64: String, cacheKey: String, targetPixels: CGFloat) async -> NSImage? {
+        let targetPixels = max(1, Int(targetPixels.rounded(.up)))
+        let key = "base64|\(cacheKey)|\(base64.count)|\(targetPixels)" as NSString
+        if let cached = store.image(for: key) {
+            return cached
+        }
+
+        return await Task.detached(priority: .utility) { () -> ImageBox? in
+            guard let data = Data(base64Encoded: base64),
+                  let image = downsampledImage(from: data as CFData, targetPixels: targetPixels) else {
+                return nil
+            }
+            store.store(image, for: key)
+            return ImageBox(image)
+        }.value?.image
+    }
+
+    private static func downsampledImage(from url: CFURL, targetPixels: Int) -> NSImage? {
+        guard let source = CGImageSourceCreateWithURL(url, nil) else { return nil }
+        return downsampledImage(from: source, targetPixels: targetPixels)
+    }
+
+    private static func downsampledImage(from data: CFData, targetPixels: Int) -> NSImage? {
+        guard let source = CGImageSourceCreateWithData(data, nil) else { return nil }
+        return downsampledImage(from: source, targetPixels: targetPixels)
+    }
+
+    private static func downsampledImage(from source: CGImageSource, targetPixels: Int) -> NSImage? {
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: targetPixels
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+    }
+}
 
 struct AgentImageThumbnail: View {
     let image: AgentImageAttachment
     let size: CGFloat
     let allowsRemoval: Bool
     let onRemove: (() -> Void)?
+    @State private var decodedImage: NSImage?
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
             Group {
-                if let nsImage = Self.decode(image) {
+                if let nsImage = decodedImage {
                     Image(nsImage: nsImage)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
@@ -35,6 +118,13 @@ struct AgentImageThumbnail: View {
                 RoundedRectangle(cornerRadius: 6)
                     .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
             )
+            .task(id: "\(image.id)-\(image.dataBase64.count)-\(Int(size.rounded(.up)))") {
+                decodedImage = await AgentThumbnailImageCache.image(
+                    forBase64: image.dataBase64,
+                    cacheKey: image.id.uuidString,
+                    targetPixels: size * 2
+                )
+            }
 
             if allowsRemoval, let onRemove {
                 Button(action: onRemove) {
@@ -48,11 +138,6 @@ struct AgentImageThumbnail: View {
                 .help("Remove image")
             }
         }
-    }
-
-    private static func decode(_ image: AgentImageAttachment) -> NSImage? {
-        guard let data = Data(base64Encoded: image.dataBase64) else { return nil }
-        return NSImage(data: data)
     }
 }
 

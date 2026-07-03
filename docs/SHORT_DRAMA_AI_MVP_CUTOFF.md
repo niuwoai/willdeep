@@ -1,6 +1,6 @@
 # Short Drama AI MVP Cutoff
 
-> Last updated: 2026-07-02 | Baseline version: v1.129.0-rc1
+> Last updated: 2026-07-03 | Baseline version: v1.129.0-rc9
 
 ## 收敛结论
 
@@ -28,7 +28,7 @@
 
 ## 可用版验收清单
 
-当前记录：2026-07-02，基线 `v1.129.0-rc1`。以下命令作为可用版验收 gate；本次新增 Agent Composer 空输入 placeholder 与内置 SwiftUI 卡死诊断技能，不新增短剧制作能力，短剧 handoff todo summary 仍会单独验证 smoke evidence 合约、acceptance 摘要、交付证据索引、handoff 模式矩阵、交付文件指纹、交接待办清单、待办摘要、待办证据路径、复验命令、Debug 构建和版本一致性。
+当前记录：2026-07-03，基线 `v1.129.0-rc9`。以下命令作为可用版验收 gate；本次继续收敛 provider library 启动 Keychain 懒加载、XCTest Keychain 隔离、Voice smoke opt-in 与文件加载错误弹窗非阻塞测试路径，不新增短剧制作能力，短剧 handoff todo summary 仍会单独验证 smoke evidence 合约、acceptance 摘要、交付证据索引、handoff 模式矩阵、交付文件指纹、交接待办清单、待办摘要、待办证据路径、复验命令、Debug 构建和版本一致性。
 
 - `scripts/run_tests.sh`
 - `ruby scripts/version_consistency.rb build/version_report.md build/version_report.json`

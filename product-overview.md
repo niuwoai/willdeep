@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-02 | Current version: v1.129.0-rc1
+> Last updated: 2026-07-03 | Current version: v1.129.0-rc9
 
 ## Positioning
 
@@ -14,6 +14,12 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **模型级图片支持判断（1.129.0-rc9）** —— `AgentConfiguration.supportsImageInput` 不再只看 provider preset：中转型 provider（some.im）可同时挂视觉和纯文本模型，现在叠加 `modelAcceptsImageInput` 模型级判断（DeepSeek 非 `-vl` 系、`someim-auto*` 判为纯文本），避免长会话历史里的图片被编码成 `image_url` 后让纯文本模型 400 掉整个请求；错误详情卡片的复制按钮同版扩大命中区并加「已复制 ✓」反馈。
+- **测试宿主与 Keychain/文件错误路径稳定化（1.129.0-rc7）** —— Agent provider library 启动时只 materialize active provider 的 API key，非 active entry 在切换 active 或设置页选中时再按需读取；未加载 key 会被 `apiKeyLoaded` 标记保护，保存 provider library 不会把“尚未读取”误当成“用户清空”。XCTest 环境下 `AgentSettingsStore` 使用进程内 Keychain storage，Voice smoke 改为 `WILLDEEP_VOICE_SMOKE=1` 显式 opt-in，文件加载失败路径跳过阻塞式 `NSAlert.runModal()` 并保留回退逻辑，避免全量测试受开发机 Keychain、Downloads 音频或历史大文件状态拖住。
+- **Git / 文件状态轮询 timer 收口（1.129.0-rc5）** —— editor 主视图的 10s 状态刷新 timer publisher 提升为稳定静态实例，不再随 SwiftUI body 重算反复创建 autoconnect timer；空闲 git / 外部文件状态刷新继续受 scenePhase gate 和同值保护约束。
+- **Editor / Gateway / Remote polling 热点续修（1.129.0-rc4）** —— 编辑器 gutter 行号按文本长度缓存行起点表并二分定位首个可见行；Mobile Gateway 快照改为窗口节流，Dock badge 缩小到会话列表与 runtime 局部订阅；daemon runtime 前台命令轮询从 250ms 降到 1s，减少长命令期间的本地/远端轮询压力。
+- **MCP / Session / Editor 热点续修（1.129.0-rc3）** —— stdio MCP server 按配置复用已初始化连接，不再每个工具调用冷启动进程；Agent 会话列表启动时只加载轻量索引，跳过完整 messages 与 context summary，打开会话时再物化 transcript；编辑器括号匹配增加扫描上限，避免大文件未配对括号触发长距离同步扫描。
+- **Agent / Editor CPU 与内存热路径收敛（1.129.0-rc2）** —— Agent 工具参数流式更新改为滚动指纹 + 节流发布，LSP 文档同步增加输入防抖，AppState / git 状态 / 选区状态增加同值保护；大文件 scope guide、changed-line cache、侧栏 diff / preview、图片缩略图和远端媒体下载等高频路径减少 O(n²)、body 重算、全尺寸解码和整包进内存，降低长会话、多媒体与大文件编辑时的 CPU / 内存尖峰。
 - **Agent Composer 空输入提示（1.129.0-rc1）** —— Agent composer 在空输入时显示多语言 placeholder，引导用户用 `/` 打开命令、用 `@` 引用文件/工作区、用 `$` 挂载技能与插件；提示由 `Localizable.xcstrings` 驱动，输入、粘贴、历史召回或 token 插入后自动消失。
 - **内置 SwiftUI 卡死诊断技能（1.129.0-rc1）** —— `BundledSkills/swiftui-hang-diagnose` 随 App 打包，Settings → Skills、`$` skill picker 和 Agent 的 `list_skills` / `read_skill` 工具都能发现并读取；该技能指导 Agent 用 macOS `sample` / `spindump` 采样原生 SwiftUI/AppKit/UIKit App，按主线程调用栈判断布局不收敛、重渲染循环、死锁和同步 IO 阻塞等常见卡死模式。
 - **终端录制受保护输入按“回车”成条计数（1.128.0-rc4）** —— 手动录制终端会话时，echo-off 隐藏输入（密码）不再按字符逐个生成受保护事件；连续按键会合并到一个待定缓冲区，直到用户按回车（CR/LF）或 echo 恢复才落成一个受保护事件。这样“一条密码 = 一次受保护输入”，捷径栏和工具卡片显示的受保护输入条数与用户实际输入的密码条数一致（此前一条 19 字符密码会被记成 19 次）。回车键本身作为普通提交事件保留，回放仍能正常提交密码行。

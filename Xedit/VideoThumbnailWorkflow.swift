@@ -68,7 +68,7 @@ struct VideoThumbnailWorkflow: WorkflowDefinition {
         do {
             switch mode {
             case "scene":
-                try runFFmpeg([
+                try await runFFmpeg([
                     "-y", "-i", videoURL.path,
                     "-vf", "select='gt(scene,\(sceneThreshold))'",
                     "-vsync", "vfr",
@@ -81,7 +81,7 @@ struct VideoThumbnailWorkflow: WorkflowDefinition {
                     return "Could not determine video duration. Pass mode=scene instead."
                 }
                 let intervalSec = max(1.0, durationSeconds / Double(count))
-                try runFFmpeg([
+                try await runFFmpeg([
                     "-y", "-i", videoURL.path,
                     "-vf", "fps=1/\(intervalSec)",
                     "-frames:v", "\(count)",
@@ -111,7 +111,7 @@ struct VideoThumbnailWorkflow: WorkflowDefinition {
             mode == "scene" ? "scene-%03d.jpg" : "frame-%03d.jpg"
         ).path
         do {
-            try runFFmpeg([
+            try await runFFmpeg([
                 "-y",
                 "-pattern_type", "sequence",
                 "-start_number", "1",
@@ -143,7 +143,7 @@ struct VideoThumbnailWorkflow: WorkflowDefinition {
         """
     }
 
-    private func runFFmpeg(_ arguments: [String]) throws {
+    private func runFFmpeg(_ arguments: [String]) async throws {
         let p = Process()
         p.launchPath = "/usr/bin/env"
         p.arguments = ["-S", "ffmpeg"] + arguments
@@ -151,7 +151,7 @@ struct VideoThumbnailWorkflow: WorkflowDefinition {
         let errPipe = Pipe()
         p.standardError = errPipe
         try p.run()
-        p.waitUntilExit()
+        await AgentProcessSupport.waitUntilExit(p)
         if p.terminationStatus != 0 {
             let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             throw NSError(domain: "video-thumbnail", code: Int(p.terminationStatus), userInfo: [

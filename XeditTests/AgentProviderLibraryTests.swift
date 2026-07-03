@@ -108,6 +108,43 @@ struct AgentProviderLibraryTests {
         #expect(lib.activeID == only.id)
     }
 
+    @MainActor
+    @Test
+    func providerLibrarySavePreservesUnloadedAPIKeys() {
+        let sandbox = KeychainSandbox()
+        _ = sandbox
+
+        let active = AgentProviderEntry(
+            providerID: "openai",
+            baseURL: "https://api.openai.com/v1",
+            apiKey: "sk-active",
+            flashPrimary: "gpt-4.1-mini",
+            proPrimary: "gpt-4.1"
+        )
+        let inactive = AgentProviderEntry(
+            providerID: "deepseek",
+            baseURL: "https://api.deepseek.com",
+            apiKey: "sk-inactive",
+            flashPrimary: "deepseek-v4-flash",
+            proPrimary: "deepseek-v4-pro"
+        )
+
+        AgentSettingsStore.saveProviderLibrary(
+            AgentProviderLibrary(entries: [active, inactive], activeID: active.id)
+        )
+
+        var loaded = AgentSettingsStore.loadProviderLibrary()
+        #expect(loaded.entries.first(where: { $0.id == active.id })?.apiKey == "sk-active")
+        #expect(loaded.entries.first(where: { $0.id == inactive.id })?.apiKey == "")
+        #expect(loaded.entries.first(where: { $0.id == inactive.id })?.apiKeyLoaded == false)
+
+        AgentSettingsStore.saveProviderLibrary(loaded)
+        AgentSettingsStore.materializeProviderLibraryAPIKey(in: &loaded, id: inactive.id)
+
+        #expect(loaded.entries.first(where: { $0.id == inactive.id })?.apiKey == "sk-inactive")
+        #expect(loaded.entries.first(where: { $0.id == inactive.id })?.apiKeyLoaded == true)
+    }
+
     // MARK: - Bug fix: stale model name from previous provider
 
     @Test
@@ -301,5 +338,48 @@ struct AgentProviderLibraryTests {
         #expect(imageDescription.baseURL == SomeIMRelayRegion.chinaBaseURL)
         #expect(imageDescription.model == SomeIMIntegrationSettings.defaultVisionModel)
         #expect(imageDescription.apiKey == "sk-some-im")
+    }
+
+    // MARK: - Bug fix: image_url sent to text-only model through a relay
+
+    @Test
+    func textOnlyModelsRejectImageInputEvenOnImageCapableProvider() {
+        // Bug 现场：some.im 是多模型中转，provider 级 supportsImageInput
+        // 为 true；但用户实际跑的是纯文本的 deepseek-v4-flash，历史消息里
+        // 的图片被编码成 image_url part，整个请求被 API 以
+        // "unknown variant `image_url`, expected `text`" 400 掉。
+        // 修复后 supportsImageInput 必须叠加模型级判断。
+        #expect(!AgentConfiguration.modelAcceptsImageInput("deepseek-v4-flash"))
+        #expect(!AgentConfiguration.modelAcceptsImageInput("deepseek-v4-pro"))
+        #expect(!AgentConfiguration.modelAcceptsImageInput("DeepSeek-Coder-33B"))
+        #expect(!AgentConfiguration.modelAcceptsImageInput("someim-auto-flash"))
+        // 视觉家族与未知模型保持支持，不误伤多模态自定义模型。
+        #expect(AgentConfiguration.modelAcceptsImageInput("deepseek-vl2"))
+        #expect(AgentConfiguration.modelAcceptsImageInput("gpt-4o"))
+        #expect(AgentConfiguration.modelAcceptsImageInput("qwen3-vl-plus"))
+
+        let someIMTextConfig = AgentConfiguration(
+            providerID: "some-im",
+            baseURL: "https://some.im/v1",
+            model: "deepseek-v4-flash",
+            flashModel: "deepseek-v4-flash",
+            proModel: "deepseek-v4-pro",
+            routingMode: .flash,
+            imageDescription: .default,
+            apiKey: "sk-test"
+        )
+        #expect(!someIMTextConfig.supportsImageInput)
+
+        let someIMVisionConfig = AgentConfiguration(
+            providerID: "some-im",
+            baseURL: "https://some.im/v1",
+            model: "gpt-4o",
+            flashModel: "gpt-4o",
+            proModel: "gpt-4o",
+            routingMode: .flash,
+            imageDescription: .default,
+            apiKey: "sk-test"
+        )
+        #expect(someIMVisionConfig.supportsImageInput)
     }
 }

@@ -30,6 +30,7 @@ struct ContentView: View {
     private let minSidebarWidth: CGFloat = 170
     private let maxSidebarWidth: CGFloat = 380
     private let sidebarTopPadding: CGFloat = 48
+    private static let statusRefreshTimer = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
 
     var body: some View {
         ZStack {
@@ -72,7 +73,7 @@ struct ContentView: View {
         .onCompatibleChange(of: appState.fileContent) { _, _ in
             appState.refreshExternalFileStatus()
         }
-        .onReceive(Timer.publish(every: 10, on: .main, in: .common).autoconnect()) { _ in
+        .onReceive(Self.statusRefreshTimer) { _ in
             // 1.85.0-rc5：app 退到后台 / 窗口被遮挡时不刷新。原先 3s 一
             // 跳，每跳 fork 4 个 git 子进程（rev-parse / branch /
             // status -uall / diff --numstat），12 小时 ~5.7 万次
@@ -231,7 +232,9 @@ struct ContentView: View {
                             languageServiceFoldingIsAuthoritative: appState.editorLanguageServiceFoldingIsAuthoritative,
                             onEdit: {
                                 // Mark dirty when the user types.
-                                appState.isEdited = true
+                                if !appState.isEdited {
+                                    appState.isEdited = true
+                                }
                                 appState.synchronizeEditorLanguageServiceDocument()
                                 if appState.inspectorMode == .structure || appState.isSymbolJumpVisible {
                                     appState.refreshEditorLanguageServiceOutline()

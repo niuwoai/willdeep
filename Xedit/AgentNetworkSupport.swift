@@ -68,6 +68,16 @@ enum AgentNetworkSupport {
         request.setValue(userAgentHeaderValue, forHTTPHeaderField: "User-Agent")
     }
 
+    static func moveDownloadedFile(from temporaryURL: URL, to destinationURL: URL) throws {
+        let fileManager = FileManager.default
+        do {
+            try fileManager.moveItem(at: temporaryURL, to: destinationURL)
+        } catch {
+            try fileManager.copyItem(at: temporaryURL, to: destinationURL)
+            try? fileManager.removeItem(at: temporaryURL)
+        }
+    }
+
     /// Join `baseURL + suffix` while tolerating "user already pasted the
     /// full path" / "user left a trailing slash" / "user pasted a query
     /// string by accident". The OpenAI Chat adapter has always done this;

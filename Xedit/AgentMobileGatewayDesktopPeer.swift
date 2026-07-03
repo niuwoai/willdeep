@@ -124,10 +124,11 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
 
     private func scheduleSnapshot() {
         guard isConnected, webSocketTask != nil else { return }
-        snapshotTask?.cancel()
+        guard snapshotTask == nil else { return }
         snapshotTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 400_000_000)
             guard !Task.isCancelled else { return }
+            self?.snapshotTask = nil
             self?.publishSnapshot()
         }
     }

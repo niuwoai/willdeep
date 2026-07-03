@@ -1,5 +1,80 @@
 # Changelog
 
+## 1.129.0-rc9 - 2026-07-03
+
+### Fixed
+- **纯文本模型不再收到历史图片的 `image_url`（HTTP 400）** —— some.im 这类多模型中转的 provider 级 `supportsImageInput` 为 true，但用户实际选的可能是纯文本模型（如 `deepseek-v4-flash`）；长会话历史里只要有一张图（早前贴图、工具截图），编码请求时就会生成 `image_url` content part，被 API 以 `unknown variant image_url, expected text` 400 掉整个请求。现在 `AgentConfiguration.supportsImageInput` 在 provider 开关之上叠加模型级判断（`modelAcceptsImageInput`）：DeepSeek 文本/代码系（非 `-vl`）与 `someim-auto*` 判为不支持图片，历史图片自动替换为「[N image attachment(s) omitted ...]」文字占位，最新消息图片继续走视觉子模型转文字描述；未知模型保持支持图片，不误伤多模态自定义模型。
+- **错误详情卡片复制按钮命中区过小、无反馈** —— Request/Input Messages/Request Body/Response 各区右上角的复制按钮此前是 10pt 裸 SF Symbol，可点区域只有十几个点，点上去经常"没反应"；且复制成功也无任何提示。现在按钮补了 padding + contentShape 撑大命中区，点击后 icon 变绿色 ✓ 并显示「已复制」1.5 秒，复制内容仍为该区完整文本（不受界面截断影响）。
+
+### Changed
+- 版本号从 **1.129.0-rc8** 提升为 **1.129.0-rc9**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc8 - 2026-07-03
+
+### Fixed
+- **patch 卡片「已应用」识别，不再把已落地的改动误报为失败（1.129.0-rc8）** —— 当一个 patch 卡片对应的改动其实已经落地（Goal / workspace-access 前置自动应用、另一个会话改了同一 working tree、或同一改动裂成的重复卡片其孪生卡已应用），点「应用」时旧逻辑会因 hunk 的 context 对不上而抛出「patch 的某段与当前文件内容不匹配」并标为失败，让用户面对一张无法处理的孤儿卡。现在 `applyAgentPatch` 失配（`hunkDidNotMatch`）后会调用 `AgentPatchApplier.isAlreadyApplied` 判断文件是否已是该 patch 的目标状态：若每个 hunk 的目标内容（context + 新增行）都已存在，则把卡片标为 `.applied` 并显示「改动已存在，无需重复应用」，卡片随即从待处理列表隐藏；只有 context 与目标结果都对不上的真失败才继续报错。手动 Apply、批量自动应用、enqueue 直接落盘三条路径统一走新的 `resolveAgentPatchApplication`，行为一致。判断保持保守：纯删除 hunk（目标内容为空）无法凭存在性确认，仍按真失败处理。
+
+### Changed
+- 版本号从 **1.129.0-rc7** 提升为 **1.129.0-rc8**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc7 - 2026-07-03
+
+### Fixed
+- **Xcode 全量测试不再被文件加载错误弹窗卡住（1.129.0-rc7）** —— `AppState.applyFileLoadResult` 在 XCTest 环境下跳过 `NSAlert.runModal()`，仍执行失败回退逻辑，避免测试宿主因为用户本机会话中的大文件或不可读文件弹出模态窗口后无限等待。
+- **性能修复验证链路继续收口（1.129.0-rc7）** —— 保留 rc6 的 provider library Keychain 懒加载、测试 Keychain 隔离和 Voice smoke opt-in，并补齐文件加载错误路径的非交互测试保护，减少开发机状态对全量 `XeditTests` 的干扰。
+
+### Changed
+- 版本号从 **1.129.0-rc6** 提升为 **1.129.0-rc7**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc6 - 2026-07-03
+
+### Fixed
+- **Provider library 启动不再批量解密 Keychain（1.129.0-rc6）** —— `AgentSettingsStore.loadProviderLibrary()` 只 materialize active provider 的 API key，非 active entry 保留为未加载状态；切换 active 或在 Settings 选中条目时再按需读取对应 Keychain row，避免启动时逐条 `SecItemCopyMatching` 阻塞主线程。
+- **未加载 provider key 不会被保存流程误删（1.129.0-rc6）** —— `AgentProviderEntry` 增加运行时 `apiKeyLoaded` 标记，`saveProviderLibrary` 只同步已加载的 secret；新增单测覆盖“半加载 library 保存后 inactive key 仍可懒加载回来”的回归场景。
+- **XCTest 启动不再访问开发机真实 Keychain（1.129.0-rc6）** —— `AgentSettingsStore` 在 XCTest 环境下使用进程内 Keychain storage，与已有 sandbox 测试隔离对齐，修复完整 Xcode 测试宿主在建立 XCTest connection 前卡在 Keychain 解密的问题。
+- **Voice smoke 测试改为显式 opt-in（1.129.0-rc6）** —— `VoiceSmokeTests` 不再默认扫描 `~/Downloads` 里的本地音频文件，避免完整单测在开发机文件系统元数据读取或长音频 preflight 上卡住；需要手动转录 smoke 时设置 `WILLDEEP_VOICE_SMOKE=1`。
+
+### Changed
+- 版本号从 **1.129.0-rc5** 提升为 **1.129.0-rc6**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc5 - 2026-07-03
+
+### Fixed
+- **Git / 文件状态轮询 timer 不再在 body 内重建（1.129.0-rc5）** —— editor 主视图的 10s 状态刷新 timer publisher 提升为稳定静态实例，避免 SwiftUI body 重算时反复构造新的 autoconnect timer；配合前序 git 状态同值保护，空闲刷新不再因为 publisher 重建和相同结果发布放大全局 UI 更新。
+
+### Changed
+- 版本号从 **1.129.0-rc4** 提升为 **1.129.0-rc5**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc4 - 2026-07-03
+
+### Fixed
+- **编辑器行号尺大文件首行定位改为缓存二分（1.129.0-rc4）** —— gutter 计算首个可见行号时不再每次从文件头逐字符扫描到可见区，而是按文本长度缓存行起点表并二分定位；大文件底部滚动和重绘时避免每帧重复扫完整前缀。
+- **Mobile Gateway / Dock badge 降低全局通知放大（1.129.0-rc4）** —— Mobile Gateway 快照调度改为 400ms 窗口节流，持续流式期间不会无限推迟也不会每个 `objectWillChange` 重建任务；Dock badge 不再订阅整个 `AppState.objectWillChange`，改为会话列表变更 + runtime 局部订阅驱动。
+- **远端 daemon 前台命令轮询降频（1.129.0-rc4）** —— daemon runtime 的前台命令状态轮询从 250ms 调整为 1s，避免长命令期间每个任务持续 4 req/s 压远端服务和本地 async 调度。
+
+### Changed
+- 版本号从 **1.129.0-rc3** 提升为 **1.129.0-rc4**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc3 - 2026-07-03
+
+### Fixed
+- **MCP stdio 工具不再每次调用冷启动（1.129.0-rc3）** —— stdio MCP server 现在按配置复用已初始化连接，后续 `listTools` / `callTool` 走同一进程和 JSON-RPC id 序列，避免 `npx/node` 类 server 每次工具调用都启动、initialize、退出；阻塞式 stdio 等待移到每个连接的专用串行队列，减少挤占 Swift cooperative pool 的风险。
+- **Agent 会话启动内存不再常驻完整历史（1.129.0-rc3）** —— `AgentSessionStore.loadAll()` 改为加载轻量会话索引，跳过 `messages` 和 `contextSummary`，打开具体会话时再从磁盘物化完整 transcript；置顶、归档、重命名和空会话清理都加物化保护，避免把轻量索引误当空消息写回。
+- **编辑器括号匹配限制扫描窗口（1.129.0-rc3）** —— 光标停在未配对括号附近时，匹配高亮最多扫描 120000 个 UTF-16 code unit，不再从当前位置一路扫到大文件开头或结尾。
+
+### Changed
+- 版本号从 **1.129.0-rc2** 提升为 **1.129.0-rc3**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc2 - 2026-07-02
+
+### Fixed
+- **Agent 与 Editor 高 CPU / 高内存热路径收敛（1.129.0-rc2）** —— Agent 工具参数流式更新改用滚动指纹和节流发布，避免碎片化 JSON 参数在流式过程中反复拼接比较并触发高频 UI invalidation；Editor 的 LSP 文档同步新增输入防抖，选区与 git 状态等 `@Published` 状态增加同值保护，降低每键输入和空闲轮询造成的全局刷新。
+- **大文件编辑与媒体预览内存占用下降（1.129.0-rc2）** —— Scope guide 与 changed-line cache 避免大文件 O(n²) / 全文 hash 热路径；Agent 图片、媒体缩略图改为后台降采样并缓存，侧栏 diff / preview 避免在 SwiftUI body 中重复重算，远端媒体 artifact 下载改为文件流落盘而不是整包读入内存。
+- **异步进程等待不再阻塞协程线程池（1.129.0-rc2）** —— Shell 前台命令与视频 workflow 中的 ffmpeg / ffprobe 等进程等待改为 termination handler + continuation，减少长时间外部命令挤占 Swift concurrency worker 的风险；非活跃 Agent runtime 会按最近使用保留并持久化驱逐，降低多会话常驻对象压力。
+
+### Changed
+- 版本号从 **1.129.0-rc1** 提升为 **1.129.0-rc2**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
 ## 1.129.0-rc1 - 2026-07-02
 
 ### Added

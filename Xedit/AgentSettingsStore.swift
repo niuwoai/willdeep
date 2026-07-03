@@ -88,9 +88,14 @@ enum AgentSettingsStore {
     /// point this at a per-run `UserDefaults(suiteName:)` so non-secret
     /// fixture data is sandboxed too.
     nonisolated(unsafe) private static var testDefaultsOverride: UserDefaults?
+    nonisolated(unsafe) private static var xctestKeychainStorage: [String: String] = [:]
 
     private static var keychainService: String {
         testKeychainServiceOverride ?? defaultKeychainService
+    }
+
+    private static var isRunningUnderXCTest: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
     /// All non-secret persistence flows through this accessor so a test
@@ -125,6 +130,11 @@ enum AgentSettingsStore {
     /// production service, which we never want in tests, so the guard
     /// below makes that a no-op.
     static func _wipeTestKeychain() {
+        if isRunningUnderXCTest {
+            let prefix = "\(keychainService)/"
+            xctestKeychainStorage = xctestKeychainStorage.filter { !$0.key.hasPrefix(prefix) }
+            return
+        }
         guard let service = testKeychainServiceOverride else { return }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -430,12 +440,7 @@ enum AgentSettingsStore {
     /// `loadProviderLibrary` one-shot repair so a stale key can't get
     /// re-adopted later.
     static func deleteLegacyProviderAPIKey() {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: keychainAccount
-        ]
-        SecItemDelete(query as CFDictionary)
+        deleteAPIKey(account: keychainAccount)
     }
 
     /// One-shot accessor used by the migration: returns the legacy
@@ -509,12 +514,8 @@ enum AgentSettingsStore {
     static func loadProviderLibrary() -> AgentProviderLibrary {
         if let data = defaults.data(forKey: providerLibraryKey),
            let stored = try? JSONDecoder().decode(StoredLibrary.self, from: data) {
-            let entries = stored.entries.map { stripped -> AgentProviderEntry in
-                var entry = stripped
-                entry.apiKey = loadAPIKey(account: libraryEntryKeychainAccount(for: entry.id))
-                return entry
-            }
-            var library = AgentProviderLibrary(entries: entries, activeID: stored.activeID)
+            var library = AgentProviderLibrary(entries: stored.entries, activeID: stored.activeID)
+            materializeProviderLibraryAPIKey(in: &library, id: library.active?.id)
 
             // One-shot repair pass. We don't re-run it on every launch
             // because once cfg.didSet no longer回灌 library, no new
@@ -538,6 +539,18 @@ enum AgentSettingsStore {
         // chase.
         defaults.set(true, forKey: repairAppliedKey)
         return migrated
+    }
+
+    @discardableResult
+    static func materializeProviderLibraryAPIKey(in library: inout AgentProviderLibrary, id: UUID?) -> Bool {
+        guard let id,
+              let index = library.entries.firstIndex(where: { $0.id == id }),
+              !library.entries[index].apiKeyLoaded else {
+            return false
+        }
+        library.entries[index].apiKey = loadAPIKey(account: libraryEntryKeychainAccount(for: id))
+        library.entries[index].apiKeyLoaded = true
+        return true
     }
 
     /// One-shot key (UserDefaults bool) that marks whether the
@@ -577,15 +590,18 @@ enum AgentSettingsStore {
         let stripped = library.entries.map { entry -> AgentProviderEntry in
             var copy = entry
             copy.apiKey = ""
+            copy.apiKeyLoaded = false
             return copy
         }
         let stored = StoredLibrary(entries: stripped, activeID: library.activeID)
         if let data = try? JSONEncoder().encode(stored) {
             defaults.set(data, forKey: providerLibraryKey)
         }
-        // Sync keychain — write each entry's key under its UUID, and
-        // delete keychain rows for entries that no longer exist.
+        // Sync only entries whose secret has been materialized. Empty
+        // `apiKey` on an unloaded entry means "still in Keychain", not
+        // "user cleared this key".
         for entry in library.entries {
+            guard entry.apiKeyLoaded else { continue }
             saveAPIKey(entry.apiKey, account: libraryEntryKeychainAccount(for: entry.id))
         }
     }
@@ -593,13 +609,7 @@ enum AgentSettingsStore {
     /// Convenience for tests + migrations: deletes a library entry's
     /// Keychain row.
     static func deleteLibraryEntryAPIKey(for id: UUID) {
-        let account = libraryEntryKeychainAccount(for: id)
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account
-        ]
-        SecItemDelete(query as CFDictionary)
+        deleteAPIKey(account: libraryEntryKeychainAccount(for: id))
     }
 
     private static func libraryEntryKeychainAccount(for id: UUID) -> String {
@@ -614,6 +624,9 @@ enum AgentSettingsStore {
     }
 
     private static func loadAPIKey(account: String) -> String {
+        if isRunningUnderXCTest {
+            return xctestKeychainStorage[keychainStorageKey(account: account)] ?? ""
+        }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
@@ -629,6 +642,23 @@ enum AgentSettingsStore {
             return ""
         }
         return value
+    }
+
+    private static func keychainStorageKey(account: String) -> String {
+        "\(keychainService)/\(account)"
+    }
+
+    private static func deleteAPIKey(account: String) {
+        if isRunningUnderXCTest {
+            xctestKeychainStorage.removeValue(forKey: keychainStorageKey(account: account))
+            return
+        }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: account
+        ]
+        SecItemDelete(query as CFDictionary)
     }
 
     /// Why this is more careful than "delete then add":
@@ -655,12 +685,14 @@ enum AgentSettingsStore {
     private static func saveAPIKey(_ apiKey: String, account: String) {
         // Empty value → delete the row (don't store empty data).
         guard !apiKey.isEmpty, let data = apiKey.data(using: .utf8) else {
-            let deleteQuery: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: keychainService,
-                kSecAttrAccount as String: account
-            ]
-            SecItemDelete(deleteQuery as CFDictionary)
+            deleteAPIKey(account: account)
+            return
+        }
+
+        if isRunningUnderXCTest {
+            let key = keychainStorageKey(account: account)
+            if xctestKeychainStorage[key] == apiKey { return }
+            xctestKeychainStorage[key] = apiKey
             return
         }
 

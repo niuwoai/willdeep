@@ -20,6 +20,9 @@ final class AppState: ObservableObject {
     @Published var fileContent: String {
         didSet {
             updateActiveTab { tab in
+                if tab.content != fileContent {
+                    tab.contentRevision += 1
+                }
                 tab.content = fileContent
             }
         }
@@ -70,6 +73,8 @@ final class AppState: ObservableObject {
     var editorDocumentHighlightRequestKey: String?
     var editorWorkspaceSymbolRevision = 0
     var editorWorkspaceSymbolRequestKey: String?
+    var editorLanguageServiceSynchronizationRevision = 0
+    var editorLanguageServiceSynchronizationTask: Task<Void, Never>?
     @Published var isFindBarVisible = false
     @Published var findQuery = "" {
         didSet {
@@ -346,6 +351,7 @@ final class AppState: ObservableObject {
     /// inside `AgentSessionRowStatusDot`, so background runtime
     /// changes only repaint that one row.
     private var activeRuntimeSubscription: AnyCancellable?
+    private var activeRuntimeForwardTask: Task<Void, Never>?
     /// rc482 perf: while the user is typing in the composer, the keystroke
     /// writes `activeRuntime.input` (a `@Published`), whose `objectWillChange`
     /// is forwarded below into `AppState.objectWillChange`. That forward
@@ -551,6 +557,7 @@ final class AppState: ObservableObject {
         quickOpenRefreshTask?.cancel()
         agentRequestTask?.cancel()
         activeRuntimeSubscription?.cancel()
+        activeRuntimeForwardTask?.cancel()
         jobRegistrySubscription?.cancel()
         mediaTaskRegistrySubscription?.cancel()
         Task { @MainActor [poller = agentMediaTaskPoller] in
@@ -581,6 +588,8 @@ final class AppState: ObservableObject {
     /// directly via @ObservedObject.
     func subscribeToActiveRuntime() {
         activeRuntimeSubscription?.cancel()
+        activeRuntimeForwardTask?.cancel()
+        activeRuntimeForwardTask = nil
         guard let runtime = activeRuntime else {
             activeRuntimeSubscription = nil
             return
@@ -588,8 +597,19 @@ final class AppState: ObservableObject {
         activeRuntimeSubscription = runtime.objectWillChange
             .sink { [weak self] _ in
                 guard let self, !self.suppressActiveRuntimeForward else { return }
-                self.objectWillChange.send()
+                self.scheduleActiveRuntimeForward()
             }
+    }
+
+    private func scheduleActiveRuntimeForward() {
+        guard activeRuntimeForwardTask == nil else { return }
+        activeRuntimeForwardTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self else { return }
+            self.activeRuntimeForwardTask = nil
+            guard !self.suppressActiveRuntimeForward else { return }
+            self.objectWillChange.send()
+        }
     }
 
     var activeTab: EditorTab? {
@@ -648,23 +668,25 @@ final class AppState: ObservableObject {
     /// + change-bar overlay + tab title dirty-dot, so a typo in a 5K-line
     /// file triggers three line-diffs per keystroke.
     private struct ChangedLinesCache {
-        let currentHash: Int
-        let savedHash: Int
+        let currentRevision: Int
+        let savedRevision: Int
         let lines: Set<Int>
     }
     private var changedLinesCache: ChangedLinesCache?
 
     var changedLineNumbers: Set<Int> {
         guard let activeTab else { return [] }
-        let currentHash = activeTab.content.hashValue
-        let savedHash = activeTab.savedContent.hashValue
         if let cached = changedLinesCache,
-           cached.currentHash == currentHash,
-           cached.savedHash == savedHash {
+           cached.currentRevision == activeTab.contentRevision,
+           cached.savedRevision == activeTab.savedContentRevision {
             return cached.lines
         }
         let lines = Self.changedLineNumbers(current: activeTab.content, saved: activeTab.savedContent)
-        changedLinesCache = ChangedLinesCache(currentHash: currentHash, savedHash: savedHash, lines: lines)
+        changedLinesCache = ChangedLinesCache(
+            currentRevision: activeTab.contentRevision,
+            savedRevision: activeTab.savedContentRevision,
+            lines: lines
+        )
         return lines
     }
 
@@ -676,11 +698,25 @@ final class AppState: ObservableObject {
         selectedText: String = "",
         characterOffset: Int? = nil
     ) {
-        cursorLine = max(1, line)
-        cursorColumn = max(1, column)
-        selectedCharacterCount = max(0, selectedCharacters)
-        selectedLineCount = max(0, selectedLines)
-        self.selectedText = selectedText
+        let nextLine = max(1, line)
+        let nextColumn = max(1, column)
+        let nextSelectedCharacters = max(0, selectedCharacters)
+        let nextSelectedLines = max(0, selectedLines)
+        if cursorLine != nextLine {
+            cursorLine = nextLine
+        }
+        if cursorColumn != nextColumn {
+            cursorColumn = nextColumn
+        }
+        if selectedCharacterCount != nextSelectedCharacters {
+            selectedCharacterCount = nextSelectedCharacters
+        }
+        if selectedLineCount != nextSelectedLines {
+            selectedLineCount = nextSelectedLines
+        }
+        if self.selectedText != selectedText {
+            self.selectedText = selectedText
+        }
         if let characterOffset {
             refreshEditorDocumentHighlights(characterOffset: characterOffset, selectedLength: selectedCharacters)
         }
@@ -1255,7 +1291,11 @@ final class AppState: ObservableObject {
             let ranges = Self.findRanges(in: tabs[index].content, query: findQuery)
             guard !ranges.isEmpty else { continue }
 
-            tabs[index].content = Self.replacingRanges(ranges, in: tabs[index].content, with: replaceText)
+            let replaced = Self.replacingRanges(ranges, in: tabs[index].content, with: replaceText)
+            if tabs[index].content != replaced {
+                tabs[index].contentRevision += 1
+            }
+            tabs[index].content = replaced
             tabs[index].isEdited = true
             replacementCount += ranges.count
         }
@@ -1288,7 +1328,14 @@ final class AppState: ObservableObject {
                 let replaced = Self.replacingRanges(ranges, in: tabs[tabIndex].content, with: replaceText)
                 do {
                     try replaced.write(to: url, atomically: true, encoding: .utf8)
+                    if tabs[tabIndex].content != replaced {
+                        tabs[tabIndex].contentRevision += 1
+                    }
                     tabs[tabIndex].content = replaced
+                    if tabs[tabIndex].savedContent != replaced {
+                        tabs[tabIndex].savedContentRevision += 1
+                    }
+                    tabs[tabIndex].savedContent = replaced
                     tabs[tabIndex].isEdited = false
                     replacementCount += ranges.count
                 } catch {
@@ -1498,7 +1545,13 @@ final class AppState: ObservableObject {
             return
         }
         tabs[index].url = url
+        if tabs[index].content != fileContent {
+            tabs[index].contentRevision += 1
+        }
         tabs[index].content = fileContent
+        if tabs[index].savedContent != fileContent {
+            tabs[index].savedContentRevision += 1
+        }
         tabs[index].savedContent = fileContent
         tabs[index].isEdited = isEdited
         tabs[index].isUntitled = false
@@ -1521,6 +1574,9 @@ final class AppState: ObservableObject {
 
         do {
             try tab.content.write(to: tab.url, atomically: true, encoding: .utf8)
+            if tabs[index].savedContent != tab.content {
+                tabs[index].savedContentRevision += 1
+            }
             tabs[index].savedContent = tab.content
             tabs[index].isEdited = false
             return true

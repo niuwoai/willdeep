@@ -96,6 +96,7 @@ enum ScopeGuideCalculator {
         let text: String
         let trimmed: String
         let indent: Int
+        let startOffset: Int
     }
 
     private struct StackItem {
@@ -107,13 +108,17 @@ enum ScopeGuideCalculator {
     }
 
     private nonisolated static func makeLines(_ source: String) -> [Line] {
-        source.components(separatedBy: "\n").enumerated().map { index, text in
-            Line(
+        var startOffset = 0
+        return source.components(separatedBy: "\n").enumerated().map { index, text in
+            let line = Line(
                 number: index + 1,
                 text: text,
                 trimmed: text.trimmingCharacters(in: .whitespaces),
-                indent: leadingColumnCount(in: text)
+                indent: leadingColumnCount(in: text),
+                startOffset: startOffset
             )
+            startOffset += (text as NSString).length + 1
+            return line
         }
     }
 
@@ -223,7 +228,7 @@ enum ScopeGuideCalculator {
         let lines = makeLines(source)
 
         for line in lines {
-            let range = NSRange(location: lineStartOffset(for: line.number, in: lines), length: (line.text as NSString).length)
+            let range = NSRange(location: line.startOffset, length: (line.text as NSString).length)
             for match in regex.matches(in: source, range: range) {
                 let full = nsSource.substring(with: match.range)
                 let tag = nsSource.substring(with: match.range(at: 1)).lowercased()
@@ -432,13 +437,6 @@ enum ScopeGuideCalculator {
         }
 
         return output
-    }
-
-    private nonisolated static func lineStartOffset(for lineNumber: Int, in lines: [Line]) -> Int {
-        guard lineNumber > 1 else { return 0 }
-        return lines.prefix(lineNumber - 1).reduce(0) { partial, line in
-            partial + (line.text as NSString).length + 1
-        }
     }
 
     private nonisolated static func markdownHeadingLevel(_ text: String) -> Int? {

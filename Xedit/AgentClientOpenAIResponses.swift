@@ -270,7 +270,7 @@ struct OpenAIResponsesAdapter {
     private struct StreamState {
         var functionCalls: [String: PendingFunctionCall] = [:]
         var orderedItemIDs: [String] = []
-        var emittedSignature = ""
+        var toolCallEmissionGate = AgentToolCallStreamEmissionGate()
     }
 
     private struct PendingFunctionCall {
@@ -279,6 +279,24 @@ struct OpenAIResponsesAdapter {
         var externalID: String
         var name: String
         var argumentsJSON: String
+        var argumentsFingerprint = AgentStreamingStringFingerprint()
+
+        init(externalID: String, name: String, argumentsJSON: String) {
+            self.externalID = externalID
+            self.name = name
+            self.argumentsJSON = argumentsJSON
+            self.argumentsFingerprint.replace(with: argumentsJSON)
+        }
+
+        mutating func appendArguments(_ fragment: String) {
+            argumentsJSON += fragment
+            argumentsFingerprint.append(fragment)
+        }
+
+        mutating func replaceArguments(with arguments: String) {
+            argumentsJSON = arguments
+            argumentsFingerprint.replace(with: arguments)
+        }
     }
 
     private func handleEvent(
@@ -336,7 +354,7 @@ struct OpenAIResponsesAdapter {
                let delta = event.delta,
                !delta.isEmpty {
                 if var pending = state.functionCalls[itemID] {
-                    pending.argumentsJSON += delta
+                    pending.appendArguments(delta)
                     state.functionCalls[itemID] = pending
                 } else {
                     // `output_item.added` should always precede this,
@@ -362,14 +380,15 @@ struct OpenAIResponsesAdapter {
                let itemID = event.item_id {
                 if var pending = state.functionCalls[itemID] {
                     if let final = event.arguments {
-                        pending.argumentsJSON = final
+                        pending.replaceArguments(with: final)
                     }
                     state.functionCalls[itemID] = pending
-                    await emitToolCallsIfChanged(state: &state, onEvent: onEvent)
+                    await emitToolCallsIfChanged(state: &state, onEvent: onEvent, force: true)
                 }
             }
 
         case "response.completed":
+            await emitToolCallsIfChanged(state: &state, onEvent: onEvent, force: true)
             // Final event — carries the full Response object including
             // usage and stop reason. Translate the OpenAI Responses
             // `status` / `incomplete_details.reason` into the
@@ -421,13 +440,12 @@ struct OpenAIResponsesAdapter {
 
     private func emitToolCallsIfChanged(
         state: inout StreamState,
-        onEvent: @escaping @Sendable (AgentClientEvent) async -> Void
+        onEvent: @escaping @Sendable (AgentClientEvent) async -> Void,
+        force: Bool = false
     ) async {
-        let snapshot = Self.snapshot(of: state)
-        let signature = Self.signature(of: snapshot)
-        if signature != state.emittedSignature {
-            state.emittedSignature = signature
-            await onEvent(.toolCallsUpdated(snapshot))
+        let signature = Self.signature(of: state)
+        if state.toolCallEmissionGate.shouldEmit(signature: signature, force: force) {
+            await onEvent(.toolCallsUpdated(Self.snapshot(of: state)))
         }
     }
 
@@ -442,8 +460,11 @@ struct OpenAIResponsesAdapter {
         }
     }
 
-    private static func signature(of calls: [AgentMessageToolCall]) -> String {
-        calls.map { "\($0.externalID)|\($0.toolName)|\($0.argumentsJSON)" }.joined(separator: "||")
+    private static func signature(of state: StreamState) -> String {
+        state.orderedItemIDs.compactMap { itemID -> String? in
+            guard let pending = state.functionCalls[itemID] else { return nil }
+            return "\(itemID)|\(pending.externalID)|\(pending.name)|\(pending.argumentsFingerprint.signatureComponent)"
+        }.joined(separator: "||")
     }
 
     /// Translate the Response object's terminal state into one of the

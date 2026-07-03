@@ -1106,6 +1106,51 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 - [ ] 复测内置技能：Settings → Skills 或 `$` skill picker 可搜索 `swiftui` / `卡死` / `sample` 找到 `swiftui-hang-diagnose`，Agent `read_skill` 能读到 `sample <PID> 5 -mayDie` 与 `spindump <PID> 5` 诊断流程。
 - [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.129.0-rc1`，短剧制作能力无新增。
 
+## 1.129.0-rc2 — 短剧指针同步 / Agent Editor performance
+
+- [ ] 复测 Agent 长工具参数流式输出：工具卡片应持续可见最新参数，但长 JSON streaming 时聊天区滚动和 composer 输入不应出现明显卡顿。
+- [ ] 复测大文件编辑：打开长文件后移动光标、输入、保存和查看 change bar，确认 scope guide 与 changed-line 标记仍正确且输入回显稳定。
+- [ ] 复测媒体任务缩略图与侧栏预览：图片、视频任务缩略图能显示，Diff / Preview 面板切换不应因重复重算造成明显冻结。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.129.0-rc2`，短剧制作能力无新增。
+
+## 1.129.0-rc3 — 短剧指针同步 / MCP session editor performance
+
+- [ ] 复测 MCP stdio server：连续调用同一个 MCP server 的 list/call 工具，第二次起不应重新冷启动 server 进程。
+- [ ] 复测 Agent 历史会话：启动后侧栏能列出历史会话，点击旧会话后完整 transcript 正常恢复；置顶、归档、重命名不会丢消息。
+- [ ] 复测大文件括号匹配：光标停在未配对括号附近时编辑器不应因向文件头/尾全量扫描而卡住。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.129.0-rc3`，短剧制作能力无新增。
+
+## 1.129.0-rc4 — 短剧指针同步 / editor gateway polling
+
+- [ ] 复测大文件底部滚动与输入：行号尺首个可见行号正确，滚动底部不应因为从文件头扫描行号而明显卡顿。
+- [ ] 复测 Mobile Gateway：持续流式或打字时手机端快照仍会周期更新，不应无限推迟，也不应在每个 UI 通知上重建快照任务。
+- [ ] 复测远端 daemon runtime：前台命令仍能返回结果，长命令期间状态轮询频率应降到约 1 秒一次。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.129.0-rc4`，短剧制作能力无新增。
+
+## 1.129.0-rc5 — 短剧指针同步 / status timer polling
+
+- [ ] 复测 editor 主窗口空闲状态：SwiftUI body 重算不应重建 git / 外部文件状态刷新 timer，10s 状态刷新仍只在 scenePhase active 时触发。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.129.0-rc5`，短剧制作能力无新增。
+
+## 1.129.0-rc6 — 短剧指针同步 / provider keychain lazy loading
+
+- [ ] 复测 Agent Settings provider library：启动 App 不应因多个 provider key 逐条读取 Keychain 而卡住；切换 active provider 或选中非 active provider 编辑时，对应 API key 仍能按需显示和生效。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.129.0-rc6`，短剧制作能力无新增。
+
+## 1.129.0-rc7 — 短剧指针同步 / test-host stabilization
+
+- [ ] 复测 Agent Settings provider library：启动 App 不应因多个 provider key 逐条读取 Keychain 而卡住；切换 active provider 或选中非 active provider 编辑时，对应 API key 仍能按需显示和生效。
+- [ ] 复测本地单测环境：未设置 `WILLDEEP_VOICE_SMOKE=1` 时 Voice smoke 应跳过；全量 `XeditTests` 不应因本机历史大文件或不可读文件弹出阻塞式文件加载错误弹窗。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.129.0-rc7`，短剧制作能力无新增。
+
+## 1.129.0-rc9 — 短剧指针同步 / patch 卡片已应用识别
+
+- [ ] 复现原始 bug：让 Agent 在 Goal / workspace-access 模式下改一个文件（例如 `scripts/release_mac_apps.rb`），改动已落盘后，再手动点残留的同改动 patch 卡片「应用」，不应再弹「patch 的某段与当前文件内容不匹配」，而应显示「改动已存在，无需重复应用」并把卡片标为已应用（绿勾、从待处理列表消失）。
+- [ ] 反向验证：对一个 context 真的对不上、且文件里也不存在目标结果的坏 patch 点「应用」，仍应正常报「patch 的某段与当前文件内容不匹配」并标为失败（不能把真失败误判成已应用）。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.129.0-rc9`，短剧制作能力无新增。
+- [ ] 在含历史图片（早前贴过图/工具截过图）的长会话里切到 some.im + deepseek-v4-flash 继续对话，确认不再出现 HTTP 400 `unknown variant image_url`；历史图片位置应以「[N image attachment(s) omitted ...]」文字占位发出。
+- [ ] 触发一次 Agent 请求错误，展开错误详情卡片，点击 Response 区右上角复制按钮：icon 应变成绿色 ✓ 并显示「已复制」，粘贴板里应是完整 Response 内容（含被界面省略的部分）。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）

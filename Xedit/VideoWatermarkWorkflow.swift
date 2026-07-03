@@ -74,7 +74,7 @@ struct VideoWatermarkWorkflow: WorkflowDefinition {
         """
 
         do {
-            try runFFmpeg([
+            try await runFFmpeg([
                 "-y", "-i", videoURL.path,
                 "-vf", filter,
                 "-c:a", "copy",
@@ -151,7 +151,7 @@ struct VideoWatermarkWorkflow: WorkflowDefinition {
         return out
     }
 
-    private func runFFmpeg(_ arguments: [String]) throws {
+    private func runFFmpeg(_ arguments: [String]) async throws {
         let p = Process()
         p.launchPath = "/usr/bin/env"
         p.arguments = ["-S", "ffmpeg"] + arguments
@@ -159,7 +159,7 @@ struct VideoWatermarkWorkflow: WorkflowDefinition {
         let errPipe = Pipe()
         p.standardError = errPipe
         try p.run()
-        p.waitUntilExit()
+        await AgentProcessSupport.waitUntilExit(p)
         if p.terminationStatus != 0 {
             let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             throw NSError(domain: "video-watermark", code: Int(p.terminationStatus), userInfo: [

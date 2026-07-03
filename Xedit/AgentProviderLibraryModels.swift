@@ -21,6 +21,11 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
     /// one entry in `agentProviderLibrary` is the active one; toggling
     /// activation is the library's job, not this struct's.
     var apiKey: String
+    /// Runtime-only marker: `false` means the key is still in Keychain and
+    /// has not been materialized into memory. This is intentionally not
+    /// persisted, otherwise a startup metadata load would erase secrets on
+    /// the next save.
+    var apiKeyLoaded: Bool
     /// Primary model for Auto/Flash routing. Required when this entry
     /// is active.
     var flashPrimary: String
@@ -71,6 +76,7 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
         // site is covered too.
         self.baseURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         self.apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.apiKeyLoaded = true
         self.flashPrimary = flashPrimary
         self.flashAlternates = AgentProviderEntry.cleanList(flashAlternates, excluding: flashPrimary)
         self.proPrimary = proPrimary
@@ -96,7 +102,9 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
         self.providerID = try c.decode(String.self, forKey: .providerID)
         self.displayName = try c.decode(String.self, forKey: .displayName)
         self.baseURL = try c.decode(String.self, forKey: .baseURL)
-        self.apiKey = try c.decodeIfPresent(String.self, forKey: .apiKey) ?? ""
+        let decodedAPIKey = try c.decodeIfPresent(String.self, forKey: .apiKey) ?? ""
+        self.apiKey = decodedAPIKey
+        self.apiKeyLoaded = !decodedAPIKey.isEmpty
         self.flashPrimary = try c.decode(String.self, forKey: .flashPrimary)
         self.flashAlternates = try c.decodeIfPresent([String].self, forKey: .flashAlternates) ?? []
         self.proPrimary = try c.decode(String.self, forKey: .proPrimary)

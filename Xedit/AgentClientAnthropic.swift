@@ -231,10 +231,7 @@ struct AnthropicMessagesAdapter {
     private struct StreamState {
         /// Tool-use blocks indexed by their content_block index.
         var toolBlocks: [Int: PendingToolCall] = [:]
-        /// Cumulative signature of the last emitted toolCallsUpdated
-        /// snapshot — gate so we don't fire the event on every JSON
-        /// fragment if nothing observable changed.
-        var emittedSignature = ""
+        var toolCallEmissionGate = AgentToolCallStreamEmissionGate()
         /// Carried from `message_start` (Anthropic emits input_tokens
         /// up front) so the final `usageReported` can include both
         /// halves once `message_delta` brings output_tokens.
@@ -247,6 +244,12 @@ struct AnthropicMessagesAdapter {
         var externalID: String = ""
         var toolName: String = ""
         var argumentsJSON: String = ""
+        var argumentsFingerprint = AgentStreamingStringFingerprint()
+
+        mutating func appendArguments(_ fragment: String) {
+            argumentsJSON += fragment
+            argumentsFingerprint.append(fragment)
+        }
     }
 
     private func handleEvent(
@@ -270,12 +273,7 @@ struct AnthropicMessagesAdapter {
                 pending.externalID = event.content_block.id ?? ""
                 pending.toolName = event.content_block.name ?? ""
                 state.toolBlocks[event.index] = pending
-                let snapshot = Self.snapshot(of: state.toolBlocks)
-                let signature = Self.signature(of: snapshot)
-                if signature != state.emittedSignature {
-                    state.emittedSignature = signature
-                    await onEvent(.toolCallsUpdated(snapshot))
-                }
+                await emitToolCallsIfChanged(state: &state, onEvent: onEvent, force: true)
             }
 
         case "content_block_delta":
@@ -295,14 +293,9 @@ struct AnthropicMessagesAdapter {
                 }
             case "input_json_delta":
                 if let partial = event.delta.partial_json, var pending = state.toolBlocks[event.index] {
-                    pending.argumentsJSON += partial
+                    pending.appendArguments(partial)
                     state.toolBlocks[event.index] = pending
-                    let snapshot = Self.snapshot(of: state.toolBlocks)
-                    let signature = Self.signature(of: snapshot)
-                    if signature != state.emittedSignature {
-                        state.emittedSignature = signature
-                        await onEvent(.toolCallsUpdated(snapshot))
-                    }
+                    await emitToolCallsIfChanged(state: &state, onEvent: onEvent)
                 }
             default:
                 // signature_delta and any future delta type — silently
@@ -311,8 +304,7 @@ struct AnthropicMessagesAdapter {
             }
 
         case "content_block_stop":
-            // Nothing to emit — accumulation already done in deltas.
-            break
+            await emitToolCallsIfChanged(state: &state, onEvent: onEvent, force: true)
 
         case "message_delta":
             guard let event = try? JSONDecoder().decode(MessageDeltaEvent.self, from: payload) else { return }
@@ -349,9 +341,7 @@ struct AnthropicMessagesAdapter {
             }
 
         case "message_stop":
-            // End of stream; nothing to flush — `for try await line in
-            // bytes.lines` naturally returns when the socket closes.
-            break
+            await emitToolCallsIfChanged(state: &state, onEvent: onEvent, force: true)
 
         case "error":
             // Anthropic sends an `event: error` with `{ type: "error",
@@ -378,6 +368,17 @@ struct AnthropicMessagesAdapter {
         }
     }
 
+    private func emitToolCallsIfChanged(
+        state: inout StreamState,
+        onEvent: @escaping @Sendable (AgentClientEvent) async -> Void,
+        force: Bool = false
+    ) async {
+        let signature = Self.signature(of: state.toolBlocks)
+        if state.toolCallEmissionGate.shouldEmit(signature: signature, force: force) {
+            await onEvent(.toolCallsUpdated(Self.snapshot(of: state.toolBlocks)))
+        }
+    }
+
     private static func snapshot(of pending: [Int: PendingToolCall]) -> [AgentMessageToolCall] {
         pending.keys.sorted().map { idx in
             let entry = pending[idx]!
@@ -389,8 +390,11 @@ struct AnthropicMessagesAdapter {
         }
     }
 
-    private static func signature(of calls: [AgentMessageToolCall]) -> String {
-        calls.map { "\($0.externalID)|\($0.toolName)|\($0.argumentsJSON)" }.joined(separator: "||")
+    private static func signature(of pending: [Int: PendingToolCall]) -> String {
+        pending.keys.sorted().map { idx in
+            let entry = pending[idx]!
+            return "\(idx)|\(entry.externalID)|\(entry.toolName)|\(entry.argumentsFingerprint.signatureComponent)"
+        }.joined(separator: "||")
     }
 
     // MARK: - Headers / endpoints

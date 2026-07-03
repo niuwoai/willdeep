@@ -178,7 +178,7 @@ struct AgentModeMessageView: View {
                 RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
                     .stroke(Color.primary.opacity(0.032), lineWidth: 1)
             )
-            .frame(maxWidth: AgentDesign.chatMaxContentWidth * AgentDesign.userMessageMaxWidthRatio, alignment: .leading)
+            .frame(maxWidth: AgentDesign.chatMaxContentWidth * AgentDesign.userMessageMaxWidthRatio, alignment: .trailing)
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
     }

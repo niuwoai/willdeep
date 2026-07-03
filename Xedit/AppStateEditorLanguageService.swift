@@ -1008,7 +1008,13 @@ extension AppState {
                 }
                 guard updated != source else { continue }
                 try updated.write(to: fileURL, atomically: true, encoding: .utf8)
+                if tabs[tabIndex].content != updated {
+                    tabs[tabIndex].contentRevision += 1
+                }
                 tabs[tabIndex].content = updated
+                if tabs[tabIndex].savedContent != updated {
+                    tabs[tabIndex].savedContentRevision += 1
+                }
                 tabs[tabIndex].savedContent = updated
                 tabs[tabIndex].isEdited = false
                 knownModificationDates[fileURL] = Self.modificationDate(at: fileURL)
@@ -1099,7 +1105,13 @@ extension AppState {
         try Data().write(to: fileURL, options: [.atomic])
         knownModificationDates[fileURL] = Self.modificationDate(at: fileURL)
         if let tabIndex = tabIndex(for: fileURL) {
+            if tabs[tabIndex].content != "" {
+                tabs[tabIndex].contentRevision += 1
+            }
             tabs[tabIndex].content = ""
+            if tabs[tabIndex].savedContent != "" {
+                tabs[tabIndex].savedContentRevision += 1
+            }
             tabs[tabIndex].savedContent = ""
             tabs[tabIndex].isEdited = false
             if tabs[tabIndex].id == activeTabID {
@@ -1450,93 +1462,82 @@ extension AppState {
     func synchronizeEditorLanguageServiceDocument() {
         installEditorLanguageServiceDiagnosticsHandlerIfNeeded()
         guard let url = openedFileURL else {
-            editorWorkspaceSymbolRevision += 1
-            editorWorkspaceSymbolRequestKey = nil
-            editorWorkspaceSymbolItems = []
-            editorWorkspaceSymbolSearchStatus = .unavailable
-            isEditorWorkspaceSymbolSearchLoading = false
-            editorLanguageServiceDiagnosticsURI = nil
-            editorLanguageServiceDiagnosticIssues = []
-            editorLanguageServiceSemanticTokensURI = nil
-            editorSemanticTokenSpans = []
-            editorLanguageServiceInlayHintsURI = nil
-            editorInlayHintSpans = []
-            editorLanguageServiceDocumentLinksURI = nil
-            editorDocumentLinkSpans = []
-            editorLanguageServiceFoldingURI = nil
-            editorLanguageServiceFoldingGuides = []
-            editorLanguageServiceFoldingStatus = .unavailable
-            editorLanguageServiceDocumentHighlightsURI = nil
-            editorDocumentHighlightRequestKey = nil
-            editorDocumentHighlightRevision += 1
-            editorDocumentHighlightSpans = []
-            editorHoverInfo = nil
-            editorCompletionPanel = nil
-            editorSignatureHelpPanel = nil
-            editorCodeActionPanel = nil
-            editorReferencesPanel = nil
-            editorCallHierarchyPanel = nil
+            cancelPendingEditorLanguageServiceSynchronization()
+            clearEditorLanguageServiceStateForInactiveDocument()
             return
         }
-        let language = effectiveLanguage
+        guard let language = effectiveLanguage else {
+            cancelPendingEditorLanguageServiceSynchronization()
+            clearEditorLanguageServiceStateForInactiveDocument()
+            return
+        }
         guard EditorLanguageServiceRegistry.isFirstStageIDELanguage(language) else {
-            editorWorkspaceSymbolRevision += 1
-            editorWorkspaceSymbolRequestKey = nil
-            editorWorkspaceSymbolItems = []
-            editorWorkspaceSymbolSearchStatus = .unavailable
-            isEditorWorkspaceSymbolSearchLoading = false
-            editorLanguageServiceDiagnosticsURI = nil
-            editorLanguageServiceDiagnosticIssues = []
-            editorLanguageServiceSemanticTokensURI = nil
-            editorSemanticTokenSpans = []
-            editorLanguageServiceInlayHintsURI = nil
-            editorInlayHintSpans = []
-            editorLanguageServiceDocumentLinksURI = nil
-            editorDocumentLinkSpans = []
-            editorLanguageServiceFoldingURI = nil
-            editorLanguageServiceFoldingGuides = []
-            editorLanguageServiceFoldingStatus = .unavailable
-            editorLanguageServiceDocumentHighlightsURI = nil
-            editorDocumentHighlightRequestKey = nil
-            editorDocumentHighlightRevision += 1
-            editorDocumentHighlightSpans = []
-            editorHoverInfo = nil
-            editorCompletionPanel = nil
-            editorSignatureHelpPanel = nil
-            editorCodeActionPanel = nil
-            editorReferencesPanel = nil
-            editorCallHierarchyPanel = nil
+            cancelPendingEditorLanguageServiceSynchronization()
+            clearEditorLanguageServiceStateForInactiveDocument()
             return
         }
         if editorLanguageServiceDiagnosticsURI != url.absoluteString {
             editorLanguageServiceDiagnosticsURI = nil
-            editorLanguageServiceDiagnosticIssues = []
+            setEditorLanguageServiceValue(\.editorLanguageServiceDiagnosticIssues, to: [])
         }
         if editorLanguageServiceSemanticTokensURI != url.absoluteString {
             editorLanguageServiceSemanticTokensURI = nil
-            editorSemanticTokenSpans = []
+            setEditorLanguageServiceValue(\.editorSemanticTokenSpans, to: [])
         }
         if editorLanguageServiceInlayHintsURI != url.absoluteString {
             editorLanguageServiceInlayHintsURI = nil
-            editorInlayHintSpans = []
+            setEditorLanguageServiceValue(\.editorInlayHintSpans, to: [])
         }
         if editorLanguageServiceDocumentLinksURI != url.absoluteString {
             editorLanguageServiceDocumentLinksURI = nil
-            editorDocumentLinkSpans = []
+            setEditorLanguageServiceValue(\.editorDocumentLinkSpans, to: [])
         }
         if editorLanguageServiceFoldingURI != url.absoluteString {
             editorLanguageServiceFoldingURI = nil
-            editorLanguageServiceFoldingGuides = []
-            editorLanguageServiceFoldingStatus = .unavailable
+            setEditorLanguageServiceValue(\.editorLanguageServiceFoldingGuides, to: [])
+            setEditorLanguageServiceValue(\.editorLanguageServiceFoldingStatus, to: .unavailable)
         }
         if editorLanguageServiceDocumentHighlightsURI != url.absoluteString {
             editorLanguageServiceDocumentHighlightsURI = nil
             editorDocumentHighlightRequestKey = nil
             editorDocumentHighlightRevision += 1
-            editorDocumentHighlightSpans = []
+            setEditorLanguageServiceValue(\.editorDocumentHighlightSpans, to: [])
         }
         let text = fileContent
         let root = rootDirectory
+        editorLanguageServiceSynchronizationRevision += 1
+        let revision = editorLanguageServiceSynchronizationRevision
+        editorLanguageServiceSynchronizationTask?.cancel()
+        editorLanguageServiceSynchronizationTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 300_000_000)
+            } catch {
+                return
+            }
+            await MainActor.run {
+                guard let self,
+                      self.editorLanguageServiceSynchronizationRevision == revision,
+                      self.openedFileURL?.standardizedFileURL == url.standardizedFileURL,
+                      self.effectiveLanguage == language,
+                      self.fileContent == text else {
+                    return
+                }
+                self.performEditorLanguageServiceDocumentSynchronization(
+                    url: url,
+                    language: language,
+                    root: root,
+                    text: text
+                )
+            }
+        }
+    }
+
+    private func performEditorLanguageServiceDocumentSynchronization(
+        url: URL,
+        language: Language,
+        root: URL?,
+        text: String
+    ) {
 
         Task { [weak self] in
             guard let self else { return }
@@ -1674,6 +1675,49 @@ extension AppState {
                 }
             }
         }
+    }
+
+    private func cancelPendingEditorLanguageServiceSynchronization() {
+        editorLanguageServiceSynchronizationRevision += 1
+        editorLanguageServiceSynchronizationTask?.cancel()
+        editorLanguageServiceSynchronizationTask = nil
+    }
+
+    private func clearEditorLanguageServiceStateForInactiveDocument() {
+        editorWorkspaceSymbolRevision += 1
+        editorWorkspaceSymbolRequestKey = nil
+        setEditorLanguageServiceValue(\.editorWorkspaceSymbolItems, to: [])
+        setEditorLanguageServiceValue(\.editorWorkspaceSymbolSearchStatus, to: .unavailable)
+        setEditorLanguageServiceValue(\.isEditorWorkspaceSymbolSearchLoading, to: false)
+        editorLanguageServiceDiagnosticsURI = nil
+        setEditorLanguageServiceValue(\.editorLanguageServiceDiagnosticIssues, to: [])
+        editorLanguageServiceSemanticTokensURI = nil
+        setEditorLanguageServiceValue(\.editorSemanticTokenSpans, to: [])
+        editorLanguageServiceInlayHintsURI = nil
+        setEditorLanguageServiceValue(\.editorInlayHintSpans, to: [])
+        editorLanguageServiceDocumentLinksURI = nil
+        setEditorLanguageServiceValue(\.editorDocumentLinkSpans, to: [])
+        editorLanguageServiceFoldingURI = nil
+        setEditorLanguageServiceValue(\.editorLanguageServiceFoldingGuides, to: [])
+        setEditorLanguageServiceValue(\.editorLanguageServiceFoldingStatus, to: .unavailable)
+        editorLanguageServiceDocumentHighlightsURI = nil
+        editorDocumentHighlightRequestKey = nil
+        editorDocumentHighlightRevision += 1
+        setEditorLanguageServiceValue(\.editorDocumentHighlightSpans, to: [])
+        setEditorLanguageServiceValue(\.editorHoverInfo, to: nil)
+        setEditorLanguageServiceValue(\.editorCompletionPanel, to: nil)
+        setEditorLanguageServiceValue(\.editorSignatureHelpPanel, to: nil)
+        setEditorLanguageServiceValue(\.editorCodeActionPanel, to: nil)
+        setEditorLanguageServiceValue(\.editorReferencesPanel, to: nil)
+        setEditorLanguageServiceValue(\.editorCallHierarchyPanel, to: nil)
+    }
+
+    private func setEditorLanguageServiceValue<Value: Equatable>(
+        _ keyPath: ReferenceWritableKeyPath<AppState, Value>,
+        to value: Value
+    ) {
+        guard self[keyPath: keyPath] != value else { return }
+        self[keyPath: keyPath] = value
     }
 
     func notifyEditorLanguageServiceDocumentSaved(url: URL, text: String) {

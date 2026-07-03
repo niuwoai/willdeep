@@ -89,7 +89,7 @@ final class AgentDockBadgeCoordinator {
         trackedAppStates = uniqueAppStates
 
         for (id, appState) in uniqueAppStates where appStateSubscriptions[id] == nil {
-            appStateSubscriptions[id] = appState.objectWillChange
+            appStateSubscriptions[id] = appState.$agentSessions
                 .sink { [weak self] _ in
                     Task { @MainActor in
                         self?.scheduleRefresh()

@@ -54,7 +54,7 @@ struct VideoSummaryWorkflow: WorkflowDefinition {
         let videoURL: URL
         do {
             if VideoToolPreflight.isURL(input) {
-                videoURL = try downloadVideo(url: input, to: workDir)
+                videoURL = try await downloadVideo(url: input, to: workDir)
             } else {
                 let expanded = (input as NSString).expandingTildeInPath
                 videoURL = URL(fileURLWithPath: expanded)
@@ -66,7 +66,7 @@ struct VideoSummaryWorkflow: WorkflowDefinition {
         // Step 2: extract 16 kHz mono PCM WAV via ffmpeg.
         let audioURL = workDir.appendingPathComponent("audio.wav")
         do {
-            try extractAudio(videoURL: videoURL, audioURL: audioURL)
+            try await extractAudio(videoURL: videoURL, audioURL: audioURL)
         } catch {
             return "Audio extraction failed: \(error.localizedDescription)"
         }
@@ -129,9 +129,9 @@ struct VideoSummaryWorkflow: WorkflowDefinition {
 
     // MARK: - Helpers
 
-    private func downloadVideo(url: String, to workDir: URL) throws -> URL {
+    private func downloadVideo(url: String, to workDir: URL) async throws -> URL {
         let outputTemplate = workDir.appendingPathComponent("video.%(ext)s").path
-        let result = runProcess("/usr/bin/env", [
+        let result = await runProcess("/usr/bin/env", [
             "-S", "yt-dlp",
             "--no-playlist",
             "-f", "best[height<=720]/best",  // 720p 够 OCR / 关键帧；省带宽
@@ -153,8 +153,8 @@ struct VideoSummaryWorkflow: WorkflowDefinition {
         return workDir.appendingPathComponent(candidate)
     }
 
-    private func extractAudio(videoURL: URL, audioURL: URL) throws {
-        let result = runProcess("/usr/bin/env", [
+    private func extractAudio(videoURL: URL, audioURL: URL) async throws {
+        let result = await runProcess("/usr/bin/env", [
             "-S", "ffmpeg",
             "-y",                              // overwrite
             "-i", videoURL.path,
@@ -173,7 +173,7 @@ struct VideoSummaryWorkflow: WorkflowDefinition {
 
     private struct RunResult { let exitCode: Int32; let stdout: String; let stderr: String }
 
-    private func runProcess(_ launchPath: String, _ arguments: [String]) -> RunResult {
+    private func runProcess(_ launchPath: String, _ arguments: [String]) async -> RunResult {
         let p = Process()
         p.launchPath = launchPath
         p.arguments = arguments
@@ -182,7 +182,7 @@ struct VideoSummaryWorkflow: WorkflowDefinition {
         do { try p.run() } catch {
             return RunResult(exitCode: -1, stdout: "", stderr: error.localizedDescription)
         }
-        p.waitUntilExit()
+        await AgentProcessSupport.waitUntilExit(p)
         let out = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         return RunResult(exitCode: p.terminationStatus, stdout: out, stderr: err)

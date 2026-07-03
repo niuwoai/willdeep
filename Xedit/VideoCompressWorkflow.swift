@@ -42,7 +42,7 @@ struct VideoCompressWorkflow: WorkflowDefinition {
         // Probe original.
         let probe: [String: Any]
         do {
-            probe = try VideoMediaHelpers.probe(videoURL: videoURL)
+            probe = try await VideoMediaHelpers.probe(videoURL: videoURL)
         } catch {
             return "ffprobe failed: \(error.localizedDescription)"
         }
@@ -99,7 +99,7 @@ struct VideoCompressWorkflow: WorkflowDefinition {
             p1.standardOutput = Pipe()
             p1.standardError = errPipe
             try p1.run()
-            p1.waitUntilExit()
+            await AgentProcessSupport.waitUntilExit(p1)
             if p1.terminationStatus != 0 {
                 let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
                 return "ffmpeg pass 1 failed (\(p1.terminationStatus)): \(err.suffix(500))"
@@ -126,7 +126,7 @@ struct VideoCompressWorkflow: WorkflowDefinition {
             p2.standardOutput = Pipe()
             p2.standardError = errPipe
             try p2.run()
-            p2.waitUntilExit()
+            await AgentProcessSupport.waitUntilExit(p2)
             if p2.terminationStatus != 0 {
                 let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
                 return "ffmpeg pass 2 failed (\(p2.terminationStatus)): \(err.suffix(500))"

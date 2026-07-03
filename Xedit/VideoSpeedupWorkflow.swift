@@ -52,7 +52,7 @@ struct VideoSpeedupWorkflow: WorkflowDefinition {
         let filter = "[0:v]\(videoSetpts)[v];[0:a]\(atempoChain)[a]"
 
         do {
-            try runFFmpeg([
+            try await runFFmpeg([
                 "-y", "-i", videoURL.path,
                 "-filter_complex", filter,
                 "-map", "[v]", "-map", "[a]",
@@ -108,7 +108,7 @@ struct VideoSpeedupWorkflow: WorkflowDefinition {
         return raw.replacingOccurrences(of: ".", with: "_")
     }
 
-    private func runFFmpeg(_ arguments: [String]) throws {
+    private func runFFmpeg(_ arguments: [String]) async throws {
         let p = Process()
         p.launchPath = "/usr/bin/env"
         p.arguments = ["-S", "ffmpeg"] + arguments
@@ -116,7 +116,7 @@ struct VideoSpeedupWorkflow: WorkflowDefinition {
         let errPipe = Pipe()
         p.standardError = errPipe
         try p.run()
-        p.waitUntilExit()
+        await AgentProcessSupport.waitUntilExit(p)
         if p.terminationStatus != 0 {
             let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             throw NSError(domain: "video-speedup", code: Int(p.terminationStatus), userInfo: [

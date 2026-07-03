@@ -282,18 +282,20 @@ enum AgentGenericMediaStatusClient {
     ) async throws -> AgentMediaArtifact {
         var request = URLRequest(url: remoteURL)
         AgentNetworkSupport.applyStandardHeaders(to: &request)
-        let (data, response) = try await session.data(for: request)
+        let (temporaryURL, response) = try await session.download(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw AgentToolError.invalidArgument("第三方媒体输出下载返回了非 HTTP 响应。")
         }
         guard (200..<300).contains(http.statusCode) else {
-            let text = String(data: data, encoding: .utf8) ?? "<non-UTF8 response body>"
+            let data = (try? Data(contentsOf: temporaryURL)) ?? Data()
+            let text = String(data: data.prefix(64 * 1024), encoding: .utf8) ?? "<non-UTF8 response body>"
+            try? FileManager.default.removeItem(at: temporaryURL)
             throw AgentToolError.httpFailed(http.statusCode, AgentNetworkSupport.limitDebugText(text))
         }
         let ext = fileExtension(for: remoteURL, mimeType: http.mimeType)
         let filename = "\(safeFileStem(title))-\(String(format: "%02d", index)).\(ext)"
         let fileURL = uniqueFileURL(in: directory, filename: filename)
-        try data.write(to: fileURL, options: [.atomic])
+        try AgentNetworkSupport.moveDownloadedFile(from: temporaryURL, to: fileURL)
         return AgentMediaArtifact(title: fileURL.lastPathComponent, filePath: fileURL.path, mimeType: http.mimeType, remoteURL: remoteURL.absoluteString)
     }
 

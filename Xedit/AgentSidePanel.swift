@@ -1357,16 +1357,13 @@ struct AgentSidePanelDiffView: View {
             ProgressView()
                 .controlSize(.small)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .loaded(let diff, _):
+        case .loaded(let diff, let date):
             let palette = appState.editorSettings.interfaceSkin.palette
-            ScrollView([.vertical, .horizontal]) {
-                Text(AgentDiffColorizer.attributed(diff, palette: palette))
-                    .font(.system(size: 11, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-            }
-            .background(AgentDiffColorizer.background(for: palette))
+            AgentSidePanelColoredDiffView(
+                diff: diff,
+                cacheKey: "\(appState.editorSettings.interfaceSkin.id)|\(date.timeIntervalSinceReferenceDate)",
+                palette: palette
+            )
         case .empty:
             placeholder(systemImage: "checkmark.seal", text: L10n.AgentSidePanel.diffEmpty)
         case .noWorkspace:
@@ -1517,6 +1514,33 @@ struct AgentSidePanelFilesView: View {
     }
 }
 
+private struct AgentSidePanelColoredDiffView: View {
+    let diff: String
+    let cacheKey: String
+    let palette: EditorInterfaceSkinPalette
+    @State private var cachedKey = ""
+    @State private var cachedText: AttributedString?
+
+    var body: some View {
+        ScrollView([.vertical, .horizontal]) {
+            Text(cachedText ?? AttributedString(diff))
+                .font(.system(size: 11, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+        }
+        .background(AgentDiffColorizer.background(for: palette))
+        .onAppear(perform: refreshIfNeeded)
+        .onCompatibleChange(of: cacheKey) { _, _ in refreshIfNeeded() }
+    }
+
+    private func refreshIfNeeded() {
+        guard cachedKey != cacheKey else { return }
+        cachedText = AgentDiffColorizer.attributed(diff, palette: palette)
+        cachedKey = cacheKey
+    }
+}
+
 // MARK: - Plan panel
 //
 // Surfaces the current `AgentPlan` of the active runtime. Reuses the
@@ -1573,6 +1597,7 @@ struct AgentSidePanelPreviewView: View {
     @State private var loadedURL: URL?
     @State private var content: String = ""
     @State private var language: Language?
+    @State private var previewBlocks: [MarkdownPreviewBlock] = []
     @State private var loadError: String?
 
     var body: some View {
@@ -1587,6 +1612,7 @@ struct AgentSidePanelPreviewView: View {
             selectedFile = nil
             loadedURL = nil
             content = ""
+            previewBlocks = []
             syncFromBinding()
         }
     }
@@ -1626,7 +1652,7 @@ struct AgentSidePanelPreviewView: View {
         } else if PreviewPaneCompatibility.supports(language) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
-                    ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                    ForEach(Array(previewBlocks.enumerated()), id: \.offset) { _, block in
                         MarkdownPreviewBlockView(block: block)
                     }
                 }
@@ -1652,7 +1678,7 @@ struct AgentSidePanelPreviewView: View {
         }
     }
 
-    private var blocks: [MarkdownPreviewBlock] {
+    private static func blocks(for content: String, language: Language?) -> [MarkdownPreviewBlock] {
         switch language {
         case .html:
             return HTMLPreviewParser.blocks(from: content)
@@ -1743,6 +1769,7 @@ struct AgentSidePanelPreviewView: View {
             let data = try Data(contentsOf: url, options: .mappedIfSafe)
             if Self.looksBinary(data) {
                 content = ""
+                previewBlocks = []
                 loadedURL = url
                 language = nil
                 loadError = L10n.AgentSidePanel.previewUnsupported
@@ -1759,8 +1786,12 @@ struct AgentSidePanelPreviewView: View {
             }
             loadedURL = url
             language = Language.fromURL(url)
+            previewBlocks = PreviewPaneCompatibility.supports(language)
+                ? Self.blocks(for: content, language: language)
+                : []
         } catch {
             content = ""
+            previewBlocks = []
             loadedURL = url
             language = nil
             loadError = error.localizedDescription
