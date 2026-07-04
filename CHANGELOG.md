@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.129.0-rc31 - 2026-07-05
+
+### Fixed
+- **编辑器终端面板 i18n 补全** —— `EditorTerminalView.swift` 约 20 处硬编码英文 UI 文案（终端头部标题/工作目录占位符/Run 菜单/「未找到项目命令」/四个按钮 tooltip，以及终端设置页的 Shell/字体/自定义字体/大小/光标/光标闪烁/配色方案/环境各标签、「跟随应用皮肤」选项、字号 pt 显示和三段说明文案）全部提取到 `L10n.EditorTerminal`（key 前缀 `editor-terminal.`，共 23 个），`Localizable.xcstrings` 按字母序补齐 en + zh-Hans 双语条目；中文系统下终端面板与终端设置不再回落英文。i18n 覆盖率守卫保持 100%。
+- 版本号从 **1.129.0-rc30** 提升为 **1.129.0-rc31**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
 ## 1.129.0-rc30 - 2026-07-05
 
 ### Changed

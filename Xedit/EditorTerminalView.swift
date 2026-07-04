@@ -60,10 +60,10 @@ private struct EditorTerminalPaneContent: View {
         HStack(spacing: 8) {
             Image(systemName: session.isRunning ? "terminal.fill" : "terminal")
                 .foregroundStyle(Color(nsColor: settings.colorScheme.accent))
-            Text("Terminal")
+            Text(L10n.EditorTerminal.title)
                 .font(.caption.weight(.semibold))
 
-            TextField("working directory", text: $session.workingDirectoryPath)
+            TextField(L10n.EditorTerminal.workingDirectoryPlaceholder, text: $session.workingDirectoryPath)
                 .textFieldStyle(.plain)
                 .font(.caption2.monospaced())
                 .foregroundStyle(Color(nsColor: settings.colorScheme.muted))
@@ -73,7 +73,7 @@ private struct EditorTerminalPaneContent: View {
 
             Menu {
                 if commands.isEmpty {
-                    Text("No project commands found")
+                    Text(L10n.EditorTerminal.noProjectCommands)
                 } else {
                     ForEach(commands) { command in
                         Button(command.title) {
@@ -82,7 +82,7 @@ private struct EditorTerminalPaneContent: View {
                     }
                 }
             } label: {
-                Label("Run", systemImage: "play.fill")
+                Label(L10n.EditorTerminal.run, systemImage: "play.fill")
             }
             .menuStyle(.button)
 
@@ -93,7 +93,7 @@ private struct EditorTerminalPaneContent: View {
             }
             .buttonStyle(.borderless)
             .disabled(session.isRunning)
-            .help("Start Shell")
+            .help(L10n.EditorTerminal.startShellHelp)
 
             Button {
                 appState.openTerminalSettings()
@@ -101,7 +101,7 @@ private struct EditorTerminalPaneContent: View {
                 Image(systemName: "gearshape")
             }
             .buttonStyle(.borderless)
-            .help("Terminal Settings")
+            .help(L10n.EditorTerminal.settingsHelp)
 
             Button {
                 session.clear()
@@ -109,7 +109,7 @@ private struct EditorTerminalPaneContent: View {
                 Image(systemName: "trash")
             }
             .buttonStyle(.borderless)
-            .help("Clear")
+            .help(L10n.EditorTerminal.clearHelp)
 
             Button {
                 appState.isEditorTerminalVisible = false
@@ -117,7 +117,7 @@ private struct EditorTerminalPaneContent: View {
                 Image(systemName: "xmark")
             }
             .buttonStyle(.borderless)
-            .help("Close")
+            .help(L10n.EditorTerminal.closeHelp)
         }
         .padding(.horizontal, 10)
         .frame(height: 30)
@@ -136,45 +136,45 @@ private struct EditorTerminalPaneContent: View {
 extension EditorSettingsView {
     var terminalSettings: some View {
         Form {
-            Section("Terminal") {
-                LabeledContent("Shell") {
+            Section(L10n.EditorTerminal.settingsSection) {
+                LabeledContent(L10n.EditorTerminal.shell) {
                     TextField("/bin/zsh", text: terminalSetting(\.shellPath))
                         .textFieldStyle(.roundedBorder)
                 }
 
-                Picker("Font", selection: terminalSetting(\.fontName)) {
+                Picker(L10n.EditorTerminal.font, selection: terminalSetting(\.fontName)) {
                     ForEach(EditorTerminalFont.all) { font in
                         Text(font.displayName).tag(font.id)
                     }
                 }
 
-                LabeledContent("Custom font") {
-                    TextField("e.g. JetBrainsMono Nerd Font", text: terminalSetting(\.customFontName))
+                LabeledContent(L10n.EditorTerminal.customFont) {
+                    TextField(L10n.EditorTerminal.customFontPlaceholder, text: terminalSetting(\.customFontName))
                         .textFieldStyle(.roundedBorder)
                 }
-                Text("Type the exact name of any installed font to override the picker — use this to apply a Nerd Font that isn't auto-detected so powerline/icon glyphs stop showing as boxes. Leave empty to use the selection above.")
+                Text(L10n.EditorTerminal.customFontFootnote)
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                LabeledContent("Size") {
+                LabeledContent(L10n.EditorTerminal.size) {
                     HStack {
                         Slider(value: terminalSetting(\.fontSize), in: 10...20, step: 1)
-                        Text("\(Int(appState.editorTerminalSettings.fontSize)) pt")
+                        Text(L10n.EditorTerminal.fontSizePoints(String(Int(appState.editorTerminalSettings.fontSize))))
                             .monospacedDigit()
                             .frame(width: 48, alignment: .trailing)
                     }
                 }
 
-                Picker("Cursor", selection: terminalSetting(\.cursorStyleID)) {
+                Picker(L10n.EditorTerminal.cursor, selection: terminalSetting(\.cursorStyleID)) {
                     ForEach(EditorTerminalCursorStyle.allCases) { style in
                         Text(style.displayName).tag(style.id)
                     }
                 }
 
-                Toggle("Blink cursor", isOn: terminalSetting(\.cursorBlinks))
+                Toggle(L10n.EditorTerminal.blinkCursor, isOn: terminalSetting(\.cursorBlinks))
 
-                Picker("Color scheme", selection: terminalSetting(\.colorSchemeID)) {
-                    Text("Follow App Skin").tag(EditorTerminalSettings.followSkinColorSchemeID)
+                Picker(L10n.EditorTerminal.colorScheme, selection: terminalSetting(\.colorSchemeID)) {
+                    Text(L10n.EditorTerminal.followAppSkin).tag(EditorTerminalSettings.followSkinColorSchemeID)
                     ForEach(EditorTerminalColorScheme.all) { scheme in
                         Text(scheme.displayName).tag(scheme.id)
                     }
@@ -197,16 +197,16 @@ extension EditorSettingsView {
                         .accessibilityLabel(scheme.displayName)
                     }
                 }
-                Text("“Follow App Skin” derives the terminal background, foreground, and cursor from your interface skin; ANSI program colors stay standard so output stays readable. Line spacing isn't adjustable with the current terminal engine.")
+                Text(L10n.EditorTerminal.colorSchemeFootnote)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("Environment") {
+            Section(L10n.EditorTerminal.environmentSection) {
                 TextEditor(text: terminalSetting(\.environmentText))
                     .font(.system(.body, design: .monospaced))
                     .frame(minHeight: 110)
-                Text("One KEY=value per line. These values are added to commands launched from the editor terminal.")
+                Text(L10n.EditorTerminal.environmentFootnote)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

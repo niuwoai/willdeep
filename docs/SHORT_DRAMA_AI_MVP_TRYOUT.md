@@ -1,6 +1,6 @@
 # Short Drama AI MVP Tryout
 
-> Last updated: 2026-07-05 | Baseline version: v1.129.0-rc30
+> Last updated: 2026-07-05 | Baseline version: v1.129.0-rc31
 
 这份文档用于试用当前短剧 AI MVP。它不是完整产品手册，只覆盖“不完美但可用”的主路径。
 
@@ -112,4 +112,4 @@ import_media_manifest(package_directory=build/ci/short_drama_mvp_tryout_package,
 
 ## 验收记录
 
-人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.129.0-rc30 — 短剧指针同步 / 会话持久化移出主线程` 小节。
+人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.129.0-rc31 — 短剧指针同步 / 编辑器终端 i18n 补全` 小节。
