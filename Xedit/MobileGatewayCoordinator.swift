@@ -749,12 +749,23 @@ final class MobileGatewayCoordinator: ObservableObject {
 
     static func desktopBaseURL(for settings: MobileGatewaySettings) -> URL {
         let host = ["0.0.0.0", "::", ""].contains(settings.host) ? "127.0.0.1" : settings.host
-        return URL(string: "http://\(host):\(settings.port)")!
+        return httpBaseURL(host: host, port: settings.port)
     }
 
     static func pairingBaseURL(for settings: MobileGatewaySettings) -> URL {
         let host = ["0.0.0.0", "::", ""].contains(settings.host) ? (Self.primaryLANIPv4Address() ?? "127.0.0.1") : settings.host
-        return URL(string: "http://\(host):\(settings.port)")!
+        return httpBaseURL(host: host, port: settings.port)
+    }
+
+    /// `host` comes from user-editable settings; whitespace or stray
+    /// characters make `URL(string:)` return nil, which used to be
+    /// force-unwrapped and crash. Fall back to loopback instead.
+    private static func httpBaseURL(host: String, port: Int) -> URL {
+        let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let url = URL(string: "http://\(trimmed):\(port)"), url.host != nil {
+            return url
+        }
+        return URL(string: "http://127.0.0.1:\(port)") ?? URL(fileURLWithPath: "/")
     }
 
     static func pairingFallbackBaseURLs(for settings: MobileGatewaySettings) -> [URL] {

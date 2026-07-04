@@ -2589,4 +2589,49 @@ enum L10n {
         static let runningTasksHelp = String(localized: "transcript.running-tasks.help", defaultValue: "Tasks are still running — output resumes when they finish")
     }
 
+    // 1.129.0-rc29:关标签页的「未保存更改」/「保存失败」两个 NSAlert 此前
+    // 硬编码英文,简体中文用户看到的是英文对话框。
+    enum CloseTab {
+        static let unsavedTitle = String(localized: "close-tab.unsaved-title", defaultValue: "Unsaved Changes")
+        static func unsavedMessage(_ a1: String) -> String {
+            let template = String(localized: "close-tab.unsaved-message", defaultValue: "Do you want to save the changes made to \"%@\"?")
+            return String(format: template, a1)
+        }
+        static let save = String(localized: "close-tab.save", defaultValue: "Save")
+        static let discard = String(localized: "close-tab.discard", defaultValue: "Discard")
+        static let cancel = String(localized: "close-tab.cancel", defaultValue: "Cancel")
+        static let saveFailedTitle = String(localized: "close-tab.save-failed-title", defaultValue: "Save Failed")
+        static func saveFailedMessage(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "close-tab.save-failed-message", defaultValue: "Could not save \"%1$@\": %2$@")
+            return String(format: template, a1, a2)
+        }
+        static let ok = String(localized: "close-tab.ok", defaultValue: "OK")
+    }
+
+    // 1.129.0-rc29:composer 上的手动压缩按钮,此前硬编码英文。
+    enum ContextCompression {
+        static let compress = String(localized: "context-compression.compress", defaultValue: "Compress")
+        static let compressing = String(localized: "context-compression.compressing", defaultValue: "Compressing…")
+        static let compressHelp = String(localized: "context-compression.compress-help", defaultValue: "Summarize older messages to free context budget")
+    }
+
+    // 1.129.0-rc29:composer 工作树变更摘要条与侧栏任务监控里的溢出计数,
+    // 此前硬编码简体中文,英文用户看到的是中文。
+    enum AgentWorktreeSummary {
+        static func filesChanged(_ n: Int) -> String {
+            String(format: String(localized: "agent-worktree-summary.files-changed", defaultValue: "%d files changed"), n)
+        }
+        static let review = String(localized: "agent-worktree-summary.review", defaultValue: "Review")
+        static let reviewHelp = String(localized: "agent-worktree-summary.review-help", defaultValue: "View the current uncommitted diff")
+        static func moreFiles(_ n: Int) -> String {
+            String(format: String(localized: "agent-worktree-summary.more-files", defaultValue: "%d more files"), n)
+        }
+    }
+
+    enum AgentTaskMonitor {
+        static func moreBackgroundJobs(_ n: Int) -> String {
+            String(format: String(localized: "agent-task-monitor.more-background-jobs", defaultValue: "%d more background tasks"), n)
+        }
+    }
+
 }

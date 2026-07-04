@@ -229,6 +229,7 @@ extension AppState {
                 } catch {
                     // Missing or failing language servers fall back to the
                     // lightweight resolver so existing editor behavior survives.
+                    NSLog("[EditorLSP] definition lookup failed: %@", error.localizedDescription)
                 }
                 if EditorDefinitionFallbackPolicy.shouldFallbackToRegex(didReceiveLanguageServerResponse: false) {
                     await MainActor.run {
@@ -270,6 +271,7 @@ extension AppState {
             } catch {
                 // Declaration lookup is semantic-only; do not fall back to a
                 // regex match that may land on an implementation instead.
+                NSLog("[EditorLSP] declaration lookup failed: %@", error.localizedDescription)
             }
             await MainActor.run {
                 NSSound.beep()
@@ -305,6 +307,7 @@ extension AppState {
             } catch {
                 // Type definition has no reliable regex fallback; avoid jumping
                 // to an unrelated text match when the language server cannot help.
+                NSLog("[EditorLSP] type definition lookup failed: %@", error.localizedDescription)
             }
             await MainActor.run {
                 NSSound.beep()
@@ -340,6 +343,7 @@ extension AppState {
             } catch {
                 // Implementation lookup is semantic-only; a regex fallback would
                 // look confident while often landing on the wrong declaration.
+                NSLog("[EditorLSP] implementation lookup failed: %@", error.localizedDescription)
             }
             await MainActor.run {
                 NSSound.beep()

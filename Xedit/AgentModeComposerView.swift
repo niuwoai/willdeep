@@ -150,7 +150,7 @@ private struct AgentComposerWorktreeSummaryBar: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Text("\(appState.agentWorktreeChanges.fileCount) 个文件已更改")
+            Text(L10n.AgentWorktreeSummary.filesChanged(appState.agentWorktreeChanges.fileCount))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -165,13 +165,13 @@ private struct AgentComposerWorktreeSummaryBar: View {
             Button {
                 appState.showAgentWorktreeDiff()
             } label: {
-                Text("审查")
+                Text(L10n.AgentWorktreeSummary.review)
                     .font(.system(size: 12, weight: .medium))
             }
             .buttonStyle(.plain)
             .focusable(false)
             .foregroundStyle(.primary)
-            .help("查看当前未提交 diff")
+            .help(L10n.AgentWorktreeSummary.reviewHelp)
 
             Button {
                 withAnimation(.easeInOut(duration: 0.16)) {
@@ -1124,7 +1124,7 @@ private struct CompressButton: View {
             if appState.isCompressingAgentContext {
                 HStack(spacing: 4) {
                     ProgressView().controlSize(.mini)
-                    Text("Compressing…")
+                    Text(L10n.ContextCompression.compressing)
                 }
             } else if shouldOffer {
                 Button {
@@ -1133,7 +1133,7 @@ private struct CompressButton: View {
                     HStack(spacing: 3) {
                         Image(systemName: "rectangle.compress.vertical")
                             .font(.system(size: 9))
-                        Text("Compress")
+                        Text(L10n.ContextCompression.compress)
                     }
                     .foregroundStyle(tint)
                     .padding(.horizontal, 6)
@@ -1142,7 +1142,7 @@ private struct CompressButton: View {
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .help("Summarize older messages to free context budget")
+                .help(L10n.ContextCompression.compressHelp)
                 .disabled(appState.isAgentResponding)
             }
         }

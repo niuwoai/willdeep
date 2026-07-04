@@ -240,14 +240,12 @@ final class AgentRuntime: ObservableObject, Identifiable {
     // MARK: - Persistence
 
     /// Push the runtime's persisted-shape state back onto `session`
-    /// and write to disk. Call after any mutation that touches the
-    /// fields `AgentSession` cares about.
-    ///
-    /// Returns false when the on-disk write failed (disk full, permission
-    /// lost, …) so the host can surface it — a silent save failure means
-    /// the user only discovers the lost history after a relaunch.
-    @discardableResult
-    func persist() -> Bool {
+    /// and enqueue an ordered background write. The disk I/O rides
+    /// `AgentSessionStore`'s serial write queue instead of blocking the
+    /// main actor; write failures are broadcast via
+    /// `AgentSessionStore.saveDidFailNotification` (each AppState
+    /// instance claims failures for the runtimes it owns).
+    func persist() {
         session.messages = messages
         session.contextSummary = contextSummary
         session.contextSummaryThroughMessageID = contextSummaryThroughMessageID
@@ -286,7 +284,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
                 session.title = derived
             }
         }
-        return AgentSessionStore.save(session)
+        AgentSessionStore.saveAsync(session)
     }
 
     /// True if this session has no real user messages yet.

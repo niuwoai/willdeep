@@ -1742,6 +1742,24 @@
         }
       }
     },
+    "agent-task-monitor.more-background-jobs" : {
+      "comment" : "Overflow count under the task monitor rail when more background jobs exist than are shown. Placeholder is the hidden job count.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d more background tasks"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还有 %d 个后台任务"
+          }
+        }
+      }
+    },
     "agent-terminal.clear" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2658,6 +2676,78 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移除已粘贴的文本"
+          }
+        }
+      }
+    },
+    "agent-worktree-summary.files-changed" : {
+      "comment" : "Composer worktree summary bar. Placeholder is the changed file count.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d files changed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d 个文件已更改"
+          }
+        }
+      }
+    },
+    "agent-worktree-summary.more-files" : {
+      "comment" : "Overflow count in the worktree change rail when more files changed than rows shown. Placeholder is the hidden file count.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d more files"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还有 %d 个文件"
+          }
+        }
+      }
+    },
+    "agent-worktree-summary.review" : {
+      "comment" : "Button on the composer worktree summary bar that opens the uncommitted diff.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "审查"
+          }
+        }
+      }
+    },
+    "agent-worktree-summary.review-help" : {
+      "comment" : "Tooltip for the Review button on the composer worktree summary bar.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View the current uncommitted diff"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看当前未提交的 diff"
           }
         }
       }
@@ -4258,6 +4348,150 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "配色方案"
+          }
+        }
+      }
+    },
+    "close-tab.cancel" : {
+      "comment" : "Cancel button in the unsaved-changes alert when closing a tab.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
+    "close-tab.discard" : {
+      "comment" : "Discard button in the unsaved-changes alert when closing a tab.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不保存"
+          }
+        }
+      }
+    },
+    "close-tab.ok" : {
+      "comment" : "OK button in the save-failed alert when closing a tab.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "好"
+          }
+        }
+      }
+    },
+    "close-tab.save" : {
+      "comment" : "Save button in the unsaved-changes alert when closing a tab.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存"
+          }
+        }
+      }
+    },
+    "close-tab.save-failed-message" : {
+      "comment" : "Body of the save-failed alert. Placeholder 1 is the tab title, placeholder 2 is the error description.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not save \"%1$@\": %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法保存“%1$@”：%2$@"
+          }
+        }
+      }
+    },
+    "close-tab.save-failed-title" : {
+      "comment" : "Title of the alert shown when saving a tab fails while closing it.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save Failed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存失败"
+          }
+        }
+      }
+    },
+    "close-tab.unsaved-message" : {
+      "comment" : "Body of the unsaved-changes alert when closing a tab. Placeholder is the tab title.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Do you want to save the changes made to \"%@\"?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要保存对“%@”的更改吗？"
+          }
+        }
+      }
+    },
+    "close-tab.unsaved-title" : {
+      "comment" : "Title of the unsaved-changes alert when closing a tab.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unsaved Changes"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未保存的更改"
           }
         }
       }
@@ -5959,6 +6193,60 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在压缩…"
+          }
+        }
+      }
+    },
+    "context-compression.compress" : {
+      "comment" : "Manual context-compression button on the composer.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compress"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "压缩"
+          }
+        }
+      }
+    },
+    "context-compression.compress-help" : {
+      "comment" : "Tooltip for the manual context-compression button.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Summarize older messages to free context budget"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "总结较早的消息，释放上下文空间"
+          }
+        }
+      }
+    },
+    "context-compression.compressing" : {
+      "comment" : "Shown with a spinner while context compression is running.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compressing…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "压缩中…"
           }
         }
       }
