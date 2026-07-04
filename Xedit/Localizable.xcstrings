@@ -306,6 +306,258 @@
         }
       }
     },
+    "agent-image-editor.brush-mode-picker" : {
+      "comment" : "Segmented picker label for the brush paint mode in the image mask editor",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brush Mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画笔模式"
+          }
+        }
+      }
+    },
+    "agent-image-editor.brush-mode.add" : {
+      "comment" : "Brush paint mode that adds to the mask",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加"
+          }
+        }
+      }
+    },
+    "agent-image-editor.brush-mode.eraser" : {
+      "comment" : "Brush paint mode that erases from the mask",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eraser"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "橡皮"
+          }
+        }
+      }
+    },
+    "agent-image-editor.empty-subtitle" : {
+      "comment" : "Empty-state hint explaining how to send an image into the mask editor",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Click the mask button on an image output in Media Tasks to send it here for editing."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在「媒体任务」里点击图片产物的蒙版按钮，即可把图片送到这里编辑。"
+          }
+        }
+      }
+    },
+    "agent-image-editor.empty-title" : {
+      "comment" : "Empty-state title of the image mask editor panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select an image"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请选择一张图片"
+          }
+        }
+      }
+    },
+    "agent-image-editor.generic-edit-hint" : {
+      "comment" : "Hint shown when the mask editor has no production anchor context",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Generic image editing. Sending to chat exports the mask first when a selection exists and attaches edit_image_with_mask parameters."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通用图片编辑；发送到聊天会在已有选区时先导出蒙版，并附带 edit_image_with_mask 参数。"
+          }
+        }
+      }
+    },
+    "agent-image-editor.mask-tool-picker" : {
+      "comment" : "Segmented picker label for choosing the mask tool in the image mask editor",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mask Tool"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "蒙版工具"
+          }
+        }
+      }
+    },
+    "agent-image-editor.mask-tool.brush" : {
+      "comment" : "Mask tool that paints freehand strokes",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brush"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画笔"
+          }
+        }
+      }
+    },
+    "agent-image-editor.mask-tool.brush-help" : {
+      "comment" : "Help text for the brush mask tool",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paint over the areas to erase or repaint. Switch between add and eraser to refine mask edges, then export a same-size PNG mask. White areas become the edit region."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拖动画笔涂抹要擦除或重绘的区域；可切换添加/橡皮修整蒙版边缘，再导出同尺寸 PNG 蒙版。白色区域会作为编辑区域。"
+          }
+        }
+      }
+    },
+    "agent-image-editor.mask-tool.rectangle" : {
+      "comment" : "Mask tool that selects rectangular regions",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rectangle"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "矩形"
+          }
+        }
+      }
+    },
+    "agent-image-editor.mask-tool.rectangle-help" : {
+      "comment" : "Help text for the rectangle mask tool",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drag to select the areas to erase or repaint. You can select multiple areas, then export a same-size PNG mask. White areas become the edit region."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拖拽框选要擦除或重绘的区域；可连续框选多块区域，然后导出同尺寸 PNG 蒙版。白色区域会作为编辑区域。"
+          }
+        }
+      }
+    },
+    "agent-image-editor.seed-mask-help" : {
+      "comment" : "Tooltip when a previous mask has been loaded as the editing base",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loaded the previous mask as a base. Exports will keep it and overlay new selections and strokes."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已载入旧蒙版作为底稿，导出时会保留并叠加新的选区/笔迹。"
+          }
+        }
+      }
+    },
+    "agent-image-editor.send-to-chat" : {
+      "comment" : "Button that sends the current image and mask context to the chat",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send to Chat"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送到聊天"
+          }
+        }
+      }
+    },
+    "agent-image-editor.send-to-chat-help" : {
+      "comment" : "Tooltip for the send-to-chat button in the image mask editor",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send the current image and mask path to the chat"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把当前图片和蒙版路径发送到聊天"
+          }
+        }
+      }
+    },
     "agent-jobs.collapse-help" : {
       "comment" : "Tooltip on the close button inside the background-jobs drawer",
       "extractionState" : "manual",

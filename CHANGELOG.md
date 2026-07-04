@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.129.0-rc29 - 2026-07-05
+
+### Fixed
+- **图片蒙版编辑面板文案国际化** —— `AgentImageEditPanel` 的蒙版工具/画笔模式选择器、「发送到聊天」按钮及 tooltip、旧蒙版底稿提示、通用图片编辑说明、空状态文案，以及矩形/画笔、添加/橡皮枚举标签此前硬编码简体中文，英文用户也只能看到中文；现迁入 `L10n.AgentImageEditor`（String Catalog 键前缀 `agent-image-editor.*`，en 默认值 + zh-Hans 保留原文案），i18n 覆盖率守卫保持 100%。
+- 版本号从 **1.129.0-rc28** 提升为 **1.129.0-rc29**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
 ## 1.129.0-rc28 - 2026-07-05
 
 ### Fixed

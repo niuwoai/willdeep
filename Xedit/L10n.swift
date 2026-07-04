@@ -56,6 +56,23 @@ enum L10n {
         static let untitledFile = String(localized: "agent-selection.untitled-file", defaultValue: "Untitled")
     }
 
+    enum AgentImageEditor {
+        static let brushModeAdd = String(localized: "agent-image-editor.brush-mode.add", defaultValue: "Add")
+        static let brushModeEraser = String(localized: "agent-image-editor.brush-mode.eraser", defaultValue: "Eraser")
+        static let brushModePicker = String(localized: "agent-image-editor.brush-mode-picker", defaultValue: "Brush Mode")
+        static let emptySubtitle = String(localized: "agent-image-editor.empty-subtitle", defaultValue: "Click the mask button on an image output in Media Tasks to send it here for editing.")
+        static let emptyTitle = String(localized: "agent-image-editor.empty-title", defaultValue: "Select an image")
+        static let genericEditHint = String(localized: "agent-image-editor.generic-edit-hint", defaultValue: "Generic image editing. Sending to chat exports the mask first when a selection exists and attaches edit_image_with_mask parameters.")
+        static let maskToolBrush = String(localized: "agent-image-editor.mask-tool.brush", defaultValue: "Brush")
+        static let maskToolBrushHelp = String(localized: "agent-image-editor.mask-tool.brush-help", defaultValue: "Paint over the areas to erase or repaint. Switch between add and eraser to refine mask edges, then export a same-size PNG mask. White areas become the edit region.")
+        static let maskToolPicker = String(localized: "agent-image-editor.mask-tool-picker", defaultValue: "Mask Tool")
+        static let maskToolRectangle = String(localized: "agent-image-editor.mask-tool.rectangle", defaultValue: "Rectangle")
+        static let maskToolRectangleHelp = String(localized: "agent-image-editor.mask-tool.rectangle-help", defaultValue: "Drag to select the areas to erase or repaint. You can select multiple areas, then export a same-size PNG mask. White areas become the edit region.")
+        static let seedMaskHelp = String(localized: "agent-image-editor.seed-mask-help", defaultValue: "Loaded the previous mask as a base. Exports will keep it and overlay new selections and strokes.")
+        static let sendToChat = String(localized: "agent-image-editor.send-to-chat", defaultValue: "Send to Chat")
+        static let sendToChatHelp = String(localized: "agent-image-editor.send-to-chat-help", defaultValue: "Send the current image and mask path to the chat")
+    }
+
     enum InteractionMode {
         // 1.96.0-rc3:composer 上的 Normal / Plan / Goal 三档 badge 文案。
         // 之前是硬编码英文 displayName,简体中文用户看着突兀。

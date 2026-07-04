@@ -192,10 +192,10 @@ struct AgentImageEditPanel: View {
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
-                                .help("已载入旧蒙版作为底稿，导出时会保留并叠加新的选区/笔迹。")
+                                .help(L10n.AgentImageEditor.seedMaskHelp)
                         }
                         imageEditorContextCard(imageInfo: imageInfo)
-                        Picker("蒙版工具", selection: $maskTool) {
+                        Picker(L10n.AgentImageEditor.maskToolPicker, selection: $maskTool) {
                             ForEach(MaskTool.allCases) { tool in
                                 Label(tool.title, systemImage: tool.systemImage).tag(tool)
                             }
@@ -208,7 +208,7 @@ struct AgentImageEditPanel: View {
                             lastMaskURL = nil
                         }
                         if maskTool == .brush {
-                            Picker("画笔模式", selection: $brushPaintMode) {
+                            Picker(L10n.AgentImageEditor.brushModePicker, selection: $brushPaintMode) {
                                 ForEach(BrushPaintMode.allCases) { mode in
                                     Label(mode.title, systemImage: mode.systemImage).tag(mode)
                                 }
@@ -283,14 +283,14 @@ struct AgentImageEditPanel: View {
                 Button {
                     appendImageEditorContextToChat(imageInfo: imageInfo)
                 } label: {
-                    Label("发送到聊天", systemImage: "text.bubble")
+                    Label(L10n.AgentImageEditor.sendToChat, systemImage: "text.bubble")
                         .font(.caption2)
                 }
                 .buttonStyle(.borderless)
-                .help("把当前图片和蒙版路径发送到聊天")
+                .help(L10n.AgentImageEditor.sendToChatHelp)
             }
             if rows.isEmpty {
-                Text("通用图片编辑；发送到聊天会在已有选区时先导出蒙版，并附带 edit_image_with_mask 参数。")
+                Text(L10n.AgentImageEditor.genericEditHint)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -323,9 +323,9 @@ struct AgentImageEditPanel: View {
             Image(systemName: "photo.badge.magnifyingglass")
                 .font(.system(size: 24))
                 .foregroundStyle(.secondary)
-            Text("请选择一张图片")
+            Text(L10n.AgentImageEditor.emptyTitle)
                 .font(.system(size: 13, weight: .semibold))
-            Text("在「媒体任务」里点击图片产物的蒙版按钮，即可把图片送到这里编辑。")
+            Text(L10n.AgentImageEditor.emptySubtitle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -1312,8 +1312,8 @@ struct AgentImageEditPanel: View {
 
         var title: String {
             switch self {
-            case .rectangle: return "矩形"
-            case .brush: return "画笔"
+            case .rectangle: return L10n.AgentImageEditor.maskToolRectangle
+            case .brush: return L10n.AgentImageEditor.maskToolBrush
             }
         }
 
@@ -1327,9 +1327,9 @@ struct AgentImageEditPanel: View {
         var helpText: String {
             switch self {
             case .rectangle:
-                return "拖拽框选要擦除或重绘的区域；可连续框选多块区域，然后导出同尺寸 PNG 蒙版。白色区域会作为编辑区域。"
+                return L10n.AgentImageEditor.maskToolRectangleHelp
             case .brush:
-                return "拖动画笔涂抹要擦除或重绘的区域；可切换添加/橡皮修整蒙版边缘，再导出同尺寸 PNG 蒙版。白色区域会作为编辑区域。"
+                return L10n.AgentImageEditor.maskToolBrushHelp
             }
         }
     }
@@ -1342,8 +1342,8 @@ struct AgentImageEditPanel: View {
 
         var title: String {
             switch self {
-            case .add: return "添加"
-            case .subtract: return "橡皮"
+            case .add: return L10n.AgentImageEditor.brushModeAdd
+            case .subtract: return L10n.AgentImageEditor.brushModeEraser
             }
         }
 
