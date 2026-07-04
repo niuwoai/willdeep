@@ -196,14 +196,17 @@ nonisolated enum ProjectFileListCache {
             return
         }
 
-        let sorted = dirs.sorted { lhs, rhs in
-            let l = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-            let r = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-            return l > r
-        }
+        // Resolve each directory's mtime once up front; doing it inside the
+        // sort comparator re-queried file metadata O(n log n) times.
+        let sorted = dirs
+            .map { url -> (url: URL, mtime: Date) in
+                let mtime = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                return (url, mtime)
+            }
+            .sorted { $0.mtime > $1.mtime }
 
         for stale in sorted.dropFirst(maxCachedProjects) {
-            try? FileManager.default.removeItem(at: stale)
+            try? FileManager.default.removeItem(at: stale.url)
         }
     }
 }

@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-05 | Current version: v1.129.0-rc28
+> Last updated: 2026-07-05 | Current version: v1.129.0-rc30
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **稳定性/性能/i18n 小步修复（1.129.0-rc29）** —— 移动网关 host/port 拼 URL 的强制解包改为安全回退（非法 host 不再闪崩）；关标签页在「未保存更改」弹窗返回后按 id 重查 index（模态期间 tabs 变化不再越界）；窗口 chrome 轮询加防重入（每次 SwiftUI 更新不再新启一条 30-tick 递归链）；项目文件缓存淘汰排序先解析 mtime 再排序；LSP 四条跳转路径失败补 `[EditorLSP]` 日志；关标签页两个 NSAlert、composer 压缩按钮、工作树摘要条、任务监控溢出计数等硬编码文案全部走 L10n（en/zh-Hans 齐全，覆盖率守卫保持 100%）。
 - **Patch 批量操作条置底（1.129.0-rc26）** —— 多张 Apply 卡片同时待审时，transcript 级 `全部拒绝 / 全部应用` 批量操作条改到这一组待审卡片最下面，先展示逐项变更，再给批量处理入口，降低用户还没看完就误点全局操作的风险。
 - **VL 失败不污染用户消息（1.129.0-rc25）** —— 文本模型带图时，Image Understanding / VL 请求失败后不再把 `Image description failed...`、HTTP 状态码或 provider 错误正文拼进用户气泡；外部执行器委托 prompt 与视觉 QA 工具同样改成通用不可用/跳过语义，保留诊断边界，避免把 401、模型名或 relay 错误暴露到用户正文里。
 - **移动网关默认走互联网中继（1.129.0-rc24）** —— 新增连接方式设置。默认「互联网中继」不再启动本地 Go 网关：Swift 桌面 peer 直连中继房间，App 自己生成配对二维码（含 `relay_*` 坐标），手机凭共享 `relay_token` 加入，脱离局域网可用、无需运行本地进程；存活状态取 peer 的 WebSocket 连接，注销设备靠轮换房间+令牌全体重扫。「局域网网关」作为备选一键切回（Go `serve-mobile` 进程 + HTTP 配对 + 按设备令牌/注销）。Go 网关从不自己连中继，只是过去在配对负载里广告中继坐标，所以中继模式可零本地进程运行。二维码 `relay_*` 字段与现有安卓端一致，向后兼容。中继内容当前仅 WSS 传输层加密、尚无端到端加密，E2E 设计见 `docs/MOBILE_GATEWAY_E2E_ENCRYPTION_DESIGN.md`。

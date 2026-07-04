@@ -376,6 +376,7 @@ final class AppState: ObservableObject {
     /// updates can `@ObservedObject` the registry directly.
     private var jobRegistrySubscription: AnyCancellable?
     private var mediaTaskRegistrySubscription: AnyCancellable?
+    private var sessionSaveFailureSubscription: AnyCancellable?
     /// Desktop peer for the LAN Mobile Gateway. The Go gateway handles
     /// pairing/device auth; this bridge translates authorized mobile
     /// commands back into normal AppState Agent operations.
@@ -558,6 +559,23 @@ final class AppState: ObservableObject {
                   let runtime = self.runtime(for: run.parentRuntimeID) else { return }
             self.resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
         }
+        // Session writes ride a background queue now; when one fails
+        // (disk full, permission lost) surface it on the owning session's
+        // error card instead of only printing to the console — otherwise
+        // the user learns about the lost history at the next relaunch.
+        // Never overwrite a provider error that's already showing. Each
+        // AppState instance claims only the runtimes it owns, so the
+        // Settings window's instance can't swallow the main window's
+        // failures.
+        sessionSaveFailureSubscription = NotificationCenter.default
+            .publisher(for: AgentSessionStore.saveDidFailNotification)
+            .sink { [weak self] note in
+                guard let self,
+                      let sessionID = note.object as? UUID,
+                      let runtime = self.agentRuntimes[sessionID],
+                      runtime.errorMessage == nil else { return }
+                runtime.errorMessage = L10n.AgentPanel.sessionSaveFailed
+            }
         // Keep terminal settings in sync across AppState instances (the
         // Settings window builds its own instance). When any instance saves,
         // reload here so `editorTerminalSettings` observers — and thus the live
@@ -582,6 +600,7 @@ final class AppState: ObservableObject {
         activeRuntimeForwardTask?.cancel()
         jobRegistrySubscription?.cancel()
         mediaTaskRegistrySubscription?.cancel()
+        sessionSaveFailureSubscription?.cancel()
         Task { @MainActor [poller = agentMediaTaskPoller] in
             poller.stop()
         }
@@ -1454,18 +1473,18 @@ final class AppState: ObservableObject {
     }
 
     func closeTab(id: EditorTab.ID) {
-        guard let index = tabs.firstIndex(where: { $0.id == id }) else {
+        guard var index = tabs.firstIndex(where: { $0.id == id }) else {
             return
         }
 
         if tabs[index].isEdited {
             let tab = tabs[index]
             let alert = NSAlert()
-            alert.messageText = "Unsaved Changes"
-            alert.informativeText = "Do you want to save the changes made to \"\(tab.title)\"?"
-            alert.addButton(withTitle: "Save")
-            alert.addButton(withTitle: "Discard")
-            alert.addButton(withTitle: "Cancel")
+            alert.messageText = L10n.CloseTab.unsavedTitle
+            alert.informativeText = L10n.CloseTab.unsavedMessage(tab.title)
+            alert.addButton(withTitle: L10n.CloseTab.save)
+            alert.addButton(withTitle: L10n.CloseTab.discard)
+            alert.addButton(withTitle: L10n.CloseTab.cancel)
             alert.alertStyle = .warning
 
             switch alert.runModal() {
@@ -1478,6 +1497,14 @@ final class AppState: ObservableObject {
             default:
                 break
             }
+
+            // The modal alert (and the save panel behind it) spins a nested
+            // runloop where main-queue work can mutate `tabs`; the index we
+            // captured before the dialog may be stale. Re-resolve by id.
+            guard let refreshedIndex = tabs.firstIndex(where: { $0.id == id }) else {
+                return
+            }
+            index = refreshedIndex
         }
 
         let wasActive = tabs[index].id == activeTabID
@@ -1604,10 +1631,10 @@ final class AppState: ObservableObject {
             return true
         } catch {
             let saveAlert = NSAlert()
-            saveAlert.messageText = "Save Failed"
-            saveAlert.informativeText = "Could not save \"\(tab.title)\": \(error.localizedDescription)"
+            saveAlert.messageText = L10n.CloseTab.saveFailedTitle
+            saveAlert.informativeText = L10n.CloseTab.saveFailedMessage(tab.title, error.localizedDescription)
             saveAlert.alertStyle = .critical
-            saveAlert.addButton(withTitle: "OK")
+            saveAlert.addButton(withTitle: L10n.CloseTab.ok)
             saveAlert.runModal()
             return false
         }

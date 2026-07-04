@@ -26,10 +26,14 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         AIPipe.flush()
+        // Session persists are asynchronous; drain the write queue so
+        // quitting right after a turn can't drop the last messages.
+        AgentSessionStore.flushPendingWrites()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         AIPipe.flush()
+        AgentSessionStore.flushPendingWrites()
         return .terminateNow
     }
 }

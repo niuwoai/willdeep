@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.129.0-rc30 - 2026-07-05
+
+### Changed
+- **会话持久化移出主线程** —— 此前每次 persist 都在 @MainActor 上同步 JSON 编码 + 原子写盘（一个回合触发多次，长对话/含 base64 图片的会话单次可达几十毫秒），流式输出期间反复卡 UI。现在所有会话写盘走 `AgentSessionStore` 的串行后台写队列：
+  - `persist()` 异步入队并**按会话合并**（一回合连发 N 次只编码最新快照一次）；写序用票据（seq）门控，`saveAsync → delete → saveAsync` 交错时后发的保存不会被先排队的 drain 抢走、也不会被 delete 误伤。
+  - 同步 `save()` / `delete()` 也路由到同一队列，与异步路径保持每会话写序一致；`delete` 先取消待写快照，防「删除后被 pending 写复活」。
+  - `load(id:)` 优先返回还没落盘的最新快照；**`loadAll()` 叠加 pending 快照**——否则 Settings 窗口（第二个 AppState 实例）在写窗口期调用 loadAll 会把刚持久化的会话误标回「metadata-only 且无用户消息」，下一次空会话清理会**删掉有真实历史的会话**（对抗性审查发现的数据丢失竞态）。
+  - 写失败时快照**放回内存兜底**（load 仍能读到最新态）并经 `saveDidFailNotification` 广播，各 AppState 实例认领自己 runtime 的失败挂到错误卡；App 退出前 `flushPendingWrites()` 排空队列，⌘Q 不丢最后一条消息。
+  - 置顶/归档/改名/标题摘要这几处同步 save 改为异步（调用方本就丢弃返回值），不再排队等大会话写完。
+
+### Fixed
+- **置顶/归档不再被回合结束的 persist 冲掉** —— `toggleAgentSessionPinned/Archived` 此前只改 `agentSessions` 行、不回写常驻 runtime 的 session 副本（rename 早就回写了），runtime 下一次 persist 会用旧副本覆盖,静默取消置顶/归档；现在两处都镜像回写。附回归测试。
+- 新增回归测试：异步写合并+flush、pending 快照可读、delete 取消待写、delete 后再 save 不被吞、loadAll 叠加 pending 快照且不误标空会话、pin/归档扛住 runtime persist。
+- 版本号从 **1.129.0-rc29** 提升为 **1.129.0-rc30**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc29 - 2026-07-05
+
+### Fixed
+- **移动网关非法 host 配置不再闪崩** —— `desktopBaseURL` / `pairingBaseURL` 此前把用户可编辑的 host/port 拼进 `URL(string:)!` 强制解包，host 含空格或非法字符时直接崩溃；现在统一走 `httpBaseURL(host:port:)`，先 trim 再解析，解析失败回退 `127.0.0.1`。
+- **关标签页对话框期间 tabs 变化不再越界** —— `closeTab` 在「未保存更改」弹窗（含背后的存储面板）模态循环期间，主队列任务可能改动 `tabs` 数组，之前继续用弹窗前捕获的 index 删除，有错删/越界风险；现在弹窗返回后按 id 重查 index。
+- **LSP 跳转失败不再无声无息** —— 定义/声明/类型定义/实现四条查询路径的 catch 此前完全吞掉错误，语言服务器持续故障时只能靠猜；现在补 `NSLog("[EditorLSP] …")` 日志（回退/蜂鸣行为不变），排查有迹可循。
+
+### Changed
+- **窗口 chrome 轮询不再多链叠加** —— `MainWindowChrome.Coordinator.attach` 被 SwiftUI 每次 `updateNSView` 调用，之前每次都新启一条 30-tick 的递归 poll 链、多条链并行做同样的事；现在加 `isPolling` 防重入，只维持一条链（刷新重试预算的语义保留）。
+- **项目文件缓存淘汰排序不再重复查磁盘** —— `ProjectFileListCache.evictOldProjectsIfNeeded` 的排序比较器里每次比较都查两次 mtime（O(n log n) 次元数据查询）；现在先一次性解析成 `(URL, Date)` 再排序。
+- **一批硬编码文案走 L10n（en/zh-Hans 齐全）** —— ① 关标签页「未保存更改 / 保存失败」两个 NSAlert（原硬编码英文）；② composer 手动压缩按钮 Compress / Compressing… 及 tooltip（原硬编码英文）；③ composer 工作树摘要条「N 个文件已更改 / 审查」与侧栏任务监控「还有 N 个后台任务 / 还有 N 个文件」（原硬编码中文）。i18n 覆盖率守卫保持 100%。
+- 版本号从 **1.129.0-rc28** 提升为 **1.129.0-rc29**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
 ## 1.129.0-rc28 - 2026-07-05
 
 ### Fixed

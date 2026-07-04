@@ -120,10 +120,18 @@ struct WindowChromeConfigurator: NSViewRepresentable {
     final class Coordinator {
         private weak var view: NSView?
         private var retriesLeft = 30
+        private var isPolling = false
 
+        /// Called from every `updateNSView`, i.e. on each parent body pass.
+        /// Refill the retry budget but never start a second concurrent poll
+        /// chain — without the `isPolling` guard each SwiftUI update spawned
+        /// another 30-tick recursive chain, keeping the main runloop busy
+        /// with N overlapping chains doing identical work.
         func attach(to view: NSView) {
             self.view = view
             retriesLeft = 30
+            guard !isPolling else { return }
+            isPolling = true
             poll()
         }
 
@@ -133,7 +141,10 @@ struct WindowChromeConfigurator: NSViewRepresentable {
         /// turns later. Poll until we get a window, then keep configuring for a
         /// short while so our settings win over SwiftUI's late reset.
         private func poll() {
-            guard retriesLeft > 0 else { return }
+            guard retriesLeft > 0 else {
+                isPolling = false
+                return
+            }
             retriesLeft -= 1
             if let window = view?.window {
                 WindowChromeConfigurator.configure(window)

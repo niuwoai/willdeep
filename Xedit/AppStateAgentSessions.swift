@@ -1249,7 +1249,13 @@ extension AppState {
         _ = materializeAgentSessionIfNeeded(id: id)
         guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
         agentSessions[index].pinnedAt = agentSessions[index].pinnedAt == nil ? Date() : nil
-        _ = AgentSessionStore.save(agentSessions[index])
+        // Mirror onto the live runtime's session copy (rename already
+        // does) — otherwise the runtime's next persist() writes its own
+        // stale copy back and silently un-pins the row.
+        if let runtime = agentRuntimes[id] {
+            runtime.session.pinnedAt = agentSessions[index].pinnedAt
+        }
+        AgentSessionStore.saveAsync(agentSessions[index])
         upsertAgentUsageSnapshot(for: agentSessions[index])
     }
 
@@ -1263,12 +1269,18 @@ extension AppState {
         guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
         let willArchive = agentSessions[index].archivedAt == nil
         agentSessions[index].archivedAt = willArchive ? Date() : nil
+        // Mirror onto the live runtime's session copy (rename already
+        // does) — otherwise the runtime's next persist() writes its own
+        // stale copy back and silently un-archives the row.
+        if let runtime = agentRuntimes[id] {
+            runtime.session.archivedAt = agentSessions[index].archivedAt
+        }
         // Archiving the currently-active session shouldn't kick the
         // user out — the chat stays selected. They can pick another
         // session whenever they want; in the meantime the row simply
         // vanishes from the visible list, which is exactly what every
         // other chat app (Cursor, Slack, Linear) does.
-        _ = AgentSessionStore.save(agentSessions[index])
+        AgentSessionStore.saveAsync(agentSessions[index])
         upsertAgentUsageSnapshot(for: agentSessions[index])
     }
 
@@ -1288,7 +1300,9 @@ extension AppState {
             runtime.session.title = trimmed
             runtime.session.titleIsUserSet = true
         }
-        _ = AgentSessionStore.save(agentSessions[index])
+        // Async: rename must not stall the main thread behind a backlog
+        // of large session writes (the caller discards the result anyway).
+        AgentSessionStore.saveAsync(agentSessions[index])
         upsertAgentUsageSnapshot(for: agentSessions[index])
     }
 
@@ -1334,14 +1348,7 @@ extension AppState {
         runtime.session.providerID = activeProvider?.providerID ?? agentConfiguration.normalized.providerID
         runtime.session.providerDisplayName = activeProvider?.displayName
             ?? AgentProviderPreset.preset(id: runtime.session.providerID ?? "")?.displayName
-        let didSave = runtime.persist()
-        if !didSave, runtime.errorMessage == nil {
-            // Surface the write failure on the session's error card instead
-            // of only printing to the console — otherwise the user learns
-            // about the lost history at the next relaunch. Never overwrite
-            // a provider error that's already showing.
-            runtime.errorMessage = L10n.AgentPanel.sessionSaveFailed
-        }
+        runtime.persist()
         agentSessions[index] = runtime.session
         // `persist()` just stamped `updatedAt = now`, so this session is
         // the newest — a single move-to-front keeps the list sorted.

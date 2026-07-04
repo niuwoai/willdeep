@@ -43,6 +43,162 @@ enum AgentSessionStore {
 
     private static let metadataOnlySessions = MetadataOnlySessionTracker()
 
+    // MARK: - Async write pipeline
+    //
+    // Session JSON used to be encoded + atomically written on the main
+    // actor at every persist — several times per turn, tens of ms each
+    // for long transcripts, all of it blocking the UI while tokens
+    // stream. Writes now ride a single serial utility queue:
+    //
+    //   - `saveAsync` coalesces by session id (a burst of persists in
+    //     one turn encodes once, with the latest snapshot) and reports
+    //     failures back through `onAsyncSaveFailure`.
+    //   - `save` / `delete` keep their synchronous contracts but run
+    //     their file work on the same queue, so per-id write order can
+    //     never invert between the sync and async paths.
+    //   - `load(id:)` consults the not-yet-flushed snapshot first so a
+    //     session materialized milliseconds after eviction can't read
+    //     a stale file.
+    //   - `flushPendingWrites()` drains the queue at app termination.
+
+    private static let writeQueue = DispatchQueue(
+        label: "com.willdeep.agent-session-store.writes",
+        qos: .utility
+    )
+
+    private nonisolated final class PendingWriteTracker: @unchecked Sendable {
+        private let lock = NSLock()
+        private var payloads: [UUID: (session: AgentSession, seq: UInt64)] = [:]
+        /// The snapshot a drain block is writing RIGHT NOW. Kept visible
+        /// to peek/allPending — between `claim` and the file landing, the
+        /// session is neither queued nor on disk, and without this window
+        /// a concurrent `loadAll` (Settings window) would not see it at
+        /// all. The serial write queue guarantees at most one in-flight
+        /// write per id at any moment.
+        private var inFlight: [UUID: AgentSession] = [:]
+        private var nextSeq: UInt64 = 0
+
+        /// Stores the snapshot and returns this write's ticket. Every
+        /// `saveAsync` schedules its own drain block carrying the ticket;
+        /// coalescing happens at `claim` time instead of at scheduling
+        /// time so ordering against `delete` stays provable.
+        func put(_ session: AgentSession) -> UInt64 {
+            lock.lock()
+            defer { lock.unlock() }
+            nextSeq += 1
+            payloads[session.id] = (session, nextSeq)
+            return nextSeq
+        }
+
+        /// Moves the payload to the in-flight slot and returns it — only
+        /// when it was enqueued at or before `seq`. A drain block must
+        /// never write a snapshot queued AFTER itself — e.g.
+        /// `saveAsync(S1) → delete → saveAsync(S2)`: S1's drain runs
+        /// before the queued delete and must not grab S2, or the delete
+        /// would wipe a save that logically followed it. S2 is written by
+        /// its own (post-delete) drain instead.
+        func claim(_ id: UUID, upTo seq: UInt64) -> AgentSession? {
+            lock.lock()
+            defer { lock.unlock() }
+            guard let entry = payloads[id], entry.seq <= seq else { return nil }
+            payloads.removeValue(forKey: id)
+            inFlight[id] = entry.session
+            return entry.session
+        }
+
+        /// The write finished (success or failure) — drop the in-flight
+        /// marker. On failure the caller re-queues via `restoreIfAbsent`
+        /// BEFORE calling this so the snapshot never goes dark.
+        func finish(_ id: UUID) {
+            lock.lock()
+            inFlight.removeValue(forKey: id)
+            lock.unlock()
+        }
+
+        func peek(_ id: UUID) -> AgentSession? {
+            lock.lock()
+            defer { lock.unlock() }
+            return payloads[id]?.session ?? inFlight[id]
+        }
+
+        func cancel(_ id: UUID) {
+            lock.lock()
+            payloads.removeValue(forKey: id)
+            lock.unlock()
+        }
+
+        /// Re-insert a payload whose disk write failed — unless a newer
+        /// snapshot already superseded it. Keeps `load(id:)` serving the
+        /// freshest state even while the disk is failing, instead of
+        /// silently falling back to a stale file.
+        func restoreIfAbsent(_ session: AgentSession, seq: UInt64) {
+            lock.lock()
+            defer { lock.unlock() }
+            guard payloads[session.id] == nil else { return }
+            payloads[session.id] = (session, seq)
+        }
+
+        func allPending() -> [UUID: AgentSession] {
+            lock.lock()
+            defer { lock.unlock() }
+            // Queued payloads win over in-flight ones — they are newer.
+            return inFlight.merging(payloads.mapValues(\.session)) { _, queued in queued }
+        }
+    }
+
+    private static let pendingWrites = PendingWriteTracker()
+
+    /// Posted on the main queue when a background session write fails;
+    /// `object` is the session `UUID`. A notification (not a single
+    /// stored closure) because multiple AppState instances exist (the
+    /// Settings window builds its own) and each must be able to claim
+    /// failures for the runtimes it owns.
+    static let saveDidFailNotification = Notification.Name("AgentSessionStore.saveDidFail")
+
+    /// Enqueue an ordered, coalesced background write of this session.
+    /// The snapshot is taken now (value copy); a burst of saves for the
+    /// same id still encodes only once — earlier drain blocks see a
+    /// newer-than-their-ticket payload and yield to the last one.
+    static func saveAsync(_ session: AgentSession) {
+        metadataOnlySessions.remove(session.id)
+        let id = session.id
+        let ticket = pendingWrites.put(session)
+        writeQueue.async {
+            guard let payload = pendingWrites.claim(id, upTo: ticket) else { return }
+            do {
+                try ensureDirectory()
+                let url = directory.appendingPathComponent("\(id.uuidString).json")
+                // AgentSession's Codable conformance is MainActor-inferred
+                // (SWIFT_DEFAULT_ACTOR_ISOLATION), so this off-main encode
+                // warns under -swift-version 6. It is deliberate: the model
+                // graph is pure value types with synthesized Codable — no
+                // main-actor state is touched — and encoding here is the
+                // point of the pipeline. Marking the whole persisted model
+                // graph `nonisolated` is the eventual clean fix.
+                let data = try encoder.encode(payload)
+                try data.write(to: url, options: .atomic)
+            } catch {
+                print("AgentSessionStore: failed to save session \(id): \(error)")
+                // Keep the unwritten snapshot around as an in-memory
+                // fallback so load(id:) stays fresh (an evicted session
+                // would otherwise re-materialize from the stale file and
+                // silently truncate history). The next save supersedes it.
+                pendingWrites.restoreIfAbsent(payload, seq: ticket)
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: saveDidFailNotification, object: id)
+                }
+            }
+            pendingWrites.finish(id)
+        }
+    }
+
+    /// Blocks until every queued write has hit the disk. Called from app
+    /// termination so quitting right after a turn can't drop the last
+    /// messages that were still riding the async pipeline.
+    static func flushPendingWrites() {
+        writeQueue.sync {}
+    }
+
     private struct MessageIndex: Decodable {
         let role: String?
 
@@ -349,38 +505,60 @@ enum AgentSessionStore {
     /// chat size. Full messages are materialized by `load(id:)` when the user
     /// opens a session.
     static func loadAll() -> [AgentSession] {
-        let dir = directory
-        var isDir: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else {
-            metadataOnlySessions.replace(with: [], userMessageIDs: [])
-            return []
-        }
-        guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: dir,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        ) else {
-            metadataOnlySessions.replace(with: [], userMessageIDs: [])
-            return []
-        }
-
         var sessions: [AgentSession] = []
         var metadataOnlyIDs: Set<UUID> = []
         var metadataOnlyUserMessageIDs: Set<UUID> = []
-        for url in entries where url.pathExtension == "json" {
-            guard let data = try? Data(contentsOf: url) else { continue }
-            do {
-                let index = try decoder.decode(SessionIndex.self, from: data)
-                let session = index.session
-                metadataOnlyIDs.insert(session.id)
-                if index.hasUserMessage {
-                    metadataOnlyUserMessageIDs.insert(session.id)
+
+        // Capture the pending overlay BEFORE scanning the directory. In
+        // the opposite order a write that completes between the two reads
+        // is invisible on both sides (file listed too early, tracker
+        // already drained); this way it shows up in at least one — worst
+        // case both, and the overlay merge below makes that harmless.
+        let pendingSnapshot = pendingWrites.allPending()
+
+        let dir = directory
+        var isDir: ObjCBool = false
+        if FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue,
+           let entries = try? FileManager.default.contentsOfDirectory(
+               at: dir,
+               includingPropertiesForKeys: nil,
+               options: [.skipsHiddenFiles]
+           ) {
+            for url in entries where url.pathExtension == "json" {
+                guard let data = try? Data(contentsOf: url) else { continue }
+                do {
+                    let index = try decoder.decode(SessionIndex.self, from: data)
+                    let session = index.session
+                    metadataOnlyIDs.insert(session.id)
+                    if index.hasUserMessage {
+                        metadataOnlyUserMessageIDs.insert(session.id)
+                    }
+                    sessions.append(session)
+                } catch {
+                    print("AgentSessionStore: skipping unreadable session at \(url.lastPathComponent): \(error)")
                 }
-                sessions.append(session)
-            } catch {
-                print("AgentSessionStore: skipping unreadable session at \(url.lastPathComponent): \(error)")
             }
         }
+
+        // Overlay snapshots still riding the async write pipeline: the
+        // disk copy is stale for them, and the SessionIndex decode above
+        // may have mis-classified one as "no user message yet". Without
+        // this merge, a second AppState instance (the Settings window
+        // builds its own) calling loadAll during the write window would
+        // re-mark a just-persisted session metadata-only-without-user-
+        // message — and pruneEmptyAgentSessions would then DELETE a
+        // session that has real history. The pending snapshot is the
+        // full session, so it is not metadata-only at all.
+        for (id, snapshot) in pendingSnapshot {
+            metadataOnlyIDs.remove(id)
+            metadataOnlyUserMessageIDs.remove(id)
+            if let index = sessions.firstIndex(where: { $0.id == id }) {
+                sessions[index] = snapshot
+            } else {
+                sessions.append(snapshot)
+            }
+        }
+
         metadataOnlySessions.replace(with: metadataOnlyIDs, userMessageIDs: metadataOnlyUserMessageIDs)
         return sessions.sorted { $0.updatedAt > $1.updatedAt }
     }
@@ -412,6 +590,13 @@ enum AgentSessionStore {
     }
 
     static func load(id: UUID) -> AgentSession? {
+        // A snapshot still riding the async write pipeline is fresher
+        // than whatever is on disk — e.g. a session evicted milliseconds
+        // ago being re-materialized by a click. Serve it directly.
+        if let pending = pendingWrites.peek(id) {
+            metadataOnlySessions.remove(id)
+            return pending
+        }
         let url = directory.appendingPathComponent("\(id.uuidString).json")
         guard let data = try? Data(contentsOf: url) else { return nil }
         do {
@@ -443,31 +628,42 @@ enum AgentSessionStore {
 
     @discardableResult
     static func save(_ session: AgentSession) -> Bool {
-        do {
-            try ensureDirectory()
-            let url = directory.appendingPathComponent("\(session.id.uuidString).json")
-            let data = try encoder.encode(session)
-            try data.write(to: url, options: .atomic)
-            metadataOnlySessions.remove(session.id)
-            return true
-        } catch {
-            print("AgentSessionStore: failed to save session \(session.id): \(error)")
-            return false
+        metadataOnlySessions.remove(session.id)
+        // Run on the shared write queue (not inline) so a synchronous
+        // save can never race ahead of an older `saveAsync` payload for
+        // the same session and then get clobbered by it.
+        return writeQueue.sync {
+            do {
+                try ensureDirectory()
+                let url = directory.appendingPathComponent("\(session.id.uuidString).json")
+                let data = try encoder.encode(session)
+                try data.write(to: url, options: .atomic)
+                return true
+            } catch {
+                print("AgentSessionStore: failed to save session \(session.id): \(error)")
+                return false
+            }
         }
     }
 
     @discardableResult
     static func delete(id: UUID) -> Bool {
-        let url = directory.appendingPathComponent("\(id.uuidString).json")
-        do {
-            if FileManager.default.fileExists(atPath: url.path) {
-                try FileManager.default.removeItem(at: url)
+        // Drop any queued-but-unwritten snapshot first, then remove the
+        // file on the write queue — otherwise a pending async save could
+        // resurrect the session on disk right after the delete.
+        pendingWrites.cancel(id)
+        return writeQueue.sync {
+            let url = directory.appendingPathComponent("\(id.uuidString).json")
+            do {
+                if FileManager.default.fileExists(atPath: url.path) {
+                    try FileManager.default.removeItem(at: url)
+                }
+                metadataOnlySessions.remove(id)
+                return true
+            } catch {
+                print("AgentSessionStore: failed to delete session \(id): \(error)")
+                return false
             }
-            metadataOnlySessions.remove(id)
-            return true
-        } catch {
-            print("AgentSessionStore: failed to delete session \(id): \(error)")
-            return false
         }
     }
 

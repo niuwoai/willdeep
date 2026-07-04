@@ -66,7 +66,7 @@ struct AgentTaskMonitorRail: View {
                     .frame(maxHeight: monitorJobListMaxHeight)
                     .fixedSize(horizontal: false, vertical: true)
                     if runtimeJobs.count > monitorJobDisplayLimit {
-                        Text("还有 \(runtimeJobs.count - monitorJobDisplayLimit) 个后台任务")
+                        Text(L10n.AgentTaskMonitor.moreBackgroundJobs(runtimeJobs.count - monitorJobDisplayLimit))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -186,7 +186,7 @@ struct AgentTaskMonitorRail: View {
                         AgentRailDirectoryRow(group: group)
                     }
                     if appState.agentWorktreeChanges.fileCount > groups.reduce(0, { $0 + $1.count }) {
-                        Text("还有 \(appState.agentWorktreeChanges.fileCount - groups.reduce(0, { $0 + $1.count })) 个文件")
+                        Text(L10n.AgentWorktreeSummary.moreFiles(appState.agentWorktreeChanges.fileCount - groups.reduce(0, { $0 + $1.count })))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }

@@ -132,7 +132,7 @@ extension AppState {
             agentSessions[index].title = title
             agentSessions[index].titleIsUserSet = true
         }
-        AgentSessionStore.save(runtime.session)
+        AgentSessionStore.saveAsync(runtime.session)
     }
 
     /// Fire one non-streaming-flavored chat completion against the
