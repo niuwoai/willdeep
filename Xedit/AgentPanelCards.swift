@@ -219,11 +219,9 @@ struct AgentPatchProposalList: View {
     var body: some View {
         // When pending patches are spread across 2+ independent cards
         // (one-patch-per-turn over several turns), a single card's "Apply
-        // All" can't reach the others. Surface a transcript-level bar that
-        // applies / rejects EVERY pending patch at once.
-        if showBulkBar {
-            constrained(bulkBar)
-        }
+        // All" can't reach the others. Surface a transcript-level bar after
+        // the card stack so the destructive / broad actions live at the end
+        // of the review group rather than ahead of the individual choices.
         ForEach(groupedProposals, id: \.messageID) { group in
             constrained(
                 Group {
@@ -234,6 +232,9 @@ struct AgentPatchProposalList: View {
                     }
                 }
             )
+        }
+        if showBulkBar {
+            constrained(bulkBar)
         }
     }
 

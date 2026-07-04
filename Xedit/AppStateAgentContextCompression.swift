@@ -113,6 +113,14 @@ extension AppState {
             // the queue once compression resolves so the user doesn't see
             // "queued" forever.
             consumeNextQueuedMessageIfNeeded(for: runtime)
+            // A background job/media task/subagent finishing while
+            // `isCompressingContext` was set had its auto-resume guarded
+            // off — and auto-compression runs in the turn's defer BEFORE
+            // that defer's own resume attempt, so this is a common window,
+            // not an edge case. Re-kick now that compression resolved (a
+            // no-op if the queued-message consume above claimed the
+            // runtime; that turn drains completions itself).
+            resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
         }
 
         let transcriptBody = head

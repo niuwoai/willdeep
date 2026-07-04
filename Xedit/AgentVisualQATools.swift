@@ -146,7 +146,7 @@ enum AgentVisualQATools {
             guard !result.isEmpty else { return "VL analysis: provider returned an empty response." }
             return limit(result, to: maxVLCharacters)
         } catch {
-            return "VL analysis failed: \(error.localizedDescription)"
+            return "VL analysis: unavailable because the configured Image Understanding provider did not return a usable result."
         }
     }
 

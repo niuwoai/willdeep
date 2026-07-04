@@ -233,7 +233,7 @@ extension AppState {
         }
 
         if !images.isEmpty {
-            let imageDescriptions: String
+            let imageDescriptions: String?
             do {
                 let configuration = agentConfiguration.normalized.imageDescription.agentConfiguration
                 imageDescriptions = try await describeImagesForTextOnlyProvider(
@@ -241,7 +241,7 @@ extension AppState {
                     configuration: configuration
                 )
             } catch {
-                imageDescriptions = "Image description failed: \(error.localizedDescription)"
+                imageDescriptions = nil
             }
             let prompt = delegatedAgentPrompt(
                 userText: userText,

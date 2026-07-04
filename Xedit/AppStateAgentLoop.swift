@@ -142,7 +142,7 @@ extension AppState {
                 configuration: imageDescriptionConfiguration
             )
         } catch {
-            description = "Image description failed before sending to \(mainConfiguration.providerID): \(error.localizedDescription)"
+            return
         }
 
         guard !Task.isCancelled,
@@ -270,16 +270,21 @@ extension AppState {
     /// model actually sees the completion and reacts.
     ///
     /// An active turn already drains completions itself, so we only kick
-    /// when the runtime is fully idle; if the provider is saturated we bow
-    /// out and let a later turn surface it (never enqueue a phantom user
-    /// message for this).
+    /// when the runtime is fully idle. Every guard that makes us bow out
+    /// here has a matching re-trigger later, so a completion can never be
+    /// stranded: `isResponding`/`requestTask` → the turn's defer resumes;
+    /// `isAwaitingProviderSlot` → the queued dispatch drains completions
+    /// at the top of its loop; `isCompressingContext` → compression's
+    /// defer resumes; slot saturation → `releaseProviderSlot` sweeps all
+    /// runtimes via `resumeAgentLoopsWithPendingBackgroundCompletions()`.
+    /// (Never enqueue a phantom user message for this.)
     @MainActor
     func resumeAgentLoopForPendingBackgroundCompletions(for runtime: AgentRuntime) {
         guard !runtime.isResponding,
               !runtime.isAwaitingProviderSlot,
               !runtime.isCompressingContext,
               runtime.requestTask == nil else { return }
-        guard agentJobRegistry.pendingCompletionCount(forRuntime: runtime.id) > 0 else { return }
+        guard hasPendingBackgroundWakeups(for: runtime) else { return }
 
         let configuration = configurationForCurrentTurn(for: runtime)
         let providerID = configuration.providerID
@@ -298,6 +303,30 @@ extension AppState {
                 return
             }
             await self.runAgentLoop(for: runtime, configuration: configuration)
+        }
+    }
+
+    /// True when any background channel has a finished-but-unsurfaced
+    /// event for this runtime: shell jobs, media tasks, or subagent
+    /// reports. All three ride the same top-of-round drain in
+    /// `runAgentLoop`, so any of them justifies a wake-up turn.
+    @MainActor
+    func hasPendingBackgroundWakeups(for runtime: AgentRuntime) -> Bool {
+        agentJobRegistry.pendingCompletionCount(forRuntime: runtime.id) > 0
+            || agentMediaTaskRegistry.pendingCompletionCount(forRuntime: runtime.id) > 0
+            || agentSubagentRegistry.pendingReportCount(forParentRuntime: runtime.id) > 0
+    }
+
+    /// Sweep every live runtime and kick a wake-up turn for any with
+    /// stranded background completions. Called from `releaseProviderSlot`
+    /// so completions that lost the slot race (their resume bailed while
+    /// another session held the slot) surface as soon as capacity frees
+    /// up — without this, a job finishing for an idle session B while
+    /// session A monopolizes the provider stayed silent forever.
+    @MainActor
+    func resumeAgentLoopsWithPendingBackgroundCompletions() {
+        for runtime in agentRuntimes.values where hasPendingBackgroundWakeups(for: runtime) {
+            resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
         }
     }
 

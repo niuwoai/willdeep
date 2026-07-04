@@ -32,6 +32,11 @@ extension AppState {
         // most one queued entry for the same provider; entries for
         // other providers stay in line.
         drainPendingDispatchQueue()
+        // Queued user dispatches take priority above; whatever capacity
+        // is still left goes to runtimes whose background completions
+        // (jobs / media tasks / subagent reports) were stranded because
+        // their resume attempt lost an earlier slot race.
+        resumeAgentLoopsWithPendingBackgroundCompletions()
     }
 
     func drainPendingDispatchQueue() {

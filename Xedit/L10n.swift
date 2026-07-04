@@ -823,6 +823,7 @@ enum L10n {
         static let activeFileIncludedHint = String(localized: "agent-panel.active-file-included-hint", defaultValue: "Active file included · Tools available")
         static let openFolderHint = String(localized: "agent-panel.open-folder-hint", defaultValue: "Open a folder to enable tools")
         static let selectionIncludedHint = String(localized: "agent-panel.selection-included-hint", defaultValue: "Selection included · Tools available")
+        static let sessionSaveFailed = String(localized: "agent-panel.session-save-failed", defaultValue: "Failed to save this conversation to disk — recent messages may be lost after quitting. Check free disk space and folder permissions.")
     }
 
     enum HeatmapCell {
@@ -1035,6 +1036,13 @@ enum L10n {
         static let sessionMenuSummarizeTitle = String(localized: "sidebar.session-menu.summarize-title", defaultValue: "Summarize with AI")
         static let sessionMenuUnarchive = String(localized: "sidebar.session-menu.unarchive", defaultValue: "Unarchive")
         static let sessionMenuUnpin = String(localized: "sidebar.session-menu.unpin", defaultValue: "Unpin")
+        static let deleteSessionAlertTitle = String(localized: "sidebar.delete-session.alert-title", defaultValue: "Delete Session")
+        static func deleteSessionAlertMessage(_ title: String) -> String {
+            let template = String(localized: "sidebar.delete-session.alert-message", defaultValue: "“%@” and all its messages will be permanently deleted. This cannot be undone.")
+            return String(format: template, title)
+        }
+        static let deleteSessionConfirm = String(localized: "sidebar.delete-session.confirm", defaultValue: "Delete")
+        static let deleteSessionCancel = String(localized: "sidebar.delete-session.cancel", defaultValue: "Cancel")
         static let renameSessionAlertTitle = String(localized: "sidebar.rename-session.alert-title", defaultValue: "Rename Session")
         static let renameSessionAlertMessage = String(localized: "sidebar.rename-session.alert-message", defaultValue: "Give this conversation a new name.")
         static let renameSessionConfirm = String(localized: "sidebar.rename-session.confirm", defaultValue: "Save")

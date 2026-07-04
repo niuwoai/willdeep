@@ -525,9 +525,28 @@ struct AgentSessionsSidebar: View {
             .disabled(appState.agentRuntimes[session.id] == nil)
             Divider()
             Button(L10n.Sidebar.sessionMenuDelete, role: .destructive) {
-                appState.deleteAgentSession(id: session.id)
+                presentDeleteAlert(for: session)
             }
         }
+    }
+
+    /// Deletion is the only unrecoverable action in this menu (rename
+    /// already confirms via its own alert), so gate it behind an explicit
+    /// NSAlert — a mis-click on the context menu used to wipe the whole
+    /// conversation with no way back.
+    private func presentDeleteAlert(for session: AgentSession) {
+        let alert = NSAlert()
+        alert.messageText = L10n.Sidebar.deleteSessionAlertTitle
+        alert.informativeText = L10n.Sidebar.deleteSessionAlertMessage(session.title)
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: L10n.Sidebar.deleteSessionConfirm)
+        alert.addButton(withTitle: L10n.Sidebar.deleteSessionCancel)
+        if let deleteButton = alert.buttons.first {
+            deleteButton.hasDestructiveAction = true
+        }
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return }
+        appState.deleteAgentSession(id: session.id)
     }
 
     /// Pop a tiny NSAlert with an accessory NSTextField for renaming.

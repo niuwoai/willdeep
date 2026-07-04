@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.129.0-rc28 - 2026-07-05
+
+### Fixed
+- **LSP 进程不再无限累积** —— language server 会话按「服务器×工作区」缓存但从不关闭（`closeAll` 无调用者），跨项目游走一圈就挂一排 sourcekit-lsp/gopls 常驻到退出。现在加 LRU 上限（6 组），超出即停掉最久未用的会话；被淘汰的项目再次打开文件时自动重建（文档状态经 `didOpen` 重同步）。`transport.stop()` 同时关闭 stdin 写端（体面退出 + 立刻回收文件描述符），`send()` 改用可 throw 的 `write(contentsOf:)`，杜绝向已停进程写入时的 ObjC 异常崩溃。新增 LRU 淘汰回归测试。
+- **删除会话加确认框** —— 右键菜单误触不再直接抹掉整段对话；弹窗含会话名，删除按钮标记为 destructive（en/zh-Hans 文案齐全）。
+- **会话落盘失败浮出错误卡** —— `AgentSessionStore.save` 失败（磁盘满/权限丢失）此前只 print 到控制台，用户重启后才发现历史丢失；现在 persist 失败会在会话错误卡上提示（不覆盖已显示的 provider 错误）。
+
+### Changed
+- **聊天渲染：路径识别正则提为 static 缓存** —— 此前每渲染一个文本块都重新编译一次 `NSRegularExpression`，流式输出期间是纯浪费；pattern 恒定，编译一次终生复用。
+- **会话列表：persist 不再全量排序** —— `persistAgentSession` 每回合触发多次、每次对整个 @Published 会话数组全量 `sort`（顺带放大侧栏重绘）；现改为单次 move-to-front（persist 刚盖了 `updatedAt`，该会话必是最新）。加载与其余插入点原本就维持降序，语义不变。
+- 版本号从 **1.129.0-rc27** 提升为 **1.129.0-rc28**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc27 - 2026-07-04
+
+### Fixed
+- **后台任务失败后聊天会话不再"装死"** —— 侧栏任务监控里后台任务（`run_in_background` shell job）已显示失败，但聊天窗口不发起任何新动作、agent 承诺的"完成后我会告诉你结果"永远不来。修复了完成通知唤起链路上的四个死角：
+  - **上下文压缩窗口**：回合结束的 defer 先跑自动压缩再尝试唤起，`isCompressingContext` 把唤起 guard 挡掉后无人补触发；现在压缩结束时会重新 kick（`runContextCompression` defer）。
+  - **Provider 槽位竞争**：唤起尝试抢不到并发槽就静默放弃，之后槽位释放只排空用户消息队列；现在 `releaseProviderSlot` 会额外扫描所有持有滞留完成事件的会话并逐个唤起。
+  - **媒体任务与后台 subagent 完全没有唤起钩子**：此前只能等下一个用户消息才在回合顶部拉取；现在 `AgentMediaTaskRegistry.onTaskFinished` / `AgentSubagentRegistry.onRunFinished` 与 shell job 走同一条 auto-resume 链路，唤起判定也改为三通道合并计数（`hasPendingBackgroundWakeups`）。
+  - **闲置 runtime 淘汰竞态**：带着运行中后台任务/subagent 的会话可能被 idle-runtime 淘汰，任务完成时查不到 runtime、通知丢失（淘汰还会误杀在跑的 subagent）；现在这类会话不参与淘汰，且完成钩子改用 `runtime(for:)` 兜底重新物化。
+  - 新增回归测试：subagent 完成钩子/计数、媒体任务终态钩子/计数、重复终态不重复入队。
+- 版本号从 **1.129.0-rc26** 提升为 **1.129.0-rc27**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc26 - 2026-07-04
+
+### Fixed
+- **Patch 批量操作条移到待审卡片组底部** —— 当多张 Apply 卡片同时待审时，`全部拒绝 / 全部应用` 不再显示在列表顶部，而是放在这一组待审卡片最下面；用户可以先逐项扫完变更，再决定是否批量处理。
+- 版本号从 **1.129.0-rc25** 提升为 **1.129.0-rc26**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc25 - 2026-07-04
+
+### Fixed
+- **VL 图片说明失败时不再把供应商错误贴进用户消息** —— 文本模型带图时，Image Understanding / VL 请求失败后不再把 `Image description failed...`、HTTP 状态码或 provider 错误正文拼进用户气泡；保留原用户文本继续发送，避免 401、模型名、relay 信息等诊断文本污染对话内容。
+- **外部执行器与视觉 QA 的 VL 失败输出改为安静降级** —— Composer 委托 Claude Code / Codex 时，VL 失败不再把错误详情写入委托 prompt；视觉 QA 工具也改为返回通用不可用提示，不暴露底层 provider 错误。
+- 版本号从 **1.129.0-rc24** 提升为 **1.129.0-rc25**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
 ## 1.129.0-rc24 - 2026-07-03
 
 ### Changed

@@ -37,6 +37,19 @@ actor EditorLanguageServiceManager {
     private var applyEditHandler: ApplyEditHandler?
     private var sessions: [SessionKey: Session] = [:]
 
+    /// LRU bookkeeping + cap for live language-server processes. Sessions
+    /// are keyed by (server, workspace root) and were previously never
+    /// stopped: every project the user visited left its LSP processes
+    /// running for the app's whole lifetime (`closeAll` had no callers).
+    /// A hop across a dozen repos meant a dozen sourcekit-lsp/gopls/…
+    /// instances idling in the background. Evicting the least-recently
+    /// used session is safe: document state re-syncs on the next request
+    /// because a fresh session starts with empty `openedDocumentVersions`,
+    /// which routes through `didOpen` again.
+    private static let maxLiveSessions = 6
+    private var sessionUseCounter: UInt64 = 0
+    private var sessionLastUse: [SessionKey: UInt64] = [:]
+
     init(
         transportFactory: @escaping TransportFactory = { executableURL, arguments, rootURL in
             ProcessLanguageServerTransport(
@@ -511,6 +524,7 @@ actor EditorLanguageServiceManager {
             await session.client.stop()
         }
         sessions.removeAll()
+        sessionLastUse.removeAll()
     }
 
     private func session(
@@ -532,6 +546,7 @@ actor EditorLanguageServiceManager {
             rootPath: rootURL.standardizedFileURL.path
         )
         if let existing = sessions[key] {
+            touchSession(key)
             return existing
         }
 
@@ -548,7 +563,25 @@ actor EditorLanguageServiceManager {
 
         let created = Session(configuration: configuration, rootURL: rootURL, client: client)
         sessions[key] = created
+        touchSession(key)
+        await evictLeastRecentlyUsedSessionsIfNeeded(protecting: key)
         return created
+    }
+
+    private func touchSession(_ key: SessionKey) {
+        sessionUseCounter += 1
+        sessionLastUse[key] = sessionUseCounter
+    }
+
+    private func evictLeastRecentlyUsedSessionsIfNeeded(protecting protectedKey: SessionKey) async {
+        while sessions.count > Self.maxLiveSessions {
+            let evictable = sessions.keys
+                .filter { $0 != protectedKey }
+                .min { (sessionLastUse[$0] ?? 0) < (sessionLastUse[$1] ?? 0) }
+            guard let victim = evictable, let session = sessions.removeValue(forKey: victim) else { return }
+            sessionLastUse.removeValue(forKey: victim)
+            await session.client.stop()
+        }
     }
 
     private func synchronizeDocument(

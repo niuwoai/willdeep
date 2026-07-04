@@ -1066,6 +1066,15 @@ extension AppState {
                     && !runtime.isResponding
                     && runtime.requestTask == nil
                     && runtime.toolDecisionWaiter == nil
+                    // A session waiting on background work is not idle:
+                    // evicting it here would cancel its live subagents
+                    // (cancelAll below) and orphan alive shell jobs, and
+                    // any already-queued completion would depend on the
+                    // finish-hook re-materializing the runtime. Keep it
+                    // resident until the work is surfaced.
+                    && agentJobRegistry.aliveJobs(forRuntime: runtime.id).isEmpty
+                    && agentSubagentRegistry.activeCount(forParentRuntime: runtime.id) == 0
+                    && !hasPendingBackgroundWakeups(for: runtime)
             }
             .sorted { $0.session.updatedAt > $1.session.updatedAt }
 
@@ -1325,9 +1334,26 @@ extension AppState {
         runtime.session.providerID = activeProvider?.providerID ?? agentConfiguration.normalized.providerID
         runtime.session.providerDisplayName = activeProvider?.displayName
             ?? AgentProviderPreset.preset(id: runtime.session.providerID ?? "")?.displayName
-        runtime.persist()
+        let didSave = runtime.persist()
+        if !didSave, runtime.errorMessage == nil {
+            // Surface the write failure on the session's error card instead
+            // of only printing to the console — otherwise the user learns
+            // about the lost history at the next relaunch. Never overwrite
+            // a provider error that's already showing.
+            runtime.errorMessage = L10n.AgentPanel.sessionSaveFailed
+        }
         agentSessions[index] = runtime.session
-        agentSessions.sort { $0.updatedAt > $1.updatedAt }
+        // `persist()` just stamped `updatedAt = now`, so this session is
+        // the newest — a single move-to-front keeps the list sorted.
+        // The previous full `sort` here ran on EVERY persist (several
+        // times per turn, for every concurrent runtime), re-comparing
+        // hundreds of already-ordered sessions each time; and because
+        // `agentSessions` is @Published, the wholesale reorder also
+        // invalidated the sidebar more than needed.
+        if index > 0 {
+            let updated = agentSessions.remove(at: index)
+            agentSessions.insert(updated, at: 0)
+        }
         upsertAgentUsageSnapshot(for: runtime.session)
 
         // After every persist, give the LLM summarizer a chance to

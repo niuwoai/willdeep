@@ -537,9 +537,26 @@ final class AppState: ObservableObject {
             // is idle (its turn already ended saying "I'll check back"),
             // auto-resume so the model reacts to the completion/failure
             // instead of going silent until the user sends another message.
-            if let runtime = self.agentRuntimes[job.runtimeID] {
+            // `runtime(for:)` re-materializes the session if the idle-runtime
+            // eviction dropped it while the job was still running — a plain
+            // `agentRuntimes[...]` lookup would silently strand the result.
+            if let runtime = self.runtime(for: job.runtimeID) {
                 self.resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
             }
+        }
+        // Same wake-up contract for the other two background channels:
+        // media tasks and spawned subagents queue their completions for
+        // the top-of-round drain, so a run that outlives its turn needs
+        // this kick or it stays unreported until the next user message.
+        agentMediaTaskRegistry.onTaskFinished = { [weak self] task in
+            guard let self, let runtimeID = task.runtimeID,
+                  let runtime = self.runtime(for: runtimeID) else { return }
+            self.resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
+        }
+        agentSubagentRegistry.onRunFinished = { [weak self] run in
+            guard let self,
+                  let runtime = self.runtime(for: run.parentRuntimeID) else { return }
+            self.resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
         }
         // Keep terminal settings in sync across AppState instances (the
         // Settings window builds its own instance). When any instance saves,

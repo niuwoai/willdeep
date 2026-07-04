@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-03 | Current version: v1.129.0-rc24
+> Last updated: 2026-07-05 | Current version: v1.129.0-rc28
 
 ## Positioning
 
@@ -14,6 +14,8 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Patch 批量操作条置底（1.129.0-rc26）** —— 多张 Apply 卡片同时待审时，transcript 级 `全部拒绝 / 全部应用` 批量操作条改到这一组待审卡片最下面，先展示逐项变更，再给批量处理入口，降低用户还没看完就误点全局操作的风险。
+- **VL 失败不污染用户消息（1.129.0-rc25）** —— 文本模型带图时，Image Understanding / VL 请求失败后不再把 `Image description failed...`、HTTP 状态码或 provider 错误正文拼进用户气泡；外部执行器委托 prompt 与视觉 QA 工具同样改成通用不可用/跳过语义，保留诊断边界，避免把 401、模型名或 relay 错误暴露到用户正文里。
 - **移动网关默认走互联网中继（1.129.0-rc24）** —— 新增连接方式设置。默认「互联网中继」不再启动本地 Go 网关：Swift 桌面 peer 直连中继房间，App 自己生成配对二维码（含 `relay_*` 坐标），手机凭共享 `relay_token` 加入，脱离局域网可用、无需运行本地进程；存活状态取 peer 的 WebSocket 连接，注销设备靠轮换房间+令牌全体重扫。「局域网网关」作为备选一键切回（Go `serve-mobile` 进程 + HTTP 配对 + 按设备令牌/注销）。Go 网关从不自己连中继，只是过去在配对负载里广告中继坐标，所以中继模式可零本地进程运行。二维码 `relay_*` 字段与现有安卓端一致，向后兼容。中继内容当前仅 WSS 传输层加密、尚无端到端加密，E2E 设计见 `docs/MOBILE_GATEWAY_E2E_ENCRYPTION_DESIGN.md`。
 - **移动网关快照只读化（1.129.0-rc23）** —— Mobile Gateway 周期快照的 queued/recent/worktree 访问器此前经由 `runtime(for:)` 读状态，导致每次快照把所有持久化会话物化成 runtime（磁盘读 + JSON 解码）、再触发 idle 淘汰同步 JSON 编码 + 原子写盘，主线程 materialize→evict→persist 死循环，CPU 常驻 20–60%（rc21 采样定位）。现在快照只读已存活的 `agentRuntimes`，不物化、不淘汰、不落盘；手机端打开会话仍走命令路径按需物化单个会话。
 - **workspace 级记忆可视与隔离补强（1.129.0-rc22）** —— 记忆的 Global/Project 隔离链路原本就在（project 记忆按 workspace 指纹只在对应项目注入），本次补齐可用性：记忆记录新增可读 `projectPath`，设置 → 记忆列表显示每条 project 记忆挂载的项目名/路径，并新增「全部 / 仅全局 / 当前项目」过滤；老记录在对应 workspace 打开时自动回填路径，仓库搬家后指纹失联可通过路径兜底匹配或编辑重存一键重绑；`add_memory` 不传 scope 时按内容启发式推断（提到仓库/版本/测试等 → project），不再一律默认 global。

@@ -684,6 +684,24 @@
         }
       }
     },
+    "agent-panel.session-save-failed" : {
+      "comment" : "error card body when writing the session JSON to disk fails",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to save this conversation to disk — recent messages may be lost after quitting. Check free disk space and folder permissions."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话保存到磁盘失败——退出后最近的消息可能丢失。请检查磁盘剩余空间和目录权限。"
+          }
+        }
+      }
+    },
     "agent-patch-error.empty-diff" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -22755,6 +22773,78 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "归档"
+          }
+        }
+      }
+    },
+    "sidebar.delete-session.alert-title" : {
+      "comment" : "confirmation alert title before deleting a session",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Session"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除会话"
+          }
+        }
+      }
+    },
+    "sidebar.delete-session.alert-message" : {
+      "comment" : "confirmation alert body; %@ is the session title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” and all its messages will be permanently deleted. This cannot be undone."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」及其全部消息将被永久删除，无法撤销。"
+          }
+        }
+      }
+    },
+    "sidebar.delete-session.confirm" : {
+      "comment" : "destructive confirm button in the delete-session alert",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除"
+          }
+        }
+      }
+    },
+    "sidebar.delete-session.cancel" : {
+      "comment" : "cancel button in the delete-session alert",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
           }
         }
       }

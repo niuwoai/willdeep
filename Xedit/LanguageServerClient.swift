@@ -64,11 +64,20 @@ nonisolated final class ProcessLanguageServerTransport: LanguageServerTransport 
     }
 
     func send(_ data: Data) throws {
-        inputPipe.fileHandleForWriting.write(data)
+        // `write(contentsOf:)` throws a Swift error on a closed/broken
+        // handle; the legacy `write(_:)` raises an uncatchable ObjC
+        // exception instead, which would crash the app if a request
+        // races a `stop()` (session eviction) or a dead server process.
+        try inputPipe.fileHandleForWriting.write(contentsOf: data)
     }
 
     func stop() {
         outputPipe.fileHandleForReading.readabilityHandler = nil
+        // Close our end of stdin first: well-behaved LSP servers treat
+        // stdin EOF as a shutdown signal, so most exit before the SIGTERM
+        // below even lands — and the write-side descriptor is reclaimed
+        // immediately instead of at Pipe dealloc.
+        try? inputPipe.fileHandleForWriting.close()
         if process.isRunning {
             process.terminate()
         }

@@ -1892,6 +1892,78 @@ struct WillDeepTests {
         #expect(registry.consumePendingReports(forParentRuntime: parentID).isEmpty)
     }
 
+    @Test("subagent finish fires onRunFinished and pendingReportCount is non-destructive")
+    @MainActor
+    func testSubagentFinishFiresWakeupHook() async throws {
+        let registry = AgentSubagentRegistry()
+        let parentID = UUID()
+        var hookRuns: [AgentSubagentRun] = []
+        registry.onRunFinished = { hookRuns.append($0) }
+        let configuration = AgentConfiguration(
+            providerID: "deepseek",
+            baseURL: "https://api.deepseek.com",
+            model: "deepseek-chat",
+            flashModel: "",
+            proModel: "",
+            routingMode: .pro,
+            apiKey: ""
+        )
+        _ = try registry.startBackground(
+            prompt: "do something",
+            label: "doomed",
+            configuration: configuration,
+            workspaceURL: nil,
+            parentRuntimeID: parentID
+        )
+        for _ in 0..<200 {
+            if !hookRuns.isEmpty { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        // The hook fires exactly when the report is queued, so a resume
+        // triggered by it must observe a non-zero pending count.
+        #expect(hookRuns.count == 1)
+        #expect(hookRuns.first?.parentRuntimeID == parentID)
+        #expect(registry.pendingReportCount(forParentRuntime: parentID) == 1)
+        // Peeking is non-destructive; consuming drains it.
+        #expect(registry.pendingReportCount(forParentRuntime: parentID) == 1)
+        #expect(registry.consumePendingReports(forParentRuntime: parentID).count == 1)
+        #expect(registry.pendingReportCount(forParentRuntime: parentID) == 0)
+    }
+
+    @Test("media task terminal transition fires onTaskFinished and queues a completion")
+    @MainActor
+    func testMediaTaskFinishFiresWakeupHook() throws {
+        let scratch = FileManager.default.temporaryDirectory
+            .appendingPathComponent("media-task-wakeup-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let registry = AgentMediaTaskRegistry(fileURL: scratch)
+        let runtimeID = UUID()
+        var hookTasks: [AgentMediaTask] = []
+        registry.onTaskFinished = { hookTasks.append($0) }
+
+        let task = registry.create(
+            provider: .someIM,
+            kind: .videoGeneration,
+            title: "wakeup probe",
+            runtimeID: runtimeID,
+            status: .processing
+        )
+        #expect(hookTasks.isEmpty)
+        #expect(registry.pendingCompletionCount(forRuntime: runtimeID) == 0)
+
+        registry.update(id: task.id, status: .failed, statusMessage: "boom")
+        #expect(hookTasks.count == 1)
+        #expect(hookTasks.first?.id == task.id)
+        #expect(registry.pendingCompletionCount(forRuntime: runtimeID) == 1)
+        #expect(registry.consumePendingCompletions(forRuntime: runtimeID).count == 1)
+        #expect(registry.pendingCompletionCount(forRuntime: runtimeID) == 0)
+
+        // A second terminal-to-terminal update must not re-queue.
+        registry.update(id: task.id, statusMessage: "still failed")
+        #expect(hookTasks.count == 1)
+        #expect(registry.pendingCompletionCount(forRuntime: runtimeID) == 0)
+    }
+
     @Test("agent context window recognizes modern large-context models")
     func testAgentContextWindowModernModels() {
         // gpt-5.5 (and -pro) is a ~1M window; only plain gpt-5 stays 400K.

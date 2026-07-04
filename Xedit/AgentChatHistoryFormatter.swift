@@ -887,26 +887,29 @@ enum AgentChatHistoryRenderer {
         return converted
     }
 
+    // 文件引用识别正则。**关键约束**:带斜杠的普通词(`GB/T`、`TCP/IP`、
+    // `I/O`、`和/或`、日期 `01/02`、分数 `1/2`)不能被误判成路径。旧正则
+    // 「只要有斜杠就算路径」太宽,会把 `GB/T` 这种标准号染成可点文件链接
+    // (用户反馈)。收紧为只认两类:
+    //   ① 带路径锚点的:以 `/`、`./`、`../`、`~/` 开头(绝对/相对/家目录路径,
+    //      如 `/usr/bin/ssh`、`~/.willdeep/skills`、`./scripts/x`);
+    //   ② 以已知文件后缀结尾的(可带任意层目录前缀,如 `README.md`、
+    //      `src/main.ts`、`Xedit/AppState.swift`)。
+    // 两类都可带 `:行[:列]` 后缀。`GB/T` 既无锚点又无后缀 → 不再命中。
+    // 新规则严格比旧的窄,只会去掉误链接,不会凭空多出。
+    // static let:每渲染一个文本块就编译一次正则曾是纯浪费——pattern
+    // 是常量,编译一次终生复用。
+    private static let pathChipRegex = try? NSRegularExpression(
+        pattern: #"(?<![\w@/])(?:(?:\.{1,2}/|~/|/)[A-Za-z0-9_.$@+~()-]+(?:/[A-Za-z0-9_.$@+~()-]+)*|(?:[A-Za-z0-9_.$@+~()-]+/)*[A-Za-z0-9_.$@+~()-]+\.(?:swift|go|ts|tsx|js|jsx|vue|md|markdown|json|yaml|yml|toml|rb|py|java|kt|rs|html|css|scss|sql|sh|zsh|txt))(?:\:\d+(?:\:\d+)?)?"#
+    )
+
     private static func applyPathChipAttributes(
         to attributed: NSMutableAttributedString,
         baseFont: NSFont,
         color: NSColor
     ) {
         let fullRange = NSRange(location: 0, length: attributed.length)
-        // 文件引用识别正则。**关键约束**:带斜杠的普通词(`GB/T`、`TCP/IP`、
-        // `I/O`、`和/或`、日期 `01/02`、分数 `1/2`)不能被误判成路径。旧正则
-        // 「只要有斜杠就算路径」太宽,会把 `GB/T` 这种标准号染成可点文件链接
-        // (用户反馈)。收紧为只认两类:
-        //   ① 带路径锚点的:以 `/`、`./`、`../`、`~/` 开头(绝对/相对/家目录路径,
-        //      如 `/usr/bin/ssh`、`~/.willdeep/skills`、`./scripts/x`);
-        //   ② 以已知文件后缀结尾的(可带任意层目录前缀,如 `README.md`、
-        //      `src/main.ts`、`Xedit/AppState.swift`)。
-        // 两类都可带 `:行[:列]` 后缀。`GB/T` 既无锚点又无后缀 → 不再命中。
-        // 新规则严格比旧的窄,只会去掉误链接,不会凭空多出。
-        guard fullRange.length > 0,
-              let regex = try? NSRegularExpression(
-                pattern: #"(?<![\w@/])(?:(?:\.{1,2}/|~/|/)[A-Za-z0-9_.$@+~()-]+(?:/[A-Za-z0-9_.$@+~()-]+)*|(?:[A-Za-z0-9_.$@+~()-]+/)*[A-Za-z0-9_.$@+~()-]+\.(?:swift|go|ts|tsx|js|jsx|vue|md|markdown|json|yaml|yml|toml|rb|py|java|kt|rs|html|css|scss|sql|sh|zsh|txt))(?:\:\d+(?:\:\d+)?)?"#
-              ) else {
+        guard fullRange.length > 0, let regex = Self.pathChipRegex else {
             return
         }
         let string = attributed.string as NSString

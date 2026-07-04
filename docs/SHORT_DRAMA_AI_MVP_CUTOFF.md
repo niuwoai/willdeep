@@ -1,6 +1,6 @@
 # Short Drama AI MVP Cutoff
 
-> Last updated: 2026-07-03 | Baseline version: v1.129.0-rc24
+> Last updated: 2026-07-05 | Baseline version: v1.129.0-rc28
 
 ## 收敛结论
 
@@ -28,7 +28,7 @@
 
 ## 可用版验收清单
 
-当前记录：2026-07-03，基线 `v1.129.0-rc24`。以下命令作为可用版验收 gate；本次将移动网关默认改为互联网中继、Go 本地网关降级为可选备选，不新增短剧制作能力，短剧 handoff todo summary 仍会单独验证 smoke evidence 合约、acceptance 摘要、交付证据索引、handoff 模式矩阵、交付文件指纹、交接待办清单、待办摘要、待办证据路径、复验命令、Debug 构建和版本一致性。
+当前记录：2026-07-05，基线 `v1.129.0-rc28`。以下命令作为可用版验收 gate；本次仅做性能/稳定性/体验修复（LSP 进程 LRU 淘汰、渲染正则缓存、会话列表排序去抖、删会话确认框、落盘失败浮出），不新增短剧制作能力，短剧 handoff todo summary 仍会单独验证 smoke evidence 合约、acceptance 摘要、交付证据索引、handoff 模式矩阵、交付文件指纹、交接待办清单、待办摘要、待办证据路径、复验命令、Debug 构建和版本一致性。
 
 - `scripts/run_tests.sh`
 - `ruby scripts/version_consistency.rb build/version_report.md build/version_report.json`

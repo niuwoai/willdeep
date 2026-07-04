@@ -102,6 +102,14 @@ final class AgentSubagentRegistry: ObservableObject {
     private var tasks: [UUID: Task<Void, Never>] = [:]
     private var pendingReports: [UUID: [UUID]] = [:]
 
+    /// Host hook fired after a run finishes and its report is queued
+    /// into `pendingReports`. AppState uses it to auto-resume the parent
+    /// agent loop when the run outlives the turn that spawned it —
+    /// mirroring `AgentJobRegistry.onJobFinished`. Without this, a
+    /// background subagent that finishes after its parent turn ended
+    /// would sit unreported until the user happens to send a message.
+    var onRunFinished: ((AgentSubagentRun) -> Void)?
+
     func activeCount(forParentRuntime runtimeID: UUID) -> Int {
         runs.filter { $0.parentRuntimeID == runtimeID && $0.status == .running }.count
     }
@@ -189,6 +197,9 @@ final class AgentSubagentRegistry: ObservableObject {
         let parentID = runs[index].parentRuntimeID
         pendingReports[parentID, default: []].append(id)
         evictOldFinishedRuns(forParentRuntime: parentID)
+        if let finished = runs.first(where: { $0.id == id }) {
+            onRunFinished?(finished)
+        }
     }
 
     // MARK: Report consumption
@@ -201,6 +212,12 @@ final class AgentSubagentRegistry: ObservableObject {
             return []
         }
         return ids.compactMap { id in runs.first { $0.id == id } }
+    }
+
+    /// Non-destructive count of finished-but-unreported runs — the
+    /// auto-resume path checks this before kicking a wake-up turn.
+    func pendingReportCount(forParentRuntime runtimeID: UUID) -> Int {
+        pendingReports[runtimeID]?.count ?? 0
     }
 
     /// Cancel every live subagent owned by a session. Used when the

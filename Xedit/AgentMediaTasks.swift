@@ -304,6 +304,12 @@ final class AgentMediaTaskRegistry: ObservableObject {
     private var pendingCompletionEvents: [UUID: [UUID]] = [:]
     weak var shortDramaStore: AgentShortDramaStore?
 
+    /// Host hook fired after a task reaches a terminal status and its
+    /// completion event is queued. AppState uses it to auto-resume the
+    /// owning agent loop when the task outlives the turn that spawned
+    /// it — mirroring `AgentJobRegistry.onJobFinished`.
+    var onTaskFinished: ((AgentMediaTask) -> Void)?
+
     init(fileURL: URL = AgentMediaTaskRegistry.defaultFileURL()) {
         self.fileURL = fileURL
         self.tasks = Self.load(from: fileURL)
@@ -399,11 +405,15 @@ final class AgentMediaTaskRegistry: ObservableObject {
             task.finishedAt = task.updatedAt
         }
         tasks[index] = task
-        if previousStatus.isActive, !task.status.isActive, let runtimeID = task.runtimeID {
+        let justFinished = previousStatus.isActive && !task.status.isActive && task.runtimeID != nil
+        if justFinished, let runtimeID = task.runtimeID {
             pendingCompletionEvents[runtimeID, default: []].append(task.id)
         }
         syncShortDramaLinks(for: task)
         trimHistory()
+        if justFinished {
+            onTaskFinished?(task)
+        }
     }
 
     func appendArtifact(_ artifact: AgentMediaArtifact, to taskID: UUID) {
@@ -458,6 +468,12 @@ final class AgentMediaTaskRegistry: ObservableObject {
             return []
         }
         return ids.compactMap { id in tasks.first(where: { $0.id == id }) }
+    }
+
+    /// Non-destructive count of finished-but-unsurfaced tasks — the
+    /// auto-resume path checks this before kicking a wake-up turn.
+    func pendingCompletionCount(forRuntime runtimeID: UUID) -> Int {
+        pendingCompletionEvents[runtimeID]?.count ?? 0
     }
 
     private func insertOrUpdate(_ task: AgentMediaTask) {
