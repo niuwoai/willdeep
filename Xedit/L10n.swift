@@ -7,7 +7,11 @@ import Foundation
 //
 // To regenerate: see scripts/i18n_regenerate.rb (TODO if we ever automate this).
 
-enum L10n {
+// `nonisolated`: pure `String(localized:)` lookups with no main-actor
+// state. Under SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor these statics
+// would otherwise be unusable from nonisolated model code (e.g. the
+// persisted session graph's displayName helpers).
+nonisolated enum L10n {
     enum AppUpdate {
         static let download = String(localized: "app-update.download", defaultValue: "Download")
         static let later = String(localized: "app-update.later", defaultValue: "Later")

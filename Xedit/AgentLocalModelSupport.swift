@@ -128,7 +128,7 @@ struct AgentLocalModelPackageFile: Identifiable, Equatable, Sendable {
     var id: String { fileName }
 }
 
-struct AgentLocalModelFileMatch: Identifiable, Equatable, Sendable {
+nonisolated struct AgentLocalModelFileMatch: Identifiable, Equatable, Sendable {
     enum Quality: Equatable, Sendable {
         case matched
         case close

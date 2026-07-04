@@ -10,7 +10,12 @@ import Foundation
 /// A persisted Agent conversation. Lives as one JSON file under the app's
 /// Application Support directory. `workspaceLocation` is the canonical
 /// workspace binding; `workspaceRootPath` remains for local legacy sessions.
-struct AgentSession: Identifiable, Codable, Equatable {
+// The persisted model graph is `nonisolated`: the project compiles with
+// SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor, which would otherwise make
+// these types' synthesized Codable conformances main-actor-isolated —
+// and AgentSessionStore encodes them on a background write queue. Pure
+// value types with no main-actor state; keep new members that way.
+nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     let id: UUID
     var title: String
     /// Optional — sessions started before a folder was picked have no root.
@@ -252,7 +257,7 @@ struct AgentSession: Identifiable, Codable, Equatable {
 /// Top-level interaction mode for an Agent session. Plan locks all write
 /// tools until the user approves a plan; Goal pins a long-term objective
 /// + checklist to every system prompt. Normal is the default.
-enum AgentInteractionMode: String, Codable, CaseIterable, Identifiable {
+nonisolated enum AgentInteractionMode: String, Codable, CaseIterable, Identifiable {
     case normal
     case plan
     case goal
@@ -280,7 +285,7 @@ enum AgentInteractionMode: String, Codable, CaseIterable, Identifiable {
 /// influences only write-tier auto-approval; read tools still run
 /// automatically, danger-tier tools still require typed confirmation,
 /// and Plan mode keeps its own plan-approval gate.
-enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable {
+nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable {
     case requestEveryTime
     case smart
     case workspaceAccess
@@ -336,7 +341,7 @@ enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable {
 
 /// Optional specialist packs that expand the model-facing tool surface and
 /// domain prompt only when the user explicitly enables them for a session.
-enum AgentExpert: String, Codable, CaseIterable, Identifiable, Hashable {
+nonisolated enum AgentExpert: String, Codable, CaseIterable, Identifiable, Hashable {
     case shortDrama
     case browserOps
 
@@ -387,7 +392,7 @@ enum AgentExpert: String, Codable, CaseIterable, Identifiable, Hashable {
 /// choose the LLM API used by WillDeep itself, while this chooses whether
 /// the submitted task is handled by WillDeep or delegated to an external
 /// coding agent CLI through the existing tool/approval boundary.
-enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiable {
+nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiable {
     case willDeep
     case claudeCode
     case codexCLI
@@ -444,7 +449,7 @@ enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiable {
 ///   approved → write tools unlocked, agent continues
 ///   rejected → user dismissed; agent should re-plan on next turn
 ///   executing/done used purely for display once approved.
-struct AgentPlan: Codable, Equatable {
+nonisolated struct AgentPlan: Codable, Equatable {
     enum Status: String, Codable { case proposed, approved, rejected, executing, done }
 
     /// Per-step lifecycle. Agent self-reports via a ```progress fenced
@@ -492,7 +497,7 @@ struct AgentPlan: Codable, Equatable {
 /// A long-term goal pinned to a session. Sticks to every system prompt so
 /// the agent stays aligned, and renders as a banner at the top of the
 /// transcript. `checklist` entries can be ticked off independently.
-struct AgentGoal: Codable, Equatable {
+nonisolated struct AgentGoal: Codable, Equatable {
     var statement: String
     var checklist: [Item]
 

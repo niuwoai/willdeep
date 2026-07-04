@@ -168,13 +168,6 @@ enum AgentSessionStore {
             do {
                 try ensureDirectory()
                 let url = directory.appendingPathComponent("\(id.uuidString).json")
-                // AgentSession's Codable conformance is MainActor-inferred
-                // (SWIFT_DEFAULT_ACTOR_ISOLATION), so this off-main encode
-                // warns under -swift-version 6. It is deliberate: the model
-                // graph is pure value types with synthesized Codable — no
-                // main-actor state is touched — and encoding here is the
-                // point of the pipeline. Marking the whole persisted model
-                // graph `nonisolated` is the eventual clean fix.
                 let data = try encoder.encode(payload)
                 try data.write(to: url, options: .atomic)
             } catch {
@@ -677,7 +670,7 @@ enum AgentSessionStore {
 
     /// Localized placeholder title for a session that has no derived or
     /// summarized title yet ("New Chat" / "新对话").
-    static var defaultTitle: String { L10n.Sidebar.defaultSessionTitle }
+    nonisolated static var defaultTitle: String { L10n.Sidebar.defaultSessionTitle }
 
     /// Whether `title` is a generic placeholder (the localized default, an
     /// older hardcoded variant, or empty) rather than a real, content-

@@ -13,7 +13,7 @@
 
 import Foundation
 
-struct AgentWidget: Codable, Equatable, Identifiable {
+nonisolated struct AgentWidget: Codable, Equatable, Identifiable {
     let id: UUID
     /// 用户能看到的卡片标题，也作为 widget 的 download 文件名前缀
     /// （phase 2 加导出功能时用得到）。
@@ -202,7 +202,7 @@ struct AgentWidget: Codable, Equatable, Identifiable {
     }
 }
 
-struct AgentWidgetRecommendedAction: Equatable {
+nonisolated struct AgentWidgetRecommendedAction: Equatable {
     let tool: String
     let arguments: String?
 
@@ -212,7 +212,7 @@ struct AgentWidgetRecommendedAction: Equatable {
     }
 }
 
-struct AgentWidgetHandoffAction: Equatable, Identifiable {
+nonisolated struct AgentWidgetHandoffAction: Equatable, Identifiable {
     let key: String
     let label: String
     let tool: String

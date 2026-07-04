@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.129.0-rc32 - 2026-07-05
+
+### Changed
+- **持久化模型图 Swift 6 就绪：整体标注 `nonisolated`** —— 项目开着 `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`，`AgentSession` 及其全部 Codable 子类型（29 个顶层声明，含 AgentMessage / AgentPlan / AgentGoal / WorkflowReport / AgentWidget / 自学习与回忆模型等）的 synthesized Codable conformance 之前都是 main-actor 隔离的，rc30 的后台写队列 encode 会触发「isolated conformance in nonisolated context」警告（Swift 6 模式下是 error）。这些类型全是无 main-actor 状态的纯值类型，现已显式 `nonisolated`。
+- **连带清理**：`L10n`（纯 `String(localized:)`）、`AgentSessionStore.defaultTitle`、`AgentWorkspaceAvailability(+Resolver)`、`RemotePathValidator`、`AgentWidgetRecommendedAction/HandoffAction`、`AgentLocalModelFileMatch`、`AgentSessionTodoSummary`、`AgentMarkdownTableFormatter.StyledSpan` 一并标注，顺手消掉同族的既有隔离警告（含测试宏展开处）。本次为纯注解变更，无行为变化；相关隔离警告从约 20 条降到 0。
+- 版本号从 **1.129.0-rc31** 提升为 **1.129.0-rc32**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
 ## 1.129.0-rc31 - 2026-07-05
 
 ### Fixed
