@@ -36,7 +36,7 @@ enum AgentMarkdownTableFormatter {
     /// text. Offsets are *Character* offsets into the formatted string
     /// (not UTF-16), so callers convert to whatever index space their
     /// attributed-string API needs.
-    struct StyledSpan: Equatable {
+    nonisolated struct StyledSpan: Equatable {
         enum Style: Equatable { case bold, italic, code }
         /// Character-offset range into the formatted text.
         let range: Range<Int>

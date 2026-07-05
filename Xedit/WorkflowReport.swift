@@ -14,7 +14,7 @@
 
 import Foundation
 
-struct WorkflowReport: Codable, Equatable, Identifiable {
+nonisolated struct WorkflowReport: Codable, Equatable, Identifiable {
     enum Status: String, Codable {
         case planning
         case running

@@ -10,7 +10,7 @@
 
 import Foundation
 
-struct LocalWorkspaceIdentity: Codable, Equatable {
+nonisolated struct LocalWorkspaceIdentity: Codable, Equatable {
     var bookmarkData: Data?
     var volumeIdentifierDescription: String?
     var fileResourceIdentifierDescription: String?
@@ -20,7 +20,7 @@ struct LocalWorkspaceIdentity: Codable, Equatable {
     }
 }
 
-enum AgentWorkspaceAvailability: Equatable {
+nonisolated enum AgentWorkspaceAvailability: Equatable {
     case optimistic
     case verified(path: String, checkedAt: Date)
     case missing(path: String, checkedAt: Date)
@@ -61,7 +61,7 @@ enum AgentWorkspaceAvailabilityError: LocalizedError, Equatable {
     }
 }
 
-enum AgentWorkspaceAvailabilityResolver {
+nonisolated enum AgentWorkspaceAvailabilityResolver {
     static func captureIdentity(for path: String?) -> LocalWorkspaceIdentity? {
         guard let path, !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return nil

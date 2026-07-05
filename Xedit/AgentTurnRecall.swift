@@ -7,12 +7,12 @@
 
 import Foundation
 
-enum AgentTurnRecallKind: String, Codable, Equatable {
+nonisolated enum AgentTurnRecallKind: String, Codable, Equatable {
     case memory
     case skill
 }
 
-struct AgentTurnRecallItem: Identifiable, Codable, Equatable {
+nonisolated struct AgentTurnRecallItem: Identifiable, Codable, Equatable {
     var id: UUID
     var kind: AgentTurnRecallKind
     var title: String
@@ -37,7 +37,7 @@ struct AgentTurnRecallItem: Identifiable, Codable, Equatable {
     }
 }
 
-struct AgentTurnRecallSnapshot: Codable, Equatable {
+nonisolated struct AgentTurnRecallSnapshot: Codable, Equatable {
     var createdAt: Date
     var query: String
     var items: [AgentTurnRecallItem]

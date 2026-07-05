@@ -619,7 +619,7 @@ struct AgentSessionModeBadges: View {
     }
 }
 
-struct AgentSessionTodoSummary: Equatable {
+nonisolated struct AgentSessionTodoSummary: Equatable {
     enum Kind: Equatable { case plan, goal }
 
     let kind: Kind

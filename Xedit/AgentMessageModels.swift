@@ -19,7 +19,7 @@ struct AgentEditorSelectionContext: Equatable {
     let endLine: Int
 }
 
-enum AgentRole: String, Codable {
+nonisolated enum AgentRole: String, Codable {
     case system
     case user
     case assistant
@@ -38,7 +38,7 @@ enum AgentRole: String, Codable {
     case widget
 }
 
-enum AgentMessageOrigin: String, Codable, Equatable {
+nonisolated enum AgentMessageOrigin: String, Codable, Equatable {
     case nativeModel
     case delegatedExternal
 }
@@ -46,7 +46,7 @@ enum AgentMessageOrigin: String, Codable, Equatable {
 /// A user-attached image, encoded inline so it round-trips through session
 /// JSON without a separate blob store. `dataBase64` is the raw image bytes
 /// base64-encoded (no `data:` prefix); `mimeType` is e.g. `image/png`.
-struct AgentImageAttachment: Codable, Equatable, Identifiable {
+nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable {
     let id: UUID
     let mimeType: String
     let dataBase64: String
@@ -66,7 +66,7 @@ struct AgentImageAttachment: Codable, Equatable, Identifiable {
 /// instead of being inlined into the visible chat bubble. This keeps
 /// crash logs and other long snippets readable while still sending the
 /// full payload to the model.
-struct AgentTextAttachment: Codable, Equatable, Identifiable {
+nonisolated struct AgentTextAttachment: Codable, Equatable, Identifiable {
     nonisolated static let pastedTextFilename = "Pasted text.txt"
     nonisolated static let largePasteCharacterThreshold = 1_800
     nonisolated static let largePasteLineThreshold = 18
@@ -143,13 +143,13 @@ struct AgentTextAttachment: Codable, Equatable, Identifiable {
 /// Tool call emitted by the assistant in an OpenAI function-calling response.
 /// `argumentsJSON` is the raw JSON text the model produced (it may stream in
 /// fragments and only be valid JSON once complete).
-struct AgentMessageToolCall: Codable, Equatable {
+nonisolated struct AgentMessageToolCall: Codable, Equatable {
     var externalID: String
     var toolName: String
     var argumentsJSON: String
 }
 
-struct AgentMessage: Identifiable, Codable, Equatable {
+nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
     let id: UUID
     let role: AgentRole
     var content: String

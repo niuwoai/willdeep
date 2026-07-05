@@ -21,13 +21,13 @@ struct AgentSelfLearningSkillCandidate: Equatable {
     var reason: String
 }
 
-enum AgentLearningEventKind: String, Codable, Equatable {
+nonisolated enum AgentLearningEventKind: String, Codable, Equatable {
     case memory
     case skill
     case mcpSuggestion
 }
 
-enum AgentLearningEventStatus: String, Codable, Equatable {
+nonisolated enum AgentLearningEventStatus: String, Codable, Equatable {
     case saved
     case created
     case suggested
@@ -35,7 +35,7 @@ enum AgentLearningEventStatus: String, Codable, Equatable {
     case failed
 }
 
-enum AgentLearningActionKind: String, Codable, Equatable {
+nonisolated enum AgentLearningActionKind: String, Codable, Equatable {
     case saveMemory
     case createSkill
     case proposeSkill
@@ -43,7 +43,7 @@ enum AgentLearningActionKind: String, Codable, Equatable {
     case suggestMCPInstall
 }
 
-struct AgentLearningSkillDraft: Codable, Equatable {
+nonisolated struct AgentLearningSkillDraft: Codable, Equatable {
     var name: String
     var description: String
     var body: String
@@ -53,7 +53,7 @@ struct AgentLearningSkillDraft: Codable, Equatable {
 /// 挂在 [AgentLearningEvent.memoryDrafts](Xedit/AgentSelfLearning.swift) 上,
 /// 由 popover 的 Approve 按钮触发真正写入。所有字段都是 Codable 基本
 /// 类型,持久化平迁老 session。
-struct AgentMemoryDraft: Codable, Equatable, Hashable {
+nonisolated struct AgentMemoryDraft: Codable, Equatable, Hashable {
     var content: String
     var scopeRaw: String        // AgentMemoryScope.rawValue
     var lifetimeRaw: String     // AgentMemoryLifetime.rawValue
@@ -75,7 +75,7 @@ struct AgentMemoryDraft: Codable, Equatable, Hashable {
     }
 }
 
-struct AgentLearningMCPDraft: Codable, Equatable {
+nonisolated struct AgentLearningMCPDraft: Codable, Equatable {
     var capability: String
     var serverName: String
     var installHint: String?
@@ -90,7 +90,7 @@ struct AgentLearningMCPDraft: Codable, Equatable {
     var reason: String
 }
 
-struct AgentLearningAction: Codable, Equatable {
+nonisolated struct AgentLearningAction: Codable, Equatable {
     var kind: AgentLearningActionKind
     var commandName: String?
     var target: String?
@@ -130,7 +130,7 @@ struct AgentLearningAction: Codable, Equatable {
 /// `id` matches an `AgentTurnRecallItem.id` in the same turn's snapshot;
 /// `title`/`kind` are duplicated so the event is self-contained for
 /// display and copy without cross-referencing the snapshot.
-struct AgentLearningRecallLink: Identifiable, Codable, Equatable {
+nonisolated struct AgentLearningRecallLink: Identifiable, Codable, Equatable {
     /// Qualitative association strength, derived from the numeric score.
     enum Strength: String, Codable, Equatable {
         case strong
@@ -173,7 +173,7 @@ struct AgentLearningRecallLink: Identifiable, Codable, Equatable {
     }
 }
 
-struct AgentLearningEvent: Identifiable, Codable, Equatable {
+nonisolated struct AgentLearningEvent: Identifiable, Codable, Equatable {
     var id: UUID
     var kind: AgentLearningEventKind
     var status: AgentLearningEventStatus

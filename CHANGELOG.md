@@ -1,9 +1,22 @@
 # Changelog
 
+## 1.129.0-rc33 - 2026-07-05
+
+### Fixed
+- **图片蒙版编辑面板文案国际化收尾** —— 继 rc29 首批（蒙版工具/画笔模式选择器、发送到聊天、空状态、枚举标签）之后，把 `AgentImageEditPanel` 剩余约 40 处硬编码中文全部迁入 `L10n.AgentImageEditor`：面板标题与工具栏 tooltip（撤销/清空/导出）、反选蒙版 Toggle 及说明、提交区（标题、模式/服务选择器、提示词与 model/version/endpoint 占位符、提交按钮、Replicate 配置提示、provider 说明）、导出/提交状态消息（含 %@ 插值模板）、选区摘要、聊天接力 lead 行和制作锚点行标签。聊天 handoff 结构化块中被合约测试钉住的 `active_task_follow_up` 行保持原文（属 agent prompt 合约，非 UI 文案）；`short_drama_media_contract_test` / `image_edit_contract_test` 中逐字断言中文源串的检查同步改为断言 L10n 调用形式，两个合约测试与 i18n 覆盖率守卫（100%）全部通过。
+- 版本号从 **1.129.0-rc32** 提升为 **1.129.0-rc33**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc32 - 2026-07-05
+
+### Changed
+- **持久化模型图 Swift 6 就绪：整体标注 `nonisolated`** —— 项目开着 `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`，`AgentSession` 及其全部 Codable 子类型（29 个顶层声明，含 AgentMessage / AgentPlan / AgentGoal / WorkflowReport / AgentWidget / 自学习与回忆模型等）的 synthesized Codable conformance 之前都是 main-actor 隔离的，rc30 的后台写队列 encode 会触发「isolated conformance in nonisolated context」警告（Swift 6 模式下是 error）。这些类型全是无 main-actor 状态的纯值类型，现已显式 `nonisolated`。
+- **连带清理**：`L10n`（纯 `String(localized:)`）、`AgentSessionStore.defaultTitle`、`AgentWorkspaceAvailability(+Resolver)`、`RemotePathValidator`、`AgentWidgetRecommendedAction/HandoffAction`、`AgentLocalModelFileMatch`、`AgentSessionTodoSummary`、`AgentMarkdownTableFormatter.StyledSpan` 一并标注，顺手消掉同族的既有隔离警告（含测试宏展开处）。本次为纯注解变更，无行为变化；相关隔离警告从约 20 条降到 0。
+- 版本号从 **1.129.0-rc31** 提升为 **1.129.0-rc32**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
 ## 1.129.0-rc31 - 2026-07-05
 
 ### Fixed
-- **图片蒙版编辑面板文案国际化收尾** —— 继 rc29 首批（蒙版工具/画笔模式选择器、发送到聊天、空状态、枚举标签）之后，把面板剩余约 40 处硬编码中文全部迁入 `L10n.AgentImageEditor`：面板标题与工具栏 tooltip（撤销/清空/导出）、反选蒙版 Toggle 及说明、提交区（标题、模式/服务选择器、提示词与 model/version/endpoint 占位符、提交按钮、Replicate 配置提示、provider 说明）、导出/提交状态消息（含插值模板）、选区摘要、聊天接力 lead 行和制作锚点行标签。聊天 handoff 结构化块中被合约测试钉住的 `active_task_follow_up` 行保持原文不变；`short_drama_media_contract_test` / `image_edit_contract_test` 中逐字断言中文源串的检查同步改为断言 L10n 调用形式（rc29 首批曾使其中 3 项断言失效，本次一并修复），两个合约测试与 i18n 覆盖率守卫（100%）全部通过。
+- **编辑器终端面板 i18n 补全** —— `EditorTerminalView.swift` 约 20 处硬编码英文 UI 文案（终端头部标题/工作目录占位符/Run 菜单/「未找到项目命令」/四个按钮 tooltip，以及终端设置页的 Shell/字体/自定义字体/大小/光标/光标闪烁/配色方案/环境各标签、「跟随应用皮肤」选项、字号 pt 显示和三段说明文案）全部提取到 `L10n.EditorTerminal`（key 前缀 `editor-terminal.`，共 23 个），`Localizable.xcstrings` 按字母序补齐 en + zh-Hans 双语条目；中文系统下终端面板与终端设置不再回落英文。i18n 覆盖率守卫保持 100%。
 - 版本号从 **1.129.0-rc30** 提升为 **1.129.0-rc31**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
 
 ## 1.129.0-rc30 - 2026-07-05
@@ -24,7 +37,6 @@
 ## 1.129.0-rc29 - 2026-07-05
 
 ### Fixed
-- **图片蒙版编辑面板文案国际化** —— `AgentImageEditPanel` 的蒙版工具/画笔模式选择器、「发送到聊天」按钮及 tooltip、旧蒙版底稿提示、通用图片编辑说明、空状态文案，以及矩形/画笔、添加/橡皮枚举标签此前硬编码简体中文，英文用户也只能看到中文；现迁入 `L10n.AgentImageEditor`（String Catalog 键前缀 `agent-image-editor.*`，en 默认值 + zh-Hans 保留原文案），i18n 覆盖率守卫保持 100%。（该项与下列条目来自并行会话，合并于 rc31 前）
 - **移动网关非法 host 配置不再闪崩** —— `desktopBaseURL` / `pairingBaseURL` 此前把用户可编辑的 host/port 拼进 `URL(string:)!` 强制解包，host 含空格或非法字符时直接崩溃；现在统一走 `httpBaseURL(host:port:)`，先 trim 再解析，解析失败回退 `127.0.0.1`。
 - **关标签页对话框期间 tabs 变化不再越界** —— `closeTab` 在「未保存更改」弹窗（含背后的存储面板）模态循环期间，主队列任务可能改动 `tabs` 数组，之前继续用弹窗前捕获的 index 删除，有错删/越界风险；现在弹窗返回后按 id 重查 index。
 - **LSP 跳转失败不再无声无息** —— 定义/声明/类型定义/实现四条查询路径的 catch 此前完全吞掉错误，语言服务器持续故障时只能靠猜；现在补 `NSLog("[EditorLSP] …")` 日志（回退/蜂鸣行为不变），排查有迹可循。

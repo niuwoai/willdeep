@@ -7642,6 +7642,420 @@
         }
       }
     },
+    "editor-terminal.blink-cursor" : {
+      "comment" : "Toggle label for cursor blinking in terminal settings",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Blink cursor"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "光标闪烁"
+          }
+        }
+      }
+    },
+    "editor-terminal.clear-help" : {
+      "comment" : "Tooltip for the clear-terminal button in the editor terminal header",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除"
+          }
+        }
+      }
+    },
+    "editor-terminal.close-help" : {
+      "comment" : "Tooltip for the close-pane button in the editor terminal header",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
+          }
+        }
+      }
+    },
+    "editor-terminal.color-scheme" : {
+      "comment" : "Picker label for the terminal color scheme in terminal settings",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Color scheme"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配色方案"
+          }
+        }
+      }
+    },
+    "editor-terminal.color-scheme-footnote" : {
+      "comment" : "Footnote under the color scheme picker explaining Follow App Skin and line spacing limitation",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“Follow App Skin” derives the terminal background, foreground, and cursor from your interface skin; ANSI program colors stay standard so output stays readable. Line spacing isn't adjustable with the current terminal engine."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“跟随应用皮肤”会根据界面皮肤推导出终端的背景色、前景色和光标颜色;ANSI 程序色保持标准配色,确保输出清晰可读。当前终端引擎不支持调整行间距。"
+          }
+        }
+      }
+    },
+    "editor-terminal.cursor" : {
+      "comment" : "Picker label for the cursor style in terminal settings",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cursor"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "光标"
+          }
+        }
+      }
+    },
+    "editor-terminal.custom-font" : {
+      "comment" : "LabeledContent label for the custom font name field in terminal settings",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom font"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自定义字体"
+          }
+        }
+      }
+    },
+    "editor-terminal.custom-font-footnote" : {
+      "comment" : "Footnote under the custom font field explaining Nerd Font override behavior",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Type the exact name of any installed font to override the picker — use this to apply a Nerd Font that isn't auto-detected so powerline/icon glyphs stop showing as boxes. Leave empty to use the selection above."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入任意已安装字体的准确名称以覆盖选择器 —— 用它来应用未被自动识别的 Nerd Font，让 powerline/图标字形不再显示为方框。留空则使用上面的选择。"
+          }
+        }
+      }
+    },
+    "editor-terminal.custom-font-placeholder" : {
+      "comment" : "Placeholder text in the custom font name field in terminal settings",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "e.g. JetBrainsMono Nerd Font"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "例如 JetBrainsMono Nerd Font"
+          }
+        }
+      }
+    },
+    "editor-terminal.environment-footnote" : {
+      "comment" : "Footnote under the environment editor explaining the KEY=value format",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One KEY=value per line. These values are added to commands launched from the editor terminal."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每行一个 KEY=value。这些值会被加入到从编辑器终端启动的命令中。"
+          }
+        }
+      }
+    },
+    "editor-terminal.environment-section" : {
+      "comment" : "Section header for environment variables in terminal settings",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Environment"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "环境"
+          }
+        }
+      }
+    },
+    "editor-terminal.follow-app-skin" : {
+      "comment" : "Color scheme picker option that follows the app interface skin",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Follow App Skin"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟随应用皮肤"
+          }
+        }
+      }
+    },
+    "editor-terminal.font" : {
+      "comment" : "Picker label for the terminal font in terminal settings",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Font"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "字体"
+          }
+        }
+      }
+    },
+    "editor-terminal.font-size-points" : {
+      "comment" : "Font size value with pt unit next to the size slider; %@ is the number",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ pt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ pt"
+          }
+        }
+      }
+    },
+    "editor-terminal.no-project-commands" : {
+      "comment" : "Menu placeholder when no project commands are detected for the Run menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No project commands found"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未找到项目命令"
+          }
+        }
+      }
+    },
+    "editor-terminal.run" : {
+      "comment" : "Label of the Run menu in the editor terminal header",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Run"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行"
+          }
+        }
+      }
+    },
+    "editor-terminal.settings-help" : {
+      "comment" : "Tooltip for the terminal settings button in the editor terminal header",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terminal Settings"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端设置"
+          }
+        }
+      }
+    },
+    "editor-terminal.settings-section" : {
+      "comment" : "Section header of the terminal settings form",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terminal"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端"
+          }
+        }
+      }
+    },
+    "editor-terminal.shell" : {
+      "comment" : "LabeledContent label for the shell path field in terminal settings",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell"
+          }
+        }
+      }
+    },
+    "editor-terminal.size" : {
+      "comment" : "LabeledContent label for the font size slider in terminal settings",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Size"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大小"
+          }
+        }
+      }
+    },
+    "editor-terminal.start-shell-help" : {
+      "comment" : "Tooltip for the start-shell button in the editor terminal header",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start Shell"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动 Shell"
+          }
+        }
+      }
+    },
+    "editor-terminal.title" : {
+      "comment" : "Title text in the editor terminal pane header",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terminal"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端"
+          }
+        }
+      }
+    },
+    "editor-terminal.working-directory-placeholder" : {
+      "comment" : "Placeholder for the working directory field in the editor terminal header",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "working directory"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作目录"
+          }
+        }
+      }
+    },
     "empty-state.agent-mode" : {
       "comment" : "Label() button text in EmptyWorkspaceHero, primary call-to-action",
       "extractionState" : "manual",

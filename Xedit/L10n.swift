@@ -7,7 +7,11 @@ import Foundation
 //
 // To regenerate: see scripts/i18n_regenerate.rb (TODO if we ever automate this).
 
-enum L10n {
+// `nonisolated`: pure `String(localized:)` lookups with no main-actor
+// state. Under SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor these statics
+// would otherwise be unusable from nonisolated model code (e.g. the
+// persisted session graph's displayName helpers).
+nonisolated enum L10n {
     enum AppUpdate {
         static let download = String(localized: "app-update.download", defaultValue: "Download")
         static let later = String(localized: "app-update.later", defaultValue: "Later")
@@ -595,6 +599,35 @@ enum L10n {
             let template = String(localized: "editor-tab-bar.close-tab", defaultValue: "Close")
             return String(format: template, a1)
         }
+    }
+
+    enum EditorTerminal {
+        static let blinkCursor = String(localized: "editor-terminal.blink-cursor", defaultValue: "Blink cursor")
+        static let clearHelp = String(localized: "editor-terminal.clear-help", defaultValue: "Clear")
+        static let closeHelp = String(localized: "editor-terminal.close-help", defaultValue: "Close")
+        static let colorScheme = String(localized: "editor-terminal.color-scheme", defaultValue: "Color scheme")
+        static let colorSchemeFootnote = String(localized: "editor-terminal.color-scheme-footnote", defaultValue: "“Follow App Skin” derives the terminal background, foreground, and cursor from your interface skin; ANSI program colors stay standard so output stays readable. Line spacing isn't adjustable with the current terminal engine.")
+        static let cursor = String(localized: "editor-terminal.cursor", defaultValue: "Cursor")
+        static let customFont = String(localized: "editor-terminal.custom-font", defaultValue: "Custom font")
+        static let customFontFootnote = String(localized: "editor-terminal.custom-font-footnote", defaultValue: "Type the exact name of any installed font to override the picker — use this to apply a Nerd Font that isn't auto-detected so powerline/icon glyphs stop showing as boxes. Leave empty to use the selection above.")
+        static let customFontPlaceholder = String(localized: "editor-terminal.custom-font-placeholder", defaultValue: "e.g. JetBrainsMono Nerd Font")
+        static let environmentFootnote = String(localized: "editor-terminal.environment-footnote", defaultValue: "One KEY=value per line. These values are added to commands launched from the editor terminal.")
+        static let environmentSection = String(localized: "editor-terminal.environment-section", defaultValue: "Environment")
+        static let followAppSkin = String(localized: "editor-terminal.follow-app-skin", defaultValue: "Follow App Skin")
+        static let font = String(localized: "editor-terminal.font", defaultValue: "Font")
+        static func fontSizePoints(_ a1: String) -> String {
+            let template = String(localized: "editor-terminal.font-size-points", defaultValue: "%@ pt")
+            return String(format: template, a1)
+        }
+        static let noProjectCommands = String(localized: "editor-terminal.no-project-commands", defaultValue: "No project commands found")
+        static let run = String(localized: "editor-terminal.run", defaultValue: "Run")
+        static let settingsHelp = String(localized: "editor-terminal.settings-help", defaultValue: "Terminal Settings")
+        static let settingsSection = String(localized: "editor-terminal.settings-section", defaultValue: "Terminal")
+        static let shell = String(localized: "editor-terminal.shell", defaultValue: "Shell")
+        static let size = String(localized: "editor-terminal.size", defaultValue: "Size")
+        static let startShellHelp = String(localized: "editor-terminal.start-shell-help", defaultValue: "Start Shell")
+        static let title = String(localized: "editor-terminal.title", defaultValue: "Terminal")
+        static let workingDirectoryPlaceholder = String(localized: "editor-terminal.working-directory-placeholder", defaultValue: "working directory")
     }
 
     enum EmptyState {

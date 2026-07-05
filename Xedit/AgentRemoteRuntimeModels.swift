@@ -331,7 +331,7 @@ enum RemoteRuntimeSecretStore {
     }
 }
 
-enum WorkspaceLocation: Codable, Equatable {
+nonisolated enum WorkspaceLocation: Codable, Equatable {
     case local(path: String)
     case remote(runtimeID: UUID, path: String)
 
@@ -410,7 +410,7 @@ enum RemotePathError: LocalizedError {
     }
 }
 
-enum RemotePathValidator {
+nonisolated enum RemotePathValidator {
     static func normalizedWorkspaceRoot(_ path: String) -> String {
         var cleaned = path.trimmingCharacters(in: .whitespacesAndNewlines)
         while cleaned.count > 1 && cleaned.hasSuffix("/") {
