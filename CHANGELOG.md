@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.129.0-rc34 - 2026-07-05
+
+### Fixed
+- **apply_patch 现在支持 CRLF 文件** —— `AgentPatchApplier.apply` 此前把文件内容按 `"\n"` 切分,CRLF 文件每行残留尾部 `\r`,而解析出的 diff 行不带 `\r`(parse 用 `.newlines` 切),导致上下文永远匹配不上、每个 hunk 都 "hunk did not match"。现在匹配时先剥掉每行尾部 `\r`,输出时若原文件是 CRLF 再整体还原 `\r\n`——LF 文件零影响(仅当真有 `\r` 时才 dropLast)。
+- **补丁模糊匹配歧义时拒绝而非改错位置** —— hunk 在 ±6 行锚点窗口匹配不上时会退回全文件搜索;此前取**第一个**匹配,在重复代码里可能把补丁打到错误的函数上。现在全文件回退要求**唯一**匹配,出现多处相同 context+removed 块时拒绝(→ "hunk did not match"),交回用户判断。±6 锚点窗口内仍保留就近优先(高置信,行为不变)。
+- **越界 hunk 行号不再崩溃** —— hunk 头 `oldStart` 指向文件末尾之后(文件被外部截断/头部损坏)时,`(preferredIndex-6)...(preferredIndex+6)` 会出现 `lower > upper` 触发 ClosedRange 运行时陷阱直接崩溃;现在先把锚点夹到合法区间,安全失败为 "hunk did not match"。
+- 新增回归测试 `AgentPatchApplierRobustnessTests`(CRLF 应用/LF 不受影响/歧义拒绝/唯一漂移块仍应用/越界锚点安全失败),既有 32 个补丁与 edit_file 用例全绿。
+
+### Changed
+- 版本号从 **1.129.0-rc33** 提升为 **1.129.0-rc34**,并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
 ## 1.129.0-rc33 - 2026-07-05
 
 ### Fixed

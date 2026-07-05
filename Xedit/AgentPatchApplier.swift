@@ -178,7 +178,16 @@ enum AgentPatchApplier {
             return added.joined(separator: "\n")
         }
 
-        var lines = content.components(separatedBy: "\n")
+        // Match on `\r`-stripped lines but remember whether the file used
+        // CRLF so we can restore it on output. Parsed diff lines never carry
+        // `\r` (`parse` splits on `.newlines`), so without this a CRLF file —
+        // whose lines keep a trailing `\r` when split on "\n" — never matches
+        // the expected context and every hunk fails with "hunk did not
+        // match". No-op for LF files: `dropLast` only fires on a real `\r`.
+        let usesCRLF = content.contains("\r\n")
+        var lines = content.components(separatedBy: "\n").map { line in
+            line.hasSuffix("\r") ? String(line.dropLast()) : line
+        }
         var searchOffset = 0
 
         for hunk in change.hunks {
@@ -208,7 +217,11 @@ enum AgentPatchApplier {
             searchOffset += replacement.count - expected.count
         }
 
-        return lines.joined(separator: "\n")
+        let joined = lines.joined(separator: "\n")
+        // Restore the file's original line-ending convention. Replacement
+        // lines come from the diff as LF; re-emitting a CRLF file as LF would
+        // rewrite every line ending and blow up the git diff.
+        return usesCRLF ? joined.replacingOccurrences(of: "\n", with: "\r\n") : joined
     }
 
     /// True when `content` already contains this change's post-patch result
@@ -278,16 +291,32 @@ enum AgentPatchApplier {
         }
         guard expected.count <= lines.count else { return nil }
 
-        let nearbyRange = max(0, preferredIndex - 6)...min(lines.count - expected.count, preferredIndex + 6)
-        for index in nearbyRange where matches(expected, in: lines, at: index) {
+        // Prefer a match in the ±6 window around the diff's declared line:
+        // it's anchored to where the hunk says it belongs, so first-match
+        // there is high-confidence and stays first-match (prior behavior).
+        // Clamp the anchor into range first: a hunk whose `oldStart` points
+        // past EOF (file truncated externally, bogus header) would otherwise
+        // make `lower > upper` and trap the ClosedRange at runtime.
+        let lastValidStart = lines.count - expected.count
+        let anchor = min(max(0, preferredIndex), lastValidStart)
+        let lower = max(0, anchor - 6)
+        let upper = min(lastValidStart, anchor + 6)
+        for index in lower...upper where matches(expected, in: lines, at: index) {
             return index
         }
 
+        // Full-file fallback covers drift larger than the window (e.g. big
+        // edits above the hunk shifted it). But if the same context+removed
+        // block appears at more than one place, we can't tell which the diff
+        // meant — silently patching the first is how a hunk lands on the
+        // wrong function in repetitive code. Require a UNIQUE match; refuse
+        // (→ "hunk did not match") when it's ambiguous.
+        var fallback: Int?
         for index in 0...(lines.count - expected.count) where matches(expected, in: lines, at: index) {
-            return index
+            if fallback != nil { return nil }
+            fallback = index
         }
-
-        return nil
+        return fallback
     }
 
     private static func matches(_ expected: [String], in lines: [String], at index: Int) -> Bool {

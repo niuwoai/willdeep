@@ -1318,6 +1318,13 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 - [ ] `ruby scripts/short_drama_media_contract_test.rb` 与 `ruby scripts/image_edit_contract_test.rb` 均 failures=0（断言已同步 L10n 形式）。
 - [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.129.0-rc33`，短剧制作能力无新增。
 
+## 1.129.0-rc34 — 短剧指针同步 / 补丁应用 CRLF 与模糊匹配加固
+
+- [ ] 让 agent 用 apply_patch 修改一个 CRLF 行尾的文件（例如从 Windows 拉来的 `.txt`/`.cs`）：补丁应能正常应用，且应用后文件行尾仍是 CRLF（git diff 不应显示整文件行尾翻转）。
+- [ ] LF 文件的补丁应用与 edit_file 行为无回归（常规改一处、多处 replace_all、含中文/emoji 内容）。
+- [ ] 在含重复代码块的文件里，让 agent 的补丁 context 恰好在两处都出现：应报 "hunk did not match" 交回判断，而不是静默改到错误的位置。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.129.0-rc34`，短剧制作能力无新增。
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）
