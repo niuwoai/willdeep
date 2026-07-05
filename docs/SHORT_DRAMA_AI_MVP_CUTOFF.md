@@ -1,6 +1,6 @@
 # Short Drama AI MVP Cutoff
 
-> Last updated: 2026-07-05 | Baseline version: v1.129.0-rc30
+> Last updated: 2026-07-05 | Baseline version: v1.129.0-rc31
 
 ## 收敛结论
 
@@ -28,7 +28,7 @@
 
 ## 可用版验收清单
 
-当前记录：2026-07-05，基线 `v1.129.0-rc30`。以下命令作为可用版验收 gate；本次仅做性能/稳定性修复（会话持久化移出主线程：串行写队列+按会话合并+退出前 flush，loadAll 叠加未落盘快照防误删，写失败快照兜底+错误浮出，pin/归档/改名改异步保存并回写 runtime 副本），不新增短剧制作能力，短剧 handoff todo summary 仍会单独验证 smoke evidence 合约、acceptance 摘要、交付证据索引、handoff 模式矩阵、交付文件指纹、交接待办清单、待办摘要、待办证据路径、复验命令、Debug 构建和版本一致性。
+当前记录：2026-07-05，基线 `v1.129.0-rc31`。以下命令作为可用版验收 gate；本次仅做图片蒙版编辑面板文案国际化收尾（面板全部 UI 文案迁入 `L10n.AgentImageEditor` / String Catalog，en 默认值 + zh-Hans 保留原文案，聊天 handoff 合约行保持不变，合约测试断言同步更新），不新增短剧制作能力，短剧 handoff todo summary 仍会单独验证 smoke evidence 合约、acceptance 摘要、交付证据索引、handoff 模式矩阵、交付文件指纹、交接待办清单、待办摘要、待办证据路径、复验命令、Debug 构建和版本一致性。
 
 - `scripts/run_tests.sh`
 - `ruby scripts/version_consistency.rb build/version_report.md build/version_report.json`

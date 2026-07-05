@@ -360,6 +360,204 @@
         }
       }
     },
+    "agent-image-editor.chat-context-lead" : {
+      "comment" : "Lead sentence of the image-editor context block staged into the chat composer",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue collaborating based on the current image mask editor panel."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请基于当前图片蒙版编辑面板继续协作。"
+          }
+        }
+      }
+    },
+    "agent-image-editor.chat-submitted-lead" : {
+      "comment" : "Lead sentence of the submitted-task block staged into the chat composer",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Submitted an image mask edit task; track progress in the media tasks sidebar."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已提交图片蒙版编辑任务，可在媒体任务侧栏跟踪进度。"
+          }
+        }
+      }
+    },
+    "agent-image-editor.clear-help" : {
+      "comment" : "Tooltip for the clear-all button in the mask editor toolbar",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear all selections and strokes"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清空所有选区和笔迹"
+          }
+        }
+      }
+    },
+    "agent-image-editor.context-card.anchors" : {
+      "comment" : "Context card title when short-drama production anchors are present",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Production Anchors"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "制作锚点"
+          }
+        }
+      }
+    },
+    "agent-image-editor.context-card.generic" : {
+      "comment" : "Context card title when no production anchors are present",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit Handoff"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑接力"
+          }
+        }
+      }
+    },
+    "agent-image-editor.context.asset" : {
+      "comment" : "Context row label for the asset ID",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Asset"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "资产"
+          }
+        }
+      }
+    },
+    "agent-image-editor.context.asset-kind" : {
+      "comment" : "Context row label for the asset kind",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Asset Kind"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "资产类"
+          }
+        }
+      }
+    },
+    "agent-image-editor.context.episode" : {
+      "comment" : "Context row label for the episode ID",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Episode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集"
+          }
+        }
+      }
+    },
+    "agent-image-editor.context.project" : {
+      "comment" : "Context row label for the project ID",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Project"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目"
+          }
+        }
+      }
+    },
+    "agent-image-editor.context.review-item" : {
+      "comment" : "Context row label for the review item ID",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review Item"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检查项"
+          }
+        }
+      }
+    },
+    "agent-image-editor.context.shot" : {
+      "comment" : "Context row label for the shot ID",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shot"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分镜"
+          }
+        }
+      }
+    },
     "agent-image-editor.empty-subtitle" : {
       "comment" : "Empty-state hint explaining how to send an image into the mask editor",
       "extractionState" : "manual",
@@ -396,6 +594,114 @@
         }
       }
     },
+    "agent-image-editor.export-failed" : {
+      "comment" : "Status message when mask export fails; %@ is the error description",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export failed: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出失败：%@"
+          }
+        }
+      }
+    },
+    "agent-image-editor.export-help" : {
+      "comment" : "Tooltip for the export-mask button in the mask editor toolbar",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export mask"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出蒙版"
+          }
+        }
+      }
+    },
+    "agent-image-editor.exported.erase-suffix" : {
+      "comment" : "Suffix appended to the export status when eraser strokes exist; %@ is the count",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ", %@ eraser strokes"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "，%@ 条橡皮笔迹"
+          }
+        }
+      }
+    },
+    "agent-image-editor.exported.mask" : {
+      "comment" : "Export status message; %1$@ part count, %2$@ optional suffixes, %3$@ output path",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exported mask (%@ selections/strokes%@): %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已导出蒙版（%@ 个选区/笔迹%@）：%@"
+          }
+        }
+      }
+    },
+    "agent-image-editor.exported.mask-inverted" : {
+      "comment" : "Export status message for inverted masks; %1$@ part count, %2$@ optional suffixes, %3$@ output path",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exported inverted mask (%@ selections/strokes%@): %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已导出反选蒙版（%@ 个选区/笔迹%@）：%@"
+          }
+        }
+      }
+    },
+    "agent-image-editor.exported.seed-suffix" : {
+      "comment" : "Suffix appended to the export status when the previous mask base is included",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ", with the previous mask base"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "，含旧蒙版底稿"
+          }
+        }
+      }
+    },
     "agent-image-editor.generic-edit-hint" : {
       "comment" : "Hint shown when the mask editor has no production anchor context",
       "extractionState" : "manual",
@@ -410,6 +716,42 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "通用图片编辑；发送到聊天会在已有选区时先导出蒙版，并附带 edit_image_with_mask 参数。"
+          }
+        }
+      }
+    },
+    "agent-image-editor.invert-help" : {
+      "comment" : "Tooltip for the invert-mask toggle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When on, the white edit region becomes everything outside the selection — good for keeping the subject and repainting the background."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启后白色编辑区域会变成选区外部，适合保留主体、重绘背景。"
+          }
+        }
+      }
+    },
+    "agent-image-editor.invert-toggle" : {
+      "comment" : "Toggle label for inverting the mask",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invert Mask"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "反选蒙版"
           }
         }
       }
@@ -504,6 +846,366 @@
         }
       }
     },
+    "agent-image-editor.need-mask-first" : {
+      "comment" : "Status message when submitting without a mask selection",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select an area and export a mask first."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先框选区域并导出蒙版。"
+          }
+        }
+      }
+    },
+    "agent-image-editor.open-replicate-settings" : {
+      "comment" : "Button that opens the Replicate integration settings",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Replicate Settings"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开 Replicate 设置"
+          }
+        }
+      }
+    },
+    "agent-image-editor.operation-picker" : {
+      "comment" : "Segmented picker label for choosing the edit operation (inpaint/erase)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模式"
+          }
+        }
+      }
+    },
+    "agent-image-editor.operation.erase" : {
+      "comment" : "Edit operation that erases the selection",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erase"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "擦除"
+          }
+        }
+      }
+    },
+    "agent-image-editor.operation.inpaint" : {
+      "comment" : "Edit operation that repaints the selection",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inpaint"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "局部重绘"
+          }
+        }
+      }
+    },
+    "agent-image-editor.operation.missing-prompt-erase" : {
+      "comment" : "Validation message when the erase prompt is required but missing",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter an erase prompt, or leave it empty to use the default erase prompt."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请填写擦除提示词，或保持为空使用默认擦除提示。"
+          }
+        }
+      }
+    },
+    "agent-image-editor.operation.missing-prompt-inpaint" : {
+      "comment" : "Validation message when the inpaint prompt is missing",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter an inpaint prompt."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请填写重绘提示词。"
+          }
+        }
+      }
+    },
+    "agent-image-editor.operation.prompt-placeholder-erase" : {
+      "comment" : "Prompt text-field placeholder for the erase operation",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prompt (optional): describe what to erase or clean up"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提示词（可选）：描述要擦除或清理的内容"
+          }
+        }
+      }
+    },
+    "agent-image-editor.operation.prompt-placeholder-inpaint" : {
+      "comment" : "Prompt text-field placeholder for the inpaint operation",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prompt: describe what to paint into the selection"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提示词：描述要把选区重绘成什么"
+          }
+        }
+      }
+    },
+    "agent-image-editor.operation.submit-erase" : {
+      "comment" : "Submit button title for the erase operation",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Submit Erase"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提交擦除"
+          }
+        }
+      }
+    },
+    "agent-image-editor.operation.submit-inpaint" : {
+      "comment" : "Submit button title for the inpaint operation",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Submit Inpaint"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提交重绘"
+          }
+        }
+      }
+    },
+    "agent-image-editor.panel-title" : {
+      "comment" : "Title of the image mask editor side panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Image Mask"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "图片蒙版"
+          }
+        }
+      }
+    },
+    "agent-image-editor.provider-picker" : {
+      "comment" : "Segmented picker label for choosing the submit provider",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Provider"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务"
+          }
+        }
+      }
+    },
+    "agent-image-editor.replicate.help-erase" : {
+      "comment" : "Footnote for the Replicate provider in erase mode",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replicate prefers the version entered here; when empty, the image-erase version from Settings → Integrations → Replicate is used. Erase can run without a prompt — a basic background-repair prompt is added automatically on submit."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replicate 会优先使用这里填写的 version；留空时使用 Settings → Integrations → Replicate 的图片擦除 version。擦除可不填提示词，提交时会自动补一个基础背景修复提示。"
+          }
+        }
+      }
+    },
+    "agent-image-editor.replicate.help-inpaint" : {
+      "comment" : "Footnote for the Replicate provider in inpaint mode",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replicate prefers the version entered here; when empty, the mask-inpaint version from Settings → Integrations → Replicate is used. The model must accept image, mask, and prompt inputs."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replicate 会优先使用这里填写的 version；留空时使用 Settings → Integrations → Replicate 的蒙版重绘 version。该模型需支持 image、mask、prompt 输入。"
+          }
+        }
+      }
+    },
+    "agent-image-editor.replicate.need-erase-version" : {
+      "comment" : "Configuration issue when no erase version is available",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a Replicate version hash, or configure a default image-erase version in Settings."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请填写 Replicate version hash，或在设置中配置默认图片擦除 version。"
+          }
+        }
+      }
+    },
+    "agent-image-editor.replicate.need-inpaint-version" : {
+      "comment" : "Configuration issue when no inpaint version is available",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a Replicate version hash, or configure a default mask-inpaint version in Settings."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请填写 Replicate version hash，或在设置中配置默认蒙版重绘 version。"
+          }
+        }
+      }
+    },
+    "agent-image-editor.replicate.need-token" : {
+      "comment" : "Configuration issue when no Replicate API token is configured",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configure a Replicate API token first, or set the REPLICATE_API_TOKEN environment variable."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先配置 Replicate API Token，或设置 REPLICATE_API_TOKEN 环境变量。"
+          }
+        }
+      }
+    },
+    "agent-image-editor.replicate.version-placeholder-erase" : {
+      "comment" : "Model/version text-field placeholder for Replicate in erase mode",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replicate version hash; leave empty for the default erase version"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replicate version hash，可留空使用默认擦除"
+          }
+        }
+      }
+    },
+    "agent-image-editor.replicate.version-placeholder-inpaint" : {
+      "comment" : "Model/version text-field placeholder for Replicate in inpaint mode",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replicate version hash; leave empty for the default mask-inpaint version"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replicate version hash，可留空使用默认蒙版重绘"
+          }
+        }
+      }
+    },
     "agent-image-editor.seed-mask-help" : {
       "comment" : "Tooltip when a previous mask has been loaded as the editing base",
       "extractionState" : "manual",
@@ -554,6 +1256,294 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "把当前图片和蒙版路径发送到聊天"
+          }
+        }
+      }
+    },
+    "agent-image-editor.someim.endpoint-placeholder" : {
+      "comment" : "Endpoint text-field placeholder for the some.im provider",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im endpoint, e.g. images/edits"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im endpoint，例如 images/edits"
+          }
+        }
+      }
+    },
+    "agent-image-editor.someim.help" : {
+      "comment" : "Footnote for the some.im provider",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im submits with the image, mask, and prompt fields; adjust the endpoint to match your relay service routing. Erase mode automatically uses a basic erase prompt when no prompt is given."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im 会使用 image、mask、prompt 字段提交，可按中转服务实际路由调整 endpoint。擦除模式在没有提示词时会自动使用基础擦除提示。"
+          }
+        }
+      }
+    },
+    "agent-image-editor.someim.model-placeholder" : {
+      "comment" : "Model text-field placeholder for the some.im provider",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im model; leave empty to use the default image model"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im model，可留空使用默认图片模型"
+          }
+        }
+      }
+    },
+    "agent-image-editor.submit-failed" : {
+      "comment" : "Status message when submitting an edit task fails; %@ is the error description",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Submission failed: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提交失败：%@"
+          }
+        }
+      }
+    },
+    "agent-image-editor.submit-section-title" : {
+      "comment" : "Section title above the submit controls in the mask editor",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Submit Mask Edit"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提交蒙版编辑"
+          }
+        }
+      }
+    },
+    "agent-image-editor.submitted-replicate" : {
+      "comment" : "Status message after a Replicate task is submitted; %@ is the task handle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Submitted Replicate task: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已提交 Replicate 任务：%@"
+          }
+        }
+      }
+    },
+    "agent-image-editor.submitted-someim" : {
+      "comment" : "Status message after a some.im task is submitted; %@ is the task handle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Submitted some.im task: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已提交 some.im 任务：%@"
+          }
+        }
+      }
+    },
+    "agent-image-editor.submitting" : {
+      "comment" : "Submit button label while a submission is in flight",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Submitting"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提交中"
+          }
+        }
+      }
+    },
+    "agent-image-editor.submitting-status" : {
+      "comment" : "Status message while submitting; %@ is the operation title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Submitting %@ task..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在提交%@任务..."
+          }
+        }
+      }
+    },
+    "agent-image-editor.summary.full" : {
+      "comment" : "Selection summary; args: seed prefix, rect count, stroke count, eraser count, rect px, stroke px, eraser px, inverted suffix",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selection: %@%@ rectangles, %@ brush strokes, %@ eraser strokes, rectangles ≈ %@ px, strokes ≈ %@ px, eraser ≈ %@ px%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选区：%@%@ 块矩形，%@ 条笔迹，%@ 条橡皮，矩形约 %@ px，笔迹约 %@ px，橡皮约 %@ px%@"
+          }
+        }
+      }
+    },
+    "agent-image-editor.summary.inverted-background-suffix" : {
+      "comment" : "Suffix for the seed-only selection summary when the mask is inverted",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ", background inverted"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "，反选背景"
+          }
+        }
+      }
+    },
+    "agent-image-editor.summary.inverted-suffix" : {
+      "comment" : "Suffix for selection summaries when the mask is inverted",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ", inverted"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "，反选"
+          }
+        }
+      }
+    },
+    "agent-image-editor.summary.rect" : {
+      "comment" : "Selection summary for a single rectangle; args: x, y, w, h, inverted suffix",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selection: x %@, y %@, w %@, h %@%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选区：x %@, y %@, w %@, h %@%@"
+          }
+        }
+      }
+    },
+    "agent-image-editor.summary.seed-only" : {
+      "comment" : "Selection summary when only the previous mask base is present; %@ is the inverted suffix",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selection: previous mask base%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选区：旧蒙版底稿%@"
+          }
+        }
+      }
+    },
+    "agent-image-editor.summary.seed-prefix" : {
+      "comment" : "Prefix in the full selection summary when the previous mask base is included",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "previous mask + "
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旧蒙版 + "
+          }
+        }
+      }
+    },
+    "agent-image-editor.undo-help" : {
+      "comment" : "Tooltip for the undo button in the mask editor toolbar",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Undo the current or last selection/stroke"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撤销当前或上一个选区/笔迹"
           }
         }
       }

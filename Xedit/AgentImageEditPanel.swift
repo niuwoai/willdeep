@@ -73,7 +73,7 @@ struct AgentImageEditPanel: View {
         HStack(spacing: 8) {
             Image(systemName: "paintbrush.pointed")
                 .foregroundStyle(.secondary)
-            Text("图片蒙版")
+            Text(L10n.AgentImageEditor.panelTitle)
                 .font(.system(size: 13, weight: .semibold))
             Spacer(minLength: 0)
             Button {
@@ -100,7 +100,7 @@ struct AgentImageEditPanel: View {
             }
             .buttonStyle(.borderless)
             .disabled(selectionRect == nil && activeStroke == nil && maskRects.isEmpty && maskStrokes.isEmpty && maskEraseStrokes.isEmpty && seedMaskInfo == nil)
-            .help("撤销当前或上一个选区/笔迹")
+            .help(L10n.AgentImageEditor.undoHelp)
             Button {
                 selectionRect = nil
                 maskRects.removeAll()
@@ -116,7 +116,7 @@ struct AgentImageEditPanel: View {
             }
             .buttonStyle(.borderless)
             .disabled(selectionRect == nil && activeStroke == nil && maskRects.isEmpty && maskStrokes.isEmpty && maskEraseStrokes.isEmpty && seedMaskInfo == nil)
-            .help("清空所有选区和笔迹")
+            .help(L10n.AgentImageEditor.clearHelp)
             Button {
                 exportMask()
             } label: {
@@ -124,7 +124,7 @@ struct AgentImageEditPanel: View {
             }
             .buttonStyle(.borderless)
             .disabled(imageInfo == nil || !hasMaskSelection)
-            .help("导出蒙版")
+            .help(L10n.AgentImageEditor.exportHelp)
         }
         .padding(.horizontal, 12)
         .frame(height: 34)
@@ -238,9 +238,9 @@ struct AgentImageEditPanel: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
-                        Toggle("反选蒙版", isOn: $invertMask)
+                        Toggle(L10n.AgentImageEditor.invertToggle, isOn: $invertMask)
                             .font(.caption)
-                            .help("开启后白色编辑区域会变成选区外部，适合保留主体、重绘背景。")
+                            .help(L10n.AgentImageEditor.invertHelp)
                             .onChange(of: invertMask) { _ in
                                 lastMaskURL = nil
                             }
@@ -277,7 +277,7 @@ struct AgentImageEditPanel: View {
                 Image(systemName: "scope")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                Text(rows.isEmpty ? "编辑接力" : "制作锚点")
+                Text(rows.isEmpty ? L10n.AgentImageEditor.contextCardGeneric : L10n.AgentImageEditor.contextCardAnchors)
                     .font(.caption.weight(.semibold))
                 Spacer(minLength: 0)
                 Button {
@@ -425,17 +425,17 @@ struct AgentImageEditPanel: View {
     @ViewBuilder
     private func submitControls(imageInfo: ImageInfo) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("提交蒙版编辑")
+            Text(L10n.AgentImageEditor.submitSectionTitle)
                 .font(.system(size: 12, weight: .semibold))
 
-            Picker("模式", selection: $editOperation) {
+            Picker(L10n.AgentImageEditor.operationPicker, selection: $editOperation) {
                 ForEach(ImageEditOperation.allCases) { operation in
                     Text(operation.title).tag(operation)
                 }
             }
             .pickerStyle(.segmented)
 
-            Picker("服务", selection: $submitProvider) {
+            Picker(L10n.AgentImageEditor.providerPicker, selection: $submitProvider) {
                 ForEach(ImageEditSubmitProvider.allCases) { provider in
                     Text(provider.title).tag(provider)
                 }
@@ -450,7 +450,7 @@ struct AgentImageEditPanel: View {
                 .textFieldStyle(.roundedBorder)
 
             if submitProvider == .someIM {
-                TextField("some.im endpoint，例如 images/edits", text: $someIMEndpointSuffix)
+                TextField(L10n.AgentImageEditor.someIMEndpointPlaceholder, text: $someIMEndpointSuffix)
                     .textFieldStyle(.roundedBorder)
             }
 
@@ -462,7 +462,7 @@ struct AgentImageEditPanel: View {
                     Button {
                         EditorSettingsNavigation.shared.open(.replicate, appState: appState)
                     } label: {
-                        Label("打开 Replicate 设置", systemImage: "gearshape")
+                        Label(L10n.AgentImageEditor.openReplicateSettings, systemImage: "gearshape")
                     }
                     .buttonStyle(.borderless)
                     .font(.caption)
@@ -474,7 +474,7 @@ struct AgentImageEditPanel: View {
                 Button {
                     submitImageEdit(imageInfo: imageInfo)
                 } label: {
-                    Label(isSubmitting ? "提交中" : editOperation.submitTitle, systemImage: "wand.and.stars")
+                    Label(isSubmitting ? L10n.AgentImageEditor.submitting : editOperation.submitTitle, systemImage: "wand.and.stars")
                 }
                 .disabled(!canSubmitImageEdit || isSubmitting)
 
@@ -645,12 +645,14 @@ struct AgentImageEditPanel: View {
             lastMaskURL = output
             let partCount = pixelRects.count + pixelStrokes.count
             let eraseCount = pixelEraseStrokes.count
-            let eraseSuffix = eraseCount > 0 ? "，\(eraseCount) 条橡皮笔迹" : ""
-            let seedSuffix = seedMaskInfo == nil ? "" : "，含旧蒙版底稿"
-            statusMessage = "已导出\(invertMask ? "反选" : "")蒙版（\(partCount) 个选区/笔迹\(eraseSuffix)\(seedSuffix)）：\(output.path)"
+            let eraseSuffix = eraseCount > 0 ? L10n.AgentImageEditor.exportedEraseSuffix("\(eraseCount)") : ""
+            let seedSuffix = seedMaskInfo == nil ? "" : L10n.AgentImageEditor.exportedSeedSuffix
+            statusMessage = invertMask
+                ? L10n.AgentImageEditor.exportedMaskInverted("\(partCount)", eraseSuffix + seedSuffix, output.path)
+                : L10n.AgentImageEditor.exportedMask("\(partCount)", eraseSuffix + seedSuffix, output.path)
             return output
         } catch {
-            statusMessage = "导出失败：\(error.localizedDescription)"
+            statusMessage = L10n.AgentImageEditor.exportFailed(error.localizedDescription)
             return nil
         }
     }
@@ -658,7 +660,7 @@ struct AgentImageEditPanel: View {
     private func submitImageEdit(imageInfo: ImageInfo) {
         guard !isSubmitting else { return }
         guard let maskURL = lastMaskURL ?? exportMask() else {
-            statusMessage = "请先框选区域并导出蒙版。"
+            statusMessage = L10n.AgentImageEditor.needMaskFirst
             return
         }
         guard let prompt = effectivePrompt else {
@@ -666,7 +668,7 @@ struct AgentImageEditPanel: View {
             return
         }
         isSubmitting = true
-        statusMessage = "正在提交\(editOperation.title)任务..."
+        statusMessage = L10n.AgentImageEditor.submittingStatus(editOperation.title)
 
         Task {
             do {
@@ -678,7 +680,7 @@ struct AgentImageEditPanel: View {
                 }
             } catch {
                 await MainActor.run {
-                    statusMessage = "提交失败：\(error.localizedDescription)"
+                    statusMessage = L10n.AgentImageEditor.submitFailed(error.localizedDescription)
                     isSubmitting = false
                 }
             }
@@ -733,7 +735,7 @@ struct AgentImageEditPanel: View {
             let submittedTask = appState.agentMediaTaskRegistry.task(matchingHandle: task.displayHandle, runtimeID: appState.activeRuntime?.id) ?? task
             appState.recordAgentImageEditSubmission(task: submittedTask)
             appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .mediaTasks)
-            statusMessage = "已提交 Replicate 任务：\(submittedTask.displayHandle)"
+            statusMessage = L10n.AgentImageEditor.submittedReplicate(submittedTask.displayHandle)
             // Contract anchor: appendSubmittedEditTaskToChat(task: task, sourceImagePath: imageInfo.url.path, maskPath: maskURL.path)
             appendSubmittedEditTaskToChat(task: submittedTask, sourceImagePath: imageInfo.url.path, maskPath: maskURL.path)
             isSubmitting = false
@@ -796,7 +798,7 @@ struct AgentImageEditPanel: View {
             let submittedTask = appState.agentMediaTaskRegistry.task(matchingHandle: task.displayHandle, runtimeID: appState.activeRuntime?.id) ?? task
             appState.recordAgentImageEditSubmission(task: submittedTask)
             appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .mediaTasks)
-            statusMessage = "已提交 some.im 任务：\(submittedTask.displayHandle)"
+            statusMessage = L10n.AgentImageEditor.submittedSomeIM(submittedTask.displayHandle)
             // Contract anchor: appendSubmittedEditTaskToChat(task: task, sourceImagePath: imageInfo.url.path, maskPath: maskURL.path)
             appendSubmittedEditTaskToChat(task: submittedTask, sourceImagePath: imageInfo.url.path, maskPath: maskURL.path)
             isSubmitting = false
@@ -806,7 +808,7 @@ struct AgentImageEditPanel: View {
     private func appendSubmittedEditTaskToChat(task: AgentMediaTask, sourceImagePath: String, maskPath: String) {
         let context = appState.agentImageEditorContext
         var lines: [String] = [
-            "已提交图片蒙版编辑任务，可在媒体任务侧栏跟踪进度。",
+            L10n.AgentImageEditor.chatSubmittedLead,
             "",
             "<image-edit-task-submitted>",
             "action: image_edit_task_submitted",
@@ -930,7 +932,7 @@ struct AgentImageEditPanel: View {
         let currentMaskURL = lastMaskURL ?? (hasMaskSelection ? exportMask() : nil)
         let currentMaskPath = currentMaskURL?.path
         var lines: [String] = [
-            "请基于当前图片蒙版编辑面板继续协作。",
+            L10n.AgentImageEditor.chatContextLead,
             "",
             "<image-editor-context>",
             "action: inspect_image_editor_from_side_panel",
@@ -1030,12 +1032,12 @@ struct AgentImageEditPanel: View {
     private func imageEditorContextRows() -> [(String, String)] {
         let context = appState.agentImageEditorContext
         var rows: [(String, String)] = []
-        appendContextRow("项目", context?.projectID, to: &rows)
-        appendContextRow("集", context?.episodeID, to: &rows)
-        appendContextRow("分镜", context?.shotID, to: &rows)
-        appendContextRow("资产类", context?.assetKind, to: &rows)
-        appendContextRow("资产", context?.assetID, to: &rows)
-        appendContextRow("检查项", context?.reviewItemID, to: &rows)
+        appendContextRow(L10n.AgentImageEditor.contextProject, context?.projectID, to: &rows)
+        appendContextRow(L10n.AgentImageEditor.contextEpisode, context?.episodeID, to: &rows)
+        appendContextRow(L10n.AgentImageEditor.contextShot, context?.shotID, to: &rows)
+        appendContextRow(L10n.AgentImageEditor.contextAssetKind, context?.assetKind, to: &rows)
+        appendContextRow(L10n.AgentImageEditor.contextAsset, context?.assetID, to: &rows)
+        appendContextRow(L10n.AgentImageEditor.contextReviewItem, context?.reviewItemID, to: &rows)
         return rows
     }
 
@@ -1099,7 +1101,7 @@ struct AgentImageEditPanel: View {
         case .replicate:
             return editOperation.replicateVersionPlaceholder
         case .someIM:
-            return "some.im model，可留空使用默认图片模型"
+            return L10n.AgentImageEditor.someIMModelPlaceholder
         }
     }
 
@@ -1108,21 +1110,21 @@ struct AgentImageEditPanel: View {
         case .replicate:
             return editOperation.replicateHelp
         case .someIM:
-            return "some.im 会使用 image、mask、prompt 字段提交，可按中转服务实际路由调整 endpoint。擦除模式在没有提示词时会自动使用基础擦除提示。"
+            return L10n.AgentImageEditor.someIMHelp
         }
     }
 
     private var replicateConfigurationIssue: String? {
         guard submitProvider == .replicate else { return nil }
         if !ReplicateIntegrationStore.isConfigured {
-            return "请先配置 Replicate API Token，或设置 REPLICATE_API_TOKEN 环境变量。"
+            return L10n.AgentImageEditor.replicateNeedToken
         }
         if replicateWorkflowVersion == nil {
             switch editOperation {
             case .inpaint:
-                return "请填写 Replicate version hash，或在设置中配置默认蒙版重绘 version。"
+                return L10n.AgentImageEditor.replicateNeedInpaintVersion
             case .erase:
-                return "请填写 Replicate version hash，或在设置中配置默认图片擦除 version。"
+                return L10n.AgentImageEditor.replicateNeedEraseVersion
             }
         }
         return nil
@@ -1173,10 +1175,16 @@ struct AgentImageEditPanel: View {
         let pixelEraseStrokes = eraseStrokesForMask(imageInfo: imageInfo)
         guard seedMaskInfo != nil || !pixelRects.isEmpty || !pixelStrokes.isEmpty || !pixelEraseStrokes.isEmpty else { return nil }
         if seedMaskInfo != nil, pixelRects.isEmpty, pixelStrokes.isEmpty, pixelEraseStrokes.isEmpty {
-            return "选区：旧蒙版底稿\(invertMask ? "，反选背景" : "")"
+            return L10n.AgentImageEditor.summarySeedOnly(invertMask ? L10n.AgentImageEditor.summaryInvertedBackgroundSuffix : "")
         }
         if pixelRects.count == 1, pixelStrokes.isEmpty, let rect = pixelRects.first {
-            return "选区：x \(Int(rect.origin.x)), y \(Int(rect.origin.y)), w \(Int(rect.width)), h \(Int(rect.height))\(invertMask ? "，反选" : "")"
+            return L10n.AgentImageEditor.summaryRect(
+                "\(Int(rect.origin.x))",
+                "\(Int(rect.origin.y))",
+                "\(Int(rect.width))",
+                "\(Int(rect.height))",
+                invertMask ? L10n.AgentImageEditor.summaryInvertedSuffix : ""
+            )
         }
         let totalPixels = pixelRects.reduce(CGFloat(0)) { partial, rect in
             partial + rect.width * rect.height
@@ -1187,8 +1195,17 @@ struct AgentImageEditPanel: View {
         let eraseStrokeLength = pixelEraseStrokes.reduce(CGFloat(0)) { partial, stroke in
             partial + estimatedLength(points: stroke.points)
         }
-        let seedPrefix = seedMaskInfo == nil ? "" : "旧蒙版 + "
-        return "选区：\(seedPrefix)\(pixelRects.count) 块矩形，\(pixelStrokes.count) 条笔迹，\(pixelEraseStrokes.count) 条橡皮，矩形约 \(Int(totalPixels)) px，笔迹约 \(Int(strokeLength)) px，橡皮约 \(Int(eraseStrokeLength)) px\(invertMask ? "，反选" : "")"
+        let seedPrefix = seedMaskInfo == nil ? "" : L10n.AgentImageEditor.summarySeedPrefix
+        return L10n.AgentImageEditor.summaryFull(
+            seedPrefix,
+            "\(pixelRects.count)",
+            "\(pixelStrokes.count)",
+            "\(pixelEraseStrokes.count)",
+            "\(Int(totalPixels))",
+            "\(Int(strokeLength))",
+            "\(Int(eraseStrokeLength))",
+            invertMask ? L10n.AgentImageEditor.summaryInvertedSuffix : ""
+        )
     }
 
     private func imagePixelRect(from viewRect: CGRect, imageInfo: ImageInfo) -> CGRect? {
@@ -1370,15 +1387,15 @@ struct AgentImageEditPanel: View {
 
         var title: String {
             switch self {
-            case .inpaint: return "局部重绘"
-            case .erase: return "擦除"
+            case .inpaint: return L10n.AgentImageEditor.operationInpaint
+            case .erase: return L10n.AgentImageEditor.operationErase
             }
         }
 
         var submitTitle: String {
             switch self {
-            case .inpaint: return "提交重绘"
-            case .erase: return "提交擦除"
+            case .inpaint: return L10n.AgentImageEditor.operationSubmitInpaint
+            case .erase: return L10n.AgentImageEditor.operationSubmitErase
             }
         }
 
@@ -1391,8 +1408,8 @@ struct AgentImageEditPanel: View {
 
         var promptPlaceholder: String {
             switch self {
-            case .inpaint: return "提示词：描述要把选区重绘成什么"
-            case .erase: return "提示词（可选）：描述要擦除或清理的内容"
+            case .inpaint: return L10n.AgentImageEditor.operationPromptPlaceholderInpaint
+            case .erase: return L10n.AgentImageEditor.operationPromptPlaceholderErase
             }
         }
 
@@ -1405,8 +1422,8 @@ struct AgentImageEditPanel: View {
 
         var missingPromptMessage: String {
             switch self {
-            case .inpaint: return "请填写重绘提示词。"
-            case .erase: return "请填写擦除提示词，或保持为空使用默认擦除提示。"
+            case .inpaint: return L10n.AgentImageEditor.operationMissingPromptInpaint
+            case .erase: return L10n.AgentImageEditor.operationMissingPromptErase
             }
         }
 
@@ -1417,18 +1434,18 @@ struct AgentImageEditPanel: View {
         var replicateVersionPlaceholder: String {
             switch self {
             case .inpaint:
-                return "Replicate version hash，可留空使用默认蒙版重绘"
+                return L10n.AgentImageEditor.replicateVersionPlaceholderInpaint
             case .erase:
-                return "Replicate version hash，可留空使用默认擦除"
+                return L10n.AgentImageEditor.replicateVersionPlaceholderErase
             }
         }
 
         var replicateHelp: String {
             switch self {
             case .inpaint:
-                return "Replicate 会优先使用这里填写的 version；留空时使用 Settings → Integrations → Replicate 的蒙版重绘 version。该模型需支持 image、mask、prompt 输入。"
+                return L10n.AgentImageEditor.replicateHelpInpaint
             case .erase:
-                return "Replicate 会优先使用这里填写的 version；留空时使用 Settings → Integrations → Replicate 的图片擦除 version。擦除可不填提示词，提交时会自动补一个基础背景修复提示。"
+                return L10n.AgentImageEditor.replicateHelpErase
             }
         }
     }

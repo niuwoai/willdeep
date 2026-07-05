@@ -1788,7 +1788,7 @@ plan_import_contract = {
     app_state_loop_source.include?("artifact_paths:"),
   "image editor supports inverted masks" =>
     image_edit_source.include?("@State private var invertMask = false") &&
-    image_edit_source.include?("Toggle(\"反选蒙版\", isOn: $invertMask)") &&
+    image_edit_source.include?("Toggle(L10n.AgentImageEditor.invertToggle, isOn: $invertMask)") &&
     image_edit_source.include?("background: invertMask ? .white : .black") &&
     image_edit_source.include?("CGColor(gray: invertMask ? 0 : 1, alpha: 1)") &&
     image_edit_source.include?("mask-inverted"),
@@ -1798,16 +1798,16 @@ plan_import_contract = {
     image_edit_source.include?("maskRects.popLast()") &&
     image_edit_source.include?("private func rectsForMask(imageInfo: ImageInfo) -> [CGRect]") &&
     image_edit_source.include?("for rect in pixelRects") &&
-    image_edit_source.include?("已导出\\(invertMask ? \"反选\" : \"\")蒙版（\\(partCount) 个选区/笔迹") &&
-    image_edit_source.include?("\\(seedSuffix)）：\\(output.path)"),
+    image_edit_source.include?("L10n.AgentImageEditor.exportedMaskInverted(\"\\(partCount)\", eraseSuffix + seedSuffix, output.path)") &&
+    image_edit_source.include?("L10n.AgentImageEditor.exportedMask(\"\\(partCount)\", eraseSuffix + seedSuffix, output.path)"),
   "image editor supports brush masks" =>
     image_edit_source.include?("@State private var maskStrokes: [MaskStroke] = []") &&
     image_edit_source.include?("@State private var maskEraseStrokes: [MaskStroke] = []") &&
     image_edit_source.include?("@State private var maskTool: MaskTool = .rectangle") &&
     image_edit_source.include?("@State private var brushPaintMode: BrushPaintMode = .add") &&
     image_edit_source.include?("@State private var brushSize: Double = 28") &&
-    image_edit_source.include?("Picker(\"蒙版工具\", selection: $maskTool)") &&
-    image_edit_source.include?("Picker(\"画笔模式\", selection: $brushPaintMode)") &&
+    image_edit_source.include?("Picker(L10n.AgentImageEditor.maskToolPicker, selection: $maskTool)") &&
+    image_edit_source.include?("Picker(L10n.AgentImageEditor.brushModePicker, selection: $brushPaintMode)") &&
     image_edit_source.include?("Slider(value: $brushSize") &&
     image_edit_source.include?("activeStroke = MaskStroke") &&
     image_edit_source.include?("maskEraseStrokes.append(stroke)") &&
@@ -1817,16 +1817,16 @@ plan_import_contract = {
     image_edit_source.include?("context.setFillColor(CGColor(gray: invertMask ? 1 : 0, alpha: 1))") &&
     image_edit_source.include?("private enum BrushPaintMode") &&
     image_edit_source.include?("case subtract") &&
-    image_edit_source.include?("橡皮") &&
+    image_edit_source.include?("L10n.AgentImageEditor.brushModeEraser") &&
     image_edit_source.include?("private struct PixelMaskStroke") &&
-    image_edit_source.include?("笔迹"),
+    image_edit_source.include?("L10n.AgentImageEditor.summaryFull("),
   "image editor can reopen an existing mask as a seed layer" =>
     app_state_source.include?("agentImageEditorMaskURL") &&
     registry_source.include?('AgentToolParameter(name: "mask_path", type: .string, description: "Optional existing local PNG mask to load as the editor') &&
     image_edit_source.include?("@State private var seedMaskInfo: ImageInfo?") &&
     image_edit_source.include?("reloadSeedMask()") &&
     image_edit_source.include?("context.draw(") &&
-    image_edit_source.include?("含旧蒙版底稿") &&
+    image_edit_source.include?("L10n.AgentImageEditor.exportedSeedSuffix") &&
     image_edit_source.include?("seedMaskInfo != nil || !maskRects.isEmpty") &&
     media_tools_source.include?("appState.agentImageEditorMaskURL = maskURL") &&
     image_tools_source.include?("appState.agentImageEditorMaskURL = maskPath.map") &&
@@ -1837,11 +1837,11 @@ plan_import_contract = {
   "image editor surfaces Replicate configuration issues" =>
     image_edit_source.include?("private var replicateConfigurationIssue: String?") &&
     image_edit_source.include?("ReplicateIntegrationStore.isConfigured") &&
-    image_edit_source.include?("请先配置 Replicate API Token") &&
-    image_edit_source.include?("默认蒙版重绘 version") &&
-    image_edit_source.include?("默认图片擦除 version") &&
+    image_edit_source.include?("L10n.AgentImageEditor.replicateNeedToken") &&
+    image_edit_source.include?("L10n.AgentImageEditor.replicateNeedInpaintVersion") &&
+    image_edit_source.include?("L10n.AgentImageEditor.replicateNeedEraseVersion") &&
     image_edit_source.include?("EditorSettingsNavigation.shared.open(.replicate, appState: appState)") &&
-    image_edit_source.include?("打开 Replicate 设置") &&
+    image_edit_source.include?("L10n.AgentImageEditor.openReplicateSettings") &&
     image_edit_source.include?("return replicateConfigurationIssue == nil"),
   "storyboard widget builder split from side panel" =>
     storyboard_widget_source.include?("enum AgentShortDramaStoryboardWidgetBuilder") &&
@@ -2505,7 +2505,7 @@ plan_import_contract = {
     media_tools_source.include?("open_image_editor is only available in conversational agent runtimes"),
   "image editor side panel exposes production anchors to chat" =>
     image_edit_source.include?("imageEditorContextCard(imageInfo: imageInfo)") &&
-    image_edit_source.include?("Text(rows.isEmpty ? \"编辑接力\" : \"制作锚点\")") &&
+    image_edit_source.include?("Text(rows.isEmpty ? L10n.AgentImageEditor.contextCardGeneric : L10n.AgentImageEditor.contextCardAnchors)") &&
     image_edit_source.include?("appendImageEditorContextToChat") &&
     image_edit_source.include?("<image-editor-context>") &&
     image_edit_source.include?("action: inspect_image_editor_from_side_panel") &&
@@ -2527,7 +2527,7 @@ plan_import_contract = {
     image_edit_source.include?("attach_reference_tool: short_drama_attach_asset_reference_image") &&
     image_edit_source.include?("appendImageEditorContextAnchorLines") &&
     image_edit_source.include?("imageEditorContextRows") &&
-    image_edit_source.include?("把当前图片和蒙版路径发送到聊天"),
+    image_edit_source.include?("L10n.AgentImageEditor.sendToChatHelp"),
   "generic image mask edit tool submits existing masks" =>
     registry_source.include?('name: "edit_image_with_mask"') &&
     registry_source.include?("Submit an image edit task directly from a local image_path and mask_path") &&

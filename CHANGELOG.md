@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.129.0-rc31 - 2026-07-05
+
+### Fixed
+- **图片蒙版编辑面板文案国际化收尾** —— 继 rc29 首批（蒙版工具/画笔模式选择器、发送到聊天、空状态、枚举标签）之后，把面板剩余约 40 处硬编码中文全部迁入 `L10n.AgentImageEditor`：面板标题与工具栏 tooltip（撤销/清空/导出）、反选蒙版 Toggle 及说明、提交区（标题、模式/服务选择器、提示词与 model/version/endpoint 占位符、提交按钮、Replicate 配置提示、provider 说明）、导出/提交状态消息（含插值模板）、选区摘要、聊天接力 lead 行和制作锚点行标签。聊天 handoff 结构化块中被合约测试钉住的 `active_task_follow_up` 行保持原文不变；`short_drama_media_contract_test` / `image_edit_contract_test` 中逐字断言中文源串的检查同步改为断言 L10n 调用形式（rc29 首批曾使其中 3 项断言失效，本次一并修复），两个合约测试与 i18n 覆盖率守卫（100%）全部通过。
+- 版本号从 **1.129.0-rc30** 提升为 **1.129.0-rc31**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
 ## 1.129.0-rc30 - 2026-07-05
 
 ### Changed

@@ -49,8 +49,8 @@ add_check.call(
   includes_all?(
     panel_source,
     [
-      "Text(rows.isEmpty ? \"编辑接力\" : \"制作锚点\")",
-      "通用图片编辑；发送到聊天会在已有选区时先导出蒙版",
+      "Text(rows.isEmpty ? L10n.AgentImageEditor.contextCardGeneric : L10n.AgentImageEditor.contextCardAnchors)",
+      "L10n.AgentImageEditor.genericEditHint",
       "appendImageEditorContextToChat(imageInfo: imageInfo)"
     ]
   ),
