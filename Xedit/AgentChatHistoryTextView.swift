@@ -154,7 +154,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
         }
         layoutManager.ensureLayout(for: textContainer)
         let used = layoutManager.usedRect(for: textContainer).size
-        return NSSize(width: NSView.noIntrinsicMetric, height: ceil(used.height))
+        let drawingHeight = used.height + AgentChatHistoryLayoutMetrics.bubbleDrawingVerticalOverscan
+        return NSSize(width: NSView.noIntrinsicMetric, height: ceil(drawingHeight))
     }
 
     override func layout() {
@@ -241,6 +242,12 @@ final class AgentChatHistoryNSTextView: NSTextView {
             hasher.combine(m.role.rawValue)
             hasher.combine(m.content.count)
             hasher.combine(m.reasoningContent?.count ?? -1)
+            hasher.combine(m.images.count)
+            for image in m.images {
+                hasher.combine(image.id)
+                hasher.combine(image.mimeType)
+                hasher.combine(image.dataBase64.count)
+            }
             hasher.combine(m.textAttachments.count)
             hasher.combine(m.toolCallID)
             hasher.combine(m.usageTokens)
@@ -538,6 +545,10 @@ enum AgentChatHistoryLayoutMetrics {
     /// 用户正文左缩进：约一个汉字宽。
     static let userBodyHeadIndent: CGFloat = 16
     static let userBodyTailIndent: CGFloat = -46
+    /// Bubble backgrounds are drawn outside TextKit's glyph usedRect.
+    /// Without this bottom slack the final user bubble can have its lower
+    /// rounded corners clipped by the hosting SwiftUI layout.
+    static let bubbleDrawingVerticalOverscan: CGFloat = 14
 }
 
 enum AgentChatHistoryTableLink {

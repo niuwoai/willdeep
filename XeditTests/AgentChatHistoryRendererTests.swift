@@ -13,6 +13,8 @@ import Testing
 
 @Suite
 struct AgentChatHistoryRendererTests {
+    private static let tinyPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+
     @Test
     func longMessagePreviewKeepsHeadAndTail() {
         let content = String(repeating: "A", count: 120)
@@ -31,6 +33,55 @@ struct AgentChatHistoryRendererTests {
         #expect(!preview.content.contains("MIDDLE_SHOULD_BE_OMITTED"))
         #expect(preview.omittedCharacters > 0)
         #expect(preview.content.count <= 160)
+    }
+
+    @Test
+    func olderHistoryPreviewCapsPlainTextWithoutRenderingFullDetails() {
+        let messages = [
+            AgentMessage(role: .user, content: "short request"),
+            AgentMessage(
+                role: .assistant,
+                content: String(repeating: "A", count: 220) + "TAIL_SHOULD_BE_OMITTED"
+            ),
+        ]
+
+        let preview = AgentOlderHistoryPreview.make(
+            messages: messages,
+            maxCharacters: 90,
+            roleLabel: { $0.rawValue },
+            omissionText: { "[\($0) omitted]" }
+        )
+
+        #expect(preview.content.contains("user:\nshort request"))
+        #expect(preview.content.contains("assistant:\n"))
+        #expect(!preview.content.contains("TAIL_SHOULD_BE_OMITTED"))
+        #expect(preview.content.count <= 90)
+        #expect(preview.omittedCharacters > 0)
+        #expect(preview.totalCharacters > preview.content.count)
+    }
+
+    @Test
+    func olderHistoryPreviewHidesGeneratedImageDescription() {
+        let content = AppState.contentByAppendingImageDescription(
+            to: "现在还有图片吗？",
+            description: "Image 1: internal VL-only screenshot notes.",
+            imageCount: 1,
+            providerID: "some-im",
+            model: "qwen3-vl-plus"
+        )
+        let image = AgentImageAttachment(mimeType: "image/png", dataBase64: Self.tinyPNGBase64)
+
+        let preview = AgentOlderHistoryPreview.make(
+            messages: [AgentMessage(role: .user, content: content, images: [image])],
+            maxCharacters: 240,
+            roleLabel: { $0.rawValue },
+            omissionText: { "[\($0) omitted]" }
+        )
+
+        #expect(preview.content.contains("现在还有图片吗？"))
+        #expect(preview.content.contains("[Image attachment ×1]"))
+        #expect(!preview.content.contains("[Image description generated"))
+        #expect(!preview.content.contains("internal VL-only"))
     }
 
     @Test
@@ -79,6 +130,28 @@ struct AgentChatHistoryRendererTests {
         #expect(!rendered.string.contains("# Title"))
         #expect(!rendered.string.contains("**bold**"))
         #expect(!rendered.string.contains("```"))
+    }
+
+    @Test
+    func rendersUserImageInsteadOfGeneratedImageDescriptionInHistory() {
+        let content = AppState.contentByAppendingImageDescription(
+            to: "识别一下这张图",
+            description: "Image 1: internal VL-only screenshot notes.",
+            imageCount: 1,
+            providerID: "some-im",
+            model: "qwen3-vl-plus"
+        )
+        let image = AgentImageAttachment(mimeType: "image/png", dataBase64: Self.tinyPNGBase64)
+        let message = AgentMessage(role: .user, content: content, images: [image])
+
+        let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
+
+        #expect(rendered.string.contains("You"))
+        #expect(rendered.string.contains("识别一下这张图"))
+        #expect(rendered.string.contains("\u{fffc}") || rendered.string.contains("Image attachment"))
+        #expect(!rendered.string.contains("[Image description generated"))
+        #expect(!rendered.string.contains("internal VL-only"))
+        #expect(!message.copyableContent.contains("internal VL-only"))
     }
 
     @Test
@@ -595,6 +668,7 @@ struct AgentChatHistoryRendererTests {
         let plain = AgentChatHistoryRenderer.render(messages: [user], isDark: false)
         #expect(plain.string.contains("You\nhello"))
         let hiddenCopyRange = try #require(firstCopyIconRange(in: plain))
+        #expect(plain.attribute(.agentChatHistoryBubbleKind, at: hiddenCopyRange.location, effectiveRange: nil) != nil)
         #expect(plain.attribute(.link, at: hiddenCopyRange.location, effectiveRange: nil) == nil)
         #expect(plain.attribute(
             NSAttributedString.Key("AgentChatHistoryMessageCopyText"),
@@ -619,6 +693,7 @@ struct AgentChatHistoryRendererTests {
             value: "hello",
             in: hovered
         ))
+        #expect(hovered.attribute(.agentChatHistoryBubbleKind, at: visibleCopyRange.location, effectiveRange: nil) != nil)
         #expect(hovered.attribute(.link, at: visibleCopyRange.location, effectiveRange: nil) != nil)
         #expect(hovered.attribute(
             NSAttributedString.Key("AgentChatHistoryMessageCopyText"),
@@ -631,6 +706,26 @@ struct AgentChatHistoryRendererTests {
             effectiveRange: nil
         ) as? NSColor)
         #expect(visibleColor.alphaComponent > 0)
+    }
+
+    @Test
+    @MainActor
+    func textViewIntrinsicHeightKeepsRoomForFinalBubbleCorners() throws {
+        let user = AgentMessage(
+            role: .user,
+            content: "last user message"
+        )
+        let view = AgentChatHistoryNSTextView()
+        view.frame = NSRect(x: 0, y: 0, width: 640, height: 1)
+        view.textContainer?.size = NSSize(width: 640, height: CGFloat.greatestFiniteMagnitude)
+        view.applyMessages([user], isDark: false)
+
+        let layoutManager = try #require(view.layoutManager)
+        let textContainer = try #require(view.textContainer)
+        layoutManager.ensureLayout(for: textContainer)
+        let usedHeight = layoutManager.usedRect(for: textContainer).height
+
+        #expect(view.intrinsicContentSize.height >= ceil(usedHeight + AgentChatHistoryLayoutMetrics.bubbleDrawingVerticalOverscan))
     }
 
     private func firstAttributeRange(

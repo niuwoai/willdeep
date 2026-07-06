@@ -1579,6 +1579,13 @@ final class AgentInteractiveTerminalController: ObservableObject {
         }
     }
 
+    func closeTabs(openedBy sessionID: UUID) {
+        let ids = tabs
+            .filter { $0.originAgentSessionID == sessionID }
+            .map(\.id)
+        ids.forEach(closeTab)
+    }
+
     func startRecordingActiveTab() {
         guard recordingTabID == nil,
               let tab = activeTab,

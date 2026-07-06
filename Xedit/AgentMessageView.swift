@@ -148,9 +148,6 @@ struct AgentModeMessageView: View {
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                if let description = split.description {
-                    AgentImageDescriptionDisclosure(description: description)
-                }
                 if !message.images.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {

@@ -37,6 +37,22 @@ extension WillDeepTests {
         #expect(decoded.path == path)
     }
 
+    @Test("plain launch routes the initial empty editor window to Agent")
+    func testPlainLaunchRoutesInitialEditorToAgent() {
+        #expect(InitialEditorLaunchRoute.shouldRoutePlainLaunchToAgent(
+            externalEditorOpenSeen: false,
+            didRoutePlainLaunch: false
+        ))
+        #expect(!InitialEditorLaunchRoute.shouldRoutePlainLaunchToAgent(
+            externalEditorOpenSeen: true,
+            didRoutePlainLaunch: false
+        ))
+        #expect(!InitialEditorLaunchRoute.shouldRoutePlainLaunchToAgent(
+            externalEditorOpenSeen: false,
+            didRoutePlainLaunch: true
+        ))
+    }
+
     @MainActor
     @Test("external CLI open creates a missing file when the parent exists")
     func testOpenExternalURLCreatesMissingFile() throws {

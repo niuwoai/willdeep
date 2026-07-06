@@ -6,6 +6,7 @@
 //
 
 import AppKit
+import ImageIO
 
 extension AgentChatHistoryRenderer {
     static func appendHeader(
@@ -261,7 +262,7 @@ extension AgentChatHistoryRenderer {
     ) -> Bool {
         switch message.role {
         case .user:
-            return !body.isEmpty || !message.textAttachments.isEmpty
+            return !body.isEmpty || !message.textAttachments.isEmpty || !message.images.isEmpty
         case .assistant:
             return !body.isEmpty
         case .system, .tool, .workflowReport, .widget:
@@ -291,6 +292,62 @@ extension AgentChatHistoryRenderer {
                 ]
             ))
         }
+    }
+
+    static func appendImageAttachments(
+        _ images: [AgentImageAttachment],
+        to result: NSMutableAttributedString,
+        font: NSFont,
+        secondaryColor: NSColor
+    ) {
+        for (index, image) in images.enumerated() {
+            if index > 0 {
+                result.append(NSAttributedString(string: "  ", attributes: [.font: font]))
+            }
+            if let thumbnail = chatHistoryThumbnail(for: image) {
+                let attachment = NSTextAttachment()
+                attachment.image = thumbnail
+                attachment.bounds = NSRect(
+                    x: 0,
+                    y: -4,
+                    width: thumbnail.size.width,
+                    height: thumbnail.size.height
+                )
+                result.append(NSAttributedString(attachment: attachment))
+            } else {
+                result.append(NSAttributedString(
+                    string: "▧ Image attachment",
+                    attributes: [
+                        .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+                        .foregroundColor: secondaryColor,
+                    ]
+                ))
+            }
+        }
+    }
+
+    private static func chatHistoryThumbnail(for image: AgentImageAttachment) -> NSImage? {
+        guard let data = Data(base64Encoded: image.dataBase64),
+              let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+            return nil
+        }
+        let maxSide: CGFloat = 96
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: Int(maxSide * 2)
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        let rawSize = NSSize(width: cgImage.width, height: cgImage.height)
+        let scale = min(1, maxSide / max(rawSize.width, rawSize.height))
+        let pointSize = NSSize(
+            width: max(1, round(rawSize.width * scale)),
+            height: max(1, round(rawSize.height * scale))
+        )
+        return NSImage(cgImage: cgImage, size: pointSize)
     }
 
     static func appendMessageFooter(

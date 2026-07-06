@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-06 | Current version: v1.131.0-rc4
+> Last updated: 2026-07-06 | Current version: v1.131.0-rc9
 
 ## Positioning
 
@@ -14,9 +14,15 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
-- **Agent 图片附件磁盘化队列（1.131.0-rc3）** —— Composer 新粘贴的图片不再以内联 base64 常驻 pending/queued/session JSON，而是原子写入 Application Support 的 `AgentAttachments` 目录；队列和会话只保存文件路径、MIME、大小与 SHA-256 元数据，发送给视觉模型或渲染缩略图时再按需读取。旧会话内联图片继续兼容，用户清空队列或删除未发送草稿图片时会同步清理对应暂存文件，且清理路径只允许命中 App 自己的附件目录。
-- **干净 tracked 文件编辑自动落盘（1.131.0-rc4）** —— Agent 对已存在文件调用 `edit_file` / `apply_patch` 时，如果所有目标文件都已纳入 git、当前对 HEAD 干净，并且编辑器里没有未保存缓冲区，会直接写入磁盘，不再要求用户点击 Apply；未跟踪、已有本地改动或 App 内未保存的文件仍走 inline patch 卡片确认。
-- **Web 编程专家与 Dev Server 面板（1.131.0-rc4）** —— 新增 `webCoding` 专家，用于截图生成 UI、本地 HTML/CSS/图片资源预览、Vite/Next/React/Vue 项目预览与视觉 QA。Agent 可在需要时通过 `ask_user` + `activate_expert` 引导用户激活专家；激活后嵌入浏览器/Chrome 预览截图工具也对 Web 编程专家开放。右侧 Dev Server 面板会扫描当前工作区根目录与常见前端/后端目录，发现 Vite/Next/React/Vue、Node API、Go、Rails、FastAPI 和静态 HTML 启动候选；前端与后端分区支持直接启动、停止、重启，`tail -f` 日志可由用户直接指定并作为后台任务实时查看。`show_widget(html_path:)` 现在会把 HTML 所在目录作为本地 baseURL，允许相对 CSS/JS/图片从用户明确给出的 workspace/tmp 文件旁加载。
+- **Agent 侧边栏资源闲置释放与 Dev Server 工作区共享（1.131.0-rc9）** —— 会话侧边栏记录最后查看时间，终端、嵌入浏览器、Widget 和图片编辑器等重面板在所属会话超过 1 小时未被查看后自动收起并释放资源；Dev Server 面板按 workspace root 聚合后台 dev server / tail 任务，同一工作区的多个会话共享端口型资源视图；旧聊天历史展开也先显示轻量纯文本预览，避免长会话一次性渲染完整富文本。
+- **Agent 侧边栏状态跟随会话（1.131.0-rc8）** —— 右侧侧边栏的打开面板、选中文件/预览、媒体任务 scope 与图片编辑器输入现在保存到当前 Agent 会话；切到未打开过侧边栏的会话时自动收起，切回原会话会恢复原侧栏和关联数据，避免跨会话串台。
+- **文本模型图片转写对用户不可见（1.131.0-rc7）** —— 当主模型不支持图片输入时，Image Understanding / VL 生成的描述只进入模型上下文；用户气泡、TextKit 历史记录、旧历史预览和复制按钮继续展示用户原文与图片缩略图，不再把内部图片描述正文暴露在聊天记录中。
+- **普通启动默认 Agent 窗口（1.131.0-rc6）** —— App 冷启动不带文件/目录意图时只保留 Agent 单例窗口；命令行通用打开命令、`willdeep://open?path=...` 和 Finder 右键打开文件或目录仍进入 Editor 模式，Agent 顶部切回 Editor 的图标入口继续保留。
+- **聊天历史气泡底部裁剪修复（1.131.0-rc5）** —— TextKit 历史聊天视图会为气泡背景额外预留底部绘制余量，最后一条用户输入贴近滚动容器底部时也能完整显示圆角矩形、时间和复制区域。
+- **干净 tracked 文件编辑自动落盘与 Dev Server 面板增强（1.131.0-rc4）** —— Agent 对已存在文件调用 `edit_file` / `apply_patch` 时，如果所有目标文件都已纳入 git、当前对 HEAD 干净，并且编辑器里没有未保存缓冲区，会直接写入磁盘，不再要求用户点击 Apply；Dev Server 面板会扫描当前工作区根目录与常见前端/后端目录，支持直接启动、停止、重启前端/后端候选，并可直接 tail 用户指定日志。
+- **Composer 图片附件入队改为磁盘引用（1.131.0-rc3）** —— 新粘贴到 Agent composer 的图片先原子写入 Application Support 下的 `AgentAttachments` 目录，会话和队列只保存路径、大小、SHA-256 与 MIME 元数据；发送给视觉模型或生成缩略图时再按需读取，旧内联 `dataBase64` 会话仍保持兼容。
+- **`terminal_snapshot` 读取新鲜终端屏幕（1.131.0-rc2）** —— Agent 终端改为后台队列喂养 headless 镜像 `Terminal`，`terminal_snapshot` 从镜像读取屏幕文本，不再因主线程被流式富文本渲染占满而拿到陈旧屏幕；可见终端仍在主线程有序绘制，ZMODEM 与 echo 检测保持原有主线程亲和逻辑。
+- **Web 编程专家、Dev Server 侧栏与回复结束补滚（1.131.0-rc1）** —— 新增 `webCoding` 专家和 `activate_expert` 工具，覆盖截图生成 UI、本地 HTML/CSS/图片资源预览、Vite/Next/React/Vue 项目预览与视觉 QA；右侧 Dev Server tab 可查看 dev server 与 `tail -f` 后台任务；`show_widget(html_path:)` 以 HTML 所在目录作为本地 baseURL；AI 回复结束后聊天区会在布局稳定后补滚到底部，避免长回复停在答案中段。
 - **Agent 右侧面板更多菜单去重（1.130.0-rc4）** —— 顶部快捷条已经提供的 Diff / Terminal / Preview / Files 不再重复出现在「…」下拉菜单里；更多菜单只保留任务监控、媒体任务、网页组件、图片编辑、计划等非快捷入口，面板已打开时仍保留关闭面板操作。
 - **截图工具与工具结果图片直通视觉模型（1.130.0-rc1）** —— 新增 `capture_screenshot` 工具，可截取本机 Mac 屏幕、Android 设备/模拟器（adb）或 iOS 模拟器（simctl），图片在捕获时即缩放到 ≤1568 长边再随工具结果返回。`AgentToolResult` 新增 `images` 字段、`.tool` 消息携带图片：Anthropic 等视觉模型以 `tool_result` image block 直接“看到”像素并多轮重发，DeepSeek / OpenAI Chat / Gemini 等自动降级为文本 payload（含 OCR + 保存路径，可再调 `visual_qa_screenshot`）。工具卡片内联渲染缩略图（ImageIO 下采样，避免内存失控），点击在预览中打开完整图。
 - **Mobile Gateway 设置默认收起高级参数（1.130.0-rc1）** —— 手机网关设置页不再记住上次展开高级信息的状态；每次进入都先展示连接方式、状态和配对二维码。IP、端口、协议、可执行路径等诊断项仍可手动展开；`j.niuwoai.com` 这类默认公共中继坐标再收进「自定义中继服务」，只有自建兼容 WebSocket 中继时才需要修改。

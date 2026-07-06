@@ -88,6 +88,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var currentGoalEditedAt: Date?
     @Published var learningEvents: [AgentLearningEvent] = []
     @Published var latestTurnRecall: AgentTurnRecallSnapshot?
+    @Published var sidePanelState: AgentSidePanelState = .empty
     /// Last image candidate selected from a widget in this runtime. This is
     /// runtime-only context: the clicked widget still sends a normal user
     /// message, while the next turn also receives a compact structured block
@@ -186,6 +187,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.currentGoal = session.currentGoal
         self.learningEvents = session.learningEvents
         self.latestTurnRecall = session.latestTurnRecall
+        self.sidePanelState = session.sidePanelState
     }
 
     /// Move an idle/new session to another workspace. Used by the
@@ -266,6 +268,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.currentGoal = currentGoal
         session.learningEvents = learningEvents
         session.latestTurnRecall = latestTurnRecall
+        session.sidePanelState = sidePanelState
         session.updatedAt = Date()
         // Two title sources fight for this slot:
         //   1. User-set (sidebar rename) — `titleIsUserSet == true`,
