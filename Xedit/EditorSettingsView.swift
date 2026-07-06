@@ -489,6 +489,22 @@ struct EditorSettingsView: View {
         }
     }
 
+    private func commitImageDescriptionBuffers() {
+        var configuration = appState.agentConfiguration
+        configuration.imageDescription = AgentImageDescriptionConfiguration(
+            providerID: imageProviderIDBuffer,
+            baseURL: imageBaseURLBuffer,
+            model: imageModelBuffer,
+            apiKey: imageAPIKeyBuffer
+        ).normalized
+        appState.agentConfiguration = configuration.normalized
+        let saved = appState.agentConfiguration.imageDescription
+        imageProviderIDBuffer = saved.providerID
+        imageBaseURLBuffer = saved.baseURL
+        imageModelBuffer = saved.model
+        imageAPIKeyBuffer = saved.apiKey
+    }
+
     private func agentModelField(_ title: String, text: Binding<String>, models: [String]) -> some View {
         // The TextField's first arg doubles as its in-field placeholder.
         // Passing `title` made the model name (e.g. "Vision Model") show
@@ -830,6 +846,7 @@ struct EditorSettingsView: View {
                            let firstModel = models.first {
                             imageModelBuffer = firstModel
                         }
+                        commitImageDescriptionBuffers()
                     }
                 case .failure(let error):
                     fetchedImageModels = []

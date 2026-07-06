@@ -37,10 +37,10 @@ struct AgentSessionsSidebar: View {
     /// pin/archive button visibility — cursor-style "they only show up
     /// when you're aiming at them".
     @State private var hoveredSessionID: AgentSession.ID?
-    /// The workspace group header the mouse is hovering. Drives the
-    /// trailing "+" (new chat in this workspace) button visibility,
-    /// same show-on-aim pattern as the session rows.
-    @State private var hoveredWorkspaceHeader: String?
+    /// The workspace group the mouse is hovering. Drives the trailing
+    /// "+" (new chat in this workspace) button visibility, same
+    /// show-on-aim pattern as the session rows.
+    @State private var hoveredWorkspaceGroup: String?
     @State private var someIMAccount = SomeIMIntegrationStore.loadAccount()
     @State private var isRefreshingSomeIMAccount = false
     @State private var isOpeningSomeIMAccount = false
@@ -291,66 +291,63 @@ struct AgentSessionsSidebar: View {
         let archivedExpanded = expandedArchivedGroups.contains(workspace)
         let remoteWorkspace = remoteWorkspaceGroup(from: workspace)
         let remoteRuntime = remoteWorkspace.flatMap { AgentRuntimeStore.descriptor(id: $0.runtimeID) }
+        let isWorkspaceHovered = hoveredWorkspaceGroup == workspace
 
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
-                // Clicking the folder glyph collapses / expands the whole
-                // group. Using `folder` vs `folder.fill` as the visual
+                // Clicking the workspace identity collapses / expands the
+                // whole group. Using `folder` vs `folder.fill` as the visual
                 // affordance — filled means "closed, stuff hidden behind
-                // it", outline means "open". The hit target stays small
-                // (just the icon) so dragging across the title line or
-                // hitting the right-click menu still works as before.
+                // it", outline means "open".
                 Button {
                     withAnimation(.easeInOut(duration: 0.15)) {
                         setWorkspaceCollapsed(workspace, collapsed: !isCollapsed)
                     }
                 } label: {
-                    Image(systemName: remoteWorkspace == nil
-                        ? (isCollapsed ? "folder.fill" : "folder")
-                        : WorkspacePresentation.remoteSymbolName(for: remoteRuntime))
-                        .font(.system(size: 11))
-                        .foregroundStyle(remoteWorkspace == nil ? Color.secondary : WorkspacePresentation.remoteTint(for: remoteRuntime))
-                        .frame(width: 14, height: 14)
-                        .contentShape(Rectangle())
+                    HStack(spacing: 6) {
+                        Image(systemName: remoteWorkspace == nil
+                            ? (isCollapsed ? "folder.fill" : "folder")
+                            : WorkspacePresentation.remoteSymbolName(for: remoteRuntime))
+                            .font(.system(size: 11))
+                            .foregroundStyle(remoteWorkspace == nil ? Color.secondary : WorkspacePresentation.remoteTint(for: remoteRuntime))
+                            .frame(width: 14, height: 14)
+                        Text(workspaceDisplayName(workspace))
+                            .font(.system(size: 12, weight: .semibold))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        if remoteWorkspace != nil {
+                            Text(WorkspacePresentation.remoteBadge(for: remoteRuntime))
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(WorkspacePresentation.remoteTint(for: remoteRuntime))
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(WorkspacePresentation.remoteTint(for: remoteRuntime).opacity(0.12))
+                                .clipShape(RoundedRectangle(cornerRadius: 3))
+                        }
+                    }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help(isCollapsed ? L10n.Sidebar.workspaceToggleExpandTooltip : L10n.Sidebar.workspaceToggleCollapseTooltip)
-                Text(workspaceDisplayName(workspace))
-                    .font(.system(size: 12, weight: .semibold))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                if remoteWorkspace != nil {
-                    Text(WorkspacePresentation.remoteBadge(for: remoteRuntime))
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(WorkspacePresentation.remoteTint(for: remoteRuntime))
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
-                        .background(WorkspacePresentation.remoteTint(for: remoteRuntime).opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
-                }
                 Spacer(minLength: 0)
                 Button {
                     startNewSession(inWorkspaceGroup: workspace)
                 } label: {
                     Image(systemName: "plus.circle")
                         .font(.system(size: 12))
-                        .foregroundStyle(hoveredWorkspaceHeader == workspace ? .secondary : .tertiary)
+                        .foregroundStyle(.secondary)
                         .frame(width: 16, height: 16)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .opacity(isWorkspaceHovered ? 1 : 0)
+                .allowsHitTesting(isWorkspaceHovered)
+                .accessibilityHidden(!isWorkspaceHovered)
                 .help(L10n.Sidebar.workspaceMenuNewChat)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 4)
             .contentShape(Rectangle())
-            .onHover { hovering in
-                if hovering {
-                    hoveredWorkspaceHeader = workspace
-                } else if hoveredWorkspaceHeader == workspace {
-                    hoveredWorkspaceHeader = nil
-                }
-            }
             .contextMenu {
                 Button(L10n.Sidebar.workspaceMenuNewChat) {
                     startNewSession(inWorkspaceGroup: workspace)
@@ -394,6 +391,13 @@ struct AgentSessionsSidebar: View {
             }
 
             Spacer().frame(height: 10)
+        }
+        .onHover { hovering in
+            if hovering {
+                hoveredWorkspaceGroup = workspace
+            } else if hoveredWorkspaceGroup == workspace {
+                hoveredWorkspaceGroup = nil
+            }
         }
     }
 

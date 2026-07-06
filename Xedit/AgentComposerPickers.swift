@@ -82,6 +82,7 @@ struct WorkspacePickerPill: View {
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
+        .focusable(false)
         .fixedSize()
         .help(helpText)
         .onAppear {
@@ -391,6 +392,7 @@ struct AgentApprovalModePickerPill: View {
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
+        .focusable(false)
         .fixedSize()
         .help(L10n.ApprovalMode.pickerHelp)
     }
@@ -439,6 +441,7 @@ struct ComposerAdaptiveControlStrip: View {
             AgentModePickerPill()
             ComposerOverflowPill(controls: [.approval, .executor, .plugins, .experts])
         }
+        .focusable(false)
     }
 }
 
@@ -468,10 +471,12 @@ struct AgentExpertPickerPill: View {
             .overlay(Capsule(style: .continuous).stroke(pillBorder, lineWidth: 1))
         }
         .buttonStyle(.plain)
+        .focusable(false)
         .fixedSize()
         .help(L10n.Expert.pickerHelp)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             AgentExpertActivationList()
+                .focusable(false)
                 .padding(14)
                 .frame(width: 320, alignment: .leading)
                 .environmentObject(appState)
@@ -541,8 +546,10 @@ struct AgentExpertActivationList: View {
             ))
             .labelsHidden()
             .toggleStyle(.switch)
+            .focusable(false)
             .disabled(isActive)
         }
+        .focusable(false)
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(
@@ -558,6 +565,7 @@ struct AgentExpertActivationList: View {
             guard !isActive else { return }
             appState.activateAgentExpert(expert)
         }
+        .focusable(false)
     }
 }
 
@@ -583,6 +591,7 @@ struct AgentPluginPickerPill: View {
                             } label: {
                                 pluginRow(name: group.displayName, checked: isSkillAttached(skill))
                             }
+                            .focusable(false)
                         } else {
                             Menu(group.displayName) {
                                 ForEach(group.skills.prefix(12)) { skill in
@@ -591,6 +600,7 @@ struct AgentPluginPickerPill: View {
                                     } label: {
                                         pluginRow(name: skill.name, checked: isSkillAttached(skill))
                                     }
+                                    .focusable(false)
                                 }
                             }
                         }
@@ -602,6 +612,7 @@ struct AgentPluginPickerPill: View {
                 Section(L10n.PluginPicker.mcpServers("\(mcpServers.count)")) {
                     ForEach(mcpServers.prefix(12)) { server in
                         Label(server.name, systemImage: serverIcon(server))
+                            .focusable(false)
                     }
                 }
             }
@@ -622,6 +633,7 @@ struct AgentPluginPickerPill: View {
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
+        .focusable(false)
         .fixedSize()
         .help(L10n.PluginPicker.help)
         .onAppear(perform: refresh)
@@ -785,6 +797,7 @@ struct ModelPickerPill: View {
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
+        .focusable(false)
         .fixedSize()
         .help("Pick provider + model for this chat. The active provider also drives Auto/Flash/Pro routing.")
         .onAppear(perform: refreshMenuSnapshot)
@@ -1059,6 +1072,7 @@ struct AgentExecutionPickerPill: View {
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
+        .focusable(false)
         .fixedSize()
         .help("选择这一轮由 WillDeep 自己执行，还是委托给本机 Claude Code / Codex CLI。")
     }
@@ -1113,6 +1127,7 @@ struct AgentModePickerPill: View {
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
+        .focusable(false)
         .fixedSize()
         .help("Conversation mode — Plan locks writes until you approve; Goal pins an objective to every reply.")
     }
@@ -1163,6 +1178,7 @@ struct ComposerOverflowPill: View {
             .clipShape(RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius))
         }
         .buttonStyle(.plain)
+        .focusable(false)
         .fixedSize()
         .help(L10n.Composer.overflowHelp)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
@@ -1181,10 +1197,12 @@ struct ComposerOverflowPill: View {
                 }
                 if controls.contains(.experts) {
                     AgentExpertActivationList()
+                        .focusable(false)
                 }
             }
             .padding(14)
             .frame(width: controls.contains(.experts) ? 340 : 300, alignment: .leading)
+            .focusable(false)
             .environmentObject(appState)
         }
     }
@@ -1201,6 +1219,8 @@ struct ComposerOverflowPill: View {
                 .frame(width: 64, alignment: .leading)
             Spacer(minLength: 0)
             pill()
+                .focusable(false)
         }
+        .focusable(false)
     }
 }

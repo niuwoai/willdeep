@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-07-06 | Target version: v1.130.0-rc1
+> Last updated: 2026-07-06 | Target version: v1.130.0-rc2
 
 ## Summary
 
@@ -60,6 +60,7 @@ The current Swift bridge supports the first command set needed for phone-to-Mac 
 - `job.kill`
 - `file.read`
 - `queue.update`
+- `capabilities.get`
 
 Commands that touch files and queues remain desktop-mediated and must not bypass existing safety gates.
 
@@ -77,8 +78,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.130.0-rc1`
-- `X-Server-Version: 1.130.0-rc1`
+- `X-App-Version: 1.130.0-rc2`
+- `X-Server-Version: 1.130.0-rc2`
 
 ### `GET /mobile/health`
 
@@ -90,7 +91,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.130.0-rc1",
+    "version": "1.130.0-rc2",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
@@ -260,6 +261,8 @@ The desktop peer may broadcast:
 - `patch.upsert`
 - `job.updated`
 - `worktree.updated`
+- `workspace.list`
+- `capabilities.updated`
 - `error`
 - `ack`
 - `command.error`
@@ -293,6 +296,8 @@ The desktop app remains responsible for the actual command result and subsequent
 
 `session.create` and `message.send` may include `payload.workspace_path`. When present, Swift routes the command into a local Mac Agent session bound to that workspace path. Android live acceptance uses this field to make phone-originated coding requests land in the intended Mac repository instead of a generic "No workspace" session.
 
+`message.send` and `queue.update` may include `payload.images` as an array of image data URLs or OpenAI-compatible `{ "type": "image_url", "image_url": { "url": "data:image/png;base64,..." } }` objects. The Swift desktop bridge validates `image/*` base64 data URLs, converts them into `AgentImageAttachment`, and sends them through the existing Mac Agent composer / queued message / Image Understanding flow. Image-only sends are allowed when at least one valid image is present.
+
 Current desktop bridge behavior:
 
 - `state.snapshot` includes session summaries, pending tool approvals, patch proposals, background jobs, queued message previews, recent conversation messages, and `worktree_changes` summaries.
@@ -308,7 +313,7 @@ Current desktop bridge behavior:
 - `state.snapshot` includes desktop worktree changed-file metadata, and `publishSnapshot()` also emits `worktree.updated` envelopes for current changed files.
 - `job.kill` resolves a session-scoped job handle and calls the existing `AgentJobRegistry.kill` path; it does not grant mobile process handles or shell access.
 - `file.read` reads only text files inside the selected local session workspace, rejects path escapes/directories/binary files, and returns `path`, `content`, `truncated`, and `byte_count` in an `ack` payload.
-- `queue.update` controls only the selected session queue through desktop AppState: `add` queues text, `remove` deletes a queued message by id, `clear` removes all queued messages for the session, and `send_now` promotes a queued message through the same Mac-side send-now path used by the desktop UI.
+- `queue.update` controls only the selected session queue through desktop AppState: `add` queues text and optional images, `remove` deletes a queued message by id, `clear` removes all queued messages for the session, and `send_now` promotes a queued message through the same Mac-side send-now path used by the desktop UI.
 
 ## Security Requirements
 

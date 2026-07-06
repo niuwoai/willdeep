@@ -224,6 +224,93 @@ extension AppState: AgentMobileGatewayControlling {
         }
     }
 
+    var mobileGatewayCapabilities: AgentMobileGatewayCapabilitiesSnapshot {
+        let activeProvider = agentProviderLibrary.active
+        let activeProviderID = agentProviderLibrary.activeID?.uuidString
+        let overrideModel = agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let activeModelID = overrideModel?.isEmpty == false
+            ? overrideModel!
+            : agentConfiguration.normalized.model(for: .interactive)
+
+        let providers = agentProviderLibrary.entries.map { entry in
+            let presetName = AgentProviderPreset.preset(id: entry.providerID)?.displayName ?? entry.providerID
+            return AgentMobileGatewayCapabilityOptionSnapshot(
+                id: entry.id.uuidString,
+                title: entry.displayName,
+                subtitle: presetName,
+                isActive: entry.id == agentProviderLibrary.activeID
+            )
+        }
+
+        let modelCandidates = Self.mobileGatewayUniqueStrings(
+            (activeProvider?.allFlashModels ?? []) +
+            (activeProvider?.allProModels ?? []) +
+            agentRecentlyUsedModelIDs +
+            agentKnownModelIDs +
+            [
+                agentConfiguration.normalized.model(for: .interactive),
+                agentConfiguration.normalized.flashModel,
+                agentConfiguration.normalized.proModel
+            ]
+        )
+        let models = modelCandidates.map { model in
+            AgentMobileGatewayCapabilityOptionSnapshot(
+                id: model,
+                title: model,
+                subtitle: activeProvider?.displayName,
+                isActive: model == activeModelID
+            )
+        }
+
+        let pendingSkillIDs = Set(agentPendingSkills.map(\.identifier))
+        let skillEntries = AgentSkillDirectory.list(includeDisabled: false)
+        let skills = skillEntries
+            .filter { $0.source != .plugin }
+            .prefix(80)
+            .map { entry in
+                AgentMobileGatewayCapabilityOptionSnapshot(
+                    id: entry.identifier,
+                    title: AgentSkillLocalization.displayName(for: entry),
+                    subtitle: AgentSkillLocalization.displayDescription(for: entry),
+                    isActive: pendingSkillIDs.contains(entry.identifier)
+                )
+            }
+
+        let activeExperts = agentActiveExperts
+        let experts = AgentExpert.allCases.map { expert in
+            AgentMobileGatewayCapabilityOptionSnapshot(
+                id: expert.rawValue,
+                title: expert.displayName,
+                subtitle: expert.summary,
+                isActive: activeExperts.contains(expert)
+            )
+        }
+
+        let pluginGroups = Dictionary(grouping: skillEntries.filter { $0.source == .plugin }) { skill in
+            skill.identifier.split(separator: ":").first.map(String.init) ?? skill.identifier
+        }
+        let plugins = pluginGroups
+            .map { name, skills in
+                AgentMobileGatewayCapabilityOptionSnapshot(
+                    id: "plugin:\(name)",
+                    title: Self.mobileGatewayPluginDisplayName(name),
+                    subtitle: "\(skills.count) skills",
+                    isActive: skills.contains { pendingSkillIDs.contains($0.identifier) }
+                )
+            }
+            .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+
+        return AgentMobileGatewayCapabilitiesSnapshot(
+            providers: providers,
+            models: models,
+            skills: Array(skills),
+            experts: experts,
+            plugins: plugins,
+            activeProviderID: activeProviderID,
+            activeModelID: activeModelID
+        )
+    }
+
     func mobileGatewayValidateWorkspacePath(_ rawPath: String) throws -> String {
         let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -343,7 +430,14 @@ extension AppState: AgentMobileGatewayControlling {
     func mobileGatewaySendMessage(
         sessionID: UUID?,
         text: String,
-        workspacePath: String?
+        images: [AgentImageAttachment],
+        workspacePath: String?,
+        providerID: String?,
+        modelID: String?,
+        approvalModeID: String?,
+        skillIDs: [String],
+        expertIDs: [String],
+        pluginIDs: [String]
     ) throws -> AgentMobileGatewayCommandResult {
         if let sessionID {
             guard mobileGatewaySelectSession(id: sessionID) else {
@@ -361,11 +455,106 @@ extension AppState: AgentMobileGatewayControlling {
         }
         guard let runtime = activeRuntime else {
             let session = startNewAgentSession()
-            return try mobileGatewaySendMessage(sessionID: session.id, text: text, workspacePath: nil)
+            return try mobileGatewaySendMessage(
+                sessionID: session.id,
+                text: text,
+                images: images,
+                workspacePath: nil,
+                providerID: providerID,
+                modelID: modelID,
+                approvalModeID: approvalModeID,
+                skillIDs: skillIDs,
+                expertIDs: expertIDs,
+                pluginIDs: pluginIDs
+            )
         }
+        applyMobileGatewayRunContext(
+            providerID: providerID,
+            modelID: modelID,
+            approvalModeID: approvalModeID,
+            skillIDs: skillIDs,
+            expertIDs: expertIDs,
+            pluginIDs: pluginIDs
+        )
         runtime.input = text
+        runtime.pendingImages = images
         sendAgentMessage()
         return .ok(sessionID: runtime.id)
+    }
+
+    private func applyMobileGatewayRunContext(
+        providerID: String?,
+        modelID: String?,
+        approvalModeID: String?,
+        skillIDs: [String],
+        expertIDs: [String],
+        pluginIDs: [String]
+    ) {
+        if let rawProviderID = providerID?.trimmingCharacters(in: .whitespacesAndNewlines),
+           let providerUUID = UUID(uuidString: rawProviderID),
+           agentProviderLibrary.entries.contains(where: { $0.id == providerUUID }) {
+            setActiveProviderLibraryEntry(id: providerUUID)
+        }
+        if let rawModelID = modelID?.trimmingCharacters(in: .whitespacesAndNewlines), !rawModelID.isEmpty {
+            setAgentSessionModel(rawModelID)
+        }
+        if let mode = Self.mobileGatewayApprovalMode(from: approvalModeID) {
+            agentApprovalMode = mode
+            persistActiveAgentSession()
+        }
+
+        let entries = AgentSkillDirectory.list(includeDisabled: false)
+        let directIDs = Set(skillIDs.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })
+        let pluginPrefixes = pluginIDs
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .map { $0.hasPrefix("plugin:") ? String($0.dropFirst("plugin:".count)) : $0 }
+        let selectedSkills = entries.filter { entry in
+            if directIDs.contains(entry.identifier) { return true }
+            return pluginPrefixes.contains { prefix in
+                entry.identifier == prefix || entry.identifier.hasPrefix(prefix + ":")
+            }
+        }
+        selectedSkills.forEach { attachAgentSkill($0) }
+
+        expertIDs
+            .compactMap { AgentExpert(rawValue: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+            .forEach { activateAgentExpert($0) }
+    }
+
+    private static func mobileGatewayUniqueStrings(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        return values
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .filter { seen.insert($0).inserted }
+    }
+
+    private static func mobileGatewayPluginDisplayName(_ name: String) -> String {
+        switch name.lowercased() {
+        case "browser": return "Browser"
+        case "chrome": return "Chrome"
+        case "gmail": return "Gmail"
+        case "github": return "GitHub"
+        default: return name
+        }
+    }
+
+    private static func mobileGatewayApprovalMode(from raw: String?) -> AgentApprovalMode? {
+        let value = raw?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+        switch value {
+        case "ask_every_time", "request_every_time", "requesteverytime":
+            return .requestEveryTime
+        case "smart", "smart_approval":
+            return .smart
+        case "workspace_access", "workspace_writable", "workspaceaccess":
+            return .workspaceAccess
+        default:
+            return nil
+        }
     }
 
     func mobileGatewayStopTurn(sessionID: UUID?) throws -> AgentMobileGatewayCommandResult {
@@ -550,7 +739,8 @@ extension AppState: AgentMobileGatewayControlling {
         sessionID: UUID?,
         action: String,
         messageID: UUID?,
-        text: String?
+        text: String?,
+        images: [AgentImageAttachment]
     ) throws -> AgentMobileGatewayCommandResult {
         let runtime = try mobileGatewayRuntime(sessionID: sessionID)
         let normalizedAction = action
@@ -561,10 +751,10 @@ extension AppState: AgentMobileGatewayControlling {
         switch normalizedAction {
         case "add":
             let prompt = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            guard !prompt.isEmpty else {
+            guard !prompt.isEmpty || !images.isEmpty else {
                 throw AgentMobileGatewayCommandError.missingText
             }
-            runtime.queuedMessages.append(AgentQueuedMessage(text: prompt))
+            runtime.queuedMessages.append(AgentQueuedMessage(text: prompt, images: images))
             return .ok(sessionID: runtime.id, message: "Queued message added")
 
         case "clear":

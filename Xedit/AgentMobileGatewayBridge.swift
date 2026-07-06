@@ -55,6 +55,12 @@ enum AgentMobileGatewayCommandRouter {
                     controller: controller,
                     now: now
                 )
+            case "capabilities.get":
+                return capabilitiesEnvelope(
+                    id: envelope.id,
+                    controller: controller,
+                    now: now
+                )
             case "session.select":
                 let sessionID = try requiredSessionID(from: envelope)
                 guard controller.mobileGatewaySelectSession(id: sessionID) else {
@@ -64,11 +70,19 @@ enum AgentMobileGatewayCommandRouter {
             case "message.send":
                 let text = envelope.payload["text"]?.stringValue?
                     .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                guard !text.isEmpty else { throw AgentMobileGatewayCommandError.missingText }
+                let images = try imageAttachments(from: envelope)
+                guard !text.isEmpty || !images.isEmpty else { throw AgentMobileGatewayCommandError.missingText }
                 let result = try controller.mobileGatewaySendMessage(
                     sessionID: try optionalSessionID(from: envelope),
                     text: text,
-                    workspacePath: envelope.payload["workspace_path"]?.stringValue
+                    images: images,
+                    workspacePath: envelope.payload["workspace_path"]?.stringValue,
+                    providerID: envelope.payload["provider_id"]?.stringValue,
+                    modelID: envelope.payload["model"]?.stringValue ?? envelope.payload["model_id"]?.stringValue,
+                    approvalModeID: envelope.payload["approval_mode"]?.stringValue,
+                    skillIDs: stringArrayPayload("skills", from: envelope),
+                    expertIDs: stringArrayPayload("experts", from: envelope),
+                    pluginIDs: stringArrayPayload("plugins", from: envelope)
                 )
                 return ackEnvelope(
                     for: envelope,
@@ -163,7 +177,8 @@ enum AgentMobileGatewayCommandRouter {
                     sessionID: try optionalSessionID(from: envelope),
                     action: action,
                     messageID: messageID,
-                    text: envelope.payload["text"]?.stringValue
+                    text: envelope.payload["text"]?.stringValue,
+                    images: try imageAttachments(from: envelope)
                 )
                 return ackEnvelope(
                     for: envelope,
@@ -221,6 +236,47 @@ enum AgentMobileGatewayCommandRouter {
             payload: ["workspaces": .array(workspaces)],
             timestamp: isoTimestamp(now)
         )
+    }
+
+    static func capabilitiesEnvelope(
+        id: String? = nil,
+        controller: AgentMobileGatewayControlling,
+        now: Date = Date()
+    ) -> AgentMobileGatewayEnvelope {
+        let capabilities = controller.mobileGatewayCapabilities
+        var payload: [String: AgentMobileGatewayJSON] = [
+            "providers": .array(capabilities.providers.map(capabilityOptionJSON)),
+            "models": .array(capabilities.models.map(capabilityOptionJSON)),
+            "skills": .array(capabilities.skills.map(capabilityOptionJSON)),
+            "experts": .array(capabilities.experts.map(capabilityOptionJSON)),
+            "plugins": .array(capabilities.plugins.map(capabilityOptionJSON))
+        ]
+        if let activeProviderID = capabilities.activeProviderID {
+            payload["active_provider_id"] = .string(activeProviderID)
+        }
+        if let activeModelID = capabilities.activeModelID {
+            payload["active_model_id"] = .string(activeModelID)
+        }
+        return AgentMobileGatewayEnvelope(
+            id: id,
+            type: "capabilities.updated",
+            payload: payload,
+            timestamp: isoTimestamp(now)
+        )
+    }
+
+    private static func capabilityOptionJSON(
+        _ option: AgentMobileGatewayCapabilityOptionSnapshot
+    ) -> AgentMobileGatewayJSON {
+        var fields: [String: AgentMobileGatewayJSON] = [
+            "id": .string(option.id),
+            "title": .string(option.title),
+            "is_active": .bool(option.isActive)
+        ]
+        if let subtitle = option.subtitle, !subtitle.isEmpty {
+            fields["subtitle"] = .string(subtitle)
+        }
+        return .object(fields)
     }
 
     private static func workspaceJSON(_ workspace: AgentMobileGatewayWorkspaceSnapshot) -> AgentMobileGatewayJSON {
@@ -592,6 +648,64 @@ enum AgentMobileGatewayCommandRouter {
             return value
         }
         throw AgentMobileGatewayCommandError.missingAction(envelope.type)
+    }
+
+    private static func stringArrayPayload(
+        _ key: String,
+        from envelope: AgentMobileGatewayEnvelope
+    ) -> [String] {
+        guard case .array(let values)? = envelope.payload[key] else { return [] }
+        return values.compactMap { value in
+            value.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
+    }
+
+    private static func imageAttachments(from envelope: AgentMobileGatewayEnvelope) throws -> [AgentImageAttachment] {
+        guard case .array(let values)? = envelope.payload["images"] else { return [] }
+        return try values.compactMap { value in
+            guard let dataURL = imageDataURL(from: value) else { return nil }
+            return try imageAttachment(fromDataURL: dataURL)
+        }
+    }
+
+    private static func imageDataURL(from value: AgentMobileGatewayJSON) -> String? {
+        if let raw = value.stringValue {
+            return raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard case .object(let object) = value else { return nil }
+        if let raw = object["url"]?.stringValue ?? object["image_url"]?.stringValue {
+            return raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if case .object(let nested)? = object["image_url"],
+           let raw = nested["url"]?.stringValue {
+            return raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return nil
+    }
+
+    private static func imageAttachment(fromDataURL dataURL: String) throws -> AgentImageAttachment {
+        guard dataURL.hasPrefix("data:") else {
+            throw AgentMobileGatewayCommandError.invalidImagePayload("only data URLs are supported")
+        }
+        guard let comma = dataURL.firstIndex(of: ",") else {
+            throw AgentMobileGatewayCommandError.invalidImagePayload("missing data URL payload")
+        }
+        let metadata = String(dataURL[dataURL.index(dataURL.startIndex, offsetBy: 5)..<comma])
+        let dataBase64 = String(dataURL[dataURL.index(after: comma)...])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = metadata.split(separator: ";").map(String.init)
+        let mimeType = parts.first?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        guard mimeType.hasPrefix("image/") else {
+            throw AgentMobileGatewayCommandError.invalidImagePayload("mime type must be image/*")
+        }
+        guard parts.contains(where: { $0.lowercased() == "base64" }) else {
+            throw AgentMobileGatewayCommandError.invalidImagePayload("image data URL must be base64")
+        }
+        guard !dataBase64.isEmpty,
+              Data(base64Encoded: dataBase64, options: [.ignoreUnknownCharacters]) != nil else {
+            throw AgentMobileGatewayCommandError.invalidImagePayload("base64 image data is invalid")
+        }
+        return AgentImageAttachment(mimeType: mimeType, dataBase64: dataBase64)
     }
 
     private static func optionalPayloadUUID(

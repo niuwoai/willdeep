@@ -262,6 +262,23 @@ struct AgentMobileGatewayWorkspaceSnapshot: Equatable {
     var repositoryRoot: String?
 }
 
+struct AgentMobileGatewayCapabilityOptionSnapshot: Equatable {
+    var id: String
+    var title: String
+    var subtitle: String?
+    var isActive: Bool
+}
+
+struct AgentMobileGatewayCapabilitiesSnapshot: Equatable {
+    var providers: [AgentMobileGatewayCapabilityOptionSnapshot]
+    var models: [AgentMobileGatewayCapabilityOptionSnapshot]
+    var skills: [AgentMobileGatewayCapabilityOptionSnapshot]
+    var experts: [AgentMobileGatewayCapabilityOptionSnapshot]
+    var plugins: [AgentMobileGatewayCapabilityOptionSnapshot]
+    var activeProviderID: String?
+    var activeModelID: String?
+}
+
 struct AgentMobileGatewayWorktreeFileSnapshot: Equatable {
     var path: String
     var kind: String
@@ -295,9 +312,21 @@ protocol AgentMobileGatewayControlling: AnyObject {
     func mobileGatewayRuntimeIsResponding(sessionID: UUID) -> Bool
     func mobileGatewayStartSession(workspacePath: String?) -> AgentSession
     func mobileGatewaySelectSession(id: UUID) -> Bool
-    func mobileGatewaySendMessage(sessionID: UUID?, text: String, workspacePath: String?) throws -> AgentMobileGatewayCommandResult
+    func mobileGatewaySendMessage(
+        sessionID: UUID?,
+        text: String,
+        images: [AgentImageAttachment],
+        workspacePath: String?,
+        providerID: String?,
+        modelID: String?,
+        approvalModeID: String?,
+        skillIDs: [String],
+        expertIDs: [String],
+        pluginIDs: [String]
+    ) throws -> AgentMobileGatewayCommandResult
     func mobileGatewayStopTurn(sessionID: UUID?) throws -> AgentMobileGatewayCommandResult
     var mobileGatewayWorkspaceList: [AgentMobileGatewayWorkspaceSnapshot] { get }
+    var mobileGatewayCapabilities: AgentMobileGatewayCapabilitiesSnapshot { get }
     func mobileGatewayValidateWorkspacePath(_ rawPath: String) throws -> String
     var mobileGatewayPendingToolApprovals: [AgentMobileGatewayToolApprovalSnapshot] { get }
     var mobileGatewayPendingPatchProposals: [AgentMobileGatewayPatchSnapshot] { get }
@@ -334,7 +363,8 @@ protocol AgentMobileGatewayControlling: AnyObject {
         sessionID: UUID?,
         action: String,
         messageID: UUID?,
-        text: String?
+        text: String?,
+        images: [AgentImageAttachment]
     ) throws -> AgentMobileGatewayCommandResult
 }
 
@@ -366,6 +396,7 @@ enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
     case workspacePathNotFound(String)
     case workspacePathNotDirectory(String)
     case workspacePathForbidden(String)
+    case invalidImagePayload(String)
 
     var errorDescription: String? {
         switch self {
@@ -423,6 +454,8 @@ enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
             return "Workspace path is not a directory: \(path)."
         case .workspacePathForbidden(let path):
             return "Workspace path is not allowed: \(path)."
+        case .invalidImagePayload(let reason):
+            return "Invalid mobile image payload: \(reason)."
         }
     }
 }

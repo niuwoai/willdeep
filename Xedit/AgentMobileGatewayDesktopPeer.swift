@@ -92,6 +92,7 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         }
         send(AgentMobileGatewayCommandRouter.snapshotEnvelope(controller: appState))
         send(AgentMobileGatewayCommandRouter.workspaceListEnvelope(controller: appState))
+        send(AgentMobileGatewayCommandRouter.capabilitiesEnvelope(controller: appState))
         for approval in appState.mobileGatewayPendingToolApprovals {
             send(AgentMobileGatewayCommandRouter.toolPendingEnvelope(approval))
         }

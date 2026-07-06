@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.130.0-rc2 - 2026-07-06
+
+### Fixed
+- **窗口收窄时左侧会话栏被挤出左缘 / 中间聊天区外溢右缘** —— 中间 chat 列的 frame 只写了 `maxWidth: .infinity`,按 SwiftUI frame 语义其最小宽度会回退为子内容本征最小宽,统计卡片 / composer 等压不动的内容把中间列下限顶得比可用空间还宽,整条 HStack 溢出后被父级默认居中:左栏被推出窗体左缘、chat 内容溢出右缘。现在中间列显式 `minWidth: 0` 成为真正的唯一可压缩列(压不下的内容靠左、在右缘被 `.clipped()` 裁掉),外层 frame 改 `.leading` 对齐,即便平铺工具 / 编程式 resize 把窗口压到固定列宽之和以下,左栏也钉在左缘不再被遮挡。
+
+### Changed
+- 版本号从 **1.130.0-rc1** 提升为 **1.130.0-rc2**,并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
 ## 1.130.0-rc1 - 2026-07-06
 
 ### Added
@@ -7,10 +15,52 @@
 
 ### Fixed
 - **手机网关设置页默认不再铺开高级参数** —— “显示高级信息”改为本次设置视图内的临时状态，不再记住历史展开值；旧用户曾经打开过高级信息，也不会每次进来都看到 IP、端口、协议、可执行路径等一大屏参数。
+- **Settings 里的图像理解配置立即作用到当前聊天** —— Settings 窗口不再新建独立 `AppState`，而是复用 `EditorAppStateRegistry` 当前 AppState；切换 Image Understanding 到 some.im 后，正在聊天的 Agent 会直接拿到新的 provider/baseURL/model/API key，不再继续用旧的 DashScope 配置。
+- **获取视觉模型列表成功后同步提交当前图像理解配置** —— 避免用户看到 `Fetched ... image models` 后误以为已生效，但下一次发图仍按旧配置请求。
 
 ### Changed
 - **公共中继配置再收进自定义区域** —— `j.niuwoai.com` 默认中继地址和 relay room 字段仍保留给自建兼容 WebSocket 中继服务的用户，但默认藏在“自定义中继服务”折叠组里；普通用户只看连接方式、状态和配对二维码即可。
 - 版本号从 **1.130.0** 调整为 **1.130.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.130.0 - 2026-07-06
+
+### Fixed
+- **Android 发图终于进入 Mac Agent 图片链路** —— `message.send` 和 `queue.update` 现在会解析 Android 上传的 `payload.images` data URL，转成 Mac 原生 `AgentImageAttachment` 后进入现有 composer / queued message / Image Understanding 流程；纯图片消息也允许发送，不再因为缺少 `payload.text` 被拒绝。
+
+### Changed
+- 本次记录对齐当前产品版本 **1.130.0**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.129.0-rc47 - 2026-07-06
+
+### Fixed
+- **纯「思考中」切换不再自动开合右侧任务监控面板** —— `AgentTaskMonitorSnapshot` 的 `isAgentResponding` 虽然被设计为不参与自动展开判定，却仍是 `Equatable` 的比较字段，导致 agent 每次「思考↔空闲」翻转都会触发 `handleTaskMonitorSnapshotChange`；当用户手动打开、当前无后台内容的面板遇到一次 thinking 切换时，会被「无可见监控内容 → 收起」分支自动关掉。现在当两次快照除 `isAgentResponding` 外其余字段全等时判定为纯思考态切换，直接跳过、不改动面板开合状态。
+
+### Changed
+- 版本号从 **1.129.0-rc46** 提升为 **1.129.0-rc47**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.129.0-rc46 - 2026-07-06
+
+### Added
+- **Mobile Gateway 下发真实运行能力给 Android** —— Swift desktop peer 新增 `capabilities.get` / `capabilities.updated` 协议路径，向手机同步当前 provider、模型、技能、专家和插件列表；Android 发送 `message.send` 时可带回 `provider_id`、`model`、`skills`、`experts` 和 `plugins`，Mac 端在发起这一轮 Agent 前应用这些运行上下文。
+
+### Changed
+- 版本号从 **1.129.0-rc45** 提升为 **1.129.0-rc46**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.129.0-rc45 - 2026-07-06
+
+### Fixed
+- **Agent composer「更多设置」弹层不再抢输入焦点** —— workspace / model / mode / 审批 / 执行器 / 插件 / 专家这些 composer pill 统一声明 `focusable(false)`；「更多设置」popover、专家开关、插件行和 MCP 只读行也补齐焦点禁用，避免打开弹层后把键盘焦点从输入框拿走。
+
+### Changed
+- 版本号从 **1.129.0-rc44** 提升为 **1.129.0-rc45**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.129.0-rc44 - 2026-07-06
+
+### Fixed
+- **Agent 左侧 workspace 列表更安静也更顺手** —— workspace 行尾的新建会话 `+` 不再常驻显示，只有鼠标移到该 workspace 行或其会话列表区域时才出现；点击 workspace 名称本身现在也会展开 / 收起会话列表，不再必须精确点文件夹图标。
+
+### Changed
+- 版本号从 **1.129.0-rc43** 提升为 **1.129.0-rc44**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
 
 ## 1.129.0-rc43 - 2026-07-06
 

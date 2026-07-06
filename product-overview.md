@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-06 | Current version: v1.130.0-rc1
+> Last updated: 2026-07-06 | Current version: v1.130.0-rc2
 
 ## Positioning
 
@@ -16,6 +16,11 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 
 - **截图工具与工具结果图片直通视觉模型（1.130.0-rc1）** —— 新增 `capture_screenshot` 工具，可截取本机 Mac 屏幕、Android 设备/模拟器（adb）或 iOS 模拟器（simctl），图片在捕获时即缩放到 ≤1568 长边再随工具结果返回。`AgentToolResult` 新增 `images` 字段、`.tool` 消息携带图片：Anthropic 等视觉模型以 `tool_result` image block 直接“看到”像素并多轮重发，DeepSeek / OpenAI Chat / Gemini 等自动降级为文本 payload（含 OCR + 保存路径，可再调 `visual_qa_screenshot`）。工具卡片内联渲染缩略图（ImageIO 下采样，避免内存失控），点击在预览中打开完整图。
 - **Mobile Gateway 设置默认收起高级参数（1.130.0-rc1）** —— 手机网关设置页不再记住上次展开高级信息的状态；每次进入都先展示连接方式、状态和配对二维码。IP、端口、协议、可执行路径等诊断项仍可手动展开；`j.niuwoai.com` 这类默认公共中继坐标再收进「自定义中继服务」，只有自建兼容 WebSocket 中继时才需要修改。
+- **Settings 与 Agent 共享运行态配置（1.130.0-rc1）** —— Settings 窗口不再创建独立 `AppState`；图像理解 provider/baseURL/model/API key 保存后会立即作用到当前聊天窗口，获取视觉模型列表成功时也会提交当前 Image Understanding 配置，避免设置页显示 some.im、聊天请求仍走 DashScope 的错位。
+- **Mobile Gateway 图片附件接入 Agent（1.130.0）** —— Android `message.send` / `queue.update` 里的 `payload.images` 现在由 Mac desktop peer 解析为原生 `AgentImageAttachment`，进入现有 Agent composer / 队列 / Image Understanding 流程；手机端发图不再退化成“请提供图片路径”。
+- **Mobile Gateway 运行能力下发（1.129.0-rc46）** —— Android 端现在可通过 `capabilities.get` 获取 Mac 当前 provider、模型、技能、专家和插件列表，并在 `message.send` 中回传所选 `provider_id`、`model`、`skills`、`experts` 和 `plugins`；Mac 端在发起移动端这一轮 Agent 前应用这些运行上下文，手机不再依赖本地写死的模型/技能占位列表。
+- **Agent composer 控件焦点收敛（1.129.0-rc45）** —— composer 底部的 workspace / model / mode / 审批 / 执行器 / 插件 / 专家 pill，以及「更多设置」popover、专家开关、插件行和 MCP 只读行统一声明 `focusable(false)`，避免打开设置弹层或切换工具包时抢走输入框键盘焦点；MCP 在该菜单中仍保持只读展示，因为 MCP server 是配置级启用能力，不是当前会话的可勾选附件。
+- **Agent workspace 侧边栏 hover 操作收敛（1.129.0-rc44）** —— 左侧 workspace 分组的新建会话 `+` 改为按目标显隐：鼠标移到 workspace 标题行或该 workspace 下任一会话区域时才显示并可点击，平时不再形成一列常驻小图标；workspace 的文件夹图标、名称和远端徽标现在共同作为展开 / 收起热区，点击名称即可折叠或展开该工作区会话列表。
 - **聊天历史终端摘要收敛（1.129.0-rc42）** —— Agent 聊天历史不再把 `terminal_send_command`、`terminal_snapshot`、`terminal_send_control` 分别刷成多条“已调用 terminal …”：最新 assistant 输出只显示一条聚合的「终端操作」摘要；历史 assistant 输出隐藏终端相关摘要，读取文件、搜索代码等非终端工具摘要仍保留，既少废话也不丢关键上下文。
 - **智能审批 AI 裁判修复 + 人工历史参照 + 缓存优化（1.129.0-rc43）** —— 修复「智能审批几乎从不调用 AI 裁判」的老 bug（本机审计日志 `llmJudge` 命中 0 次）。① 工具覆盖：把 `terminal_send_command` 纳入与 `run_command` 相同的「静态白名单 → LLM 裁判」链路（此前直接绕过裁判弹人工，是人工审批的最大来源），`terminal_send_control` 也经伪命令送裁判。② 请求修复：`max_tokens` 从 16 提到 512（Responses 1024），避免被 reasoning 模型思考过程烧光；OpenAI-兼容响应 `content` 改可选，`content=null` 不再整体解码失败静默 `return false`；超时 12s→20s。③ 可观测：每次裁判结果（allow/deny/unavailable + 原因）落盘 `AgentAudit/judge.jsonl`。④ 人工历史参照：从审计日志抽取操作者过去手动批准/拒绝的命令样本，去重截断、注入标记中和、批准≤14 拒绝≤6，作为软性 few-shot 附到裁判 system prompt（不覆盖安全规则）。⑤ prompt 缓存优化：历史块不每次重取，内存缓存最多每 30 分钟重建，使「安全规则+历史」system 前缀跨调用字节一致命中 provider 缓存，Anthropic 额外给 system 块打 `cache_control: ephemeral`，每次只有末尾 `<command>` 变化。
 - **版本一致性脚本去短剧化（1.129.0-rc41）** —— `scripts/version_consistency.rb` 回到通用版本源检查：只核对 Xcode、Go agent、Help、README badge、product overview、Mobile Gateway、Agent Harness 和 CHANGELOG 顶部版本，不再扫描短剧/剧本 cutoff、tryout、manual queue 或短剧 delivery gate；短剧交付守门继续由短剧专用 contract / acceptance / handoff 脚本承担。

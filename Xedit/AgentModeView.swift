@@ -95,11 +95,16 @@ struct AgentModeView: View {
                 AgentChatComposer()
                 AgentChatStatusBar()
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // `minWidth: 0` 是关键:frame 只写 `maxWidth: .infinity` 时,
+            // 最小宽度会回退为子内容的本征最小宽(SwiftUI frame 语义),
+            // 统计卡片 / composer 这类压不动的子 view 会把中间列的下限
+            // 顶得比可用空间还宽 → 整条 HStack 溢出、被父级居中,左栏
+            // 被挤出窗体左缘、chat 内容溢出右缘(rc47 用户截图)。显式
+            // `minWidth: 0` 让中间列无条件接受父级提议的宽度,成为真正
+            // 的唯一可压缩列;压不下的内容按 `.leading` 靠左,在右缘被
+            // `.clipped()` 裁掉,不再外溢盖住左右邻居。
+            .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .background(skin.windowBackground)
-            // 中间列是唯一可压缩列:窗口被压到比内容窄时由它吃差额,
-            // `.clipped()` 让 composer / transcript 在列边界处自我裁切,
-            // 而不是按本征宽度外溢、用不透明背景盖住左侧会话栏。
             .clipped()
 
             if sidePanel != nil {
@@ -129,7 +134,11 @@ struct AgentModeView: View {
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .frame(minWidth: contentMinWidth, maxWidth: .infinity, maxHeight: .infinity)
+        // `alignment: .leading`:万一窗口仍被压到比「左栏 + 分隔线 +
+        // 右面板」的固定宽度之和还窄(contentMinSize 只挡交互式拖拽,
+        // 挡不住平铺工具 / 编程式 resize),HStack 溢出时不再默认居中
+        // 把左栏推出窗体左缘 —— 靠左钉住,溢出只从右缘裁掉。
+        .frame(minWidth: contentMinWidth, maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(skin.windowBackground)
         .background(AgentWindowMinWidthSetter(minWidth: contentMinWidth))
         .sheet(isPresented: $isSessionSearchPresented) {
@@ -186,6 +195,21 @@ struct AgentModeView: View {
         if oldSnapshot.sessionID != newSnapshot.sessionID {
             lastTaskMonitorSnapshot = newSnapshot
             didObserveAgentTaskMonitorActivity = newSnapshot.hasAutoOpenMonitorContent
+            return
+        }
+
+        // 纯「思考中」开合:除 isAgentResponding 外其余字段全等,说明这次
+        // 快照变化只是 agent 在思考↔空闲之间翻转,没有任何实质监控内容
+        // 变动。此时不应自动改动右侧任务监控面板的开合状态 —— 否则用户
+        // 手动打开、当前无后台内容的面板,会因为一次 thinking 切换被下方
+        // `hasVisibleMonitorContent` 收起分支自动关掉。
+        var respondingNormalized = newSnapshot
+        respondingNormalized.isAgentResponding = oldSnapshot.isAgentResponding
+        if respondingNormalized == oldSnapshot {
+            if newSnapshot.hasAutoOpenMonitorContent {
+                didObserveAgentTaskMonitorActivity = true
+            }
+            lastTaskMonitorSnapshot = newSnapshot
             return
         }
 

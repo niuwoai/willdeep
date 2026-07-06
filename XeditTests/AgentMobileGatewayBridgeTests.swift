@@ -58,9 +58,42 @@ struct AgentMobileGatewayBridgeTests {
             FakeMobileGatewayController.SentMessage(
                 sessionID: session.id,
                 text: "Implement the Android bridge",
+                images: [],
                 workspacePath: nil
             )
         ])
+    }
+
+    @Test @MainActor
+    func messageSendRoutesAndroidImagesToSelectedSession() {
+        let session = AgentSession(title: "Image task")
+        let controller = FakeMobileGatewayController(sessions: [session], activeSessionID: nil)
+        let response = AgentMobileGatewayCommandRouter.handle(
+            AgentMobileGatewayEnvelope(
+                id: "cmd-image",
+                type: "message.send",
+                sessionID: session.id.uuidString,
+                payload: [
+                    "text": .string("识别一下图片"),
+                    "images": .array([
+                        .object([
+                            "type": .string("image_url"),
+                            "image_url": .object([
+                                "url": .string("data:image/png;base64,aGVsbG8=")
+                            ])
+                        ])
+                    ])
+                ]
+            ),
+            controller: controller,
+            now: fixedDate
+        )
+
+        #expect(response.type == "ack")
+        #expect(response.sessionID == session.id.uuidString)
+        #expect(controller.sentMessages.last?.images.count == 1)
+        #expect(controller.sentMessages.last?.images.first?.mimeType == "image/png")
+        #expect(controller.sentMessages.last?.images.first?.dataBase64 == "aGVsbG8=")
     }
 
     @Test @MainActor
@@ -76,7 +109,14 @@ struct AgentMobileGatewayBridgeTests {
         let result = try appState.mobileGatewaySendMessage(
             sessionID: session.id,
             text: "Implement the Android live acceptance gate",
-            workspacePath: nil
+            images: [],
+            workspacePath: nil,
+            providerID: nil,
+            modelID: nil,
+            approvalModeID: nil,
+            skillIDs: [],
+            expertIDs: [],
+            pluginIDs: []
         )
 
         #expect(result.sessionID == session.id)
@@ -568,7 +608,8 @@ struct AgentMobileGatewayBridgeTests {
                 sessionID: session.id,
                 action: "send_now",
                 messageID: queuedID,
-                text: nil
+                text: nil,
+                images: []
             )
         ])
     }
@@ -976,6 +1017,7 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
     struct SentMessage: Equatable {
         var sessionID: UUID?
         var text: String
+        var images: [AgentImageAttachment]
         var workspacePath: String?
     }
 
@@ -1029,6 +1071,7 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
         var action: String
         var messageID: UUID?
         var text: String?
+        var images: [AgentImageAttachment]
     }
 
     init(sessions: [AgentSession], activeSessionID: UUID?) {
@@ -1043,6 +1086,17 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
     var mobileGatewaySessions: [AgentSession] { sessions }
     var mobileGatewayActiveSessionID: UUID? { activeSessionID }
     var mobileGatewayWorkspaceList: [AgentMobileGatewayWorkspaceSnapshot] { workspaceListSnapshots }
+    var mobileGatewayCapabilities: AgentMobileGatewayCapabilitiesSnapshot {
+        AgentMobileGatewayCapabilitiesSnapshot(
+            providers: [],
+            models: [],
+            skills: [],
+            experts: [],
+            plugins: [],
+            activeProviderID: nil,
+            activeModelID: nil
+        )
+    }
     var mobileGatewayPendingToolApprovals: [AgentMobileGatewayToolApprovalSnapshot] { pendingTools }
     var mobileGatewayPendingPatchProposals: [AgentMobileGatewayPatchSnapshot] { pendingPatches }
     var mobileGatewayJobs: [AgentMobileGatewayJobSnapshot] { jobs }
@@ -1083,14 +1137,21 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
     func mobileGatewaySendMessage(
         sessionID: UUID?,
         text: String,
-        workspacePath: String?
+        images: [AgentImageAttachment],
+        workspacePath: String?,
+        providerID: String?,
+        modelID: String?,
+        approvalModeID: String?,
+        skillIDs: [String],
+        expertIDs: [String],
+        pluginIDs: [String]
     ) throws -> AgentMobileGatewayCommandResult {
         if let sessionID {
             guard mobileGatewaySelectSession(id: sessionID) else {
                 throw AgentMobileGatewayCommandError.sessionNotFound(sessionID)
             }
         }
-        sentMessages.append(SentMessage(sessionID: sessionID, text: text, workspacePath: workspacePath))
+        sentMessages.append(SentMessage(sessionID: sessionID, text: text, images: images, workspacePath: workspacePath))
         return .ok(sessionID: sessionID ?? activeSessionID)
     }
 
@@ -1161,14 +1222,16 @@ private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
         sessionID: UUID?,
         action: String,
         messageID: UUID?,
-        text: String?
+        text: String?,
+        images: [AgentImageAttachment]
     ) throws -> AgentMobileGatewayCommandResult {
         queueUpdates.append(
             QueueUpdate(
                 sessionID: sessionID,
                 action: action,
                 messageID: messageID,
-                text: text
+                text: text,
+                images: images
             )
         )
         return .ok(sessionID: sessionID ?? activeSessionID, message: "Queue updated")

@@ -39,8 +39,7 @@ struct WillDeepApp: App {
         .defaultSize(width: defaultSize.width, height: defaultSize.height)
 
         Settings {
-            EditorSettingsView()
-                .environmentObject(AppState())
+            SettingsRootView()
         }
     }
 
@@ -53,6 +52,25 @@ struct WillDeepApp: App {
         let width = max(900, visible.width * 0.80)
         let height = max(600, visible.height * 0.85)
         return CGSize(width: width, height: height)
+    }
+}
+
+private struct SettingsRootView: View {
+    @ObservedObject private var registry = EditorAppStateRegistry.shared
+
+    var body: some View {
+        Group {
+            if let appState = registry.current {
+                EditorSettingsView()
+                    .environmentObject(appState)
+                    .id(ObjectIdentifier(appState))
+            } else {
+                Color.clear
+            }
+        }
+        .onAppear {
+            registry.ensureHeadlessFallback()
+        }
     }
 }
 
