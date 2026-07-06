@@ -39,6 +39,7 @@ enum AgentSidePanelKind: String, CaseIterable, Identifiable {
     case diff
     case files
     case terminal
+    case devServer
     case backgroundTasks
     case mediaTasks
     case shortDrama
@@ -55,6 +56,8 @@ enum AgentSidePanelKind: String, CaseIterable, Identifiable {
             return .shortDrama
         case .embeddedBrowser:
             return .browserOps
+        case .devServer:
+            return .webCoding
         default:
             return nil
         }
@@ -71,6 +74,7 @@ enum AgentSidePanelKind: String, CaseIterable, Identifiable {
         case .diff: return L10n.AgentSidePanel.diff
         case .files: return L10n.AgentSidePanel.files
         case .terminal: return L10n.AgentSidePanel.terminal
+        case .devServer: return "Dev Server"
         case .backgroundTasks: return "任务监控"
         case .mediaTasks: return "媒体任务"
         case .shortDrama: return "短剧"
@@ -89,6 +93,7 @@ enum AgentSidePanelKind: String, CaseIterable, Identifiable {
         case .diff: return "rectangle.split.2x1.fill"
         case .files: return "folder"
         case .terminal: return "terminal"
+        case .devServer: return "server.rack"
         case .backgroundTasks: return "list.bullet.rectangle"
         case .mediaTasks: return "photo.stack"
         case .shortDrama: return "rectangle.stack.badge.play"
@@ -107,6 +112,13 @@ struct AgentSidePanelHost: View {
     @State private var hasMountedTerminalPanel = false
     /// Width is driven by the draggable divider in AgentModeView.
     var width: CGFloat = 320
+    /// 拖拽调宽期间的「排版宽度」= 拖拽起点的已提交宽度。内容始终按
+    /// 它布局(逐帧稳定,不重折行/不重排 WebView),外层 frame 才跟随
+    /// `width` 移动;内容钉在 trailing(窗口右缘拖拽中不动),分隔条
+    /// 一侧多出的部分裁掉。非拖拽期与 `width` 相等,等价于旧行为。
+    var contentWidth: CGFloat? = nil
+
+    private var layoutWidth: CGFloat { contentWidth ?? width }
 
     var body: some View {
         let palette = appState.editorSettings.interfaceSkin.palette
@@ -115,7 +127,9 @@ struct AgentSidePanelHost: View {
             Rectangle().fill(palette.hairline).frame(height: 1)
             content
         }
-        .frame(width: width)
+        .frame(width: layoutWidth)
+        .frame(width: width, alignment: .trailing)
+        .clipped()
         .background(palette.panelFill)
         .onAppear {
             rememberTerminalMountIfNeeded(kind)
@@ -195,18 +209,21 @@ struct AgentSidePanelHost: View {
         case .backgroundTasks:
             // 必须把面板宽度传进去 —— Rail 默认把自己 `.frame(width: 320)`
             // 锁死,侧面板拖到比 320 窄时它会溢出面板、向左盖住 chat
-            // (「突破左边界」)。传 width 让它跟随面板宽度。
-            AgentTaskMonitorRail(width: width)
+            // (「突破左边界」)。传 layoutWidth:拖拽期间保持在拖拽
+            // 起点宽度,子面板不逐鼠标事件重排。
+            AgentTaskMonitorRail(width: layoutWidth)
         case .mediaTasks:
-            AgentMediaTasksPanel(width: width)
+            AgentMediaTasksPanel(width: layoutWidth)
+        case .devServer:
+            AgentDevServerPanel(width: layoutWidth)
         case .shortDrama:
-            AgentShortDramaPanel(store: appState.agentShortDramaStore, width: width)
+            AgentShortDramaPanel(store: appState.agentShortDramaStore, width: layoutWidth)
         case .embeddedBrowser:
-            AgentEmbeddedBrowserPanel(width: width)
+            AgentEmbeddedBrowserPanel(width: layoutWidth)
         case .widget:
-            AgentSidePanelWidgetView(width: width)
+            AgentSidePanelWidgetView(width: layoutWidth)
         case .imageEditor:
-            AgentImageEditPanel(width: width)
+            AgentImageEditPanel(width: layoutWidth)
         case .diff:
             AgentSidePanelDiffView()
         case .files:
@@ -1084,7 +1101,8 @@ struct AgentSidePanelWidgetView: View {
         let widget = AgentWidget(
             title: fields["title"] ?? url.deletingPathExtension().lastPathComponent,
             html: html,
-            contextLines: widgetHTMLContextLines(action: action, fields: fields, url: url)
+            contextLines: widgetHTMLContextLines(action: action, fields: fields, url: url),
+            sourceBaseURL: url.deletingLastPathComponent()
         )
         AgentWidgetRegistry.shared.add(widget, forRuntime: runtimeID)
         appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .widget)

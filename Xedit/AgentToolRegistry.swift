@@ -202,6 +202,15 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "activate_expert",
+            description: "Activate a specialist expert pack for the current Agent session after the user agrees. Use this when a task clearly matches an available expert but it is not active yet, for example web UI work that should use the Web Programming expert.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "expert_id", type: .string, description: "Expert raw id to activate. Supported values include: shortDrama, browserOps, webCoding.", required: true),
+                AgentToolParameter(name: "reason", type: .string, description: "Brief user-facing reason for activating this expert.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "add_memory",
             description: "Save a durable user or project memory when the conversation reveals a preference, rule, recurring fact, or reusable constraint that should influence future turns. Do not store secrets. Requires approval outside autonomous modes.",
             risk: .write,
@@ -1349,7 +1358,7 @@ enum AgentToolRegistry {
                 return activeExperts.contains(.shortDrama)
             }
             if descriptor.name.hasPrefix("embedded_browser_") || descriptor.name.hasPrefix("chrome_") {
-                return activeExperts.contains(.browserOps)
+                return activeExperts.contains(.browserOps) || activeExperts.contains(.webCoding)
             }
             return true
         }

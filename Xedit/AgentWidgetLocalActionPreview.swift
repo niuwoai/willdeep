@@ -165,7 +165,8 @@ extension AppState {
                 "html_path: \(url.path)",
                 "widget_action_id: \(action.id.uuidString)",
                 "</widget-tool-action-html>"
-            ]
+            ],
+            sourceBaseURL: url.deletingLastPathComponent()
         )
         AgentWidgetRegistry.shared.add(widget, forRuntime: runtimeID)
         agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .widget)

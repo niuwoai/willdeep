@@ -1,12 +1,44 @@
 # Changelog
 
-## 1.130.0-rc5 - 2026-07-06
+## 1.131.0-rc2 - 2026-07-06
 
 ### Fixed
-- **`terminal_snapshot` 一直显示旧内容（终端快照读到陈旧屏幕）** —— 根因是 SwiftTerm 的 `LocalProcessTerminalView` 把 PTY 字节固定在**主线程**上 parse 进终端模型（可见 NSView 也在主线程读这个模型来绘制）。当主线程被 Agent 流式渲染富 markdown 占满时，这条 parse 被饿死、模型落后于真实输出，于是快照读到的是旧屏幕。而 `process` 是 `internal(set)`、`LocalProcess` 又写死主队列，子类无法注入后台队列。现在 `AgentLocalProcessTerminalView` 不再继承 `LocalProcessTerminalView`，改为 `TerminalView` + 自持一个 `LocalProcess(dispatchQueue:)`，把 PTY 交付放到专用后台串行队列：`dataReceived` 在该队列上喂一个 **headless 镜像 `Terminal`**（快照即读它，永远新鲜、不被主线程饿死），同时把**可见终端**的模型+绘制 feed 有序 marshal 回主线程（可见终端行为与体验完全不变）。`terminal_snapshot` 改为从镜像在后台队列读取屏幕文本，主线程只留一次极廉价的元数据 hop（仍受 3s 超时护栏保护）。ZMODEM 传输期间镜像暂停喂养（原始协议字节对快照无意义），echo 检测/ZMODEM 桥（`@MainActor`）等主线程亲和逻辑保持在主线程、无数据竞争。
+- **`terminal_snapshot` 一直显示旧内容（终端快照读到陈旧屏幕）** —— 根因是 SwiftTerm 的 `LocalProcessTerminalView` 把 PTY 字节固定在**主线程**上 parse 进终端模型（可见 NSView 也在主线程读这个模型来绘制）。当主线程被 Agent 流式渲染富 markdown 占满时，这条 parse 被饿死、模型落后于真实输出，于是快照读到的是旧屏幕。而 `process` 是 `internal(set)`、`LocalProcess` 又写死主队列，子类无法注入后台队列。现在 `AgentLocalProcessTerminalView` 不再继承 `LocalProcessTerminalView`，改为 `TerminalView` + 自持一个 `LocalProcess(dispatchQueue:)`，把 PTY 交付放到专用后台串行队列：`dataReceived` 在该队列上喂一个 **headless 镜像 `Terminal`**（快照即读它，永远新鲜、不被主线程饿死），同时把**可见终端**的模型+绘制 feed 有序 marshal 回主线程（可见终端行为与体验完全不变）。`terminal_snapshot` 改为从镜像在后台队列读取屏幕文本，主线程只留一次极廉价的元数据 hop（仍受 3s 超时护栏保护）。ZMODEM 传输期间镜像暂停喂养（原始协议字节对快照无意义），echo 检测/ZMODEM 桥（`@MainActor`）等主线程亲和逻辑保持在主线程、无数据竞争。Agent 终端与编辑器内置终端两处共享此视图类，同步接入新的 `AgentTerminalProcessDelegate`。
 
 ### Changed
-- 版本号从 **1.130.0-rc2** 提升为 **1.130.0-rc5**（rc3/rc4 为并行分支占用，本终端修复取下一个空号），并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+- 版本号从 **1.131.0-rc1** 提升为 **1.131.0-rc2**（bugfix，递增 rc），并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.131.0-rc1 - 2026-07-06
+
+### Fixed
+- **AI 回复结束后聊天区补滚到底部** —— 自动滚动此前只在「消息/工具调用条数变化」时触发（防逐 token 滚动钉死主线程的既有设计），而 assistant 消息在流式开始、内容还近乎空白时就已 append 并完成那次滚动；之后长回复在视口下方持续长高、条数不变、再无滚动，输出结束时视口停在答案中段。现在监听回合结束（`isAgentResponding` true→false），等布局落定后一次性滚到底部哨兵，用户总能看到最新内容；流式期间行为不变、零逐 token 开销。
+
+### Added
+- **Web 编程专家** —— 新增 `webCoding` 专家，覆盖截图生成 UI、本地 HTML/CSS/图片资源预览、Vite/Next/React/Vue 项目预览、浏览器截图 QA 与 dev server 编排；Agent 提示词会在短剧/Web 编程等场景引导用户确认激活对应专家。
+- **专家激活工具** —— 新增 `activate_expert`，模型可在 `ask_user` 确认后为当前会话激活专家，而不是只提示用户手动找开关。
+- **Dev Server 侧栏面板** —— 新增右侧 `Dev Server` tab，激活 Web 编程专家后可查看当前会话的前端/后端 dev server 与 `tail -f` 后台任务，读取输出尾部、停止任务，并把启动/重启/tail 日志请求回填给 Agent。
+
+### Changed
+- **本地 HTML 预览资源增强** —— `show_widget(html_path:)`、widget action 预览和 widget 源文件重载都会把 HTML 所在目录作为 WebView baseURL，允许用户引用同目录下的 CSS、JS 和图片文件，同时继续禁止网络连接和任意本地跳转。
+- 版本号从 **1.130.0-rc4** 提升为 **1.131.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.130.0-rc4 - 2026-07-06
+
+### Fixed
+- **Agent 右侧面板「…」菜单不再重复列出快捷入口** —— 顶部快捷条已有的 Diff / Terminal / Preview / Files 从更多菜单中移除；更多菜单只展示非快捷面板入口，当前已有面板打开时仍保留「关闭面板」操作。
+- **用户输入气泡左侧大片留白收窄到约一个字宽** —— TextKit 历史渲染里用户消息正文左缩进原是写死的 172pt、气泡固定 82% 宽，窄窗口下输入内容左边空出一大块。现在正文左缩进降到 16pt（约一个汉字），气泡几乎撑满内容列（左缘仅留 4pt、右缘保持 30pt trailing margin），窄到极限时退回 260pt 最小宽度右对齐。
+
+### Changed
+- 版本号从 **1.130.0-rc3** 提升为 **1.130.0-rc4**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.130.0-rc3 - 2026-07-06
+
+### Fixed
+- **右侧面板（预览等）在小窗口下启动即占掉半个窗口** —— 面板宽度此前只按持久化值（默认 320pt）夹在 240–760 之间，完全不看窗口实际宽度；在 ~650pt 的窗口里 320+ 的面板直接吃掉一半以上，中间 chat 列被裁得没法用。现在面板有效宽度按「窗口宽 − 会话侧栏 − chat 舒适宽」动态封顶：小窗口下自动收窄（最窄 240pt），窗口拉大后自动恢复用户拖出来的偏好宽度；拖拽上限同样吃这个封顶，不允许把 chat 列挤没。
+- **拖动右侧面板分隔条时闪动感明显** —— 此前每个鼠标事件都改真实布局宽度，chat 列与面板内容（markdown 逐帧重折行、WebView/终端逐帧重排）整体重排版，肉眼即闪。现在拖拽期间两侧内容都按拖拽起点宽度冻结排版，只有 frame 跟手移动（chat 内容钉左缘、面板内容钉右缘，多余部分裁掉），松手后一次性按新宽度重排；分隔条在拖拽中还锁定左右缩放光标与高亮，消除快速拖动时 hover 高频翻转带来的光标/高亮闪烁。窗口 `contentMinSize` 也不再跟随持久化面板宽度，只保证最窄面板放得下。
+
+### Changed
+- 版本号从 **1.130.0-rc2** 提升为 **1.130.0-rc3**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
 
 ## 1.130.0-rc2 - 2026-07-06
 

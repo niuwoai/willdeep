@@ -138,6 +138,8 @@ enum AgentToolRunner {
                 result = try AgentSkillCatalog.listSkills(arguments: activeArguments)
             case "read_skill":
                 result = try AgentSkillCatalog.readSkill(arguments: activeArguments)
+            case "activate_expert":
+                result = try await activateExpert(arguments: activeArguments, context: activeContext)
             case "add_memory":
                 result = try AgentSelfLearning.addMemory(arguments: activeArguments, rootDirectory: activeContext.rootDirectory)
             case "create_user_skill":
@@ -1272,6 +1274,44 @@ enum AgentToolRunner {
         return "\(h)h\(mm)m"
     }
 
+    private static func activateExpert(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        guard let rawID = arguments["expert_id"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawID.isEmpty else {
+            throw AgentToolError.missingArgument("expert_id")
+        }
+        guard let expert = AgentExpert(rawValue: rawID) else {
+            throw AgentToolError.invalidArgument("Unknown expert_id: \(rawID)")
+        }
+        guard let runtimeID = context.runtimeID else {
+            throw AgentToolError.invalidArgument("activate_expert requires a conversational runtime.")
+        }
+        let activated = await MainActor.run { () -> Bool in
+            guard let appState = EditorAppStateRegistry.shared.appState(forRuntime: runtimeID),
+                  let runtime = appState.agentRuntimes[runtimeID] else {
+                return false
+            }
+            if runtime.activeExperts.contains(expert) {
+                return true
+            }
+            var experts = runtime.activeExperts
+            experts.insert(expert)
+            runtime.activeExperts = experts
+            return true
+        }
+        guard activated else {
+            throw AgentToolError.invalidArgument("No active app session found for activate_expert.")
+        }
+        let reason = arguments["reason"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let reasonLine = reason?.isEmpty == false ? "\nReason: \(reason!)" : ""
+        return AgentToolResult(
+            summary: "Activated expert: \(expert.rawValue)",
+            payload: "Activated \(expert.displayName) for this session.\(reasonLine)"
+        )
+    }
+
     // MARK: helpers
 
     private struct CommandOutcome: Sendable {
@@ -1369,7 +1409,8 @@ enum AgentToolRunner {
                 payload: "show_widget is only available in conversational agent runtimes (no runtime id in this call context)."
             )
         }
-        let html = try widgetHTML(arguments: arguments, context: context)
+        let sourceURL = try widgetHTMLSourceURL(arguments: arguments, context: context)
+        let html = try widgetHTML(arguments: arguments, context: context, sourceURL: sourceURL)
         let contextLines = try widgetContextLines(arguments: arguments)
         let bytes = html.utf8.count
         if bytes > 1_048_576 {
@@ -1378,7 +1419,8 @@ enum AgentToolRunner {
                 payload: "show_widget refused: html payload is \(bytes) bytes (>1 MB). Trim it down or split into multiple widgets."
             )
         }
-        let widget = AgentWidget(title: title, html: html, contextLines: contextLines)
+        var widget = AgentWidget(title: title, html: html, contextLines: contextLines)
+        widget.sourceBaseURL = sourceURL?.deletingLastPathComponent()
         await MainActor.run {
             AgentWidgetRegistry.shared.add(widget, forRuntime: runtimeID)
             EditorAppStateRegistry.shared.appState(forRuntime: runtimeID)?.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .widget)
@@ -1498,16 +1540,16 @@ enum AgentToolRunner {
 
     private static func widgetHTML(
         arguments: [String: AgentJSONValue],
-        context: AgentToolContext
+        context: AgentToolContext,
+        sourceURL: URL? = nil
     ) throws -> String {
         if let html = arguments["html"]?.stringValue(), !html.isEmpty {
             return html
         }
-        guard let rawPath = arguments["html_path"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !rawPath.isEmpty else {
+        guard let url = sourceURL else {
             throw AgentToolError.missingArgument("html")
         }
-        let url = try resolveWidgetHTMLURL(rawPath, context: context)
+        let rawPath = arguments["html_path"]?.stringValue() ?? url.path
         let path = url.path
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else {
@@ -1527,6 +1569,17 @@ enum AgentToolRunner {
             throw AgentToolError.invalidArgument("html_path must contain non-empty UTF-8 HTML/SVG.")
         }
         return html
+    }
+
+    private static func widgetHTMLSourceURL(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) throws -> URL? {
+        guard let rawPath = arguments["html_path"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawPath.isEmpty else {
+            return nil
+        }
+        return try resolveWidgetHTMLURL(rawPath, context: context)
     }
 
     private static func resolveWidgetHTMLURL(_ rawPath: String, context: AgentToolContext) throws -> URL {

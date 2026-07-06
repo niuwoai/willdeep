@@ -194,6 +194,8 @@ nonisolated enum L10n {
         static let shortDramaSummary = String(localized: "expert.short-drama.summary", defaultValue: "Enable short-drama planning, storyboard, media task, and production-package tools.")
         static let browserOps = String(localized: "expert.browser-ops", defaultValue: "Browser Ops")
         static let browserOpsSummary = String(localized: "expert.browser-ops.summary", defaultValue: "Enable the side-panel browser plus screenshot, click, fill, and Chrome tab tools.")
+        static let webCoding = String(localized: "expert.web-coding", defaultValue: "Web Programming")
+        static let webCodingSummary = String(localized: "expert.web-coding.summary", defaultValue: "Enable screenshot-to-UI, local HTML/CSS/image previews, browser QA, and dev-server orchestration.")
     }
 
     enum Automation {

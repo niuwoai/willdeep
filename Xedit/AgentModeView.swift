@@ -56,15 +56,45 @@ struct AgentModeView: View {
     private var contentMinWidth: CGFloat {
         (sessionsSidebarVisible ? sidebarWidth : 0)
             + chatColumnComfortWidth
-            // During drag, keep NSWindow.contentMinSize stable. Rewriting it
-            // every pixel competes with SwiftUI layout and is a visible source
-            // of side-panel shimmer; commit the new minimum when the drag ends.
-            + (sidePanel != nil ? CGFloat(sidePanelWidth) : 0)
+            // 面板宽度现在会随窗口宽度自适应封顶(见 panelWidthCap),
+            // 窗口下限只需保证「最窄面板」放得下,不再跟着持久化宽度
+            // 走 —— 也就免了拖拽提交后反复改写 contentMinSize。
+            + (sidePanel != nil ? CGFloat(sidePanelWidthRange.lowerBound) : 0)
+    }
+
+    /// 侧栏(含 1pt 分隔线)当前占用的宽度。
+    private var sidebarOccupiedWidth: CGFloat {
+        sessionsSidebarVisible ? sidebarWidth + 1 : 0
+    }
+
+    /// 窗口宽度给面板的封顶:面板再宽也必须给「会话侧栏 + chat 舒适
+    /// 宽」留出空间。否则小窗口(如 ~655pt)下持久化的 320+ 宽度会
+    /// 直接吃掉半个窗口(rc 用户截图:预览面板占了一半还多),chat
+    /// 列被裁得没法看。窗口拉大后自动恢复到用户拖出来的偏好宽度。
+    private func panelWidthCap(totalWidth: CGFloat) -> Double {
+        guard totalWidth > 0 else { return sidePanelWidthRange.upperBound }
+        let available = Double(totalWidth - sidebarOccupiedWidth - 1) - Double(chatColumnComfortWidth)
+        return min(sidePanelWidthRange.upperBound, max(sidePanelWidthRange.lowerBound, available))
     }
 
     var body: some View {
+        GeometryReader { proxy in
+            mainContent(totalWidth: proxy.size.width)
+        }
+    }
+
+    @ViewBuilder
+    private func mainContent(totalWidth: CGFloat) -> some View {
         let skin = appState.editorSettings.interfaceSkin
-        let panelWidth = currentSidePanelWidth
+        let cap = panelWidthCap(totalWidth: totalWidth)
+        // 「已提交」宽度在整个拖拽过程中保持不变(AppStorage 只在松手
+        // 时写入),拖拽期间面板/chat 的**内容**都按它排版,只有 frame
+        // 跟着鼠标走 —— 这是消除拖拽闪动的关键:文本不再逐鼠标事件
+        // 重折行,WebView/终端也不逐帧重排。
+        let committedPanelWidth = min(max(sidePanelWidth, sidePanelWidthRange.lowerBound), cap)
+        let panelWidth = min(currentSidePanelWidth, cap)
+        let isResizingPanel = liveSidePanelWidth != nil
+        let frozenChatWidth = max(totalWidth - sidebarOccupiedWidth - 1 - CGFloat(committedPanelWidth), 0)
         HStack(spacing: 0) {
             if sessionsSidebarVisible {
                 AgentSessionsSidebar()
@@ -95,6 +125,14 @@ struct AgentModeView: View {
                 AgentChatComposer()
                 AgentChatStatusBar()
             }
+            // 拖拽调宽期间把 chat 内容冻结在拖拽起点的宽度上:文本不随
+            // 每个鼠标事件重折行(重折行时单词在行间跳动,肉眼就是
+            // 「闪」),多出的部分被下面的 `.clipped()` 裁掉;左缘
+            // (`.leading`)钉死不动,松手后一次性按新宽度重排。
+            .frame(
+                width: sidePanel != nil && isResizingPanel ? frozenChatWidth : nil,
+                alignment: .leading
+            )
             // `minWidth: 0` 是关键:frame 只写 `maxWidth: .infinity` 时,
             // 最小宽度会回退为子内容的本征最小宽(SwiftUI frame 语义),
             // 统计卡片 / composer 这类压不动的子 view 会把中间列的下限
@@ -112,10 +150,12 @@ struct AgentModeView: View {
                 // 侧栏在右侧,所以向左拖(translation.width 变负)= 加宽侧栏。
                 AgentSidePanelResizeHandle(
                     width: Binding(
-                        get: { currentSidePanelWidth },
+                        get: { min(currentSidePanelWidth, cap) },
                         set: { liveSidePanelWidth = $0 }
                     ),
-                    range: sidePanelWidthRange,
+                    // 上限同样吃窗口封顶:小窗口下不允许把面板拖到把
+                    // chat 列挤没的宽度。
+                    range: sidePanelWidthRange.lowerBound...cap,
                     onCommit: { committedWidth in
                         liveSidePanelWidth = nil
                         sidePanelWidth = committedWidth
@@ -124,7 +164,8 @@ struct AgentModeView: View {
                 AgentSidePanelHost(
                     kind: $sidePanel,
                     selectedFile: $sidePanelFile,
-                    width: CGFloat(panelWidth)
+                    width: CGFloat(panelWidth),
+                    contentWidth: CGFloat(committedPanelWidth)
                 )
                     // 固定到用户选定的宽度,父 HStack 不靠压缩它来腾位置。
                     .fixedSize(horizontal: true, vertical: false)
@@ -278,6 +319,7 @@ private struct AgentSidePanelResizeHandle: View {
 
     @State private var dragStartWidth: Double?
     @State private var isHovering = false
+    @State private var isDragging = false
 
     var body: some View {
         Divider()
@@ -287,9 +329,13 @@ private struct AgentSidePanelResizeHandle: View {
                     .frame(width: 7)
                     .contentShape(Rectangle())
             )
-            .background(isHovering ? Color.accentColor.opacity(0.25) : Color.clear)
+            .background(isHovering || isDragging ? Color.accentColor.opacity(0.25) : Color.clear)
             .onHover { hovering in
                 isHovering = hovering
+                // 快速拖动时鼠标会瞬时冲出 7pt 热区再被布局追上,hover
+                // 会 true/false 高频翻转;若照常 push/pop,光标就在箭头
+                // ↔ 左右缩放之间闪。拖拽期间光标交给 onChanged 钉住。
+                guard !isDragging else { return }
                 if hovering {
                     NSCursor.resizeLeftRight.push()
                 } else {
@@ -299,6 +345,8 @@ private struct AgentSidePanelResizeHandle: View {
             .gesture(
                 DragGesture(minimumDistance: 1)
                     .onChanged { value in
+                        if !isDragging { isDragging = true }
+                        NSCursor.resizeLeftRight.set()
                         let base = dragStartWidth ?? width
                         if dragStartWidth == nil { dragStartWidth = base }
                         let proposed = base - Double(value.translation.width)
@@ -317,6 +365,10 @@ private struct AgentSidePanelResizeHandle: View {
                     .onEnded { _ in
                         let committedWidth = width
                         dragStartWidth = nil
+                        isDragging = false
+                        // 拖拽中被吞掉的 hover 退出在这里补一次 pop,保持
+                        // NSCursor push/pop 配平。
+                        if !isHovering { NSCursor.pop() }
                         onCommit(committedWidth)
                     }
             )

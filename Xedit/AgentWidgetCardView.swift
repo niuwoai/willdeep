@@ -10,9 +10,10 @@
 //      `connect-src 'none'` + `frame-src 'none'` —— 最关键的是
 //      `connect-src 'none'`，LLM 不论怎么写 fetch / XHR / WebSocket 都
 //      发不出去网络请求。
-//   2. **Navigation 拦截**：`decidePolicyFor navigationAction` 全部
-//      `.cancel`。
-//   3. **scheme 黑名单**：file:// / ws:// / wss:// 一律拒。
+//   2. **Navigation 拦截**：`decidePolicyFor navigationAction` 只放行
+//      about/data 与本 widget baseURL 目录内的 file 资源。
+//   3. **scheme 黑名单**：ws:// / wss:// 一律拒；file:// 导航只允许
+//      widget 自己的本地 baseURL 目录，用来加载用户明确给出的 CSS/图片。
 //   4. **JS 通信**：1.84.0-rc2 通过 `WKScriptMessageHandler` 加了双向
 //      桥，但仅暴露 `window.sendPrompt(text)` 和
 //      `window.sendToolAction(action)` 给 widget 反向触发 chat；自动高度
@@ -47,6 +48,7 @@ struct AgentWidgetCardView: View {
                     widgetTitle: widget.title,
                     widgetContext: widget.contextBlock,
                     html: composedHTML,
+                    baseURL: widget.sourceBaseURL,
                     appState: appState,
                     onHeightChange: { reported in
                         let clamped = max(Self.minHeight, min(Self.maxAutoHeight, reported))
@@ -224,6 +226,7 @@ private struct AgentWidgetWebView: NSViewRepresentable {
     let widgetTitle: String
     let widgetContext: String
     let html: String
+    let baseURL: URL?
     let appState: AppState
     let onHeightChange: (CGFloat) -> Void
 
@@ -251,13 +254,14 @@ private struct AgentWidgetWebView: NSViewRepresentable {
         context.coordinator.widgetID = widgetID
         context.coordinator.widgetTitle = widgetTitle
         context.coordinator.widgetContext = widgetContext
+        context.coordinator.baseURL = baseURL
         context.coordinator.appState = appState
         context.coordinator.onHeightChange = onHeightChange
-        webView.loadHTMLString(html, baseURL: nil)
+        webView.loadHTMLString(html, baseURL: baseURL)
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(widgetID: widgetID, widgetTitle: widgetTitle, widgetContext: widgetContext, appState: appState, onHeightChange: onHeightChange)
+        Coordinator(widgetID: widgetID, widgetTitle: widgetTitle, widgetContext: widgetContext, baseURL: baseURL, appState: appState, onHeightChange: onHeightChange)
     }
 
     static func dismantleNSView(_ nsView: WKWebView, coordinator: Coordinator) {
@@ -270,13 +274,15 @@ private struct AgentWidgetWebView: NSViewRepresentable {
         var widgetID: UUID
         var widgetTitle: String
         var widgetContext: String
+        var baseURL: URL?
         weak var appState: AppState?
         var onHeightChange: (CGFloat) -> Void
 
-        init(widgetID: UUID, widgetTitle: String, widgetContext: String, appState: AppState, onHeightChange: @escaping (CGFloat) -> Void) {
+        init(widgetID: UUID, widgetTitle: String, widgetContext: String, baseURL: URL?, appState: AppState, onHeightChange: @escaping (CGFloat) -> Void) {
             self.widgetID = widgetID
             self.widgetTitle = widgetTitle
             self.widgetContext = widgetContext
+            self.baseURL = baseURL
             self.appState = appState
             self.onHeightChange = onHeightChange
         }
@@ -293,9 +299,18 @@ private struct AgentWidgetWebView: NSViewRepresentable {
             let scheme = (url.scheme ?? "").lowercased()
             if scheme == "about" || scheme == "data" {
                 decisionHandler(.allow)
+            } else if scheme == "file", isAllowedLocalResource(url) {
+                decisionHandler(.allow)
             } else {
                 decisionHandler(.cancel)
             }
+        }
+
+        private func isAllowedLocalResource(_ url: URL) -> Bool {
+            guard let baseURL else { return false }
+            let base = baseURL.standardizedFileURL.path
+            let path = url.standardizedFileURL.path
+            return path == base || path.hasPrefix(base.hasSuffix("/") ? base : base + "/")
         }
 
         func webView(_ webView: WKWebView,

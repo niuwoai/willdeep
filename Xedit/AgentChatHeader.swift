@@ -142,7 +142,7 @@ struct AgentChatHeader: View {
 
     private var sidePanelMenu: some View {
         Menu {
-            ForEach(visibleKinds) { item in
+            ForEach(sidePanelMenuKinds) { item in
                 Button {
                     // 再点同一项就关闭——和 Claude Code 那个菜单一致。
                     sidePanel = (sidePanel == item) ? nil : item
@@ -193,8 +193,14 @@ struct AgentChatHeader: View {
     }
 
     private var frequentSidePanelKinds: [AgentSidePanelKind] {
-        [.diff, .terminal, .preview, .files].filter { kind in
+        [.diff, .terminal, .devServer, .preview, .files].filter { kind in
             visibleKinds.contains(kind)
+        }
+    }
+
+    private var sidePanelMenuKinds: [AgentSidePanelKind] {
+        visibleKinds.filter { kind in
+            !frequentSidePanelKinds.contains(kind)
         }
     }
 
