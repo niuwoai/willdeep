@@ -4,8 +4,11 @@
 
 ### Fixed
 - **Composer 图片附件入队改为磁盘引用** —— 新粘贴到 Agent composer 的图片会先原子写入 Application Support 下的 `AgentAttachments` 目录，`AgentImageAttachment` / queued message / session JSON 只保存路径、大小、SHA-256 和 MIME 元数据；发送给视觉模型或生成缩略图时再按需从文件读取。旧会话里的内联 `dataBase64` 仍可解码，清空队列、删除队列项或移除草稿图片会清理对应未发送暂存文件，且清理路径只允许命中 App 自己的 `AgentAttachments/<uuid>` 目录，避免排队多张大图时把内存和 session JSON 一起顶高。
+- **干净 tracked 文件的 Agent 编辑直接落盘** —— `edit_file` / `apply_patch` 修改已存在文件时，如果所有目标文件都已经被 git 跟踪、当前对 HEAD 干净，并且 App 内没有未保存编辑，补丁会直接应用，不再要求用户再点一次 Apply。未跟踪文件、已有未提交改动的文件、打开但未保存的文件仍保留 inline patch 卡片等待用户确认。
 
 ### Changed
+- **Dev Server 面板改为可直接操作项目 dev 环境** —— 面板现在会扫描当前工作区根目录与常见前端/后端目录，发现 Vite/Next/React/Vue、Node API、Go、Rails、FastAPI 和静态 HTML 的启动候选；前端与后端分区支持直接启动、停止、重启，并继续复用后台 job 注册表。
+- **实时日志 tail 不再只回填提示词** —— Dev Server 面板可直接对用户指定的 workspace/tmp/本地日志路径启动 `tail -f` 后台任务，输出尾部与 AI 通过 `run_command(run_in_background=true)` 启动的任务统一展示。
 - 版本号从 **1.131.0-rc2** 提升为 **1.131.0-rc3**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
 
 ## 1.131.0-rc2 - 2026-07-06

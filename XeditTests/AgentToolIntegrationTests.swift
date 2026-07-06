@@ -1224,6 +1224,79 @@ extension WillDeepTests {
         #expect(try String(contentsOf: fileURL, encoding: .utf8) == "let value = 3\n")
     }
 
+    @Test("apply_patch auto-applies clean tracked files but queues dirty tracked files")
+    @MainActor
+    func testApplyPatchAutoAppliesOnlyCleanTrackedFiles() throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_apply_patch_clean_tracked_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        func runGit(_ arguments: [String]) {
+            let result = AppState.runGitCommand(arguments: arguments, in: workspace)
+            #expect(result.succeeded, "git \(arguments.joined(separator: " ")) failed: \(result.stderr)")
+        }
+
+        runGit(["init"])
+        runGit(["config", "user.email", "tests@example.invalid"])
+        runGit(["config", "user.name", "WillDeep Tests"])
+
+        let cleanURL = workspace.appendingPathComponent("Clean.swift")
+        let dirtyURL = workspace.appendingPathComponent("Dirty.swift")
+        try "let clean = 1\n".write(to: cleanURL, atomically: true, encoding: .utf8)
+        try "let dirty = 1\n".write(to: dirtyURL, atomically: true, encoding: .utf8)
+        runGit(["add", "Clean.swift", "Dirty.swift"])
+        runGit(["commit", "-m", "initial"])
+
+        let appState = AppState(rootDirectory: workspace)
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        let session = appState.startNewAgentSession()
+        defer {
+            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
+                AgentSessionStore.delete(id: id)
+            }
+        }
+        guard let runtime = appState.agentRuntimes[session.id] else {
+            Issue.record("Expected runtime for new agent session")
+            return
+        }
+
+        let cleanProposal = try appState.enqueueAgentPatchProposal(
+            for: runtime,
+            messageID: UUID(),
+            title: "Clean tracked update",
+            diff: """
+            --- a/Clean.swift
+            +++ b/Clean.swift
+            @@ -1 +1 @@
+            -let clean = 1
+            +let clean = 2
+            """
+        )
+
+        #expect(cleanProposal.status == .applied)
+        #expect(cleanProposal.statusMessage == "Auto-applied because edited files are tracked and clean in git")
+        #expect(try String(contentsOf: cleanURL, encoding: .utf8) == "let clean = 2\n")
+
+        try "let dirty = 2\n".write(to: dirtyURL, atomically: true, encoding: .utf8)
+        let dirtyProposal = try appState.enqueueAgentPatchProposal(
+            for: runtime,
+            messageID: UUID(),
+            title: "Dirty tracked update",
+            diff: """
+            --- a/Dirty.swift
+            +++ b/Dirty.swift
+            @@ -1 +1 @@
+            -let dirty = 2
+            +let dirty = 3
+            """
+        )
+
+        #expect(dirtyProposal.status == .pending)
+        #expect(dirtyProposal.statusMessage == nil)
+        #expect(try String(contentsOf: dirtyURL, encoding: .utf8) == "let dirty = 2\n")
+    }
+
     @Test("pending patch proposals auto-resolve before the next message in autonomous modes")
     @MainActor
     func testPendingPatchProposalsAutoResolveBeforeNextMessageInAutonomousModes() throws {
