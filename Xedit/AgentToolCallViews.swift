@@ -61,6 +61,7 @@ nonisolated enum AgentToolDisplay {
         "kill_job": "终止后台任务",
         "list_skills": "查看技能",
         "read_skill": "读取技能",
+        "activate_expert": "激活专家",
         "add_memory": "记忆要点",
         "create_user_skill": "新建技能",
         "update_user_skill": "更新技能",

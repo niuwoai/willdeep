@@ -528,10 +528,15 @@ enum AgentChatHistoryBubbleKind: Int {
 }
 
 enum AgentChatHistoryLayoutMetrics {
-    static let userBubbleMaxWidthRatio: CGFloat = 0.82
+    // 1.130.0-rc3：用户气泡从「固定 82% 宽、文字左缩进 172」改成
+    // 几乎撑满内容列 —— 左侧只留约一个字宽。旧版在窄窗口里用户输入
+    // 左边空出一大块（截图反馈），信息密度太低。
     static let userBubbleMinWidth: CGFloat = 260
     static let userBubbleTrailingMargin: CGFloat = 30
-    static let userBodyHeadIndent: CGFloat = 172
+    /// 气泡背景矩形距内容列左缘的留白（正文缩进 16 − 气泡内衬 12）。
+    static let userBubbleLeadingMargin: CGFloat = 4
+    /// 用户正文左缩进：约一个汉字宽。
+    static let userBodyHeadIndent: CGFloat = 16
     static let userBodyTailIndent: CGFloat = -46
 }
 
@@ -673,9 +678,14 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
 
         switch kind {
         case .user:
+            // 几乎撑满内容列：左缘只留 userBubbleLeadingMargin（正文缩进
+            // 16 − 气泡内衬 12 = 4），右缘保持 trailing margin。窄到极限
+            // 时退回 minWidth 右对齐，避免气泡比正文还窄。
             let width = max(
                 AgentChatHistoryLayoutMetrics.userBubbleMinWidth,
-                containerWidth * AgentChatHistoryLayoutMetrics.userBubbleMaxWidthRatio
+                containerWidth
+                    - AgentChatHistoryLayoutMetrics.userBubbleTrailingMargin
+                    - AgentChatHistoryLayoutMetrics.userBubbleLeadingMargin
             )
             rect.origin.x = origin.x + containerWidth - width - AgentChatHistoryLayoutMetrics.userBubbleTrailingMargin
             rect.size.width = width

@@ -112,7 +112,8 @@ struct AgentWidgetSourceRows: View {
         let reloaded = AgentWidget(
             title: widget.title,
             html: html,
-            contextLines: contextLines
+            contextLines: contextLines,
+            sourceBaseURL: url.deletingLastPathComponent()
         )
         AgentWidgetRegistry.shared.add(reloaded, forRuntime: runtimeID)
         appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .widget)

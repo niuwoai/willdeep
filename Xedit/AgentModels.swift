@@ -344,6 +344,7 @@ nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable 
 nonisolated enum AgentExpert: String, Codable, CaseIterable, Identifiable, Hashable {
     case shortDrama
     case browserOps
+    case webCoding
 
     var id: String { rawValue }
 
@@ -351,6 +352,7 @@ nonisolated enum AgentExpert: String, Codable, CaseIterable, Identifiable, Hasha
         switch self {
         case .shortDrama: return L10n.Expert.shortDrama
         case .browserOps: return L10n.Expert.browserOps
+        case .webCoding: return L10n.Expert.webCoding
         }
     }
 
@@ -358,6 +360,7 @@ nonisolated enum AgentExpert: String, Codable, CaseIterable, Identifiable, Hasha
         switch self {
         case .shortDrama: return L10n.Expert.shortDramaSummary
         case .browserOps: return L10n.Expert.browserOpsSummary
+        case .webCoding: return L10n.Expert.webCodingSummary
         }
     }
 
@@ -365,6 +368,7 @@ nonisolated enum AgentExpert: String, Codable, CaseIterable, Identifiable, Hasha
         switch self {
         case .shortDrama: return "film.stack"
         case .browserOps: return "globe.badge.chevron.backward"
+        case .webCoding: return "curlybraces.square"
         }
     }
 
@@ -381,6 +385,16 @@ nonisolated enum AgentExpert: String, Codable, CaseIterable, Identifiable, Hasha
             === BROWSER OPERATIONS EXPERT — ACTIVE ===
             The user enabled the browser operations expert for this session. You may use `embedded_browser_*` tools for the visible in-app side-panel browser, including navigation, page reading, DOM snapshots, wait conditions, console logs, AJAX/API request inspection, redacted request/response headers, HAR export, storage/cookie inspection, page performance diagnostics, failed-resource aggregation, network resource timing, screenshot capture, CSS-selector clicks, JavaScript evaluation, and form filling.
             Use `chrome_*` tools only when the user needs their existing Chrome tabs, cookies, or login session. Screenshots and page mutations may expose or change private web apps, so keep actions scoped, explain selectors when useful, and prefer read/status calls before clicking or typing.
+            """
+        case .webCoding:
+            return """
+            === WEB PROGRAMMING EXPERT — ACTIVE ===
+            The user enabled the web programming expert for this session. Treat UI generation, HTML/CSS/JS, React/Vue/Next/Vite, frontend screenshots, local assets, preview, screenshot QA, and dev-server orchestration as first-class work.
+            When the user provides screenshots or local image assets, use them as visual requirements. Build a faithful, responsive UI from the supplied pixels, then preview and visually verify when practical.
+            For React work, keep all user-visible JSX/TSX text in i18n resources. Prefer yarn for install/build/dev commands unless the project proves another package manager is required.
+            For static HTML artifacts, prefer local files plus show_widget/html preview. When using `show_widget` with `html_path`, local relative CSS, JS, and image references may be loaded from the HTML file's directory; keep those references workspace-local or explicitly user-provided.
+            For Vite/Next/React/Vue apps, start dev servers with `run_command` and `run_in_background: true`, inspect output with `get_job_output`, stop with `kill_job`, and use the Dev Server side panel to track running frontend/backend jobs and tail logs. If the project has both frontend and backend, manage them as separate background jobs and label which command belongs to which server.
+            For live preview/screenshot QA, use the Preview/Widget side panel for static artifacts and `embedded_browser_*` or `chrome_*` screenshot/read tools for running web apps when available.
             """
         }
     }

@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.131.0-rc1 - 2026-07-06
+
+### Added
+- **Web 编程专家** —— 新增 `webCoding` 专家，覆盖截图生成 UI、本地 HTML/CSS/图片资源预览、Vite/Next/React/Vue 项目预览、浏览器截图 QA 与 dev server 编排；Agent 提示词会在短剧/Web 编程等场景引导用户确认激活对应专家。
+- **专家激活工具** —— 新增 `activate_expert`，模型可在 `ask_user` 确认后为当前会话激活专家，而不是只提示用户手动找开关。
+- **Dev Server 侧栏面板** —— 新增右侧 `Dev Server` tab，激活 Web 编程专家后可查看当前会话的前端/后端 dev server 与 `tail -f` 后台任务，读取输出尾部、停止任务，并把启动/重启/tail 日志请求回填给 Agent。
+
+### Changed
+- **本地 HTML 预览资源增强** —— `show_widget(html_path:)`、widget action 预览和 widget 源文件重载都会把 HTML 所在目录作为 WebView baseURL，允许用户引用同目录下的 CSS、JS 和图片文件，同时继续禁止网络连接和任意本地跳转。
+- 版本号从 **1.130.0-rc4** 提升为 **1.131.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.130.0-rc4 - 2026-07-06
+
+### Fixed
+- **Agent 右侧面板「…」菜单不再重复列出快捷入口** —— 顶部快捷条已有的 Diff / Terminal / Preview / Files 从更多菜单中移除；更多菜单只展示非快捷面板入口，当前已有面板打开时仍保留「关闭面板」操作。
+- **用户输入气泡左侧大片留白收窄到约一个字宽** —— TextKit 历史渲染里用户消息正文左缩进原是写死的 172pt、气泡固定 82% 宽，窄窗口下输入内容左边空出一大块。现在正文左缩进降到 16pt（约一个汉字），气泡几乎撑满内容列（左缘仅留 4pt、右缘保持 30pt trailing margin），窄到极限时退回 260pt 最小宽度右对齐。
+
+### Changed
+- 版本号从 **1.130.0-rc3** 提升为 **1.130.0-rc4**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
 ## 1.130.0-rc3 - 2026-07-06
 
 ### Fixed

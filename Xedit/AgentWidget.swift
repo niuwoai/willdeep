@@ -7,7 +7,7 @@
 //  `.widget` 消息，由 `AgentWidgetCardView` 在 WKWebView 里渲染。
 //
 //  数据本身只是元数据 + 一段 HTML 字符串 —— 真正的安全 sandbox 全在
-//  `AgentWidgetCardView` 那一层（CSP、禁外网、禁 navigation、禁 file://、
+//  `AgentWidgetCardView` 那一层（CSP、禁外网、禁 navigation、禁远程 file://、
 //  注入主题 CSS 变量）。
 //
 
@@ -25,6 +25,10 @@ nonisolated struct AgentWidget: Codable, Equatable, Identifiable {
     /// These are not exposed to JavaScript. They only ride along when the
     /// user sends the widget or a widget button back into chat.
     var contextLines: [String]
+    /// Optional base URL for local HTML previews. When `show_widget` loads
+    /// a workspace/tmp HTML file, this lets relative CSS/images resolve
+    /// without allowing network fetches or arbitrary navigation.
+    var sourceBaseURL: URL?
     let createdAt: Date
 
     init(
@@ -32,12 +36,14 @@ nonisolated struct AgentWidget: Codable, Equatable, Identifiable {
         title: String,
         html: String,
         contextLines: [String] = [],
+        sourceBaseURL: URL? = nil,
         createdAt: Date = Date()
     ) {
         self.id = id
         self.title = title
         self.html = html
         self.contextLines = contextLines
+        self.sourceBaseURL = sourceBaseURL
         self.createdAt = createdAt
     }
 

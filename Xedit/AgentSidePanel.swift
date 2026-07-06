@@ -39,6 +39,7 @@ enum AgentSidePanelKind: String, CaseIterable, Identifiable {
     case diff
     case files
     case terminal
+    case devServer
     case backgroundTasks
     case mediaTasks
     case shortDrama
@@ -55,6 +56,8 @@ enum AgentSidePanelKind: String, CaseIterable, Identifiable {
             return .shortDrama
         case .embeddedBrowser:
             return .browserOps
+        case .devServer:
+            return .webCoding
         default:
             return nil
         }
@@ -71,6 +74,7 @@ enum AgentSidePanelKind: String, CaseIterable, Identifiable {
         case .diff: return L10n.AgentSidePanel.diff
         case .files: return L10n.AgentSidePanel.files
         case .terminal: return L10n.AgentSidePanel.terminal
+        case .devServer: return "Dev Server"
         case .backgroundTasks: return "任务监控"
         case .mediaTasks: return "媒体任务"
         case .shortDrama: return "短剧"
@@ -89,6 +93,7 @@ enum AgentSidePanelKind: String, CaseIterable, Identifiable {
         case .diff: return "rectangle.split.2x1.fill"
         case .files: return "folder"
         case .terminal: return "terminal"
+        case .devServer: return "server.rack"
         case .backgroundTasks: return "list.bullet.rectangle"
         case .mediaTasks: return "photo.stack"
         case .shortDrama: return "rectangle.stack.badge.play"
@@ -209,6 +214,8 @@ struct AgentSidePanelHost: View {
             AgentTaskMonitorRail(width: layoutWidth)
         case .mediaTasks:
             AgentMediaTasksPanel(width: layoutWidth)
+        case .devServer:
+            AgentDevServerPanel(width: layoutWidth)
         case .shortDrama:
             AgentShortDramaPanel(store: appState.agentShortDramaStore, width: layoutWidth)
         case .embeddedBrowser:
@@ -1094,7 +1101,8 @@ struct AgentSidePanelWidgetView: View {
         let widget = AgentWidget(
             title: fields["title"] ?? url.deletingPathExtension().lastPathComponent,
             html: html,
-            contextLines: widgetHTMLContextLines(action: action, fields: fields, url: url)
+            contextLines: widgetHTMLContextLines(action: action, fields: fields, url: url),
+            sourceBaseURL: url.deletingLastPathComponent()
         )
         AgentWidgetRegistry.shared.add(widget, forRuntime: runtimeID)
         appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .widget)
