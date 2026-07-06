@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import CryptoKit
 
 enum AppMode: String, Codable {
     case editor
@@ -43,22 +44,172 @@ nonisolated enum AgentMessageOrigin: String, Codable, Equatable {
     case delegatedExternal
 }
 
-/// A user-attached image, encoded inline so it round-trips through session
-/// JSON without a separate blob store. `dataBase64` is the raw image bytes
-/// base64-encoded (no `data:` prefix); `mimeType` is e.g. `image/png`.
+/// A user-attached image. Older sessions may still carry inline
+/// `dataBase64`; new composer attachments are file-backed so queued drafts
+/// and session JSON keep only lightweight metadata.
 nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable {
     let id: UUID
     let mimeType: String
-    let dataBase64: String
+    private let inlineDataBase64: String?
+    let filePath: String?
+    let byteCount: Int?
+    let sha256: String?
+    let createdAt: Date
 
     init(id: UUID = UUID(), mimeType: String, dataBase64: String) {
         self.id = id
         self.mimeType = mimeType
-        self.dataBase64 = dataBase64
+        self.inlineDataBase64 = dataBase64
+        self.filePath = nil
+        self.byteCount = Data(base64Encoded: dataBase64)?.count
+        self.sha256 = nil
+        self.createdAt = Date()
+    }
+
+    init(
+        id: UUID = UUID(),
+        mimeType: String,
+        filePath: String,
+        byteCount: Int? = nil,
+        sha256: String? = nil,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.mimeType = mimeType
+        self.inlineDataBase64 = nil
+        self.filePath = filePath
+        self.byteCount = byteCount
+        self.sha256 = sha256
+        self.createdAt = createdAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, mimeType, dataBase64, filePath, byteCount, sha256, createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        mimeType = try container.decode(String.self, forKey: .mimeType)
+        inlineDataBase64 = try container.decodeIfPresent(String.self, forKey: .dataBase64)
+        filePath = try container.decodeIfPresent(String.self, forKey: .filePath)
+        byteCount = try container.decodeIfPresent(Int.self, forKey: .byteCount)
+            ?? inlineDataBase64.flatMap { Data(base64Encoded: $0)?.count }
+        sha256 = try container.decodeIfPresent(String.self, forKey: .sha256)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(mimeType, forKey: .mimeType)
+        if let inlineDataBase64 {
+            try container.encode(inlineDataBase64, forKey: .dataBase64)
+        }
+        try container.encodeIfPresent(filePath, forKey: .filePath)
+        try container.encodeIfPresent(byteCount, forKey: .byteCount)
+        try container.encodeIfPresent(sha256, forKey: .sha256)
+        try container.encode(createdAt, forKey: .createdAt)
     }
 
     nonisolated var dataURL: String {
         "data:\(mimeType);base64,\(dataBase64)"
+    }
+
+    nonisolated var dataBase64: String {
+        if let inlineDataBase64 {
+            return inlineDataBase64
+        }
+        guard let fileURL,
+              let data = try? Data(contentsOf: fileURL) else {
+            return ""
+        }
+        return data.base64EncodedString()
+    }
+
+    nonisolated var fileURL: URL? {
+        guard let filePath, !filePath.isEmpty else { return nil }
+        return URL(fileURLWithPath: filePath).standardizedFileURL
+    }
+
+    nonisolated var isFileBacked: Bool {
+        fileURL != nil
+    }
+
+    nonisolated var thumbnailCacheKey: String {
+        if let filePath {
+            return "file|\(filePath)|\(sha256 ?? "")"
+        }
+        return "inline|\(id.uuidString)|\(inlineDataBase64?.count ?? 0)"
+    }
+
+    nonisolated static func fileBacked(
+        data: Data,
+        mimeType: String,
+        id: UUID = UUID(),
+        createdAt: Date = Date()
+    ) throws -> AgentImageAttachment {
+        let directory = try attachmentDirectory(for: id)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let filename = "image.\(fileExtension(for: mimeType))"
+        let url = directory.appendingPathComponent(filename, isDirectory: false)
+        try data.write(to: url, options: [.atomic])
+        return AgentImageAttachment(
+            id: id,
+            mimeType: mimeType,
+            filePath: url.standardizedFileURL.path,
+            byteCount: data.count,
+            sha256: sha256Hex(for: data),
+            createdAt: createdAt
+        )
+    }
+
+    nonisolated func diskBackedCopy() throws -> AgentImageAttachment {
+        if isFileBacked {
+            return self
+        }
+        guard let inlineDataBase64,
+              let data = Data(base64Encoded: inlineDataBase64) else {
+            return self
+        }
+        return try Self.fileBacked(data: data, mimeType: mimeType, id: id, createdAt: createdAt)
+    }
+
+    nonisolated func removeStoredFileIfNeeded() {
+        guard let fileURL else { return }
+        let directory = fileURL.deletingLastPathComponent()
+        guard directory.lastPathComponent == id.uuidString,
+              directory.deletingLastPathComponent().lastPathComponent == "AgentAttachments" else {
+            return
+        }
+        try? FileManager.default.removeItem(at: directory)
+    }
+
+    private nonisolated static func attachmentDirectory(for id: UUID) throws -> URL {
+        guard let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        let bundleID = Bundle.main.bundleIdentifier ?? "com.willdeep.app"
+        return base
+            .appendingPathComponent(bundleID, isDirectory: true)
+            .appendingPathComponent("AgentAttachments", isDirectory: true)
+            .appendingPathComponent(id.uuidString, isDirectory: true)
+    }
+
+    private nonisolated static func fileExtension(for mimeType: String) -> String {
+        switch mimeType.lowercased() {
+        case "image/jpeg", "image/jpg": return "jpg"
+        case "image/gif": return "gif"
+        case "image/webp": return "webp"
+        case "image/heic": return "heic"
+        default: return "png"
+        }
+    }
+
+    private nonisolated static func sha256Hex(for data: Data) -> String {
+        SHA256.hash(data: data)
+            .map { String(format: "%02x", $0) }
+            .joined()
     }
 }
 

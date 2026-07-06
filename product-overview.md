@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-06 | Current version: v1.131.0-rc1
+> Last updated: 2026-07-06 | Current version: v1.131.0-rc3
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Agent 图片附件磁盘化队列（1.131.0-rc3）** —— Composer 新粘贴的图片不再以内联 base64 常驻 pending/queued/session JSON，而是原子写入 Application Support 的 `AgentAttachments` 目录；队列和会话只保存文件路径、MIME、大小与 SHA-256 元数据，发送给视觉模型或渲染缩略图时再按需读取。旧会话内联图片继续兼容，用户清空队列或删除未发送草稿图片时会同步清理对应暂存文件，且清理路径只允许命中 App 自己的附件目录。
 - **Web 编程专家与 Dev Server 面板（1.131.0-rc1）** —— 新增 `webCoding` 专家，用于截图生成 UI、本地 HTML/CSS/图片资源预览、Vite/Next/React/Vue 项目预览与视觉 QA。Agent 可在需要时通过 `ask_user` + `activate_expert` 引导用户激活专家；激活后嵌入浏览器/Chrome 预览截图工具也对 Web 编程专家开放。右侧新增 Dev Server 面板，复用后台 job 注册表展示前端/后端 dev server 与 `tail -f` 日志任务，支持查看输出尾部、停止任务、回填启动/重启/tail 请求到 composer。`show_widget(html_path:)` 现在会把 HTML 所在目录作为本地 baseURL，允许相对 CSS/JS/图片从用户明确给出的 workspace/tmp 文件旁加载。
 - **Agent 右侧面板更多菜单去重（1.130.0-rc4）** —— 顶部快捷条已经提供的 Diff / Terminal / Preview / Files 不再重复出现在「…」下拉菜单里；更多菜单只保留任务监控、媒体任务、网页组件、图片编辑、计划等非快捷入口，面板已打开时仍保留关闭面板操作。
 - **截图工具与工具结果图片直通视觉模型（1.130.0-rc1）** —— 新增 `capture_screenshot` 工具，可截取本机 Mac 屏幕、Android 设备/模拟器（adb）或 iOS 模拟器（simctl），图片在捕获时即缩放到 ≤1568 长边再随工具结果返回。`AgentToolResult` 新增 `images` 字段、`.tool` 消息携带图片：Anthropic 等视觉模型以 `tool_result` image block 直接“看到”像素并多轮重发，DeepSeek / OpenAI Chat / Gemini 等自动降级为文本 payload（含 OCR + 保存路径，可再调 `visual_qa_screenshot`）。工具卡片内联渲染缩略图（ImageIO 下采样，避免内存失控），点击在预览中打开完整图。

@@ -646,10 +646,13 @@ extension AppState {
     }
 
     func clearAgentQueue() {
+        agentQueuedMessages.forEach(Self.removeStoredImageFiles)
         agentQueuedMessages.removeAll()
     }
 
     func removeQueuedAgentMessage(id: AgentQueuedMessage.ID) {
+        let removed = agentQueuedMessages.filter { $0.id == id }
+        removed.forEach(Self.removeStoredImageFiles)
         agentQueuedMessages.removeAll { $0.id == id }
     }
 
@@ -685,12 +688,20 @@ extension AppState {
     }
 
     func addAgentImage(data: Data, mimeType: String) {
-        let attachment = AgentImageAttachment(mimeType: mimeType, dataBase64: data.base64EncodedString())
+        let attachment = (try? AgentImageAttachment.fileBacked(data: data, mimeType: mimeType))
+            ?? AgentImageAttachment(mimeType: mimeType, dataBase64: data.base64EncodedString())
         agentPendingImages.append(attachment)
     }
 
     func removeAgentImage(id: AgentImageAttachment.ID) {
+        agentPendingImages
+            .filter { $0.id == id }
+            .forEach { $0.removeStoredFileIfNeeded() }
         agentPendingImages.removeAll { $0.id == id }
+    }
+
+    private nonisolated static func removeStoredImageFiles(_ message: AgentQueuedMessage) {
+        message.images.forEach { $0.removeStoredFileIfNeeded() }
     }
 
     // MARK: - Agent mode + sessions
