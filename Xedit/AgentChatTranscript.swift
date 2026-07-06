@@ -362,6 +362,19 @@ struct AgentChatTranscript: View {
             .onCompatibleChange(of: appState.agentQueuedMessages.count) { _, _ in
                 proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
             }
+            // 1.130.0-rc4：回合结束补一次到底滚动。流式期间只按「条数
+            // 变化」滚动（见上方 CRITICAL 注释——逐 token 滚动会把主线
+            // 程钉死在布局里），但 assistant 消息是流式开始时就 append
+            // 的：滚动发生在它还近乎空白的那一刻，之后内容在视口下方
+            // 持续长高、条数不变、再无滚动，长回复结束时视口停在答案
+            // 中段。这里watch isAgentResponding 的 true→false 翻转，
+            // 等一帧让 TextKit 历史折叠与布局落定后一次性滚到底。
+            .onCompatibleChange(of: appState.isAgentResponding) { _, nowResponding in
+                guard !nowResponding else { return }
+                DispatchQueue.main.async {
+                    proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                }
+            }
             // 切走 app 再切回来时,SwiftUI 会重新布局 ScrollView,默认
             // 把滚动位置重置到顶部 —— 用户反馈:本来在看最新消息,
             // 切回来却跳到了最顶上。这里在视图首次出现 + app 重新激活
