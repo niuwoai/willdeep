@@ -1,5 +1,52 @@
 # Changelog
 
+## 1.131.0-rc9 - 2026-07-06
+
+### Fixed
+- **Agent 侧边栏重资源会在长时间未查看后释放** —— 会话侧边栏记录最后查看时间；终端、嵌入浏览器、Widget 和图片编辑器等重面板在所属会话超过 1 小时未被查看后会自动收起并释放对应资源，其中终端会关闭该会话打开的 tab，嵌入浏览器会重置不可见 WebView 状态。
+- **Dev Server 面板改为 workspace 共享视角** —— 同一工作区内不同 Agent 会话会看到同一组 dev server / tail 后台任务，避免每个会话各自认为要启动一套服务而造成端口占用冲突。
+
+### Changed
+- 版本号从 **1.131.0-rc8** 提升为 **1.131.0-rc9**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.131.0-rc8 - 2026-07-06
+
+### Fixed
+- **Agent 右侧侧边栏状态改为跟随会话** —— 侧边栏打开的面板类型、文件/预览选择、媒体任务 scope 和图片编辑器输入现在保存到当前会话 runtime；切到另一个会话会按目标会话自己的状态显示（未打开过则收起），切回原会话会恢复原侧栏与关联数据，不再被其它会话覆盖或清空。
+
+### Changed
+- 版本号从 **1.131.0-rc7** 提升为 **1.131.0-rc8**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.131.0-rc7 - 2026-07-06
+
+### Fixed
+- **文本模型带图不再把 VL 描述暴露在聊天记录里** —— 当前模型不支持图片输入时，Image Understanding 生成的图片描述仍会作为模型上下文发送，但用户气泡、TextKit 历史记录、旧历史预览和复制按钮只展示用户原文与图片缩略图，不再显示 `[Image description generated...]` 或 `Image 1:` 这类内部转写内容。
+
+### Changed
+- 版本号从 **1.131.0-rc6** 提升为 **1.131.0-rc7**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.131.0-rc6 - 2026-07-06
+
+### Changed
+- **普通启动默认只显示 Agent 窗口** —— App 冷启动不带文件/目录意图时，会自动打开 Agent 单例窗口并关闭 SwiftUI 先创建的空 Editor 窗口；通过命令行通用打开命令、`willdeep://open?path=...`、Finder 右键打开文件或目录时仍保留 Editor 模式。Agent 顶部“进入 Editor”图标入口不变。
+- 版本号从 **1.131.0-rc5** 提升为 **1.131.0-rc6**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.131.0-rc5 - 2026-07-06
+
+### Fixed
+- **最后一条用户气泡底部不再被裁掉** —— TextKit 历史聊天视图的本征高度现在为气泡背景额外预留底部绘制余量，避免最后一条用户输入的下圆角和 footer 区域贴近滚动容器底部时被裁切。
+
+### Changed
+- 版本号从 **1.131.0-rc4** 提升为 **1.131.0-rc5**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.131.0-rc4 - 2026-07-06
+
+### Fixed
+- **展开旧聊天历史不再默认渲染完整富文本** —— transcript 顶部“对话前面还有多条消息”现在点击后先展示最多 4000 字符的纯文本预览，只保留角色与正文，避免长会话一次性把完整历史烤成富文本导致内存和主线程压力飙升；完整详情仍可通过预览里的“完整详情”按钮打开独立窗口查看。
+
+### Changed
+- 版本号从 **1.131.0-rc3** 提升为 **1.131.0-rc4**，并同步 Xcode / Go agent / Help / product overview / Mobile Gateway / Agent Harness 位点。
+
 ## 1.131.0-rc3 - 2026-07-06
 
 ### Fixed

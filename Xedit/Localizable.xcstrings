@@ -27519,6 +27519,222 @@
         }
       }
     },
+    "transcript.older-history.no-text" : {
+      "comment" : "fallback text when collapsed older history has no plain text content",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Older messages have no plain text preview."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更早消息没有可预览的纯文本内容。"
+          }
+        }
+      }
+    },
+    "transcript.older-history.omitted" : {
+      "comment" : "marker shown at the end of the lightweight older history preview",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "… %@ older text characters omitted …"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "… 已省略 %@ 个更早文本字符 …"
+          }
+        }
+      }
+    },
+    "transcript.older-history.open-full" : {
+      "comment" : "button label for opening full older history details",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Full details"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完整详情"
+          }
+        }
+      }
+    },
+    "transcript.older-history.preview-help" : {
+      "comment" : "tooltip for expanding lightweight older history preview",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show a lightweight text-only preview of older messages"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示更早消息的轻量纯文本预览"
+          }
+        }
+      }
+    },
+    "transcript.older-history.preview-limit" : {
+      "comment" : "small label showing the character cap for older history preview",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Text preview · %@ chars max"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "纯文本预览 · 最多 %@ 字符"
+          }
+        }
+      }
+    },
+    "transcript.older-history.preview-summary" : {
+      "comment" : "summary under lightweight older history preview",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Showing %@ of %@ text chars · %@ omitted"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已显示 %@ / %@ 个文本字符 · 省略 %@ 个"
+          }
+        }
+      }
+    },
+    "transcript.older-history.role.assistant" : {
+      "comment" : "role label in lightweight older history preview",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Assistant"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "助手"
+          }
+        }
+      }
+    },
+    "transcript.older-history.role.system" : {
+      "comment" : "role label in lightweight older history preview",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统"
+          }
+        }
+      }
+    },
+    "transcript.older-history.role.tool" : {
+      "comment" : "role label in lightweight older history preview",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tool"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具"
+          }
+        }
+      }
+    },
+    "transcript.older-history.role.user" : {
+      "comment" : "role label in lightweight older history preview",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "User"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用户"
+          }
+        }
+      }
+    },
+    "transcript.older-history.role.widget" : {
+      "comment" : "role label in lightweight older history preview",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Widget"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "组件"
+          }
+        }
+      }
+    },
+    "transcript.older-history.role.workflow" : {
+      "comment" : "role label in lightweight older history preview",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workflow"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作流"
+          }
+        }
+      }
+    },
     "transcript.older-history.text" : {
       "comment" : "button label for older history card",
       "extractionState" : "manual",

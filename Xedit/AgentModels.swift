@@ -81,6 +81,11 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// Structured record of which memories / attached skills were
     /// injected into the latest turn context.
     var latestTurnRecall: AgentTurnRecallSnapshot?
+    /// Per-session right side-panel state. The visible Agent pane swaps
+    /// this state when the user switches sessions, so a panel opened in
+    /// one chat is restored when returning to that chat without leaking
+    /// into unrelated conversations.
+    var sidePanelState: AgentSidePanelState
     /// When the user pinned this session to the top of its workspace
     /// group. Nil = not pinned. We store the timestamp (not a bool) so
     /// that multiple pinned items inside one workspace can be ordered
@@ -128,6 +133,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         currentGoal: AgentGoal? = nil,
         learningEvents: [AgentLearningEvent] = [],
         latestTurnRecall: AgentTurnRecallSnapshot? = nil,
+        sidePanelState: AgentSidePanelState = .empty,
         pinnedAt: Date? = nil,
         archivedAt: Date? = nil,
         titleIsUserSet: Bool = false
@@ -156,6 +162,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.currentGoal = currentGoal
         self.learningEvents = learningEvents
         self.latestTurnRecall = latestTurnRecall
+        self.sidePanelState = sidePanelState
         self.pinnedAt = pinnedAt
         self.archivedAt = archivedAt
         self.titleIsUserSet = titleIsUserSet
@@ -216,7 +223,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         case id, title, workspaceRootPath, workspaceLocation, localWorkspaceIdentity, modelID
         case providerID, providerDisplayName
         case createdAt, updatedAt, messages, contextSummary, contextSummaryThroughMessageID
-        case didEditFiles, agentEditedPaths, interactionMode, approvalMode, executionAgent, activeExperts, currentPlan, currentGoal, learningEvents, latestTurnRecall
+        case didEditFiles, agentEditedPaths, interactionMode, approvalMode, executionAgent, activeExperts, currentPlan, currentGoal, learningEvents, latestTurnRecall, sidePanelState
         case pinnedAt, archivedAt, titleIsUserSet
     }
 
@@ -246,9 +253,43 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.currentGoal = try c.decodeIfPresent(AgentGoal.self, forKey: .currentGoal)
         self.learningEvents = try c.decodeIfPresent([AgentLearningEvent].self, forKey: .learningEvents) ?? []
         self.latestTurnRecall = try c.decodeIfPresent(AgentTurnRecallSnapshot.self, forKey: .latestTurnRecall)
+        self.sidePanelState = try c.decodeIfPresent(AgentSidePanelState.self, forKey: .sidePanelState) ?? .empty
         self.pinnedAt = try c.decodeIfPresent(Date.self, forKey: .pinnedAt)
         self.archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
         self.titleIsUserSet = try c.decodeIfPresent(Bool.self, forKey: .titleIsUserSet) ?? false
+    }
+}
+
+nonisolated struct AgentSidePanelState: Codable, Equatable {
+    var kind: AgentSidePanelKind?
+    var selectedFilePath: String?
+    var mediaTaskScope: AgentMediaTaskScope?
+    var imageEditorImagePath: String?
+    var imageEditorMaskPath: String?
+    var imageEditorPreferredOperation: AgentImageEditorOperationPreference?
+    var imageEditorContext: AgentImageEditorContext?
+    var lastViewedAt: Date?
+
+    static let empty = AgentSidePanelState()
+
+    init(
+        kind: AgentSidePanelKind? = nil,
+        selectedFilePath: String? = nil,
+        mediaTaskScope: AgentMediaTaskScope? = nil,
+        imageEditorImagePath: String? = nil,
+        imageEditorMaskPath: String? = nil,
+        imageEditorPreferredOperation: AgentImageEditorOperationPreference? = nil,
+        imageEditorContext: AgentImageEditorContext? = nil,
+        lastViewedAt: Date? = nil
+    ) {
+        self.kind = kind
+        self.selectedFilePath = selectedFilePath
+        self.mediaTaskScope = mediaTaskScope
+        self.imageEditorImagePath = imageEditorImagePath
+        self.imageEditorMaskPath = imageEditorMaskPath
+        self.imageEditorPreferredOperation = imageEditorPreferredOperation
+        self.imageEditorContext = imageEditorContext
+        self.lastViewedAt = lastViewedAt
     }
 }
 

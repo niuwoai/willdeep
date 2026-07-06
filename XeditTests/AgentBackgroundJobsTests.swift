@@ -146,6 +146,38 @@ struct AgentBackgroundJobsTests {
         #expect(registry.job(matchingHandle: "garbage", runtimeID: UUID()) == nil)
     }
 
+    /// Dev Server is a workspace-level surface: two Agent sessions in
+    /// the same repository should see and control the same port-holding
+    /// background jobs instead of each session pretending it owns a
+    /// separate server list.
+    @Test
+    func workspaceJobQueryIncludesNestedJobsAcrossRuntimes() {
+        let registry = AgentJobRegistry()
+        let root = URL(fileURLWithPath: "/tmp/willdeep-dev-root").standardizedFileURL
+        let frontend = makeStubJob(
+            command: "yarn dev",
+            workingDirectoryPath: root.appendingPathComponent("web").path,
+            runtimeID: UUID()
+        )
+        let backend = makeStubJob(
+            command: "go run .",
+            workingDirectoryPath: root.path,
+            runtimeID: UUID()
+        )
+        let sibling = makeStubJob(
+            command: "yarn dev",
+            workingDirectoryPath: "/tmp/willdeep-dev-root-other",
+            runtimeID: UUID()
+        )
+        registry.replaceJobsForTesting([frontend, backend, sibling])
+
+        let jobs = registry.jobs(inWorkspaceRoot: root)
+
+        #expect(jobs.map(\.id).contains(frontend.id))
+        #expect(jobs.map(\.id).contains(backend.id))
+        #expect(jobs.map(\.id).contains(sibling.id) == false)
+    }
+
     /// The completion notice that goes into history is the only way
     /// the model learns about a finished background job. Verify the
     /// rendered text carries every piece the model needs to act:
@@ -738,6 +770,7 @@ struct AgentBackgroundJobsTests {
         exitCode: Int32? = nil,
         finishedAfter seconds: TimeInterval? = nil,
         outputByteCount: Int = 0,
+        workingDirectoryPath: String? = nil,
         runtimeID: UUID = UUID()
     ) -> AgentBackgroundJob {
         let id = UUID()
@@ -746,7 +779,7 @@ struct AgentBackgroundJobsTests {
             id: id,
             shortID: String(id.uuidString.prefix(6)).lowercased(),
             command: command,
-            workingDirectoryPath: nil,
+            workingDirectoryPath: workingDirectoryPath,
             runtimeID: runtimeID,
             startedAt: started,
             pid: 12345,

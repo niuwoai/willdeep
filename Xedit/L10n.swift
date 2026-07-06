@@ -2701,6 +2701,27 @@ nonisolated enum L10n {
             let template = String(localized: "transcript.older-history.text", defaultValue: "More messages earlier in conversation")
             return String(format: template, a1)
         }
+        static let olderHistoryPreviewHelp = String(localized: "transcript.older-history.preview-help", defaultValue: "Show a lightweight text-only preview of older messages")
+        static func olderHistoryPreviewLimit(_ a1: String) -> String {
+            let template = String(localized: "transcript.older-history.preview-limit", defaultValue: "Text preview · %@ chars max")
+            return String(format: template, a1)
+        }
+        static func olderHistoryPreviewSummary(_ a1: String, _ a2: String, _ a3: String) -> String {
+            let template = String(localized: "transcript.older-history.preview-summary", defaultValue: "Showing %@ of %@ text chars · %@ omitted")
+            return String(format: template, a1, a2, a3)
+        }
+        static func olderHistoryOmittedText(_ a1: String) -> String {
+            let template = String(localized: "transcript.older-history.omitted", defaultValue: "… %@ older text characters omitted …")
+            return String(format: template, a1)
+        }
+        static let olderHistoryNoText = String(localized: "transcript.older-history.no-text", defaultValue: "Older messages have no plain text preview.")
+        static let olderHistoryOpenFull = String(localized: "transcript.older-history.open-full", defaultValue: "Full details")
+        static let olderHistoryRoleSystem = String(localized: "transcript.older-history.role.system", defaultValue: "System")
+        static let olderHistoryRoleUser = String(localized: "transcript.older-history.role.user", defaultValue: "User")
+        static let olderHistoryRoleAssistant = String(localized: "transcript.older-history.role.assistant", defaultValue: "Assistant")
+        static let olderHistoryRoleTool = String(localized: "transcript.older-history.role.tool", defaultValue: "Tool")
+        static let olderHistoryRoleWorkflow = String(localized: "transcript.older-history.role.workflow", defaultValue: "Workflow")
+        static let olderHistoryRoleWidget = String(localized: "transcript.older-history.role.widget", defaultValue: "Widget")
         static let runningTaskOne = String(localized: "transcript.running-tasks.one", defaultValue: "1 running task")
         static func runningTasksMany(_ a1: String) -> String {
             let template = String(localized: "transcript.running-tasks.many", defaultValue: "%@ running tasks")

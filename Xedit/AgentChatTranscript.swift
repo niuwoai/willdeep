@@ -75,6 +75,97 @@ struct AgentMessageContentPreview {
     }
 }
 
+struct AgentOlderHistoryPreview {
+    let content: String
+    let omittedCharacters: Int
+    let totalCharacters: Int
+
+    static func make(
+        messages: [AgentMessage],
+        maxCharacters: Int,
+        roleLabel: (AgentRole) -> String,
+        omissionText: (Int) -> String
+    ) -> AgentOlderHistoryPreview {
+        let totalCharacters = messages.reduce(0) { partial, message in
+            partial + plainTextLength(for: message, roleLabel: roleLabel)
+        }
+        guard maxCharacters > 0 else {
+            return AgentOlderHistoryPreview(
+                content: "",
+                omittedCharacters: totalCharacters,
+                totalCharacters: totalCharacters
+            )
+        }
+
+        var lines: [String] = []
+        var used = 0
+        var omitted = 0
+
+        for message in messages {
+            let text = plainText(for: message, roleLabel: roleLabel)
+            guard !text.isEmpty else { continue }
+            let separatorLength = lines.isEmpty ? 0 : 2
+            let available = maxCharacters - used - separatorLength
+            guard available > 0 else {
+                omitted += separatorLength + text.count
+                continue
+            }
+            if text.count <= available {
+                lines.append(text)
+                used += separatorLength + text.count
+            } else {
+                lines.append(String(text.prefix(available)))
+                omitted += text.count - available
+                used = maxCharacters
+            }
+        }
+
+        if omitted > 0 {
+            let marker = omissionText(omitted)
+            if used + 2 + marker.count <= maxCharacters {
+                lines.append(marker)
+            }
+        }
+
+        return AgentOlderHistoryPreview(
+            content: lines.joined(separator: "\n\n"),
+            omittedCharacters: omitted,
+            totalCharacters: totalCharacters
+        )
+    }
+
+    private static func plainText(for message: AgentMessage, roleLabel: (AgentRole) -> String) -> String {
+        let content = visiblePlainTextContent(for: message)
+        guard !content.isEmpty else { return "" }
+        return "\(roleLabel(message.role)):\n\(content)"
+    }
+
+    private static func plainTextLength(for message: AgentMessage, roleLabel: (AgentRole) -> String) -> Int {
+        let content = visiblePlainTextContent(for: message)
+        guard !content.isEmpty else { return 0 }
+        return roleLabel(message.role).count + 2 + content.count
+    }
+
+    private static func visiblePlainTextContent(for message: AgentMessage) -> String {
+        guard message.role == .user else {
+            return message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let display = AgentAttachedPromptDisplay.transform(message.content)
+        let source = display.isSplicedPrelude ? display.visibleContent : message.content
+        var parts: [String] = []
+        let visible = AgentUserContentSplitter.split(source)
+            .visible
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !visible.isEmpty {
+            parts.append(visible)
+        }
+        if !message.images.isEmpty {
+            parts.append("[Image attachment ×\(message.images.count)]")
+        }
+        return parts.joined(separator: "\n")
+    }
+}
+
 struct AgentChatTranscript: View {
     @EnvironmentObject var appState: AppState
     private static let bottomScrollID = "agent-chat-transcript-bottom"
@@ -83,6 +174,7 @@ struct AgentChatTranscript: View {
     /// AgentTurnReportCard 的 SwiftUI popover 开关。Anchor 挂在
     /// AgentChatHistoryTextView wrapper 上即可。
     @State private var showTurnReportPopover = false
+    @State private var isOlderHistoryPreviewExpanded = false
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -137,7 +229,10 @@ struct AgentChatTranscript: View {
                         let rendered = renderedMessages(from: allVisible)
                         let omitted = allVisible.count - rendered.count
                         if omitted > 0 {
-                            transcriptOlderHistoryCard(omittedCount: omitted)
+                            transcriptOlderHistoryCard(
+                                omittedCount: omitted,
+                                omittedMessages: olderMessages(from: allVisible)
+                            )
                         }
 
                         let streamingMessageID = currentStreamingMessageID
@@ -490,6 +585,11 @@ struct AgentChatTranscript: View {
     /// enough for SwiftUI to handle without main-thread freezes.
     private static let messageContentRenderCap = 3_000
 
+    /// Character cap for the inline older-history text preview. Full
+    /// history remains available through the standalone reader, but the
+    /// default expansion should stay cheap for very long sessions.
+    static let olderHistoryPreviewCharacterCap = 4_000
+
     /// Returns the message unchanged when its content fits, or a preview
     /// copy when it doesn't. Long previews preserve both the beginning
     /// and the end so the latest conclusion/error is still visible while
@@ -544,6 +644,11 @@ struct AgentChatTranscript: View {
         return Array(all.suffix(Self.renderedMessageCap))
     }
 
+    private func olderMessages(from all: [AgentMessage]) -> [AgentMessage] {
+        guard all.count > Self.renderedMessageCap else { return [] }
+        return Array(all.prefix(all.count - Self.renderedMessageCap))
+    }
+
     /// Inline disclosure shown right under a message whose content
     /// was truncated for the chat-pane render (see
     /// `messageContentRenderCap`). One tap opens the full message
@@ -585,40 +690,102 @@ struct AgentChatTranscript: View {
     }
 
     /// Banner shown at the top of the transcript when older messages
-    /// have been hidden from the chat pane. One tap opens the full
-    /// transcript in a standalone NSWindow.
+    /// have been hidden from the chat pane. The default expansion is a
+    /// capped plain-text preview; opening the full rich transcript is a
+    /// separate explicit action.
     @ViewBuilder
-    private func transcriptOlderHistoryCard(omittedCount: Int) -> some View {
-        Button {
-            guard let id = appState.activeAgentSessionID,
-                  let session = appState.agentSessions.first(where: { $0.id == id }) else { return }
-            AgentTranscriptReader.open(session: session)
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                Text(L10n.Transcript.olderHistoryText(String(omittedCount)))
-                    .font(AgentDesign.secondaryFont)
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-                Image(systemName: "arrow.up.right.square")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
+    private func transcriptOlderHistoryCard(omittedCount: Int, omittedMessages: [AgentMessage]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    isOlderHistoryPreviewExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Text(L10n.Transcript.olderHistoryText(String(omittedCount)))
+                        .font(AgentDesign.secondaryFont)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    Text(L10n.Transcript.olderHistoryPreviewLimit(String(Self.olderHistoryPreviewCharacterCap)))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                    Image(systemName: isOlderHistoryPreviewExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.55))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-            )
+            .buttonStyle(.plain)
+            .help(L10n.Transcript.olderHistoryPreviewHelp)
+
+            if isOlderHistoryPreviewExpanded {
+                let preview = AgentOlderHistoryPreview.make(
+                    messages: omittedMessages,
+                    maxCharacters: Self.olderHistoryPreviewCharacterCap,
+                    roleLabel: olderHistoryRoleLabel,
+                    omissionText: { L10n.Transcript.olderHistoryOmittedText(String($0)) }
+                )
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(preview.content.isEmpty ? L10n.Transcript.olderHistoryNoText : preview.content)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .lineLimit(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(spacing: 8) {
+                        Text(L10n.Transcript.olderHistoryPreviewSummary(
+                            String(preview.content.count),
+                            String(preview.totalCharacters),
+                            String(preview.omittedCharacters)
+                        ))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                        Spacer(minLength: 0)
+                        Button {
+                            guard let id = appState.activeAgentSessionID,
+                                  let session = appState.agentSessions.first(where: { $0.id == id }) else { return }
+                            AgentTranscriptReader.open(session: session)
+                        } label: {
+                            Label(L10n.Transcript.olderHistoryOpenFull, systemImage: "arrow.up.right.square")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .buttonStyle(.borderless)
+                        .help(L10n.Transcript.olderHistoryHelp)
+                    }
+                }
+                .padding(.top, 2)
+            }
         }
-        .buttonStyle(.plain)
-        .help(L10n.Transcript.olderHistoryHelp)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.55))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+        )
+    }
+
+    private func olderHistoryRoleLabel(_ role: AgentRole) -> String {
+        switch role {
+        case .system:
+            return L10n.Transcript.olderHistoryRoleSystem
+        case .user:
+            return L10n.Transcript.olderHistoryRoleUser
+        case .assistant:
+            return L10n.Transcript.olderHistoryRoleAssistant
+        case .tool:
+            return L10n.Transcript.olderHistoryRoleTool
+        case .workflowReport:
+            return L10n.Transcript.olderHistoryRoleWorkflow
+        case .widget:
+            return L10n.Transcript.olderHistoryRoleWidget
+        }
     }
 }

@@ -319,11 +319,20 @@ extension AgentMessage {
     /// Clipboard-friendly full text for copy buttons and standalone
     /// readers: visible text first, then pasted-text attachments.
     nonisolated var copyableContent: String {
-        guard !textAttachments.isEmpty else { return content }
+        let visibleContent: String
+        if role == .user {
+            let display = AgentAttachedPromptDisplay.transform(content)
+            let source = display.isSplicedPrelude ? display.visibleContent : content
+            visibleContent = AgentUserContentSplitter.split(source).visible
+        } else {
+            visibleContent = content
+        }
+
+        guard !textAttachments.isEmpty else { return visibleContent }
         var blocks: [String] = []
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = visibleContent.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
-            blocks.append(content)
+            blocks.append(visibleContent)
         }
         for attachment in textAttachments {
             blocks.append("""

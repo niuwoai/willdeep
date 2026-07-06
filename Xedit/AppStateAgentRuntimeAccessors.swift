@@ -225,4 +225,166 @@ extension AppState {
         get { activeRuntime?.requestTask }
         set { activeRuntime?.requestTask = newValue }
     }
+
+    var agentSidePanelKind: AgentSidePanelKind? {
+        get { activeRuntime?.sidePanelState.kind }
+        set {
+            updateActiveSidePanelState { state in
+                state.kind = newValue
+                if newValue != nil {
+                    state.lastViewedAt = Date()
+                }
+            }
+        }
+    }
+
+    var agentSidePanelSelectedFile: URL? {
+        get {
+            guard let path = activeRuntime?.sidePanelState.selectedFilePath, !path.isEmpty else {
+                return nil
+            }
+            return URL(fileURLWithPath: path)
+        }
+        set {
+            updateActiveSidePanelState { state in
+                state.selectedFilePath = newValue?.standardizedFileURL.path
+            }
+        }
+    }
+
+    func updateActiveSidePanelState(_ mutate: (inout AgentSidePanelState) -> Void) {
+        guard let runtime = activeRuntime else { return }
+        var state = runtime.sidePanelState
+        mutate(&state)
+        guard state != runtime.sidePanelState else { return }
+        runtime.sidePanelState = state
+        persistAgentSidePanelState(runtime: runtime)
+    }
+
+    func syncActiveSidePanelPayloadFromGlobals() {
+        guard !isRestoringAgentSidePanelGlobals,
+              activeRuntime != nil else { return }
+        updateActiveSidePanelState { state in
+            state.mediaTaskScope = agentMediaTaskPanelScope
+            state.imageEditorImagePath = agentImageEditorImageURL?.standardizedFileURL.path
+            state.imageEditorMaskPath = agentImageEditorMaskURL?.standardizedFileURL.path
+            state.imageEditorPreferredOperation = agentImageEditorPreferredOperation
+            state.imageEditorContext = agentImageEditorContext
+        }
+    }
+
+    func restoreAgentSidePanelGlobals(from runtime: AgentRuntime?) {
+        isRestoringAgentSidePanelGlobals = true
+        defer { isRestoringAgentSidePanelGlobals = false }
+
+        guard let state = runtime?.sidePanelState else {
+            agentMediaTaskPanelScope = nil
+            agentImageEditorImageURL = nil
+            agentImageEditorMaskURL = nil
+            agentImageEditorPreferredOperation = nil
+            agentImageEditorContext = nil
+            return
+        }
+
+        agentMediaTaskPanelScope = state.mediaTaskScope
+        agentImageEditorImageURL = state.imageEditorImagePath.map { URL(fileURLWithPath: $0) }
+        agentImageEditorMaskURL = state.imageEditorMaskPath.map { URL(fileURLWithPath: $0) }
+        agentImageEditorPreferredOperation = state.imageEditorPreferredOperation
+        agentImageEditorContext = state.imageEditorContext
+    }
+
+    func markActiveSidePanelViewedIfOpen() {
+        guard let activeAgentSessionID else { return }
+        markSidePanelViewed(sessionID: activeAgentSessionID)
+    }
+
+    func markSidePanelViewed(sessionID: AgentSession.ID, now: Date = Date()) {
+        var didUpdateRuntime = false
+        if let runtime = agentRuntimes[sessionID],
+           runtime.sidePanelState.kind != nil {
+            var state = runtime.sidePanelState
+            state.lastViewedAt = now
+            runtime.sidePanelState = state
+            runtime.session.sidePanelState = runtime.sidePanelState
+            didUpdateRuntime = true
+        }
+
+        if let index = agentSessions.firstIndex(where: { $0.id == sessionID }),
+           agentSessions[index].sidePanelState.kind != nil {
+            agentSessions[index].sidePanelState.lastViewedAt = now
+            AgentSessionStore.saveAsync(agentSessions[index])
+        } else if didUpdateRuntime, let runtime = agentRuntimes[sessionID] {
+            AgentSessionStore.saveAsync(runtime.session)
+        }
+    }
+
+    func reapStaleAgentSidePanelResources(now: Date = Date()) {
+        let timeout = Self.agentSidePanelResourceIdleTimeout
+        let activeID = activeAgentSessionID
+        var resetEmbeddedBrowser = false
+
+        for runtime in agentRuntimes.values {
+            guard runtime.id != activeID,
+                  shouldReapSidePanelResources(state: runtime.sidePanelState, now: now, timeout: timeout) else {
+                continue
+            }
+            releaseSidePanelResources(for: runtime.id, kind: runtime.sidePanelState.kind)
+            resetEmbeddedBrowser = resetEmbeddedBrowser || runtime.sidePanelState.kind == .embeddedBrowser
+            var state = runtime.sidePanelState
+            state.kind = nil
+            runtime.sidePanelState = state
+            runtime.session.sidePanelState = runtime.sidePanelState
+            persistAgentSidePanelState(runtime: runtime)
+        }
+
+        for index in agentSessions.indices {
+            guard agentSessions[index].id != activeID,
+                  shouldReapSidePanelResources(state: agentSessions[index].sidePanelState, now: now, timeout: timeout) else {
+                continue
+            }
+            let kind = agentSessions[index].sidePanelState.kind
+            releaseSidePanelResources(for: agentSessions[index].id, kind: kind)
+            resetEmbeddedBrowser = resetEmbeddedBrowser || kind == .embeddedBrowser
+            agentSessions[index].sidePanelState.kind = nil
+            AgentSessionStore.saveAsync(agentSessions[index])
+        }
+
+        if resetEmbeddedBrowser, activeRuntime?.sidePanelState.kind != .embeddedBrowser {
+            AgentEmbeddedBrowserController.shared.resetForResourceReaper()
+        }
+    }
+
+    private func shouldReapSidePanelResources(
+        state: AgentSidePanelState,
+        now: Date,
+        timeout: TimeInterval
+    ) -> Bool {
+        guard let kind = state.kind,
+              kind.releasesResourcesWhenUnviewed,
+              let lastViewedAt = state.lastViewedAt else {
+            return false
+        }
+        return now.timeIntervalSince(lastViewedAt) >= timeout
+    }
+
+    private func releaseSidePanelResources(for sessionID: AgentSession.ID, kind: AgentSidePanelKind?) {
+        switch kind {
+        case .terminal:
+            agentTerminalController.closeTabs(openedBy: sessionID)
+        case .embeddedBrowser:
+            break
+        default:
+            break
+        }
+    }
+
+    func persistAgentSidePanelState(runtime: AgentRuntime) {
+        runtime.session.sidePanelState = runtime.sidePanelState
+        if let index = agentSessions.firstIndex(where: { $0.id == runtime.id }) {
+            agentSessions[index].sidePanelState = runtime.sidePanelState
+            AgentSessionStore.saveAsync(agentSessions[index])
+        } else {
+            AgentSessionStore.saveAsync(runtime.session)
+        }
+    }
 }

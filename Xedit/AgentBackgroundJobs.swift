@@ -282,6 +282,15 @@ final class AgentJobRegistry: ObservableObject {
         jobs.filter { $0.runtimeID == runtimeID }
     }
 
+    func jobs(inWorkspaceRoot root: URL) -> [AgentBackgroundJob] {
+        let rootPath = root.standardizedFileURL.path
+        return jobs.filter { job in
+            guard let path = job.workingDirectoryPath else { return false }
+            let jobPath = URL(fileURLWithPath: path).standardizedFileURL.path
+            return jobPath == rootPath || jobPath.hasPrefix(rootPath + "/")
+        }
+    }
+
     func aliveJobs(forRuntime runtimeID: UUID) -> [AgentBackgroundJob] {
         jobs.filter { $0.runtimeID == runtimeID && $0.isAlive }
     }

@@ -114,6 +114,12 @@ enum AgentChatHistoryRenderer {
         hasher.combine(m.id)
         hasher.combine(m.role.rawValue)
         hasher.combine(m.content)
+        hasher.combine(m.images.count)
+        for image in m.images {
+            hasher.combine(image.id)
+            hasher.combine(image.mimeType)
+            hasher.combine(image.dataBase64.count)
+        }
         hasher.combine(m.textAttachments.count)
         for attachment in m.textAttachments {
             hasher.combine(attachment.id)
@@ -298,7 +304,8 @@ enum AgentChatHistoryRenderer {
             let displaySourceContent: String = {
                 guard message.role == .user else { return message.content }
                 let display = AgentAttachedPromptDisplay.transform(message.content)
-                return display.isSplicedPrelude ? display.visibleContent : message.content
+                let source = display.isSplicedPrelude ? display.visibleContent : message.content
+                return AgentUserContentSplitter.split(source).visible
             }()
             let body: String
             if useMono, message.content.count > toolBodyLimit {
@@ -322,6 +329,29 @@ enum AgentChatHistoryRenderer {
                     kind: bubbleKind(for: message.role),
                     to: result,
                     range: attachmentRange,
+                    paragraphStyle: bodyParagraphStyle(for: message.role),
+                    userMessageID: message.id,
+                    foregroundColor: nil
+                )
+                hasMessageBubbleContent = true
+            }
+
+            if message.role == .user, !message.images.isEmpty {
+                if hasMessageBubbleContent {
+                    result.append(NSAttributedString(string: "\n", attributes: [.font: bodyFont]))
+                }
+                let imageStart = result.length
+                appendImageAttachments(
+                    message.images,
+                    to: result,
+                    font: bodyFont,
+                    secondaryColor: secondaryColor
+                )
+                let imageRange = NSRange(location: imageStart, length: result.length - imageStart)
+                applyBubbleChrome(
+                    kind: bubbleKind(for: message.role),
+                    to: result,
+                    range: imageRange,
                     paragraphStyle: bodyParagraphStyle(for: message.role),
                     userMessageID: message.id,
                     foregroundColor: nil

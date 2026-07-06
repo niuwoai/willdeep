@@ -10,12 +10,12 @@
 import AppKit
 import SwiftUI
 
-enum AgentImageEditorOperationPreference: String, Equatable {
+nonisolated enum AgentImageEditorOperationPreference: String, Codable, Equatable {
     case inpaint
     case erase
 }
 
-struct AgentImageEditorContext: Equatable {
+nonisolated struct AgentImageEditorContext: Codable, Equatable {
     var projectID: String? = nil
     var episodeID: String? = nil
     var shotID: String? = nil

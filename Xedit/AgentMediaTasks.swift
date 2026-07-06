@@ -910,7 +910,7 @@ final class AgentMediaTaskPoller {
     }
 }
 
-struct AgentMediaTaskScope: Equatable {
+nonisolated struct AgentMediaTaskScope: Codable, Equatable {
     var label: String
     var projectID: String?
     var episodeID: String?

@@ -54,6 +54,23 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         }
     }
 
+    func resetForResourceReaper() {
+        webView?.stopLoading()
+        webView?.loadHTMLString("", baseURL: nil)
+        webView = nil
+        address = "https://example.com"
+        currentURL = ""
+        title = ""
+        isLoading = false
+        lastError = nil
+        lastScreenshotPath = nil
+        canGoBack = false
+        canGoForward = false
+        consoleEvents.removeAll()
+        requestEvents.removeAll()
+        failedResourceEvents.removeAll()
+    }
+
     var isReady: Bool {
         webView != nil
     }

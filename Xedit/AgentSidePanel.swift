@@ -34,7 +34,7 @@ struct AgentSidePanelOpenRequest: Equatable, Identifiable {
     }
 }
 
-enum AgentSidePanelKind: String, CaseIterable, Identifiable {
+nonisolated enum AgentSidePanelKind: String, CaseIterable, Identifiable, Codable {
     case preview
     case diff
     case files
@@ -49,6 +49,19 @@ enum AgentSidePanelKind: String, CaseIterable, Identifiable {
     case plan
 
     var id: String { rawValue }
+
+    /// Panels with live processes, embedded web content, or large editing
+    /// canvases should not keep resources forever after their owning
+    /// session has gone unviewed. Dev Server is intentionally excluded:
+    /// those jobs are workspace-level resources because they occupy ports.
+    var releasesResourcesWhenUnviewed: Bool {
+        switch self {
+        case .terminal, .embeddedBrowser, .widget, .imageEditor:
+            return true
+        case .preview, .diff, .files, .devServer, .backgroundTasks, .mediaTasks, .shortDrama, .plan:
+            return false
+        }
+    }
 
     var requiredExpert: AgentExpert? {
         switch self {

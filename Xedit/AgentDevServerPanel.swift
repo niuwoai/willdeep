@@ -226,8 +226,8 @@ struct AgentDevServerPanel: View {
     }
 
     private var devJobs: [AgentBackgroundJob] {
-        guard let runtimeID = appState.activeRuntime?.id else { return [] }
-        return appState.agentJobRegistry.jobs(forRuntime: runtimeID)
+        guard let workspaceRootURL else { return [] }
+        return appState.agentJobRegistry.jobs(inWorkspaceRoot: workspaceRootURL)
             .filter { job in
                 job.isAlive || Self.looksLikeDevServerCommand(job.command)
             }

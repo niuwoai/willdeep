@@ -37,6 +37,7 @@ struct AgentSessionPersistenceTests {
         #expect(session.contextSummaryThroughMessageID == nil)
         #expect(session.didEditFiles == false)
         #expect(session.workspaceRootPath == nil)
+        #expect(session.sidePanelState == .empty)
     }
 
     /// Round-trip a session carrying every new field — values should
@@ -59,6 +60,7 @@ struct AgentSessionPersistenceTests {
                 AgentGoal.Item(text: "Mutators persist", done: false)
             ]
         )
+        let sidePanelLastViewedAt = Date(timeIntervalSince1970: 760_000_100)
         let original = AgentSession(
             title: "Persistence work",
             workspaceRootPath: "/Users/test/proj",
@@ -82,6 +84,26 @@ struct AgentSessionPersistenceTests {
                         reasons: ["keyword overlap"]
                     )
                 ]
+            ),
+            sidePanelState: AgentSidePanelState(
+                kind: AgentSidePanelKind.imageEditor,
+                selectedFilePath: "/Users/test/proj/README.md",
+                mediaTaskScope: AgentMediaTaskScope(
+                    label: "Shot 1",
+                    projectID: "project-1",
+                    episodeID: "episode-1",
+                    shotID: "shot-1"
+                ),
+                imageEditorImagePath: "/Users/test/proj/frame.png",
+                imageEditorMaskPath: "/Users/test/proj/mask.png",
+                imageEditorPreferredOperation: AgentImageEditorOperationPreference.erase,
+                imageEditorContext: AgentImageEditorContext(
+                    projectID: "project-1",
+                    episodeID: "episode-1",
+                    shotID: "shot-1",
+                    reviewItemID: "review-1"
+                ),
+                lastViewedAt: sidePanelLastViewedAt
             )
         )
 
@@ -103,6 +125,14 @@ struct AgentSessionPersistenceTests {
         #expect(decoded.latestTurnRecall?.items.count == 1)
         #expect(decoded.latestTurnRecall?.items.first?.kind == .memory)
         #expect(decoded.didEditFiles == true)
+        #expect(decoded.sidePanelState.kind == AgentSidePanelKind.imageEditor)
+        #expect(decoded.sidePanelState.selectedFilePath == "/Users/test/proj/README.md")
+        #expect(decoded.sidePanelState.mediaTaskScope?.shotID == "shot-1")
+        #expect(decoded.sidePanelState.imageEditorImagePath == "/Users/test/proj/frame.png")
+        #expect(decoded.sidePanelState.imageEditorMaskPath == "/Users/test/proj/mask.png")
+        #expect(decoded.sidePanelState.imageEditorPreferredOperation == AgentImageEditorOperationPreference.erase)
+        #expect(decoded.sidePanelState.imageEditorContext?.reviewItemID == "review-1")
+        #expect(decoded.sidePanelState.lastViewedAt == sidePanelLastViewedAt)
     }
 
     /// A goal-mode session with the goal field missing decodes fine —

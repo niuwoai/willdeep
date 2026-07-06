@@ -15,6 +15,7 @@ import AppKit
 /// and the root directory for the sidebar file tree.
 final class AppState: ObservableObject {
     nonisolated static let maxAgentToolRounds = 64
+    nonisolated static let agentSidePanelResourceIdleTimeout: TimeInterval = 60 * 60
 
     @Published var openedFileURL: URL?
     @Published var fileContent: String {
@@ -159,29 +160,38 @@ final class AppState: ObservableObject {
     /// One-shot request from chat-pane affordances (file chips, citations,
     /// future commands) to open a specific kind of side panel in Agent
     /// mode and optionally focus a file. AgentModeView listens, applies
-    /// the request, then clears it. Side-panel state itself lives in
-    /// AgentModeView's @State.
+    /// the request to the active session runtime, then clears it.
     @Published var agentSidePanelRequest: AgentSidePanelOpenRequest?
     /// Optional scope for the media task side panel. Short-drama rows set
     /// this before opening the panel so the task list can show only the
     /// project / episode / shot / asset the user clicked.
-    @Published var agentMediaTaskPanelScope: AgentMediaTaskScope?
+    @Published var agentMediaTaskPanelScope: AgentMediaTaskScope? {
+        didSet { syncActiveSidePanelPayloadFromGlobals() }
+    }
     /// Selected local image for the right-side image edit/mask panel.
     /// Media-task artifact rows set this, then request the image editor
     /// side panel. The editor can export masks for Replicate/some.im
     /// inpaint workflows without bloating chat history.
-    @Published var agentImageEditorImageURL: URL?
+    @Published var agentImageEditorImageURL: URL? {
+        didSet { syncActiveSidePanelPayloadFromGlobals() }
+    }
     /// Optional seed mask for the image editor. Failed inpaint/erase tasks
     /// can reopen with the previous mask as an editable base layer.
-    @Published var agentImageEditorMaskURL: URL?
+    @Published var agentImageEditorMaskURL: URL? {
+        didSet { syncActiveSidePanelPayloadFromGlobals() }
+    }
     /// Optional one-shot mode hint for the image editor. Short-drama
     /// review items use it so "erase" opens directly in erase mode while
     /// "redraw" opens in inpaint mode.
-    @Published var agentImageEditorPreferredOperation: AgentImageEditorOperationPreference?
+    @Published var agentImageEditorPreferredOperation: AgentImageEditorOperationPreference? {
+        didSet { syncActiveSidePanelPayloadFromGlobals() }
+    }
     /// Optional short-drama anchor for the image editor. When present,
     /// inpaint/erase tasks created from the editor can flow back into
     /// the same project episode and shot through the media task registry.
-    @Published var agentImageEditorContext: AgentImageEditorContext?
+    @Published var agentImageEditorContext: AgentImageEditorContext? {
+        didSet { syncActiveSidePanelPayloadFromGlobals() }
+    }
     /// Command families the user has explicitly allowed Agent mode to run
     /// without prompting again, e.g. `git push`.
     @Published var agentAlwaysAllowedCommands: [AgentAlwaysAllowedCommand] = []
@@ -269,6 +279,7 @@ final class AppState: ObservableObject {
     /// knows where to create/destroy runtimes — when rc2 lands there's
     /// no scramble to retrofit lifecycle.
     @Published var agentRuntimes: [AgentSession.ID: AgentRuntime] = [:]
+    var isRestoringAgentSidePanelGlobals = false
 
     /// Session ids for which an LLM title-summarization request is
     /// currently in flight. Used as a dedup guard in
@@ -294,7 +305,12 @@ final class AppState: ObservableObject {
 
     /// Active Agent-mode session id. nil means "scratch" — Editor-mode
     /// chat keeps working without forcing a session to exist.
-    @Published var activeAgentSessionID: AgentSession.ID?
+    @Published var activeAgentSessionID: AgentSession.ID? {
+        didSet {
+            guard let oldValue, oldValue != activeAgentSessionID else { return }
+            markSidePanelViewed(sessionID: oldValue)
+        }
+    }
     /// Top-level UI mode. Editor is the classic file editor; agent hides
     /// the editor and shows the conversation-first layout.
     @Published var appMode: AppMode = .editor
@@ -331,6 +347,7 @@ final class AppState: ObservableObject {
     /// above doesn't echo it back out (infinite loop guard).
     private var isApplyingExternalTerminalSettings = false
     private var terminalSettingsSyncSubscription: AnyCancellable?
+    private var agentSidePanelResourceReaperTimer: Timer?
     var editorTerminalSession = EditorTerminalSession()
     let agentTerminalController = AgentInteractiveTerminalController()
 
@@ -598,6 +615,7 @@ final class AppState: ObservableObject {
                 self.editorTerminalSettings = loaded
                 self.isApplyingExternalTerminalSettings = false
             }
+        startAgentSidePanelResourceReaper()
     }
 
     deinit {
@@ -609,6 +627,7 @@ final class AppState: ObservableObject {
         jobRegistrySubscription?.cancel()
         mediaTaskRegistrySubscription?.cancel()
         sessionSaveFailureSubscription?.cancel()
+        agentSidePanelResourceReaperTimer?.invalidate()
         Task { @MainActor [poller = agentMediaTaskPoller] in
             poller.stop()
         }
@@ -641,13 +660,27 @@ final class AppState: ObservableObject {
         activeRuntimeForwardTask = nil
         guard let runtime = activeRuntime else {
             activeRuntimeSubscription = nil
+            restoreAgentSidePanelGlobals(from: nil)
             return
         }
+        restoreAgentSidePanelGlobals(from: runtime)
+        markActiveSidePanelViewedIfOpen()
         activeRuntimeSubscription = runtime.objectWillChange
             .sink { [weak self] _ in
                 guard let self, !self.suppressActiveRuntimeForward else { return }
                 self.scheduleActiveRuntimeForward()
             }
+    }
+
+    private func startAgentSidePanelResourceReaper() {
+        agentSidePanelResourceReaperTimer?.invalidate()
+        let timer = Timer(timeInterval: 5 * 60, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.reapStaleAgentSidePanelResources()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        agentSidePanelResourceReaperTimer = timer
     }
 
     private func scheduleActiveRuntimeForward() {

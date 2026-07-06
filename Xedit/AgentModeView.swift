@@ -14,12 +14,6 @@ import UniformTypeIdentifiers
 struct AgentModeView: View {
     @EnvironmentObject var appState: AppState
     @State private var sidebarWidth: CGFloat = 230
-    @State private var sidePanel: AgentSidePanelKind?
-    /// 共享给 Files 和 Preview 两个子面板:Files 里点击 markdown/html
-    /// 时写入,Preview 直接读它 render。lift 到 AgentModeView 是因为
-    /// 同一时间只有一个面板挂着,Files 切到 Preview 时子 view 会被
-    /// 拆掉,@State 留在父 view 才能跨面板保活。
-    @State private var sidePanelFile: URL?
     @State private var lastTaskMonitorSnapshot: AgentTaskMonitorSnapshot?
     @State private var didObserveAgentTaskMonitorActivity = false
     /// Whether the leftmost session list is shown. Toggled from the chat
@@ -59,7 +53,7 @@ struct AgentModeView: View {
             // 面板宽度现在会随窗口宽度自适应封顶(见 panelWidthCap),
             // 窗口下限只需保证「最窄面板」放得下,不再跟着持久化宽度
             // 走 —— 也就免了拖拽提交后反复改写 contentMinSize。
-            + (sidePanel != nil ? CGFloat(sidePanelWidthRange.lowerBound) : 0)
+            + (appState.agentSidePanelKind != nil ? CGFloat(sidePanelWidthRange.lowerBound) : 0)
     }
 
     /// 侧栏(含 1pt 分隔线)当前占用的宽度。
@@ -95,6 +89,7 @@ struct AgentModeView: View {
         let panelWidth = min(currentSidePanelWidth, cap)
         let isResizingPanel = liveSidePanelWidth != nil
         let frozenChatWidth = max(totalWidth - sidebarOccupiedWidth - 1 - CGFloat(committedPanelWidth), 0)
+        let activeSidePanel = appState.agentSidePanelKind
         HStack(spacing: 0) {
             if sessionsSidebarVisible {
                 AgentSessionsSidebar()
@@ -116,7 +111,7 @@ struct AgentModeView: View {
 
             VStack(spacing: 0) {
                 AgentChatHeader(
-                    sidePanel: $sidePanel,
+                    sidePanel: sidePanelBinding,
                     sessionsSidebarVisible: $sessionsSidebarVisible,
                     isSessionSearchPresented: $isSessionSearchPresented
                 )
@@ -130,7 +125,7 @@ struct AgentModeView: View {
             // 「闪」),多出的部分被下面的 `.clipped()` 裁掉;左缘
             // (`.leading`)钉死不动,松手后一次性按新宽度重排。
             .frame(
-                width: sidePanel != nil && isResizingPanel ? frozenChatWidth : nil,
+                width: activeSidePanel != nil && isResizingPanel ? frozenChatWidth : nil,
                 alignment: .leading
             )
             // `minWidth: 0` 是关键:frame 只写 `maxWidth: .infinity` 时,
@@ -145,7 +140,7 @@ struct AgentModeView: View {
             .background(skin.windowBackground)
             .clipped()
 
-            if sidePanel != nil {
+            if activeSidePanel != nil {
                 // 可拖动的分隔条:拖它来调聊天主区 ↔ 侧栏的边界。
                 // 侧栏在右侧,所以向左拖(translation.width 变负)= 加宽侧栏。
                 AgentSidePanelResizeHandle(
@@ -162,8 +157,8 @@ struct AgentModeView: View {
                     }
                 )
                 AgentSidePanelHost(
-                    kind: $sidePanel,
-                    selectedFile: $sidePanelFile,
+                    kind: sidePanelBinding,
+                    selectedFile: sidePanelFileBinding,
                     width: CGFloat(panelWidth),
                     contentWidth: CGFloat(committedPanelWidth)
                 )
@@ -194,7 +189,7 @@ struct AgentModeView: View {
         .onCompatibleChange(of: currentTaskMonitorSnapshot) { oldSnapshot, newSnapshot in
             handleTaskMonitorSnapshotChange(from: oldSnapshot, to: newSnapshot)
         }
-        .onCompatibleChange(of: sidePanel) { oldPanel, newPanel in
+        .onCompatibleChange(of: appState.agentSidePanelKind) { oldPanel, newPanel in
             if newPanel == nil {
                 liveSidePanelWidth = nil
             }
@@ -207,22 +202,36 @@ struct AgentModeView: View {
                 appState.agentSidePanelRequest = nil
                 return
             }
-            if let url = request.file { sidePanelFile = url }
+            if let url = request.file { appState.agentSidePanelSelectedFile = url }
             if request.kind == .mediaTasks {
                 appState.agentMediaTaskPanelScope = request.mediaTaskScope
             }
-            sidePanel = request.kind
+            appState.agentSidePanelKind = request.kind
             // Consume:让下一次同样的请求(同 kind 同 file)也能再触
             // 发,且不会在 sheet dismiss / 视图重绘时被重放。
             appState.agentSidePanelRequest = nil
         }
         .onCompatibleChange(of: appState.agentActiveExperts) { _, activeExperts in
-            guard let current = sidePanel,
+            guard let current = appState.agentSidePanelKind,
                   !current.isAvailable(activeExperts: activeExperts) else {
                 return
             }
-            sidePanel = nil
+            appState.agentSidePanelKind = nil
         }
+    }
+
+    private var sidePanelBinding: Binding<AgentSidePanelKind?> {
+        Binding(
+            get: { appState.agentSidePanelKind },
+            set: { appState.agentSidePanelKind = $0 }
+        )
+    }
+
+    private var sidePanelFileBinding: Binding<URL?> {
+        Binding(
+            get: { appState.agentSidePanelSelectedFile },
+            set: { appState.agentSidePanelSelectedFile = $0 }
+        )
     }
 
     private var currentTaskMonitorSnapshot: AgentTaskMonitorSnapshot {
@@ -261,18 +270,18 @@ struct AgentModeView: View {
         let baseline = lastTaskMonitorSnapshot ?? oldSnapshot
         let didAutoOpenContentChange = newSnapshot.autoOpenDigest != baseline.autoOpenDigest
         defer { lastTaskMonitorSnapshot = newSnapshot }
-        if sidePanel == .backgroundTasks, !newSnapshot.hasVisibleMonitorContent {
-            sidePanel = nil
+        if appState.agentSidePanelKind == .backgroundTasks, !newSnapshot.hasVisibleMonitorContent {
+            appState.agentSidePanelKind = nil
             return
         }
 
         guard didObserveAgentTaskMonitorActivity,
               newSnapshot.hasAutoOpenMonitorContent,
               didAutoOpenContentChange,
-              sidePanel == nil else {
+              appState.agentSidePanelKind == nil else {
             return
         }
-        sidePanel = .backgroundTasks
+        appState.agentSidePanelKind = .backgroundTasks
     }
 }
 
