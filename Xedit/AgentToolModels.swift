@@ -34,6 +34,17 @@ enum AgentToolCallStatus: String, Codable {
     case denied
 }
 
+extension AgentToolCallStatus {
+    var isBlockingForUserDecision: Bool {
+        switch self {
+        case .pendingApproval, .awaitingConfirm, .awaitingUserAnswer:
+            return true
+        case .running, .succeeded, .failed, .denied:
+            return false
+        }
+    }
+}
+
 struct AgentToolParameter: Codable, Equatable {
     enum ParameterType: String, Codable {
         case string

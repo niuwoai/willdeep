@@ -53,6 +53,10 @@ extension AppState {
                     executionAgent: executionAgent
                 )
             )
+            if closeBlockingAgentToolDecision(for: runtime, reason: "New message sent") {
+                runtime.shouldConsumeQueueAfterStop = true
+                runtime.requestTask?.cancel()
+            }
             return
         }
 

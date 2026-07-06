@@ -1,6 +1,6 @@
 # Short Drama AI MVP Tryout
 
-> Last updated: 2026-07-05 | Baseline version: v1.129.0-rc34
+> Last updated: 2026-07-06 | Baseline version: v1.129.0-rc40
 
 这份文档用于试用当前短剧 AI MVP。它不是完整产品手册，只覆盖“不完美但可用”的主路径。
 
@@ -112,4 +112,4 @@ import_media_manifest(package_directory=build/ci/short_drama_mvp_tryout_package,
 
 ## 验收记录
 
-人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.129.0-rc34 — 短剧指针同步 / 补丁应用 CRLF 与模糊匹配加固` 小节。
+人工 smoke 结果请记录到 [MANUAL_TEST_QUEUE.md](MANUAL_TEST_QUEUE.md) 的 `1.129.0-rc40 — Agent 编辑提示去重 / 远程编辑兜底放宽` 小节。

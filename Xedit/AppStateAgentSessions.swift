@@ -612,7 +612,7 @@ extension AppState {
     /// drop them explicitly.
     func stopAgentResponse() {
         guard let runtime = activeRuntime, runtime.isResponding else { return }
-        closeAwaitingUserAnswer(for: runtime, reason: "Response stopped")
+        closeBlockingAgentToolDecision(for: runtime, reason: "Response stopped")
         runtime.shouldConsumeQueueAfterStop = !runtime.queuedMessages.isEmpty
         runtime.requestTask?.cancel()
         Task { @MainActor [weak self, weak runtime] in
@@ -629,13 +629,20 @@ extension AppState {
         }
     }
 
-    private func closeAwaitingUserAnswer(for runtime: AgentRuntime, reason: String) {
-        for index in runtime.toolCalls.indices where runtime.toolCalls[index].status == .awaitingUserAnswer {
+    @discardableResult
+    func closeBlockingAgentToolDecision(for runtime: AgentRuntime, reason: String) -> Bool {
+        var closedAny = false
+        for index in runtime.toolCalls.indices where runtime.toolCalls[index].status.isBlockingForUserDecision {
             runtime.toolCalls[index].status = .denied
             runtime.toolCalls[index].errorMessage = reason
+            closedAny = true
         }
-        runtime.toolDecisionWaiter?.resume(returning: .denied(reason: reason))
-        runtime.toolDecisionWaiter = nil
+        if let waiter = runtime.toolDecisionWaiter {
+            runtime.toolDecisionWaiter = nil
+            waiter.resume(returning: .denied(reason: reason))
+            closedAny = true
+        }
+        return closedAny
     }
 
     func clearAgentQueue() {
@@ -669,7 +676,8 @@ extension AppState {
         runtime.queuedMessages.insert(message, at: 0)
 
         if runtime.isResponding {
-            closeAwaitingUserAnswer(for: runtime, reason: "Sending queued message")
+            closeBlockingAgentToolDecision(for: runtime, reason: "Sending queued message")
+            runtime.shouldConsumeQueueAfterStop = true
             runtime.requestTask?.cancel()
         } else {
             consumeNextQueuedMessageIfNeeded(for: runtime)

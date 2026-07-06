@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-05 | Current version: v1.129.0-rc34
+> Last updated: 2026-07-06 | Current version: v1.129.0-rc40
 
 ## Positioning
 
@@ -14,6 +14,14 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Agent 编辑提示去重与远程编辑兜底放宽（1.129.0-rc40）** —— 全屏 Agent 已经在 composer 上方显示「N 个文件已更改 +X -Y / 审查」时，transcript 底部不再重复显示「正在编辑/已编辑 某个文件」单文件活动行；侧边栏终端提示词也从 heredoc/apply patch 绝对禁用改为默认避免、兜底可用：远端无法安装 `lrzsz` 或没有可靠传输路径时，可以使用小而清晰、可审查、可验证的 heredoc、patch、sed/perl 等远程编辑方式。
+- **侧边栏终端 rz/sz ZMODEM 桥接（1.129.0-rc39）** —— WillDeep 自己的侧边栏终端现在会拦截 lrzsz 握手并把本机 `rz`/`sz` 子进程接到当前 PTY：远端 `rz` 时弹文件选择并上传，远端 `sz` 时弹保存目录并下载；本机缺 lrzsz 时会取消本次握手并提示 `brew install lrzsz`，Agent 提示词也改为远端使用前先 `command -v rz sz`，缺失则提示按服务器系统安装 `lrzsz`。
+- **`terminal_snapshot` 读取抗卡死与错误可观测（1.129.0-rc39）** —— 取侧边栏终端内容加 3 秒超时护栏：主线程被流式渲染吃满时工具不再无限等待 `MainActor` 而挂住调用，超时返回明确可重试错误；secret 脱敏与截断移出主线程（主线程只做一次 `rawViewportText` 廉价抓取），避免慢正则冻结 UI；无活跃终端标签时抛清晰错误（引导开侧边栏或 `terminal_send_command` 自动起 shell）而非静默空快照，终端进程已退出时明确标注，区分「没输出」与「终端已死」。
+- **侧边栏终端 heredoc 收敛与 rz/sz 条件化（1.129.0-rc38）** —— Agent system prompt、`terminal_send_command` 工具描述和远程 runtime 提示同步要求：操作可见侧边栏终端时不要用 heredoc / here-string / `cat > file` / `echo > file` 等方式生成或覆写文件；`rz/sz` 只作为确认终端前端支持 ZMODEM、命令已安装且小文件测试/用户确认后的增强传输路径，不支持时回退到 scp/rsync、workspace 文件、附件或 App 编辑/写入流程。
+- **Composer 图片粘贴/文本模型发图修复（1.129.0-rc37）** —— Composer 粘贴图片时按内容去重，避免 macOS 同一张图的多种 pasteboard flavor 被重复预览；当前模型不支持图片输入时，会先通过 Image Understanding 生成图片描述并入用户消息，失败则停在错误卡，不再继续发出“图片已省略”的空图请求。
+- **shell 包装哨兵自动审批修复（1.129.0-rc37）** —— `sh` / `bash` / `zsh -c/-lc` 包装的一句 `echo DOCKER_DONE` / `printf` 等无副作用收尾命令会按真实内层命令静态放行，不再让用户确认；包装里藏删除、敏感路径或系统路径读取时仍会退回审批/确认。
+- **工作树 diff 大内容降级展示（1.129.0-rc36）** —— Agent 工作树审查遇到大量文件、超长变更或 `railway-prebuilt-web-dist` / `dist` 等前端构建产物时，会先展示降级原因与文件摘要，不再把完整压缩 JS/CSS hunk 塞进 SwiftUI diff 面板，避免复制出的预构建前端目录拖慢界面。
+- **Agent 等待态被新引导接管（1.129.0-rc35）** —— 当前 turn 停在工具授权、typed `confirm` 或 `ask_user` 时，如果用户继续发送新消息或点击排队消息立即发送，旧等待态会统一视为拒绝/跳过并恢复队列消费；confirm / ask_user 卡片不再残留在聊天区等一个用户明显不打算再给的输入。
 - **稳定性/性能/i18n 小步修复（1.129.0-rc29）** —— 移动网关 host/port 拼 URL 的强制解包改为安全回退（非法 host 不再闪崩）；关标签页在「未保存更改」弹窗返回后按 id 重查 index（模态期间 tabs 变化不再越界）；窗口 chrome 轮询加防重入（每次 SwiftUI 更新不再新启一条 30-tick 递归链）；项目文件缓存淘汰排序先解析 mtime 再排序；LSP 四条跳转路径失败补 `[EditorLSP]` 日志；关标签页两个 NSAlert、composer 压缩按钮、工作树摘要条、任务监控溢出计数等硬编码文案全部走 L10n（en/zh-Hans 齐全，覆盖率守卫保持 100%）。
 - **Patch 批量操作条置底（1.129.0-rc26）** —— 多张 Apply 卡片同时待审时，transcript 级 `全部拒绝 / 全部应用` 批量操作条改到这一组待审卡片最下面，先展示逐项变更，再给批量处理入口，降低用户还没看完就误点全局操作的风险。
 - **VL 失败不污染用户消息（1.129.0-rc25）** —— 文本模型带图时，Image Understanding / VL 请求失败后不再把 `Image description failed...`、HTTP 状态码或 provider 错误正文拼进用户气泡；外部执行器委托 prompt 与视觉 QA 工具同样改成通用不可用/跳过语义，保留诊断边界，避免把 401、模型名或 relay 错误暴露到用户正文里。

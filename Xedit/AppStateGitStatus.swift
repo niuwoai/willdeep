@@ -213,6 +213,11 @@ extension AppState {
 
     nonisolated static let maxGitOutputBytes = 512 * 1024
     nonisolated static let gitCommandTimeout: TimeInterval = 5
+    nonisolated static let worktreeDiffPreviewMaxFiles = 40
+    nonisolated static let worktreeDiffPreviewMaxChangedLines = 1_200
+    nonisolated static let worktreeDiffPreviewMaxCharacters = 96 * 1024
+    nonisolated static let worktreeDiffPreviewGeneratedFileThreshold = 8
+    nonisolated static let worktreeDiffPreviewFileListLimit = 80
 
     nonisolated static func runGit(
         arguments: [String],
@@ -687,6 +692,14 @@ extension AppState {
         changes: AgentWorktreeChangeSummary,
         repositoryRoot: URL
     ) -> AgentWorktreeDiffPreview {
+        let summaryReasons = worktreeDiffPreviewSummaryReasons(for: changes)
+        if !summaryReasons.isEmpty {
+            return AgentWorktreeDiffPreview(
+                title: "\(changes.fileCount) 个文件已更改 +\(changes.totalAddedLines) -\(changes.totalDeletedLines)",
+                diff: worktreeDiffPreviewSummaryText(changes: changes, reasons: summaryReasons)
+            )
+        }
+
         var sections: [String] = []
         let trackedPaths = changes.files
             .filter { $0.kind != .untracked }
@@ -715,15 +728,119 @@ extension AppState {
         var diff = sections.joined(separator: "\n")
         if diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             diff = "当前没有可显示的 diff。"
-        } else if diff.count > maxGitOutputBytes {
-            let end = diff.index(diff.startIndex, offsetBy: maxGitOutputBytes)
-            diff = String(diff[..<end]) + "\n\n... diff output truncated ..."
+        } else if diff.count > worktreeDiffPreviewMaxCharacters {
+            diff = worktreeDiffPreviewSummaryText(
+                changes: changes,
+                reasons: ["diff 文本超过 \(worktreeDiffPreviewMaxCharacters / 1024)KB，已降级为摘要，避免界面渲染长文本。"],
+                sample: String(diff.prefix(24 * 1024))
+            )
         }
 
         return AgentWorktreeDiffPreview(
             title: "\(changes.fileCount) 个文件已更改 +\(changes.totalAddedLines) -\(changes.totalDeletedLines)",
             diff: diff
         )
+    }
+
+    nonisolated static func worktreeDiffPreviewSummaryReasons(
+        for changes: AgentWorktreeChangeSummary
+    ) -> [String] {
+        var reasons: [String] = []
+        if changes.fileCount > worktreeDiffPreviewMaxFiles {
+            reasons.append("\(changes.fileCount) 个文件超过 \(worktreeDiffPreviewMaxFiles) 个文件的完整 diff 展示阈值。")
+        }
+
+        let changedLines = changes.totalAddedLines + changes.totalDeletedLines
+        if changedLines > worktreeDiffPreviewMaxChangedLines {
+            reasons.append("\(changedLines) 行变更超过 \(worktreeDiffPreviewMaxChangedLines) 行的完整 diff 展示阈值。")
+        }
+
+        let generatedCount = changes.files.filter { isGeneratedWebDiffPath($0.path) }.count
+        if generatedCount >= worktreeDiffPreviewGeneratedFileThreshold {
+            reasons.append("\(generatedCount) 个文件位于疑似前端构建产物目录，已跳过完整 hunk 渲染。")
+        }
+        return reasons
+    }
+
+    nonisolated static func isGeneratedWebDiffPath(_ path: String) -> Bool {
+        let lower = path.lowercased()
+        let components = lower.split(separator: "/").map(String.init)
+        let generatedDirectory = components.contains { component in
+            component == "dist" ||
+            component == "build" ||
+            component == ".vite" ||
+            component == "node_modules" ||
+            component.hasSuffix("-dist") ||
+            component.hasSuffix("-web-dist") ||
+            component.contains("prebuilt-web-dist")
+        }
+        guard generatedDirectory else { return false }
+
+        let ext = URL(fileURLWithPath: lower).pathExtension
+        if ext.isEmpty { return true }
+        return [
+            "js", "mjs", "cjs", "css", "map", "wasm", "html",
+            "svg", "png", "jpg", "jpeg", "webp", "avif", "woff", "woff2"
+        ].contains(ext)
+    }
+
+    nonisolated static func worktreeDiffPreviewSummaryText(
+        changes: AgentWorktreeChangeSummary,
+        reasons: [String],
+        sample: String? = nil
+    ) -> String {
+        var lines: [String] = [
+            "Diff 预览已降级，未展示完整内容。",
+            "这样可以避免大量文件或构建产物 diff 拖慢界面渲染。",
+            "",
+            "原因："
+        ]
+        lines.append(contentsOf: reasons.map { "- \($0)" })
+        lines.append("")
+        lines.append("文件摘要：")
+
+        let listedFiles = changes.files.prefix(worktreeDiffPreviewFileListLimit)
+        for change in listedFiles {
+            lines.append(worktreeDiffPreviewFileSummaryLine(change))
+        }
+
+        let omitted = changes.files.count - listedFiles.count
+        if omitted > 0 {
+            lines.append("... 另外 \(omitted) 个文件未列出 ...")
+        }
+
+        if let sample, !sample.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("")
+            lines.append("前 \(sample.count) 个字符预览：")
+            lines.append(sample)
+            lines.append("")
+            lines.append("... diff output truncated ...")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    nonisolated static func worktreeDiffPreviewFileSummaryLine(
+        _ change: AgentFileChangeSummary
+    ) -> String {
+        let marker: String
+        switch change.kind {
+        case .added, .untracked:
+            marker = "A"
+        case .deleted:
+            marker = "D"
+        case .renamed:
+            marker = "R"
+        case .modified:
+            marker = "M"
+        }
+
+        let stats: String
+        if change.hasKnownLineStats {
+            stats = " +\(change.addedLines) -\(change.deletedLines)"
+        } else {
+            stats = ""
+        }
+        return "\(marker) \(change.path)\(stats)"
     }
 
 }

@@ -182,32 +182,38 @@ enum AgentImagePasteboardHelper {
     /// The NSImage is then flattened to PNG.
     static func readImages(from pasteboard: NSPasteboard) -> [(data: Data, mimeType: String)] {
         var results: [(Data, String)] = []
+        var fingerprints = Set<String>()
         for item in pasteboard.pasteboardItems ?? [] {
             if let pngData = item.data(forType: .png) {
-                results.append((pngData, "image/png"))
+                appendUnique(data: pngData, mimeType: "image/png", to: &results, fingerprints: &fingerprints)
                 continue
             }
             if let tiffData = item.data(forType: .tiff),
                let rep = NSBitmapImageRep(data: tiffData),
                let png = rep.representation(using: .png, properties: [:]) {
-                results.append((png, "image/png"))
+                appendUnique(data: png, mimeType: "image/png", to: &results, fingerprints: &fingerprints)
                 continue
             }
             if let fileURLString = item.string(forType: .fileURL),
                let url = URL(string: fileURLString),
                let data = try? Data(contentsOf: url),
                let mime = mimeType(forPath: url.path) {
-                results.append((data, mime))
+                appendUnique(data: data, mimeType: mime, to: &results, fingerprints: &fingerprints)
                 continue
             }
             if let imageData = imageData(from: item) {
-                results.append(imageData)
+                appendUnique(
+                    data: imageData.0,
+                    mimeType: imageData.1,
+                    to: &results,
+                    fingerprints: &fingerprints
+                )
             }
         }
         if results.isEmpty,
            let image = NSImage(pasteboard: pasteboard),
            let png = pngData(from: image) {
-            results.append((png, "image/png"))
+            appendUnique(data: png, mimeType: "image/png", to: &results, fingerprints: &fingerprints)
         }
         return results
     }
@@ -255,6 +261,26 @@ enum AgentImagePasteboardHelper {
         guard let tiff = image.tiffRepresentation,
               let rep = NSBitmapImageRep(data: tiff) else { return nil }
         return rep.representation(using: .png, properties: [:])
+    }
+
+    private static func appendUnique(
+        data: Data,
+        mimeType: String,
+        to results: inout [(Data, String)],
+        fingerprints: inout Set<String>
+    ) {
+        let fingerprint = imageFingerprint(data)
+        guard fingerprints.insert(fingerprint).inserted else { return }
+        results.append((data, mimeType))
+    }
+
+    private static func imageFingerprint(_ data: Data) -> String {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in data {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return "\(data.count)-\(String(hash, radix: 16))"
     }
 
     static func mimeType(forPath path: String) -> String? {

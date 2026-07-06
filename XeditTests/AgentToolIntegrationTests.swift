@@ -150,6 +150,16 @@ extension WillDeepTests {
         #expect(SafeCommand.classify(command: "npm publish") == .needsJudgment)
     }
 
+    @Test("SafeCommand: shell wrappers with harmless sentinel commands auto-approve")
+    func testSafeCommandShellWrapperSentinel() {
+        #expect(SafeCommand.classify(command: #"/bin/sh -lc "echo DOCKER_DONE""#) == .alwaysSafe)
+        #expect(SafeCommand.classify(command: #"bash -c "printf '%s\n' DOCKER_DONE""#) == .alwaysSafe)
+        #expect(SafeCommand.classify(command: #"env PATH=/usr/bin:/bin zsh -lc "echo DOCKER_DONE""#) == .alwaysSafe)
+
+        #expect(SafeCommand.classify(command: #"bash -lc "rm -rf /tmp/build""#) == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: #"bash -lc "cat /etc/passwd""#) == .needsJudgment)
+    }
+
     @Test("SafeCommand pipelines: every segment must be safe for the chain to auto-approve")
     func testSafeCommandPipelines() {
         // Two safe segments → safe.

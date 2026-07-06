@@ -80,30 +80,91 @@ enum AgentTerminalTools {
             throw AgentToolError.invalidArgument("Agent Terminal is not available in this context.")
         }
         let maxCharacters = min(max(arguments["max_characters"]?.intValue() ?? 6_000, 500), 12_000)
-        let snapshot = await MainActor.run {
-            controller.snapshot(maxCharacters: maxCharacters)
+
+        let snapshot: RedactedTerminalSnapshot
+        do {
+            snapshot = try await withTerminalSnapshotTimeout(seconds: 3) {
+                // Cheap main-actor hop: raw viewport capture + metadata only.
+                let raw = try await MainActor.run { try controller.rawSnapshot() }
+                // Off the main actor: secret redaction + trim, so a slow
+                // redaction regex or a busy main thread can never freeze the UI.
+                let redacted = AgentTerminalRedactor.redact(raw.rawOutput)
+                let trimmed = String(redacted.suffix(max(1, maxCharacters)))
+                return RedactedTerminalSnapshot(
+                    isRunning: raw.isRunning,
+                    runtimeName: raw.runtimeName,
+                    runtimeTarget: raw.runtimeTarget,
+                    output: trimmed,
+                    recentCommands: raw.recentCommands
+                )
+            }
+        } catch is TerminalSnapshotTimeout {
+            throw AgentToolError.invalidArgument(
+                "Timed out reading the Agent Terminal after 3s — the app's main thread is busy (usually mid-render while streaming a reply). Nothing was changed; call terminal_snapshot again in a moment."
+            )
         }
-        let running = snapshot.isRunning ? "connected" : "disconnected"
-        let target = snapshot.runtimeTarget.isEmpty ? "" : " (\(snapshot.runtimeTarget))"
-        let pending = snapshot.pendingCommands.isEmpty
-            ? "none"
-            : snapshot.pendingCommands.joined(separator: "\n")
+
+        let statusLine: String
+        if snapshot.isRunning {
+            let target = snapshot.runtimeTarget.isEmpty ? "" : " (\(snapshot.runtimeTarget))"
+            statusLine = "Agent Terminal: connected\nRuntime: \(snapshot.runtimeName)\(target)"
+        } else {
+            statusLine = "Agent Terminal: process has exited (showing its final visible screen)\nRuntime: \(snapshot.runtimeName)"
+        }
         let recent = snapshot.recentCommands.isEmpty
             ? "none"
             : snapshot.recentCommands.joined(separator: "\n")
+        let screen = snapshot.output.isEmpty
+            ? (snapshot.isRunning ? "(no terminal output yet)" : "(terminal produced no output before exiting)")
+            : snapshot.output
         let payload = """
-        Agent Terminal: \(running)
-        Runtime: \(snapshot.runtimeName)\(target)
-        Pending auto commands:
-        \(pending)
+        \(statusLine)
 
         Recent AI/auto commands:
         \(recent)
 
         --- latest visible screen ---
-        \(snapshot.output.isEmpty ? "(no terminal output captured)" : snapshot.output)
+        \(screen)
         """
-        return AgentToolResult(summary: "terminal \(running): \(snapshot.runtimeName)", payload: payload)
+        let summary = snapshot.isRunning
+            ? "terminal connected: \(snapshot.runtimeName)"
+            : "terminal exited: \(snapshot.runtimeName)"
+        return AgentToolResult(summary: summary, payload: payload)
+    }
+
+    // MARK: terminal_snapshot timeout plumbing
+
+    /// Redacted, trimmed capture ready for the tool payload. Built off the
+    /// main actor from `AgentTerminalRawSnapshot`.
+    private struct RedactedTerminalSnapshot: Sendable {
+        let isRunning: Bool
+        let runtimeName: String
+        let runtimeTarget: String
+        let output: String
+        let recentCommands: [String]
+    }
+
+    private struct TerminalSnapshotTimeout: Error {}
+
+    /// Races `operation` against a deadline. If the deadline wins (e.g. the
+    /// main actor is wedged mid-render), throws `TerminalSnapshotTimeout`
+    /// instead of hanging the entire tool call — and the agent — forever.
+    private static func withTerminalSnapshotTimeout<T: Sendable>(
+        seconds: Double,
+        operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw TerminalSnapshotTimeout()
+            }
+            defer { group.cancelAll() }
+            guard let first = try await group.next() else {
+                throw TerminalSnapshotTimeout()
+            }
+            return first
+        }
     }
 
     static func sendCommand(arguments: [String: AgentJSONValue], context: AgentToolContext) async throws -> AgentToolResult {

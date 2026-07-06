@@ -96,7 +96,7 @@ nonisolated enum SafeCommand {
         "md5", "shasum", "sha256sum", "sha512sum", "base64",
         // env / introspection
         "echo", "printf", "which", "whereis", "type", "command",
-        "env", "printenv", "uname", "whoami", "id", "date", "uptime",
+        "printenv", "uname", "whoami", "id", "date", "uptime",
         // process snapshot (no signals)
         "ps", "top",
         // network read-only. whois 和 dig/host 同族——往查询端口发一个
@@ -128,7 +128,9 @@ nonisolated enum SafeCommand {
     static let conditionalFirstTokens: Set<String> = [
         "git", "find", "xargs", "ssh", "scp", "rsync",
         "npm", "yarn", "pnpm", "cargo", "swift", "make", "python", "python3",
-        "node", "ruby", "go", "rake"
+        "node", "ruby", "go", "rake",
+        "sh", "bash", "zsh", "/bin/sh", "/bin/bash", "/bin/zsh",
+        "env", "/usr/bin/env"
     ]
 
     /// Token-level dangerous words. classifySegment walks EVERY token
@@ -330,6 +332,10 @@ nonisolated enum SafeCommand {
             return classifyFind(tokens: tokens)
         case "go":
             return classifyGo(tokens: tokens)
+        case "sh", "bash", "zsh", "/bin/sh", "/bin/bash", "/bin/zsh":
+            return classifyShellWrapper(tokens: tokens)
+        case "env", "/usr/bin/env":
+            return classifyEnv(tokens: tokens)
         case "npm", "pnpm", "yarn":
             return AgentPackageCommandPolicy.classify(firstToken: firstToken, tokens: tokens)
         case "xargs":
@@ -382,6 +388,89 @@ nonisolated enum SafeCommand {
             return .alwaysSafe
         }
         return .needsJudgment
+    }
+
+    private static func classifyShellWrapper(tokens: [String]) -> CommandSafety {
+        guard let commandIndex = shellCommandArgumentIndex(tokens: tokens) else {
+            return .needsJudgment
+        }
+        let innerCommand = tokens[commandIndex]
+        let innerSafety = classify(command: innerCommand)
+        guard innerSafety != .alwaysDangerous else {
+            return .alwaysDangerous
+        }
+        guard shellWrappedCommandIsPathNeutral(innerCommand) else {
+            return .needsJudgment
+        }
+        return innerSafety
+    }
+
+    private static func classifyEnv(tokens: [String]) -> CommandSafety {
+        var index = 1
+        while index < tokens.count {
+            let token = tokens[index]
+            if token == "--" {
+                index += 1
+                break
+            }
+            if token.hasPrefix("-") {
+                index += 1
+                continue
+            }
+            if token.contains("="), !token.hasPrefix("=") {
+                index += 1
+                continue
+            }
+            break
+        }
+
+        guard index < tokens.count else {
+            return .alwaysSafe
+        }
+        let executable = tokens[index].lowercased()
+        if ["sh", "bash", "zsh", "/bin/sh", "/bin/bash", "/bin/zsh"].contains(executable) {
+            return classifyShellWrapper(tokens: Array(tokens[index...]))
+        }
+        return .needsJudgment
+    }
+
+    private static func shellCommandArgumentIndex(tokens: [String]) -> Int? {
+        var index = 1
+        while index < tokens.count {
+            let token = tokens[index]
+            if token == "--" {
+                index += 1
+                continue
+            }
+            guard token.hasPrefix("-") else {
+                return nil
+            }
+            if token.dropFirst().contains("c") {
+                let commandIndex = index + 1
+                return commandIndex < tokens.count ? commandIndex : nil
+            }
+            index += 1
+        }
+        return nil
+    }
+
+    private static func shellWrappedCommandIsPathNeutral(_ command: String) -> Bool {
+        let sensitiveFragments = ["/.ssh", "/.gnupg", "/.aws", ".env", "id_rsa", "id_ed25519", "token", "secret"]
+        let segments = splitPipeline(command)
+        guard !segments.isEmpty else { return false }
+        for segment in segments {
+            for token in tokenize(segment) {
+                let cleaned = token.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+                let lower = cleaned.lowercased()
+                if cleaned.hasPrefix("/") || cleaned.hasPrefix("./") || cleaned.hasPrefix("../") || cleaned == ".." || cleaned.hasPrefix("~") {
+                    return false
+                }
+                if sensitiveFragments.contains(where: { lower.contains($0) }) {
+                    return false
+                }
+            }
+        }
+        return true
     }
 
     private static func gitSubcommandIndex(tokens: [String]) -> Int? {

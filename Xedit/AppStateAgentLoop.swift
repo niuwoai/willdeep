@@ -114,12 +114,30 @@ extension AppState {
                 self.releaseProviderSlot(providerID: providerID)
                 return
             }
-            await self.prepareImagesForTextOnlyProvider(
-                for: runtime,
-                userMessageID: userMessage.id,
-                mainConfiguration: configuration,
-                imageDescriptionConfiguration: imageDescriptionConfiguration
-            )
+            do {
+                try await self.prepareImagesForTextOnlyProvider(
+                    for: runtime,
+                    userMessageID: userMessage.id,
+                    mainConfiguration: configuration,
+                    imageDescriptionConfiguration: imageDescriptionConfiguration
+                )
+            } catch is CancellationError {
+                runtime.isResponding = false
+                runtime.turnStartedAt = nil
+                runtime.requestTask = nil
+                self.persistAgentSession(runtime: runtime)
+                self.releaseProviderSlot(providerID: providerID)
+                return
+            } catch {
+                self.setAgentError(error, for: runtime)
+                runtime.isResponding = false
+                runtime.turnStartedAt = nil
+                runtime.requestTask = nil
+                self.persistAgentSession(runtime: runtime)
+                self.releaseProviderSlot(providerID: providerID)
+                self.consumeNextQueuedMessageIfNeeded(for: runtime)
+                return
+            }
             await self.runAgentLoop(for: runtime, configuration: configuration)
         }
     }
@@ -129,21 +147,16 @@ extension AppState {
         userMessageID: AgentMessage.ID,
         mainConfiguration: AgentConfiguration,
         imageDescriptionConfiguration: AgentConfiguration
-    ) async {
+    ) async throws {
         guard !mainConfiguration.supportsImageInput else { return }
         guard let index = runtime.messages.firstIndex(where: { $0.id == userMessageID }) else { return }
         let images = runtime.messages[index].images
         guard !images.isEmpty else { return }
 
-        let description: String
-        do {
-            description = try await describeImagesForTextOnlyProvider(
-                images,
-                configuration: imageDescriptionConfiguration
-            )
-        } catch {
-            return
-        }
+        let description = try await describeImagesForTextOnlyProvider(
+            images,
+            configuration: imageDescriptionConfiguration
+        )
 
         guard !Task.isCancelled,
               let liveIndex = runtime.messages.firstIndex(where: { $0.id == userMessageID }) else {
@@ -156,6 +169,7 @@ extension AppState {
             providerID: imageDescriptionConfiguration.providerID,
             model: imageDescriptionConfiguration.model
         )
+        persistAgentSession(runtime: runtime)
     }
 
     func describeImagesForTextOnlyProvider(
@@ -563,7 +577,7 @@ extension AppState {
 
                 RUN ON THE REMOTE RUNTIME (these reach \(remoteRuntimeDescriptor.sshTarget)):
                 - search_files, grep_files, read_file, list_directory, git_status — read remote files.
-                - run_command — executes on the remote box, in the remote root. This is your main hands-on tool here; use it for edits too (e.g. `sed -i`, `python - <<'PY'`, `git apply`, writing heredocs), inspecting processes, services, disk, logs.
+                - run_command — executes on the remote box, in the remote root. This is your main hands-on tool here; use it for edits too (e.g. targeted `sed` / `perl` replacements, checked-in scripts, `git apply` with an existing patch file, explicit file transfer, or a small auditable heredoc/patch fallback when transfer tools such as rz/sz cannot be installed), inspecting processes, services, disk, logs. Avoid heredoc/here-string file creation as the first choice, but it is an allowed fallback when no safer auditable path exists.
                 - claude_code / codex_cli / cursor_agent / cline_cli — the delegated CLI runs on the remote box (it must be installed there).
 
                 RUN ON THE LOCAL MAC, NOT the remote box — do NOT use these to change or inspect the remote workspace:

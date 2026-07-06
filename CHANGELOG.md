@@ -1,5 +1,69 @@
 # Changelog
 
+## 1.129.0-rc40 - 2026-07-06
+
+### Fixed
+- **全屏 Agent composer 上方不再重复显示单文件编辑提示** —— 已有贴近 composer 的「N 个文件已更改 +X -Y / 审查」汇总条时，transcript 底部不再额外显示「正在编辑/已编辑 某个文件」活动行，避免同一组工作树变更出现两次提示；停靠侧边栏模式仍保留该行，因为它没有同样的 composer 汇总条。
+- **侧边栏终端 heredoc / apply patch 改为兜底可用而非绝对禁止** —— system prompt、`terminal_send_command` 描述、远程 runtime 附加提示和默认全局规则同步改为：优先使用 App 编辑/写入、`apply_patch`、明确文件传输或 `rz/sz`；当远程无法安装 `lrzsz` 或传输路径不可用时，可以使用小而清晰、可审查、可验证的 heredoc、patch、sed/perl 等远程编辑兜底。
+
+### Changed
+- 版本号从 **1.129.0-rc39** 提升为 **1.129.0-rc40**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc39 - 2026-07-06
+
+### Added
+- **WillDeep 侧边栏终端支持 rz/sz ZMODEM 桥接** —— 侧边栏终端现在会拦截远端 `rz` / `sz` 的 lrzsz 握手：远端 `rz` 时弹本机文件选择并用本机 `sz` 上传，远端 `sz` 时弹保存目录并用本机 `rz` 下载。桥接过程把本机 lrzsz 子进程与当前 PTY 对接，不再把 ZMODEM 控制流直接刷成乱码。
+- **lrzsz 缺失时给安装提示** —— 本机缺 `rz`/`sz` 时终端会取消本次 ZMODEM 并提示 `brew install lrzsz`；system prompt / `terminal_send_command` 工具说明也改为明确 WillDeep 前端支持 ZMODEM，模型在远端使用前应先跑 `command -v rz sz`，缺失时按服务端系统提示安装 `lrzsz`。
+- 新增 ZMODEM 握手检测回归断言，覆盖远端 `rz` 提示归类为上传、远端 `sz` 握手归类为下载。
+
+### Fixed
+- **`terminal_snapshot` 取侧边栏终端内容不再卡死** —— 读取加了 3 秒超时护栏：主线程被占用（典型是 agent 流式渲染富 markdown 时 SwiftUI 布局吃满主线程）时，工具不再无限等待 `MainActor` 调度而挂住整个工具调用；超时会返回一句「主线程繁忙、什么都没改、稍后重试」的明确错误，让模型自己重试而不是干等。
+- **脱敏与截断移出主线程** —— 主线程上只做一次廉价的原始视口抓取（`rawViewportText`），secret 脱敏正则和长度截断改到主线程外执行，避免超长行触发正则灾难性回溯时冻结 UI；超时护栏同时覆盖脱敏阶段。
+- **无终端/终端已退出时给出可操作的错误而非静默空快照** —— 没有活跃终端标签时抛出清晰错误（提示先打开侧边栏终端，或用 `terminal_send_command` 自动起 shell），不再返回一个 agent 无法与「真的没输出」区分的空「disconnected」快照；终端进程已退出时明确标注「process has exited（展示最后可见屏幕）」。
+
+### Changed
+- 版本号从 **1.129.0-rc38** 提升为 **1.129.0-rc39**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc38 - 2026-07-06
+
+### Fixed
+- **侧边栏终端提示词避免 heredoc 文件写入** —— Stable system prompt、`terminal_send_command` 工具描述和远程 runtime 附加提示同步收紧：操作可见侧边栏终端时，不再用 heredoc / here-string / `cat > file` / `echo > file` 等粘贴式多行 shell 技术生成或覆写文件，优先走 `create_file` / `edit_file`、普通 `run_command` 或明确的文件传输路径。
+- **rz/sz 作为检测后启用的增强路径** —— system prompt 明确 `rz/sz` 只在终端前端支持 ZMODEM、远端安装 `rz`/`sz`，并经用户同意或小文件测试证明可用后才尝试；支持不明或测试失败时回退到 scp/rsync、workspace 文件、附件或 App 编辑/写入流程。
+- 新增回归断言覆盖侧边栏终端上下文提示中的 heredoc 禁用与 `rz/sz` ZMODEM 条件说明。
+
+### Changed
+- 版本号从 **1.129.0-rc37** 提升为 **1.129.0-rc38**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc37 - 2026-07-06
+
+### Fixed
+- **Composer 粘贴同一张图片不再重复入队** —— 剪贴板图片读取新增内容 fingerprint 去重，避免 macOS 同一张图以多个 pasteboard item/flavor 暴露时，`Command+V` 后预览区出现重复缩略图。
+- **文本模型带图发送不再静默丢图** —— 当当前模型不支持图片输入（如 DeepSeek 非 VL 模型）时，会先用 Image Understanding 生成图片描述并并入用户消息；若图片描述失败，本轮会停在错误卡而不是继续发出一个“图片已省略”的请求。OpenAI-compatible text-only payload 在已有生成描述时也不再追加误导性的 omitted 提示。
+- **shell 包装的 `echo DOCKER_DONE` 哨兵不再误弹审批** —— `SafeCommand` 现在能识别 `sh` / `bash` / `zsh` 的 `-c` / `-lc` 包装命令：内层是 `echo` / `printf` 等无副作用哨兵时直接按只读放行，避免远端/容器脚本收尾的一句 `echo DOCKER_DONE` 交给用户确认；内层藏有 `rm`、敏感路径或显式系统路径时仍会降级为审批/确认。
+- 新增回归测试覆盖剪贴板图片去重，以及 text-only provider 收到生成图片描述时的请求编码。
+- 新增回归测试覆盖 `/bin/sh -lc "echo DOCKER_DONE"` 的静态安全分类与沙箱决策，确认 shell 包装哨兵不再进入用户审批。
+
+### Changed
+- 版本号从 **1.129.0-rc36** 提升为 **1.129.0-rc37**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc36 - 2026-07-06
+
+### Fixed
+- **工作树 diff 预览遇到大量前端构建产物时自动降级** —— `showAgentWorktreeDiff` 现在在超过文件数/变更行数阈值，或命中 `dist` / `*-web-dist` / `assets/*.js` 等疑似预构建前端产物时，不再渲染完整 hunk，而是展示原因、文件摘要和受限预览，避免 160+ 个压缩 JS/CSS diff 拖慢界面。
+- 新增回归测试覆盖 `railway-prebuilt-web-dist/assets/*.js` 大量删除场景，确保预览不再输出完整 `diff --git` 内容。
+
+### Changed
+- 版本号从 **1.129.0-rc35** 提升为 **1.129.0-rc36**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc35 - 2026-07-06
+
+### Fixed
+- **队列引导接管等待确认/询问时会收起旧卡片** —— 用户在当前 turn 卡在 `confirm` / 普通授权 / `ask_user` 时发送新消息或点击排队消息的“立即发送”，现在会把当前阻塞工具调用标记为已拒绝/已跳过，并恢复队列消费；旧的 confirm / ask_user 交互卡不再继续挂在聊天区等用户输入。
+- 新增回归测试覆盖 Stop、立即发送排队消息和新消息接管等待态时的 `awaitingConfirm` / `awaitingUserAnswer` 收尾行为。
+
+### Changed
+- 版本号从 **1.129.0-rc34** 提升为 **1.129.0-rc35**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
 ## 1.129.0-rc34 - 2026-07-05
 
 ### Fixed

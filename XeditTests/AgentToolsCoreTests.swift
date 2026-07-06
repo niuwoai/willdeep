@@ -139,6 +139,34 @@ struct AgentToolsCoreTests {
     }
 
     @Test
+    func agentImagePasteboardHelperDeduplicatesEquivalentImageItems() throws {
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("willdeep-image-dedupe-\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        let image = NSImage(size: NSSize(width: 12, height: 8))
+        image.lockFocus()
+        NSColor.systemGreen.setFill()
+        NSRect(x: 0, y: 0, width: 12, height: 8).fill()
+        image.unlockFocus()
+        let png = try #require(AgentToolsCoreTests.pngData(for: image))
+        let first = NSPasteboardItem()
+        first.setData(png, forType: .png)
+        let second = NSPasteboardItem()
+        second.setData(png, forType: .png)
+
+        #expect(pasteboard.writeObjects([first, second]) == true)
+
+        let images = AgentImagePasteboardHelper.readImages(from: pasteboard)
+        #expect(images.count == 1)
+        #expect(images.first?.data == png)
+    }
+
+    private static func pngData(for image: NSImage) -> Data? {
+        guard let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff) else { return nil }
+        return rep.representation(using: .png, properties: [:])
+    }
+
+    @Test
     func runCommandClosesStandardInputForHeadlessCLIs() async throws {
         let result = try await AgentToolRunner.run(
             name: "run_command",
@@ -507,6 +535,24 @@ struct AgentToolsCoreTests {
     }
 
     @Test
+    func sandboxPolicyAutoApprovesShellWrappedEchoSentinel() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        let decision = AgentSandboxPolicy.commandDecision(
+            command: #"/bin/sh -lc "echo DOCKER_DONE""#,
+            rootDirectory: root
+        )
+        #expect(decision.mode == .readOnly)
+        #expect(decision.requiresUserApproval == false)
+        #expect(decision.requiresTypedConfirmation == false)
+
+        let hiddenPathRead = AgentSandboxPolicy.commandDecision(
+            command: #"bash -lc "cat /etc/passwd""#,
+            rootDirectory: root
+        )
+        #expect(hiddenPathRead.requiresUserApproval == true)
+    }
+
+    @Test
     func sandboxPolicyRequiresEscalationForNetworkAndCredentialCommands() {
         let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
         let decision = AgentSandboxPolicy.commandDecision(
@@ -845,6 +891,34 @@ struct AgentQueueModeTests {
 
     @Test
     @MainActor
+    func stopAgentResponseDeniesAwaitingConfirm() {
+        let state = AppState()
+        _ = state.startNewAgentSession()
+        guard let runtime = state.activeRuntime else {
+            Issue.record("Expected active runtime")
+            return
+        }
+
+        runtime.isResponding = true
+        runtime.toolCalls = [
+            AgentToolCall(
+                messageID: UUID(),
+                externalID: "confirm-1",
+                toolName: "run_command",
+                arguments: [:],
+                risk: .danger,
+                status: .awaitingConfirm
+            )
+        ]
+
+        state.stopAgentResponse()
+
+        #expect(runtime.toolCalls.first?.status == .denied)
+        #expect(runtime.toolCalls.first?.errorMessage == "Response stopped")
+    }
+
+    @Test
+    @MainActor
     func sendingQueuedMessageNowDeniesAwaitingUserAnswer() {
         let state = AppState()
         _ = state.startNewAgentSession()
@@ -876,6 +950,100 @@ struct AgentQueueModeTests {
         #expect(runtime.toolCalls.first?.status == .denied)
         #expect(runtime.toolCalls.first?.errorMessage == "Sending queued message")
         #expect(runtime.queuedMessages.first?.id == queued.id)
+        #expect(runtime.shouldConsumeQueueAfterStop == true)
+    }
+
+    @Test
+    @MainActor
+    func sendingQueuedMessageNowDeniesAwaitingConfirm() {
+        let state = AppState()
+        _ = state.startNewAgentSession()
+        guard let runtime = state.activeRuntime else {
+            Issue.record("Expected active runtime")
+            return
+        }
+
+        let queued = AgentQueuedMessage(id: UUID(), text: "next please")
+        runtime.isResponding = true
+        runtime.queuedMessages = [queued]
+        runtime.toolCalls = [
+            AgentToolCall(
+                messageID: UUID(),
+                externalID: "confirm-1",
+                toolName: "run_command",
+                arguments: [:],
+                risk: .danger,
+                status: .awaitingConfirm
+            )
+        ]
+
+        state.sendQueuedAgentMessageNow(id: queued.id)
+
+        #expect(runtime.toolCalls.first?.status == .denied)
+        #expect(runtime.toolCalls.first?.errorMessage == "Sending queued message")
+        #expect(runtime.queuedMessages.first?.id == queued.id)
+        #expect(runtime.shouldConsumeQueueAfterStop == true)
+    }
+
+    @Test
+    @MainActor
+    func sendingNewMessageWhileAwaitingUserDecisionClosesBlockingCall() {
+        let state = AppState()
+        _ = state.startNewAgentSession()
+        guard let runtime = state.activeRuntime else {
+            Issue.record("Expected active runtime")
+            return
+        }
+
+        runtime.input = "skip that and continue here"
+        runtime.isResponding = true
+        runtime.toolCalls = [
+            AgentToolCall(
+                messageID: UUID(),
+                externalID: "ask-user-1",
+                toolName: "ask_user",
+                arguments: [:],
+                risk: .userInput,
+                status: .awaitingUserAnswer
+            )
+        ]
+
+        state.sendAgentMessage()
+
+        #expect(runtime.toolCalls.first?.status == .denied)
+        #expect(runtime.toolCalls.first?.errorMessage == "New message sent")
+        #expect(runtime.queuedMessages.first?.text == "skip that and continue here")
+        #expect(runtime.shouldConsumeQueueAfterStop == true)
+    }
+
+    @Test
+    @MainActor
+    func sendingNewMessageDuringNonBlockingResponseOnlyQueuesIt() {
+        let state = AppState()
+        _ = state.startNewAgentSession()
+        guard let runtime = state.activeRuntime else {
+            Issue.record("Expected active runtime")
+            return
+        }
+
+        runtime.input = "next normal message"
+        runtime.isResponding = true
+        runtime.toolCalls = [
+            AgentToolCall(
+                messageID: UUID(),
+                externalID: "read-1",
+                toolName: "git_status",
+                arguments: [:],
+                risk: .read,
+                status: .running
+            )
+        ]
+
+        state.sendAgentMessage()
+
+        #expect(runtime.toolCalls.first?.status == .running)
+        #expect(runtime.queuedMessages.first?.text == "next normal message")
+        #expect(runtime.shouldConsumeQueueAfterStop == false)
     }
 }
 

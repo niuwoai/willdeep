@@ -256,6 +256,30 @@ struct GitWorktreeCoreTests {
         #expect(!preview.diff.contains("+user"))
     }
 
+    @Test("agent worktree diff preview summarizes large generated web dist changes")
+    func testWorktreeDiffPreviewSummarizesGeneratedWebDist() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-git-root")
+        let files = (0..<160).map { index in
+            AgentFileChangeSummary(
+                path: "railway-prebuilt-web-dist/assets/Chunk-\(String(format: "%03d", index)).js",
+                kind: .deleted,
+                lineStats: AgentLineChangeStats(added: 0, deleted: 5)
+            )
+        }
+        let summary = AgentWorktreeChangeSummary(repositoryRoot: root, files: files)
+        let preview = AppState.loadAgentWorktreeDiffPreview(
+            changes: summary,
+            repositoryRoot: root
+        )
+
+        #expect(preview.title == "160 个文件已更改 +0 -800")
+        #expect(preview.diff.contains("Diff 预览已降级"))
+        #expect(preview.diff.contains("疑似前端构建产物目录"))
+        #expect(preview.diff.contains("railway-prebuilt-web-dist/assets/Chunk-000.js"))
+        #expect(preview.diff.contains("... 另外 80 个文件未列出 ..."))
+        #expect(!preview.diff.contains("diff --git"))
+    }
+
     @Test("agent worktree summary skips modified files without real diff")
     func testAgentWorktreeSummarySkipsModifiedFilesWithoutDiff() {
         #expect(AppState.shouldIncludeAgentWorktreeChange(

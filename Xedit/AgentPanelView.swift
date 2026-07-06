@@ -665,6 +665,7 @@ struct AgentTurnFileActivityCard: View {
     @Environment(\.openWindow) private var openWindow
     let calls: [AgentToolCall]
     var showsToolActivity = true
+    var showsEditingActivity = true
 
     var body: some View {
         let summary = AgentToolActivitySummary(calls: calls)
@@ -700,7 +701,7 @@ struct AgentTurnFileActivityCard: View {
     }
 
     private var shouldShowEditingRow: Bool {
-        appState.agentSessionDidEditFiles && !appState.agentWorktreeChanges.isEmpty
+        showsEditingActivity && appState.agentSessionDidEditFiles && !appState.agentWorktreeChanges.isEmpty
     }
 
     private var latestCommandPreview: String? {

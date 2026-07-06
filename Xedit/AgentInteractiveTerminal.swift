@@ -74,12 +74,15 @@ struct RuntimeTerminalProfile: Codable, Equatable {
     }
 }
 
-struct AgentTerminalSnapshot: Equatable {
+/// Main-actor capture handed to the agent-tool layer BEFORE secret
+/// redaction and length trimming. Sendable so those steps can run off the
+/// main actor (see `AgentTerminalTools.snapshot`), keeping the main thread
+/// free even when redaction is slow or the UI is mid-render.
+struct AgentTerminalRawSnapshot: Sendable {
     let isRunning: Bool
     let runtimeName: String
     let runtimeTarget: String
-    let output: String
-    let pendingCommands: [String]
+    let rawOutput: String
     let recentCommands: [String]
 }
 
@@ -831,6 +834,7 @@ final class AgentLocalProcessTerminalView: LocalProcessTerminalView {
     var onUserActivity: (() -> Void)?
     var shouldRecordInput: (() -> Bool)?
     var onSendToProcess: ((_ data: [UInt8], _ echoEnabled: Bool) -> Void)?
+    private lazy var zmodemBridge = TerminalZModemBridge(terminalView: self)
     private var cachedEchoEnabled: Bool?
     private var cachedEchoCheckedAt: TimeInterval = 0
     private var pendingEchoBytes: [UInt8] = []
@@ -856,6 +860,9 @@ final class AgentLocalProcessTerminalView: LocalProcessTerminalView {
     }
 
     override func dataReceived(slice: ArraySlice<UInt8>) {
+        if zmodemBridge.handleRemoteBytes(Array(slice)) {
+            return
+        }
         if shouldRecordInput?() == true, !isExpectedEcho(slice) {
             invalidateTerminalEchoCache()
         }
@@ -1153,20 +1160,21 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
         return AgentToolResult(summary: "terminal: \(control.displayName)", payload: payload)
     }
 
-    /// Latest live viewport text, secrets redacted.
-    func snapshotText(maxCharacters: Int) -> String {
+    /// Raw latest-viewport text — NO redaction, NO trimming. The agent-tool
+    /// layer redacts and trims this off the main actor so a slow redaction
+    /// regex or a busy main thread can't freeze the UI. See
+    /// `AgentTerminalTools.snapshot`.
+    func rawViewportText() -> String {
         let terminal = terminalView.getTerminal()
         let rows = terminal.rows
         let cols = terminal.cols
         guard rows > 0, cols > 0 else { return "" }
         let startRow = terminal.buffer.yDisp
         let bottom = startRow + rows - 1
-        let raw = terminal.getText(
+        return terminal.getText(
             start: Position(col: 0, row: startRow),
             end: Position(col: cols - 1, row: bottom)
         )
-        let redacted = AgentTerminalRedactor.redact(raw)
-        return String(redacted.suffix(max(1, maxCharacters)))
     }
 
     private func recordCommand(_ command: String) {
@@ -1748,23 +1756,23 @@ final class AgentInteractiveTerminalController: ObservableObject {
 
     // MARK: Agent-tool surface (operate on the active tab)
 
-    func snapshot(maxCharacters: Int = 16_000) -> AgentTerminalSnapshot {
+    /// Raw viewport capture for the `terminal_snapshot` tool. Throws a clear,
+    /// actionable error when there is no terminal to read — instead of
+    /// silently returning an empty "disconnected" snapshot the agent can't
+    /// tell apart from a terminal that simply produced no output. Redaction
+    /// and length trimming run off the main actor in
+    /// `AgentTerminalTools.snapshot`.
+    func rawSnapshot() throws -> AgentTerminalRawSnapshot {
         guard let tab = activeTab else {
-            return AgentTerminalSnapshot(
-                isRunning: false,
-                runtimeName: L10n.AgentTerminal.disconnectedRuntime,
-                runtimeTarget: "",
-                output: "",
-                pendingCommands: [],
-                recentCommands: []
+            throw AgentToolError.invalidArgument(
+                "No Agent Terminal tab is open, so there is nothing to read. Open the Agent Terminal side panel, or use the terminal send_command tool (it starts a shell automatically) before calling terminal_snapshot."
             )
         }
-        return AgentTerminalSnapshot(
+        return AgentTerminalRawSnapshot(
             isRunning: tab.isRunning,
             runtimeName: tab.title,
             runtimeTarget: tab.runtimeTarget,
-            output: tab.snapshotText(maxCharacters: maxCharacters),
-            pendingCommands: [],
+            rawOutput: tab.rawViewportText(),
             recentCommands: tab.recentCommands
         )
     }
