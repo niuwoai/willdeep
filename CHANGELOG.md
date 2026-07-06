@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.130.0-rc5 - 2026-07-06
+
+### Fixed
+- **`terminal_snapshot` 一直显示旧内容（终端快照读到陈旧屏幕）** —— 根因是 SwiftTerm 的 `LocalProcessTerminalView` 把 PTY 字节固定在**主线程**上 parse 进终端模型（可见 NSView 也在主线程读这个模型来绘制）。当主线程被 Agent 流式渲染富 markdown 占满时，这条 parse 被饿死、模型落后于真实输出，于是快照读到的是旧屏幕。而 `process` 是 `internal(set)`、`LocalProcess` 又写死主队列，子类无法注入后台队列。现在 `AgentLocalProcessTerminalView` 不再继承 `LocalProcessTerminalView`，改为 `TerminalView` + 自持一个 `LocalProcess(dispatchQueue:)`，把 PTY 交付放到专用后台串行队列：`dataReceived` 在该队列上喂一个 **headless 镜像 `Terminal`**（快照即读它，永远新鲜、不被主线程饿死），同时把**可见终端**的模型+绘制 feed 有序 marshal 回主线程（可见终端行为与体验完全不变）。`terminal_snapshot` 改为从镜像在后台队列读取屏幕文本，主线程只留一次极廉价的元数据 hop（仍受 3s 超时护栏保护）。ZMODEM 传输期间镜像暂停喂养（原始协议字节对快照无意义），echo 检测/ZMODEM 桥（`@MainActor`）等主线程亲和逻辑保持在主线程、无数据竞争。
+
+### Changed
+- 版本号从 **1.130.0-rc2** 提升为 **1.130.0-rc5**（rc3/rc4 为并行分支占用，本终端修复取下一个空号），并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
 ## 1.130.0-rc2 - 2026-07-06
 
 ### Fixed

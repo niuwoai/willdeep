@@ -74,16 +74,22 @@ struct RuntimeTerminalProfile: Codable, Equatable {
     }
 }
 
-/// Main-actor capture handed to the agent-tool layer BEFORE secret
-/// redaction and length trimming. Sendable so those steps can run off the
-/// main actor (see `AgentTerminalTools.snapshot`), keeping the main thread
-/// free even when redaction is slow or the UI is mid-render.
+/// Cheap main-actor metadata handed to the agent-tool layer. The actual
+/// screen text is read OFF the main actor from `mirror` — a head-less
+/// `Terminal` fed on a background queue — so `terminal_snapshot` no longer
+/// depends on the (possibly starved) visible model being current. Redaction
+/// and trimming also run off the main actor (see `AgentTerminalTools.snapshot`).
 struct AgentTerminalRawSnapshot: Sendable {
     let isRunning: Bool
     let runtimeName: String
     let runtimeTarget: String
-    let rawOutput: String
     let recentCommands: [String]
+    /// Off-main source of the visible screen text.
+    let mirror: AgentTerminalSnapshotMirror
+    /// Live geometry of the visible terminal, so the mirror can be squared
+    /// up before capture even if a resize hasn't reflowed it yet.
+    let cols: Int
+    let rows: Int
 }
 
 enum AgentTerminalControl: String, CaseIterable {
@@ -824,13 +830,50 @@ enum AgentTerminalTabKind: Equatable {
 
 // MARK: - SwiftTerm view subclass that reports user activity
 
-/// LocalProcessTerminalView subclass. `paste` is `open` in SwiftTerm so
-/// we hook it for activity; `keyDown` is only `public` (not overridable
-/// cross-module), so typed-keystroke activity is instead inferred from
-/// echoed output via the controller's buffer-hash sampling — plus the
-/// active (visible) tab is always exempt from the idle reaper, which is
-/// the only tab the user can actually be typing into.
-final class AgentLocalProcessTerminalView: LocalProcessTerminalView {
+/// Callbacks the owning `AgentTerminalTab` needs from the terminal view.
+/// Replaces SwiftTerm's `LocalProcessTerminalViewDelegate` because the view
+/// is no longer a `LocalProcessTerminalView` (see the class note below), so
+/// its `source:` type would no longer fit.
+protocol AgentTerminalProcessDelegate: AnyObject {
+    func sizeChanged(source: AgentLocalProcessTerminalView, newCols: Int, newRows: Int)
+    func setTerminalTitle(source: AgentLocalProcessTerminalView, title: String)
+    func hostCurrentDirectoryUpdate(source: AgentLocalProcessTerminalView, directory: String?)
+    func processTerminated(source: AgentLocalProcessTerminalView, exitCode: Int32?)
+}
+
+/// A `TerminalView` that owns its own `LocalProcess` — deliberately NOT a
+/// `LocalProcessTerminalView`.
+///
+/// Why not the stock subclass: `LocalProcessTerminalView` hard-wires its
+/// `LocalProcess` to `DispatchQueue.main`, and its `process` is
+/// `internal(set)`, so a subclass cannot swap in a background delivery
+/// queue. That main-thread delivery is exactly what makes
+/// `terminal_snapshot` return stale content: when the main thread is busy
+/// (mid-render while streaming a reply) the PTY→model parse is starved.
+///
+/// So we hand-roll the ~thin process glue `LocalProcessTerminalView` gave
+/// us, but point the `LocalProcess` at a private background serial queue
+/// (`snapshotMirror.queue`). On that queue `dataReceived`:
+///   1. feeds a head-less mirror `Terminal` (fresh, snapshot reads this), and
+///   2. marshals the *visible* terminal's model+display feed back to the
+///      main thread — because the visible NSView reads its model on the main
+///      thread when it draws, so feeding it off-main would race the drawing.
+/// The visible terminal therefore behaves exactly as before; only the
+/// snapshot path is decoupled from main-thread starvation.
+///
+/// `paste` is `open` in SwiftTerm so we hook it for activity; `keyDown` is
+/// only `public` (not overridable cross-module), so typed-keystroke activity
+/// is instead inferred from echoed output via the controller's buffer-hash
+/// sampling — plus the active (visible) tab is always exempt from the idle
+/// reaper, which is the only tab the user can actually be typing into.
+final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, LocalProcessDelegate {
+    /// Owned PTY process, delivering bytes on `snapshotMirror.queue`.
+    private(set) var process: LocalProcess!
+    /// Head-less model fed off the main thread; the source of truth for
+    /// `terminal_snapshot`.
+    let snapshotMirror: AgentTerminalSnapshotMirror
+    weak var processDelegate: AgentTerminalProcessDelegate?
+
     var onUserActivity: (() -> Void)?
     var shouldRecordInput: (() -> Bool)?
     var onSendToProcess: ((_ data: [UInt8], _ echoEnabled: Bool) -> Void)?
@@ -840,13 +883,59 @@ final class AgentLocalProcessTerminalView: LocalProcessTerminalView {
     private var pendingEchoBytes: [UInt8] = []
     private let maxEchoCacheAge: TimeInterval = 1.0
     private let maxPendingEchoBytes = 2_048
+    /// True while a ZMODEM transfer is in flight. Written on main (from the
+    /// bridge decision), read on the delivery queue (in `dataReceived`) to
+    /// pause mirror feeding — the raw protocol bytes would otherwise corrupt
+    /// the mirror screen, and a snapshot mid-transfer is meaningless anyway.
+    /// Lock-guarded because the two accessors run on different threads.
+    private let zmodemLock = NSLock()
+    private var _zmodemActive = false
+    private var zmodemActive: Bool {
+        get { zmodemLock.lock(); defer { zmodemLock.unlock() }; return _zmodemActive }
+        set { zmodemLock.lock(); _zmodemActive = newValue; zmodemLock.unlock() }
+    }
+
+    /// Scrollback kept by the mirror. Matches SwiftTerm's default so the
+    /// mirror and the visible terminal reflow identically.
+    private static let mirrorScrollback = 500
+
+    override init(frame: CGRect) {
+        let seed = AgentLocalProcessTerminalView.seedGeometry(for: frame)
+        snapshotMirror = AgentTerminalSnapshotMirror(
+            cols: seed.cols,
+            rows: seed.rows,
+            scrollback: AgentLocalProcessTerminalView.mirrorScrollback,
+            label: "com.willdeep.agent.terminal.snapshot-mirror"
+        )
+        super.init(frame: frame)
+        terminalDelegate = self
+        // Deliver PTY bytes on the mirror's queue, NOT the main thread.
+        process = LocalProcess(delegate: self, dispatchQueue: snapshotMirror.queue)
+        // Match the mirror to the visible terminal's real geometry once the
+        // view has computed it from the frame + font.
+        let live = getTerminal()
+        snapshotMirror.resize(cols: live.cols, rows: live.rows)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private static func seedGeometry(for frame: CGRect) -> (cols: Int, rows: Int) {
+        // Pre-`super.init` we can't ask the view for its cell grid, so seed
+        // with a sane default; the init tail resizes the mirror to the real
+        // geometry, and every `sizeChanged` keeps it in step thereafter.
+        (cols: 80, rows: 24)
+    }
 
     override func paste(_ sender: Any) {
         onUserActivity?()
         super.paste(sender)
     }
 
-    override func send(source: TerminalView, data: ArraySlice<UInt8>) {
+    // MARK: TerminalViewDelegate
+
+    func send(source: TerminalView, data: ArraySlice<UInt8>) {
         onUserActivity?()
         if shouldRecordInput?() == true {
             let bytes = Array(data)
@@ -856,17 +945,100 @@ final class AgentLocalProcessTerminalView: LocalProcessTerminalView {
                 rememberExpectedEcho(bytes)
             }
         }
-        super.send(source: source, data: data)
+        process.send(data: data)
     }
 
-    override func dataReceived(slice: ArraySlice<UInt8>) {
-        if zmodemBridge.handleRemoteBytes(Array(slice)) {
-            return
+    func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
+        if process.running {
+            var size = getWindowSize()
+            _ = PseudoTerminalHelpers.setWinSize(masterPtyDescriptor: process.childfd, windowSize: &size)
         }
-        if shouldRecordInput?() == true, !isExpectedEcho(slice) {
-            invalidateTerminalEchoCache()
+        // Keep the mirror's wrapping in step with what the user sees.
+        snapshotMirror.resize(cols: newCols, rows: newRows)
+        processDelegate?.sizeChanged(source: self, newCols: newCols, newRows: newRows)
+    }
+
+    func setTerminalTitle(source: TerminalView, title: String) {
+        processDelegate?.setTerminalTitle(source: self, title: title)
+    }
+
+    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {
+        processDelegate?.hostCurrentDirectoryUpdate(source: self, directory: directory)
+    }
+
+    func scrolled(source: TerminalView, position: Double) {}
+
+    func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
+
+    func clipboardCopy(source: TerminalView, content: Data) {
+        guard let str = String(bytes: content, encoding: .utf8) else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects([str as NSString])
+    }
+
+    // MARK: LocalProcessDelegate
+
+    /// Runs on `snapshotMirror.queue` — NOT the main thread. Feeding the
+    /// mirror here is the whole fix: it can never be starved by main-thread
+    /// rendering, so the snapshot stays fresh. Everything main-affine (the
+    /// @MainActor ZMODEM bridge, echo bookkeeping shared with `send`, and the
+    /// visible terminal's model+display) is marshaled back to main, ordered.
+    func dataReceived(slice: ArraySlice<UInt8>) {
+        let bytes = Array(slice)
+        if !zmodemActive {
+            snapshotMirror.feedOnQueue(bytes)
         }
-        super.dataReceived(slice: slice)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let consumed = self.zmodemBridge.handleRemoteBytes(bytes)
+            self.zmodemActive = self.zmodemBridge.isActive
+            if consumed { return }
+            if self.shouldRecordInput?() == true, !self.isExpectedEcho(bytes[...]) {
+                self.invalidateTerminalEchoCache()
+            }
+            self.feed(byteArray: bytes[...])
+        }
+    }
+
+    func processTerminated(_ source: LocalProcess, exitCode: Int32?) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.processDelegate?.processTerminated(source: self, exitCode: exitCode)
+        }
+    }
+
+    func getWindowSize() -> winsize {
+        let f = self.frame
+        let live = getTerminal()
+        return winsize(
+            ws_row: UInt16(live.rows),
+            ws_col: UInt16(live.cols),
+            ws_xpixel: UInt16(f.width),
+            ws_ypixel: UInt16(f.height)
+        )
+    }
+
+    // MARK: Process control (mirrors the old LocalProcessTerminalView surface)
+
+    func startProcess(
+        executable: String = "/bin/bash",
+        args: [String] = [],
+        environment: [String]? = nil,
+        execName: String? = nil,
+        currentDirectory: String? = nil
+    ) {
+        process.startProcess(
+            executable: executable,
+            args: args,
+            environment: environment,
+            execName: execName,
+            currentDirectory: currentDirectory
+        )
+    }
+
+    func terminate() {
+        process.terminate()
     }
 
     var terminalEchoEnabled: Bool {
@@ -913,7 +1085,7 @@ final class AgentLocalProcessTerminalView: LocalProcessTerminalView {
 // MARK: - One terminal tab
 
 @MainActor
-final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTerminalViewDelegate {
+final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProcessDelegate {
     let id = UUID()
     /// Which Agent session opened this tab. nil for tabs the user opened
     /// manually with no active session context.
@@ -1160,21 +1332,13 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
         return AgentToolResult(summary: "terminal: \(control.displayName)", payload: payload)
     }
 
-    /// Raw latest-viewport text — NO redaction, NO trimming. The agent-tool
-    /// layer redacts and trims this off the main actor so a slow redaction
-    /// regex or a busy main thread can't freeze the UI. See
-    /// `AgentTerminalTools.snapshot`.
-    func rawViewportText() -> String {
+    /// The off-main snapshot mirror plus the visible terminal's live grid
+    /// size. The screen text itself is read from the mirror off the main
+    /// actor by `AgentTerminalTools.snapshot`, so a busy main thread can no
+    /// longer make the snapshot stale.
+    func snapshotSource() -> (mirror: AgentTerminalSnapshotMirror, cols: Int, rows: Int) {
         let terminal = terminalView.getTerminal()
-        let rows = terminal.rows
-        let cols = terminal.cols
-        guard rows > 0, cols > 0 else { return "" }
-        let startRow = terminal.buffer.yDisp
-        let bottom = startRow + rows - 1
-        return terminal.getText(
-            start: Position(col: 0, row: startRow),
-            end: Position(col: cols - 1, row: bottom)
-        )
+        return (terminalView.snapshotMirror, terminal.cols, terminal.rows)
     }
 
     private func recordCommand(_ command: String) {
@@ -1224,11 +1388,11 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
         return false
     }
 
-    // MARK: LocalProcessTerminalViewDelegate
+    // MARK: AgentTerminalProcessDelegate
 
-    func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
+    func sizeChanged(source: AgentLocalProcessTerminalView, newCols: Int, newRows: Int) {}
 
-    func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
+    func setTerminalTitle(source: AgentLocalProcessTerminalView, title: String) {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         // Keep the user/origin label as the primary title; the OSC title
@@ -1239,9 +1403,9 @@ final class AgentTerminalTab: ObservableObject, Identifiable, LocalProcessTermin
         }
     }
 
-    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
+    func hostCurrentDirectoryUpdate(source: AgentLocalProcessTerminalView, directory: String?) {}
 
-    func processTerminated(source: TerminalView, exitCode: Int32?) {
+    func processTerminated(source: AgentLocalProcessTerminalView, exitCode: Int32?) {
         isRunning = false
         finishShortcutPlayback(status: .cancelled(reason: "terminal_exited"))
     }
@@ -1756,11 +1920,12 @@ final class AgentInteractiveTerminalController: ObservableObject {
 
     // MARK: Agent-tool surface (operate on the active tab)
 
-    /// Raw viewport capture for the `terminal_snapshot` tool. Throws a clear,
+    /// Cheap main-actor metadata for the `terminal_snapshot` tool, plus the
+    /// off-main mirror the tool reads the actual screen from. Throws a clear,
     /// actionable error when there is no terminal to read — instead of
     /// silently returning an empty "disconnected" snapshot the agent can't
-    /// tell apart from a terminal that simply produced no output. Redaction
-    /// and length trimming run off the main actor in
+    /// tell apart from a terminal that simply produced no output. The screen
+    /// text, redaction and trimming all run off the main actor in
     /// `AgentTerminalTools.snapshot`.
     func rawSnapshot() throws -> AgentTerminalRawSnapshot {
         guard let tab = activeTab else {
@@ -1768,12 +1933,15 @@ final class AgentInteractiveTerminalController: ObservableObject {
                 "No Agent Terminal tab is open, so there is nothing to read. Open the Agent Terminal side panel, or use the terminal send_command tool (it starts a shell automatically) before calling terminal_snapshot."
             )
         }
+        let source = tab.snapshotSource()
         return AgentTerminalRawSnapshot(
             isRunning: tab.isRunning,
             runtimeName: tab.title,
             runtimeTarget: tab.runtimeTarget,
-            rawOutput: tab.rawViewportText(),
-            recentCommands: tab.recentCommands
+            recentCommands: tab.recentCommands,
+            mirror: source.mirror,
+            cols: source.cols,
+            rows: source.rows
         )
     }
 

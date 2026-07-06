@@ -84,11 +84,18 @@ enum AgentTerminalTools {
         let snapshot: RedactedTerminalSnapshot
         do {
             snapshot = try await withTerminalSnapshotTimeout(seconds: 3) {
-                // Cheap main-actor hop: raw viewport capture + metadata only.
+                // Cheap main-actor hop: metadata + the off-main mirror handle
+                // only. No screen text is read on the main thread, so a busy
+                // main thread can't make the snapshot stale — it can at worst
+                // delay this tiny metadata hop, which the timeout still guards.
                 let raw = try await MainActor.run { try controller.rawSnapshot() }
-                // Off the main actor: secret redaction + trim, so a slow
-                // redaction regex or a busy main thread can never freeze the UI.
-                let redacted = AgentTerminalRedactor.redact(raw.rawOutput)
+                // Square the mirror to the visible grid, then read the screen
+                // and redact/trim — ALL off the main actor. The mirror is fed
+                // on its own queue, so this reflects the latest PTY output even
+                // while the UI is mid-render.
+                raw.mirror.resize(cols: raw.cols, rows: raw.rows)
+                let rawOutput = raw.mirror.captureViewport()
+                let redacted = AgentTerminalRedactor.redact(rawOutput)
                 let trimmed = String(redacted.suffix(max(1, maxCharacters)))
                 return RedactedTerminalSnapshot(
                     isRunning: raw.isRunning,

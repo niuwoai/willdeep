@@ -1364,6 +1364,30 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 - [ ] 在远端 SSH 场景模拟无法安装 `lrzsz`：Agent 应优先建议 scp/rsync、workspace 文件、附件或 App 编辑/写入流程；这些不可用时，应允许小而清晰、可审查、可验证的 heredoc / patch / sed / perl 等远程编辑兜底，而不是说绝对禁止。
 - [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.129.0-rc40`，短剧制作能力无新增。
 
+## 1.130.0-rc5 — 终端快照改读 off-main 镜像（治本「一直显示旧内容」）
+
+> 这次改动重写了终端进程层（`AgentLocalProcessTerminalView` 从
+> `LocalProcessTerminalView` 换成 `TerminalView` + 自持 `LocalProcess`），
+> 交互终端是用户直接打字的地方，务必重点冒烟。Agent 终端与编辑器内置
+> 终端（Cmd 打开的那个）**都**用这个类，两处都要测。
+
+- ⏳ 侧边栏「终端」正常起一个本地 shell：能打字、回显正常、Tab 补全、
+  Ctrl-C、方向键历史都正常；`vim` / `htop` / `less` 等全屏 TUI 渲染正常、
+  退出后屏幕恢复
+- ⏳ 让 Agent 一边流式输出一大段富 markdown 回复，一边（或紧接着）调
+  `terminal_snapshot`：快照应反映终端**最新**输出，不再「一直显示旧内容」；
+  之前会陈旧的场景现在应即时
+- ⏳ SSH tab：连一台远程主机，远程跑命令产出多屏输出，snapshot 能读到当前屏
+- ⏳ ZMODEM：远程 `sz`/`rz` 传文件仍能触发本地 lrzsz 桥、文件收发成功；传输
+  过程中调 snapshot 不崩（内容可能是传输前的旧屏，属预期）；传输结束后终端
+  恢复正常、后续 snapshot 跟上
+- ⏳ 编辑器内置终端（`EditorTerminalSession`）：打开、打字、改当前目录（OSC 7）
+  时 workingDirectory 跟随、进程退出后状态正确
+- ⏳ 多 tab + idle reaper：开多个 tab 放置一段时间，非活动 idle tab 被回收、
+  活动 tab 不被回收；被回收的 tab 不会让 snapshot 崩
+- ⏳ 内存/泄漏抽查：反复开关终端 tab，Instruments/内存不持续上涨（确认镜像
+  Terminal 与后台队列随 tab 释放，无强引用环）
+
 ---
 
 ## 已知 phase 2（不算 bug，是延迟做的功能）

@@ -86,7 +86,7 @@ enum TerminalAppearance {
 /// VT100/ANSI terminal (matching the Agent side-panel terminal). Single
 /// session; keeps the small lifecycle surface the pane + AppState use.
 @MainActor
-final class EditorTerminalSession: ObservableObject, LocalProcessTerminalViewDelegate {
+final class EditorTerminalSession: ObservableObject, AgentTerminalProcessDelegate {
     @Published var workingDirectoryPath: String = FileManager.default.homeDirectoryForCurrentUser.path
     @Published private(set) var isRunning = false
 
@@ -146,14 +146,14 @@ final class EditorTerminalSession: ObservableObject, LocalProcessTerminalViewDel
         TerminalAppearance.apply(to: terminalView, settings: settings.normalized(), skin: skin)
     }
 
-    // MARK: LocalProcessTerminalViewDelegate
+    // MARK: AgentTerminalProcessDelegate
 
-    func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
-    func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}
-    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {
+    func sizeChanged(source: AgentLocalProcessTerminalView, newCols: Int, newRows: Int) {}
+    func setTerminalTitle(source: AgentLocalProcessTerminalView, title: String) {}
+    func hostCurrentDirectoryUpdate(source: AgentLocalProcessTerminalView, directory: String?) {
         if let directory, !directory.isEmpty { workingDirectoryPath = directory }
     }
-    func processTerminated(source: TerminalView, exitCode: Int32?) {
+    func processTerminated(source: AgentLocalProcessTerminalView, exitCode: Int32?) {
         isRunning = false
     }
 

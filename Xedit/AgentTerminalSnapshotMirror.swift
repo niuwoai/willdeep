@@ -1,0 +1,97 @@
+//
+//  AgentTerminalSnapshotMirror.swift
+//  WillDeep
+//
+//  A head-less SwiftTerm `Terminal` that mirrors an interactive terminal's
+//  PTY output on a dedicated background queue, so `terminal_snapshot` can
+//  read a *fresh* screen even while the main thread is saturated (typically
+//  mid-render while streaming a rich agent reply).
+//
+//  Why this exists — the "一直显示旧内容" bug:
+//  SwiftTerm's `LocalProcessTerminalView` delivers PTY bytes on the main
+//  queue and parses them into its buffer model there, because the visible
+//  NSView reads that same model on the main thread when it draws. When the
+//  main thread is busy, the parse is starved and the model lags behind the
+//  actual output — so a snapshot read off the visible model returns stale
+//  content. This mirror is a *second*, view-less model fed on a queue that
+//  the main thread can never starve, giving the snapshot a live screen.
+//
+//  Threading contract (load-bearing): the wrapped `Terminal` is NOT thread
+//  safe. Every access — feed, resize, capture — MUST happen on `queue`.
+//  The owning terminal view configures its `LocalProcess` to deliver PTY
+//  bytes on this very queue, so `feedOnQueue` runs there for free and stays
+//  ordered with the visible feed. `@unchecked Sendable` is sound ONLY under
+//  that contract.
+//
+
+import Foundation
+import SwiftTerm
+
+final class AgentTerminalSnapshotMirror: @unchecked Sendable {
+    /// Serial queue that exclusively owns `terminal`. Also the queue the
+    /// owning `LocalProcess` delivers PTY bytes on, so feeds are ordered and
+    /// never contend with the main thread's rendering.
+    let queue: DispatchQueue
+    private let terminal: Terminal
+    /// `Terminal` holds its delegate `weak`; keep the driver alive here.
+    private let driver = MirrorDriver()
+
+    init(cols: Int, rows: Int, scrollback: Int, label: String) {
+        queue = DispatchQueue(label: label, qos: .userInitiated)
+        let safeCols = max(cols, 1)
+        let safeRows = max(rows, 1)
+        let options = TerminalOptions(
+            cols: safeCols,
+            rows: safeRows,
+            scrollback: max(scrollback, 0)
+        )
+        terminal = Terminal(delegate: driver, options: options)
+    }
+
+    /// Feed raw PTY bytes into the mirror. MUST be called on `queue` (the
+    /// owning view calls it straight from its `dataReceived`, which the
+    /// `LocalProcess` already dispatches on `queue`).
+    func feedOnQueue(_ bytes: [UInt8]) {
+        terminal.feed(buffer: bytes[...])
+    }
+
+    /// Keep the mirror's geometry in step with the visible terminal so line
+    /// wrapping agrees. Safe to call from any thread; hops onto `queue`.
+    func resize(cols: Int, rows: Int) {
+        guard cols > 0, rows > 0 else { return }
+        queue.async { [terminal] in
+            guard terminal.cols != cols || terminal.rows != rows else { return }
+            terminal.resize(cols: cols, rows: rows)
+        }
+    }
+
+    /// Capture the currently visible viewport as text. Safe to call from any
+    /// thread *except* `queue`; it blocks on `queue` until in-flight feeds
+    /// drain (bounded by one feed call — never by the main thread). This is
+    /// the read the snapshot tool uses instead of the starved visible model.
+    func captureViewport() -> String {
+        queue.sync {
+            let rows = terminal.rows
+            let cols = terminal.cols
+            guard rows > 0, cols > 0 else { return "" }
+            // `yDisp` is the absolute index of the top visible row inside the
+            // scrollback line array; `getText` indexes that array directly.
+            // Mirror the exact region the visible terminal would show.
+            let startRow = terminal.buffer.yDisp
+            let bottom = startRow + rows - 1
+            return terminal.getText(
+                start: Position(col: 0, row: startRow),
+                end: Position(col: cols - 1, row: bottom)
+            )
+        }
+    }
+}
+
+/// Minimal `TerminalDelegate`. The one method with no protocol default is
+/// `send` — and it MUST stay a no-op: the mirror shares the PTY's byte
+/// stream with the visible terminal, which already answers device queries
+/// (DA / DSR / cursor-position reports). A second responder writing to the
+/// PTY would double-answer and corrupt the stream.
+private final class MirrorDriver: TerminalDelegate {
+    func send(source: Terminal, data: ArraySlice<UInt8>) {}
+}
