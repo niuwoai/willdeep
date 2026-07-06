@@ -206,14 +206,22 @@ extension AppState {
             proposalIndex = runtime.patchProposals.count - 1
         }
 
-        // 直接落盘的三种情形:Goal / workspace-access 自动应用、纯新建
-        // 文件、以及用户本轮明确要求「直接写 / 落盘 / 不用审核」
-        // (applyImmediately)。其余编辑仍排进 chat 卡片等用户点 Apply。
-        if (autoApplySource != nil || isPureCreation || applyImmediately),
+        let isCleanTrackedModify = shouldAutoApplyCleanTrackedPatch(changes: parsed)
+
+        // 直接落盘的四种情形:Goal / workspace-access 自动应用、纯新建
+        // 文件、用户本轮明确要求「直接写 / 落盘 / 不用审核」
+        // (applyImmediately)、以及所有目标都是 git 已跟踪且当前干净的
+        // 既有文件。后者有 HEAD 兜底,风险边界清楚;未跟踪、已有用户
+        // 改动、打开但未保存的文件仍进 chat 卡片等用户点 Apply。
+        if (autoApplySource != nil || isPureCreation || applyImmediately || isCleanTrackedModify),
            runtime.patchProposals[proposalIndex].status == .pending {
             let appliedMessage = autoApplySource
                 .map(autoApplyStatusMessage(for:))
-                ?? (isPureCreation ? "New file written automatically" : "Applied immediately as requested")
+                ?? autoApplyStatusMessage(
+                    isPureCreation: isPureCreation,
+                    applyImmediately: applyImmediately,
+                    isCleanTrackedModify: isCleanTrackedModify
+                )
             let outcome = resolveAgentPatchApplication(diff, appliedMessage: appliedMessage)
             runtime.patchProposals[proposalIndex].status = outcome.status
             runtime.patchProposals[proposalIndex].statusMessage = outcome.message
@@ -221,6 +229,23 @@ extension AppState {
 
         persistAgentSession(runtime: runtime)
         return runtime.patchProposals[proposalIndex]
+    }
+
+    private func autoApplyStatusMessage(
+        isPureCreation: Bool,
+        applyImmediately: Bool,
+        isCleanTrackedModify: Bool
+    ) -> String {
+        if isPureCreation {
+            return "New file written automatically"
+        }
+        if applyImmediately {
+            return "Applied immediately as requested"
+        }
+        if isCleanTrackedModify {
+            return "Auto-applied because edited files are tracked and clean in git"
+        }
+        return "Auto-applied"
     }
 
     private func autoApplyStatusMessage(for source: AgentToolApprovalSource) -> String {
@@ -243,6 +268,51 @@ extension AppState {
             return .workspaceAccess
         }
         return nil
+    }
+
+    private func shouldAutoApplyCleanTrackedPatch(changes: [AgentPatchFileChange]) -> Bool {
+        guard !changes.isEmpty,
+              !changes.contains(where: \.isNewFile),
+              let workspaceRoot = agentPatchWorkspaceRoot()?.standardizedFileURL,
+              let repositoryRoot = Self.findGitRepositoryRoot(startingAt: workspaceRoot)?.standardizedFileURL else {
+            return false
+        }
+
+        let workspacePath = workspaceRoot.path
+        let repositoryPath = repositoryRoot.path
+        return changes.allSatisfy { change in
+            guard let url = try? resolveAgentPatchURL(change.path, root: workspaceRoot, rootPath: workspacePath),
+                  FileManager.default.fileExists(atPath: url.path),
+                  !agentPatchHasUnsavedEditorChanges(for: url) else {
+                return false
+            }
+            let repositoryRelativePath = Self.relativeWorkspacePath(
+                for: url,
+                root: repositoryRoot,
+                rootPath: repositoryPath
+            )
+            guard !repositoryRelativePath.isEmpty else { return false }
+
+            let tracked = Self.runGitCommand(
+                arguments: ["ls-files", "--error-unmatch", "--", repositoryRelativePath],
+                in: repositoryRoot
+            ).succeeded
+            guard tracked else { return false }
+
+            let status = Self.runGit(
+                arguments: ["status", "--porcelain=v1", "--", repositoryRelativePath],
+                in: repositoryRoot
+            ).trimmingCharacters(in: .whitespacesAndNewlines)
+            return status.isEmpty
+        }
+    }
+
+    private func agentPatchHasUnsavedEditorChanges(for url: URL) -> Bool {
+        let standardizedPath = url.standardizedFileURL.path
+        if tabs.contains(where: { $0.url.standardizedFileURL.path == standardizedPath && $0.isEdited }) {
+            return true
+        }
+        return openedFileURL?.standardizedFileURL.path == standardizedPath && isEdited
     }
 
     func applyAgentPatch(_ diff: String) throws {
