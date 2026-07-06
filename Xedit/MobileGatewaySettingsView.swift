@@ -14,9 +14,9 @@ struct MobileGatewaySettingsView: View {
     @State private var portText = String(MobileGatewaySettingsStore.load().port)
     @FocusState private var portFieldFocused: Bool
     /// Advanced info (IP / port / host / executable path) stays hidden by
-    /// default — day-to-day the user only needs the QR code. Persisted so
-    /// power users who flip it on keep it on.
-    @AppStorage("com.willdeep.mobileGateway.showAdvanced") private var showAdvanced = false
+    /// default — day-to-day the user only needs the QR code.
+    @State private var showAdvanced = false
+    @State private var showCustomRelaySettings = false
 
     private var coordinator: MobileGatewayCoordinator {
         appState.mobileGatewayCoordinator
@@ -201,17 +201,28 @@ struct MobileGatewaySettingsView: View {
                     ))
                     .textFieldStyle(.roundedBorder)
 
-                    TextField(L10n.Settings.MobileGateway.relayBaseURLPrompt, text: Binding(
-                        get: { draft.relayBaseURL },
-                        set: { draft.relayBaseURL = $0; saveDraft() }
-                    ))
-                    .textFieldStyle(.roundedBorder)
+                    DisclosureGroup(isExpanded: $showCustomRelaySettings) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            TextField(L10n.Settings.MobileGateway.relayBaseURLPrompt, text: Binding(
+                                get: { draft.relayBaseURL },
+                                set: { draft.relayBaseURL = $0; saveDraft() }
+                            ))
+                            .textFieldStyle(.roundedBorder)
 
-                    TextField(L10n.Settings.MobileGateway.relayRoomPrompt, text: Binding(
-                        get: { draft.relayRoom },
-                        set: { draft.relayRoom = $0; saveDraft() }
-                    ))
-                    .textFieldStyle(.roundedBorder)
+                            TextField(L10n.Settings.MobileGateway.relayRoomPrompt, text: Binding(
+                                get: { draft.relayRoom },
+                                set: { draft.relayRoom = $0; saveDraft() }
+                            ))
+                            .textFieldStyle(.roundedBorder)
+
+                            Text(L10n.Settings.MobileGateway.customRelayDescription)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.top, 6)
+                    } label: {
+                        Text(L10n.Settings.MobileGateway.customRelayToggle)
+                    }
 
                     if let resolved = coordinator.resolvedExecutablePath {
                         MobileGatewayCopyableValue(

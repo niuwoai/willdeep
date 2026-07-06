@@ -18567,6 +18567,40 @@
         }
       }
     },
+    "settings.mobile-gateway.custom-relay-description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only change these if you run your own compatible WebSocket relay. The default public relay is already configured."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只有在你自己运行兼容的 WebSocket 中继服务时才需要修改。默认公共中继已经配置好。"
+          }
+        }
+      }
+    },
+    "settings.mobile-gateway.custom-relay-toggle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom relay service"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自定义中继服务"
+          }
+        }
+      }
+    },
     "settings.mobile-gateway.created-at" : {
       "extractionState" : "manual",
       "localizations" : {

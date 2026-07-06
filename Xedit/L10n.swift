@@ -1769,6 +1769,8 @@ nonisolated enum L10n {
             static let executablePathPrompt = String(localized: "settings.mobile-gateway.executable-path-prompt", defaultValue: "Optional willdeep-agent executable path")
             static let relayBaseURLPrompt = String(localized: "settings.mobile-gateway.relay-base-url-prompt", defaultValue: "Optional public relay URL")
             static let relayRoomPrompt = String(localized: "settings.mobile-gateway.relay-room-prompt", defaultValue: "Relay room")
+            static let customRelayToggle = String(localized: "settings.mobile-gateway.custom-relay-toggle", defaultValue: "Custom relay service")
+            static let customRelayDescription = String(localized: "settings.mobile-gateway.custom-relay-description", defaultValue: "Only change these if you run your own compatible WebSocket relay. The default public relay is already configured.")
             static let restartButton = String(localized: "settings.mobile-gateway.restart", defaultValue: "Apply & Restart")
             static let refreshButton = String(localized: "settings.mobile-gateway.refresh", defaultValue: "Refresh")
             static let copyPayloadButton = String(localized: "settings.mobile-gateway.copy-payload", defaultValue: "Copy pairing payload")
