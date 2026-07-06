@@ -192,6 +192,8 @@ enum AgentToolRunner {
                 result = try await generateImage(arguments: activeArguments)
             case "visual_qa_screenshot":
                 result = try await AgentVisualQATools.analyzeScreenshot(arguments: activeArguments, context: activeContext)
+            case "capture_screenshot":
+                result = try await AgentCaptureTools.captureScreenshot(arguments: activeArguments, context: activeContext)
             case "chrome_status":
                 result = try await AgentChromeTools.status(arguments: activeArguments)
             case "chrome_read_page":

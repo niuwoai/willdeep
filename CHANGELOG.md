@@ -2,6 +2,9 @@
 
 ## 1.130.0-rc1 - 2026-07-06
 
+### Added
+- **截图工具与工具结果图片直通视觉模型** —— 新增 `capture_screenshot` 工具，可截取本机 Mac 屏幕（`screencapture`）、连接的 Android 设备/模拟器（`adb exec-out screencap`）或已启动的 iOS 模拟器（`xcrun simctl io screenshot`）。`AgentToolResult` 新增 `images` 字段，`.tool` 消息随之携带图片：Anthropic 等视觉模型以 `tool_result` image block 形式直接“看到”像素并可多轮重发；DeepSeek / OpenAI Chat / Gemini 等非视觉或不支持工具图片的 provider 自动降级为纯文本 payload（含本地 OCR + 保存的完整分辨率路径，可再调 `visual_qa_screenshot` 做 VL 描述）。图片在捕获时即缩放到 ≤1568 长边再入会话，避免上下文与内存膨胀。工具卡片内联渲染缩略图（ImageIO 下采样解码，规避历史上的图片/布局内存失控），点击在“预览”中打开完整截图。
+
 ### Fixed
 - **手机网关设置页默认不再铺开高级参数** —— “显示高级信息”改为本次设置视图内的临时状态，不再记住历史展开值；旧用户曾经打开过高级信息，也不会每次进来都看到 IP、端口、协议、可执行路径等一大屏参数。
 

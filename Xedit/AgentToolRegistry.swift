@@ -1012,6 +1012,16 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "capture_screenshot",
+            description: "Capture a screenshot and hand the pixels back to you for visual analysis. Targets: `mac_screen` (this Mac's display), `android` (a connected device/emulator via adb), or `ios_simulator` (a booted simulator via simctl). The image is attached to the tool result so vision-capable models see it directly; the payload also carries the saved full-resolution path and local OCR text so text-only models can follow up with `visual_qa_screenshot`. Use for UI verification after a change, inspecting app/device state, or when the user asks what something looks like. Requires approval because screenshots can contain private information.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "target", type: .string, description: "What to capture: `mac_screen` (default), `android`, or `ios_simulator`.", required: false),
+                AgentToolParameter(name: "device", type: .string, description: "Optional device selector: adb serial for Android (from `adb devices`), or simulator UDID for iOS (defaults to the booted simulator).", required: false),
+                AgentToolParameter(name: "display", type: .integer, description: "Optional 1-based display index for `mac_screen` when multiple monitors are attached.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "chrome_status",
             description: "Check whether the WillDeep Browser Chrome extension native bridge is reachable on localhost and return protocol/version/capability details. Read-only.",
             risk: .read,

@@ -226,11 +226,24 @@ nonisolated struct AgentToolResult: Equatable, Sendable {
     /// model still receives `payload`; UI uses this compact list for
     /// clickable source affordances after the turn.
     let references: [AgentSourceReference]
+    /// Images the tool produced (e.g. `capture_screenshot`). These ride
+    /// along on the resulting `role == .tool` message so vision-capable
+    /// providers see the pixels directly (Anthropic attaches them as
+    /// `tool_result` image blocks); text-only providers ignore them and
+    /// fall back to `payload`. Downscaled at capture time to keep context
+    /// and memory bounded — never store an unscaled retina screenshot here.
+    let images: [AgentImageAttachment]
 
-    init(summary: String, payload: String, references: [AgentSourceReference] = []) {
+    init(
+        summary: String,
+        payload: String,
+        references: [AgentSourceReference] = [],
+        images: [AgentImageAttachment] = []
+    ) {
         self.summary = summary
         self.payload = payload
         self.references = references
+        self.images = images
     }
 }
 

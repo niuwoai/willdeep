@@ -502,11 +502,36 @@ struct AnthropicMessagesAdapter {
                 // requested them and BEFORE the next user turn —
                 // see OpenAIChatAdapter.providerReadyMessages.)
                 guard let id = message.toolCallID, !id.isEmpty else { continue }
-                pendingToolResults.append([
-                    "type": "tool_result",
-                    "tool_use_id": id,
-                    "content": message.modelContent
-                ])
+                // A tool_result's `content` may be a plain string OR an
+                // array of blocks (text + image). Attach images inline so
+                // vision-capable models see tool-produced screenshots
+                // directly; text-only models never reach this branch
+                // because `supportsImages` is false there.
+                let imageBlocks: [[String: Any]]
+                if supportsImages {
+                    imageBlocks = message.images.compactMap { imageBlock(from: $0) }
+                } else {
+                    imageBlocks = []
+                }
+                if imageBlocks.isEmpty {
+                    pendingToolResults.append([
+                        "type": "tool_result",
+                        "tool_use_id": id,
+                        "content": message.modelContent
+                    ])
+                } else {
+                    var blocks: [[String: Any]] = []
+                    let text = message.modelContent
+                    if !text.isEmpty {
+                        blocks.append(["type": "text", "text": text])
+                    }
+                    blocks.append(contentsOf: imageBlocks)
+                    pendingToolResults.append([
+                        "type": "tool_result",
+                        "tool_use_id": id,
+                        "content": blocks
+                    ])
+                }
 
             case .user:
                 var content: [[String: Any]] = pendingToolResults

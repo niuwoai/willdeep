@@ -583,7 +583,7 @@ extension AppState {
                 RUN ON THE LOCAL MAC, NOT the remote box — do NOT use these to change or inspect the remote workspace:
                 - create_file / edit_file / apply_patch — create or edit LOCAL files; they do NOT touch remote files. For remote file creation or edits use run_command.
                 - terminal_snapshot / terminal_send_command / terminal_send_control — drive the visible side-panel terminal, which is a LOCAL shell by default (unless the user themselves opened an SSH tab to this host)\(remoteRuntimeDescriptor.transport == .daemon ? "; for a daemon runtime it can never reach the remote box" : ""). To run something on the remote box, use run_command, not the terminal tools.
-                - skills / memory / MCP management (list_skills, read_skill, add_memory, create_user_skill, update_user_skill, delete_user_skill, search_mcp_servers, suggest_mcp_server, configure_mcp_server), chrome_*, web_search, web_fetch, generate_image, visual_qa_screenshot — these are about the local WillDeep install / this Mac, not the remote host. web_fetch also can't reach the remote box's private/loopback services.
+                - skills / memory / MCP management (list_skills, read_skill, add_memory, create_user_skill, update_user_skill, delete_user_skill, search_mcp_servers, suggest_mcp_server, configure_mcp_server), chrome_*, web_search, web_fetch, generate_image, visual_qa_screenshot, capture_screenshot — these are about the local WillDeep install / this Mac, not the remote host. web_fetch also can't reach the remote box's private/loopback services.
 
                 Tell the user when an action is local vs remote if it matters.
                 """
@@ -1035,7 +1035,7 @@ extension AppState {
                             baselineSnapshot: turnBaselineSnapshot
                         )
                     }
-                    appendToolMessage(for: runtime, toolCallID: call.externalID, payload: result.payload)
+                    appendToolMessage(for: runtime, toolCallID: call.externalID, payload: result.payload, images: result.images)
                 } catch {
                     let workspaceIssue = diagnoseLocalWorkspaceIfNeeded(
                         after: error,
@@ -1751,6 +1751,7 @@ extension AppState {
         for runtime: AgentRuntime,
         toolCallID: String,
         payload: String,
+        images: [AgentImageAttachment] = [],
         source: AgentInjectionDefense.ToolMessageSource = .toolOutput
     ) {
         let sanitized = AgentInjectionDefense.sanitizedToolMessageContent(
@@ -1764,8 +1765,12 @@ extension AppState {
         } else {
             limited = sanitized
         }
+        // Images ride on the tool message so vision-capable providers
+        // re-see them every turn (Anthropic re-attaches as tool_result
+        // image blocks). Text-only providers ignore `images` and use the
+        // sanitized text payload.
         runtime.messages.append(
-            AgentMessage(role: .tool, content: limited, toolCallID: toolCallID)
+            AgentMessage(role: .tool, content: limited, images: images, toolCallID: toolCallID)
         )
     }
 
