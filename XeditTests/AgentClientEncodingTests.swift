@@ -135,6 +135,33 @@ struct AgentClientEncodingTests {
         #expect(encodedContent.contains("omitted because this provider only accepts text messages") == false)
     }
 
+    @Test
+    func fileBackedImageAttachmentEncodesPathMetadataWithoutInlineBase64() throws {
+        let data = Data("image-bytes".utf8)
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-file-backed-image-\(UUID().uuidString).png")
+        try data.write(to: url, options: [.atomic])
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let image = AgentImageAttachment(
+            mimeType: "image/png",
+            filePath: url.path,
+            byteCount: data.count,
+            sha256: "test-sha"
+        )
+
+        let encoded = try JSONEncoder().encode(image)
+        let object = try parseJSONObject(encoded)
+        #expect(object["filePath"] as? String == url.path)
+        #expect(object["byteCount"] as? Int == data.count)
+        #expect(object["sha256"] as? String == "test-sha")
+        #expect(object["dataBase64"] == nil)
+
+        let decoded = try JSONDecoder().decode(AgentImageAttachment.self, from: encoded)
+        #expect(decoded.dataBase64 == data.base64EncodedString())
+        #expect(decoded.dataURL == "data:image/png;base64,\(data.base64EncodedString())")
+    }
+
     // MARK: - providerReadyMessages
 
     /// A pure user → assistant exchange passes through unmodified.

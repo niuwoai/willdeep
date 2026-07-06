@@ -118,12 +118,19 @@ struct AgentImageThumbnail: View {
                 RoundedRectangle(cornerRadius: 6)
                     .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
             )
-            .task(id: "\(image.id)-\(image.dataBase64.count)-\(Int(size.rounded(.up)))") {
-                decodedImage = await AgentThumbnailImageCache.image(
-                    forBase64: image.dataBase64,
-                    cacheKey: image.id.uuidString,
-                    targetPixels: size * 2
-                )
+            .task(id: "\(image.thumbnailCacheKey)-\(Int(size.rounded(.up)))") {
+                if let fileURL = image.fileURL {
+                    decodedImage = await AgentThumbnailImageCache.image(
+                        forFileURL: fileURL,
+                        targetPixels: size * 2
+                    )
+                } else {
+                    decodedImage = await AgentThumbnailImageCache.image(
+                        forBase64: image.dataBase64,
+                        cacheKey: image.thumbnailCacheKey,
+                        targetPixels: size * 2
+                    )
+                }
             }
 
             if allowsRemoval, let onRemove {

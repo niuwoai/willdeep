@@ -16,7 +16,9 @@ extension AppState {
         guard let runtime = activeRuntime ?? activeRuntimeAfterCreatingNewSession() else { return }
 
         let userText = runtime.input.trimmingCharacters(in: .whitespacesAndNewlines)
-        let images = runtime.pendingImages
+        let images = runtime.pendingImages.map { image in
+            (try? image.diskBackedCopy()) ?? image
+        }
         let textAttachments = runtime.pendingTextAttachments
         let skills = runtime.pendingSkills
         let files = runtime.pendingFiles

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.131.0-rc3 - 2026-07-06
+
+### Fixed
+- **Composer 图片附件入队改为磁盘引用** —— 新粘贴到 Agent composer 的图片会先原子写入 Application Support 下的 `AgentAttachments` 目录，`AgentImageAttachment` / queued message / session JSON 只保存路径、大小、SHA-256 和 MIME 元数据；发送给视觉模型或生成缩略图时再按需从文件读取。旧会话里的内联 `dataBase64` 仍可解码，清空队列、删除队列项或移除草稿图片会清理对应未发送暂存文件，且清理路径只允许命中 App 自己的 `AgentAttachments/<uuid>` 目录，避免排队多张大图时把内存和 session JSON 一起顶高。
+
+### Changed
+- 版本号从 **1.131.0-rc2** 提升为 **1.131.0-rc3**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
 ## 1.131.0-rc2 - 2026-07-06
 
 ### Fixed
