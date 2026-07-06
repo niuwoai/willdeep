@@ -94,6 +94,19 @@ struct AgentToolCallStreamEmissionGate {
     }
 }
 
+/// Outcome of a one-shot auto-approve safety judge round trip.
+/// `.allow` = model returned a clean YES; `.deny` = a clean NO (it
+/// classified and refused); `.unavailable` = we never got a usable
+/// verdict (missing key, network/parse error, or a reply with no verdict
+/// tag — e.g. a reasoning model truncated before answering). All non-allow
+/// outcomes fall back to human approval; the associated string is a short
+/// reason kept for the judge audit log.
+enum AgentSafetyJudgeResult: Equatable {
+    case allow
+    case deny
+    case unavailable(String)
+}
+
 struct AgentClient {
     private let configuration: AgentConfiguration
     private let session: URLSession?
@@ -124,20 +137,27 @@ struct AgentClient {
         }
     }
 
-    func judgeCommandSafety(command: String) async -> Bool {
+    /// Ask the configured provider whether a command is safe to auto-run.
+    /// `historyContext` is an optional, caller-cached block of the
+    /// operator's prior hand decisions appended to the judge system prompt;
+    /// keep it stable across calls so the request prefix stays cache-hot.
+    func judgeCommandSafety(
+        command: String,
+        historyContext: String = ""
+    ) async -> AgentSafetyJudgeResult {
         switch configuration.providerKind {
         case .openAIChat:
             return await OpenAIChatAdapter(configuration: configuration, session: session)
-                .judgeCommandSafety(command: command)
+                .judgeCommandSafety(command: command, historyContext: historyContext)
         case .anthropicMessages:
             return await AnthropicMessagesAdapter(configuration: configuration, session: session)
-                .judgeCommandSafety(command: command)
+                .judgeCommandSafety(command: command, historyContext: historyContext)
         case .geminiGenerateContent:
             return await GeminiAdapter(configuration: configuration, session: session)
-                .judgeCommandSafety(command: command)
+                .judgeCommandSafety(command: command, historyContext: historyContext)
         case .openAIResponses:
             return await OpenAIResponsesAdapter(configuration: configuration, session: session)
-                .judgeCommandSafety(command: command)
+                .judgeCommandSafety(command: command, historyContext: historyContext)
         }
     }
 

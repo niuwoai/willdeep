@@ -137,43 +137,61 @@ struct AnthropicMessagesAdapter {
     /// clean `YES`; any network/parse failure means "ask the user".
     /// Anthropic flavoured: `system` is top-level and `user` is the
     /// only message in this single round trip.
-    func judgeCommandSafety(command: String) async -> Bool {
-        guard !configuration.apiKey.isEmpty else { return false }
+    func judgeCommandSafety(
+        command: String,
+        historyContext: String = ""
+    ) async -> AgentSafetyJudgeResult {
+        guard !configuration.apiKey.isEmpty else {
+            return .unavailable("missing api key")
+        }
 
         let endpoint: URL
         do { endpoint = try messagesEndpoint(from: configuration.baseURL) }
-        catch { return false }
+        catch { return .unavailable("bad endpoint") }
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
-        request.timeoutInterval = 12
+        request.timeoutInterval = AgentInjectionDefense.judgeTimeout
         applyAuthenticationHeaders(to: &request)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let systemPrompt = AgentInjectionDefense.judgeSystemPrompt
+        let systemPrompt = AgentInjectionDefense.judgeSystemPromptText(historyContext: historyContext)
         let userPayload = AgentInjectionDefense.judgeUserPayload(command: command)
 
+        // System block carries the fixed rules + the caller's stable history
+        // block, so mark it `cache_control: ephemeral` — the identical prefix
+        // is served from Anthropic's prompt cache across judge calls; only
+        // the per-call <command> in the user message is uncached.
         let body: [String: Any] = [
             "model": configuration.model,
-            "max_tokens": 16,
+            "max_tokens": AgentInjectionDefense.judgeMaxOutputTokens,
             "temperature": 0,
-            "system": systemPrompt,
+            "system": [
+                [
+                    "type": "text",
+                    "text": systemPrompt,
+                    "cache_control": ["type": "ephemeral"]
+                ]
+            ],
             "messages": [
                 ["role": "user", "content": userPayload]
             ]
         ]
         guard let payload = try? JSONSerialization.data(withJSONObject: body, options: []) else {
-            return false
+            return .unavailable("encode failed")
         }
         request.httpBody = payload
 
         do {
             let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-                return false
+            guard let http = response as? HTTPURLResponse else {
+                return .unavailable("no http response")
+            }
+            guard (200..<300).contains(http.statusCode) else {
+                return .unavailable("http \(http.statusCode)")
             }
             guard let decoded = try? JSONDecoder().decode(NonStreamMessage.self, from: data) else {
-                return false
+                return .unavailable("decode failed")
             }
             let textBlobs = decoded.content.compactMap { block -> String? in
                 guard block.type == "text" else { return nil }
@@ -181,9 +199,14 @@ struct AnthropicMessagesAdapter {
             }
             let answer = textBlobs.joined()
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            return AgentInjectionDefense.judgeVerdictIsYes(rawText: answer)
+            switch AgentInjectionDefense.judgeVerdict(rawText: answer) {
+            case .yes: return .allow
+            case .no: return .deny
+            case .unclear:
+                return .unavailable(answer.isEmpty ? "empty reply" : "no verdict tag")
+            }
         } catch {
-            return false
+            return .unavailable("network error")
         }
     }
 

@@ -142,26 +142,31 @@ struct OpenAIChatAdapter {
     /// `true` only when the model unambiguously answers `YES`. Network
     /// errors return `false` — the caller (AppState) treats that as
     /// "fall back to user approval".
-    func judgeCommandSafety(command: String) async -> Bool {
-        guard !configuration.requiresAPIKey || !configuration.apiKey.isEmpty else { return false }
+    func judgeCommandSafety(
+        command: String,
+        historyContext: String = ""
+    ) async -> AgentSafetyJudgeResult {
+        guard !configuration.requiresAPIKey || !configuration.apiKey.isEmpty else {
+            return .unavailable("missing api key")
+        }
 
         let endpoint: URL
         do { endpoint = try chatCompletionsEndpoint(from: configuration.baseURL) }
-        catch { return false }
+        catch { return .unavailable("bad endpoint") }
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
-        request.timeoutInterval = 12
+        request.timeoutInterval = AgentInjectionDefense.judgeTimeout
         applyAuthenticationHeaders(to: &request)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let systemPrompt = AgentInjectionDefense.judgeSystemPrompt
+        let systemPrompt = AgentInjectionDefense.judgeSystemPromptText(historyContext: historyContext)
         let userPayload = AgentInjectionDefense.judgeUserPayload(command: command)
 
         let body: [String: Any] = [
             "model": configuration.model,
             "stream": false,
-            "max_tokens": 16,
+            "max_tokens": AgentInjectionDefense.judgeMaxOutputTokens,
             "temperature": 0,
             "messages": [
                 ["role": "system", "content": systemPrompt],
@@ -169,24 +174,32 @@ struct OpenAIChatAdapter {
             ]
         ]
         guard let payload = try? JSONSerialization.data(withJSONObject: body, options: []) else {
-            return false
+            return .unavailable("encode failed")
         }
         request.httpBody = payload
 
         do {
             let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-                return false
+            guard let http = response as? HTTPURLResponse else {
+                return .unavailable("no http response")
+            }
+            guard (200..<300).contains(http.statusCode) else {
+                return .unavailable("http \(http.statusCode)")
             }
             guard let decoded = try? JSONDecoder().decode(JudgmentResponse.self, from: data),
                   let choice = decoded.choices.first else {
-                return false
+                return .unavailable("decode failed")
             }
-            let answer = choice.message.content
+            let answer = (choice.message.content ?? "")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            return AgentInjectionDefense.judgeVerdictIsYes(rawText: answer)
+            switch AgentInjectionDefense.judgeVerdict(rawText: answer) {
+            case .yes: return .allow
+            case .no: return .deny
+            case .unclear:
+                return .unavailable(answer.isEmpty ? "empty reply" : "no verdict tag")
+            }
         } catch {
-            return false
+            return .unavailable("network error")
         }
     }
 
@@ -682,6 +695,12 @@ private struct JudgmentResponse: Decodable {
     }
 
     struct Message: Decodable {
-        let content: String
+        /// Optional on purpose: reasoning-tier models (deepseek-*-flash,
+        /// o-series) return `reasoning_content` alongside a `content` that
+        /// can be null or absent when the token budget was spent thinking.
+        /// A non-optional field made the whole decode throw → silent
+        /// fallback to manual approval. Optional lets us surface the real
+        /// state ("empty reply") to the judge log instead.
+        let content: String?
     }
 }

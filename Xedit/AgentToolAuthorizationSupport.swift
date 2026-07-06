@@ -89,6 +89,119 @@ enum AgentSandboxAuditLog {
             .appendingPathComponent("AgentAudit", isDirectory: true)
             .appendingPathComponent("sandbox.jsonl")
     }
+
+    // MARK: - Reading prior decisions (judge few-shot history)
+
+    /// Split recent audit entries into command samples the operator
+    /// APPROVED by hand versus ones they REJECTED, newest first. Only
+    /// command-shaped tools contribute (a `terminal_snapshot` line is
+    /// noise to the judge). Bounded work: only the last `tailBytes` of the
+    /// file are read and parsed, so this stays cheap even as the log grows.
+    static func judgeHistorySamples(
+        approvedLimit: Int = 40,
+        rejectedLimit: Int = 20,
+        tailBytes: Int = 128 * 1024
+    ) -> (approved: [String], rejected: [String]) {
+        let entries = recentEntries(tailBytes: tailBytes)
+        var approved: [String] = []
+        var rejected: [String] = []
+        // recentEntries is oldest→newest (file order); walk backwards so the
+        // freshest decisions win the capped slots.
+        for entry in entries.reversed() {
+            guard entry.toolName == "run_command"
+                || entry.toolName == "terminal_send_command"
+                || entry.toolName == "call_mcp_tool" else { continue }
+            let summary = entry.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !summary.isEmpty, summary != entry.toolName else { continue }
+            if entry.outcome == "denied" {
+                if rejected.count < rejectedLimit { rejected.append(summary) }
+            } else if entry.approvedBy == "user" {
+                if approved.count < approvedLimit { approved.append(summary) }
+            }
+            if approved.count >= approvedLimit && rejected.count >= rejectedLimit { break }
+        }
+        return (approved, rejected)
+    }
+
+    private static func recentEntries(tailBytes: Int) -> [Entry] {
+        guard let url = auditURL(),
+              let handle = try? FileHandle(forReadingFrom: url) else {
+            return []
+        }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        let start = size > UInt64(tailBytes) ? size - UInt64(tailBytes) : 0
+        try? handle.seek(toOffset: start)
+        guard let data = try? handle.readToEnd(), !data.isEmpty else { return [] }
+        var text = String(decoding: data, as: UTF8.self)
+        // Drop the leading partial line when we seeked into the middle.
+        if start > 0, let newline = text.firstIndex(of: "\n") {
+            text = String(text[text.index(after: newline)...])
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        var entries: [Entry] = []
+        for line in text.split(separator: "\n") {
+            guard let entry = try? decoder.decode(Entry.self, from: Data(line.utf8)) else { continue }
+            entries.append(entry)
+        }
+        return entries
+    }
+
+    // MARK: - Judge outcome log
+
+    struct JudgeEntry: Codable, Equatable {
+        let timestamp: Date
+        let toolName: String
+        let command: String
+        let model: String
+        let verdict: String
+        let detail: String
+    }
+
+    /// Record one auto-approve judge round trip to `judge.jsonl` (sibling of
+    /// sandbox.jsonl). This is the observability that used to be missing:
+    /// every allow / deny / unavailable outcome lands on disk with its
+    /// reason, so "why did it still ask me?" becomes answerable instead of a
+    /// silent `return false`.
+    static func recordJudge(
+        toolName: String,
+        command: String,
+        model: String,
+        verdict: String,
+        detail: String
+    ) {
+        let entry = JudgeEntry(
+            timestamp: Date(),
+            toolName: toolName,
+            command: AgentSandboxPolicy.scrub(String(command.prefix(400))),
+            model: model,
+            verdict: verdict,
+            detail: String(detail.prefix(200))
+        )
+        guard let data = try? JSONEncoder.agentSandboxEncoder.encode(entry) else { return }
+        var line = String(data: data, encoding: .utf8) ?? "{}"
+        line += "\n"
+        guard let url = judgeURL(), let bytes = line.data(using: .utf8) else { return }
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        if FileManager.default.fileExists(atPath: url.path),
+           let handle = try? FileHandle(forWritingTo: url) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: bytes)
+        } else {
+            try? bytes.write(to: url, options: [.atomic])
+        }
+    }
+
+    private static func judgeURL() -> URL? {
+        auditURL()?
+            .deletingLastPathComponent()
+            .appendingPathComponent("judge.jsonl")
+    }
 }
 
 private extension JSONEncoder {
@@ -379,5 +492,14 @@ enum AgentToolAuthorization {
     /// uses; see AgentInjectionDefense).
     static func mcpJudgePseudoCommand(server: String, tool: String, argumentsJSON: String) -> String {
         "mcp-tool-call server=\(server) tool=\(tool) arguments=\(argumentsJSON)"
+    }
+
+    /// Render a `terminal_send_control` call as a pseudo command line for
+    /// the LLM safety judge. The control key is one of the whitelisted set
+    /// (`ctrl_c` / `enter` / `escape`); the judge sees the intent and can
+    /// YES the harmless interrupt/cancel keys while staying cautious about
+    /// `enter` submitting a queued line.
+    static func terminalControlJudgePseudoCommand(control: String) -> String {
+        "terminal-send-control key=\(control)"
     }
 }

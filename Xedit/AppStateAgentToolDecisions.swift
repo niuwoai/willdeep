@@ -194,9 +194,41 @@ extension AppState {
                     tool: tool,
                     argumentsJSON: arguments["arguments_json"]?.stringValue() ?? "{}"
                 )
-                let client = AgentClient(configuration: configurationForSafetyJudge())
-                return await client.judgeCommandSafety(command: pseudoCommand) ? .llmJudge : nil
+                return await safetyJudgeApproval(toolName: toolName, command: pseudoCommand)
             }
+        }
+
+        // Terminal side-panel commands ARE shell commands, just delivered to
+        // the user's watched terminal — classify them the same way as
+        // run_command (static allowlist first, then the LLM judge). Before
+        // this, every `terminal_send_command` fell straight through to a
+        // manual prompt; it was the single biggest source of hand approvals.
+        if toolName == "terminal_send_command" {
+            guard autoApproveSafeCommands,
+                  let command = arguments["command"]?.stringValue(),
+                  !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return nil
+            }
+            switch SafeCommand.classify(command: command) {
+            case .alwaysSafe:
+                return .staticAllowlist
+            case .alwaysDangerous:
+                return nil
+            case .needsJudgment:
+                break
+            }
+            return await safetyJudgeApproval(toolName: toolName, command: command)
+        }
+
+        if toolName == "terminal_send_control" {
+            guard autoApproveSafeCommands,
+                  let control = arguments["control"]?.stringValue()?
+                      .trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                  ["ctrl_c", "enter", "escape"].contains(control) else {
+                return nil
+            }
+            let pseudo = AgentToolAuthorization.terminalControlJudgePseudoCommand(control: control)
+            return await safetyJudgeApproval(toolName: toolName, command: pseudo)
         }
 
         guard toolName == "run_command" else { return nil }
@@ -221,10 +253,75 @@ extension AppState {
             break
         }
 
+        return await safetyJudgeApproval(toolName: toolName, command: command)
+    }
+
+    // MARK: - Safety judge (LLM) with cached operator history
+
+    /// TTL for the cached few-shot history block fed to the safety judge.
+    /// The block is rebuilt at most once per this interval — NOT per call —
+    /// so (a) we don't re-read the audit log on every tool decision, and
+    /// (b) the judge request prefix stays byte-identical between rebuilds,
+    /// keeping the provider's prompt cache hot. 30 min balances "new
+    /// approve-this habits show up quickly" against cache thrash.
+    private static let safetyJudgeHistoryTTL: TimeInterval = 30 * 60
+
+    /// Cached operator-decision context appended to the judge system prompt.
+    /// Bounded and deduped by `AgentSandboxAuditLog.judgeHistorySamples` +
+    /// `AgentInjectionDefense.judgeHistoryContext`; rebuilt lazily behind
+    /// `safetyJudgeHistoryTTL`.
+    func safetyJudgeHistoryContext() -> String {
+        if let builtAt = cachedJudgeHistoryBuiltAt,
+           Date().timeIntervalSince(builtAt) < Self.safetyJudgeHistoryTTL {
+            return cachedJudgeHistoryContext
+        }
+        let samples = AgentSandboxAuditLog.judgeHistorySamples()
+        let context = AgentInjectionDefense.judgeHistoryContext(
+            approved: samples.approved,
+            rejected: samples.rejected
+        )
+        cachedJudgeHistoryContext = context
+        cachedJudgeHistoryBuiltAt = Date()
+        return context
+    }
+
+    /// Run the auto-approve safety judge for a command-shaped candidate,
+    /// threading the operator's cached decision history in as few-shot
+    /// context and logging the outcome to judge.jsonl. Returns `.llmJudge`
+    /// on a clean YES; `nil` for deny / unavailable (both fall back to the
+    /// user). The single choke point every judge path (run_command, MCP,
+    /// terminal) routes through.
+    func safetyJudgeApproval(
+        toolName: String,
+        command: String
+    ) async -> AgentToolApprovalSource? {
         let configuration = configurationForSafetyJudge()
         let client = AgentClient(configuration: configuration)
-        let safe = await client.judgeCommandSafety(command: command)
-        return safe ? .llmJudge : nil
+        let result = await client.judgeCommandSafety(
+            command: command,
+            historyContext: safetyJudgeHistoryContext()
+        )
+        let verdict: String
+        let detail: String
+        switch result {
+        case .allow:
+            verdict = "allow"
+            detail = ""
+        case .deny:
+            verdict = "deny"
+            detail = ""
+        case .unavailable(let reason):
+            verdict = "unavailable"
+            detail = reason
+        }
+        AgentSandboxAuditLog.recordJudge(
+            toolName: toolName,
+            command: command,
+            model: configuration.model,
+            verdict: verdict,
+            detail: detail
+        )
+        return result == .allow ? .llmJudge : nil
     }
 
     nonisolated static func canSendToSafetyJudge(

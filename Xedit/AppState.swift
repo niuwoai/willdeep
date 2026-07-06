@@ -192,6 +192,14 @@ final class AppState: ObservableObject {
     @Published var autoApproveSafeCommands: Bool = AgentSettingsStore.loadAutoApproveSafeCommands() {
         didSet { AgentSettingsStore.saveAutoApproveSafeCommands(autoApproveSafeCommands) }
     }
+    /// Cached few-shot block of the operator's prior hand-review decisions,
+    /// appended to the auto-approve safety-judge system prompt. Rebuilt
+    /// lazily behind `safetyJudgeHistoryTTL` (see safetyJudgeHistoryContext)
+    /// — deliberately NOT recomputed per judge call, both to avoid re-reading
+    /// the audit log each time and to keep the judge request prefix stable
+    /// for provider prompt caching. Not `@Published`: UI never renders it.
+    var cachedJudgeHistoryContext: String = ""
+    var cachedJudgeHistoryBuiltAt: Date?
     /// User-tunable base font size (in points) for the Agent chat
     /// transcript body — applies to user/assistant message prose and
     /// rendered Markdown blocks. Tool-call summaries, footers, and

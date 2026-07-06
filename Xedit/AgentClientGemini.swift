@@ -121,20 +121,25 @@ struct GeminiAdapter {
 
     /// Non-streaming classifier. Returns `true` only on a clean `YES`;
     /// any network/parse failure means "ask the user".
-    func judgeCommandSafety(command: String) async -> Bool {
-        guard !configuration.apiKey.isEmpty else { return false }
+    func judgeCommandSafety(
+        command: String,
+        historyContext: String = ""
+    ) async -> AgentSafetyJudgeResult {
+        guard !configuration.apiKey.isEmpty else {
+            return .unavailable("missing api key")
+        }
 
         let endpoint: URL
         do { endpoint = try nonStreamEndpoint(model: configuration.model) }
-        catch { return false }
+        catch { return .unavailable("bad endpoint") }
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
-        request.timeoutInterval = 12
+        request.timeoutInterval = AgentInjectionDefense.judgeTimeout
         applyAuthenticationHeaders(to: &request)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let systemPrompt = AgentInjectionDefense.judgeSystemPrompt
+        let systemPrompt = AgentInjectionDefense.judgeSystemPromptText(historyContext: historyContext)
         let userPayload = AgentInjectionDefense.judgeUserPayload(command: command)
 
         let body: [String: Any] = [
@@ -148,31 +153,39 @@ struct GeminiAdapter {
                 ]
             ],
             "generationConfig": [
-                "maxOutputTokens": 16,
+                "maxOutputTokens": AgentInjectionDefense.judgeMaxOutputTokens,
                 "temperature": 0
             ]
         ]
         guard let payload = try? JSONSerialization.data(withJSONObject: body, options: []) else {
-            return false
+            return .unavailable("encode failed")
         }
         request.httpBody = payload
 
         do {
             let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-                return false
+            guard let http = response as? HTTPURLResponse else {
+                return .unavailable("no http response")
+            }
+            guard (200..<300).contains(http.statusCode) else {
+                return .unavailable("http \(http.statusCode)")
             }
             guard let decoded = try? JSONDecoder().decode(GenerateContentResponse.self, from: data),
                   let candidate = decoded.candidates?.first else {
-                return false
+                return .unavailable("decode failed")
             }
             let text = (candidate.content?.parts ?? [])
                 .compactMap(\.text)
                 .joined()
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            return AgentInjectionDefense.judgeVerdictIsYes(rawText: text)
+            switch AgentInjectionDefense.judgeVerdict(rawText: text) {
+            case .yes: return .allow
+            case .no: return .deny
+            case .unclear:
+                return .unavailable(text.isEmpty ? "empty reply" : "no verdict tag")
+            }
         } catch {
-            return false
+            return .unavailable("network error")
         }
     }
 
