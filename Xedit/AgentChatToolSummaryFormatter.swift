@@ -55,6 +55,7 @@ enum AgentChatToolSummaryFormatter {
         var searchCount = 0
         var gitStatusCount = 0
         var commandCount = 0
+        var terminalOperationCount = 0
 
         init(toolCalls: [AgentMessageToolCall]) {
             var readFiles = Set<String>()
@@ -73,6 +74,8 @@ enum AgentChatToolSummaryFormatter {
                     gitStatusCount += 1
                 case "run_command":
                     commandCount += 1
+                case _ where AgentTerminalToolNames.isVisibleTerminalOperation(call.toolName):
+                    terminalOperationCount += 1
                 default:
                     break
                 }
@@ -98,6 +101,9 @@ enum AgentChatToolSummaryFormatter {
             }
             if commandCount > 0 {
                 parts.append("已运行 \(commandCount) 条命令")
+            }
+            if terminalOperationCount > 0 {
+                parts.append("已执行 \(terminalOperationCount) 次终端操作")
             }
             return parts.isEmpty ? nil : parts.joined(separator: " · ")
         }
@@ -156,6 +162,12 @@ enum AgentChatToolSummaryFormatter {
         switch call.toolName {
         case "run_command":
             preferredKeys = ["command", "cwd", "timeout"]
+        case "terminal_send_command":
+            preferredKeys = ["command"]
+        case "terminal_send_control":
+            preferredKeys = ["control"]
+        case "terminal_snapshot":
+            preferredKeys = ["max_chars", "include_recent_commands"]
         case "grep_files":
             preferredKeys = ["pattern", "include", "path"]
         case "search_files":

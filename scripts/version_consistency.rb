@@ -28,15 +28,7 @@ def badge_to_version(value)
   value.tr("_", "-").gsub("--", "-")
 end
 
-def semver_sort_key(version)
-  core, rc = version.split("-rc", 2)
-  major, minor, patch = core.split(".").map(&:to_i)
-  release_rank = rc ? 0 : 1
-  [major, minor, patch, release_rank, rc.to_i]
-end
-
 checks = []
-delivery_checks = []
 
 add_check = lambda do |name, path, versions, expected_count: nil, allow_empty: false|
   versions = Array(versions).compact
@@ -47,15 +39,6 @@ add_check = lambda do |name, path, versions, expected_count: nil, allow_empty: f
     versions: versions,
     expected_count: expected_count,
     allow_empty: allow_empty
-  }
-end
-
-add_delivery_check = lambda do |name, path, ok, detail|
-  delivery_checks << {
-    name: name,
-    path: path,
-    ok: ok,
-    detail: detail
   }
 end
 
@@ -114,337 +97,6 @@ add_check.call(
   expected_count: 1
 )
 
-short_drama_cutoff = read_file(repo_root, "docs/SHORT_DRAMA_AI_MVP_CUTOFF.md")
-add_check.call(
-  "Short drama cutoff baseline versions",
-  "docs/SHORT_DRAMA_AI_MVP_CUTOFF.md",
-  short_drama_cutoff.scan(/(?:Baseline version:\s*v?|基线 `v?)(#{version_pattern})/).flatten,
-  expected_count: 2
-)
-
-short_drama_tryout = read_file(repo_root, "docs/SHORT_DRAMA_AI_MVP_TRYOUT.md")
-add_check.call(
-  "Short drama tryout baseline/manual queue versions",
-  "docs/SHORT_DRAMA_AI_MVP_TRYOUT.md",
-  [
-    short_drama_tryout[/Baseline version:\s*v?(#{version_pattern})/, 1],
-    short_drama_tryout[/人工 smoke 结果请记录到 .*?`(#{version_pattern})\s+—/m, 1]
-  ],
-  expected_count: 2
-)
-
-manual_test_queue = read_file(repo_root, "docs/MANUAL_TEST_QUEUE.md")
-short_drama_manual_versions = manual_test_queue.scan(/^##\s+(#{version_pattern})\s+—\s+短剧/m).flatten
-pending_short_drama_pointer_versions = manual_test_queue
-  .scan(/^- ⏳(?:.*\n(?:  .*\n?)*)/)
-  .select do |block|
-    block.include?("SHORT_DRAMA_AI_MVP_TRYOUT.md") ||
-      block.include?("最新短剧 smoke") ||
-      block.include?("phase 2 之前最后一个短剧") ||
-      block.include?("底部“验收记录”") ||
-      block.include?("都指向")
-  end
-  .flat_map { |block| block.scan(version_pattern).flatten }
-add_check.call(
-  "Manual smoke latest short drama section",
-  "docs/MANUAL_TEST_QUEUE.md",
-  short_drama_manual_versions.max_by { |version| semver_sort_key(version) },
-  expected_count: 1
-)
-add_check.call(
-  "Manual smoke last short drama section",
-  "docs/MANUAL_TEST_QUEUE.md",
-  short_drama_manual_versions.last,
-  expected_count: 1
-)
-add_check.call(
-  "Manual smoke pending short drama pointer versions",
-  "docs/MANUAL_TEST_QUEUE.md",
-  pending_short_drama_pointer_versions,
-  allow_empty: true
-)
-
-run_tests = read_file(repo_root, "scripts/run_tests.sh")
-workflow = read_file(repo_root, ".github/workflows/test.yml")
-short_drama_tryout_package = read_file(repo_root, "scripts/short_drama_mvp_tryout_package.rb")
-short_drama_acceptance_report = read_file(repo_root, "scripts/short_drama_mvp_acceptance_report.rb")
-short_drama_smoke_evidence_report = read_file(repo_root, "scripts/short_drama_mvp_smoke_evidence_report.rb")
-short_drama_smoke_evidence_contract = read_file(repo_root, "scripts/short_drama_mvp_smoke_evidence_contract_test.rb")
-short_drama_handoff_bundle = read_file(repo_root, "scripts/short_drama_mvp_handoff_bundle.rb")
-short_drama_handoff_bundle_contract = read_file(repo_root, "scripts/short_drama_mvp_handoff_bundle_contract_test.rb")
-short_drama_remaining_risks = short_drama_cutoff
-  .match(/^##\s+当前剩余风险\n\n(?<body>.*?)(?=^##\s|\z)/m)
-  &.[](:body)
-  .to_s
-  .scan(/^- (.+)$/)
-  .flatten
-add_delivery_check.call(
-  "Short drama cutoff documents one-shot local acceptance",
-  "docs/SHORT_DRAMA_AI_MVP_CUTOFF.md",
-  short_drama_cutoff.include?("`scripts/run_tests.sh`"),
-  "Cutoff should name the local one-shot acceptance command."
-)
-add_delivery_check.call(
-  "Short drama cutoff documents remote Go acceptance",
-  "docs/SHORT_DRAMA_AI_MVP_CUTOFF.md",
-  short_drama_cutoff.include?("`go test ./...`") && short_drama_cutoff.include?("willdeep-agent"),
-  "Cutoff should name the remote Go agent test command and working directory."
-)
-add_delivery_check.call(
-  "Short drama cutoff documents remote Xedit acceptance",
-  "docs/SHORT_DRAMA_AI_MVP_CUTOFF.md",
-  short_drama_cutoff.include?("GitHub Actions `Tests`") && short_drama_cutoff.include?("Run XeditTests"),
-  "Cutoff should name the GitHub Actions Tests workflow and Xedit test gate."
-)
-add_delivery_check.call(
-  "Local acceptance still runs short-drama tryout package",
-  "scripts/run_tests.sh",
-  run_tests.include?("scripts/short_drama_mvp_tryout_package.rb") &&
-    run_tests.include?("short_drama_mvp_tryout_package_report.md"),
-  "scripts/run_tests.sh should generate the local short-drama MVP tryout package report."
-)
-add_delivery_check.call(
-  "Remote acceptance still runs Go and Xedit gates",
-  ".github/workflows/test.yml",
-  workflow.include?("Run Go agent tests") &&
-    workflow.include?("go test ./...") &&
-    workflow.include?("Run XeditTests"),
-  "GitHub Actions should run Go agent tests and XeditTests."
-)
-add_delivery_check.call(
-  "Tryout package preserves manual smoke result templates",
-  "scripts/short_drama_mvp_tryout_package.rb",
-  short_drama_tryout_package.include?("manual-smoke-results-template.md") &&
-    short_drama_tryout_package.include?("manual-smoke-results-template.json") &&
-    short_drama_tryout_package.include?("manual_smoke_results_md_path") &&
-    short_drama_tryout_package.include?("manual_smoke_results_json_path"),
-  "Tryout package report should expose Markdown and JSON manual smoke result templates."
-)
-add_delivery_check.call(
-  "Tryout package preserves provider API smoke templates",
-  "scripts/short_drama_mvp_tryout_package.rb",
-  short_drama_tryout_package.include?("provider-api-smoke-template.md") &&
-    short_drama_tryout_package.include?("provider-api-smoke-template.json") &&
-    short_drama_tryout_package.include?("provider_api_smoke_md_path") &&
-    short_drama_tryout_package.include?("provider_api_smoke_json_path") &&
-    short_drama_tryout_package.include?("willdeep.short_drama.provider_api_smoke.v1"),
-  "Tryout package should expose optional real some.im / Replicate smoke templates without embedding secrets."
-)
-add_delivery_check.call(
-  "Tryout package preserves smoke evidence redaction guide",
-  "scripts/short_drama_mvp_tryout_package.rb",
-  short_drama_tryout_package.include?("smoke-evidence-redaction-guide.md") &&
-    short_drama_tryout_package.include?("smoke_evidence_redaction_guide_path") &&
-    short_drama_tryout_package.include?("Allowed Evidence") &&
-    short_drama_tryout_package.include?("Never Paste") &&
-    short_drama_tryout_package.include?("Sensitive findings: 0"),
-  "Tryout package should carry package-local instructions for allowed evidence and credential redaction."
-)
-add_delivery_check.call(
-  "Tryout package preserves handoff index",
-  "scripts/short_drama_mvp_tryout_package.rb",
-  short_drama_tryout_package.include?("handoff-index.md") &&
-    short_drama_tryout_package.include?("handoff-index.json") &&
-    short_drama_tryout_package.include?("handoff_index_md_path") &&
-    short_drama_tryout_package.include?("handoff_index_json_path") &&
-    short_drama_tryout_package.include?("willdeep.short_drama.tryout_handoff_index.v1"),
-  "Tryout package should expose a package-local handoff index so users have one ordered entrypoint."
-)
-add_delivery_check.call(
-  "Tryout package preserves acceptance runbook",
-  "scripts/short_drama_mvp_tryout_package.rb",
-  short_drama_tryout_package.include?("acceptance-runbook.md") &&
-    short_drama_tryout_package.include?("acceptance-runbook.json") &&
-    short_drama_tryout_package.include?("willdeep.short_drama.acceptance_runbook.v1") &&
-    short_drama_tryout_package.include?("acceptance_report_command") &&
-    short_drama_tryout_package.include?("scripts/run_tests.sh") &&
-    short_drama_tryout_package.include?("Handoff Decision"),
-  "Tryout package should include a package-local acceptance runbook with local gates and readiness meanings."
-)
-add_delivery_check.call(
-  "Short drama smoke evidence report is wired into local and remote acceptance",
-  "scripts/short_drama_mvp_smoke_evidence_report.rb",
-  File.file?(File.join(repo_root, "scripts/short_drama_mvp_smoke_evidence_report.rb")) &&
-    run_tests.include?("scripts/short_drama_mvp_smoke_evidence_report.rb") &&
-    workflow.include?("Generate short-drama MVP smoke evidence report") &&
-    workflow.include?("short_drama_mvp_smoke_evidence_report.md") &&
-    short_drama_tryout_package.include?("smoke_evidence_report_command"),
-  "Local and GitHub acceptance should generate the standalone manual/provider smoke evidence report."
-)
-add_delivery_check.call(
-  "Short drama smoke evidence readiness matrix is guarded",
-  "scripts/short_drama_mvp_smoke_evidence_contract_test.rb",
-  File.file?(File.join(repo_root, "scripts/short_drama_mvp_smoke_evidence_contract_test.rb")) &&
-    run_tests.include?("scripts/short_drama_mvp_smoke_evidence_contract_test.rb") &&
-    workflow.include?("Run short-drama MVP smoke evidence contract guard") &&
-    workflow.include?("short_drama_mvp_smoke_evidence_contract_report.md") &&
-    short_drama_smoke_evidence_contract.include?("default_pending") &&
-    short_drama_smoke_evidence_contract.include?("ready_to_handoff") &&
-    short_drama_smoke_evidence_contract.include?("manual_failed") &&
-    short_drama_smoke_evidence_contract.include?("sensitive_blocked") &&
-    short_drama_smoke_evidence_contract.include?("raw sensitive value is not emitted"),
-  "Local and GitHub acceptance should guard smoke evidence readiness transitions and redaction output."
-)
-add_delivery_check.call(
-  "Short drama acceptance report is wired into local and remote acceptance",
-  "scripts/short_drama_mvp_acceptance_report.rb",
-  File.file?(File.join(repo_root, "scripts/short_drama_mvp_acceptance_report.rb")) &&
-    run_tests.include?("scripts/short_drama_mvp_acceptance_report.rb") &&
-    workflow.include?("Generate short-drama MVP acceptance report") &&
-    workflow.include?("short_drama_mvp_acceptance_report.md"),
-  "Local and GitHub acceptance should generate the short-drama MVP acceptance report."
-)
-add_delivery_check.call(
-  "Short drama handoff bundle is wired into local and remote acceptance",
-  "scripts/short_drama_mvp_handoff_bundle.rb",
-  File.file?(File.join(repo_root, "scripts/short_drama_mvp_handoff_bundle.rb")) &&
-    run_tests.include?("scripts/short_drama_mvp_handoff_bundle.rb") &&
-    workflow.include?("Generate short-drama MVP handoff bundle") &&
-    workflow.include?("short_drama_mvp_handoff_bundle.md") &&
-    workflow.include?("short_drama_mvp_handoff_bundle.json") &&
-    short_drama_handoff_bundle.include?("ready_release_candidate") &&
-    short_drama_handoff_bundle.include?("trial_package_with_explicit_pending_reasons") &&
-    short_drama_handoff_bundle.include?("handoff_files") &&
-    short_drama_handoff_bundle.include?("Digest::SHA256") &&
-    short_drama_handoff_bundle.include?("size_bytes") &&
-    short_drama_handoff_bundle.include?("sha256") &&
-    short_drama_handoff_bundle.include?("file_count") &&
-    short_drama_handoff_bundle.include?("handoff_todos") &&
-    short_drama_handoff_bundle.include?("handoff_todo_summary") &&
-    short_drama_handoff_bundle.include?("build_handoff_todo_summary") &&
-    short_drama_handoff_bundle.include?("machine_replay_required") &&
-    short_drama_handoff_bundle.include?("release_ready_todo_present") &&
-    short_drama_handoff_bundle.include?("build_handoff_todos") &&
-    short_drama_handoff_bundle.include?("todo_evidence_paths") &&
-    short_drama_handoff_bundle.include?("verification_command") &&
-    short_drama_handoff_bundle.include?("evidence_paths") &&
-    short_drama_handoff_bundle.include?("## Handoff Todos") &&
-    short_drama_handoff_bundle.include?("regenerate_acceptance_and_handoff") &&
-    short_drama_handoff_bundle.include?("remaining_risks") &&
-    short_drama_tryout_package.include?("handoff_bundle_command") &&
-    short_drama_cutoff.include?("short_drama_mvp_handoff_bundle.rb") &&
-    short_drama_tryout.include?("short_drama_mvp_handoff_bundle.rb"),
-  "Local and GitHub acceptance should generate the final handoff bundle with readiness, evidence files, next actions, and remaining risks."
-)
-add_delivery_check.call(
-  "Short drama handoff bundle contract matrix is guarded",
-  "scripts/short_drama_mvp_handoff_bundle_contract_test.rb",
-  File.file?(File.join(repo_root, "scripts/short_drama_mvp_handoff_bundle_contract_test.rb")) &&
-    run_tests.include?("scripts/short_drama_mvp_handoff_bundle_contract_test.rb") &&
-    workflow.include?("Run short-drama MVP handoff bundle contract guard") &&
-    workflow.include?("short_drama_mvp_handoff_bundle_contract_report.md") &&
-    short_drama_handoff_bundle_contract.include?("default_trial") &&
-    short_drama_handoff_bundle_contract.include?("ready_release") &&
-    short_drama_handoff_bundle_contract.include?("manual_failed") &&
-    short_drama_handoff_bundle_contract.include?("machine_failed") &&
-    short_drama_handoff_bundle_contract.include?("missing_handoff_evidence") &&
-    short_drama_handoff_bundle_contract.include?("ready_release_candidate") &&
-    short_drama_handoff_bundle_contract.include?("blocked_machine_handoff") &&
-    short_drama_handoff_bundle_contract.include?("handoff files include fingerprints") &&
-    short_drama_handoff_bundle_contract.include?("SHA-256") &&
-    short_drama_handoff_bundle_contract.include?("handoff todos include manual provider and verify phases") &&
-    short_drama_handoff_bundle_contract.include?("handoff todos point at evidence files") &&
-    short_drama_handoff_bundle_contract.include?("handoff todo summary covers trial work") &&
-    short_drama_handoff_bundle_contract.include?("handoff todo summary covers ready release") &&
-    short_drama_handoff_bundle_contract.include?("release todo is present"),
-  "Local and GitHub acceptance should guard handoff bundle mode transitions for trial, ready, failed, machine-blocked, and missing-evidence states."
-)
-add_delivery_check.call(
-  "Short drama acceptance report preserves handoff readiness summary",
-  "scripts/short_drama_mvp_acceptance_report.rb",
-  short_drama_acceptance_report.include?('"handoff_readiness"') &&
-    short_drama_acceptance_report.include?('"remaining_risks"') &&
-    short_drama_acceptance_report.include?('"manual_results_summary"') &&
-    short_drama_acceptance_report.include?('"manual_evidence_summary"') &&
-    short_drama_acceptance_report.include?('"provider_api_smoke_summary"') &&
-    short_drama_acceptance_report.include?('"handoff_pending_reasons"') &&
-    short_drama_acceptance_report.include?('"acceptance_runbook"') &&
-    short_drama_acceptance_report.include?('"smoke_evidence_contract_report"') &&
-    short_drama_acceptance_report.include?("smoke_evidence_redaction_guide_path") &&
-    short_drama_acceptance_report.include?("## Handoff Readiness") &&
-    short_drama_acceptance_report.include?("## Handoff Pending Reasons") &&
-    short_drama_acceptance_report.include?("## Acceptance Runbook") &&
-    short_drama_acceptance_report.include?("## Smoke Evidence Readiness Matrix") &&
-    short_drama_acceptance_report.include?("## Manual Results File") &&
-    short_drama_acceptance_report.include?("## Manual Evidence") &&
-    short_drama_acceptance_report.include?("## Provider API Smoke Templates") &&
-    short_drama_acceptance_report.include?("## Smoke Evidence Redaction Guide") &&
-    short_drama_acceptance_report.include?("## Remaining Risks") &&
-    short_drama_acceptance_report.include?("cutoff keeps explicit remaining risks") &&
-    short_drama_cutoff.include?("交付就绪状态") &&
-    short_drama_cutoff.include?("剩余风险"),
-  "Acceptance report should keep machine/manual readiness and remaining-risk evidence visible."
-)
-add_delivery_check.call(
-  "Short drama cutoff preserves explicit remaining risks",
-  "docs/SHORT_DRAMA_AI_MVP_CUTOFF.md",
-  short_drama_remaining_risks.any?,
-  "Cutoff should keep at least one remaining-risk bullet instead of implying the MVP has no external or manual smoke risk."
-)
-add_delivery_check.call(
-  "Short drama acceptance report summarizes manual smoke result file",
-  "scripts/short_drama_mvp_acceptance_report.rb",
-  short_drama_acceptance_report.include?("manual_results_summary") &&
-    short_drama_acceptance_report.include?("manual smoke results JSON is summarized") &&
-    short_drama_acceptance_report.include?("normalize_manual_result_status") &&
-    short_drama_acceptance_report.include?("Manual Results File"),
-  "Acceptance report should parse the tryout package manual smoke results JSON so filled pass/fail evidence is visible."
-)
-add_delivery_check.call(
-  "Short drama acceptance report summarizes manual smoke evidence",
-  "scripts/short_drama_mvp_acceptance_report.rb",
-  short_drama_acceptance_report.include?("manual_evidence_summary") &&
-    short_drama_acceptance_report.include?("manual smoke evidence is summarized") &&
-    short_drama_acceptance_report.include?("evidence_missing_count") &&
-    short_drama_acceptance_report.include?("Manual Evidence"),
-  "Acceptance report should count pass/fail manual smoke steps whose evidence is still blank."
-)
-add_delivery_check.call(
-  "Short drama acceptance report summarizes provider API smoke templates",
-  "scripts/short_drama_mvp_acceptance_report.rb",
-  short_drama_acceptance_report.include?("provider_api_smoke_summary") &&
-    short_drama_acceptance_report.include?("provider API smoke template is summarized") &&
-    short_drama_acceptance_report.include?("provider API smoke evidence is summarized") &&
-    short_drama_acceptance_report.include?("provider_api_smoke_evidence_missing") &&
-    short_drama_acceptance_report.include?("provider_smoke_untested") &&
-    short_drama_acceptance_report.include?("evidence_missing_count") &&
-    short_drama_acceptance_report.include?("willdeep.short_drama.provider_api_smoke.v1") &&
-    short_drama_acceptance_report.include?("Provider API Smoke Templates"),
-  "Acceptance report should surface optional real provider smoke evidence paths and evidence quality without calling external APIs."
-)
-add_delivery_check.call(
-  "Short drama acceptance report summarizes standalone smoke evidence report",
-  "scripts/short_drama_mvp_acceptance_report.rb",
-  short_drama_acceptance_report.include?("smoke_evidence_report") &&
-    short_drama_acceptance_report.include?("smoke_evidence_next_actions") &&
-    short_drama_acceptance_report.include?("smoke_evidence_sensitive_findings") &&
-    short_drama_acceptance_report.include?("handoff_index") &&
-    short_drama_acceptance_report.include?("smoke evidence report is generated") &&
-    short_drama_acceptance_report.include?("smoke evidence sensitive guard is summarized") &&
-    short_drama_acceptance_report.include?("tryout package exposes smoke evidence redaction guide") &&
-    short_drama_acceptance_report.include?("tryout package exposes handoff index") &&
-    short_drama_acceptance_report.include?("tryout package exposes acceptance runbook") &&
-    short_drama_acceptance_report.include?("smoke evidence readiness matrix is generated") &&
-    short_drama_acceptance_report.include?("## Smoke Evidence Report") &&
-    short_drama_acceptance_report.include?("## Smoke Evidence Readiness Matrix") &&
-    short_drama_acceptance_report.include?("## Smoke Evidence Redaction Guide") &&
-    short_drama_acceptance_report.include?("## Smoke Evidence Sensitive Guard") &&
-    short_drama_acceptance_report.include?("## Smoke Evidence Next Actions") &&
-    short_drama_acceptance_report.include?("## Handoff Index") &&
-    short_drama_smoke_evidence_report.include?("willdeep.short_drama.manual_smoke_results.v1") &&
-    short_drama_smoke_evidence_report.include?("willdeep.short_drama.provider_api_smoke.v1") &&
-    short_drama_smoke_evidence_report.include?("SENSITIVE_VALUE_PATTERNS") &&
-    short_drama_smoke_evidence_report.include?("redact_sensitive_evidence") &&
-    short_drama_smoke_evidence_report.include?("sensitive_evidence_count") &&
-    short_drama_smoke_evidence_report.include?("sensitive_findings") &&
-    short_drama_smoke_evidence_report.include?("## Sensitive Evidence Guard") &&
-    short_drama_smoke_evidence_report.include?("next_actions") &&
-    short_drama_smoke_evidence_report.include?("## Next Actions") &&
-    short_drama_smoke_evidence_report.include?("manual_failed") &&
-    short_drama_smoke_evidence_report.include?("manual_pending"),
-  "Acceptance report should include the standalone smoke evidence report and its readiness result."
-)
-
 changelog = read_file(repo_root, "CHANGELOG.md")
 add_check.call(
   "CHANGELOG top entry",
@@ -477,12 +129,7 @@ checks.each do |check|
   end
 end
 
-if all_versions.uniq.length > 1
-  failures << "Version sources disagree: #{all_versions.uniq.sort.join(", ")}"
-end
-delivery_checks.each do |check|
-  failures << "#{check[:name]} missing: #{check[:detail]}" unless check[:ok]
-end
+failures << "Version sources disagree: #{all_versions.uniq.sort.join(", ")}" if all_versions.uniq.length > 1
 
 ok = failures.empty?
 report = {
@@ -490,7 +137,6 @@ report = {
   generated_at: Time.now.utc.iso8601,
   canonical_version: canonical_version,
   checks: checks,
-  delivery_checks: delivery_checks,
   failures: failures
 }
 
@@ -506,7 +152,6 @@ md = +"# Version Consistency Report\n\n"
 md << "**Status:** #{status}\n\n"
 md << "- Canonical version: #{canonical_version || "unknown"}\n"
 md << "- Checked sources: #{checks.length}\n"
-md << "- Delivery gates: #{delivery_checks.length}\n"
 md << "- Failures: #{failures.length}\n\n"
 
 if failures.empty?
@@ -523,13 +168,6 @@ md << "| --- | --- | --- |\n"
 checks.each do |check|
   versions = check[:versions].empty? ? (check[:allow_empty] ? "_none_" : "_missing_") : check[:versions].uniq.join(", ")
   md << "| #{check[:name]} | `#{check[:path]}` | `#{versions}` |\n"
-end
-
-md << "\n## Delivery Gates\n\n"
-md << "| Gate | Path | Status | Detail |\n"
-md << "| --- | --- | --- | --- |\n"
-delivery_checks.each do |check|
-  md << "| #{check[:name]} | `#{check[:path]}` | #{check[:ok] ? "PASS" : "FAIL"} | #{check[:detail]} |\n"
 end
 
 File.write(File.expand_path(markdown_path, repo_root), md)

@@ -358,6 +358,62 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func latestAssistantCollapsesTerminalToolSummaries() {
+        let message = AgentMessage(
+            role: .assistant,
+            content: "Redis 关键调不在尾行。",
+            toolCalls: [
+                AgentMessageToolCall(
+                    externalID: "terminal_send",
+                    toolName: "terminal_send_command",
+                    argumentsJSON: #"{"command":"redis-cli ping"}"#
+                ),
+                AgentMessageToolCall(
+                    externalID: "terminal_snapshot",
+                    toolName: "terminal_snapshot",
+                    argumentsJSON: #"{"max_chars":2000}"#
+                )
+            ]
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
+
+        #expect(rendered.string.contains("▸ 已执行 2 次终端操作"))
+        #expect(!rendered.string.contains("已调用 terminal send command"))
+        #expect(!rendered.string.contains("已调用 terminal snapshot"))
+    }
+
+    @Test
+    func historicAssistantHidesTerminalToolSummariesOnly() {
+        let older = AgentMessage(
+            role: .assistant,
+            content: "我先查一下。",
+            toolCalls: [
+                AgentMessageToolCall(
+                    externalID: "terminal_send",
+                    toolName: "terminal_send_command",
+                    argumentsJSON: #"{"command":"redis-cli ping"}"#
+                ),
+                AgentMessageToolCall(
+                    externalID: "read_file",
+                    toolName: "read_file",
+                    argumentsJSON: #"{"path":"README.md"}"#
+                )
+            ]
+        )
+        let latest = AgentMessage(
+            role: .assistant,
+            content: "查完了。"
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(messages: [older, latest], isDark: false)
+
+        #expect(rendered.string.contains("▸ 已读取 1 个文件"))
+        #expect(!rendered.string.contains("终端操作"))
+        #expect(!rendered.string.contains("terminal_send_command"))
+    }
+
+    @Test
     func rendersMessageFooterCopyStatsAndRetry() throws {
         let user = AgentMessage(
             role: .user,

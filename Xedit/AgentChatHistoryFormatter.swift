@@ -227,6 +227,9 @@ enum AgentChatHistoryRenderer {
         let latestAssistantMessageID = messages.reversed().first {
             $0.role == .assistant && !$0.content.isEmpty
         }?.id
+        let latestAssistantTerminalSummaryMessageID = messages.reversed().first {
+            $0.role == .assistant && (!$0.content.isEmpty || !$0.toolCalls.isEmpty)
+        }?.id
 
         var index = 0
         while index < messages.count {
@@ -244,10 +247,22 @@ enum AgentChatHistoryRenderer {
                     groupMessages.append(messages[index])
                     index += 1
                 }
+                let keepTerminalCalls = groupMessages.contains {
+                    $0.id == latestAssistantTerminalSummaryMessageID
+                }
+                let group = ToolCallHistoryGroup(
+                    messages: groupMessages,
+                    calls: visibleToolCalls(
+                        groupMessages.flatMap(\.toolCalls),
+                        keepTerminalCalls: keepTerminalCalls
+                    )
+                )
+                if group.calls.isEmpty {
+                    continue
+                }
                 if result.length > 0 {
                     result.append(NSAttributedString(string: "\n\n"))
                 }
-                let group = ToolCallHistoryGroup(messages: groupMessages)
                 appendToolCallGroup(
                     group,
                     isExpanded: expandedToolGroupIDs.contains(group.id),
@@ -359,7 +374,11 @@ enum AgentChatHistoryRenderer {
             // the bubble defaults to a one-line activity summary such
             // as "▸ 已读取 2 个文件 · 已运行 1 条命令"; clicking flips
             // the chevron and reveals the full per-call summary below.
-            if !message.toolCalls.isEmpty {
+            let inlineToolCalls = visibleToolCalls(
+                message.toolCalls,
+                keepTerminalCalls: message.id == latestAssistantTerminalSummaryMessageID
+            )
+            if !inlineToolCalls.isEmpty {
                 if !body.isEmpty {
                     // Transparent spacer paragraph between the assistant
                     // body bubble and the tool summary bubble. Beyond
@@ -383,7 +402,7 @@ enum AgentChatHistoryRenderer {
                 }
                 let inlineGroup = ToolCallHistoryGroup(
                     inlineMessageID: message.id,
-                    calls: message.toolCalls
+                    calls: inlineToolCalls
                 )
                 appendToolCallGroup(
                     inlineGroup,
@@ -404,7 +423,7 @@ enum AgentChatHistoryRenderer {
                     turnReportToolCount: latestTurnReportToolCount,
                     to: result
                 )
-                if hasMessageBubbleContent && message.toolCalls.isEmpty {
+                if hasMessageBubbleContent && inlineToolCalls.isEmpty {
                     let messageRange = NSRange(location: messageBubbleStart, length: result.length - messageBubbleStart)
                     // Always draw the bubble across body + footer so the
                     // rounded rect wraps the timestamp/copy row and the
@@ -441,9 +460,9 @@ enum AgentChatHistoryRenderer {
         let id: String
         let calls: [AgentMessageToolCall]
 
-        init(messages: [AgentMessage]) {
+        init(messages: [AgentMessage], calls: [AgentMessageToolCall]? = nil) {
             id = messages.map { $0.id.uuidString }.joined(separator: ":")
-            calls = messages.flatMap(\.toolCalls)
+            self.calls = calls ?? messages.flatMap(\.toolCalls)
         }
 
         /// Tool calls that came in *alongside* an assistant message's
@@ -458,6 +477,14 @@ enum AgentChatHistoryRenderer {
 
     private static func isToolCallOnly(_ message: AgentMessage) -> Bool {
         message.role == .assistant && message.content.isEmpty && !message.toolCalls.isEmpty
+    }
+
+    private static func visibleToolCalls(
+        _ calls: [AgentMessageToolCall],
+        keepTerminalCalls: Bool
+    ) -> [AgentMessageToolCall] {
+        guard !keepTerminalCalls else { return calls }
+        return calls.filter { !AgentTerminalToolNames.isVisibleTerminalOperation($0.toolName) }
     }
 
     private static func appendPlainBody(

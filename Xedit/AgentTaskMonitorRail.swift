@@ -665,6 +665,8 @@ struct AgentSemanticActivityStatusLine: View {
             return AgentActivityPhase(label: "搜索中", systemImage: "doc.text.magnifyingglass", tint: .blue)
         case .runCommand:
             return AgentActivityPhase(label: "验证中", systemImage: "terminal", tint: .orange)
+        case .terminalOperation:
+            return AgentActivityPhase(label: "操作终端", systemImage: "terminal", tint: .orange)
         case .applyPatch:
             return AgentActivityPhase(label: "编辑中", systemImage: "pencil.line", tint: .green)
         case .subagent, .claudeCode, .codexCLI, .cursorAgent:

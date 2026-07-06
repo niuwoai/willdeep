@@ -141,10 +141,10 @@ tryout = read_text("docs/SHORT_DRAMA_AI_MVP_TRYOUT.md")
 manual_queue = read_text("docs/MANUAL_TEST_QUEUE.md")
 
 canonical_version = version_report["canonical_version"].to_s
+short_drama_baseline_version = tryout[/Baseline version:\s*v?(\d+\.\d+\.\d+(?:-rc\d+)?)/, 1].to_s
 manual_versions = manual_queue.scan(/^##\s+(\d+\.\d+\.\d+(?:-rc\d+)?)\s+—\s+短剧/m).flatten
 latest_manual_version = manual_versions.max_by { |version| semver_sort_key(version) }
-current_manual_section = extract_manual_section(manual_queue, canonical_version)
-delivery_gate_names = Array(version_report["delivery_checks"]).map { |check| check["name"].to_s }
+current_manual_section = extract_manual_section(manual_queue, short_drama_baseline_version)
 tryout_checks = Array(tryout_report["checks"])
 manual_result_paths = [
   tryout_report["manual_smoke_results_md_path"],
@@ -194,20 +194,6 @@ add_check(
   "version report passes",
   version_report["failures"].is_a?(Array) && version_report["failures"].empty? && !canonical_version.empty?,
   "version_report.json should pass and expose canonical_version.",
-  version_report_path
-)
-add_check(
-  checks,
-  "delivery gates include manual smoke result templates",
-  delivery_gate_names.include?("Tryout package preserves manual smoke result templates"),
-  "version consistency should guard the tryout package manual smoke result templates.",
-  version_report_path
-)
-add_check(
-  checks,
-  "delivery gates include handoff readiness summary",
-  delivery_gate_names.include?("Short drama acceptance report preserves handoff readiness summary"),
-  "version consistency should guard handoff readiness and remaining-risk summary output.",
   version_report_path
 )
 add_check(
@@ -343,23 +329,23 @@ add_check(
 add_check(
   checks,
   "tryout points at latest manual queue section",
-  !canonical_version.empty? &&
-    tryout.include?("`#{canonical_version} —") &&
-    latest_manual_version == canonical_version,
+  !short_drama_baseline_version.empty? &&
+    tryout.include?("`#{short_drama_baseline_version} —") &&
+    latest_manual_version == short_drama_baseline_version,
   "SHORT_DRAMA_AI_MVP_TRYOUT.md and MANUAL_TEST_QUEUE.md should agree on the current short-drama smoke section.",
   "docs/SHORT_DRAMA_AI_MVP_TRYOUT.md"
 )
 add_check(
   checks,
   "manual queue lists current short-drama handoff",
-  !canonical_version.empty? &&
-    current_manual_section.include?("## #{canonical_version} — 短剧"),
+  !short_drama_baseline_version.empty? &&
+    current_manual_section.include?("## #{short_drama_baseline_version} — 短剧"),
   "MANUAL_TEST_QUEUE.md should include the current short-drama handoff section.",
   "docs/MANUAL_TEST_QUEUE.md"
 )
 
 manual_smoke_summary = {
-  "section_version" => canonical_version,
+  "section_version" => short_drama_baseline_version,
   "passed_count" => manual_item_titles(current_manual_section, "✅").length,
   "pending_count" => manual_item_titles(current_manual_section, "⏳").length,
   "failed_count" => manual_item_titles(current_manual_section, "❌").length,

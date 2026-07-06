@@ -337,6 +337,20 @@ extension WillDeepTests {
         #expect(segments[0].kind.groupTitle(3) == "已运行 3 条命令")
     }
 
+    @Test("AgentToolCallGrouping merges visible terminal operations")
+    func testToolCallGroupingMergesVisibleTerminalOperations() {
+        let calls = [
+            makeCall("terminal_send_command"),
+            makeCall("terminal_snapshot"),
+            makeCall("terminal_send_control")
+        ]
+        let segments = AgentToolCallGrouping.group(calls)
+        #expect(segments.count == 1)
+        #expect(segments[0].kind == .terminalOperation)
+        #expect(segments[0].count == 3)
+        #expect(segments[0].title == "已执行 3 次终端操作")
+    }
+
     @Test("AgentToolCallGrouping splits when kind changes")
     func testToolCallGroupingSplitsOnKindChange() {
         let calls = [

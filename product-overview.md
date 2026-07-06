@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-06 | Current version: v1.129.0-rc40
+> Last updated: 2026-07-06 | Current version: v1.129.0-rc43
 
 ## Positioning
 
@@ -14,6 +14,9 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **聊天历史终端摘要收敛（1.129.0-rc42）** —— Agent 聊天历史不再把 `terminal_send_command`、`terminal_snapshot`、`terminal_send_control` 分别刷成多条“已调用 terminal …”：最新 assistant 输出只显示一条聚合的「终端操作」摘要；历史 assistant 输出隐藏终端相关摘要，读取文件、搜索代码等非终端工具摘要仍保留，既少废话也不丢关键上下文。
+- **智能审批 AI 裁判修复 + 人工历史参照 + 缓存优化（1.129.0-rc43）** —— 修复「智能审批几乎从不调用 AI 裁判」的老 bug（本机审计日志 `llmJudge` 命中 0 次）。① 工具覆盖：把 `terminal_send_command` 纳入与 `run_command` 相同的「静态白名单 → LLM 裁判」链路（此前直接绕过裁判弹人工，是人工审批的最大来源），`terminal_send_control` 也经伪命令送裁判。② 请求修复：`max_tokens` 从 16 提到 512（Responses 1024），避免被 reasoning 模型思考过程烧光；OpenAI-兼容响应 `content` 改可选，`content=null` 不再整体解码失败静默 `return false`；超时 12s→20s。③ 可观测：每次裁判结果（allow/deny/unavailable + 原因）落盘 `AgentAudit/judge.jsonl`。④ 人工历史参照：从审计日志抽取操作者过去手动批准/拒绝的命令样本，去重截断、注入标记中和、批准≤14 拒绝≤6，作为软性 few-shot 附到裁判 system prompt（不覆盖安全规则）。⑤ prompt 缓存优化：历史块不每次重取，内存缓存最多每 30 分钟重建，使「安全规则+历史」system 前缀跨调用字节一致命中 provider 缓存，Anthropic 额外给 system 块打 `cache_control: ephemeral`，每次只有末尾 `<command>` 变化。
+- **版本一致性脚本去短剧化（1.129.0-rc41）** —— `scripts/version_consistency.rb` 回到通用版本源检查：只核对 Xcode、Go agent、Help、README badge、product overview、Mobile Gateway、Agent Harness 和 CHANGELOG 顶部版本，不再扫描短剧/剧本 cutoff、tryout、manual queue 或短剧 delivery gate；短剧交付守门继续由短剧专用 contract / acceptance / handoff 脚本承担。
 - **Agent 编辑提示去重与远程编辑兜底放宽（1.129.0-rc40）** —— 全屏 Agent 已经在 composer 上方显示「N 个文件已更改 +X -Y / 审查」时，transcript 底部不再重复显示「正在编辑/已编辑 某个文件」单文件活动行；侧边栏终端提示词也从 heredoc/apply patch 绝对禁用改为默认避免、兜底可用：远端无法安装 `lrzsz` 或没有可靠传输路径时，可以使用小而清晰、可审查、可验证的 heredoc、patch、sed/perl 等远程编辑方式。
 - **侧边栏终端 rz/sz ZMODEM 桥接（1.129.0-rc39）** —— WillDeep 自己的侧边栏终端现在会拦截 lrzsz 握手并把本机 `rz`/`sz` 子进程接到当前 PTY：远端 `rz` 时弹文件选择并上传，远端 `sz` 时弹保存目录并下载；本机缺 lrzsz 时会取消本次握手并提示 `brew install lrzsz`，Agent 提示词也改为远端使用前先 `command -v rz sz`，缺失则提示按服务器系统安装 `lrzsz`。
 - **`terminal_snapshot` 读取抗卡死与错误可观测（1.129.0-rc39）** —— 取侧边栏终端内容加 3 秒超时护栏：主线程被流式渲染吃满时工具不再无限等待 `MainActor` 而挂住调用，超时返回明确可重试错误；secret 脱敏与截断移出主线程（主线程只做一次 `rawViewportText` 廉价抓取），避免慢正则冻结 UI；无活跃终端标签时抛清晰错误（引导开侧边栏或 `terminal_send_command` 自动起 shell）而非静默空快照，终端进程已退出时明确标注，区分「没输出」与「终端已死」。

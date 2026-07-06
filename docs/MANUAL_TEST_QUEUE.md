@@ -1351,18 +1351,18 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 - [ ] 要求 Agent 考虑 `rz/sz` 收发文件：它应先说明需要 ZMODEM 前端支持、`rz`/`sz` 已安装和小文件测试/用户确认，不应把 `rz/sz` 当作默认文件写入方案。
 - [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.129.0-rc38`，短剧制作能力无新增。
 
-## 1.129.0-rc40 — Agent 编辑提示去重 / 远程编辑兜底放宽
-
-- [ ] 在全屏 Agent 中让 Agent 修改文件并生成 worktree 变更：composer 上方应只显示「N 个文件已更改 +X -Y / 审查」汇总条，transcript 底部不应再额外显示「正在编辑/已编辑 某个文件」单文件活动行。
-- [ ] 在远端 SSH 场景模拟无法安装 `lrzsz`：Agent 应优先建议 scp/rsync、workspace 文件、附件或 App 编辑/写入流程；这些不可用时，应允许小而清晰、可审查、可验证的 heredoc / patch / sed / perl 等远程编辑兜底，而不是说绝对禁止。
-- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.129.0-rc40`，短剧制作能力无新增。
-
 ## 1.129.0-rc39 — 短剧指针同步 / 侧边栏终端 ZMODEM 桥接
 
 - [ ] 在 WillDeep 侧边栏 SSH 终端中确认远端 `command -v rz sz`：已安装时可继续测试；未安装时 Agent 应提示按服务器系统安装 `lrzsz`。
 - [ ] 远端运行 `rz`：WillDeep 应弹出本机文件选择，选择文件后通过本机 `sz` 上传；本机缺 `sz` 时应取消握手并提示 `brew install lrzsz`。
 - [ ] 远端运行 `sz <file>`：WillDeep 应弹出保存目录选择，确认后通过本机 `rz` 接收文件；本机缺 `rz` 时应取消握手并提示 `brew install lrzsz`。
 - [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.129.0-rc39`，短剧制作能力无新增。
+
+## 1.129.0-rc40 — 短剧指针同步 / Agent 编辑提示去重 / 远程编辑兜底放宽
+
+- [ ] 在全屏 Agent 中让 Agent 修改文件并生成 worktree 变更：composer 上方应只显示「N 个文件已更改 +X -Y / 审查」汇总条，transcript 底部不应再额外显示「正在编辑/已编辑 某个文件」单文件活动行。
+- [ ] 在远端 SSH 场景模拟无法安装 `lrzsz`：Agent 应优先建议 scp/rsync、workspace 文件、附件或 App 编辑/写入流程；这些不可用时，应允许小而清晰、可审查、可验证的 heredoc / patch / sed / perl 等远程编辑兜底，而不是说绝对禁止。
+- [ ] 继续执行短剧指针 smoke：当前试用文档基线应指向 `v1.129.0-rc40`，短剧制作能力无新增。
 
 ---
 

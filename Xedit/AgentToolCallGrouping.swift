@@ -15,6 +15,7 @@ import Foundation
 /// need explicit user interaction and must always render full-size.
 nonisolated enum AgentToolKind: Equatable, Sendable {
     case runCommand
+    case terminalOperation
     case fileExploration
     case subagent
     case claudeCode
@@ -28,6 +29,8 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
         switch call.toolName {
         case "run_command":
             return .runCommand
+        case _ where AgentTerminalToolNames.isVisibleTerminalOperation(call.toolName):
+            return .terminalOperation
         case "read_file", "list_directory",
              "grep_files", "search_files",
              "git_status":
@@ -63,6 +66,8 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
         switch self {
         case .runCommand:
             return "已运行 \(count) 条命令"
+        case .terminalOperation:
+            return "已执行 \(count) 次终端操作"
         case .fileExploration:
             return "已探索 \(count) 个文件"
         case .subagent:
@@ -88,6 +93,8 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
             return AgentToolActivitySummary(calls: calls).explorationText ?? groupTitle(calls.count)
         case .runCommand:
             return "已运行 \(calls.count) 条命令"
+        case .terminalOperation:
+            return "已执行 \(calls.count) 次终端操作"
         default:
             return groupTitle(calls.count)
         }
@@ -96,6 +103,7 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
     var groupIcon: String {
         switch self {
         case .runCommand: return "terminal"
+        case .terminalOperation: return "terminal"
         case .fileExploration: return "doc.text.magnifyingglass"
         case .subagent: return "person.2"
         case .claudeCode: return "sparkles.rectangle.stack"
@@ -104,6 +112,17 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
         case .applyPatch: return "square.and.pencil"
         case .askUser: return "bubble.left.and.text.bubble.right"
         case .other: return "wrench.and.screwdriver"
+        }
+    }
+}
+
+nonisolated enum AgentTerminalToolNames {
+    static func isVisibleTerminalOperation(_ toolName: String) -> Bool {
+        switch toolName {
+        case "terminal_snapshot", "terminal_send_command", "terminal_send_control":
+            return true
+        default:
+            return false
         }
     }
 }
@@ -180,6 +199,7 @@ nonisolated struct AgentToolActivitySummary: Equatable {
     var searchCount: Int
     var gitStatusCount: Int
     var commandCount: Int
+    var terminalOperationCount: Int
 
     init(calls: [AgentToolCall]) {
         var readFiles = Set<String>()
@@ -187,6 +207,7 @@ nonisolated struct AgentToolActivitySummary: Equatable {
         var searches = 0
         var gitStatuses = 0
         var commands = 0
+        var terminalOperations = 0
 
         for call in calls {
             switch call.toolName {
@@ -208,6 +229,8 @@ nonisolated struct AgentToolActivitySummary: Equatable {
                 gitStatuses += 1
             case "run_command":
                 commands += 1
+            case _ where AgentTerminalToolNames.isVisibleTerminalOperation(call.toolName):
+                terminalOperations += 1
             default:
                 break
             }
@@ -218,6 +241,7 @@ nonisolated struct AgentToolActivitySummary: Equatable {
         searchCount = searches
         gitStatusCount = gitStatuses
         commandCount = commands
+        terminalOperationCount = terminalOperations
     }
 
     var exploredPathCount: Int {
@@ -225,7 +249,7 @@ nonisolated struct AgentToolActivitySummary: Equatable {
     }
 
     var hasActivity: Bool {
-        readFileCount > 0 || listedDirectoryCount > 0 || searchCount > 0 || gitStatusCount > 0 || commandCount > 0
+        readFileCount > 0 || listedDirectoryCount > 0 || searchCount > 0 || gitStatusCount > 0 || commandCount > 0 || terminalOperationCount > 0
     }
 
     var explorationText: String? {
@@ -251,8 +275,13 @@ nonisolated struct AgentToolActivitySummary: Equatable {
         return "已运行 \(commandCount) 条命令"
     }
 
+    var terminalText: String? {
+        guard terminalOperationCount > 0 else { return nil }
+        return "已执行 \(terminalOperationCount) 次终端操作"
+    }
+
     var activityText: String? {
-        let parts = [explorationText, commandText].compactMap(\.self)
+        let parts = [explorationText, commandText, terminalText].compactMap(\.self)
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }

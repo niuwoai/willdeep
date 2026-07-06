@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.129.0-rc43 - 2026-07-06
+
+### Fixed
+- **智能审批终于会真正调用 AI 裁判了** —— 排查发现「智能审批」的 LLM 裁判此前几乎从不生效（本机审计日志 2000+ 条里 `llmJudge` 命中 0 次），根因有二并一并修复：
+  - **工具覆盖缺口**：裁判此前只覆盖 `run_command` 和 `call_mcp_tool`，而占人工审批大头的 `terminal_send_command`（侧边栏终端命令）直接绕过裁判弹人工。现在 `terminal_send_command` 走与 `run_command` 相同的「静态安全白名单 → LLM 裁判」链路，`terminal_send_control`（ctrl_c/enter/escape）也通过伪命令送裁判。
+  - **裁判请求必然失败且静默**：`max_tokens` 仅 16，被 reasoning 模型（如 deepseek-v4-flash）的思考过程烧光，正文永远为空；且 OpenAI-兼容响应体 `content` 为非可选字段，`content=null` 时整体解码失败 → 静默 `return false`。现在输出预算提到 512（Responses 1024）、`content` 改可选、超时从 12s 放宽到 20s。
+- **裁判失败不再无声无息** —— 每次裁判结果（allow / deny / unavailable + 失败原因）落盘到 `~/Library/Application Support/WillDeep/AgentAudit/judge.jsonl`，「为什么还在问我」从此可查。
+
+### Added
+- **把人工审批历史喂给 AI 裁判做参照** —— 从审计日志提取操作者过去手动「批准 / 拒绝」的命令样本，作为软性 few-shot 附到裁判 system prompt（明确不覆盖安全规则，危险命令仍判 NO）。历史块经过去重、单行截断、注入标记中和，且**体量受控**（批准≤14 条、拒绝≤6 条）。
+- **裁判请求针对 prompt 缓存优化** —— 历史块**不是每次调用都重取**：在内存里缓存、最多每 30 分钟重建一次，使「安全规则 + 历史」的 system 前缀在多次裁判间保持字节一致，命中 provider 的 prompt 缓存；Anthropic 路径额外给 system 块打 `cache_control: ephemeral`；每次调用只有末尾 `<command>` 变化。
+
+### Changed
+- 版本号从 **1.129.0-rc42** 提升为 **1.129.0-rc43**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.129.0-rc42 - 2026-07-06
+
+### Fixed
+- **聊天历史里的终端工具摘要不再刷屏** —— `terminal_send_command`、`terminal_snapshot`、`terminal_send_control` 统一聚合为「终端操作」，最新 assistant 输出保留终端操作摘要，历史 assistant 输出会隐藏终端相关摘要；历史里的读取文件、搜索代码等非终端工具摘要仍照常显示，保留必要上下文。
+- 新增回归测试覆盖终端工具聚合、最新 assistant 终端摘要展示，以及历史 assistant 仅隐藏终端摘要的行为。
+
+### Changed
+- 版本号从 **1.129.0-rc41** 提升为 **1.129.0-rc42**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.129.0-rc41 - 2026-07-06
+
+### Changed
+- **version_consistency 回归通用版本一致性检查** —— `scripts/version_consistency.rb` 不再扫描短剧/剧本相关 cutoff、tryout、manual queue，也不再承载短剧 delivery gate；报告只检查产品版本号位点是否一致。
+- **短剧验收脚本解除对 version_consistency delivery gate 的依赖** —— `short_drama_mvp_acceptance_report.rb` 仍要求版本报告通过，但不再要求版本报告内包含短剧专属 gate 名称；短剧守门继续留在短剧自己的 contract / acceptance / handoff 脚本里。
+- 版本号从 **1.129.0-rc40** 提升为 **1.129.0-rc41**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
 ## 1.129.0-rc40 - 2026-07-06
 
 ### Fixed
