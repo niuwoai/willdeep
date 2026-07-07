@@ -384,6 +384,9 @@ extension AppState {
 
     @discardableResult
     func showEditor() -> Bool {
+        if tabs.isEmpty {
+            createNewTab()
+        }
         isAgentPanelVisible = false
         isPreviewVisible = false
         isEditorTerminalVisible = false

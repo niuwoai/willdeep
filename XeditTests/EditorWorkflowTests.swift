@@ -309,6 +309,26 @@ extension WillDeepTests {
         #expect(appState.tabs.first { $0.id == firstID }?.isEdited == true)
     }
 
+    @MainActor
+    @Test("showEditor opens an untitled tab when editor has no tabs")
+    func testShowEditorCreatesUntitledTabWhenEmpty() {
+        let appState = AppState()
+        appState.isAgentPanelVisible = true
+        appState.isPreviewVisible = true
+        appState.isEditorTerminalVisible = true
+        appState.isFocusModeEnabled = true
+
+        _ = appState.showEditor()
+
+        #expect(appState.tabs.count == 1)
+        #expect(appState.activeTab?.title == "Untitled")
+        #expect(appState.activeTab?.isUntitled == true)
+        #expect(appState.isAgentPanelVisible == false)
+        #expect(appState.isPreviewVisible == false)
+        #expect(appState.isEditorTerminalVisible == false)
+        #expect(appState.isFocusModeEnabled == false)
+    }
+
     @Test("syntax highlighting selection overrides detected file language")
     func testSyntaxHighlightingSelectionOverridesDetectedLanguage() {
         let fileURL = URL(fileURLWithPath: "/tmp/willdeep_syntax_override.swift")

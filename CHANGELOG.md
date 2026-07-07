@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.132.0-rc3 - 2026-07-07
+
+### Fixed
+- **Editor 入口不再停在未打开文件夹空态** —— 从 Agent 顶部图标或菜单“显示 Editor”切回编辑器时，如果当前没有任何标签，会自动创建一个 Untitled 空白编辑 tab，直接进入可输入状态。
+
+### Changed
+- 版本号从 **1.132.0-rc2** 提升为 **1.132.0-rc3**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.132.0-rc2 - 2026-07-07
+
+### Fixed
+- **Agent 工具审批卡片点击不再丢失** —— 审批决定现在按 runtime + tool call ID 暂存和投递；用户在执行循环注册等待者之前先点 Allow / Deny / Confirm / Send 时，决定会被后续等待者消费，不再出现 terminal command 审批卡片看似可点但没有反应的状态。
+- **多个 pending 工具审批不再串线** —— continuation 记录当前等待的工具 ID，点击其它 pending 卡片只会暂存对应决定，不会唤醒错误的工具调用。
+- **已提交审批显示等待态** —— 工具卡片在决定已记录但执行循环尚未接收时隐藏操作按钮，显示“已提交决定，等待执行循环接收”，避免继续展示不可重复交付的按钮。
+
+### Changed
+- 版本号从 **1.132.0-rc1** 提升为 **1.132.0-rc2**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.132.0-rc1 - 2026-07-06
+
+### Added
+- **Mobile Gateway 接入友盟远程推送触发** —— Android 通过 `push.register` 上报友盟 device token 后，局域网 Go gateway 会在 `tool.pending` / `patch.upsert` 等需要用户注意的桌面事件出现时调用友盟 U-Push；默认互联网中继模式下，Swift desktop peer 会本地保存 token 并直接触发同样的友盟自定义 payload，确保两种连接模式都能把审批、补丁审查和 `ask_user` 输入提醒推到手机。
+- **本机友盟配置读取** —— Mac 端会从环境变量或本机 `local.properties` 读取 `UMENG_PUSH_ENABLED`、`UMENG_APPKEY`、`UMENG_APP_MASTER_SECRET` / `UMENG_MASTER_SECRET`，并兼容 `UMENG_MESSAGE_SECRET` 作为本地调试兜底；`.gitignore` 已忽略 `local.properties`，避免把密钥提交进仓库。
+
+### Changed
+- 版本号从 **1.131.0-rc9** 提升为 **1.132.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
 ## 1.131.0-rc9 - 2026-07-06
 
 ### Fixed
