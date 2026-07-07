@@ -24629,6 +24629,60 @@
         }
       }
     },
+    "sidebar.recent-sessions-rail.empty" : {
+      "comment" : "empty state in the collapsed-sidebar recent chats hover rail",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent chats will appear here."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近聊天会显示在这里。"
+          }
+        }
+      }
+    },
+    "sidebar.recent-sessions-rail.row-tooltip" : {
+      "comment" : "tooltip for a row in the collapsed-sidebar recent chats hover rail; placeholder is the workspace display name",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent chat from %1$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来自「%1$@」的最近聊天"
+          }
+        }
+      }
+    },
+    "sidebar.recent-sessions-rail.title" : {
+      "comment" : "section title in the collapsed-sidebar recent chats hover rail",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent chats"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近聊天"
+          }
+        }
+      }
+    },
     "sidebar.rename-session.alert-message" : {
       "comment" : "NSAlert.informativeText for the rename-session dialog",
       "extractionState" : "manual",

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.133.0-rc1 - 2026-07-07
+
+### Added
+- **Agent 左缘最近会话浮层** —— Agent 会话侧栏收起时，窗口左边缘保留约一个字体宽的 hover 热区；鼠标停留后弹出最近有用户消息的会话列表，并按最近活动时间排序。每行用 workspace 两字符彩色 badge 作为前缀，展示会话标题和相对更新时间，完整 workspace 名称放在 tooltip 里，点击即可切回对应会话。
+
+### Changed
+- 版本号从 **1.131.0-rc9** 提升为 **1.133.0-rc1**（新增交互功能，提升次版本并避开已有 `v1.132.0-rc*` 标签区间），并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
 ## 1.131.0-rc9 - 2026-07-06
 
 ### Fixed

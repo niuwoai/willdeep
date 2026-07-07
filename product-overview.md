@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-06 | Current version: v1.131.0-rc9
+> Last updated: 2026-07-07 | Current version: v1.133.0-rc1
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Agent 左缘最近会话浮层（1.133.0-rc1）** —— Agent 会话侧栏收起时，窗口左边缘约一个字体宽的 hover 热区会弹出最近聊过的会话列表；列表只取未归档、未隐藏 workspace 且含用户消息的会话，按最后活动时间排序，并用 workspace 前两个字符做彩色 badge，方便在多 workspace 间快速跳回刚才的对话。
 - **Agent 侧边栏资源闲置释放与 Dev Server 工作区共享（1.131.0-rc9）** —— 会话侧边栏记录最后查看时间，终端、嵌入浏览器、Widget 和图片编辑器等重面板在所属会话超过 1 小时未被查看后自动收起并释放资源；Dev Server 面板按 workspace root 聚合后台 dev server / tail 任务，同一工作区的多个会话共享端口型资源视图；旧聊天历史展开也先显示轻量纯文本预览，避免长会话一次性渲染完整富文本。
 - **Agent 侧边栏状态跟随会话（1.131.0-rc8）** —— 右侧侧边栏的打开面板、选中文件/预览、媒体任务 scope 与图片编辑器输入现在保存到当前 Agent 会话；切到未打开过侧边栏的会话时自动收起，切回原会话会恢复原侧栏和关联数据，避免跨会话串台。
 - **文本模型图片转写对用户不可见（1.131.0-rc7）** —— 当主模型不支持图片输入时，Image Understanding / VL 生成的描述只进入模型上下文；用户气泡、TextKit 历史记录、旧历史预览和复制按钮继续展示用户原文与图片缩略图，不再把内部图片描述正文暴露在聊天记录中。
@@ -922,6 +923,7 @@ CLAUDE.md §2 要求 React 部分必须走 i18n，但 WillDeep 是 SwiftUI macOS
 - Show the full `run_command` command text on approval and destructive-confirmation cards so the exact command is visible before the user allows it.
 - Keep Agent tool-call rows compact and collapsed by default, separated from the preceding assistant output by a dedicated vertical gap, and collapse consecutive calls into low-emphasis expandable groups so long multi-step runs remain scannable. A lightweight current-turn activity summary covers explored paths, searches, run commands, and active file edits; longer command/path previews remain visible in the gray summary and full arguments, output, approval controls, and errors are available only after explicit expand controls.
 - Switch the window into a dedicated Agent mode (Cmd+Shift+A) with a project-grouped session sidebar on the left and a wide chat pane on the right. Sessions persist as JSON under `~/Library/Application Support/WillDeep/agent-sessions/` and are grouped by workspace; the composer workspace picker migrates an empty active session in place, while existing conversations get a fresh session for the selected workspace. The empty-state dashboard summarizes recent usage and stretches its activity heatmap across the available stats card width.
+- When the Agent session sidebar is collapsed, hover near the left window edge to reveal a lightweight recent-chat rail. It shows the most recently active chatted sessions across workspaces with two-character workspace badges, so switching back to a recent conversation does not require reopening the full sidebar.
 - Render Agent chat history, transcript reader windows, and single-message reader windows with lightweight TextKit Markdown for headings, paragraphs, lists, quotes, syntax-highlighted code blocks, inline formatting, links, dividers, HTML details-as-code fallback, and pipe-table fallback while avoiding SwiftUI per-block transcript layout. The in-pane history keeps chat-style visual chrome through TextKit-drawn rounded bubbles, right-side hover-only user message columns with left-aligned body text, safe right padding, and pre-reserved low-contrast hover-time timestamp/copy controls, lighter full-width assistant cards with a gray star-style assistant mark, slightly inset syntax-highlighted code blocks with a little top breathing room plus clickable larger code-copy controls and 3-second success feedback, larger per-message copy footers, assistant elapsed/input/output token summaries with matching icon sizing, latest-assistant retry affordance, and collapsed low-emphasis tool-call groups that expand in place to show longer command/path/pattern arguments inside a padded gray group without overlapping adjacent user bubbles.
 - Paste, drag-drop, or attach images directly in the Agent composer; staged images appear as removable thumbnails and, for supported multimodal providers, are sent inline as base64 `image_url` content parts in the request body.
 - Paste large text blocks into the Agent composer as compact `.txt` attachments instead of expanding them inline in the chat bubble. The visible transcript shows a small filename/size chip, while provider requests, token estimates, queued messages, persistence, and message-copy payloads retain the full pasted text.

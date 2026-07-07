@@ -177,6 +177,12 @@ struct AgentModeView: View {
         .frame(minWidth: contentMinWidth, maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(skin.windowBackground)
         .background(AgentWindowMinWidthSetter(minWidth: contentMinWidth))
+        .overlay(alignment: .leading) {
+            if !sessionsSidebarVisible {
+                AgentRecentSessionEdgeRail()
+                    .zIndex(10)
+            }
+        }
         .sheet(isPresented: $isSessionSearchPresented) {
             AgentSessionSearchView()
                 .environmentObject(appState)

@@ -1167,6 +1167,12 @@ nonisolated enum L10n {
         static let emptyState = String(localized: "sidebar.empty-state", defaultValue: "Sessions you start will appear here.")
         static let newChatAction = String(localized: "sidebar.new-chat-action", defaultValue: "New Chat")
         static let defaultSessionTitle = String(localized: "sidebar.default-session-title", defaultValue: "New Chat")
+        static let recentSessionsRailTitle = String(localized: "sidebar.recent-sessions-rail.title", defaultValue: "Recent chats")
+        static let recentSessionsRailEmpty = String(localized: "sidebar.recent-sessions-rail.empty", defaultValue: "Recent chats will appear here.")
+        static func recentSessionsRailRowTooltip(_ a1: String) -> String {
+            let template = String(localized: "sidebar.recent-sessions-rail.row-tooltip", defaultValue: "Recent chat from %@")
+            return String(format: template, a1)
+        }
         static let sessionListSeeMore = String(localized: "sidebar.session-list.see-more", defaultValue: "See more")
         static let sessionListShowLess = String(localized: "sidebar.session-list.show-less", defaultValue: "Show less")
         static let sessionMenuArchive = String(localized: "sidebar.session-menu.archive", defaultValue: "Archive")
