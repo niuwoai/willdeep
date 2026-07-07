@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-06 | Current version: v1.131.0-rc12
+> Last updated: 2026-07-07 | Current version: v1.133.0-rc1
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Agent 最近会话边缘栏（1.133.0-rc1）** —— 当左侧会话列表收起时，窗口左边缘提供轻量 hover 热区，滑出最近活跃会话浮层；浮层只保留有真实用户消息的最近会话，并用 workspace 前两个字符的醒目 badge 辅助区分来源。
 - **Agent 独立窗口 chrome 对齐（1.131.0-rc12）** —— Agent Window 复用透明 titlebar / full-size content chrome 配置，左侧会话列表 toggle 的固定位置真正落在 macOS 红黄绿窗口按钮右侧，sidebar 收起后仍可见可点。
 - **手机网关成为设置窗口顶级入口（1.131.0-rc11）** —— Settings 顶部 tab 直接提供 Mobile Gateway / 手机网关入口，不再藏在 Runtimes 二级分段里；原有状态栏手机入口和设置深链仍直达同一个页面。
 - **Agent 会话列表开关贴近系统窗口按钮（1.131.0-rc10）** —— 左侧会话列表 toggle 固定显示在 macOS 红黄绿窗口按钮右侧，不再跟着聊天 header 跑到会话栏右边；会话列表收起后按钮仍留在同一 chrome 区域，搜索和标题内容会避开这组窗口控件。

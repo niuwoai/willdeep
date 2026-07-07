@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.133.0-rc1 - 2026-07-07
+
+### Added
+- **收起会话列表后可从左边缘呼出最近会话** —— Agent 会话侧栏收起时，鼠标靠近窗口左边缘会滑出最近活跃会话浮层；列表只展示有真实用户消息的最近会话，并在每行前方用明显区分样式显示 workspace 前两个字符，方便在不展开完整侧栏的情况下快速切换上下文。
+- 版本号从 **1.131.0-rc12** 提升为 **1.133.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
 ## 1.131.0-rc12 - 2026-07-06
 
 ### Fixed
