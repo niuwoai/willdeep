@@ -170,14 +170,7 @@ struct WindowChromeConfigurator: NSViewRepresentable {
     private static var didBindFrameAutosaveName = false
 
     private static func configure(_ window: NSWindow) {
-        if window.titleVisibility != .hidden { window.titleVisibility = .hidden }
-        if !window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = true }
-        if !window.styleMask.contains(.fullSizeContentView) {
-            window.styleMask.insert(.fullSizeContentView)
-        }
-        restoreStandardWindowButtons(in: window)
-        window.titlebarSeparatorStyle = .none
-        window.contentView?.superview?.hideTitlebarSeparatorViews()
+        configureTransparentTitlebar(in: window)
         applyFrameAutosaveAndDefaultSize(window)
 
         // Hide the 1px divider NavigationSplitView's underlying NSSplitView draws
@@ -192,6 +185,22 @@ struct WindowChromeConfigurator: NSViewRepresentable {
             }
             contentView.hideTitlebarSeparatorViews()
         }
+    }
+
+    /// Shared chrome setup for windows whose SwiftUI content intentionally
+    /// extends into the titlebar. The editor window adds frame autosave and
+    /// split-view cleanup separately; the standalone Agent window only needs
+    /// this titlebar portion so its custom controls can sit beside the
+    /// traffic lights without inheriting the editor window autosave slot.
+    static func configureTransparentTitlebar(in window: NSWindow) {
+        if window.titleVisibility != .hidden { window.titleVisibility = .hidden }
+        if !window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = true }
+        if !window.styleMask.contains(.fullSizeContentView) {
+            window.styleMask.insert(.fullSizeContentView)
+        }
+        restoreStandardWindowButtons(in: window)
+        window.titlebarSeparatorStyle = .none
+        window.contentView?.superview?.hideTitlebarSeparatorViews()
     }
 
     /// Persist NSWindow frame across launches (SwiftUI's WindowGroup

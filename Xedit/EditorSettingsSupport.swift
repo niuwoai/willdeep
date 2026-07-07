@@ -96,7 +96,8 @@ extension EditorSettingsTab {
         switch self {
         case .typography, .appearance, .workspace: return .editor
         case .agent, .memory, .rules, .skills, .mcp, .tools: return .ai
-        case .localAgents, .remoteRuntimes, .mobileGateway: return .runtimes
+        case .localAgents, .remoteRuntimes: return .runtimes
+        case .mobileGateway: return .mobileGateway
         case .terminal: return .terminal
         case .someIM, .replicate, .connectors: return .integrations
         case .voice: return .voice
@@ -134,6 +135,7 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
     case editor
     case ai
     case runtimes
+    case mobileGateway
     case integrations
     case terminal
     case voice
@@ -146,7 +148,8 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
         switch self {
         case .editor: return [.typography, .appearance, .workspace]
         case .ai: return [.agent, .memory, .rules, .skills, .mcp, .tools]
-        case .runtimes: return [.localAgents, .remoteRuntimes, .mobileGateway]
+        case .runtimes: return [.localAgents, .remoteRuntimes]
+        case .mobileGateway: return [.mobileGateway]
         case .integrations: return [.someIM, .replicate, .connectors]
         case .terminal: return [.terminal]
         case .voice: return [.voice]
@@ -158,6 +161,7 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
         case .editor: return String(localized: "settings.group.editor", defaultValue: "Editor")
         case .ai: return String(localized: "settings.group.ai", defaultValue: "AI Agents")
         case .runtimes: return String(localized: "settings.group.runtimes", defaultValue: "Runtimes")
+        case .mobileGateway: return L10n.Settings.tabMobileGateway
         case .integrations: return String(localized: "settings.group.integrations", defaultValue: "Integrations")
         case .terminal: return String(localized: "settings.group.terminal", defaultValue: "Terminal")
         case .voice: return String(localized: "settings.group.voice", defaultValue: "Voice")
@@ -169,6 +173,7 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
         case .editor: return "textformat"
         case .ai: return "sparkles"
         case .runtimes: return "network"
+        case .mobileGateway: return "iphone.gen3.radiowaves.left.and.right"
         case .integrations: return "puzzlepiece.extension"
         case .terminal: return "rectangle.bottomthird.inset.filled"
         case .voice: return "waveform"

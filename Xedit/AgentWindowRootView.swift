@@ -85,6 +85,7 @@ private struct AgentWindowConfigurator: NSViewRepresentable {
 
     private static func configure(_ window: NSWindow?) {
         guard let window else { return }
+        WindowChromeConfigurator.configureTransparentTitlebar(in: window)
         window.identifier = NSUserInterfaceItemIdentifier(AgentWindowID.value)
         if window.title != L10n.AgentWindow.title {
             window.title = L10n.AgentWindow.title

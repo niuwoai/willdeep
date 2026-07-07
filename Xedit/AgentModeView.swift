@@ -28,6 +28,8 @@ struct AgentModeView: View {
     @AppStorage("agentSidePanelWidth") private var sidePanelWidth: Double = 320
     @State private var liveSidePanelWidth: Double?
     private let sidePanelWidthRange: ClosedRange<Double> = 240...760
+    private let sidebarToggleLeadingFromWindowEdge: CGFloat = 78
+    private let sidebarToggleTopFromWindowEdge: CGFloat = 7
 
     /// 收窄窗口时的列宽规约(rc 用户反馈:最左列被挤出窗体左缘 /
     /// composer 盖住侧栏 / 右侧内容被文件面板遮住):左右两栏(会话列表、
@@ -74,6 +76,11 @@ struct AgentModeView: View {
     var body: some View {
         GeometryReader { proxy in
             mainContent(totalWidth: proxy.size.width)
+                .overlay(alignment: .topLeading) {
+                    AgentSessionsSidebarChromeToggleButton(isVisible: $sessionsSidebarVisible)
+                        .padding(.leading, sidebarToggleLeadingFromWindowEdge)
+                        .padding(.top, sidebarToggleTopFromWindowEdge)
+                }
         }
     }
 
@@ -282,6 +289,37 @@ struct AgentModeView: View {
             return
         }
         appState.agentSidePanelKind = .backgroundTasks
+    }
+}
+
+private struct AgentSessionsSidebarChromeToggleButton: View {
+    @EnvironmentObject var appState: AppState
+    @Binding var isVisible: Bool
+
+    var body: some View {
+        let palette = appState.editorSettings.interfaceSkin.palette
+        Button {
+            isVisible.toggle()
+        } label: {
+            Image(systemName: "sidebar.left")
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 24, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .foregroundStyle(palette.secondaryText)
+        .background(
+            RoundedRectangle(cornerRadius: 7)
+                .fill(palette.controlFill.opacity(0.72))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 7)
+                .stroke(palette.hairline.opacity(0.8), lineWidth: 1)
+        )
+        .help(isVisible ? L10n.Header.hideSidebar : L10n.Header.showSidebar)
+        .accessibilityLabel(Text(isVisible ? L10n.Header.hideSidebar : L10n.Header.showSidebar))
+        .keyboardShortcut("\\", modifiers: .command)
     }
 }
 

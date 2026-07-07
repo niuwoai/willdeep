@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.131.0-rc12 - 2026-07-06
+
+### Fixed
+- **Agent 独立窗口的会话列表开关真正进入红黄绿右侧区域** —— Agent Window 现在复用透明 titlebar / full-size content chrome 配置，让会话列表 toggle 的固定位置落在系统窗口按钮右侧，而不是普通内容区；会话列表收起后按钮仍保留可见。
+- 版本号从 **1.131.0-rc11** 提升为 **1.131.0-rc12**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.131.0-rc11 - 2026-07-06
+
+### Changed
+- **手机网关成为设置窗口顶级入口** —— Settings 顶部 tab 现在直接展示 Mobile Gateway / 手机网关，不再藏在 Runtimes 分组的二级 segmented control 里；原有状态栏和深链跳转仍会直达手机网关设置页。
+- 版本号从 **1.131.0-rc10** 提升为 **1.131.0-rc11**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.131.0-rc10 - 2026-07-06
+
+### Changed
+- **左侧会话列表开关移到系统红黄绿按钮右侧** —— Agent 窗口的会话列表 toggle 从聊天 header 内移到窗口左上角 chrome 区域，固定显示在 macOS 关闭 / 最小化 / 全屏按钮右侧；收起会话列表后按钮仍保留在同一位置，聊天 header 会自动避开这组窗口控件。
+- 版本号从 **1.131.0-rc9** 提升为 **1.131.0-rc10**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
 ## 1.131.0-rc9 - 2026-07-06
 
 ### Fixed

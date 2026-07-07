@@ -18,17 +18,16 @@ struct AgentChatHeader: View {
     @Binding var isSessionSearchPresented: Bool
 
     /// When the session sidebar is hidden the chat column slides to the
-    /// window's left edge, where the macOS traffic lights float over the
-    /// first ~72pt. Pad the header so our leading icons clear them; when
-    /// the sidebar is visible it already reserves that space, so 0.
-    private var leadingTrafficLightInset: CGFloat {
-        sessionsSidebarVisible ? 0 : 72
+    /// window's left edge, where the macOS traffic lights and their
+    /// companion sidebar toggle live. Pad the header so search/title
+    /// content clears that chrome; when the sidebar is visible it already
+    /// reserves that band, so 0.
+    private var leadingWindowChromeInset: CGFloat {
+        sessionsSidebarVisible ? 0 : 104
     }
 
     var body: some View {
         HStack(spacing: 8) {
-            sidebarToggle
-
             sessionSearchButton
 
             Text(title)
@@ -69,22 +68,9 @@ struct AgentChatHeader: View {
             .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
             .help(L10n.Header.switchToEditor)
         }
-        .padding(.leading, 18 + leadingTrafficLightInset)
+        .padding(.leading, 18 + leadingWindowChromeInset)
         .padding(.trailing, 18)
         .frame(height: AgentDesign.headerHeight)
-    }
-
-    private var sidebarToggle: some View {
-        Button {
-            sessionsSidebarVisible.toggle()
-        } label: {
-            Image(systemName: "sidebar.left")
-                .foregroundStyle(.secondary)
-        }
-        .buttonStyle(.plain)
-        .focusable(false)
-        .help(sessionsSidebarVisible ? L10n.Header.hideSidebar : L10n.Header.showSidebar)
-        .keyboardShortcut("\\", modifiers: .command)
     }
 
     private var sessionSearchButton: some View {

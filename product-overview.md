@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-06 | Current version: v1.131.0-rc9
+> Last updated: 2026-07-06 | Current version: v1.131.0-rc12
 
 ## Positioning
 
@@ -14,6 +14,9 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Agent 独立窗口 chrome 对齐（1.131.0-rc12）** —— Agent Window 复用透明 titlebar / full-size content chrome 配置，左侧会话列表 toggle 的固定位置真正落在 macOS 红黄绿窗口按钮右侧，sidebar 收起后仍可见可点。
+- **手机网关成为设置窗口顶级入口（1.131.0-rc11）** —— Settings 顶部 tab 直接提供 Mobile Gateway / 手机网关入口，不再藏在 Runtimes 二级分段里；原有状态栏手机入口和设置深链仍直达同一个页面。
+- **Agent 会话列表开关贴近系统窗口按钮（1.131.0-rc10）** —— 左侧会话列表 toggle 固定显示在 macOS 红黄绿窗口按钮右侧，不再跟着聊天 header 跑到会话栏右边；会话列表收起后按钮仍留在同一 chrome 区域，搜索和标题内容会避开这组窗口控件。
 - **Agent 侧边栏资源闲置释放与 Dev Server 工作区共享（1.131.0-rc9）** —— 会话侧边栏记录最后查看时间，终端、嵌入浏览器、Widget 和图片编辑器等重面板在所属会话超过 1 小时未被查看后自动收起并释放资源；Dev Server 面板按 workspace root 聚合后台 dev server / tail 任务，同一工作区的多个会话共享端口型资源视图；旧聊天历史展开也先显示轻量纯文本预览，避免长会话一次性渲染完整富文本。
 - **Agent 侧边栏状态跟随会话（1.131.0-rc8）** —— 右侧侧边栏的打开面板、选中文件/预览、媒体任务 scope 与图片编辑器输入现在保存到当前 Agent 会话；切到未打开过侧边栏的会话时自动收起，切回原会话会恢复原侧栏和关联数据，避免跨会话串台。
 - **文本模型图片转写对用户不可见（1.131.0-rc7）** —— 当主模型不支持图片输入时，Image Understanding / VL 生成的描述只进入模型上下文；用户气泡、TextKit 历史记录、旧历史预览和复制按钮继续展示用户原文与图片缩略图，不再把内部图片描述正文暴露在聊天记录中。
