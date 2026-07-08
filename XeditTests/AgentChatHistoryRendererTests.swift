@@ -133,6 +133,34 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func rendersInlineCodeChipsAndHexColorSwatches() throws {
+        let message = AgentMessage(
+            role: .assistant,
+            content: "Use `SleepRangeSummary` with `#8B3F52` for the low-saturation accent."
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
+
+        #expect(rendered.string.contains("SleepRangeSummary"))
+        #expect(rendered.string.contains("#8B3F52 ■"))
+        let codeRange = try #require(firstAttributeRange(
+            .agentChatHistoryInlineCodeChipColor,
+            containing: "SleepRangeSummary",
+            in: rendered
+        ))
+        #expect(rendered.attribute(.backgroundColor, at: codeRange.location, effectiveRange: nil) == nil)
+        let swatchLocation = (rendered.string as NSString).range(of: "■").location
+        let swatchColor = try #require(rendered.attribute(
+            .foregroundColor,
+            at: swatchLocation,
+            effectiveRange: nil
+        ) as? NSColor)
+        #expect(abs(swatchColor.redComponent - 0x8b / 255.0) < 0.01)
+        #expect(abs(swatchColor.greenComponent - 0x3f / 255.0) < 0.01)
+        #expect(abs(swatchColor.blueComponent - 0x52 / 255.0) < 0.01)
+    }
+
+    @Test
     func rendersUserImageInsteadOfGeneratedImageDescriptionInHistory() {
         let content = AppState.contentByAppendingImageDescription(
             to: "识别一下这张图",

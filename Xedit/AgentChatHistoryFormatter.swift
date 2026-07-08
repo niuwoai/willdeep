@@ -971,25 +971,56 @@ enum AgentChatHistoryRenderer {
         let parsed = MarkdownInline.attributedString(from: raw)
         let converted = NSMutableAttributedString(attributedString: NSAttributedString(parsed))
         applyMissingBaseAttributes(to: converted, baseFont: baseFont, color: color)
-        applyInlineCodeChipAttributes(to: converted)
+        applyInlineCodeChipAttributes(to: converted, baseFont: baseFont)
+        applyHexSwatchAttributes(to: converted, baseFont: baseFont)
         applyPathChipAttributes(to: converted, baseFont: baseFont, color: color)
         return converted
     }
 
-    private static func applyInlineCodeChipAttributes(to attributed: NSMutableAttributedString) {
+    private static let inlinePresentationIntentKey = NSAttributedString.Key("NSInlinePresentationIntent")
+    private static let swiftUIBackgroundColorKey = NSAttributedString.Key("SwiftUI.BackgroundColor")
+
+    private static func applyInlineCodeChipAttributes(to attributed: NSMutableAttributedString, baseFont: NSFont) {
         let fullRange = NSRange(location: 0, length: attributed.length)
         guard fullRange.length > 0 else { return }
-        attributed.enumerateAttribute(.backgroundColor, in: fullRange, options: []) { value, range, _ in
-            guard range.length > 0 else { return }
-            let nsColor: NSColor?
-            if let color = value as? NSColor {
-                nsColor = color
-            } else {
-                nsColor = nil
-            }
-            guard let nsColor else { return }
-            attributed.addAttribute(.agentChatHistoryInlineCodeChipColor, value: nsColor, range: range)
+        attributed.enumerateAttributes(in: fullRange, options: []) { attributes, range, _ in
+            guard range.length > 0, isInlineCode(attributes[inlinePresentationIntentKey]) else { return }
+            attributed.addAttributes([
+                .font: NSFont.monospacedSystemFont(ofSize: baseFont.pointSize, weight: .regular),
+                .agentChatHistoryInlineCodeChipColor: NSColor.labelColor.withAlphaComponent(0.08),
+            ], range: range)
             attributed.removeAttribute(.backgroundColor, range: range)
+            attributed.removeAttribute(swiftUIBackgroundColorKey, range: range)
+        }
+    }
+
+    private static func isInlineCode(_ value: Any?) -> Bool {
+        if let number = value as? NSNumber {
+            return number.intValue & 4 == 4
+        }
+        return false
+    }
+
+    private static func applyHexSwatchAttributes(to attributed: NSMutableAttributedString, baseFont: NSFont) {
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        guard fullRange.length > 0 else { return }
+        let string = attributed.string as NSString
+        var searchStart = 0
+        while searchStart < string.length {
+            let found = string.range(of: "■", options: [], range: NSRange(location: searchStart, length: string.length - searchStart))
+            guard found.location != NSNotFound else { break }
+            let prefixLocation = max(0, found.location - 10)
+            let prefixLength = found.location - prefixLocation
+            let prefix = string.substring(with: NSRange(location: prefixLocation, length: prefixLength))
+            if let literal = prefix.split(separator: " ").last,
+               let color = MarkdownInlineSemanticEnhancer.nsColor(fromHexLiteral: String(literal)) {
+                attributed.addAttributes([
+                    .font: NSFont.systemFont(ofSize: max(10, baseFont.pointSize - 1), weight: .semibold),
+                    .foregroundColor: color,
+                ], range: found)
+                attributed.removeAttribute(NSAttributedString.Key("SwiftUI.ForegroundColor"), range: found)
+            }
+            searchStart = NSMaxRange(found)
         }
     }
 
